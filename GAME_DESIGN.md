@@ -170,7 +170,7 @@ Examples:
 - two rings;
 - belt.
 
-Keep the number of slots familiar. Depth should come from affixes and interactions, not inventory bureaucracy.
+Keep the number of slots familiar. Depth should come from affixes and interactions, not inventory bureaucracy. Inventory items expose complete stats in hover/focus tooltips and equip by dragging them directly into a matching paper-doll slot. The persistent character sheet shows the actual derived combat values, including evade.
 
 ### Rarities
 

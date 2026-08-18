@@ -19,6 +19,8 @@ export interface ArenaBalance {
   moveSpeed: number;
   attackDamage: number;
   attackSpeed: number;
+  armor: number;
+  evadeChance: number;
   focusRegen: number;
   enemyCountMultiplier: number;
   enemySpeedMultiplier: number;
@@ -47,6 +49,8 @@ export function buildArenaBalance(profile: PlayerProfile): ArenaBalance {
     moveSpeed: stats.moveSpeed / 45,
     attackDamage: stats.attackDamage,
     attackSpeed: stats.attackSpeed,
+    armor: stats.armor,
+    evadeChance: stats.evadeChance,
     focusRegen: modifiers.has("exhausting") ? 5.6 : 8,
     enemyCountMultiplier: (modifiers.has("teeming") ? 1.3 : 1) * (modifiers.has("commanded") ? 1.08 : 1),
     enemySpeedMultiplier: modifiers.has("restless") ? 1.12 : 1,

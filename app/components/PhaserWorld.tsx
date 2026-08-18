@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ACTIVE_SKILLS, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
-import type { CharacterClassId } from "../game/domain";
+import type { CharacterClassId, CharacterStats } from "../game/domain";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
 import type { WorldHudState, WorldMode, WorldStation } from "../game2d/types";
 
@@ -12,13 +12,14 @@ interface PhaserWorldProps {
   portalActive?: boolean;
   paused?: boolean;
   arenaBalance?: ArenaBalance;
+  characterStats?: CharacterStats;
   onStation?: (station: WorldStation) => void;
   onLootPickup?: (drop: MapDrop) => void;
   onArenaComplete?: (summary: ArenaSummary) => void;
   children?: React.ReactNode;
 }
 
-export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, onStation, onLootPickup, onArenaComplete, children }: PhaserWorldProps) {
+export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, onStation, onLootPickup, onArenaComplete, children }: PhaserWorldProps) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
   const parentRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<PhaserRuntime | null>(null);
@@ -124,6 +125,20 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
         </>
       )}
       {hud && <div className="world-fps">{hud.fps} FPS · WebGL sprites</div>}
+      {mode !== "class-select" && characterStats && (
+        <aside className="world-character-stats" aria-label="Character statistics">
+          <header><span>Character</span><strong>Combat Stats</strong></header>
+          <dl>
+            <div><dt>Health</dt><dd>{mode === "arena" && hud ? `${Math.ceil(hud.life)} / ` : ""}{Math.round(characterStats.maxLife)}</dd></div>
+            <div><dt>Focus <small>Mana</small></dt><dd>{mode === "arena" && hud ? `${Math.floor(hud.focus)} / ` : ""}{Math.round(characterStats.maxFocus)}</dd></div>
+            <div><dt>Damage</dt><dd>{characterStats.attackDamage.toFixed(1)}</dd></div>
+            <div><dt>Attack speed</dt><dd>{characterStats.attackSpeed.toFixed(2)}/s</dd></div>
+            <div><dt>Armor</dt><dd>{Math.round(characterStats.armor)}</dd></div>
+            <div><dt>Evade</dt><dd>{characterStats.evadeChance.toFixed(1)}%</dd></div>
+            <div><dt>Move speed</dt><dd>{Math.round(characterStats.moveSpeed)}</dd></div>
+          </dl>
+        </aside>
+      )}
       {children}
     </main>
   );

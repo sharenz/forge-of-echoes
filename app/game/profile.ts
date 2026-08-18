@@ -167,5 +167,6 @@ export function deriveStats(profile: PlayerProfile): CharacterStats {
     attackDamage: (15 + level * 1.8 + sumTag("damage") + sumTag("fire") * 0.65) * (classDefinition?.damageMultiplier ?? 1),
     attackSpeed: 1 + sumTag("speed") / 120,
     armor: (10 + level * 2 + sumTag("defense")) * (classDefinition?.armorMultiplier ?? 1),
+    evadeChance: Math.min(60, 4 + level * 0.16 + sumTag("speed") * 0.24 + (profile.character.classId === "amazon" ? 6 : profile.character.classId === "sorceress" ? 2 : 0)),
   };
 }

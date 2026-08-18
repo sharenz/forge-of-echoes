@@ -102,19 +102,18 @@ export function GameShell() {
   const backpackItems = screen === "arena" ? [...runItems, ...profile.inventory] : profile.inventory;
   const allItems = [...Object.values(profile.equipped).filter(Boolean), ...backpackItems, ...profile.stash] as EquipmentItem[];
   const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id)) as Set<string>;
-  const selectedItem = allItems.find((item) => item.id === selectedItemId) ?? null;
 
   if (screen === "arena" && profile.openedMap && arenaBalance) {
     const inventoryOpen = panel === "inventory";
     return (
-      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={inventoryOpen} arenaBalance={arenaBalance} onLootPickup={collectMapDrop} onArenaComplete={completeArena}>
+      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={inventoryOpen} arenaBalance={arenaBalance} characterStats={stats} onLootPickup={collectMapDrop} onArenaComplete={completeArena}>
         <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(inventoryOpen ? null : "inventory")}>Inventory <kbd>I</kbd></button>
         <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
         {inventoryOpen && (
           <div className="world-panel-backdrop arena-panel-backdrop">
             <section className="world-panel panel-inventory" aria-label="Character inventory">
               <header><div><span>Combat paused · equipment changes apply immediately</span><h2>Inventory</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close inventory">×</button></header>
-              <InventoryPanel profile={profile} backpackItems={backpackItems} selectedItem={selectedItem} selectedItemId={selectedItemId} freshItemIds={runItems.map((item) => item.id)} runMaterials={runMaterials} onSelect={setSelectedItemId} onEquip={equipSelected} onUnequip={unequipSelected} />
+              <InventoryPanel profile={profile} backpackItems={backpackItems} selectedItemId={selectedItemId} freshItemIds={runItems.map((item) => item.id)} runMaterials={runMaterials} onSelect={setSelectedItemId} onEquipItem={equipItem} onUnequipItem={unequipItem} />
             </section>
           </div>
         )}
@@ -245,45 +244,57 @@ export function GameShell() {
   }
 
   function equipSelected() {
-    if (!profile || !selectedItem) return;
-    if (profile.equipped[selectedItem.slot]?.id === selectedItem.id) return;
-    const previouslyEquipped = profile.equipped[selectedItem.slot];
-    const isRunItem = runItems.some((item) => item.id === selectedItem.id);
+    if (selectedItemId) equipItem(selectedItemId);
+  }
+
+  function equipItem(itemId: string) {
+    if (!profile) return;
+    const item = allItems.find((candidate) => candidate.id === itemId);
+    if (!item || profile.equipped[item.slot]?.id === item.id) return;
+    const previouslyEquipped = profile.equipped[item.slot];
+    const isRunItem = runItems.some((candidate) => candidate.id === item.id);
     if (isRunItem) {
-      runLootRef.current.items = runLootRef.current.items.filter((item) => item.id !== selectedItem.id);
-      setRunItems((current) => current.filter((item) => item.id !== selectedItem.id));
+      runLootRef.current.items = runLootRef.current.items.filter((candidate) => candidate.id !== item.id);
+      setRunItems((current) => current.filter((candidate) => candidate.id !== item.id));
     }
     setProfile({
       ...profile,
-      inventory: [...(previouslyEquipped ? [previouslyEquipped] : []), ...profile.inventory.filter((item) => item.id !== selectedItem.id)],
-      stash: profile.stash.filter((item) => item.id !== selectedItem.id),
-      equipped: { ...profile.equipped, [selectedItem.slot]: selectedItem },
+      inventory: [...(previouslyEquipped ? [previouslyEquipped] : []), ...profile.inventory.filter((candidate) => candidate.id !== item.id)],
+      stash: profile.stash.filter((candidate) => candidate.id !== item.id),
+      equipped: { ...profile.equipped, [item.slot]: item },
     });
-    setNotice(`${selectedItem.baseName} equipped.`);
+    setSelectedItemId(item.id);
+    setNotice(`${item.baseName} equipped.`);
   }
 
-  function unequipSelected() {
-    if (!profile || !selectedItem || profile.equipped[selectedItem.slot]?.id !== selectedItem.id) return;
+  function unequipItem(itemId: string) {
+    if (!profile) return;
+    const item = Object.values(profile.equipped).find((candidate) => candidate?.id === itemId);
+    if (!item || profile.equipped[item.slot]?.id !== item.id) return;
     setProfile({
       ...profile,
-      inventory: [selectedItem, ...profile.inventory],
-      equipped: { ...profile.equipped, [selectedItem.slot]: undefined },
+      inventory: [item, ...profile.inventory],
+      equipped: { ...profile.equipped, [item.slot]: undefined },
     });
-    setNotice(`${selectedItem.baseName} moved to your backpack.`);
+    setSelectedItemId(item.id);
+    setNotice(`${item.baseName} moved to your backpack.`);
   }
 
-  function transferSelected() {
-    if (!profile || !selectedItem) return;
-    const inStash = profile.stash.some((item) => item.id === selectedItem.id);
+  function transferItem(itemId: string) {
+    if (!profile) return;
+    const item = [...profile.inventory, ...profile.stash].find((candidate) => candidate.id === itemId);
+    if (!item) return;
+    const inStash = profile.stash.some((candidate) => candidate.id === item.id);
     if (inStash) {
-      setProfile({ ...profile, stash: profile.stash.filter((item) => item.id !== selectedItem.id), inventory: [...profile.inventory, selectedItem] });
-    } else if (profile.inventory.some((item) => item.id === selectedItem.id)) {
-      setProfile({ ...profile, inventory: profile.inventory.filter((item) => item.id !== selectedItem.id), stash: [...profile.stash, selectedItem] });
+      setProfile({ ...profile, stash: profile.stash.filter((candidate) => candidate.id !== item.id), inventory: [...profile.inventory, item] });
+    } else if (profile.inventory.some((candidate) => candidate.id === item.id)) {
+      setProfile({ ...profile, inventory: profile.inventory.filter((candidate) => candidate.id !== item.id), stash: [...profile.stash, item] });
     }
+    setSelectedItemId(item.id);
   }
 
   return (
-    <PhaserWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} onStation={handleStation}>
+    <PhaserWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} characterStats={stats} onStation={handleStation}>
       <header className="hideout-hud">
         <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
         <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId].name}</small></div></div>
@@ -301,7 +312,7 @@ export function GameShell() {
             {panel === "maps" && <MapWorkshop maps={profile.maps} selectedMapId={selectedMapId} materials={profile.materials} onSelect={setSelectedMapId} onCraft={craftMap} onEnter={openPortal} />}
             {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} materials={profile.materials} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
             {(panel === "inventory" || panel === "stash") && (
-              <InventoryPanel profile={profile} backpackItems={profile.inventory} selectedItem={selectedItem} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquip={equipSelected} onUnequip={unequipSelected} onTransfer={transferSelected} />
+              <InventoryPanel profile={profile} backpackItems={profile.inventory} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onUnequipItem={unequipItem} onTransferItem={transferItem} />
             )}
           </section>
         </div>

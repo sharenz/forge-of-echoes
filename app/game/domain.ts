@@ -96,6 +96,7 @@ export interface CharacterStats {
   attackDamage: number;
   attackSpeed: number;
   armor: number;
+  evadeChance: number;
 }
 
 export interface RunLoot {

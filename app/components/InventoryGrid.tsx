@@ -1,5 +1,9 @@
+"use client";
+
+import { useState } from "react";
 import type { EquipmentItem } from "../game/domain";
 import { itemDisplayName } from "../game/items";
+import { ItemTooltip } from "./ItemTooltip";
 
 interface InventoryGridProps {
   items: EquipmentItem[];
@@ -9,6 +13,9 @@ interface InventoryGridProps {
   onSelect: (id: string) => void;
   label: string;
   highlightedIds?: ReadonlySet<string>;
+  onDragItem?: (id: string) => void;
+  onDragEnd?: () => void;
+  onEquipItem?: (id: string) => void;
 }
 
 interface Placement {
@@ -52,8 +59,9 @@ function packItems(items: EquipmentItem[], columns: number, rows: number): Place
   return placements;
 }
 
-export function InventoryGrid({ items, columns, rows, selectedId, onSelect, label, highlightedIds }: InventoryGridProps) {
+export function InventoryGrid({ items, columns, rows, selectedId, onSelect, label, highlightedIds, onDragItem, onDragEnd, onEquipItem }: InventoryGridProps) {
   const placements = packItems(items, columns, rows);
+  const [tooltip, setTooltip] = useState<{ item: EquipmentItem; x: number; y: number } | null>(null);
   return (
     <div className="poe-grid-wrap">
       <div className="poe-grid-label"><span>{label}</span><em>{placements.length}/{items.length} placed</em></div>
@@ -73,6 +81,21 @@ export function InventoryGrid({ items, columns, rows, selectedId, onSelect, labe
               className={`poe-grid-item rarity-${item.rarity} ${selectedId === item.id ? "selected" : ""} ${highlighted ? "new-drop" : ""}`}
               style={{ gridColumn: `${x + 1} / span ${width}`, gridRow: `${y + 1} / span ${height}` }}
               onClick={() => onSelect(item.id)}
+              onDoubleClick={() => onEquipItem?.(item.id)}
+              draggable={Boolean(onDragItem)}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("application/x-crafty-item", item.id);
+                event.dataTransfer.setData("text/plain", item.id);
+                setTooltip(null);
+                onDragItem?.(item.id);
+              }}
+              onDragEnd={() => onDragEnd?.()}
+              onPointerEnter={(event) => setTooltip({ item, x: event.clientX, y: event.clientY })}
+              onPointerMove={(event) => setTooltip({ item, x: event.clientX, y: event.clientY })}
+              onPointerLeave={() => setTooltip(null)}
+              onFocus={(event) => { const rect = event.currentTarget.getBoundingClientRect(); setTooltip({ item, x: rect.right, y: rect.top }); }}
+              onBlur={() => setTooltip(null)}
               title={itemDisplayName(item)}
               key={item.id}
             >
@@ -83,6 +106,7 @@ export function InventoryGrid({ items, columns, rows, selectedId, onSelect, labe
           );
         })}
       </div>
+      {tooltip && <ItemTooltip item={tooltip.item} x={tooltip.x} y={tooltip.y} hint="Drag to a matching slot · double-click to equip" />}
     </div>
   );
 }

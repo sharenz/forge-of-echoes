@@ -422,7 +422,10 @@ class CraftyScene extends Phaser.Scene {
     if (!this.player) return;
     for (const enemy of this.nearbyEnemies(this.player.x, this.player.y)) {
       if (Math.hypot(this.player.x - enemy.x, this.player.y - enemy.y) < 30) {
-        this.life -= delta * (5 + this.wave * 0.8) * (this.options.arenaBalance?.enemyDamageMultiplier ?? 1);
+        const evadeMultiplier = 1 - (this.options.arenaBalance?.evadeChance ?? 0) / 100;
+        const armor = this.options.arenaBalance?.armor ?? 0;
+        const armorMultiplier = 100 / (100 + armor);
+        this.life -= delta * (5 + this.wave * 0.8) * (this.options.arenaBalance?.enemyDamageMultiplier ?? 1) * evadeMultiplier * armorMultiplier;
       }
     }
     if (this.life <= 0) {
