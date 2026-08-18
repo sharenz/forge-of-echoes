@@ -199,10 +199,23 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
 .map-list-item > span:last-child { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
 .map-list-item strong { overflow: hidden; text-overflow: ellipsis; font-family: Georgia, serif; font-size: 12px; white-space: nowrap; }
 .map-list-item small { color: var(--muted); font-size: 9px; text-transform: capitalize; }
+.map-list-item > em { margin-left: auto; color: #c77d45; font-size: 9px; font-style: normal; text-transform: uppercase; }
 .map-tier { flex: 0 0 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--line-bright); font-family: Georgia, serif; color: var(--gold); font-size: 12px; transform: rotate(45deg); }
 .map-list-item .map-tier { text-indent: 0; }
 
 .map-focus { padding: 37px clamp(30px, 4vw, 60px); background: radial-gradient(circle at 70% 20%, rgba(147, 76, 36, .12), transparent 52%); display: flex; flex-direction: column; }
+.map-device-heading { margin-bottom: 16px; }
+.map-device-heading h2 { margin: 5px 0 0; color: #e7d6bf; font: 20px Georgia, serif; }
+.map-device-slot { position: relative; min-height: 170px; padding: 22px; border: 1px solid #604731; background: radial-gradient(circle at 50% 45%, #2c1b11, #0f0c09 70%); box-shadow: inset 0 0 42px #0009; transition: border-color .18s ease, box-shadow .18s ease; }
+.map-device-slot.empty { display: grid; place-items: center; border-style: dashed; }
+.map-device-slot:hover { border-color: #b27142; box-shadow: inset 0 0 42px #0009, 0 0 18px #b75e2722; }
+.empty-map-slot { display: grid; justify-items: center; gap: 7px; color: #786b5d; text-align: center; }
+.empty-map-slot > span { color: #c17640; font: 40px Georgia, serif; }
+.empty-map-slot strong { color: #d2beaa; font: 18px Georgia, serif; }
+.empty-map-slot small { font-size: 12px; }
+.map-slot-remove { position: absolute; right: 12px; bottom: 10px; padding: 6px 9px; border: 0; background: transparent; color: #987a62; font-size: 10px; cursor: pointer; }
+.map-slot-remove:hover { color: #efb279; }
+.compact-map-affixes { max-height: 190px; overflow: auto; }
 .map-title-row { align-items: flex-start; justify-content: space-between; gap: 30px; padding-bottom: 27px; border-bottom: 1px solid var(--line); }
 .map-title-row h1 { font-family: Georgia, serif; font-size: clamp(29px, 3vw, 46px); font-weight: normal; margin: 8px 0; }
 .map-title-row p { color: var(--muted); font-size: 11px; margin: 0; }
@@ -231,6 +244,7 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
 
 .primary-action, .secondary-action { width: 100%; border: 1px solid #9c6139; background: #7b3e25; padding: 13px 18px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
 .primary-action:hover { background: #934b2d; border-color: var(--ember-bright); }
+.primary-action:disabled { opacity: .42; cursor: default; filter: grayscale(.35); }
 .primary-action span { font-family: Georgia, serif; font-size: 14px; }
 .primary-action small { color: #e8c9aa; font-size: 8px; letter-spacing: .05em; }
 .secondary-action { justify-content: center; background: #282019; color: var(--paper); border-color: var(--line-bright); }
@@ -659,6 +673,10 @@ body:has(.pixel-shell) { overflow: hidden; }
 .poe-grid-item.rarity-magic { border-color: #617dc0; background: radial-gradient(circle at 50% 35%, #202b4b, #0e111b); }
 .poe-grid-item.rarity-rare { border-color: #b9963e; background: radial-gradient(circle at 50% 35%, #443816, #151208); }
 .poe-grid-item.rarity-unique { border-color: #b25e2c; background: radial-gradient(circle at 50% 35%, #4e2614, #170c08); }
+.poe-grid-item.item-kind-map { border-color: #8a6444; background: radial-gradient(circle at 50% 35%, #382215, #130d09); }
+.poe-grid-item.inventory-currency { border-color: #6b533c; background: radial-gradient(circle at 50% 35%, #332314, #110d09); }
+.poe-grid-item.inventory-currency > span { color: #efad67; }
+.poe-grid-item .stack-count { position: absolute; right: 3px; bottom: 1px; color: #fff0cf; font: 11px Georgia, serif; text-shadow: 0 1px 3px #000; }
 .poe-grid-item.new-drop { border-color: #e28a45; animation: new-drop-glow 1.6s ease-in-out infinite; }
 .new-drop-badge { position: absolute; z-index: 3; left: 3px; top: 3px; padding: 2px 4px; background: #a84721; color: #ffe1b9; font-size: 8px; font-style: normal; letter-spacing: .08em; text-transform: uppercase; box-shadow: 0 0 9px #e76f2f88; }
 

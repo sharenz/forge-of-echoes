@@ -2,6 +2,7 @@ export type Rarity = "normal" | "magic" | "rare" | "unique";
 export type EquipmentSlot = "weapon" | "chest" | "ring" | "boots";
 export type AffixTag = "fire" | "life" | "speed" | "damage" | "defense";
 export type CharacterClassId = "amazon" | "barbarian" | "sorceress";
+export type CurrencyId = "scrap" | "essence" | "seal" | "solvent" | "mapDust" | "threatGlyph" | "rewardInk";
 
 export type AttributeKey = "strength" | "dexterity" | "intelligence";
 export type DerivedStatKey =
@@ -47,6 +48,7 @@ export interface Affix {
 }
 
 export interface EquipmentItem {
+  kind: "equipment";
   id: string;
   baseId: string;
   baseName: string;
@@ -81,6 +83,7 @@ export interface MapModifier {
 }
 
 export interface MapItem {
+  kind: "map";
   id: string;
   baseId: string;
   baseName: string;
@@ -92,15 +95,15 @@ export interface MapItem {
   modifiers: MapModifierId[];
 }
 
-export interface Materials {
-  scrap: number;
-  essence: number;
-  seal: number;
-  solvent: number;
-  mapDust: number;
-  threatGlyph: number;
-  rewardInk: number;
+export interface CurrencyItem {
+  kind: "currency";
+  id: string;
+  baseId: CurrencyId;
+  stackSize: number;
 }
+
+export type InventoryItem = EquipmentItem | MapItem | CurrencyItem;
+export type CurrencyAmounts = Record<CurrencyId, number>;
 
 export interface CharacterProgress {
   name: string;
@@ -115,13 +118,12 @@ export interface CharacterProgress {
 }
 
 export interface PlayerProfile {
-  version: 3;
+  version: 4;
   character: CharacterProgress;
-  materials: Materials;
-  inventory: EquipmentItem[];
-  stash: EquipmentItem[];
+  inventory: InventoryItem[];
+  stash: InventoryItem[];
   equipped: Partial<Record<EquipmentSlot, EquipmentItem>>;
-  maps: MapItem[];
+  mapDevice: MapItem | null;
   openedMap: MapItem | null;
 }
 
@@ -139,8 +141,7 @@ export interface CharacterStats {
 }
 
 export interface RunLoot {
-  materials: Partial<Materials>;
-  items: EquipmentItem[];
+  items: InventoryItem[];
   xp: number;
 }
 

@@ -534,26 +534,26 @@ class CraftyScene extends Phaser.Scene {
     } else if (roll < equipmentChance + materialChance) {
       const materialRoll = Math.random();
       drop = materialRoll < 0.08
-        ? { kind: "material", material: "mapDust", amount: 1 }
+        ? { kind: "currency", currency: "mapDust", amount: 1 }
         : materialRoll < 0.28
-          ? { kind: "material", material: "essence", amount: 1 }
-          : { kind: "material", material: "scrap", amount: Phaser.Math.Between(1, 2) };
+          ? { kind: "currency", currency: "essence", amount: 1 }
+          : { kind: "currency", currency: "scrap", amount: Phaser.Math.Between(1, 2) };
     }
     if (!drop) return;
     this.spawnGroundDrop(x, y, drop);
   }
 
   private spawnGroundDrop(x: number, y: number, drop: MapDrop): void {
-    const texture = drop.kind === "equipment" ? `drop-equipment-${drop.rarity}` : `drop-${drop.material}`;
+    const texture = drop.kind === "equipment" ? `drop-equipment-${drop.rarity}` : `drop-${drop.currency}`;
     const sprite = this.dropPool?.get(x, y, texture) as Phaser.GameObjects.Image | null;
     if (!sprite) return;
     sprite.setTexture(texture).setActive(true).setVisible(true).setPosition(x, y).setScale(1.8).setDepth(Math.round(y / 10) + 30);
     const labelText = drop.kind === "equipment"
       ? `${drop.rarity.toUpperCase()} ITEM`
-      : `${drop.amount} ${drop.material === "mapDust" ? "MAP DUST" : drop.material.toUpperCase()}`;
+      : `${drop.amount} ${drop.currency === "mapDust" ? "MAP DUST" : drop.currency.toUpperCase()}`;
     const color = drop.kind === "equipment"
       ? drop.rarity === "rare" ? "#ffda68" : drop.rarity === "magic" ? "#9bb8ff" : "#ded5c9"
-      : drop.material === "essence" ? "#c6a5ff" : drop.material === "mapDust" ? "#92e4df" : "#e2ac70";
+      : drop.currency === "essence" ? "#c6a5ff" : drop.currency === "mapDust" ? "#92e4df" : "#e2ac70";
     const label = this.add.text(x, y - 22, labelText, {
       fontFamily: "monospace",
       fontSize: "14px",

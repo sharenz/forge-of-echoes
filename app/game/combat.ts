@@ -1,11 +1,11 @@
 import { mapRewardBonus } from "./maps";
 import { deriveStats } from "./profile";
-import type { PlayerProfile, Rarity } from "./domain";
+import type { CurrencyId, PlayerProfile, Rarity } from "./domain";
 import { ACTIVE_SKILLS } from "./config/skills";
 
 export type MapDrop =
   | { kind: "equipment"; rarity: Rarity }
-  | { kind: "material"; material: "scrap" | "essence" | "mapDust"; amount: number };
+  | { kind: "currency"; currency: Extract<CurrencyId, "scrap" | "essence" | "mapDust">; amount: number };
 
 export { ACTIVE_SKILLS };
 

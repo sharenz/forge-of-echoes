@@ -66,8 +66,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /rollGroundDrop/);
   assert.match(world, /updateGroundDrops/);
   assert.match(shell, /onLootPickup/);
-  assert.match(shell, /setRunItems\(\(current\) => \[item, \.\.\.current\]\)/);
-  assert.match(shell, /setRunMaterials/);
+  assert.match(shell, /runLootRef\.current\.items = \[item, \.\.\.runLootRef\.current\.items\]/);
+  assert.match(shell, /addCurrencyToInventory/);
   assert.match(shell, /arena-inventory-toggle/);
   assert.match(shell, /paused=\{inventoryOpen\}/);
   assert.match(phaserWorld, /updateArenaBalance/);
@@ -79,6 +79,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.doesNotMatch(inventoryPanel, /inventory-inspector/);
   assert.match(itemTooltip, /tooltip-affixes/);
   assert.match(inventoryPanel, /Collected this map/);
+  assert.match(shell, /mapDevice/);
+  assert.match(domain, /type InventoryItem/);
   assert.match(phaserWorld, /world-character-stats/);
   assert.match(stats, /evadeChance/);
   assert.match(world, /evadeMultiplier/);

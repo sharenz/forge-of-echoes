@@ -75,7 +75,7 @@ function createEquipmentFromBase(base: ItemBaseDefinition, itemLevel: number, fo
   const rarity: Rarity = forcedRarity ?? (rarityRoll > 0.97 ? "rare" : rarityRoll > 0.55 ? "magic" : "normal");
   const affixCount = rarity === "rare" ? randomInteger(3, 4, random) : rarity === "magic" ? randomInteger(1, 2, random) : 0;
   const draft: EquipmentItem = {
-    id: createId("item"), baseId: base.id, baseName: base.name, slot: base.slot, rarity, itemLevel,
+    kind: "equipment", id: createId("item"), baseId: base.id, baseName: base.name, slot: base.slot, rarity, itemLevel,
     stability: 8, maxStability: 8, implicit: base.implicit,
     baseStats: base.baseStats.map((modifier) => scaleBaseModifier(modifier, itemLevel, `base:${base.id}`)),
     implicitModifiers: base.implicitModifiers.map((modifier) => scaleBaseModifier(modifier, itemLevel, `implicit:${base.id}`)),
@@ -138,7 +138,7 @@ export function normalizeEquipmentItem(item: EquipmentItem): EquipmentItem {
       rolls: [{ stat: fallbackStat, mode: fallbackMode, value: legacy.value, min: legacy.value, max: legacy.value, source: `legacy:${legacy.id}` }],
     } as Affix;
   });
-  return { ...item, baseId: base.id, baseName: base.name, baseStats, implicitModifiers, affixes };
+  return { ...item, kind: "equipment", baseId: base.id, baseName: base.name, baseStats, implicitModifiers, affixes };
 }
 
 export function itemDisplayName(item: EquipmentItem): string {

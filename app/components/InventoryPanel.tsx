@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import type { EquipmentItem, Materials, PlayerProfile } from "../game/domain";
+import type { EquipmentItem, InventoryItem, PlayerProfile } from "../game/domain";
+import { currencyAmounts, isEquipmentItem } from "../game/inventory";
 import { InventoryGrid } from "./InventoryGrid";
 import { ItemCard } from "./ItemCard";
 
 interface InventoryPanelProps {
   profile: PlayerProfile;
-  backpackItems: EquipmentItem[];
+  backpackItems: InventoryItem[];
   selectedItemId: string | null;
   showStash?: boolean;
   freshItemIds?: string[];
-  runMaterials?: Partial<Materials>;
   onSelect: (id: string) => void;
   onEquipItem: (id: string) => void;
   onUnequipItem: (id: string) => void;
@@ -26,7 +26,6 @@ export function InventoryPanel({
   selectedItemId,
   showStash = false,
   freshItemIds = [],
-  runMaterials,
   onSelect,
   onEquipItem,
   onUnequipItem,
@@ -35,16 +34,18 @@ export function InventoryPanel({
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const freshItems = new Set(freshItemIds);
   const equippedItems = Object.values(profile.equipped).filter(Boolean) as EquipmentItem[];
-  const allItems = [...equippedItems, ...backpackItems, ...profile.stash];
+  const allItems: InventoryItem[] = [...equippedItems, ...backpackItems, ...profile.stash];
   const draggedItem = allItems.find((item) => item.id === draggedItemId) ?? null;
-  const draggedIsEquipped = Boolean(draggedItem && profile.equipped[draggedItem.slot]?.id === draggedItem.id);
+  const draggedIsEquipped = Boolean(draggedItem && isEquipmentItem(draggedItem) && profile.equipped[draggedItem.slot]?.id === draggedItem.id);
   const draggedIsInStash = Boolean(draggedItem && profile.stash.some((item) => item.id === draggedItem.id));
+  const freshInventory = backpackItems.filter((item) => freshItems.has(item.id));
+  const freshCurrency = currencyAmounts(freshInventory);
   const materialDrops = [
-    ["scrap", "Scrap", runMaterials?.scrap ?? 0],
-    ["essence", "Essence", runMaterials?.essence ?? 0],
-    ["map-dust", "Map Dust", runMaterials?.mapDust ?? 0],
+    ["scrap", "Scrap", freshCurrency.scrap],
+    ["essence", "Essence", freshCurrency.essence],
+    ["map-dust", "Map Dust", freshCurrency.mapDust],
   ] as const;
-  const hasRunPickups = freshItems.size > 0 || materialDrops.some(([, , amount]) => amount > 0);
+  const hasRunPickups = freshItems.size > 0;
 
   const beginDrag = (id: string) => {
     setDraggedItemId(id);
@@ -56,7 +57,7 @@ export function InventoryPanel({
     event.preventDefault();
     const itemId = readDroppedItem(event);
     const item = allItems.find((candidate) => candidate.id === itemId);
-    if (item?.slot === slot) onEquipItem(item.id);
+    if (item && isEquipmentItem(item) && item.slot === slot) onEquipItem(item.id);
     endDrag();
   };
   const dropIntoBackpack = (event: React.DragEvent) => {
@@ -80,8 +81,8 @@ export function InventoryPanel({
         <div className="paperdoll-heading"><span className="eyebrow">Equipped</span><small>Drag gear into a matching slot</small></div>
         {EQUIPMENT_SLOTS.map((slot) => (
           <div
-            className={`equipment-slot slot-${slot} ${draggedItem ? draggedItem.slot === slot ? "drop-compatible" : "drop-incompatible" : ""}`}
-            onDragOver={(event) => { if (draggedItem?.slot === slot) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
+            className={`equipment-slot slot-${slot} ${draggedItem ? isEquipmentItem(draggedItem) && draggedItem.slot === slot ? "drop-compatible" : "drop-incompatible" : ""}`}
+            onDragOver={(event) => { if (draggedItem && isEquipmentItem(draggedItem) && draggedItem.slot === slot) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
             onDrop={(event) => dropIntoSlot(event, slot)}
             key={slot}
           >
@@ -95,7 +96,7 @@ export function InventoryPanel({
       <div className="inventory-containers">
         {hasRunPickups && (
           <section className="run-pickup-ledger" aria-label="Items collected in this map">
-            <header><div><span>Collected this map</span><strong>{freshItems.size} new equipment</strong></div><small>Picked up and secured</small></header>
+            <header><div><span>Collected this map</span><strong>{freshItems.size} new inventory items</strong></div><small>Picked up and secured</small></header>
             <div>
               {materialDrops.map(([kind, label, amount]) => (
                 <span className={`run-material material-${kind}`} key={kind}><i>{label.charAt(0)}</i><small>{label}</small><strong>{amount}</strong></span>

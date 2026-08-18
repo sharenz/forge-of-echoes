@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AFFIX_DEFINITIONS_BY_ID } from "../app/game/config/affixes";
+import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
 import type { EquipmentItem, PlayerProfile, StatModifier } from "../app/game/domain";
+import { addCurrencyToInventory, consumeCurrency, countCurrency, isCurrencyItem, isMapItem } from "../app/game/inventory";
 import {
   createAffixForItem,
   eligibleAffixTiers,
@@ -10,6 +12,7 @@ import {
   scaleBaseModifier,
 } from "../app/game/items";
 import { calculateCharacterStats, resolveStat } from "../app/game/stats";
+import { createInitialProfile, loadProfile } from "../app/game/profile";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -50,7 +53,7 @@ test("value crafting stays inside the existing tier range", () => {
   const rolled = createAffixForItem({ slot: "chest", itemLevel: 99, affixes: [] }, "life", () => 0.999999);
   assert.ok(rolled);
   const item = {
-    id: "item", baseId: "riveted-coat", baseName: "Riveted Coat", slot: "chest", rarity: "magic", itemLevel: 99,
+    kind: "equipment", id: "item", baseId: "riveted-coat", baseName: "Riveted Coat", slot: "chest", rarity: "magic", itemLevel: 99,
     stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [], affixes: [rolled],
   } satisfies EquipmentItem;
   const rerolled = rerollAffixValues(item, () => 0);
@@ -61,7 +64,7 @@ test("value crafting stays inside the existing tier range", () => {
 
 test("character calculations combine item base, implicit, and explicit modifiers once", () => {
   const weapon = {
-    id: "weapon", baseId: "test", baseName: "Test Weapon", slot: "weapon", rarity: "rare", itemLevel: 50,
+    kind: "equipment", id: "weapon", baseId: "test", baseName: "Test Weapon", slot: "weapon", rarity: "rare", itemLevel: 50,
     stability: 8, maxStability: 8, implicit: "test",
     baseStats: [{ stat: "attackDamage", mode: "flat", value: 10, source: "base:test" }],
     implicitModifiers: [{ stat: "attackDamage", mode: "increased", value: 20, source: "implicit:test" }],
@@ -72,10 +75,9 @@ test("character calculations combine item base, implicit, and explicit modifiers
     }],
   } satisfies EquipmentItem;
   const profile = {
-    version: 3,
+    version: 4,
     character: { name: "Test", archetype: "Test", classId: "amazon", created: true, level: 10, xp: 0, unspentPassives: 0, mapsCompleted: 0, highestWave: 0 },
-    materials: { scrap: 0, essence: 0, seal: 0, solvent: 0, mapDust: 0, threatGlyph: 0, rewardInk: 0 },
-    inventory: [], stash: [], equipped: { weapon }, maps: [], openedMap: null,
+    inventory: [], stash: [], equipped: { weapon }, mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const calculation = calculateCharacterStats(profile);
   const attack = calculation.breakdown.attackDamage;
@@ -95,4 +97,56 @@ test("legacy equipment is normalized without losing its rolled value", () => {
   assert.ok(normalized.baseStats.length > 0);
   assert.equal(normalized.affixes[0].rolls[0].value, 8);
   assert.equal(normalized.affixes[0].rolls[0].mode, "flat");
+});
+
+test("currency stacks obey their configured maximum and overflow into a new stack", () => {
+  const first = addCurrencyToInventory([], "scrap", 39);
+  const stacked = addCurrencyToInventory(first, "scrap", 3);
+  const scrapStacks = stacked.filter(isCurrencyItem);
+  assert.equal(CURRENCY_DEFINITIONS.scrap.maxStackSize, 40);
+  assert.deepEqual(scrapStacks.map((item) => item.stackSize), [40, 2]);
+  assert.equal(countCurrency(stacked, "scrap"), 42);
+});
+
+test("currency consumption removes quantities across actual inventory stacks", () => {
+  const items = addCurrencyToInventory(addCurrencyToInventory([], "essence", 40), "essence", 6);
+  const consumed = consumeCurrency(items, "essence", 43);
+  assert.ok(consumed);
+  assert.equal(countCurrency(consumed, "essence"), 3);
+  assert.deepEqual(consumed.filter(isCurrencyItem).map((item) => item.stackSize), [3]);
+});
+
+test("new profiles contain map and currency items in the backpack", () => {
+  const profile = createInitialProfile();
+  assert.equal(profile.version, 4);
+  assert.equal(profile.mapDevice, null);
+  assert.equal(profile.inventory.filter(isMapItem).length, 3);
+  assert.equal(countCurrency(profile.inventory, "scrap"), 12);
+  assert.equal("materials" in profile, false);
+  assert.equal("maps" in profile, false);
+});
+
+test("v3 counter saves migrate maps and currency into v4 inventory items", () => {
+  const oldMap = {
+    id: "old-map", baseId: "ashen-crucible", baseName: "Ashen Crucible", tier: 3, rarity: "normal",
+    quality: 0, corrupted: false, implicit: "Test", modifiers: [],
+  };
+  const v3 = {
+    version: 3,
+    character: { name: "Legacy", archetype: "Spear", classId: "amazon", created: true, level: 12, xp: 0, unspentPassives: 0, mapsCompleted: 0, highestWave: 0 },
+    materials: { scrap: 45, essence: 2, seal: 0, solvent: 0, mapDust: 0, threatGlyph: 0, rewardInk: 0 },
+    inventory: [], stash: [], equipped: {}, maps: [oldMap], openedMap: null,
+  };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: { getItem: (key: string) => key === "crafty.profile.v3" ? JSON.stringify(v3) : null } },
+  });
+  try {
+    const migrated = loadProfile();
+    assert.equal(migrated.version, 4);
+    assert.equal(migrated.inventory.filter(isMapItem).length, 1);
+    assert.deepEqual(migrated.inventory.filter(isCurrencyItem).filter((item) => item.baseId === "scrap").map((item) => item.stackSize), [40, 5]);
+  } finally {
+    Reflect.deleteProperty(globalThis, "window");
+  }
 });

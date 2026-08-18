@@ -5,6 +5,7 @@ import { choose, createId, shuffle } from "./random";
 export function createMap(tier = 1): MapItem {
   const base = choose(MAP_BASES);
   return {
+    kind: "map",
     id: createId("map"),
     baseId: base.id,
     baseName: base.name,

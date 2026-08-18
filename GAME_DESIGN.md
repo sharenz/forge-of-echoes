@@ -250,6 +250,8 @@ Do not solve loot spam with an increasingly complicated filter. Prevent the spam
 - Crafted map modifiers let the player target base types, affix tags, unique families, or crafting materials before entry.
 - Drops remain physical world objects until the character runs over them; collected equipment appears immediately at the front of the in-map backpack, while collected crafting materials appear in its pickup ledger.
 - Item drops are identified immediately; discovery comes from evaluation, not an identify-scroll tax.
+- Maps and every crafting currency are physical inventory items rather than abstract counters.
+- Currency items automatically combine into stacks. Each currency definition owns its maximum stack size; the MVP default is 40.
 
 ## Crafting system: the Workbench
 
@@ -322,6 +324,8 @@ Knowledge unlocks options, not raw power, so veteran players gain breadth withou
 ### Maps are items
 
 Every endgame map exists as a physical, craftable item in the player's inventory. A map item is consumed when its arena is opened.
+
+The hideout map device has exactly one map slot. A player moves one map from the backpack into that slot, crafts the slotted item if desired, then presses **Open Map**. Opening consumes only that slotted map and creates the portal. Closing the device or removing the map returns it unchanged to the backpack.
 
 The map item defines:
 

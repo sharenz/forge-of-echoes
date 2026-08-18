@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTER_CLASSES, XP_BY_LEVEL } from "../game/content";
 import { buildArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
-import type { CharacterClassId, EquipmentItem, Materials, PlayerProfile, RunResult } from "../game/domain";
+import type { CharacterClassId, CurrencyId, EquipmentItem, InventoryItem, MapItem, PlayerProfile, RunResult } from "../game/domain";
+import { addCurrencyToInventory, addItemsToInventory, isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency } from "../game/inventory";
 import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
-import { addMapModifier, createMap, rerollMap } from "../game/maps";
-import { addMaterials, applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
+import { addMapModifier, rerollMap } from "../game/maps";
+import { addRecoveredItems, applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
 import type { WorldStation } from "../game2d/types";
 import { GameNotification } from "./GameNotification";
 import { InventoryPanel } from "./InventoryPanel";
@@ -16,8 +17,8 @@ import { PhaserWorld } from "./PhaserWorld";
 
 type HideoutPanel = "inventory" | "stash" | "bench" | "maps" | null;
 type GameScreen = "hideout" | "arena";
-interface RunLootLedger { items: EquipmentItem[]; materials: Partial<Materials> }
-const emptyRunLoot = (): RunLootLedger => ({ items: [], materials: {} });
+interface RunLootLedger { items: InventoryItem[] }
+const emptyRunLoot = (): RunLootLedger => ({ items: [] });
 
 export function GameShell() {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
@@ -25,18 +26,15 @@ export function GameShell() {
   const [characterName, setCharacterName] = useState("");
   const [panel, setPanel] = useState<HideoutPanel>(null);
   const [screen, setScreen] = useState<GameScreen>("hideout");
-  const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [runItems, setRunItems] = useState<EquipmentItem[]>([]);
-  const [runMaterials, setRunMaterials] = useState<Partial<Materials>>({});
+  const [runItems, setRunItems] = useState<InventoryItem[]>([]);
   const runLootRef = useRef<RunLootLedger>(emptyRunLoot());
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       const loaded = loadProfile();
       setProfile(loaded);
-      setSelectedMapId(loaded.maps[0]?.id ?? null);
       const firstItem = loaded.inventory[0] ?? loaded.stash[0] ?? Object.values(loaded.equipped)[0];
       setSelectedItemId(firstItem?.id ?? null);
     }, 0);
@@ -69,8 +67,9 @@ export function GameShell() {
 
   const stats = useMemo(() => profile ? deriveStats(profile) : null, [profile]);
   const arenaBalance = useMemo(() => profile?.openedMap ? buildArenaBalance(profile) : undefined, [profile]);
+  const currencies = useMemo(() => profile ? profileCurrencyAmounts(profile) : null, [profile]);
 
-  if (!profile || !stats) {
+  if (!profile || !stats || !currencies) {
     return <main className="loading-forge"><span className="forge-loader" /><strong>Lighting the forge</strong></main>;
   }
 
@@ -100,8 +99,9 @@ export function GameShell() {
     );
   }
 
-  const backpackItems = screen === "arena" ? [...runItems, ...profile.inventory] : profile.inventory;
-  const allItems = [...Object.values(profile.equipped).filter(Boolean), ...backpackItems, ...profile.stash] as EquipmentItem[];
+  const backpackItems: InventoryItem[] = screen === "arena" ? [...runItems, ...profile.inventory] : profile.inventory;
+  const allItems = [...Object.values(profile.equipped).filter(Boolean), ...backpackItems.filter(isEquipmentItem), ...profile.stash.filter(isEquipmentItem)] as EquipmentItem[];
+  const inventoryMaps = profile.inventory.filter(isMapItem);
   const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id)) as Set<string>;
 
   if (screen === "arena" && profile.openedMap && arenaBalance) {
@@ -114,7 +114,7 @@ export function GameShell() {
           <div className="world-panel-backdrop arena-panel-backdrop">
             <section className="world-panel panel-inventory" aria-label="Character inventory">
               <header><div><span>Combat paused · equipment changes apply immediately</span><h2>Inventory</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close inventory">×</button></header>
-              <InventoryPanel profile={profile} backpackItems={backpackItems} selectedItemId={selectedItemId} freshItemIds={runItems.map((item) => item.id)} runMaterials={runMaterials} onSelect={setSelectedItemId} onEquipItem={equipItem} onUnequipItem={unequipItem} />
+              <InventoryPanel profile={profile} backpackItems={backpackItems} selectedItemId={selectedItemId} freshItemIds={runItems.map((item) => item.id)} onSelect={setSelectedItemId} onEquipItem={equipItem} onUnequipItem={unequipItem} />
             </section>
           </div>
         )}
@@ -145,21 +145,37 @@ export function GameShell() {
   }
 
   function craftMap(action: "dust" | "threat" | "reward") {
-    if (!profile || !selectedMapId) return;
+    if (!profile?.mapDevice) return;
     const costs = { dust: "mapDust", threat: "threatGlyph", reward: "rewardInk" } as const;
-    const material = costs[action];
-    if (profile.materials[material] <= 0) return;
-    const maps = profile.maps.map((map) => map.id !== selectedMapId ? map : action === "dust" ? rerollMap(map) : addMapModifier(map, action));
-    setProfile({ ...profile, maps, materials: { ...profile.materials, [material]: profile.materials[material] - 1 } });
+    const currency = costs[action];
+    const transformed = action === "dust" ? rerollMap(profile.mapDevice) : addMapModifier(profile.mapDevice, action);
+    if (transformed === profile.mapDevice) return;
+    const paid = consumeProfileCurrency(profile, currency, 1);
+    if (!paid) return;
+    setProfile({ ...paid, mapDevice: transformed });
   }
 
   function openPortal() {
-    if (!profile) return;
-    const map = profile.maps.find((candidate) => candidate.id === selectedMapId);
-    if (!map) return;
-    setProfile({ ...profile, maps: profile.maps.filter((candidate) => candidate.id !== map.id), openedMap: map });
+    if (!profile?.mapDevice || profile.openedMap) return;
+    const map = profile.mapDevice;
+    setProfile({ ...profile, mapDevice: null, openedMap: map });
     setPanel(null);
     setNotice(`${map.baseName} portal opened.`);
+  }
+
+  function slotMap(mapId: string) {
+    if (!profile) return;
+    const map = profile.inventory.find((item): item is MapItem => isMapItem(item) && item.id === mapId);
+    if (!map) return;
+    const inventory = profile.inventory.filter((item) => item.id !== map.id);
+    if (profile.mapDevice) inventory.unshift(profile.mapDevice);
+    setProfile({ ...profile, inventory, mapDevice: map });
+    setSelectedItemId(map.id);
+  }
+
+  function removeMapFromDevice() {
+    if (!profile?.mapDevice) return;
+    setProfile({ ...profile, inventory: [profile.mapDevice, ...profile.inventory], mapDevice: null });
   }
 
   function completeArena(summary: ArenaSummary) {
@@ -172,14 +188,11 @@ export function GameShell() {
       ...summary,
       loot: {
         xp: Math.round((220 + balance.tier * 65) * rewardMultiplier),
-        materials: recovered.materials,
         items: recovered.items,
       },
     };
-    let next = applyRunResult(profile, result);
-    if (next.maps.length === 0) next = { ...next, maps: [createMap(1)] };
+    const next = applyRunResult(profile, result);
     setProfile(next);
-    setSelectedMapId(next.maps[0]?.id ?? null);
     setSelectedItemId(result.loot.items[0]?.id ?? next.inventory[0]?.id ?? null);
     resetRunLoot();
     setPanel(null);
@@ -191,27 +204,19 @@ export function GameShell() {
     if (!profile?.openedMap) return;
     if (drop.kind === "equipment") {
       const item = generateEquipment(Math.max(2, profile.openedMap.tier) * 5, drop.rarity);
-      runLootRef.current.items.push(item);
-      setRunItems((current) => [item, ...current]);
+      runLootRef.current.items = [item, ...runLootRef.current.items];
+      setRunItems([...runLootRef.current.items]);
       setSelectedItemId(item.id);
       return;
     }
-    const current = runLootRef.current.materials[drop.material] ?? 0;
-    runLootRef.current.materials[drop.material] = current + drop.amount;
-    setRunMaterials((materials) => ({ ...materials, [drop.material]: (materials[drop.material] ?? 0) + drop.amount }));
+    runLootRef.current.items = addCurrencyToInventory(runLootRef.current.items, drop.currency, drop.amount);
+    setRunItems([...runLootRef.current.items]);
   }
 
   function leaveArena() {
     if (!profile) return;
     const recovered = runLootRef.current;
-    const combinedItems = [...recovered.items, ...profile.inventory];
-    setProfile({
-      ...profile,
-      materials: addMaterials(profile.materials, recovered.materials),
-      inventory: combinedItems.slice(0, 24),
-      stash: [...combinedItems.slice(24), ...profile.stash],
-      openedMap: null,
-    });
+    setProfile({ ...addRecoveredItems(profile, recovered.items), openedMap: null });
     setSelectedItemId(recovered.items[0]?.id ?? profile.inventory[0]?.id ?? null);
     resetRunLoot();
     setPanel(null);
@@ -221,8 +226,8 @@ export function GameShell() {
 
   function craftItem(action: "scrap" | "essence") {
     if (!profile || !selectedItemId) return;
-    const material = action === "scrap" ? "scrap" : "essence";
-    if (profile.materials[material] <= 0) return;
+    const currency: CurrencyId = action === "scrap" ? "scrap" : "essence";
+    if (!currencies || currencies[currency] <= 0) return;
     const transform = action === "scrap" ? rerollAffixValues : addFireAffix;
     let changed = false;
     const update = (item: EquipmentItem) => {
@@ -231,17 +236,17 @@ export function GameShell() {
       changed = next !== item;
       return next;
     };
-    const inventory = profile.inventory.map(update);
-    const stash = profile.stash.map(update);
+    const inventory = profile.inventory.map((item) => isEquipmentItem(item) ? update(item) : item);
+    const stash = profile.stash.map((item) => isEquipmentItem(item) ? update(item) : item);
     const equipped = Object.fromEntries(Object.entries(profile.equipped).map(([slot, item]) => [slot, item ? update(item) : item])) as PlayerProfile["equipped"];
     if (!changed) return;
-    setProfile({ ...profile, inventory, stash, equipped, materials: { ...profile.materials, [material]: profile.materials[material] - 1 } });
+    const paid = consumeProfileCurrency({ ...profile, inventory, stash, equipped }, currency, 1);
+    if (paid) setProfile(paid);
   }
 
   function resetRunLoot() {
     runLootRef.current = emptyRunLoot();
     setRunItems([]);
-    setRunMaterials({});
   }
 
   function equipSelected() {
@@ -253,7 +258,7 @@ export function GameShell() {
     const item = allItems.find((candidate) => candidate.id === itemId);
     if (!item || profile.equipped[item.slot]?.id === item.id) return;
     const previouslyEquipped = profile.equipped[item.slot];
-    const isRunItem = runItems.some((candidate) => candidate.id === item.id);
+    const isRunItem = runItems.some((candidate) => isEquipmentItem(candidate) && candidate.id === item.id);
     if (isRunItem) {
       runLootRef.current.items = runLootRef.current.items.filter((candidate) => candidate.id !== item.id);
       setRunItems((current) => current.filter((candidate) => candidate.id !== item.id));
@@ -287,9 +292,9 @@ export function GameShell() {
     if (!item) return;
     const inStash = profile.stash.some((candidate) => candidate.id === item.id);
     if (inStash) {
-      setProfile({ ...profile, stash: profile.stash.filter((candidate) => candidate.id !== item.id), inventory: [...profile.inventory, item] });
+      setProfile({ ...profile, stash: profile.stash.filter((candidate) => candidate.id !== item.id), inventory: addItemsToInventory(profile.inventory, [item]) });
     } else if (profile.inventory.some((candidate) => candidate.id === item.id)) {
-      setProfile({ ...profile, inventory: profile.inventory.filter((candidate) => candidate.id !== item.id), stash: [...profile.stash, item] });
+      setProfile({ ...profile, inventory: profile.inventory.filter((candidate) => candidate.id !== item.id), stash: addItemsToInventory(profile.stash, [item]) });
     }
     setSelectedItemId(item.id);
   }
@@ -299,7 +304,7 @@ export function GameShell() {
       <header className="hideout-hud">
         <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
         <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId].name}</small></div></div>
-        <nav><button type="button" onClick={() => setPanel("inventory")}>Inventory <kbd>I</kbd></button><button type="button" onClick={() => setPanel("maps")}>Maps <strong>{profile.maps.length}</strong></button></nav>
+        <nav><button type="button" onClick={() => setPanel("inventory")}>Inventory <kbd>I</kbd></button><button type="button" onClick={() => setPanel("maps")}>Maps <strong>{inventoryMaps.length + (profile.mapDevice ? 1 : 0)}</strong></button></nav>
         <div className="hideout-xp"><span style={{ width: `${xpPercent}%` }} /><small>{profile.character.xp}/{xpRequired} XP</small></div>
       </header>
 
@@ -310,8 +315,8 @@ export function GameShell() {
         <div className="world-panel-backdrop">
           <section className={`world-panel panel-${panel}`}>
             <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : "Character equipment"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : "Inventory"}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
-            {panel === "maps" && <MapWorkshop maps={profile.maps} selectedMapId={selectedMapId} materials={profile.materials} onSelect={setSelectedMapId} onCraft={craftMap} onEnter={openPortal} />}
-            {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} materials={profile.materials} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
+            {panel === "maps" && <MapWorkshop maps={inventoryMaps} slottedMap={profile.mapDevice} currencies={currencies} portalActive={Boolean(profile.openedMap)} onSlot={slotMap} onRemove={removeMapFromDevice} onCraft={craftMap} onOpen={openPortal} />}
+            {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} currencies={currencies} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
             {(panel === "inventory" || panel === "stash") && (
               <InventoryPanel profile={profile} backpackItems={profile.inventory} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onUnequipItem={unequipItem} onTransferItem={transferItem} />
             )}

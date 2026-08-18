@@ -1,17 +1,17 @@
-import type { EquipmentItem, Materials } from "../game/domain";
+import type { CurrencyAmounts, EquipmentItem } from "../game/domain";
 import { ItemCard } from "./ItemCard";
 
 interface ItemWorkbenchProps {
   items: EquipmentItem[];
   equippedIds: Set<string>;
-  materials: Materials;
+  currencies: CurrencyAmounts;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCraft: (action: "scrap" | "essence") => void;
   onEquip: () => void;
 }
 
-export function ItemWorkbench({ items, equippedIds, materials, selectedId, onSelect, onCraft, onEquip }: ItemWorkbenchProps) {
+export function ItemWorkbench({ items, equippedIds, currencies, selectedId, onSelect, onCraft, onEquip }: ItemWorkbenchProps) {
   const selected = items.find((item) => item.id === selectedId) ?? items[0];
   return (
     <section className="item-workshop workshop-layout">
@@ -39,11 +39,11 @@ export function ItemWorkbench({ items, equippedIds, materials, selectedId, onSel
         <div className="panel-heading"><div><span className="eyebrow">Item workbench</span><h2>Develop the item</h2></div></div>
         <p className="panel-copy">Every structural craft consumes Stability. At zero Stability, the item is finished—not destroyed.</p>
         <div className="action-list">
-          <button type="button" onClick={() => onCraft("scrap")} disabled={!selected || selected.affixes.length === 0 || selected.stability <= 0 || materials.scrap <= 0}>
-            <span className="material-icon">S</span><span><strong>Refine with Scrap</strong><small>Reroll all affix values</small></span><em>{materials.scrap}</em>
+          <button type="button" onClick={() => onCraft("scrap")} disabled={!selected || selected.affixes.length === 0 || selected.stability <= 0 || currencies.scrap <= 0}>
+            <span className="material-icon">S</span><span><strong>Refine with Scrap</strong><small>Reroll all affix values</small></span><em>{currencies.scrap}</em>
           </button>
-          <button type="button" onClick={() => onCraft("essence")} disabled={!selected || selected.affixes.length >= 4 || selected.stability < 2 || materials.essence <= 0}>
-            <span className="material-icon essence">E</span><span><strong>Shape with Essence</strong><small>Add a fire-tagged affix</small></span><em>{materials.essence}</em>
+          <button type="button" onClick={() => onCraft("essence")} disabled={!selected || selected.affixes.length >= 4 || selected.stability < 2 || currencies.essence <= 0}>
+            <span className="material-icon essence">E</span><span><strong>Shape with Essence</strong><small>Add a fire-tagged affix</small></span><em>{currencies.essence}</em>
           </button>
         </div>
         <div className="craft-note"><span>i</span> The prototype exposes all deterministic costs before you commit.</div>
@@ -51,4 +51,3 @@ export function ItemWorkbench({ items, equippedIds, materials, selectedId, onSel
     </section>
   );
 }
-
