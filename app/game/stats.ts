@@ -82,6 +82,16 @@ function classAttributeModifiers(
   ] satisfies StatModifier[]);
 }
 
+function allocatedAttributeModifiers(profile: PlayerProfile): StatModifier[] {
+  return ATTRIBUTE_KEYS.map((attribute) => ({
+    stat: attribute,
+    mode: "flat",
+    value: profile.character.allocatedAttributes[attribute],
+    source: `character:allocated-${attribute}`,
+    label: `Allocated ${attribute}`,
+  }));
+}
+
 function materializeRule(
   rule: StatContributionRule,
   level: number,
@@ -127,7 +137,12 @@ export function calculateCharacterStats(profile: PlayerProfile): CharacterStatCa
     source: `class:${classId}:base-${stat}`,
     label: `${classDefinition.name} class bonus`,
   }));
-  const initialModifiers = [...attributeModifiers, ...classModifiers, ...itemModifierList];
+  const initialModifiers = [
+    ...attributeModifiers,
+    ...allocatedAttributeModifiers(profile),
+    ...classModifiers,
+    ...itemModifierList,
+  ];
 
   const attributes = Object.fromEntries(ATTRIBUTE_KEYS.map((attribute) => [
     attribute,

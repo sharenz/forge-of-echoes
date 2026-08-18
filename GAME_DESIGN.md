@@ -56,10 +56,9 @@ Characters progress from **level 1 to the hard cap of level 99**.
 
 Each level-up grants:
 
-- one passive point, for 98 points earned from levels;
-- attribute points at milestone levels;
-- access to higher item tiers and skill ranks;
-- occasional specialization points.
+- five attribute points allocated directly among Strength, Dexterity, and Intelligence;
+- one active-skill point allocated to an unlocked skill;
+- access to higher item tiers and later progression systems.
 
 The leveling curve has five intended phases:
 
@@ -69,7 +68,9 @@ The leveling curve has five intended phases:
 - **Levels 76–90 — Mastery:** high-tier maps, advanced crafting, and meaningful build refinement.
 - **Levels 91–99 — Prestige:** deliberately slow aspirational progression for dedicated characters.
 
-A functional endgame build should be complete around level 75–80. Levels 91–99 provide passive points and prestige, but must not contain exclusive skills, crafting systems, or required item bases. Reaching level 99 should be impressive rather than mandatory.
+A functional endgame build should be complete around level 75–80. Levels 91–99 provide flexible attribute and skill points plus prestige, but must not contain exclusive skills, crafting systems, or required item bases. Reaching level 99 should be impressive rather than mandatory.
+
+Experience is awarded when each monster dies, not deferred until map completion. Every monster archetype owns a base reward and wave/tier growth values; magic and rare monster multipliers are shared encounter config. This keeps reward tuning attached to the enemies that produce it and makes the experience bar react to every kill.
 
 Equipment level requirements should generally stop around level 80. Better endgame items come from higher item levels, affix tiers, and crafting—not from requiring the character to reach 99.
 
@@ -134,6 +135,8 @@ A character equips:
 This is enough expression for buildcraft without requiring a browser player to manage twelve combat keys.
 
 ### Skill modification
+
+Active skills have 20 ranks. Rank effects are data-driven and resolved once for both combat and UI so displayed values cannot drift from runtime behavior. For the MVP, Ember Nova gains damage effectiveness and one projectile every rank plus one pierce at ranks 5, 10, 15, and 20. Rift Step recovers a charge faster every rank and gains a maximum charge at those same five-rank milestones.
 
 Each active skill has a small branching skill tree. A branch should change behavior, not merely add 5% damage.
 

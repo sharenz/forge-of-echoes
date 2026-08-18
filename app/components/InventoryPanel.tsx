@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { CHARACTER_EQUIPMENT_SLOTS } from "../game/config/equipment-slots";
 import { STASH_RULES } from "../game/config/stash";
-import type { CharacterEquipmentSlot, EquipmentItem, InventoryItem, ItemContainerId, PlayerProfile } from "../game/domain";
+import type { ActiveSkillId, AttributeKey, CharacterEquipmentSlot, EquipmentItem, InventoryItem, ItemContainerId, PlayerProfile } from "../game/domain";
 import { equipmentSlotAccepts } from "../game/equipment";
 import { containerItems } from "../game/item-container";
 import { currencyAmounts, isEquipmentItem } from "../game/inventory";
 import { activeStashTab, stashItems as allStashItems } from "../game/stash";
 import { InventoryGrid, type GridOffset } from "./InventoryGrid";
 import { ItemCard } from "./ItemCard";
+import { CharacterProgression } from "./CharacterProgression";
 
 interface InventoryPanelProps {
   profile: PlayerProfile;
@@ -23,9 +24,11 @@ interface InventoryPanelProps {
   onSelectStashTab: (tabId: string) => void;
   onRenameStashTab: (tabId: string, name: string) => void;
   onCreateStashTab: () => void;
+  onAllocateAttribute: (attribute: AttributeKey) => void;
+  onAllocateSkill: (skill: ActiveSkillId) => void;
 }
 
-export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem, onQuickStash, onSelectStashTab, onRenameStashTab, onCreateStashTab }: InventoryPanelProps) {
+export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem, onQuickStash, onSelectStashTab, onRenameStashTab, onCreateStashTab, onAllocateAttribute, onAllocateSkill }: InventoryPanelProps) {
   const [dragState, setDragState] = useState<{ itemId: string; offset: GridOffset } | null>(null);
   const draggedItemId = dragState?.itemId ?? null;
   const freshItems = new Set(freshItemIds);
@@ -81,6 +84,7 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
         })}
       </div>
       <div className="inventory-containers">
+        <CharacterProgression progress={profile.character} onAllocateAttribute={onAllocateAttribute} onAllocateSkill={onAllocateSkill} />
         {hasRunPickups && (
           <section className="run-pickup-ledger" aria-label="Items collected in this map">
             <header><div><span>Collected this map</span><strong>{freshItems.size} new inventory items</strong></div><small>Picked up and secured</small></header>

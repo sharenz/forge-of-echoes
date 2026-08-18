@@ -204,12 +204,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.doesNotMatch(domain, /Bargain/);
   assert.match(domain, /interface MapItem/);
   assert.match(domain, /interface StashState/);
-  assert.match(domain, /version: 7/);
+  assert.match(domain, /version: 8/);
   assert.match(domain, /interface EquipmentItem/);
-  assert.match(profile, /level < MAX_CHARACTER_LEVEL/);
+  assert.match(profile, /grantCharacterExperience/);
   assert.match(profile, /localStorage/);
-  assert.match(profile, /crafty\.profile\.v7/);
-  assert.match(profile, /migrateV6Profile/);
+  assert.match(profile, /crafty\.profile\.v8/);
+  assert.match(profile, /migrateV7Profile/);
   assert.match(stats, /sum\(increased\)|mode === "increased"/);
   assert.match(stats, /moreMultiplier/);
   assert.match(itemConfig, /perItemLevel/);

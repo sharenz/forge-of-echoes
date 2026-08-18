@@ -28,9 +28,17 @@ import { createMap, mapModifierDescription, mapModifierRewardDescription } from 
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
 import { dropChances, rollEquipmentRarity } from "../app/game/loot";
 import { activeStashTab, addStashTab, createStash, insertItemsIntoStash, renameStashTab, selectStashTab, stashItems } from "../app/game/stash";
+import { allocateAttributePoint, allocateSkillPoint, grantCharacterExperience, monsterExperienceReward } from "../app/game/progression";
+import { resolveSkillDefinition } from "../app/game/skills";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
+const characterProgress = (level = 1): PlayerProfile["character"] => ({
+  name: "Test", archetype: "Test", classId: "amazon", created: true, level, xp: 0,
+  allocatedAttributes: { strength: 0, dexterity: 0, intelligence: 0 },
+  unspentAttributePoints: 0, skillLevels: { nova: 1, dash: 1 }, unspentSkillPoints: 0,
+  mapsCompleted: 0, highestWave: 0,
+});
 
 test("resolves flat, increased, and more modifiers in the canonical order", () => {
   const result = resolveStat(100, [modifier("flat", 20), modifier("flat", 10), modifier("increased", 30), modifier("increased", 20), modifier("more", 10), modifier("more", 25)]);
@@ -90,8 +98,8 @@ test("character calculations combine item base, implicit, and explicit modifiers
     }],
   } satisfies EquipmentItem;
   const profile = {
-    version: 7,
-    character: { name: "Test", archetype: "Test", classId: "amazon", created: true, level: 10, xp: 0, unspentPassives: 0, mapsCompleted: 0, highestWave: 0 },
+    version: 8,
+    character: characterProgress(10),
     inventory: createItemContainer("backpack"), stash: createStash(), equipped: { mainHand: weapon }, mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const calculation = calculateCharacterStats(profile);
@@ -112,8 +120,8 @@ test("weapon-local APS is the base scaled by sourced increased attack speed", ()
     stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [], affixes: [],
   });
   const baseProfile = {
-    version: 7,
-    character: { name: "Test", archetype: "Test", classId: "amazon", created: true, level: 1, xp: 0, unspentPassives: 0, mapsCompleted: 0, highestWave: 0 },
+    version: 8,
+    character: characterProgress(),
     inventory: createItemContainer("backpack"), stash: createStash(), equipped: {}, mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const spear = calculateCharacterStats({ ...baseProfile, equipped: { mainHand: createWeapon("hunter-spear", "Hunter Spear") } });
@@ -162,7 +170,7 @@ test("currency consumption removes quantities across actual inventory stacks", (
 test("new profiles contain map and currency items in the backpack", () => {
   const profile = createInitialProfile();
   const backpackItems = containerItems(profile.inventory);
-  assert.equal(profile.version, 7);
+  assert.equal(profile.version, 8);
   assert.deepEqual(profile.stash.tabs.map((tab) => tab.name), ["General", "Gear", "Maps", "Materials"]);
   assert.equal(profile.mapDevice, null);
   assert.equal(backpackItems.filter(isMapItem).length, 3);
@@ -171,7 +179,7 @@ test("new profiles contain map and currency items in the backpack", () => {
   assert.equal("maps" in profile, false);
 });
 
-test("v3 counter saves migrate maps and currency into positioned v7 inventory items", () => {
+test("v3 counter saves migrate maps and currency into positioned v8 inventory items", () => {
   const oldMap = {
     id: "old-map", baseId: "ashen-crucible", baseName: "Ashen Crucible", tier: 3, rarity: "normal",
     quality: 0, corrupted: false, implicit: "Test", modifiers: [],
@@ -189,7 +197,9 @@ test("v3 counter saves migrate maps and currency into positioned v7 inventory it
   try {
     const migrated = loadProfile();
     const items = containerItems(migrated.inventory);
-    assert.equal(migrated.version, 7);
+    assert.equal(migrated.version, 8);
+    assert.equal(migrated.character.unspentAttributePoints, 55);
+    assert.equal(migrated.character.unspentSkillPoints, 0);
     assert.equal(items.filter(isMapItem).length, 1);
     assert.deepEqual(items.filter(isCurrencyItem).filter((item) => item.baseId === "scrap").map((item) => item.stackSize), [40, 5]);
   } finally {
@@ -210,7 +220,7 @@ test("v5 saves migrate legacy weapon equipment into main hand", () => {
   });
   try {
     const migrated = loadProfile();
-    assert.equal(migrated.version, 7);
+    assert.equal(migrated.version, 8);
     assert.equal(migrated.equipped.mainHand?.id, "legacy-equipped");
     assert.equal(migrated.equipped.mainHand?.slot, "mainHand");
     assert.equal("weapon" in migrated.equipped, false);
@@ -231,12 +241,90 @@ test("v6 saves migrate their positioned stash into the first named tab", () => {
   try {
     const migrated = loadProfile();
     const firstTab = activeStashTab(migrated.stash);
-    assert.equal(migrated.version, 7);
+    assert.equal(migrated.version, 8);
     assert.equal(firstTab.name, "General");
     assert.deepEqual(firstTab.container.entries[0], { item: stack, x: 3, y: 2 });
   } finally {
     Reflect.deleteProperty(globalThis, "window");
   }
+});
+
+test("v7 saves gain explicit unspent progression points without losing character progress", () => {
+  const current = createInitialProfile();
+  const legacy = {
+    ...current,
+    version: 7,
+    character: {
+      name: "Legacy", archetype: "Spear", classId: "amazon", created: true,
+      level: 6, xp: 17, unspentPassives: 2, mapsCompleted: 3, highestWave: 4,
+    },
+  };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: { getItem: (key: string) => key === "crafty.profile.v7" ? JSON.stringify(legacy) : null } },
+  });
+  try {
+    const migrated = loadProfile();
+    assert.equal(migrated.version, 8);
+    assert.equal(migrated.character.level, 6);
+    assert.equal(migrated.character.xp, 17);
+    assert.equal(migrated.character.unspentAttributePoints, 25);
+    assert.equal(migrated.character.unspentSkillPoints, 2);
+    assert.deepEqual(migrated.character.skillLevels, { nova: 1, dash: 1 });
+  } finally {
+    Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
+test("monster kills grant XP, levels award points, and allocated attributes affect real stats", () => {
+  const created = { ...createInitialProfile(), character: characterProgress() };
+  const reward = grantCharacterExperience(created, 80);
+  assert.equal(reward.levelsGained, 1);
+  assert.equal(reward.profile.character.level, 2);
+  assert.equal(reward.profile.character.xp, 0);
+  assert.equal(reward.profile.character.unspentAttributePoints, 5);
+  assert.equal(reward.profile.character.unspentSkillPoints, 1);
+
+  const before = calculateCharacterStats(reward.profile).stats.strength;
+  const allocated = allocateAttributePoint(reward.profile, "strength");
+  assert.equal(allocated.character.unspentAttributePoints, 4);
+  assert.equal(calculateCharacterStats(allocated).stats.strength, before + 1);
+  assert.ok(calculateCharacterStats(allocated).breakdown.strength.contributions.some((entry) => entry.source === "character:allocated-strength"));
+});
+
+test("Nova and Rift Step resolve all twenty configured skill levels", () => {
+  const nova1 = resolveSkillDefinition(ACTIVE_SKILLS.nova, 1);
+  const nova5 = resolveSkillDefinition(ACTIVE_SKILLS.nova, 5);
+  const nova20 = resolveSkillDefinition(ACTIVE_SKILLS.nova, 20);
+  assert.equal(nova1.projectileCount, 18);
+  assert.equal(nova1.piercing, 0);
+  assert.equal(nova5.projectileCount, 22);
+  assert.equal(nova5.piercing, 1);
+  assert.equal(nova20.projectileCount, 37);
+  assert.equal(nova20.piercing, 4);
+  assert.equal(nova20.damage?.effectiveness, 2.49);
+
+  const dash1 = resolveSkillDefinition(ACTIVE_SKILLS.dash, 1);
+  const dash20 = resolveSkillDefinition(ACTIVE_SKILLS.dash, 20);
+  assert.equal(dash1.maxCharges, 3);
+  assert.equal(dash20.maxCharges, 7);
+  assert.equal(dash20.recharge, 1.48);
+
+  let profile = { ...createInitialProfile(), character: { ...characterProgress(), unspentSkillPoints: 30 } };
+  for (let index = 0; index < 30; index += 1) profile = allocateSkillPoint(profile, "nova");
+  assert.equal(profile.character.skillLevels.nova, 20);
+  assert.equal(profile.character.unspentSkillPoints, 11);
+});
+
+test("monster XP scales with archetype, wave, map tier, and rarity", () => {
+  const early = monsterExperienceReward("ashling", 1, 1, "normal");
+  const late = monsterExperienceReward("ashling", 6, 4, "normal");
+  const magic = monsterExperienceReward("ashling", 6, 4, "magic");
+  const rare = monsterExperienceReward("ashling", 6, 4, "rare");
+  assert.ok(late > early);
+  assert.ok(magic > late);
+  assert.ok(rare > magic);
+  assert.ok(monsterExperienceReward("ironhide-brute", 1, 1, "normal") > early);
 });
 
 test("stash tabs are selectable, renamable, expandable, and insert into the active tab first", () => {

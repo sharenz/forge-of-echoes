@@ -90,6 +90,7 @@ export interface MonsterDefinition {
   aggroRange: number;
   armor: number;
   evadeChance: number;
+  experience: { base: number; perWave: number; perTier: number };
   visual: {
     scale: number;
     body: number;
@@ -125,6 +126,16 @@ export interface SkillDefinition {
     range: { minMultiplier: number; maxMultiplier: number };
   };
   projectileScale?: number;
+  projectileCount?: number;
+  piercing?: number;
+  progression?: {
+    maxLevel: number;
+    damageEffectivenessPerLevel?: number;
+    projectilesPerLevel?: number;
+    piercingEveryLevels?: number;
+    rechargePerLevel?: number;
+    chargeEveryLevels?: number;
+  };
   presentation: {
     animation: SkillAnimationId;
     vfx: SkillVfxId;

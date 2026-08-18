@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
+import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "../game/config/progression";
 import type { SkillDefinition } from "../game/config/schema";
-import type { CharacterClassId, CharacterStats, StatKey, StatModifier } from "../game/domain";
+import type { CharacterClassId, CharacterProgress, CharacterStats, StatKey, StatModifier } from "../game/domain";
+import { resolveSkillDefinition } from "../game/skills";
 import type { CharacterStatCalculation, StatResolution } from "../game/stats";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
 import type { WorldHudState, WorldMode, WorldStation } from "../game2d/types";
@@ -17,9 +19,11 @@ interface PhaserWorldProps {
   paused?: boolean;
   arenaBalance?: ArenaBalance;
   characterStats?: CharacterStats;
+  characterProgress?: CharacterProgress;
   characterStatBreakdown?: CharacterStatCalculation["breakdown"];
   onStation?: (station: WorldStation) => void;
   onLootPickup?: (drop: MapDrop) => boolean;
+  onExperienceGain?: (amount: number) => void;
   onArenaComplete?: (summary: ArenaSummary) => void;
   children?: React.ReactNode;
 }
@@ -75,13 +79,17 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
   );
 }
 
-export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterStatBreakdown, onStation, onLootPickup, onArenaComplete, children }: PhaserWorldProps) {
+export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, onStation, onLootPickup, onExperienceGain, onArenaComplete, children }: PhaserWorldProps) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
+  const novaLevel = characterProgress?.skillLevels.nova ?? 1;
+  const dashLevel = characterProgress?.skillLevels.dash ?? 1;
   const parentRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<PhaserRuntime | null>(null);
   const stationCallbackRef = useRef(onStation);
   const lootCallbackRef = useRef(onLootPickup);
   const completionCallbackRef = useRef(onArenaComplete);
+  const experienceCallbackRef = useRef(onExperienceGain);
+  const skillLevelsRef = useRef({ nova: novaLevel, dash: dashLevel });
   const pausedRef = useRef(paused);
   const arenaBalanceRef = useRef(arenaBalance);
   const [hud, setHud] = useState<WorldHudState | null>(null);
@@ -92,7 +100,8 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
     stationCallbackRef.current = onStation;
     lootCallbackRef.current = onLootPickup;
     completionCallbackRef.current = onArenaComplete;
-  }, [onArenaComplete, onLootPickup, onStation]);
+    experienceCallbackRef.current = onExperienceGain;
+  }, [onArenaComplete, onExperienceGain, onLootPickup, onStation]);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -103,6 +112,12 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
     arenaBalanceRef.current = arenaBalance;
     if (arenaBalance) runtimeRef.current?.updateArenaBalance(arenaBalance);
   }, [arenaBalance]);
+
+  useEffect(() => {
+    const skillLevels = { nova: novaLevel, dash: dashLevel };
+    skillLevelsRef.current = skillLevels;
+    runtimeRef.current?.updateSkillLevels(skillLevels);
+  }, [novaLevel, dashLevel]);
 
   useEffect(() => {
     const parent = parentRef.current;
@@ -119,10 +134,12 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
         classId: runtimeClassId,
         portalActive,
         paused: pausedRef.current,
+        skillLevels: skillLevelsRef.current,
         arenaBalance: arenaBalanceRef.current,
         onStation: (station) => stationCallbackRef.current?.(station),
         onHud: setHud,
         onLootPickup: (drop) => lootCallbackRef.current?.(drop) ?? false,
+        onExperienceGain: (amount) => experienceCallbackRef.current?.(amount),
         onArenaComplete: (summary) => completionCallbackRef.current?.(summary),
       });
       runtimeRef.current = runtime;
@@ -144,10 +161,14 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
     };
   }, [mode, portalActive, runtimeClassId]);
 
-  const novaReady = Boolean(hud && hud.novaCooldown <= 0.05 && hud.focus >= ACTIVE_SKILLS.nova.focusCost);
-  const riftReady = Boolean(hud && hud.riftCharges > 0 && hud.focus >= ACTIVE_SKILLS.dash.focusCost);
-  const novaProgress = hud ? Math.min(100, (hud.novaCooldown / ACTIVE_SKILLS.nova.cooldown) * 100) : 0;
-  const riftProgress = hud ? Math.min(100, (hud.riftRecharge / ACTIVE_SKILLS.dash.recharge) * 100) : 0;
+  const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel);
+  const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel);
+  const novaReady = Boolean(hud && hud.novaCooldown <= 0.05 && hud.focus >= resolvedNova.focusCost);
+  const riftReady = Boolean(hud && hud.riftCharges > 0 && hud.focus >= resolvedDash.focusCost);
+  const novaProgress = hud ? Math.min(100, (hud.novaCooldown / resolvedNova.cooldown) * 100) : 0;
+  const riftProgress = hud ? Math.min(100, (hud.riftRecharge / resolvedDash.recharge) * 100) : 0;
+  const xpRequired = characterProgress ? XP_BY_LEVEL(characterProgress.level) : 1;
+  const xpPercent = characterProgress?.level === MAX_CHARACTER_LEVEL ? 100 : Math.min(100, ((characterProgress?.xp ?? 0) / xpRequired) * 100);
 
   return (
     <main className={`pixel-shell mode-${mode}`}>
@@ -167,18 +188,24 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
             <button type="button" className="active-skill" disabled={!novaReady} onClick={() => runtimeRef.current?.useSkill("nova")}>
               <i className="skill-recharge" style={{ width: `${novaProgress}%` }} />
               <kbd>{ACTIVE_SKILLS.nova.key}</kbd>
-              <span><strong>{ACTIVE_SKILLS.nova.name}</strong><small>{hud.novaCooldown > 0.05 ? `${hud.novaCooldown.toFixed(1)}s recharge` : hud.focus < ACTIVE_SKILLS.nova.focusCost ? `Needs ${ACTIVE_SKILLS.nova.focusCost} Focus` : `Ready · ${damageSummary(ACTIVE_SKILLS.nova.damage)}`}</small></span>
+              <span><strong>{resolvedNova.name} · Lv {resolvedNova.level}</strong><small>{hud.novaCooldown > 0.05 ? `${hud.novaCooldown.toFixed(1)}s recharge` : hud.focus < resolvedNova.focusCost ? `Needs ${resolvedNova.focusCost} Focus` : `Ready · ${damageSummary(resolvedNova.damage!)} · ${resolvedNova.projectileCount} bolts · ${resolvedNova.piercing} pierce`}</small></span>
             </button>
             <button type="button" className="active-skill rift-skill" disabled={!riftReady} onClick={() => runtimeRef.current?.useSkill("dash")}>
               <i className="skill-recharge" style={{ width: `${riftProgress}%` }} />
               <kbd>{ACTIVE_SKILLS.dash.key}</kbd>
-              <span><strong>{ACTIVE_SKILLS.dash.name}</strong><small>{hud.riftCharges}/{hud.riftMaxCharges} charges{hud.riftCharges < hud.riftMaxCharges ? ` · +1 in ${hud.riftRecharge.toFixed(1)}s` : ` · ${ACTIVE_SKILLS.dash.focusCost} Focus`}</small></span>
+              <span><strong>{resolvedDash.name} · Lv {resolvedDash.level}</strong><small>{hud.riftCharges}/{hud.riftMaxCharges} charges{hud.riftCharges < hud.riftMaxCharges ? ` · +1 in ${hud.riftRecharge.toFixed(1)}s` : ` · ${resolvedDash.focusCost} Focus`}</small></span>
               <span className="skill-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} Rift Step charges`}>
                 {Array.from({ length: hud.riftMaxCharges }, (_, index) => <i className={index < hud.riftCharges ? "ready" : ""} key={index} />)}
               </span>
             </button>
           </div>
         </>
+      )}
+      {mode !== "class-select" && characterProgress && (
+        <div className="world-experience" aria-label={`Level ${characterProgress.level} experience`}>
+          <span><strong>Level {characterProgress.level}</strong><small>{characterProgress.level === MAX_CHARACTER_LEVEL ? "Maximum level" : `${characterProgress.xp} / ${xpRequired} XP`}</small></span>
+          <i><b style={{ width: `${xpPercent}%` }} /></i>
+        </div>
       )}
       {hud && <div className="world-fps">{hud.fps} FPS · WebGL sprites</div>}
       {mode !== "class-select" && characterStats && (

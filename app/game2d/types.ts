@@ -1,5 +1,5 @@
 import type { ArenaBalance, ArenaSummary, MapDrop } from "../game/combat";
-import type { CharacterClassId } from "../game/domain";
+import type { CharacterClassId, SkillLevels } from "../game/domain";
 
 export type WorldMode = "class-select" | "hideout" | "arena";
 export type WorldStation = "stash" | "bench" | "map-device" | "merchant" | "portal";
@@ -28,10 +28,12 @@ export interface WorldRuntimeOptions {
   classId: CharacterClassId;
   portalActive: boolean;
   paused: boolean;
+  skillLevels: SkillLevels;
   arenaBalance?: ArenaBalance;
   onStation: (station: WorldStation) => void;
   onHud: (state: WorldHudState) => void;
   /** Return false when the backpack rejected the drop, leaving it in the world. */
   onLootPickup: (drop: MapDrop) => boolean;
+  onExperienceGain: (amount: number) => void;
   onArenaComplete: (summary: ArenaSummary) => void;
 }

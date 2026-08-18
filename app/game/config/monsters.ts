@@ -15,6 +15,7 @@ const MONSTER_ARCHETYPE_DEFINITIONS = {
     aggroRange: 720,
     armor: 0,
     evadeChance: 2,
+    experience: { base: 6, perWave: 1, perTier: 0.8 },
     visual: { scale: 1.6, body: 0x8e3d42, accent: 0xd36b4e },
   },
   "cinder-spitter": {
@@ -32,6 +33,7 @@ const MONSTER_ARCHETYPE_DEFINITIONS = {
     aggroRange: 860,
     armor: 0,
     evadeChance: 5,
+    experience: { base: 7, perWave: 1.15, perTier: 0.9 },
     visual: { scale: 1.5, body: 0x5f3b72, accent: 0xd985e8 },
     ranged: { preferredRange: 270, projectileSpeed: 245, cooldown: 1.75, damageEffectiveness: 2.25 },
   },
@@ -50,6 +52,7 @@ const MONSTER_ARCHETYPE_DEFINITIONS = {
     aggroRange: 780,
     armor: 8,
     evadeChance: 4,
+    experience: { base: 11, perWave: 1.7, perTier: 1.2 },
     visual: { scale: 1.72, body: 0x315f6d, accent: 0x58d0cf },
     jump: { cooldown: 2.8, distance: 175, duration: 0.36, damageEffectiveness: 1.5 },
   },
@@ -68,6 +71,7 @@ const MONSTER_ARCHETYPE_DEFINITIONS = {
     aggroRange: 650,
     armor: 42,
     evadeChance: 0,
+    experience: { base: 15, perWave: 2.4, perTier: 1.6 },
     visual: { scale: 2.05, body: 0x4b4b49, accent: 0xb18b5d },
   },
   "ember-skitter": {
@@ -84,6 +88,7 @@ const MONSTER_ARCHETYPE_DEFINITIONS = {
     aggroRange: 800,
     armor: 0,
     evadeChance: 14,
+    experience: { base: 4, perWave: 0.65, perTier: 0.55 },
     visual: { scale: 1.25, body: 0x9a4b27, accent: 0xffa33c },
   },
 } as const satisfies Record<string, MonsterDefinition>;

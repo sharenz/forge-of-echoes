@@ -19,6 +19,7 @@ export const MONSTER_PACK_RULES = {
   typeCountWeights: [62, 30, 8],
   magicTint: 0x7799ff,
   rareTint: 0xffc34f,
+  rarityExperienceMultiplier: { normal: 1, magic: 1.8, rare: 5 } satisfies Record<MonsterRarity, number>,
   rarityRewardModifiers: {
     normal: [],
     magic: [

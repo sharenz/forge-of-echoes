@@ -676,6 +676,27 @@ body:has(.pixel-shell) { overflow: hidden; }
 .equipment-slot > span { color: #4f463d; font: 10px Georgia, serif; }
 .equipment-slot .item-card { width: 100%; min-height: 59px; }
 .inventory-containers { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.character-progression { padding: 14px; border: 1px solid #5b4432; background: linear-gradient(120deg, #25180f, #100d0a 65%); box-shadow: inset 0 0 32px #ba572014; }
+.character-progression > header { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.character-progression > header > div { display: flex; flex-direction: column; gap: 3px; }
+.character-progression > header span { color: #d48648; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; }
+.character-progression > header strong { color: #f0d8bb; font: 21px Georgia, serif; }
+.character-progression > header small { color: #a3937f; font-size: 12px; }
+.progression-xp { height: 7px; padding: 1px; border: 1px solid #493527; background: #090706; }
+.progression-xp i { display: block; height: 100%; background: linear-gradient(90deg, #8e351d, #ed8b45); box-shadow: 0 0 10px #d25835; transition: width .2s ease; }
+.progression-columns { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(360px, 1.3fr); gap: 16px; margin-top: 13px; }
+.progression-columns > div { padding: 10px; border: 1px solid #3d3026; background: #0d0b09aa; }
+.progression-columns h3 { margin: 0 0 8px; display: flex; justify-content: space-between; color: #d9c7b0; font: 15px Georgia, serif; }
+.progression-columns h3 em { color: #ee9c58; font: normal 11px Arial, sans-serif; text-transform: uppercase; }
+.progression-row { min-height: 44px; padding: 5px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #33271f; }
+.progression-row > span { min-width: 0; display: flex; align-items: center; gap: 10px; }
+.progression-row > span > b { width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid #6e4a31; background: #19110d; color: #e59a59; font-size: 10px; }
+.progression-row > span > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.progression-row strong { color: #e4d4bf; font: 14px Georgia, serif; }
+.progression-row small { color: #9c8b78; font-size: 11px; }
+.progression-row > button { width: 32px; height: 32px; flex: 0 0 auto; border: 1px solid #a76135; background: #382014; color: #ffc17c; font-size: 20px; cursor: pointer; }
+.progression-row > button:hover:not(:disabled) { border-color: #ef9b54; background: #5a2c16; }
+.progression-row > button:disabled { opacity: .28; cursor: default; }
 .stash-tab-section { min-width: 0; padding: 12px; border: 1px solid #49392c; background: linear-gradient(145deg, #17120e, #0d0b09); }
 .stash-tab-bar { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 7px; border-bottom: 1px solid #3e3025; }
 .stash-tab-bar button { flex: 0 0 auto; min-width: 94px; height: 36px; padding: 0 10px; border: 1px solid #49382b; background: #110e0b; color: #897967; cursor: pointer; display: flex; align-items: center; gap: 8px; }
@@ -816,13 +837,13 @@ body:has(.pixel-shell) { overflow: hidden; }
 .world-loot span { color: #d8c6ae; font-size: 9px; text-transform: uppercase; }
 .world-loot strong { grid-row: 1 / span 2; grid-column: 2; color: #ffcf74; font: 24px Georgia, serif; }
 .world-loot small { color: #817363; font-size: 7px; letter-spacing: .08em; text-transform: uppercase; }
-.world-vitals { position: absolute; z-index: 3; left: 26px; bottom: 28px; width: min(340px, 38vw); display: flex; flex-direction: column; gap: 5px; }
+.world-vitals { position: absolute; z-index: 3; left: 26px; bottom: 48px; width: min(340px, 38vw); display: flex; flex-direction: column; gap: 5px; }
 .world-vitals > div { display: grid; grid-template-columns: 38px 1fr 32px; align-items: center; gap: 8px; color: #a89a88; font-size: 8px; text-transform: uppercase; }
 .world-vitals i { height: 12px; border: 1px solid #543b2c; background: #110b09; padding: 2px; }
 .world-vitals i b { display: block; height: 100%; background: linear-gradient(90deg, #6d1914, #cf4938); box-shadow: 0 0 8px #b02620; transition: width .15s linear; }
 .world-vitals > div:nth-child(2) i b { background: linear-gradient(90deg, #223968, #5586cc); box-shadow: 0 0 8px #3f78ba; }
 .world-vitals strong { color: #ddd0bf; font-size: 9px; }
-.world-skills { position: absolute; z-index: 3; left: 50%; bottom: 22px; display: flex; gap: 8px; transform: translateX(-50%); }
+.world-skills { position: absolute; z-index: 3; left: 50%; bottom: 42px; display: flex; gap: 8px; transform: translateX(-50%); }
 .world-skills > span,
 .world-skills button { position: relative; min-width: 165px; height: 62px; padding: 8px 13px; overflow: hidden; border: 1px solid #5c4432; background: rgba(15,11,9,.94); color: #c8b7a2; display: flex; align-items: center; gap: 10px; cursor: default; box-shadow: 0 10px 28px #0009; }
 .world-skills button { min-width: 205px; cursor: pointer; text-align: left; transition: border-color .16s ease, background .16s ease, opacity .16s ease; }
@@ -838,7 +859,13 @@ body:has(.pixel-shell) { overflow: hidden; }
 .skill-charges { position: absolute; z-index: 3; top: 7px; right: 8px; display: flex; flex-direction: row !important; gap: 3px !important; }
 .skill-charges i { width: 7px; height: 7px; border: 1px solid #695746; background: #211913; transform: rotate(45deg); }
 .skill-charges i.ready { border-color: #d99a56; background: #f0a35d; box-shadow: 0 0 7px #dc7337; }
-.world-fps { position: absolute; z-index: 3; right: 25px; bottom: 24px; color: #766a5d; font-size: 7px; letter-spacing: .08em; pointer-events: none; }
+.world-fps { position: absolute; z-index: 3; right: 25px; bottom: 42px; color: #766a5d; font-size: 7px; letter-spacing: .08em; pointer-events: none; }
+.world-experience { position: absolute; z-index: 4; left: 18px; right: 18px; bottom: 10px; height: 20px; pointer-events: none; }
+.world-experience > span { position: absolute; z-index: 2; inset: 0 8px; display: flex; align-items: center; justify-content: space-between; color: #f1d7b8; text-shadow: 0 1px 3px #000; }
+.world-experience strong { font: 12px Georgia, serif; }
+.world-experience small { color: #d2b493; font-size: 10px; }
+.world-experience > i { position: absolute; inset: 0; padding: 3px; border: 1px solid #66412b; background: #0b0807e8; box-shadow: 0 5px 16px #000a; }
+.world-experience > i > b { display: block; height: 100%; background: linear-gradient(90deg, #7f2c1b, #e37738 70%, #ffc16e); box-shadow: 0 0 10px #d95a29; transition: width .2s ease; }
 .world-character-stats { position: absolute; z-index: 3; right: 24px; bottom: 51px; width: 205px; border: 1px solid #594432; border-right: 2px solid #bd713d; background: linear-gradient(135deg, rgba(16,12,9,.94), rgba(27,19,13,.9)); box-shadow: 0 15px 38px #0009, inset 0 0 28px #a4491f12; }
 .world-character-stats > header { padding: 10px 12px 9px; display: flex; flex-direction: column; gap: 3px; border-bottom: 1px solid #49372a; }
 .world-character-stats > header span { color: #d18349; font-size: 9px; letter-spacing: .18em; text-transform: uppercase; }
@@ -1030,6 +1057,7 @@ body:has(.pixel-shell) { overflow: hidden; }
   .world-panel-backdrop { padding: 76px 8px 8px; }
   .world-panel { width: 100%; max-height: calc(100vh - 84px); }
   .inventory-window { display: flex; flex-direction: column; padding: 12px; }
+  .progression-columns { grid-template-columns: 1fr; }
   .run-pickup-ledger > header > small { display: none; }
   .run-material { grid-template-columns: 20px 1fr auto; padding: 4px; }
   .run-material i { width: 18px; height: 18px; }
@@ -1039,14 +1067,15 @@ body:has(.pixel-shell) { overflow: hidden; }
   .world-wave { top: 12px; }
   .world-loot { left: 10px; top: 10px; min-width: 112px; padding: 7px 9px; }
   .world-loot span { font-size: 10px; }
-  .world-vitals { left: 12px; right: 12px; bottom: 76px; width: auto; }
-  .world-skills { bottom: 17px; }
+  .world-vitals { left: 12px; right: 12px; bottom: 96px; width: auto; }
+  .world-skills { bottom: 37px; }
   .world-skills { width: calc(100vw - 20px); justify-content: center; }
   .world-skills button { min-width: 0; max-width: 205px; flex: 1 1 0; padding: 7px 8px; gap: 7px; }
   .world-skills kbd { width: 32px; height: 32px; }
   .world-skills strong { font-size: 13px; }
   .world-skills small { font-size: 11px; }
   .world-fps { display: none; }
+  .world-experience { left: 8px; right: 8px; bottom: 6px; }
   .world-character-stats { right: 10px; top: 63px; bottom: auto; width: 188px; }
   .world-character-stats > header { padding: 7px 9px; }
   .character-stat-list { padding: 5px 9px 7px; }

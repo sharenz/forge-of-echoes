@@ -1,7 +1,7 @@
 import { CHARACTER_CLASSES } from "./config/classes";
 import { STARTING_CURRENCY } from "./config/currencies";
 import { CHARACTER_EQUIPMENT_SLOTS } from "./config/equipment-slots";
-import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "./config/progression";
+import { MAX_CHARACTER_LEVEL } from "./config/progression";
 import { STASH_RULES } from "./config/stash";
 import type {
   CharacterEquipmentSlot,
@@ -24,10 +24,12 @@ import { addCurrencyToInventory, isCurrencyItem, isEquipmentItem, isMapItem } fr
 import { containerItems, createItemContainer, insertItems, normalizeItemContainer } from "./item-container";
 import { generateStarterWeapon, normalizeEquipmentItem } from "./items";
 import { createMap } from "./maps";
+import { ATTRIBUTE_POINTS_PER_LEVEL, grantCharacterExperience } from "./progression";
 import { activeStashTab, createStash, insertItemsIntoStash, updateStashContainer } from "./stash";
 import { calculateCharacterStats } from "./stats";
 
-const STORAGE_KEY = "crafty.profile.v7";
+const STORAGE_KEY = "crafty.profile.v8";
+const V7_STORAGE_KEY = "crafty.profile.v7";
 const V6_STORAGE_KEY = "crafty.profile.v6";
 const V5_STORAGE_KEY = "crafty.profile.v5";
 const V4_STORAGE_KEY = "crafty.profile.v4";
@@ -35,9 +37,23 @@ const V3_STORAGE_KEY = "crafty.profile.v3";
 const V2_STORAGE_KEY = "crafty.profile.v2";
 const LEGACY_STORAGE_KEY = "crafty.profile.v1";
 
+type LegacyCharacterProgress = Omit<CharacterProgress, "allocatedAttributes" | "unspentAttributePoints" | "skillLevels" | "unspentSkillPoints"> & {
+  unspentPassives?: number;
+};
+
+interface V7Profile {
+  version: 7;
+  character: LegacyCharacterProgress;
+  inventory: ItemContainer;
+  stash: StashState;
+  equipped: Record<string, EquipmentItem | undefined>;
+  mapDevice: MapItem | null;
+  openedMap: MapItem | null;
+}
+
 interface V4Profile {
   version: 4;
-  character: CharacterProgress;
+  character: LegacyCharacterProgress;
   inventory: InventoryItem[];
   stash: InventoryItem[];
   equipped: Record<string, EquipmentItem | undefined>;
@@ -47,7 +63,7 @@ interface V4Profile {
 
 interface V5Profile {
   version: 5;
-  character: CharacterProgress;
+  character: LegacyCharacterProgress;
   inventory: ItemContainer;
   stash: ItemContainer;
   equipped: Record<string, EquipmentItem | undefined>;
@@ -57,7 +73,7 @@ interface V5Profile {
 
 interface V6Profile {
   version: 6;
-  character: CharacterProgress;
+  character: LegacyCharacterProgress;
   inventory: ItemContainer;
   stash: ItemContainer;
   equipped: Record<string, EquipmentItem | undefined>;
@@ -67,7 +83,7 @@ interface V6Profile {
 
 interface CounterProfile {
   version: 1 | 2 | 3;
-  character: CharacterProgress;
+  character: LegacyCharacterProgress;
   materials: CurrencyAmounts;
   inventory: EquipmentItem[];
   stash: EquipmentItem[];
@@ -86,16 +102,46 @@ function startingInventory(): InventoryItem[] {
 
 export function createInitialProfile(): PlayerProfile {
   return {
-    version: 7,
+    version: 8,
     character: {
       name: "", archetype: "Unchosen", classId: null, created: false, level: 1, xp: 0,
-      unspentPassives: 0, mapsCompleted: 0, highestWave: 0,
+      allocatedAttributes: { strength: 0, dexterity: 0, intelligence: 0 },
+      unspentAttributePoints: 0,
+      skillLevels: { nova: 1, dash: 1 },
+      unspentSkillPoints: 0,
+      mapsCompleted: 0, highestWave: 0,
     },
     inventory: createItemContainer("backpack", startingInventory()),
     stash: createStash(),
     equipped: {},
     mapDevice: null,
     openedMap: null,
+  };
+}
+
+function normalizeCharacterProgress(character: LegacyCharacterProgress | CharacterProgress): CharacterProgress {
+  const level = Math.min(MAX_CHARACTER_LEVEL, Math.max(1, Math.floor(character.level ?? 1)));
+  const created = character.created ?? false;
+  const current = character as Partial<CharacterProgress>;
+  return {
+    ...character,
+    classId: character.classId ?? null,
+    created,
+    level,
+    xp: level === MAX_CHARACTER_LEVEL ? 0 : Math.max(0, Math.floor(character.xp ?? 0)),
+    allocatedAttributes: {
+      strength: Math.max(0, Math.floor(current.allocatedAttributes?.strength ?? 0)),
+      dexterity: Math.max(0, Math.floor(current.allocatedAttributes?.dexterity ?? 0)),
+      intelligence: Math.max(0, Math.floor(current.allocatedAttributes?.intelligence ?? 0)),
+    },
+    unspentAttributePoints: Math.max(0, Math.floor(current.unspentAttributePoints ?? (created ? (level - 1) * ATTRIBUTE_POINTS_PER_LEVEL : 0))),
+    skillLevels: {
+      nova: Math.min(20, Math.max(1, Math.floor(current.skillLevels?.nova ?? 1))),
+      dash: Math.min(20, Math.max(1, Math.floor(current.skillLevels?.dash ?? 1))),
+    },
+    unspentSkillPoints: Math.max(0, Math.floor(current.unspentSkillPoints ?? (character as LegacyCharacterProgress).unspentPassives ?? (created ? level - 1 : 0))),
+    mapsCompleted: Math.max(0, Math.floor(character.mapsCompleted ?? 0)),
+    highestWave: Math.max(0, Math.floor(character.highestWave ?? 0)),
   };
 }
 
@@ -142,12 +188,8 @@ function migrateCounterProfile(profile: CounterProfile): PlayerProfile {
   const backpack = insertItems(createItemContainer("backpack"), normalizeInventory(inventory));
   const stash = insertItemsIntoStash(createStash(), [...profile.stash.map(normalizeEquipmentItem), ...backpack.unplaced]);
   return {
-    version: 7,
-    character: {
-      ...profile.character,
-      classId: profile.character.classId ?? null,
-      created: profile.character.created ?? false,
-    },
+    version: 8,
+    character: normalizeCharacterProgress(profile.character),
     inventory: backpack.container,
     stash: stash.stash,
     equipped: normalizeEquipped(profile.equipped),
@@ -161,7 +203,8 @@ function migrateV4Profile(profile: V4Profile): PlayerProfile {
   const stash = insertItemsIntoStash(createStash(), [...normalizeInventory(profile.stash ?? []), ...backpack.unplaced]);
   return {
     ...profile,
-    version: 7,
+    version: 8,
+    character: normalizeCharacterProgress(profile.character),
     inventory: backpack.container,
     stash: stash.stash,
     equipped: normalizeEquipped(profile.equipped ?? {}),
@@ -208,7 +251,8 @@ function normalizeStashState(stash: StashState): StashState {
 function normalizeProfile(profile: PlayerProfile): PlayerProfile {
   return {
     ...profile,
-    version: 7,
+    version: 8,
+    character: normalizeCharacterProgress(profile.character),
     inventory: normalizeItemContainer("backpack", normalizePlacedEntries(profile.inventory?.entries ?? [])),
     stash: normalizeStashState(profile.stash),
     equipped: normalizeEquipped(profile.equipped),
@@ -220,7 +264,8 @@ function normalizeProfile(profile: PlayerProfile): PlayerProfile {
 function migrateV5Profile(profile: V5Profile): PlayerProfile {
   return {
     ...profile,
-    version: 7,
+    version: 8,
+    character: normalizeCharacterProgress(profile.character),
     inventory: normalizeItemContainer("backpack", normalizePlacedEntries(profile.inventory?.entries ?? [])),
     stash: stashFromLegacyContainer(profile.stash),
     equipped: normalizeEquipped(profile.equipped),
@@ -232,13 +277,22 @@ function migrateV5Profile(profile: V5Profile): PlayerProfile {
 function migrateV6Profile(profile: V6Profile): PlayerProfile {
   return {
     ...profile,
-    version: 7,
+    version: 8,
+    character: normalizeCharacterProgress(profile.character),
     inventory: normalizeItemContainer("backpack", normalizePlacedEntries(profile.inventory?.entries ?? [])),
     stash: stashFromLegacyContainer(profile.stash),
     equipped: normalizeEquipped(profile.equipped),
     mapDevice: profile.mapDevice ? normalizeMapItem(profile.mapDevice) : null,
     openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
   };
+}
+
+function migrateV7Profile(profile: V7Profile): PlayerProfile {
+  return normalizeProfile({
+    ...profile,
+    version: 8,
+    character: normalizeCharacterProgress(profile.character),
+  });
 }
 
 export function createCharacter(profile: PlayerProfile, name: string, classId: CharacterClassId): PlayerProfile {
@@ -256,7 +310,10 @@ export function createCharacter(profile: PlayerProfile, name: string, classId: C
       created: true,
       level: 1,
       xp: 0,
-      unspentPassives: 0,
+      allocatedAttributes: { strength: 0, dexterity: 0, intelligence: 0 },
+      unspentAttributePoints: 0,
+      skillLevels: { nova: 1, dash: 1 },
+      unspentSkillPoints: 0,
       mapsCompleted: 0,
       highestWave: 0,
     },
@@ -273,8 +330,10 @@ export function loadProfile(): PlayerProfile {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as PlayerProfile;
-      if (parsed.version === 7) return normalizeProfile(parsed);
+      if (parsed.version === 8) return normalizeProfile(parsed);
     }
+    const v7 = window.localStorage.getItem(V7_STORAGE_KEY);
+    if (v7) return migrateV7Profile(JSON.parse(v7) as V7Profile);
     const v6 = window.localStorage.getItem(V6_STORAGE_KEY);
     if (v6) return migrateV6Profile(JSON.parse(v6) as V6Profile);
     const v5 = window.localStorage.getItem(V5_STORAGE_KEY);
@@ -297,29 +356,18 @@ export function saveProfile(profile: PlayerProfile): void {
 }
 
 export function applyRunResult(profile: PlayerProfile, result: RunResult): PlayerProfile {
-  let level = profile.character.level;
-  let xp = profile.character.xp + result.loot.xp;
-  let gainedLevels = 0;
-  while (level < MAX_CHARACTER_LEVEL && xp >= XP_BY_LEVEL(level)) {
-    xp -= XP_BY_LEVEL(level);
-    level += 1;
-    gainedLevels += 1;
-  }
-  if (level === MAX_CHARACTER_LEVEL) xp = 0;
-
+  const progressed = grantCharacterExperience(profile, result.loot.xp).profile;
+  const level = progressed.character.level;
   const rewards: InventoryItem[] = [...result.loot.items];
   if (result.completed) rewards.push(createMap(Math.min(16, Math.max(1, Math.ceil(level / 6)))));
-  const recoveredProfile = addRecoveredItems(profile, rewards);
+  const recoveredProfile = addRecoveredItems(progressed, rewards);
 
   return {
     ...recoveredProfile,
     character: {
-      ...profile.character,
-      level,
-      xp,
-      unspentPassives: profile.character.unspentPassives + gainedLevels,
-      mapsCompleted: profile.character.mapsCompleted + (result.completed ? 1 : 0),
-      highestWave: Math.max(profile.character.highestWave, result.wave),
+      ...recoveredProfile.character,
+      mapsCompleted: recoveredProfile.character.mapsCompleted + (result.completed ? 1 : 0),
+      highestWave: Math.max(recoveredProfile.character.highestWave, result.wave),
     },
     openedMap: null,
   };

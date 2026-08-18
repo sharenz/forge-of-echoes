@@ -35,6 +35,8 @@ export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos";
 export type SkillAnimationId = "attack" | "cast" | "dash";
 export type SkillVfxId = "ember-lance" | "ember-nova" | "rift-step";
 export type SkillAudioId = "ember-lance" | "ember-nova" | "rift-step";
+export type ActiveSkillId = "nova" | "dash";
+export type SkillLevels = Record<ActiveSkillId, number>;
 
 /**
  * Every numerical effect in the game resolves through this representation.
@@ -151,13 +153,16 @@ export interface CharacterProgress {
   created: boolean;
   level: number;
   xp: number;
-  unspentPassives: number;
+  allocatedAttributes: Record<AttributeKey, number>;
+  unspentAttributePoints: number;
+  skillLevels: SkillLevels;
+  unspentSkillPoints: number;
   mapsCompleted: number;
   highestWave: number;
 }
 
 export interface PlayerProfile {
-  version: 7;
+  version: 8;
   character: CharacterProgress;
   inventory: ItemContainer;
   stash: StashState;

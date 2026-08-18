@@ -5,9 +5,11 @@ import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
 import { MONSTER_PACK_RULES } from "../game/config/monster-packs";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
 import type { SkillDefinition } from "../game/config/schema";
-import type { CharacterClassId, DamageType, MonsterRarity } from "../game/domain";
+import type { CharacterClassId, DamageType, MonsterRarity, SkillLevels } from "../game/domain";
 import { monsterPackModifierNames, resolveMonsterStats, rollMonsterPack } from "../game/encounters";
 import { dropChances, rollEquipmentRarity } from "../game/loot";
+import { monsterExperienceReward } from "../game/progression";
+import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
 import { SkillAudio } from "./SkillAudio";
 import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
 
@@ -65,6 +67,8 @@ interface ProjectileState {
   damageType: DamageType;
   remaining: number;
   trailElapsed: number;
+  remainingPierces: number;
+  hitEnemies: Set<EnemyState>;
 }
 
 interface EnemyProjectileState extends ProjectileState {
@@ -128,8 +132,11 @@ class CraftyScene extends Phaser.Scene {
   private accumulator = 0;
   private attackCooldown = 0;
   private novaCooldown = 0;
-  private riftCharges = ACTIVE_SKILLS.dash.maxCharges;
+  private riftCharges = 0;
   private riftRecharge = 0;
+  private resolvedBasic: ResolvedSkillDefinition;
+  private resolvedNova: ResolvedSkillDefinition;
+  private resolvedDash: ResolvedSkillDefinition;
   private life: number;
   private focus: number;
   private lives = 3;
@@ -146,6 +153,10 @@ class CraftyScene extends Phaser.Scene {
   constructor(options: WorldRuntimeOptions) {
     super("crafty-world");
     this.options = options;
+    this.resolvedBasic = resolveSkillDefinition(BASIC_ATTACK, 1);
+    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, options.skillLevels.nova);
+    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, options.skillLevels.dash);
+    this.riftCharges = this.resolvedDash.maxCharges;
     this.life = options.arenaBalance?.maxLife ?? 100;
     this.focus = options.arenaBalance?.maxFocus ?? 100;
   }
@@ -219,19 +230,19 @@ class CraftyScene extends Phaser.Scene {
 
   useSkill(skill: "nova" | "dash"): void {
     if (this.options.mode !== "arena" || !this.player || this.options.paused) return;
-    if (skill === "nova" && this.novaCooldown <= 0 && this.focus >= ACTIVE_SKILLS.nova.focusCost) {
-      this.focus -= ACTIVE_SKILLS.nova.focusCost;
-      this.novaCooldown = ACTIVE_SKILLS.nova.cooldown;
-      this.playSkillPresentation(ACTIVE_SKILLS.nova);
-      for (let index = 0; index < 18; index += 1) {
-        const angle = (Math.PI * 2 * index) / 18;
-        this.spawnProjectile(Math.cos(angle), Math.sin(angle), ACTIVE_SKILLS.nova);
+    if (skill === "nova" && this.novaCooldown <= 0 && this.focus >= this.resolvedNova.focusCost) {
+      this.focus -= this.resolvedNova.focusCost;
+      this.novaCooldown = this.resolvedNova.cooldown;
+      this.playSkillPresentation(this.resolvedNova);
+      for (let index = 0; index < this.resolvedNova.projectileCount; index += 1) {
+        const angle = (Math.PI * 2 * index) / this.resolvedNova.projectileCount;
+        this.spawnProjectile(Math.cos(angle), Math.sin(angle), this.resolvedNova);
       }
     }
-    if (skill === "dash" && this.riftCharges > 0 && this.focus >= ACTIVE_SKILLS.dash.focusCost) {
-      this.focus -= ACTIVE_SKILLS.dash.focusCost;
+    if (skill === "dash" && this.riftCharges > 0 && this.focus >= this.resolvedDash.focusCost) {
+      this.focus -= this.resolvedDash.focusCost;
       this.riftCharges -= 1;
-      if (this.riftRecharge <= 0) this.riftRecharge = ACTIVE_SKILLS.dash.recharge;
+      if (this.riftRecharge <= 0) this.riftRecharge = this.resolvedDash.recharge;
       const pointer = this.input.activePointer;
       const dx = pointer.worldX - this.player.x;
       const dy = pointer.worldY - this.player.y;
@@ -241,7 +252,7 @@ class CraftyScene extends Phaser.Scene {
       this.player.x += (dx / length) * 105;
       this.player.y += (dy / length) * 105;
       this.clampPlayer();
-      this.playSkillPresentation(ACTIVE_SKILLS.dash, startX, startY);
+      this.playSkillPresentation(this.resolvedDash, startX, startY);
     }
   }
 
@@ -262,7 +273,7 @@ class CraftyScene extends Phaser.Scene {
       lootCollected: this.lootCollected,
       novaCooldown: this.novaCooldown,
       riftCharges: this.riftCharges,
-      riftMaxCharges: ACTIVE_SKILLS.dash.maxCharges,
+      riftMaxCharges: this.resolvedDash.maxCharges,
       riftRecharge: this.riftRecharge,
     };
   }
@@ -276,6 +287,20 @@ class CraftyScene extends Phaser.Scene {
     this.options.onHud(this.getHud());
   }
 
+  updateSkillLevels(skillLevels: SkillLevels): void {
+    const previousMaxCharges = this.resolvedDash.maxCharges;
+    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova);
+    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash);
+    this.riftCharges = Phaser.Math.Clamp(
+      this.riftCharges + Math.max(0, this.resolvedDash.maxCharges - previousMaxCharges),
+      0,
+      this.resolvedDash.maxCharges,
+    );
+    if (this.riftCharges === this.resolvedDash.maxCharges) this.riftRecharge = 0;
+    this.options.skillLevels = skillLevels;
+    this.options.onHud(this.getHud());
+  }
+
   private fixedUpdate(delta: number): void {
     if (!this.player) return;
     this.elapsedSeconds += delta;
@@ -283,11 +308,11 @@ class CraftyScene extends Phaser.Scene {
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
     this.novaCooldown = Math.max(0, this.novaCooldown - delta);
     this.playerAnimationLock = Math.max(0, this.playerAnimationLock - delta);
-    if (this.riftCharges < ACTIVE_SKILLS.dash.maxCharges) {
+    if (this.riftCharges < this.resolvedDash.maxCharges) {
       this.riftRecharge = Math.max(0, this.riftRecharge - delta);
       if (this.riftRecharge <= 0) {
         this.riftCharges += 1;
-        this.riftRecharge = this.riftCharges < ACTIVE_SKILLS.dash.maxCharges ? ACTIVE_SKILLS.dash.recharge : 0;
+        this.riftRecharge = this.riftCharges < this.resolvedDash.maxCharges ? this.resolvedDash.recharge : 0;
       }
     }
     this.focus = Math.min(this.options.arenaBalance?.maxFocus ?? 100, this.focus + delta * (this.options.arenaBalance?.focusRegen ?? ARENA_RULES.baseFocusRegen));
@@ -794,6 +819,8 @@ class CraftyScene extends Phaser.Scene {
       damageType: "fire",
       remaining: 2.8,
       trailElapsed: 0,
+      remainingPierces: 0,
+      hitEnemies: new Set(),
     });
   }
 
@@ -965,12 +992,12 @@ class CraftyScene extends Phaser.Scene {
       this.lastFacing = Math.sign(dx);
       this.player.setFlipX(this.lastFacing < 0);
     }
-    this.playSkillPresentation(BASIC_ATTACK);
-    this.spawnProjectile(dx / length, dy / length, BASIC_ATTACK);
+    this.playSkillPresentation(this.resolvedBasic);
+    this.spawnProjectile(dx / length, dy / length, this.resolvedBasic);
     this.attackCooldown = 1 / Math.max(0.01, this.options.arenaBalance?.attackSpeed ?? 1);
   }
 
-  private spawnProjectile(directionX: number, directionY: number, skill: SkillDefinition): void {
+  private spawnProjectile(directionX: number, directionY: number, skill: ResolvedSkillDefinition): void {
     if (!this.player || !skill.damage) return;
     const sprite = this.projectilePool?.get(this.player.x, this.player.y, "projectile") as Phaser.GameObjects.Image | null;
     if (!sprite) return;
@@ -984,6 +1011,8 @@ class CraftyScene extends Phaser.Scene {
       damageType: rolledDamage.type,
       remaining: 1.35,
       trailElapsed: 0,
+      remainingPierces: skill.piercing,
+      hitEnemies: new Set(),
     });
   }
 
@@ -1007,14 +1036,16 @@ class CraftyScene extends Phaser.Scene {
           0.03,
         );
       }
-      const hit = this.nearbyEnemies(projectile.sprite.x, projectile.sprite.y).find((enemy) => Math.hypot(projectile.sprite.x - enemy.x, projectile.sprite.y - enemy.y) < 25);
+      const hit = this.nearbyEnemies(projectile.sprite.x, projectile.sprite.y).find((enemy) => !projectile.hitEnemies.has(enemy) && Math.hypot(projectile.sprite.x - enemy.x, projectile.sprite.y - enemy.y) < 25);
       if (hit) {
+        projectile.hitEnemies.add(hit);
         const evaded = Math.random() < hit.evadeChance / 100;
         const damage = evaded ? 0 : projectile.damage * (100 / (100 + hit.armor));
         if (!evaded) hit.life -= damage;
         this.showDamageNumber(hit.x, hit.y, evaded ? "EVADE" : { amount: damage, type: projectile.damageType });
         this.emitRadialVfx(hit.x, hit.y, evaded ? 3 : 6, evaded ? 0x9aa3ad : 0xff9a4b, evaded ? 45 : 82, 0.2);
-        projectile.remaining = 0;
+        if (projectile.remainingPierces > 0) projectile.remainingPierces -= 1;
+        else projectile.remaining = 0;
         if (hit.life <= 0) this.releaseEnemy(hit);
       }
       if (projectile.remaining <= 0) {
@@ -1031,6 +1062,12 @@ class CraftyScene extends Phaser.Scene {
     this.enemyPool?.killAndHide(enemy.sprite);
     if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
     this.slain += 1;
+    this.options.onExperienceGain(monsterExperienceReward(
+      enemy.archetypeId,
+      this.wave,
+      this.options.arenaBalance?.tier ?? 1,
+      enemy.rarity,
+    ));
     this.rollGroundDrop(enemy);
   }
 
@@ -1158,6 +1195,10 @@ export class PhaserRuntime {
 
   useSkill(skill: "nova" | "dash"): void {
     this.scene?.useSkill(skill);
+  }
+
+  updateSkillLevels(skillLevels: SkillLevels): void {
+    this.scene?.updateSkillLevels(skillLevels);
   }
 
   setPaused(paused: boolean): void {
