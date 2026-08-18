@@ -112,9 +112,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /showDamageNumber/);
   assert.match(world, /DAMAGE_TYPE_DEFINITIONS\[damage\.type\]\.label/);
   assert.match(world, /damageNumberPool/);
-  assert.match(world, /createPlayerAnimations/);
-  assert.match(world, /animation\("walk", 8, 13, -1\)/);
-  assert.match(world, /animation\("cast", 6, 16, 0\)/);
+  assert.match(world, /playerVisual/);
+  assert.match(world, /updatePlayerVisual/);
+  assert.match(world, /player-amazon-rendered/);
+  assert.doesNotMatch(world, /createPlayerFrame|createPlayerAnimations/);
   assert.match(world, /vfx-slash/);
   assert.match(world, /vfx-dust/);
   assert.match(world, /class-roster/);
@@ -243,6 +244,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/ember-sigil.png", import.meta.url));
   await access(new URL("../public/class-roster-v2.png", import.meta.url));
+  await access(new URL("../public/player-amazon-v4.png", import.meta.url));
+  await access(new URL("../public/player-barbarian-v4.png", import.meta.url));
+  await access(new URL("../public/player-sorceress-v4.png", import.meta.url));
   const itemIcons = (await readdir(new URL("../public/item-icons", import.meta.url))).filter((name) => name.endsWith(".png"));
   assert.equal(itemIcons.length, 20);
 });

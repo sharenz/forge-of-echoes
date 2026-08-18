@@ -25,7 +25,7 @@ const DAMAGE_NUMBER_POOL_SIZE = 160;
 const VFX_PARTICLE_POOL_SIZE = 240;
 const HEALTH_BAR_WIDTH = 42;
 const HEALTH_BAR_HEIGHT = 5;
-const PLAYER_SCALE = 1.75;
+const PLAYER_RENDERED_HEIGHT = 128;
 
 type PlayerPose = "idle" | "walk" | "attack" | "cast";
 
@@ -96,10 +96,10 @@ interface VfxParticleState {
   rotationSpeed: number;
 }
 
-const CLASS_COLORS: Record<CharacterClassId, { cloth: number; clothDark: number; accent: number; skin: number; hair: number; metal: number; magic: number }> = {
-  amazon: { cloth: 0x627d3f, clothDark: 0x26351f, accent: 0xd9a94d, skin: 0xc9855f, hair: 0x44251b, metal: 0xb8a06f, magic: 0xf6c76f },
-  barbarian: { cloth: 0x85372f, clothDark: 0x361817, accent: 0xd66a42, skin: 0xb96f50, hair: 0x2b1a18, metal: 0xa9a69d, magic: 0xff7345 },
-  sorceress: { cloth: 0x5b3a78, clothDark: 0x241932, accent: 0xe07a42, skin: 0xca8469, hair: 0x171522, metal: 0xd3a95e, magic: 0xb77cff },
+const CLASS_COLORS: Record<CharacterClassId, { magic: number }> = {
+  amazon: { magic: 0xf6c76f },
+  barbarian: { magic: 0xff7345 },
+  sorceress: { magic: 0xb77cff },
 };
 
 const PACK_REGIONS = [
@@ -113,6 +113,7 @@ class CraftyScene extends Phaser.Scene {
   private readonly options: WorldRuntimeOptions;
   private readonly audio = new SkillAudio();
   private player: Phaser.GameObjects.Sprite | null = null;
+  private playerVisual: Phaser.GameObjects.Image | null = null;
   private playerShadow: Phaser.GameObjects.Image | null = null;
   private playerAura: Phaser.GameObjects.Image | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key> | null = null;
@@ -150,6 +151,8 @@ class CraftyScene extends Phaser.Scene {
   private arenaComplete = false;
   private lastFacing = 1;
   private playerAnimationLock = 0;
+  private playerPose: PlayerPose = "idle";
+  private playerPoseElapsed = 0;
   private footstepElapsed = 0;
 
   constructor(options: WorldRuntimeOptions) {
@@ -168,6 +171,9 @@ class CraftyScene extends Phaser.Scene {
     this.load.image("ashen-wilderness", "/pixel-ashen-wilderness.webp");
     this.load.image("ember-sigil", "/ember-sigil.png");
     this.load.image("class-roster", "/class-roster-v2.png");
+    this.load.image("player-amazon-rendered", "/player-amazon-v4.png");
+    this.load.image("player-barbarian-rendered", "/player-barbarian-v4.png");
+    this.load.image("player-sorceress-rendered", "/player-sorceress-v4.png");
   }
 
   create(): void {
@@ -355,9 +361,11 @@ class CraftyScene extends Phaser.Scene {
     if (this.playerAnimationLock <= 0) {
       this.playPlayerPose(xInput || yInput ? "walk" : "idle");
     }
-    this.playerShadow?.setPosition(this.player.x, this.player.y + 15);
-    this.playerAura?.setPosition(this.player.x, this.player.y + 18);
+    this.updatePlayerVisual(delta);
+    this.playerShadow?.setPosition(this.player.x, this.player.y + 25);
+    this.playerAura?.setPosition(this.player.x, this.player.y + 25);
     this.player.setDepth(Math.round(this.player.y / 10) + 11);
+    this.playerVisual?.setDepth(Math.round(this.player.y / 10) + 11);
     this.playerShadow?.setDepth(Math.round(this.player.y / 10) + 9);
     this.playerAura?.setDepth(Math.round(this.player.y / 10) + 9);
 
@@ -382,10 +390,6 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private createTextures(): void {
-    this.createPlayerTextures("amazon");
-    this.createPlayerTextures("barbarian");
-    this.createPlayerTextures("sorceress");
-    this.createPlayerAnimations();
     Object.values(MONSTER_ARCHETYPES).forEach((definition) => this.createEnemyTexture(definition));
     const projectile = this.make.graphics({ x: 0, y: 0 });
     projectile.fillStyle(0x8f241e, 0.45).fillCircle(7, 7, 7);
@@ -452,107 +456,6 @@ class CraftyScene extends Phaser.Scene {
     graphics.generateTexture(`enemy-${definition.id}`, 24, 24).destroy();
   }
 
-  private createPlayerTextures(classId: CharacterClassId): void {
-    const frames: Record<PlayerPose, number> = { idle: 4, walk: 8, attack: 6, cast: 6 };
-    (Object.entries(frames) as [PlayerPose, number][]).forEach(([pose, frameCount]) => {
-      for (let frame = 0; frame < frameCount; frame += 1) this.createPlayerFrame(classId, pose, frame);
-    });
-  }
-
-  private createPlayerFrame(classId: CharacterClassId, pose: PlayerPose, frame: number): void {
-    const colors = CLASS_COLORS[classId];
-    const idleBob = [0, -1, -1, 0];
-    const walkBob = [0, -1, -2, -1, 0, -1, -2, -1];
-    const strideFrames = [-3, -2, 0, 2, 3, 2, 0, -2];
-    const attackLunge = [0, 2, 5, 8, 5, 1];
-    const castLift = [0, -1, -3, -4, -2, 0];
-    const bob = pose === "walk" ? walkBob[frame] : pose === "idle" ? idleBob[frame] : pose === "cast" ? castLift[frame] : 0;
-    const stride = pose === "walk" ? strideFrames[frame] : 0;
-    const lunge = pose === "attack" ? attackLunge[frame] : 0;
-    const bodyX = 18 + lunge;
-    const bodyY = 21 + bob;
-    const graphics = this.make.graphics({ x: 0, y: 0 });
-    const leftFootX = bodyX + 2 + stride;
-    const rightFootX = bodyX + 14 - stride;
-    const capeSway = pose === "walk" ? [0, 1, 2, 1, 0, -1, -2, -1][frame] : pose === "cast" ? frame - 2 : 0;
-
-    // Back silhouette, cloak, and separated legs make the sprite readable in dense packs.
-    graphics.fillStyle(0x0d0d13).fillRect(bodyX - 4 + capeSway, bodyY - 1, 27, 25);
-    graphics.fillStyle(colors.clothDark).fillTriangle(bodyX - 3 + capeSway, bodyY + 3, bodyX + 8, bodyY + 25, bodyX + 18 + capeSway, bodyY + 7);
-    graphics.fillStyle(0x111018).fillRect(leftFootX - 1, 45 + bob, 8, 8).fillRect(rightFootX - 1, 45 + bob, 8, 8);
-    graphics.fillStyle(0x49352b).fillRect(leftFootX, 43 + bob, 6, 8).fillRect(rightFootX, 43 + bob, 6, 8);
-    graphics.fillStyle(colors.metal).fillRect(leftFootX + 1, 44 + bob, 4, 2).fillRect(rightFootX + 1, 44 + bob, 4, 2);
-
-    // Torso armor with outline, waist, shoulder plates, and one-pixel material highlights.
-    graphics.fillStyle(0x111018).fillRect(bodyX - 2, bodyY - 3, 25, 25);
-    graphics.fillStyle(colors.cloth).fillRect(bodyX, bodyY - 1, 20, 20);
-    graphics.fillStyle(colors.clothDark).fillRect(bodyX + 14, bodyY, 6, 19);
-    graphics.fillStyle(colors.accent).fillRect(bodyX, bodyY + 10, 20, 4).fillRect(bodyX + 8, bodyY, 3, 19);
-    graphics.fillStyle(0xffe1a0, 0.5).fillRect(bodyX + 2, bodyY + 1, 2, 10).fillRect(bodyX + 7, bodyY + 11, 6, 2);
-    graphics.fillStyle(colors.metal).fillRect(bodyX - 3, bodyY - 2, 7, 6).fillRect(bodyX + 17, bodyY - 2, 7, 6);
-    graphics.fillStyle(0xf4e1b0, 0.65).fillRect(bodyX - 1, bodyY - 1, 3, 2).fillRect(bodyX + 19, bodyY - 1, 3, 2);
-
-    const armReach = pose === "attack" ? [0, 3, 7, 11, 7, 2][frame] : pose === "cast" ? [0, 1, 2, 3, 2, 0][frame] : 0;
-    const armY = pose === "cast" ? bodyY - [0, 3, 7, 9, 5, 1][frame] : bodyY + 1;
-    graphics.fillStyle(0x111018).fillRect(bodyX + 18, armY, 6 + armReach, 8);
-    graphics.fillStyle(colors.skin).fillRect(bodyX + 20, armY + 2, 3 + armReach, 4);
-    graphics.fillStyle(colors.metal).fillRect(bodyX + 18, armY + 1, 4, 6);
-
-    // Face, hair, brows, eyes, and class-specific head silhouette.
-    graphics.fillStyle(0x100e14).fillRect(bodyX + 1, 6 + bob, 19, 15);
-    graphics.fillStyle(colors.skin).fillRect(bodyX + 3, 8 + bob, 15, 12);
-    graphics.fillStyle(0xe8a078).fillRect(bodyX + 5, 9 + bob, 5, 3);
-    graphics.fillStyle(colors.hair).fillRect(bodyX + 1, 5 + bob, 19, 6).fillRect(bodyX + 1, 9 + bob, 4, 12).fillRect(bodyX + 17, 8 + bob, 4, 13);
-    graphics.fillStyle(0xf7e7bc).fillRect(bodyX + 6, 13 + bob, 2, 2).fillRect(bodyX + 13, 13 + bob, 2, 2);
-    graphics.fillStyle(colors.magic).fillRect(bodyX + 7, 13 + bob, 1, 1).fillRect(bodyX + 14, 13 + bob, 1, 1);
-    graphics.fillStyle(0x25151a).fillRect(bodyX + 8, 17 + bob, 6, 2);
-
-    if (classId === "amazon") {
-      const weaponX = pose === "attack" ? bodyX + 23 : bodyX + 27;
-      const weaponY = pose === "attack" ? bodyY + 4 : 3 + bob;
-      graphics.fillStyle(0x2f2119).fillRect(weaponX, weaponY, pose === "attack" ? 21 : 3, pose === "attack" ? 3 : 42);
-      graphics.fillStyle(0xd7ad59).fillRect(weaponX, weaponY, pose === "attack" ? 20 : 2, pose === "attack" ? 2 : 41);
-      graphics.fillStyle(0xf2e5c1).fillTriangle(weaponX + (pose === "attack" ? 21 : -3), weaponY - 3, weaponX + (pose === "attack" ? 21 : 5), weaponY + 1, weaponX + (pose === "attack" ? 21 : -3), weaponY + 5);
-      graphics.fillStyle(0x879c54).fillRect(bodyX - 4, bodyY + 2, 5, 17).fillRect(bodyX - 1, bodyY + 16, 7, 3);
-      graphics.fillStyle(colors.accent).fillRect(bodyX + 3, 6 + bob, 12, 2);
-    }
-    if (classId === "barbarian") {
-      const weaponX = bodyX + 23 + armReach;
-      graphics.fillStyle(0x6a452d).fillRect(weaponX, bodyY - 7, 4, 30);
-      graphics.fillStyle(0x222229).fillRect(weaponX - 7, bodyY - 10, 16, 11);
-      graphics.fillStyle(colors.metal).fillRect(weaponX - 6, bodyY - 9, 14, 8).fillTriangle(weaponX - 10, bodyY - 6, weaponX - 5, bodyY - 13, weaponX - 5, bodyY + 1);
-      graphics.fillStyle(0xe6ded0).fillRect(weaponX - 4, bodyY - 8, 9, 2);
-      graphics.fillStyle(0xd7c3a1).fillRect(bodyX - 2, bodyY - 2, 6, 8).fillRect(bodyX + 17, bodyY - 2, 6, 8);
-      graphics.fillStyle(0x7a382e).fillRect(bodyX + 4, 6 + bob, 14, 3).fillRect(bodyX + 8, 18 + bob, 10, 5);
-    }
-    if (classId === "sorceress") {
-      const staffX = bodyX + 25 + Math.floor(armReach * 0.5);
-      graphics.fillStyle(0x31203e).fillRect(staffX, 7 + bob, 4, 39);
-      graphics.fillStyle(0x9d68c7).fillRect(staffX + 1, 8 + bob, 2, 37);
-      graphics.fillStyle(0xff4e2d, 0.5).fillCircle(staffX + 2, 6 + bob, 7);
-      graphics.fillStyle(colors.magic, 0.85).fillCircle(staffX + 2, 6 + bob, 4);
-      graphics.fillStyle(0xfff1c0).fillRect(staffX + 1, 4 + bob, 2, 4);
-      graphics.fillStyle(0x3b2850).fillTriangle(bodyX - 3, bodyY + 5, bodyX + 4, bodyY + 25, bodyX + 8, bodyY + 6);
-      graphics.fillStyle(colors.metal).fillRect(bodyX + 8, 5 + bob, 4, 3).fillRect(bodyX + 10, 3 + bob, 2, 3);
-    }
-    graphics.generateTexture(`player-${classId}-${pose}-${frame}`, 72, 58).destroy();
-  }
-
-  private createPlayerAnimations(): void {
-    (['amazon', 'barbarian', 'sorceress'] as CharacterClassId[]).forEach((classId) => {
-      const animation = (pose: PlayerPose, frames: number, frameRate: number, repeat: number) => this.anims.create({
-        key: `player-${classId}-${pose}`,
-        frames: Array.from({ length: frames }, (_, frame) => ({ key: `player-${classId}-${pose}-${frame}` })),
-        frameRate,
-        repeat,
-      });
-      animation("idle", 4, 4, -1);
-      animation("walk", 8, 13, -1);
-      animation("attack", 6, 20, 0);
-      animation("cast", 6, 16, 0);
-    });
-  }
-
   private buildClassShowcase(): void {
     const roster = this.add.image(480, 548, "class-roster").setOrigin(0.5, 1).setDisplaySize(590, 590).setDepth(12).setAlpha(0.95);
     this.tweens.add({ targets: roster, y: roster.y - 4, duration: 1450, yoyo: true, repeat: -1, ease: "Sine.InOut" });
@@ -567,36 +470,65 @@ class CraftyScene extends Phaser.Scene {
   private createPlayer(): void {
     const x = this.options.mode === "arena" ? MAP_SIZE / 2 : 480;
     const y = this.options.mode === "arena" ? MAP_SIZE / 2 : 700;
-    this.playerShadow = this.add.image(x, y + 15, "shadow").setScale(1.6).setDepth(8);
-    this.playerAura = this.add.image(x, y + 17, "player-aura").setScale(1.2).setTint(CLASS_COLORS[this.options.classId].magic).setAlpha(0.2).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
-    this.player = this.add.sprite(x, y, `player-${this.options.classId}-idle-0`).setScale(PLAYER_SCALE).setDepth(10);
-    this.player.play(`player-${this.options.classId}-idle`);
+    this.playerShadow = this.add.image(x, y + 25, "shadow").setScale(2.1, 1.45).setDepth(8);
+    this.playerAura = this.add.image(x, y + 25, "player-aura").setScale(1.45).setTint(CLASS_COLORS[this.options.classId].magic).setAlpha(0.18).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
+    this.player = this.add.sprite(x, y, "shadow").setVisible(false).setDepth(10);
+    const textureKey = `player-${this.options.classId}-rendered`;
+    this.playerVisual = this.add.image(x, y + 28, textureKey).setOrigin(0.5, 1).setDepth(10);
+    this.playerVisual.setScale(PLAYER_RENDERED_HEIGHT / this.playerVisual.height);
     this.tweens.add({ targets: this.playerAura, alpha: 0.38, scaleX: 1.4, scaleY: 1.28, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.InOut" });
   }
 
   private playPlayerPose(pose: PlayerPose): void {
-    if (!this.player) return;
-    const key = `player-${this.options.classId}-${pose}`;
-    if (this.player.anims.currentAnim?.key !== key || !this.player.anims.isPlaying) {
-      this.player.anims.timeScale = 1;
-      this.player.play(key, true);
+    if (this.playerPose === pose) return;
+    this.playerPose = pose;
+    this.playerPoseElapsed = 0;
+  }
+
+  private updatePlayerVisual(delta: number): void {
+    if (!this.player || !this.playerVisual) return;
+    this.playerPoseElapsed += delta;
+    const baseScale = PLAYER_RENDERED_HEIGHT / this.playerVisual.height;
+    const locked = this.playerAnimationLock > 0;
+    const walkPhase = this.playerPoseElapsed * 13;
+    const idlePhase = this.playerPoseElapsed * 2.7;
+    const bob = locked ? 0 : this.playerPose === "walk" ? -Math.abs(Math.sin(walkPhase)) * 4 : Math.sin(idlePhase) * 1.4;
+    this.playerVisual.setPosition(this.player.x, this.player.y + 28 + bob).setFlipX(this.lastFacing < 0);
+    if (!locked) {
+      const stride = this.playerPose === "walk" ? Math.sin(walkPhase) : Math.sin(idlePhase) * 0.15;
+      const breath = this.playerPose === "idle" ? Math.sin(idlePhase) * 0.008 : 0;
+      this.playerVisual.setScale(baseScale * (1 + breath + Math.abs(stride) * 0.012), baseScale * (1 - Math.abs(stride) * 0.018));
+      this.playerVisual.setAngle(stride * (this.playerPose === "walk" ? 1.7 : 0.35));
+      this.playerVisual.clearTint().setAlpha(1);
     }
   }
 
   private playSkillPresentation(skill: SkillDefinition, startX?: number, startY?: number): void {
-    if (!this.player) return;
+    if (!this.player || !this.playerVisual) return;
     this.audio.play(skill.presentation.audio);
+    const baseScale = PLAYER_RENDERED_HEIGHT / this.playerVisual.height;
+    this.tweens.killTweensOf(this.playerVisual);
     if (skill.presentation.animation === "attack" || skill.presentation.animation === "cast") {
       const animationSpeed = skill.presentation.animation === "attack"
         ? Phaser.Math.Clamp(this.options.arenaBalance?.attackSpeed ?? 1, 0.8, 2.5)
         : 1;
-      this.player.anims.timeScale = animationSpeed;
-      this.player.play(`player-${this.options.classId}-${skill.presentation.animation}`);
+      this.playPlayerPose(skill.presentation.animation);
       this.playerAnimationLock = skill.presentation.animation === "cast" ? 0.38 : 0.3 / animationSpeed;
+      const cast = skill.presentation.animation === "cast";
+      this.tweens.add({
+        targets: this.playerVisual,
+        scaleX: baseScale * (cast ? 1.06 : 1.12),
+        scaleY: baseScale * (cast ? 1.08 : 0.92),
+        angle: this.lastFacing * (cast ? -3 : 6),
+        duration: (cast ? 170 : 90) / animationSpeed,
+        yoyo: true,
+        ease: "Cubic.easeOut",
+      });
     } else {
+      this.playPlayerPose("walk");
       this.playerAnimationLock = 0.14;
-      this.player.setScale(PLAYER_SCALE * 1.08, PLAYER_SCALE * 0.9);
-      this.tweens.add({ targets: this.player, scaleX: PLAYER_SCALE, scaleY: PLAYER_SCALE, duration: 140, ease: "Cubic.easeOut" });
+      this.playerVisual.setScale(baseScale * 1.12, baseScale * 0.86);
+      this.tweens.add({ targets: this.playerVisual, scaleX: baseScale, scaleY: baseScale, angle: 0, duration: 140, ease: "Cubic.easeOut" });
     }
 
     if (skill.presentation.vfx === "ember-lance") {
@@ -641,13 +573,13 @@ class CraftyScene extends Phaser.Scene {
         const afterimage = this.add.image(
           Phaser.Math.Linear(fromX, this.player.x, progress),
           Phaser.Math.Linear(fromY, this.player.y, progress),
-          this.player.texture.key,
-        ).setScale(PLAYER_SCALE)
-          .setFlipX(this.player.flipX)
+          this.playerVisual.texture.key,
+        ).setScale(baseScale)
+          .setFlipX(this.playerVisual.flipX)
           .setTint(0x9f75d8)
           .setAlpha(0.38 - index * 0.055)
           .setDepth(Math.round(Phaser.Math.Linear(fromY, this.player.y, progress) / 10) + 10);
-        this.tweens.add({ targets: afterimage, alpha: 0, scale: PLAYER_SCALE * 0.88, duration: 220 + index * 25, onComplete: () => afterimage.destroy() });
+        this.tweens.add({ targets: afterimage, alpha: 0, scale: baseScale * 0.88, duration: 220 + index * 25, onComplete: () => afterimage.destroy() });
       }
       for (let index = 0; index < 14; index += 1) {
         const progress = index / 13;
@@ -720,8 +652,8 @@ class CraftyScene extends Phaser.Scene {
     this.addStation("stash", 116, 352, 135, 115, "STASH");
     this.addStation("bench", 817, 372, 150, 135, "CRAFT");
     this.addStation(this.options.portalActive ? "portal" : "map-device", 480, 177, 155, 145, this.options.portalActive ? "ENTER MAP" : "MAP DEVICE");
-    const merchant = this.add.sprite(248, 600, "player-sorceress-idle-0").setScale(2.35).setTint(0xd9ad76).setDepth(12);
-    merchant.play("player-sorceress-idle");
+    const merchant = this.add.image(248, 620, "player-sorceress-rendered").setOrigin(0.5, 1).setDisplaySize(59, 96).setTint(0xd9ad76).setDepth(12);
+    this.tweens.add({ targets: merchant, y: merchant.y - 2, duration: 1350, yoyo: true, repeat: -1, ease: "Sine.InOut" });
     this.tweens.add({ targets: merchant, y: merchant.y - 3, duration: 1250, yoyo: true, repeat: -1, ease: "Sine.InOut" });
     this.addStation("merchant", 248, 592, 125, 105, "MAP MERCHANT");
     if (this.options.portalActive) {
