@@ -4,7 +4,10 @@ import { AFFIX_DEFINITIONS_BY_ID } from "../app/game/config/affixes";
 import { ARENA_RULES } from "../app/game/config/arena";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
 import { MAP_MERCHANT } from "../app/game/config/merchants";
+import { CHARACTER_EQUIPMENT_SLOTS } from "../app/game/config/equipment-slots";
+import { ITEM_BASES } from "../app/game/config/item-bases";
 import type { EquipmentItem, ItemContainer, PlayerProfile, StatModifier } from "../app/game/domain";
+import { chooseEquipmentSlot, equipmentSlotAccepts } from "../app/game/equipment";
 import { addCurrencyToInventory, consumeCurrency, countCurrency, createCurrencyStack, isCurrencyItem, isMapItem } from "../app/game/inventory";
 import { canPlaceItem, containerItems, createItemContainer, insertItem, moveItem, transferItem } from "../app/game/item-container";
 import {
@@ -69,7 +72,7 @@ test("value crafting stays inside the existing tier range", () => {
 
 test("character calculations combine item base, implicit, and explicit modifiers once", () => {
   const weapon = {
-    kind: "equipment", id: "weapon", baseId: "test", baseName: "Test Weapon", slot: "weapon", rarity: "rare", itemLevel: 50,
+    kind: "equipment", id: "weapon", baseId: "test", baseName: "Test Weapon", slot: "mainHand", rarity: "rare", itemLevel: 50,
     stability: 8, maxStability: 8, implicit: "test",
     baseStats: [{ stat: "attackDamage", mode: "flat", value: 10, source: "base:test" }],
     implicitModifiers: [{ stat: "attackDamage", mode: "increased", value: 20, source: "implicit:test" }],
@@ -80,9 +83,9 @@ test("character calculations combine item base, implicit, and explicit modifiers
     }],
   } satisfies EquipmentItem;
   const profile = {
-    version: 5,
+    version: 6,
     character: { name: "Test", archetype: "Test", classId: "amazon", created: true, level: 10, xp: 0, unspentPassives: 0, mapsCompleted: 0, highestWave: 0 },
-    inventory: createItemContainer("backpack"), stash: createItemContainer("stash"), equipped: { weapon }, mapDevice: null, openedMap: null,
+    inventory: createItemContainer("backpack"), stash: createItemContainer("stash"), equipped: { mainHand: weapon }, mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const calculation = calculateCharacterStats(profile);
   const attack = calculation.breakdown.attackDamage;
@@ -102,6 +105,7 @@ test("legacy equipment is normalized without losing its rolled value", () => {
   assert.ok(normalized.baseStats.length > 0);
   assert.equal(normalized.affixes[0].rolls[0].value, 8);
   assert.equal(normalized.affixes[0].rolls[0].mode, "flat");
+  assert.equal(normalized.slot, "mainHand");
 });
 
 test("currency stacks obey their configured maximum and overflow into a new stack", () => {
@@ -124,7 +128,7 @@ test("currency consumption removes quantities across actual inventory stacks", (
 test("new profiles contain map and currency items in the backpack", () => {
   const profile = createInitialProfile();
   const backpackItems = containerItems(profile.inventory);
-  assert.equal(profile.version, 5);
+  assert.equal(profile.version, 6);
   assert.equal(profile.mapDevice, null);
   assert.equal(backpackItems.filter(isMapItem).length, 3);
   assert.equal(countCurrency(backpackItems, "scrap"), 12);
@@ -132,7 +136,7 @@ test("new profiles contain map and currency items in the backpack", () => {
   assert.equal("maps" in profile, false);
 });
 
-test("v3 counter saves migrate maps and currency into positioned v5 inventory items", () => {
+test("v3 counter saves migrate maps and currency into positioned v6 inventory items", () => {
   const oldMap = {
     id: "old-map", baseId: "ashen-crucible", baseName: "Ashen Crucible", tier: 3, rarity: "normal",
     quality: 0, corrupted: false, implicit: "Test", modifiers: [],
@@ -150,9 +154,31 @@ test("v3 counter saves migrate maps and currency into positioned v5 inventory it
   try {
     const migrated = loadProfile();
     const items = containerItems(migrated.inventory);
-    assert.equal(migrated.version, 5);
+    assert.equal(migrated.version, 6);
     assert.equal(items.filter(isMapItem).length, 1);
     assert.deepEqual(items.filter(isCurrencyItem).filter((item) => item.baseId === "scrap").map((item) => item.stackSize), [40, 5]);
+  } finally {
+    Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
+test("v5 saves migrate legacy weapon equipment into main hand", () => {
+  const legacyWeapon = {
+    kind: "equipment", id: "legacy-equipped", baseId: "hunter-spear", baseName: "Hunter Spear", slot: "weapon", rarity: "magic", itemLevel: 8,
+    stability: 8, maxStability: 8, implicit: "8% increased attack speed", baseStats: [], implicitModifiers: [], affixes: [],
+  };
+  const current = createInitialProfile();
+  const v5 = { ...current, version: 5, equipped: { weapon: legacyWeapon } };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: { getItem: (key: string) => key === "crafty.profile.v5" ? JSON.stringify(v5) : null } },
+  });
+  try {
+    const migrated = loadProfile();
+    assert.equal(migrated.version, 6);
+    assert.equal(migrated.equipped.mainHand?.id, "legacy-equipped");
+    assert.equal(migrated.equipped.mainHand?.slot, "mainHand");
+    assert.equal("weapon" in migrated.equipped, false);
   } finally {
     Reflect.deleteProperty(globalThis, "window");
   }
@@ -186,7 +212,7 @@ test("map purchases create inventory items and consume real Scrap stacks", () =>
 
 test("grid moves preserve explicit coordinates and reject collisions", () => {
   const weapon = {
-    kind: "equipment", id: "grid-weapon", baseId: "test", baseName: "Grid Weapon", slot: "weapon", rarity: "normal", itemLevel: 1,
+    kind: "equipment", id: "grid-weapon", baseId: "test", baseName: "Grid Weapon", slot: "mainHand", rarity: "normal", itemLevel: 1,
     stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [], affixes: [],
   } satisfies EquipmentItem;
   const ring = { ...weapon, id: "grid-ring", baseName: "Grid Ring", slot: "ring" } satisfies EquipmentItem;
@@ -231,4 +257,20 @@ test("runtime hit damage scales linearly with resolved attack damage", () => {
   const base = resolveStat(20, []);
   const fiftyMore = resolveStat(20, [modifier("more", 50)]);
   assert.equal(calculateHitDamage(fiftyMore.value, 1) / calculateHitDamage(base.value, 1), 1.5);
+});
+
+test("character equipment exposes ten positions and fills both ring slots independently", () => {
+  assert.equal(CHARACTER_EQUIPMENT_SLOTS.length, 10);
+  assert.deepEqual(CHARACTER_EQUIPMENT_SLOTS.map((slot) => slot.id), [
+    "helmet", "amulet", "mainHand", "offHand", "chest", "gloves", "ringLeft", "ringRight", "belt", "boots",
+  ]);
+  const ring = {
+    kind: "equipment", id: "ring-a", baseId: "ember-ring", baseName: "Ember Ring", slot: "ring", rarity: "normal", itemLevel: 1,
+    stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [], affixes: [],
+  } satisfies EquipmentItem;
+  assert.equal(chooseEquipmentSlot(ring, {}), "ringLeft");
+  assert.equal(chooseEquipmentSlot(ring, { ringLeft: ring }), "ringRight");
+  assert.equal(equipmentSlotAccepts("ringRight", ring), true);
+  assert.equal(equipmentSlotAccepts("amulet", ring), false);
+  assert.deepEqual(new Set(ITEM_BASES.map((base) => base.slot)), new Set(["helmet", "mainHand", "offHand", "amulet", "ring", "chest", "gloves", "boots", "belt"]));
 });

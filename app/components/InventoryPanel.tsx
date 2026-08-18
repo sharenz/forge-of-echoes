@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { EquipmentItem, InventoryItem, ItemContainerId, PlayerProfile } from "../game/domain";
+import { CHARACTER_EQUIPMENT_SLOTS } from "../game/config/equipment-slots";
+import type { CharacterEquipmentSlot, EquipmentItem, InventoryItem, ItemContainerId, PlayerProfile } from "../game/domain";
+import { equipmentSlotAccepts } from "../game/equipment";
 import { containerItems } from "../game/item-container";
 import { currencyAmounts, isEquipmentItem } from "../game/inventory";
 import { InventoryGrid } from "./InventoryGrid";
@@ -13,11 +15,9 @@ interface InventoryPanelProps {
   showStash?: boolean;
   freshItemIds?: string[];
   onSelect: (id: string) => void;
-  onEquipItem: (id: string) => void;
+  onEquipItem: (id: string, slot?: CharacterEquipmentSlot) => void;
   onMoveItem: (id: string, target: ItemContainerId, x: number, y: number) => void;
 }
-
-const EQUIPMENT_SLOTS = ["weapon", "chest", "ring", "boots"] as const;
 
 export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem }: InventoryPanelProps) {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
@@ -42,11 +42,11 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
   };
   const endDrag = () => setDraggedItemId(null);
   const readDroppedItem = (event: React.DragEvent) => event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain") || draggedItemId;
-  const dropIntoSlot = (event: React.DragEvent, slot: EquipmentItem["slot"]) => {
+  const dropIntoSlot = (event: React.DragEvent, slot: CharacterEquipmentSlot) => {
     event.preventDefault();
     const itemId = readDroppedItem(event);
     const item = allItems.find((candidate) => candidate.id === itemId);
-    if (item && isEquipmentItem(item) && item.slot === slot) onEquipItem(item.id);
+    if (item && isEquipmentItem(item) && equipmentSlotAccepts(slot, item)) onEquipItem(item.id, slot);
     endDrag();
   };
 
@@ -54,19 +54,23 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
     <div className="inventory-window">
       <div className="equipment-paperdoll">
         <div className="paperdoll-heading"><span className="eyebrow">Equipped</span><small>Drag gear into a matching slot</small></div>
-        {EQUIPMENT_SLOTS.map((slot) => (
-          <div
-            className={`equipment-slot slot-${slot} ${draggedItem ? isEquipmentItem(draggedItem) && draggedItem.slot === slot ? "drop-compatible" : "drop-incompatible" : ""}`}
-            onDragOver={(event) => { if (draggedItem && isEquipmentItem(draggedItem) && draggedItem.slot === slot) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
-            onDrop={(event) => dropIntoSlot(event, slot)}
-            key={slot}
-          >
-            <small>{slot}</small>
-            {profile.equipped[slot]
-              ? <ItemCard compact draggable item={profile.equipped[slot]} onClick={() => onSelect(profile.equipped[slot]?.id ?? "")} onDragStart={(event) => { const id = profile.equipped[slot]?.id; if (!id) return; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-crafty-item", id); event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify({ x: 0, y: 0 })); beginDrag(id); }} onDragEnd={endDrag} selected={selectedItemId === profile.equipped[slot]?.id} />
-              : <span>Empty</span>}
-          </div>
-        ))}
+        {CHARACTER_EQUIPMENT_SLOTS.map((slot) => {
+          const equipped = profile.equipped[slot.id];
+          const compatible = Boolean(draggedItem && isEquipmentItem(draggedItem) && equipmentSlotAccepts(slot.id, draggedItem));
+          return (
+            <div
+              className={`equipment-slot slot-${slot.id} ${draggedItem ? compatible ? "drop-compatible" : "drop-incompatible" : ""}`}
+              onDragOver={(event) => { if (compatible) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
+              onDrop={(event) => dropIntoSlot(event, slot.id)}
+              key={slot.id}
+            >
+              <small>{slot.label}</small>
+              {equipped
+                ? <ItemCard compact draggable item={equipped} onClick={() => onSelect(equipped.id)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-crafty-item", equipped.id); event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify({ x: 0, y: 0 })); beginDrag(equipped.id); }} onDragEnd={endDrag} selected={selectedItemId === equipped.id} />
+                : <span>Empty</span>}
+            </div>
+          );
+        })}
       </div>
       <div className="inventory-containers">
         {hasRunPickups && (

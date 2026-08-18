@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { CURRENCY_DEFINITIONS } from "../game/config/currencies";
+import { EQUIPMENT_TYPE_LABELS } from "../game/config/equipment-slots";
 import { MAP_MODIFIERS } from "../game/config/maps";
 import type { InventoryItem } from "../game/domain";
 import { isCurrencyItem, isEquipmentItem } from "../game/inventory";
@@ -56,7 +57,7 @@ export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
     <aside className={`item-tooltip rarity-${item.rarity}`} style={{ left, top }} role="tooltip">
       <span>{item.rarity} · item level {item.itemLevel}</span>
       <strong>{itemDisplayName(item)}</strong>
-      <em>{item.baseName} · {item.slot}</em>
+      <em>{item.baseName} · {EQUIPMENT_TYPE_LABELS[item.slot]}</em>
       {item.baseStats.map((modifier) => <div className="tooltip-base-stat" key={`${modifier.stat}-${modifier.mode}`}>Base: {formatModifier(modifier)}</div>)}
       <div className="tooltip-implicit">{item.implicit}</div>
       <div className="tooltip-affixes">

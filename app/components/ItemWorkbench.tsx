@@ -1,4 +1,5 @@
 import type { CurrencyAmounts, EquipmentItem } from "../game/domain";
+import { EQUIPMENT_TYPE_LABELS } from "../game/config/equipment-slots";
 import { ItemCard } from "./ItemCard";
 
 interface ItemWorkbenchProps {
@@ -31,7 +32,7 @@ export function ItemWorkbench({ items, equippedIds, currencies, selectedId, onSe
         {selected ? <>
           <div className="item-focus-card"><ItemCard item={selected} /></div>
           <button type="button" className="secondary-action" onClick={onEquip} disabled={equippedIds.has(selected.id)}>
-            {equippedIds.has(selected.id) ? "Currently equipped" : `Equip ${selected.slot}`}
+            {equippedIds.has(selected.id) ? "Currently equipped" : `Equip ${EQUIPMENT_TYPE_LABELS[selected.slot]}`}
           </button>
         </> : <div className="empty-focus"><strong>No item selected</strong><span>Equipment recovered from maps appears here.</span></div>}
       </div>

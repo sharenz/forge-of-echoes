@@ -9,7 +9,7 @@ const tier = (tierNumber: number, requiredItemLevel: number, weight: number, min
 
 export const AFFIX_DEFINITIONS = [
   {
-    id: "vigorous", name: "Vigorous", tag: "life", group: "maximum-life", slots: ["chest", "ring", "boots"],
+    id: "vigorous", name: "Vigorous", tag: "life", group: "maximum-life", slots: ["helmet", "offHand", "amulet", "chest", "ring", "gloves", "boots", "belt"],
     tiers: [
       tier(6, 1, 1000, 7, 12, { stat: "maxLife", mode: "flat" }),
       tier(5, 8, 700, 13, 21, { stat: "maxLife", mode: "flat" }),
@@ -20,7 +20,7 @@ export const AFFIX_DEFINITIONS = [
     ],
   },
   {
-    id: "honed", name: "Honed", tag: "damage", group: "flat-attack-damage", slots: ["weapon", "ring"],
+    id: "honed", name: "Honed", tag: "damage", group: "flat-attack-damage", slots: ["mainHand", "offHand", "amulet", "ring"],
     tiers: [
       tier(6, 1, 1000, 2, 4, { stat: "attackDamage", mode: "flat" }),
       tier(5, 10, 700, 5, 8, { stat: "attackDamage", mode: "flat" }),
@@ -31,7 +31,7 @@ export const AFFIX_DEFINITIONS = [
     ],
   },
   {
-    id: "scorching", name: "Scorching", tag: "fire", group: "increased-fire-damage", slots: ["weapon", "ring"],
+    id: "scorching", name: "Scorching", tag: "fire", group: "increased-fire-damage", slots: ["mainHand", "offHand", "amulet", "ring"],
     tiers: [
       tier(6, 1, 1000, 6, 11, { stat: "attackDamage", mode: "increased" }),
       tier(5, 12, 700, 12, 19, { stat: "attackDamage", mode: "increased" }),
@@ -53,7 +53,7 @@ export const AFFIX_DEFINITIONS = [
     ],
   },
   {
-    id: "of-haste", name: "of Haste", tag: "speed", group: "attack-speed", slots: ["weapon", "ring"],
+    id: "of-haste", name: "of Haste", tag: "speed", group: "attack-speed", slots: ["mainHand", "amulet", "ring", "gloves"],
     tiers: [
       tier(6, 1, 1000, 3, 5, { stat: "attackSpeed", mode: "increased" }),
       tier(5, 16, 700, 6, 8, { stat: "attackSpeed", mode: "increased" }),
@@ -64,7 +64,7 @@ export const AFFIX_DEFINITIONS = [
     ],
   },
   {
-    id: "plated", name: "Plated", tag: "defense", group: "flat-armor", slots: ["chest", "boots"],
+    id: "plated", name: "Plated", tag: "defense", group: "flat-armor", slots: ["helmet", "offHand", "chest", "gloves", "boots", "belt"],
     tiers: [
       tier(6, 1, 1000, 7, 13, { stat: "armor", mode: "flat" }),
       tier(5, 9, 700, 14, 24, { stat: "armor", mode: "flat" }),
@@ -75,7 +75,7 @@ export const AFFIX_DEFINITIONS = [
     ],
   },
   {
-    id: "steadfast", name: "Steadfast", tag: "defense", group: "increased-armor", slots: ["chest", "boots"],
+    id: "steadfast", name: "Steadfast", tag: "defense", group: "increased-armor", slots: ["helmet", "offHand", "chest", "gloves", "boots", "belt"],
     tiers: [
       tier(6, 1, 1000, 7, 12, { stat: "armor", mode: "increased" }),
       tier(5, 18, 700, 13, 20, { stat: "armor", mode: "increased" }),

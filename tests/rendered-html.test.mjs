@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, notification, mapMerchant, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, containerConfig, arenaConfig, content, profile, stats, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, notification, mapMerchant, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, equipment, containerConfig, equipmentSlotConfig, arenaConfig, content, profile, stats, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
@@ -42,7 +42,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/item-container.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/equipment.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/containers.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/equipment-slots.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/arena.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
@@ -101,6 +103,11 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(itemContainer, /transferItem/);
   assert.match(itemContainer, /ignoredItemId/);
   assert.match(containerConfig, /columns: 12, rows: 8/);
+  assert.match(equipmentSlotConfig, /ringLeft/);
+  assert.match(equipmentSlotConfig, /ringRight/);
+  assert.match(equipmentSlotConfig, /Main Hand/);
+  assert.match(equipment, /chooseEquipmentSlot/);
+  assert.match(inventoryPanel, /CHARACTER_EQUIPMENT_SLOTS\.map/);
   assert.doesNotMatch(inventoryPanel, /inventory-inspector/);
   assert.match(itemTooltip, /tooltip-affixes/);
   assert.match(inventoryPanel, /Collected this map/);
@@ -119,6 +126,11 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(stats, /sum\(increased\)|mode === "increased"/);
   assert.match(stats, /moreMultiplier/);
   assert.match(itemConfig, /perItemLevel/);
+  assert.match(itemConfig, /slot: "helmet"/);
+  assert.match(itemConfig, /slot: "offHand"/);
+  assert.match(itemConfig, /slot: "amulet"/);
+  assert.match(itemConfig, /slot: "gloves"/);
+  assert.match(itemConfig, /slot: "belt"/);
   assert.match(affixConfig, /requiredItemLevel/);
   assert.match(monsterConfig, /contactDamagePerWave/);
   assert.match(monsterConfig, /baseLife: 18/);

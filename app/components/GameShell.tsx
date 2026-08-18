@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTER_CLASSES, XP_BY_LEVEL } from "../game/content";
 import { buildArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
-import type { CharacterClassId, CurrencyId, EquipmentItem, ItemContainerId, PlayerProfile, RunResult } from "../game/domain";
+import type { CharacterClassId, CharacterEquipmentSlot, CurrencyId, EquipmentItem, ItemContainerId, PlayerProfile, RunResult } from "../game/domain";
+import { chooseEquipmentSlot, equipmentSlotAccepts, findEquippedSlot } from "../game/equipment";
 import { isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency, createCurrencyStack } from "../game/inventory";
 import { containerItems, findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../game/item-container";
 import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
@@ -139,7 +140,7 @@ export function GameShell() {
     if (!profile) return;
     const next = createCharacter(profile, characterName, selectedClass);
     setProfile(next);
-    setSelectedItemId(next.equipped.weapon?.id ?? null);
+    setSelectedItemId(next.equipped.mainHand?.id ?? null);
   }
 
   function handleStation(station: WorldStation) {
@@ -302,11 +303,25 @@ export function GameShell() {
     if (selectedItemId) equipItem(selectedItemId);
   }
 
-  function equipItem(itemId: string) {
+  function equipItem(itemId: string, requestedSlot?: CharacterEquipmentSlot) {
     if (!profile) return;
     const item = allItems.find((candidate) => candidate.id === itemId);
-    if (!item || profile.equipped[item.slot]?.id === item.id) return;
-    const previouslyEquipped = profile.equipped[item.slot];
+    if (!item) return;
+    const currentSlot = findEquippedSlot(profile.equipped, item.id);
+    if (currentSlot) {
+      if (!requestedSlot || requestedSlot === currentSlot || !equipmentSlotAccepts(requestedSlot, item)) return;
+      const targetItem = profile.equipped[requestedSlot];
+      setProfile({
+        ...profile,
+        equipped: { ...profile.equipped, [currentSlot]: targetItem, [requestedSlot]: item },
+      });
+      setSelectedItemId(item.id);
+      return;
+    }
+    const targetSlot = requestedSlot && equipmentSlotAccepts(requestedSlot, item)
+      ? requestedSlot
+      : chooseEquipmentSlot(item, profile.equipped);
+    const previouslyEquipped = profile.equipped[targetSlot];
     const inventoryEntry = findContainerEntry(profile.inventory, item.id);
     const stashEntry = findContainerEntry(profile.stash, item.id);
     const sourceKey = inventoryEntry ? "inventory" : stashEntry ? "stash" : null;
@@ -323,7 +338,7 @@ export function GameShell() {
       }
       source = swapped.container;
     }
-    setProfile({ ...profile, [sourceKey]: source, equipped: { ...profile.equipped, [item.slot]: item } });
+    setProfile({ ...profile, [sourceKey]: source, equipped: { ...profile.equipped, [targetSlot]: item } });
     setSelectedItemId(item.id);
     setNotice(`${item.baseName} equipped.`);
   }
@@ -333,12 +348,14 @@ export function GameShell() {
     const targetKey = targetId === "backpack" ? "inventory" : "stash";
     const equippedItem = Object.values(profile.equipped).find((candidate) => candidate?.id === itemId);
     if (equippedItem) {
+      const equippedSlot = findEquippedSlot(profile.equipped, equippedItem.id);
+      if (!equippedSlot) return;
       const inserted = insertItem(profile[targetKey], equippedItem, { x, y });
       if (inserted.unplaced.length > 0) {
         setNotice(`${equippedItem.baseName} does not fit there.`);
         return;
       }
-      setProfile({ ...profile, [targetKey]: inserted.container, equipped: { ...profile.equipped, [equippedItem.slot]: undefined } });
+      setProfile({ ...profile, [targetKey]: inserted.container, equipped: { ...profile.equipped, [equippedSlot]: undefined } });
       setSelectedItemId(equippedItem.id);
       return;
     }

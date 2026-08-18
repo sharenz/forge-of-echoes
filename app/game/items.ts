@@ -138,7 +138,7 @@ export function normalizeEquipmentItem(item: EquipmentItem): EquipmentItem {
       rolls: [{ stat: fallbackStat, mode: fallbackMode, value: legacy.value, min: legacy.value, max: legacy.value, source: `legacy:${legacy.id}` }],
     } as Affix;
   });
-  return { ...item, kind: "equipment", baseId: base.id, baseName: base.name, baseStats, implicitModifiers, affixes };
+  return { ...item, kind: "equipment", baseId: base.id, baseName: base.name, slot: base.slot, baseStats, implicitModifiers, affixes };
 }
 
 export function itemDisplayName(item: EquipmentItem): string {

@@ -1,5 +1,8 @@
 export type Rarity = "normal" | "magic" | "rare" | "unique";
-export type EquipmentSlot = "weapon" | "chest" | "ring" | "boots";
+/** The type of character position an item may occupy. */
+export type EquipmentSlot = "helmet" | "mainHand" | "offHand" | "amulet" | "ring" | "chest" | "gloves" | "boots" | "belt";
+/** A concrete position on the character. Rings deliberately have two positions. */
+export type CharacterEquipmentSlot = "helmet" | "mainHand" | "offHand" | "amulet" | "ringLeft" | "ringRight" | "chest" | "gloves" | "boots" | "belt";
 export type AffixTag = "fire" | "life" | "speed" | "damage" | "defense";
 export type CharacterClassId = "amazon" | "barbarian" | "sorceress";
 export type CurrencyId = "scrap" | "essence" | "seal" | "solvent" | "mapDust" | "threatGlyph" | "rewardInk";
@@ -134,11 +137,11 @@ export interface CharacterProgress {
 }
 
 export interface PlayerProfile {
-  version: 5;
+  version: 6;
   character: CharacterProgress;
   inventory: ItemContainer;
   stash: ItemContainer;
-  equipped: Partial<Record<EquipmentSlot, EquipmentItem>>;
+  equipped: Partial<Record<CharacterEquipmentSlot, EquipmentItem>>;
   mapDevice: MapItem | null;
   openedMap: MapItem | null;
 }

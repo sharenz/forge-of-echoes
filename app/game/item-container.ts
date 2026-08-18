@@ -19,10 +19,15 @@ export interface RemoveResult {
 }
 
 const EQUIPMENT_FOOTPRINTS = {
-  weapon: { width: 2, height: 4 },
+  helmet: { width: 2, height: 2 },
+  mainHand: { width: 2, height: 4 },
+  offHand: { width: 2, height: 3 },
+  amulet: { width: 1, height: 1 },
   chest: { width: 2, height: 3 },
+  gloves: { width: 2, height: 2 },
   boots: { width: 2, height: 2 },
   ring: { width: 1, height: 1 },
+  belt: { width: 2, height: 1 },
 } as const;
 
 const isCurrencyItem = (item: InventoryItem): item is CurrencyItem => item.kind === "currency";

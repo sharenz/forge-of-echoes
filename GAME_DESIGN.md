@@ -572,8 +572,8 @@ The first slice should prove combat, waves, loot, and crafting together.
 - 20–30 passive nodes with two keystones;
 - four enemy types, two elite modifiers, one lieutenant, one boss;
 - six waves plus optional overrun;
-- four equipment slots: weapon, chest, ring, boots;
-- 10 item bases;
+- ten equipment positions: helmet, main hand, off hand, amulet, two rings, chest, gloves, boots, and belt;
+- 11 item bases;
 - normal, magic, and rare items;
 - 20–25 affixes;
 - Scrap, Essence, Seal, and Solvent crafting materials;
