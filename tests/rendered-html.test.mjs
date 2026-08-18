@@ -22,25 +22,27 @@ test("server-renders the Crafty application shell and production metadata", asyn
   const html = await response.text();
   assert.match(html, /<title>Crafty — The Crucible<\/title>/i);
   assert.match(html, /Lighting the forge/);
-  assert.match(html, /Craft maps, shape rare equipment/);
+  assert.match(html, /craft maps and rare equipment/i);
   assert.match(html, /property="og:image" content="https:\/\/crafty\.example\/og\.png"/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, shell, engine, domain, profile, gameDesign] = await Promise.all([
+  const [page, shell, world, domain, profile, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameShell.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/game/engine.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game3d/BabylonRuntime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
     readFile(new URL("../GAME_DESIGN.md", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /<GameShell \/>/);
-  assert.match(shell, /<Arena/);
-  assert.match(engine, /class GameEngine/);
-  assert.match(engine, /TOTAL_WAVES = 6/);
+  assert.match(shell, /<BabylonWorld/);
+  assert.match(shell, /mode="class-select"/);
+  assert.match(world, /class BabylonRuntime/);
+  assert.match(world, /WebGPUEngine/);
+  assert.match(world, /thinInstanceSetBuffer/);
   assert.match(domain, /interface MapItem/);
   assert.match(domain, /interface EquipmentItem/);
   assert.match(profile, /level < 99/);
@@ -48,4 +50,3 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(gameDesign, /hard cap of level 99/i);
   await access(new URL("../public/og.png", import.meta.url));
 });
-

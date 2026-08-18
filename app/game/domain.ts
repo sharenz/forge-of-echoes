@@ -1,6 +1,7 @@
 export type Rarity = "normal" | "magic" | "rare" | "unique";
 export type EquipmentSlot = "weapon" | "chest" | "ring" | "boots";
 export type AffixTag = "fire" | "life" | "speed" | "damage" | "defense";
+export type CharacterClassId = "amazon" | "barbarian" | "sorceress";
 
 export interface Affix {
   id: string;
@@ -68,6 +69,8 @@ export interface Materials {
 export interface CharacterProgress {
   name: string;
   archetype: string;
+  classId: CharacterClassId | null;
+  created: boolean;
   level: number;
   xp: number;
   unspentPassives: number;
@@ -76,12 +79,14 @@ export interface CharacterProgress {
 }
 
 export interface PlayerProfile {
-  version: 1;
+  version: 2;
   character: CharacterProgress;
   materials: Materials;
   inventory: EquipmentItem[];
+  stash: EquipmentItem[];
   equipped: Partial<Record<EquipmentSlot, EquipmentItem>>;
   maps: MapItem[];
+  openedMap: MapItem | null;
 }
 
 export interface CharacterStats {
@@ -120,4 +125,3 @@ export interface RunResult {
   elapsedSeconds: number;
   loot: RunLoot;
 }
-

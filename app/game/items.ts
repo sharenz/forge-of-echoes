@@ -1,4 +1,4 @@
-import type { Affix, AffixTag, EquipmentItem, EquipmentSlot, Rarity } from "./domain";
+import type { Affix, AffixTag, CharacterClassId, EquipmentItem, EquipmentSlot, Rarity } from "./domain";
 import { choose, createId, randomInt } from "./random";
 
 interface BaseDefinition {
@@ -9,12 +9,19 @@ interface BaseDefinition {
 }
 
 const BASES: BaseDefinition[] = [
+  { id: "hunter-spear", name: "Hunter Spear", slot: "weapon", implicit: "+8% projectile speed" },
   { id: "ashwood-wand", name: "Ashwood Wand", slot: "weapon", implicit: "+8% fire effect" },
   { id: "iron-cleaver", name: "Iron Cleaver", slot: "weapon", implicit: "+4 physical damage" },
   { id: "riveted-coat", name: "Riveted Coat", slot: "chest", implicit: "+12 armor" },
   { id: "ember-ring", name: "Ember Ring", slot: "ring", implicit: "+5% fire resistance" },
   { id: "pathfinder-boots", name: "Pathfinder Boots", slot: "boots", implicit: "+3% move speed" },
 ];
+
+const STARTER_BASES: Record<CharacterClassId, string> = {
+  amazon: "hunter-spear",
+  barbarian: "iron-cleaver",
+  sorceress: "ashwood-wand",
+};
 
 const AFFIX_NAMES: Record<AffixTag, string[]> = {
   fire: ["Scorching", "Ember-fed", "of Immolation"],
@@ -52,8 +59,7 @@ function createAffix(tag: AffixTag, itemLevel: number): Affix {
   };
 }
 
-export function generateEquipment(itemLevel: number, forcedRarity?: Rarity): EquipmentItem {
-  const base = choose(BASES);
+function createEquipmentFromBase(base: BaseDefinition, itemLevel: number, forcedRarity?: Rarity): EquipmentItem {
   const rarityRoll = Math.random();
   const rarity: Rarity = forcedRarity ?? (rarityRoll > 0.94 ? "rare" : rarityRoll > 0.48 ? "magic" : "normal");
   const affixCount = rarity === "rare" ? randomInt(3, 4) : rarity === "magic" ? randomInt(1, 2) : 0;
@@ -71,6 +77,16 @@ export function generateEquipment(itemLevel: number, forcedRarity?: Rarity): Equ
     implicit: base.implicit,
     affixes,
   };
+}
+
+export function generateEquipment(itemLevel: number, forcedRarity?: Rarity): EquipmentItem {
+  return createEquipmentFromBase(choose(BASES), itemLevel, forcedRarity);
+}
+
+export function generateStarterWeapon(classId: CharacterClassId): EquipmentItem {
+  const base = BASES.find((candidate) => candidate.id === STARTER_BASES[classId]);
+  if (!base) throw new Error(`Missing starter weapon for ${classId}`);
+  return createEquipmentFromBase(base, 1, "magic");
 }
 
 export function addFireAffix(item: EquipmentItem): EquipmentItem {

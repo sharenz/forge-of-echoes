@@ -80,7 +80,7 @@ export function MapWorkshop({ maps, selectedMapId, materials, onSelect, onCraft,
             </div>
 
             <button type="button" className="primary-action" onClick={onEnter}>
-              <span>Open the Crucible</span><small>Consumes this map · 3 lives</small>
+              <span>Open Map Portal</span><small>Consumes this map · returns to hideout</small>
             </button>
           </>
         ) : (
@@ -112,4 +112,3 @@ export function MapWorkshop({ maps, selectedMapId, materials, onSelect, onCraft,
     </section>
   );
 }
-

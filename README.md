@@ -1,100 +1,48 @@
-# vinext-starter
+# Crafty — The Crucible
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Crafty is a browser-native, fixed-isometric action RPG prototype built around deep item and map crafting. The current vertical slice begins with character creation, moves into a persistent 3D hideout, and opens crafted map items into six-wave combat arenas.
 
-## Prerequisites
+## Stack
 
-- Node.js `>=22.13.0`
+- React 19 and TypeScript
+- Babylon.js with WebGPU and WebGL2 fallback
+- vinext/Vite on Cloudflare Workers
+- Browser-local profile persistence for the MVP
 
-## Quick Start
+## Local development
+
+Requires Node.js 22.13 or newer.
 
 ```bash
 npm install
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+Quality gates:
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm run typecheck
+npm run lint
+npm test
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+## Architecture
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+The game is split into three layers so that browser rendering does not own progression logic:
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+- `app/game/` contains serializable domain models, item generation, crafting, maps, combat balance, and profile migration.
+- `app/game3d/` owns Babylon scene construction and the fixed-step runtime. It consumes normalized combat configuration rather than reading profile state directly.
+- `app/components/` adapts React state to the runtime and renders accessible HUD, inventory, stash, workbench, and map-device interfaces.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+`BabylonRuntime` maintains a 30 Hz simulation step independent from rendering. Enemy packs use Babylon thin instances, while WebGPU initialization falls back to WebGL2 if adapter creation fails. The Babylon bundle is loaded dynamically, keeping it out of the initial server-rendered application shell.
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+## Current playable loop
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+1. Choose Amazon, Barbarian, or Sorceress and name the character.
+2. Move through the hideout with WASD or click-to-move.
+3. Use the stash, crafting bench, and map device as physical world stations.
+4. Craft a map item, consume it to open a portal, and enter the arena.
+5. Defeat six increasingly dense waves; character stats and map modifiers affect the live simulation and its rewards.
+6. Return rewards to the inventory, improve equipment, and craft the next map.
 
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+The broader systems and long-term progression targets are documented in [GAME_DESIGN.md](./GAME_DESIGN.md).

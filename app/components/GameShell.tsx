@@ -1,25 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { XP_BY_LEVEL } from "../game/content";
-import type { EquipmentItem, PlayerProfile, RunResult } from "../game/domain";
-import { addFireAffix, rerollAffixValues } from "../game/items";
+import { CHARACTER_CLASSES, XP_BY_LEVEL } from "../game/content";
+import { buildArenaBalance, type ArenaSummary } from "../game/combat";
+import type { CharacterClassId, EquipmentItem, PlayerProfile, RunResult } from "../game/domain";
+import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
 import { addMapModifier, createMap, rerollMap } from "../game/maps";
-import { applyRunResult, deriveStats, loadProfile, saveProfile } from "../game/profile";
-import { Arena } from "./Arena";
+import { applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
+import type { WorldStation } from "../game3d/types";
+import { BabylonWorld } from "./BabylonWorld";
+import { InventoryGrid } from "./InventoryGrid";
+import { ItemCard } from "./ItemCard";
 import { ItemWorkbench } from "./ItemWorkbench";
 import { MapWorkshop } from "./MapWorkshop";
 
-type TownView = "maps" | "items";
+type HideoutPanel = "inventory" | "stash" | "bench" | "maps" | null;
+type GameScreen = "hideout" | "arena";
 
 export function GameShell() {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
-  const [view, setView] = useState<TownView>("maps");
+  const [selectedClass, setSelectedClass] = useState<CharacterClassId>("amazon");
+  const [characterName, setCharacterName] = useState("");
+  const [panel, setPanel] = useState<HideoutPanel>(null);
+  const [screen, setScreen] = useState<GameScreen>("hideout");
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [activeMapId, setActiveMapId] = useState<string | null>(null);
-  const [activeMap, setActiveMap] = useState<ReturnType<typeof createMap> | null>(null);
-  const [lastRun, setLastRun] = useState<RunResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,7 +32,7 @@ export function GameShell() {
       const loaded = loadProfile();
       setProfile(loaded);
       setSelectedMapId(loaded.maps[0]?.id ?? null);
-      const firstItem = loaded.inventory[0] ?? Object.values(loaded.equipped)[0];
+      const firstItem = loaded.inventory[0] ?? loaded.stash[0] ?? Object.values(loaded.equipped)[0];
       setSelectedItemId(firstItem?.id ?? null);
     }, 0);
     return () => window.clearTimeout(timeout);
@@ -39,9 +44,19 @@ export function GameShell() {
 
   useEffect(() => {
     if (!notice) return;
-    const timeout = window.setTimeout(() => setNotice(null), 2800);
+    const timeout = window.setTimeout(() => setNotice(null), 2600);
     return () => window.clearTimeout(timeout);
   }, [notice]);
+
+  useEffect(() => {
+    const toggleInventory = (event: KeyboardEvent) => {
+      if (event.code !== "KeyI" || event.repeat || screen !== "hideout" || !profile?.character.created) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      setPanel((current) => current === "inventory" ? null : "inventory");
+    };
+    window.addEventListener("keydown", toggleInventory);
+    return () => window.removeEventListener("keydown", toggleInventory);
+  }, [profile?.character.created, screen]);
 
   const stats = useMemo(() => profile ? deriveStats(profile) : null, [profile]);
 
@@ -49,54 +64,100 @@ export function GameShell() {
     return <main className="loading-forge"><span className="forge-loader" /><strong>Lighting the forge</strong></main>;
   }
 
-  if (activeMap && activeMapId) {
-    return <Arena map={activeMap} stats={stats} onReturn={(result) => finishRun(result)} />;
+  if (!profile.character.created || !profile.character.classId) {
+    const selected = CHARACTER_CLASSES[selectedClass];
+    return (
+      <BabylonWorld mode="class-select" classId={selectedClass}>
+        <div className="creation-header"><span className="brand-rune">C</span><div><strong>CRAFTY</strong><small>Choose who enters the Crucible</small></div></div>
+        <section className="character-creation">
+          <div className="creation-title"><span>Begin your first life</span><h1>Choose your class</h1><p>Each class changes your starting attributes and weapon. Your passive tree remains open.</p></div>
+          <div className="class-choice-row">
+            {(Object.keys(CHARACTER_CLASSES) as CharacterClassId[]).map((classId) => {
+              const definition = CHARACTER_CLASSES[classId];
+              return (
+                <button type="button" className={selectedClass === classId ? "selected" : ""} onClick={() => setSelectedClass(classId)} key={classId}>
+                  <span>{definition.title}</span><strong>{definition.name}</strong><small>{definition.fantasy}</small><em>Starts with {definition.weapon}</em>
+                </button>
+              );
+            })}
+          </div>
+          <form className="creation-confirm" onSubmit={(event) => { event.preventDefault(); startCharacter(); }}>
+            <label><span>Character name</span><input value={characterName} onChange={(event) => setCharacterName(event.target.value)} placeholder={selected.name} maxLength={24} /></label>
+            <button type="submit"><span>Enter the Hideout</span><small>Begin as {selected.name}</small></button>
+          </form>
+        </section>
+      </BabylonWorld>
+    );
   }
 
-  const equipment = [...Object.values(profile.equipped).filter(Boolean), ...profile.inventory] as EquipmentItem[];
-  const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id));
+  if (screen === "arena" && profile.openedMap) {
+    const arenaBalance = buildArenaBalance(profile);
+    return (
+      <BabylonWorld mode="arena" classId={profile.character.classId} portalActive arenaBalance={arenaBalance} onArenaComplete={completeArena}>
+        <button type="button" className="return-hideout" onClick={() => setScreen("hideout")}>Return to hideout</button>
+      </BabylonWorld>
+    );
+  }
+
   const xpRequired = XP_BY_LEVEL(profile.character.level);
   const xpPercent = profile.character.level === 99 ? 100 : (profile.character.xp / xpRequired) * 100;
+  const allItems = [...Object.values(profile.equipped).filter(Boolean), ...profile.inventory, ...profile.stash] as EquipmentItem[];
+  const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id)) as Set<string>;
+  const selectedItem = allItems.find((item) => item.id === selectedItemId) ?? null;
+
+  function startCharacter() {
+    if (!profile) return;
+    const next = createCharacter(profile, characterName, selectedClass);
+    setProfile(next);
+    setSelectedItemId(next.equipped.weapon?.id ?? null);
+  }
+
+  function handleStation(station: WorldStation) {
+    if (station === "stash") setPanel("stash");
+    if (station === "bench") setPanel("bench");
+    if (station === "map-device") setPanel("maps");
+    if (station === "portal") setScreen("arena");
+  }
 
   function craftMap(action: "dust" | "threat" | "reward") {
     if (!profile || !selectedMapId) return;
     const costs = { dust: "mapDust", threat: "threatGlyph", reward: "rewardInk" } as const;
     const material = costs[action];
     if (profile.materials[material] <= 0) return;
-    const maps = profile.maps.map((map) => {
-      if (map.id !== selectedMapId) return map;
-      if (action === "dust") return rerollMap(map);
-      return addMapModifier(map, action);
-    });
-    setProfile({
-      ...profile,
-      maps,
-      materials: { ...profile.materials, [material]: profile.materials[material] - 1 },
-    });
-    setNotice(action === "dust" ? "The map's paths have shifted." : "A new affix was etched into the map.");
+    const maps = profile.maps.map((map) => map.id !== selectedMapId ? map : action === "dust" ? rerollMap(map) : addMapModifier(map, action));
+    setProfile({ ...profile, maps, materials: { ...profile.materials, [material]: profile.materials[material] - 1 } });
   }
 
-  function enterMap() {
+  function openPortal() {
     if (!profile) return;
     const map = profile.maps.find((candidate) => candidate.id === selectedMapId);
     if (!map) return;
-    setProfile({ ...profile, maps: profile.maps.filter((candidate) => candidate.id !== map.id) });
-    setActiveMap(map);
-    setActiveMapId(map.id);
-    setLastRun(null);
+    setProfile({ ...profile, maps: profile.maps.filter((candidate) => candidate.id !== map.id), openedMap: map });
+    setPanel(null);
+    setNotice(`${map.baseName} portal opened.`);
   }
 
-  function finishRun(result: RunResult) {
+  function completeArena(summary: ArenaSummary) {
     if (!profile) return;
-    let nextProfile = applyRunResult(profile, result);
-    if (nextProfile.maps.length === 0) nextProfile = { ...nextProfile, maps: [createMap(1)] };
-    setProfile(nextProfile);
-    setSelectedMapId(nextProfile.maps[0]?.id ?? null);
-    setSelectedItemId(result.loot.items[0]?.id ?? selectedItemId);
-    setLastRun(result);
-    setActiveMap(null);
-    setActiveMapId(null);
-    setView(result.loot.items.length > 0 ? "items" : "maps");
+    const balance = buildArenaBalance(profile);
+    const rewardMultiplier = 1 + balance.rewardBonus / 100;
+    const rareChance = Math.min(0.34, 0.06 + balance.rewardBonus / 350);
+    const result: RunResult = {
+      completed: true,
+      ...summary,
+      loot: {
+        xp: Math.round((220 + balance.tier * 65) * rewardMultiplier),
+        materials: { scrap: Math.round(8 * rewardMultiplier), essence: Math.max(1, Math.round(2 * rewardMultiplier)), mapDust: 1 },
+        items: [generateEquipment(Math.max(2, balance.tier) * 5, Math.random() < rareChance ? "rare" : "magic")],
+      },
+    };
+    let next = applyRunResult(profile, result);
+    if (next.maps.length === 0) next = { ...next, maps: [createMap(1)] };
+    setProfile(next);
+    setSelectedMapId(next.maps[0]?.id ?? null);
+    setSelectedItemId(result.loot.items[0].id);
+    setScreen("hideout");
+    setNotice("Map complete. Rewards moved to your inventory.");
   }
 
   function craftItem(action: "scrap" | "essence") {
@@ -112,91 +173,70 @@ export function GameShell() {
       return next;
     };
     const inventory = profile.inventory.map(update);
-    const equipped = Object.fromEntries(
-      Object.entries(profile.equipped).map(([slot, item]) => [slot, item ? update(item) : item]),
-    ) as PlayerProfile["equipped"];
+    const stash = profile.stash.map(update);
+    const equipped = Object.fromEntries(Object.entries(profile.equipped).map(([slot, item]) => [slot, item ? update(item) : item])) as PlayerProfile["equipped"];
     if (!changed) return;
-    setProfile({
-      ...profile,
-      inventory,
-      equipped,
-      materials: { ...profile.materials, [material]: profile.materials[material] - 1 },
-    });
-    setNotice(action === "scrap" ? "Affix values refined." : "A fire affix took shape.");
+    setProfile({ ...profile, inventory, stash, equipped, materials: { ...profile.materials, [material]: profile.materials[material] - 1 } });
   }
 
   function equipSelected() {
-    if (!profile || !selectedItemId) return;
-    const selected = profile.inventory.find((item) => item.id === selectedItemId);
-    if (!selected) return;
-    const previouslyEquipped = profile.equipped[selected.slot];
+    if (!profile || !selectedItem) return;
+    const previouslyEquipped = profile.equipped[selectedItem.slot];
     setProfile({
       ...profile,
-      inventory: [
-        ...(previouslyEquipped ? [previouslyEquipped] : []),
-        ...profile.inventory.filter((item) => item.id !== selected.id),
-      ],
-      equipped: { ...profile.equipped, [selected.slot]: selected },
+      inventory: [...(previouslyEquipped ? [previouslyEquipped] : []), ...profile.inventory.filter((item) => item.id !== selectedItem.id)],
+      stash: profile.stash.filter((item) => item.id !== selectedItem.id),
+      equipped: { ...profile.equipped, [selectedItem.slot]: selectedItem },
     });
-    setNotice(`${selected.baseName} equipped.`);
+  }
+
+  function transferSelected() {
+    if (!profile || !selectedItem) return;
+    const inStash = profile.stash.some((item) => item.id === selectedItem.id);
+    if (inStash) {
+      setProfile({ ...profile, stash: profile.stash.filter((item) => item.id !== selectedItem.id), inventory: [...profile.inventory, selectedItem] });
+    } else if (profile.inventory.some((item) => item.id === selectedItem.id)) {
+      setProfile({ ...profile, inventory: profile.inventory.filter((item) => item.id !== selectedItem.id), stash: [...profile.stash, selectedItem] });
+    }
   }
 
   return (
-    <main className="game-shell">
-      <header className="game-header">
-        <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE CRUCIBLE PROTOTYPE</small></div></div>
-        <nav className="town-nav" aria-label="Forge navigation">
-          <button type="button" className={view === "maps" ? "active" : ""} onClick={() => setView("maps")}><span>01</span> Map Forge</button>
-          <button type="button" className={view === "items" ? "active" : ""} onClick={() => setView("items")}><span>02</span> Workbench</button>
-        </nav>
-        <div className="character-summary">
-          <div className="level-medallion"><small>LVL</small><strong>{profile.character.level}</strong></div>
-          <div><strong>{profile.character.name}</strong><span>{profile.character.archetype} · {profile.character.unspentPassives} passive points</span></div>
-        </div>
+    <BabylonWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} onStation={handleStation}>
+      <header className="hideout-hud">
+        <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
+        <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId].name}</small></div></div>
+        <nav><button type="button" onClick={() => setPanel("inventory")}>Inventory <kbd>I</kbd></button><button type="button" onClick={() => setPanel("maps")}>Maps <strong>{profile.maps.length}</strong></button></nav>
+        <div className="hideout-xp"><span style={{ width: `${xpPercent}%` }} /><small>{profile.character.xp}/{xpRequired} XP</small></div>
       </header>
 
-      <section className="resource-ribbon">
-        <div className="xp-track"><span style={{ width: `${xpPercent}%` }} /></div>
-        <div className="resource-list">
-          <span><i>S</i> Scrap <strong>{profile.materials.scrap}</strong></span>
-          <span><i className="essence">E</i> Essence <strong>{profile.materials.essence}</strong></span>
-          <span><i>D</i> Map Dust <strong>{profile.materials.mapDust}</strong></span>
-          <span><i>G</i> Threat Glyph <strong>{profile.materials.threatGlyph}</strong></span>
-          <span><i>I</i> Reward Ink <strong>{profile.materials.rewardInk}</strong></span>
+      <div className="hideout-prompt"><span>WASD</span> move <i /> click ground to travel <i /> select a world object to interact</div>
+      {profile.openedMap && <div className="portal-notice"><span>Portal open</span><strong>{profile.openedMap.baseName}</strong><small>Click the portal to enter</small></div>}
+
+      {panel && (
+        <div className="world-panel-backdrop">
+          <section className={`world-panel panel-${panel}`}>
+            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : "Character equipment"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : "Inventory"}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
+            {panel === "maps" && <MapWorkshop maps={profile.maps} selectedMapId={selectedMapId} materials={profile.materials} onSelect={setSelectedMapId} onCraft={craftMap} onEnter={openPortal} />}
+            {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} materials={profile.materials} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
+            {(panel === "inventory" || panel === "stash") && (
+              <div className="inventory-window">
+                <div className="equipment-paperdoll">
+                  <span className="eyebrow">Equipped</span>
+                  {(["weapon", "chest", "ring", "boots"] as const).map((slot) => <div className={`equipment-slot slot-${slot}`} key={slot}><small>{slot}</small>{profile.equipped[slot] ? <ItemCard compact item={profile.equipped[slot]} onClick={() => setSelectedItemId(profile.equipped[slot]?.id ?? null)} selected={selectedItemId === profile.equipped[slot]?.id} /> : <span>Empty</span>}</div>)}
+                </div>
+                <div className="inventory-containers">
+                  {panel === "stash" && <InventoryGrid items={profile.stash} columns={12} rows={8} selectedId={selectedItemId} onSelect={setSelectedItemId} label="Stash" />}
+                  <InventoryGrid items={profile.inventory} columns={12} rows={5} selectedId={selectedItemId} onSelect={setSelectedItemId} label="Backpack" />
+                </div>
+                <aside className="inventory-inspector">
+                  {selectedItem ? <><ItemCard item={selectedItem} /><button type="button" className="secondary-action" onClick={equipSelected}>Equip item</button>{panel === "stash" && <button type="button" className="secondary-action" onClick={transferSelected}>{profile.stash.some((item) => item.id === selectedItem.id) ? "Move to backpack" : "Move to stash"}</button>}</> : <p>Select an item to inspect it.</p>}
+                </aside>
+              </div>
+            )}
+          </section>
         </div>
-        <div className="xp-label">{profile.character.level === 99 ? "Level cap" : `${profile.character.xp} / ${xpRequired} XP`}</div>
-      </section>
-
-      <div className="town-intro">
-        <div><span className="eyebrow">{view === "maps" ? "Prepare the expedition" : "Shape what survived"}</span><h1>{view === "maps" ? "Every map is a wager." : "Great items are made, not found."}</h1></div>
-        <p>{view === "maps" ? "Etch danger into the map, enter its six waves, and decide how far your build can be pushed." : "Develop promising bases through controlled crafts. Stability makes every decision permanent."}</p>
-      </div>
-
-      {lastRun && <div className={`last-run ${lastRun.completed ? "success" : "failure"}`}><strong>{lastRun.completed ? "Map completed" : "Map failed"}</strong><span>{lastRun.enemiesSlain} slain · {lastRun.loot.xp} XP · {lastRun.loot.items.length} items recovered</span><button type="button" onClick={() => setLastRun(null)}>×</button></div>}
-
-      {view === "maps" ? (
-        <MapWorkshop
-          maps={profile.maps}
-          selectedMapId={selectedMapId}
-          materials={profile.materials}
-          onSelect={setSelectedMapId}
-          onCraft={craftMap}
-          onEnter={enterMap}
-        />
-      ) : (
-        <ItemWorkbench
-          items={equipment}
-          equippedIds={equippedIds as Set<string>}
-          materials={profile.materials}
-          selectedId={selectedItemId}
-          onSelect={setSelectedItemId}
-          onCraft={craftItem}
-          onEquip={equipSelected}
-        />
       )}
-
-      <footer className="game-footer"><span>Prototype save is stored on this device</span><span>WASD to move · Mouse to aim and fire · Q / E skills</span></footer>
       {notice && <div className="toast" role="status">{notice}</div>}
-    </main>
+    </BabylonWorld>
   );
 }

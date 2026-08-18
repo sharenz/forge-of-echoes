@@ -1,17 +1,31 @@
-import { XP_BY_LEVEL } from "./content";
-import type { CharacterStats, EquipmentItem, Materials, PlayerProfile, RunResult } from "./domain";
-import { generateEquipment } from "./items";
+import { CHARACTER_CLASSES, XP_BY_LEVEL } from "./content";
+import type {
+  CharacterClassId,
+  CharacterStats,
+  EquipmentItem,
+  Materials,
+  PlayerProfile,
+  RunResult,
+} from "./domain";
+import { generateStarterWeapon } from "./items";
 import { createMap } from "./maps";
 
-const STORAGE_KEY = "crafty.profile.v1";
+const STORAGE_KEY = "crafty.profile.v2";
+const LEGACY_STORAGE_KEY = "crafty.profile.v1";
+
+interface LegacyProfile extends Omit<PlayerProfile, "version" | "character" | "stash" | "openedMap"> {
+  version: 1;
+  character: Omit<PlayerProfile["character"], "classId" | "created">;
+}
 
 export function createInitialProfile(): PlayerProfile {
-  const starterWeapon = generateEquipment(1, "magic");
   return {
-    version: 1,
+    version: 2,
     character: {
-      name: "The Forgebound",
-      archetype: "Emberwright",
+      name: "",
+      archetype: "Unchosen",
+      classId: null,
+      created: false,
       level: 1,
       xp: 0,
       unspentPassives: 0,
@@ -28,8 +42,52 @@ export function createInitialProfile(): PlayerProfile {
       rewardInk: 3,
     },
     inventory: [],
-    equipped: { weapon: starterWeapon },
+    stash: [],
+    equipped: {},
     maps: [createMap(1), createMap(1), createMap(2)],
+    openedMap: null,
+  };
+}
+
+function migrateLegacy(profile: LegacyProfile): PlayerProfile {
+  const recoveredEquipment = [
+    ...Object.values(profile.equipped).filter(Boolean) as EquipmentItem[],
+    ...profile.inventory,
+  ];
+  return {
+    ...profile,
+    version: 2,
+    character: { ...profile.character, classId: null, created: false },
+    inventory: [],
+    stash: recoveredEquipment,
+    equipped: {},
+    openedMap: null,
+  };
+}
+
+export function createCharacter(profile: PlayerProfile, name: string, classId: CharacterClassId): PlayerProfile {
+  const classDefinition = CHARACTER_CLASSES[classId];
+  const recoveredEquipment = [
+    ...Object.values(profile.equipped).filter(Boolean) as EquipmentItem[],
+    ...profile.inventory,
+  ];
+  return {
+    ...profile,
+    character: {
+      name: name.trim() || classDefinition.name,
+      archetype: classDefinition.title,
+      classId,
+      created: true,
+      level: 1,
+      xp: 0,
+      unspentPassives: 0,
+      mapsCompleted: 0,
+      highestWave: 0,
+    },
+    inventory: [],
+    stash: [...recoveredEquipment, ...profile.stash],
+    equipped: { weapon: generateStarterWeapon(classId) },
+    openedMap: null,
   };
 }
 
@@ -37,9 +95,13 @@ export function loadProfile(): PlayerProfile {
   if (typeof window === "undefined") return createInitialProfile();
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (!saved) return createInitialProfile();
-    const parsed = JSON.parse(saved) as PlayerProfile;
-    return parsed.version === 1 ? parsed : createInitialProfile();
+    if (saved) {
+      const parsed = JSON.parse(saved) as PlayerProfile;
+      if (parsed.version === 2) return parsed;
+    }
+    const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) return migrateLegacy(JSON.parse(legacy) as LegacyProfile);
+    return createInitialProfile();
   } catch {
     return createInitialProfile();
   }
@@ -85,22 +147,24 @@ export function applyRunResult(profile: PlayerProfile, result: RunResult): Playe
     materials: addMaterials(profile.materials, result.loot.materials),
     inventory: [...result.loot.items, ...profile.inventory].slice(0, 24),
     maps,
+    openedMap: null,
   };
 }
 
 export function deriveStats(profile: PlayerProfile): CharacterStats {
   const equipped = Object.values(profile.equipped).filter(Boolean) as EquipmentItem[];
   const level = profile.character.level;
+  const classDefinition = profile.character.classId ? CHARACTER_CLASSES[profile.character.classId] : null;
   const sumTag = (tag: string) =>
     equipped.flatMap((item) => item.affixes).filter((affix) => affix.tag === tag).reduce((sum, affix) => sum + affix.value, 0);
 
   return {
-    maxLife: 110 + level * 8 + sumTag("life"),
-    maxFocus: 100,
-    moveSpeed: 250 * (1 + sumTag("speed") / 100),
-    attackDamage: 15 + level * 1.8 + sumTag("damage") + sumTag("fire") * 0.65,
+    maxLife: (110 + level * 8 + sumTag("life")) * (classDefinition?.lifeMultiplier ?? 1),
+    maxFocus: profile.character.classId === "sorceress" ? 120 : 100,
+    moveSpeed: 250 * (classDefinition?.speedMultiplier ?? 1) * (1 + sumTag("speed") / 100),
+    attackDamage: (15 + level * 1.8 + sumTag("damage") + sumTag("fire") * 0.65) * (classDefinition?.damageMultiplier ?? 1),
     attackSpeed: 1 + sumTag("speed") / 120,
-    armor: 10 + level * 2 + sumTag("defense"),
+    armor: (10 + level * 2 + sumTag("defense")) * (classDefinition?.armorMultiplier ?? 1),
   };
 }
 

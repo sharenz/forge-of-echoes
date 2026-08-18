@@ -1,4 +1,56 @@
-import type { Bargain, MapModifier, MapModifierId } from "./domain";
+import type { Bargain, CharacterClassId, MapModifier, MapModifierId } from "./domain";
+
+export interface CharacterClassDefinition {
+  id: CharacterClassId;
+  name: string;
+  title: string;
+  fantasy: string;
+  weapon: string;
+  lifeMultiplier: number;
+  damageMultiplier: number;
+  speedMultiplier: number;
+  armorMultiplier: number;
+  accent: string;
+}
+
+export const CHARACTER_CLASSES: Record<CharacterClassId, CharacterClassDefinition> = {
+  amazon: {
+    id: "amazon",
+    name: "Amazon",
+    title: "Spear of the Wild",
+    fantasy: "Mobile ranged precision, piercing attacks, and relentless momentum.",
+    weapon: "Hunter Spear",
+    lifeMultiplier: 0.92,
+    damageMultiplier: 1.08,
+    speedMultiplier: 1.12,
+    armorMultiplier: 0.88,
+    accent: "#d2a65f",
+  },
+  barbarian: {
+    id: "barbarian",
+    name: "Barbarian",
+    title: "Breaker of Chains",
+    fantasy: "Massive life, close-range force, and armor that rewards staying in the fight.",
+    weapon: "Iron Cleaver",
+    lifeMultiplier: 1.22,
+    damageMultiplier: 1.04,
+    speedMultiplier: 0.92,
+    armorMultiplier: 1.35,
+    accent: "#c46542",
+  },
+  sorceress: {
+    id: "sorceress",
+    name: "Sorceress",
+    title: "Keeper of Embers",
+    fantasy: "Explosive spell patterns, Focus mastery, and dangerous elemental reach.",
+    weapon: "Ashwood Wand",
+    lifeMultiplier: 0.84,
+    damageMultiplier: 1.2,
+    speedMultiplier: 1.02,
+    armorMultiplier: 0.72,
+    accent: "#e98a46",
+  },
+};
 
 export const MAP_MODIFIERS: Record<MapModifierId, MapModifier> = {
   teeming: {
@@ -119,4 +171,3 @@ export const MAP_RARITY_LIMITS = {
   rare: 4,
   unique: 4,
 } as const;
-
