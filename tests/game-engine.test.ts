@@ -5,7 +5,7 @@ import { ARENA_RULES } from "../app/game/config/arena";
 import { SKILL_AUDIO } from "../app/game/config/audio";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
 import { MAP_MERCHANT } from "../app/game/config/merchants";
-import { MAP_MODIFIERS } from "../app/game/config/maps";
+import { MAP_BASES, MAP_MODIFIERS } from "../app/game/config/maps";
 import { CHARACTER_EQUIPMENT_SLOTS } from "../app/game/config/equipment-slots";
 import { ITEM_BASES } from "../app/game/config/item-bases";
 import { MONSTER_ARCHETYPES } from "../app/game/config/monsters";
@@ -452,6 +452,14 @@ test("every skill declares reusable animation, VFX, and audio presentation", () 
     assert.ok(skill.presentation.vfx);
     assert.ok(SKILL_AUDIO[skill.presentation.audio].tones.length >= 2);
   }
+});
+
+test("every inventory base declares one stable icon asset", () => {
+  const definitions = [...ITEM_BASES, ...MAP_BASES, ...Object.values(CURRENCY_DEFINITIONS)];
+  const icons = definitions.map((definition) => definition.icon);
+  assert.equal(icons.length, 20);
+  assert.equal(new Set(icons).size, icons.length);
+  assert.ok(icons.every((icon) => icon.startsWith("/item-icons/") && icon.endsWith(".png")));
 });
 
 test("character equipment exposes ten positions and fills both ring slots independently", () => {

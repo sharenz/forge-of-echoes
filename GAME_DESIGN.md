@@ -93,6 +93,8 @@ Floating combat text always includes the final damage type, such as `37 (Fire)`.
 
 Every skill config owns presentation identifiers for character animation, compact VFX, and audio. The runtime resolves those identifiers through reusable animation, particle-pool, and audio systems; combat code never hardcodes a unique asset pipeline for one skill. Player movement switches between idle and walk loops, while attacks and casts briefly lock an action animation so movement cannot overwrite the important frames. Effects should remain small and layered: readable silhouettes, a short cast accent, restrained trails, a compact impact, and a brief audio envelope instead of screen-filling flashes.
 
+Every equipment base, map base, and crafting currency also declares its inventory icon in content config. Backpack, stash, equipment, tooltip, and drag rendering resolve the same asset through one shared item-visual helper; UI components must not infer graphics from names or maintain their own icon lookup tables.
+
 ### Defenses
 
 Use a small set of layered defenses:

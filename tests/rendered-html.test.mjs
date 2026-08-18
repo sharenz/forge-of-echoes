@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -28,9 +28,10 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, skillAudio, domain, itemContainer, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, globalStyles, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemIcon, itemTooltip, world, skillAudio, domain, itemContainer, itemVisuals, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameNotification.tsx", import.meta.url), "utf8"),
@@ -39,11 +40,13 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/components/PhaserWorld.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/InventoryPanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/InventoryGrid.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/ItemIcon.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ItemTooltip.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/SkillAudio.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/item-container.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/item-visuals.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/stash.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/equipment.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/combat.ts", import.meta.url), "utf8"),
@@ -162,6 +165,11 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(inventoryGrid, /event\.ctrlKey && onQuickMove/);
   assert.match(inventoryGrid, /draggedOffset \?\? readOffset/);
   assert.match(inventoryGrid, /grid-drop-preview/);
+  assert.match(inventoryGrid, /<ItemIcon item=\{item\}/);
+  assert.match(itemIcon, /inventoryItemIcon\(item\)/);
+  assert.match(itemTooltip, /tooltip-item-icon/);
+  assert.match(itemVisuals, /CURRENCY_DEFINITIONS\[item\.baseId\]\.icon/);
+  assert.match(globalStyles, /\.poe-grid-item > \.item-icon/);
   assert.doesNotMatch(inventoryGrid, /packItems/);
   assert.match(itemContainer, /transferItem/);
   assert.match(stashEngine, /insertItemsIntoStash/);
@@ -229,4 +237,6 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(gameDesign, /The four map axes/);
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/ember-sigil.png", import.meta.url));
+  const itemIcons = (await readdir(new URL("../public/item-icons", import.meta.url))).filter((name) => name.endsWith(".png"));
+  assert.equal(itemIcons.length, 20);
 });

@@ -301,19 +301,23 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
 .item-grid { margin-top: 18px; display: grid; grid-template-columns: 1fr; gap: 7px; max-height: 470px; overflow: auto; }
 .item-grid-cell { position: relative; }
 .equipped-flag { position: absolute; right: 6px; top: 6px; z-index: 1; width: 16px; height: 16px; display: grid; place-items: center; background: #6b4a2f; color: var(--paper); font-size: 8px; }
-.item-card { width: 100%; display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 18px; border: 1px solid var(--line); background: #161310; cursor: pointer; }
+.item-icon { display: block; background-image: var(--item-icon); background-position: center; background-repeat: no-repeat; background-size: contain; }
+.item-card { position: relative; width: 100%; display: flex; flex-direction: column; gap: 8px; overflow: hidden; text-align: left; padding: 18px 92px 18px 18px; border: 1px solid var(--line); background: #161310; cursor: pointer; }
 .item-card:hover, .item-card.selected { border-color: var(--line-bright); background: #201a15; }
 .item-card.rarity-magic { border-top-color: #5d73a6; }
 .item-card.rarity-rare { border-top-color: #a98a3f; }
 .item-card strong { font-family: Georgia, serif; font-size: 17px; font-weight: normal; }
+.item-card > :not(.item-card-icon) { position: relative; z-index: 1; }
+.item-card-icon { position: absolute; z-index: 0; right: 9px; top: 50%; width: 74px; height: 74px; opacity: .68; transform: translateY(-50%); filter: drop-shadow(0 5px 5px #000) saturate(.9); }
 .item-card-kicker { color: var(--muted); font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
 .item-implicit { color: #9eb0dc; font-size: 10px; }
 .item-affix { display: flex; color: #c6bbae; font-size: 10px; }
 .item-affix em { color: #6f8ac4; min-width: 25px; font-style: normal; }
 .item-stability { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; color: var(--ember-bright); font-size: 9px; letter-spacing: .08em; }
-.item-card.compact { gap: 5px; padding: 11px 12px; }
+.item-card.compact { gap: 5px; padding: 11px 54px 11px 10px; }
 .item-card.compact strong { font-size: 12px; }
 .item-card.compact .item-implicit { font-size: 8px; }
+.item-card.compact .item-card-icon { right: 3px; width: 50px; height: 50px; opacity: .78; }
 .item-focus { display: grid; align-content: center; justify-items: center; gap: 14px; background: radial-gradient(circle, rgba(185, 96, 43, .1), transparent 48%); }
 .item-focus-card { width: min(370px, 90%); padding: 12px; border: 1px solid #4f3d2d; box-shadow: 0 20px 55px rgba(0,0,0,.38); }
 .item-focus .secondary-action { width: min(370px, 90%); }
@@ -729,19 +733,25 @@ body:has(.pixel-shell) { overflow: hidden; }
 .poe-grid-item { position: relative; min-width: 0; min-height: 0; margin: 2px; padding: 4px; overflow: hidden; border: 1px solid #655747; background: radial-gradient(circle at 50% 35%, #2e2a25, #11100e); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
 .poe-grid-item:hover, .poe-grid-item.selected { filter: brightness(1.28); box-shadow: inset 0 0 20px #b2672b33; z-index: 2; }
 .poe-grid-item.selected { outline: 1px solid #f0a45a; }
-.poe-grid-item > span { color: #dacdbd; font: 16px Georgia, serif; }
-.poe-grid-item > small { max-width: 100%; color: #a99a89; font-size: 7px; text-align: center; line-height: 1.2; }
+.poe-grid-item > .item-icon { position: absolute; inset: 4px; width: auto; height: auto; opacity: .94; filter: drop-shadow(0 3px 3px #000) saturate(.92); }
+.poe-grid-item > small { position: absolute; z-index: 2; right: 2px; bottom: 2px; left: 2px; overflow: hidden; padding: 2px 1px; background: #090706bb; color: #c8b8a5; font-size: 7px; text-align: center; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .poe-grid-item.rarity-magic { border-color: #617dc0; background: radial-gradient(circle at 50% 35%, #202b4b, #0e111b); }
 .poe-grid-item.rarity-rare { border-color: #b9963e; background: radial-gradient(circle at 50% 35%, #443816, #151208); }
 .poe-grid-item.rarity-unique { border-color: #b25e2c; background: radial-gradient(circle at 50% 35%, #4e2614, #170c08); }
 .poe-grid-item.item-kind-map { border-color: #8a6444; background: radial-gradient(circle at 50% 35%, #382215, #130d09); }
 .poe-grid-item.inventory-currency { border-color: #6b533c; background: radial-gradient(circle at 50% 35%, #332314, #110d09); }
-.poe-grid-item.inventory-currency > span { color: #efad67; }
-.poe-grid-item .stack-count { position: absolute; right: 3px; bottom: 1px; color: #fff0cf; font: 11px Georgia, serif; text-shadow: 0 1px 3px #000; }
+.poe-grid-item .stack-count,
+.poe-grid-item .item-tier-badge { position: absolute; z-index: 3; right: 3px; padding: 1px 3px; border: 1px solid #72543a; background: #0c0907d9; color: #fff0cf; font: 11px Georgia, serif; text-shadow: 0 1px 3px #000; }
+.poe-grid-item .stack-count { bottom: 2px; }
+.poe-grid-item .item-tier-badge { top: 2px; color: #e8b87d; font-size: 9px; }
 .poe-grid-item.new-drop { border-color: #e28a45; animation: new-drop-glow 1.6s ease-in-out infinite; }
 .new-drop-badge { position: absolute; z-index: 3; left: 3px; top: 3px; padding: 2px 4px; background: #a84721; color: #ffe1b9; font-size: 8px; font-style: normal; letter-spacing: .08em; text-transform: uppercase; box-shadow: 0 0 9px #e76f2f88; }
 
 .item-tooltip { position: fixed; z-index: 9999; width: 304px; padding: 15px; display: flex; flex-direction: column; gap: 7px; border: 1px solid #75604b; border-top: 2px solid #b5aa9c; background: linear-gradient(145deg, #211c17f7, #0b0908fc); color: #d9cbb9; box-shadow: 0 18px 55px #000, inset 0 0 35px #8b4c2220; pointer-events: none; }
+.item-tooltip > .tooltip-item-icon { position: absolute; top: 8px; right: 8px; width: 66px; height: 66px; opacity: .82; filter: drop-shadow(0 5px 5px #000); }
+.item-tooltip > span:not(.tooltip-item-icon),
+.item-tooltip > strong,
+.item-tooltip > em { max-width: 218px; }
 .item-tooltip > span { color: #a89886; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
 .item-tooltip > strong { color: #eee0c7; font: 20px Georgia, serif; }
 .item-tooltip > em { color: #8e8173; font-size: 11px; font-style: normal; text-transform: capitalize; }

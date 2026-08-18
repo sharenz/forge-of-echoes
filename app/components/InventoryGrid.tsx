@@ -7,6 +7,7 @@ import type { InventoryItem, ItemContainer } from "../game/domain";
 import { canPlaceItem, findContainerEntry, itemFootprint } from "../game/item-container";
 import { isCurrencyItem, isEquipmentItem, isMapItem } from "../game/inventory";
 import { itemDisplayName } from "../game/items";
+import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 
 interface InventoryGridProps {
@@ -114,7 +115,6 @@ export function InventoryGrid({ container, selectedId, onSelect, highlightedIds,
         {container.entries.map(({ item, x, y }) => {
           const size = itemFootprint(item);
           const highlighted = highlightedIds?.has(item.id) ?? false;
-          const currency = isCurrencyItem(item) ? CURRENCY_DEFINITIONS[item.baseId] : null;
           const visualClass = isEquipmentItem(item) || isMapItem(item) ? `rarity-${item.rarity}` : "inventory-currency";
           return (
             <button
@@ -148,7 +148,8 @@ export function InventoryGrid({ container, selectedId, onSelect, highlightedIds,
               key={item.id}
             >
               {highlighted && <em className="new-drop-badge">New</em>}
-              <span>{isEquipmentItem(item) ? item.baseName.split(" ").map((word) => word[0]).join("") : isMapItem(item) ? `T${item.tier}` : currency?.symbol}</span>
+              <ItemIcon item={item} />
+              {isMapItem(item) && <b className="item-tier-badge">T{item.tier}</b>}
               {isCurrencyItem(item) && <b className="stack-count">{item.stackSize}</b>}
               {size.height > 1 && isEquipmentItem(item) && <small>{item.baseName}</small>}
             </button>

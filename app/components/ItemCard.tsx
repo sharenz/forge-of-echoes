@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { EquipmentItem } from "../game/domain";
 import { itemDisplayName } from "../game/items";
 import { formatModifier } from "../game/stats";
+import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 
 interface ItemCardProps {
@@ -33,6 +34,7 @@ export function ItemCard({ item, compact = false, selected = false, onClick, dra
         onFocus={(event) => { const rect = event.currentTarget.getBoundingClientRect(); setTooltip({ x: rect.right, y: rect.top }); }}
         onBlur={() => setTooltip(null)}
       >
+        <ItemIcon item={item} className="item-card-icon" />
         <span className="item-card-kicker">{item.rarity} · item level {item.itemLevel}</span>
         <strong>{itemDisplayName(item)}</strong>
         <span className="item-implicit">{item.implicit}</span>

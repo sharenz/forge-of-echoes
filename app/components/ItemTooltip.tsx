@@ -9,6 +9,7 @@ import { isCurrencyItem, isEquipmentItem } from "../game/inventory";
 import { itemDisplayName } from "../game/items";
 import { mapDanger, mapModifierDescription, mapStatSummary } from "../game/maps";
 import { formatModifier } from "../game/stats";
+import { ItemIcon } from "./ItemIcon";
 
 interface ItemTooltipProps {
   item: InventoryItem;
@@ -26,6 +27,7 @@ export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
     const definition = CURRENCY_DEFINITIONS[item.baseId];
     return createPortal(
       <aside className="item-tooltip currency-tooltip" style={{ left, top }} role="tooltip">
+        <ItemIcon item={item} className="tooltip-item-icon" />
         <span>Stackable crafting currency</span>
         <strong>{definition.name}</strong>
         <em>{item.stackSize} / {definition.maxStackSize} per stack</em>
@@ -39,6 +41,7 @@ export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
     const mapStats = mapStatSummary(item);
     return createPortal(
       <aside className={`item-tooltip rarity-${item.rarity}`} style={{ left, top }} role="tooltip">
+        <ItemIcon item={item} className="tooltip-item-icon" />
         <span>{item.rarity} map · tier {item.tier}</span>
         <strong>{item.baseName}</strong>
         <em>Map item · consumed by the map device</em>
@@ -56,6 +59,7 @@ export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
 
   return createPortal(
     <aside className={`item-tooltip rarity-${item.rarity}`} style={{ left, top }} role="tooltip">
+      <ItemIcon item={item} className="tooltip-item-icon" />
       <span>{item.rarity} · item level {item.itemLevel}</span>
       <strong>{itemDisplayName(item)}</strong>
       <em>{item.baseName} · {EQUIPMENT_TYPE_LABELS[item.slot]}</em>

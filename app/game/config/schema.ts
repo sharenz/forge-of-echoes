@@ -25,6 +25,7 @@ export interface ScaledModifierDefinition<TStat extends ModifierStatKey = StatKe
 export interface ItemBaseDefinition {
   id: string;
   name: string;
+  icon: string;
   slot: EquipmentSlot;
   requiredLevel: number;
   implicit: string;
@@ -135,6 +136,7 @@ export interface SkillDefinition {
 export interface MapBaseDefinition {
   id: string;
   name: string;
+  icon: string;
   implicit: string;
 }
 
