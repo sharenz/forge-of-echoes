@@ -3,11 +3,45 @@ export type EquipmentSlot = "weapon" | "chest" | "ring" | "boots";
 export type AffixTag = "fire" | "life" | "speed" | "damage" | "defense";
 export type CharacterClassId = "amazon" | "barbarian" | "sorceress";
 
+export type AttributeKey = "strength" | "dexterity" | "intelligence";
+export type DerivedStatKey =
+  | "maxLife"
+  | "maxFocus"
+  | "moveSpeed"
+  | "attackDamage"
+  | "attackSpeed"
+  | "armor"
+  | "evadeChance";
+export type StatKey = AttributeKey | DerivedStatKey;
+export type ModifierMode = "flat" | "increased" | "more";
+
+/**
+ * Every numerical effect in the game resolves through this representation.
+ * flat values are added first, increased values are summed into one multiplier,
+ * and each more value is a separate multiplicative multiplier.
+ */
+export interface StatModifier {
+  stat: StatKey;
+  mode: ModifierMode;
+  value: number;
+  source: string;
+}
+
+export interface AffixRoll extends StatModifier {
+  min: number;
+  max: number;
+}
+
 export interface Affix {
   id: string;
+  definitionId: string;
   name: string;
   tag: AffixTag;
   tier: number;
+  requiredItemLevel: number;
+  group: string;
+  rolls: AffixRoll[];
+  /** Compatibility summary for compact UI. Calculation uses rolls. */
   value: number;
   unit: "flat" | "percent";
 }
@@ -22,6 +56,8 @@ export interface EquipmentItem {
   stability: number;
   maxStability: number;
   implicit: string;
+  baseStats: StatModifier[];
+  implicitModifiers: StatModifier[];
   affixes: Affix[];
 }
 
@@ -79,7 +115,7 @@ export interface CharacterProgress {
 }
 
 export interface PlayerProfile {
-  version: 2;
+  version: 3;
   character: CharacterProgress;
   materials: Materials;
   inventory: EquipmentItem[];
@@ -90,6 +126,9 @@ export interface PlayerProfile {
 }
 
 export interface CharacterStats {
+  strength: number;
+  dexterity: number;
+  intelligence: number;
   maxLife: number;
   maxFocus: number;
   moveSpeed: number;

@@ -1,121 +1,149 @@
-import type { Affix, AffixTag, CharacterClassId, EquipmentItem, EquipmentSlot, Rarity } from "./domain";
+import { AFFIX_DEFINITIONS, AFFIX_DEFINITIONS_BY_ID } from "./config/affixes";
+import { ITEM_BASES, ITEM_BASES_BY_ID, STARTER_BASES, type ItemBaseId } from "./config/item-bases";
+import type { AffixDefinition, AffixTierDefinition, ItemBaseDefinition, ScaledModifierDefinition } from "./config/schema";
+import type { Affix, AffixTag, CharacterClassId, EquipmentItem, EquipmentSlot, Rarity, StatModifier } from "./domain";
 import { choose, createId, randomInt } from "./random";
 
-interface BaseDefinition {
-  id: string;
-  name: string;
-  slot: EquipmentSlot;
-  implicit: string;
+export type RandomSource = () => number;
+
+function randomInteger(min: number, max: number, random: RandomSource): number {
+  return Math.floor(random() * (max - min + 1)) + min;
 }
 
-const BASES: BaseDefinition[] = [
-  { id: "hunter-spear", name: "Hunter Spear", slot: "weapon", implicit: "+8% projectile speed" },
-  { id: "ashwood-wand", name: "Ashwood Wand", slot: "weapon", implicit: "+8% fire effect" },
-  { id: "iron-cleaver", name: "Iron Cleaver", slot: "weapon", implicit: "+4 physical damage" },
-  { id: "riveted-coat", name: "Riveted Coat", slot: "chest", implicit: "+12 armor" },
-  { id: "ember-ring", name: "Ember Ring", slot: "ring", implicit: "+5% fire resistance" },
-  { id: "pathfinder-boots", name: "Pathfinder Boots", slot: "boots", implicit: "+3% move speed" },
-];
+function weightedChoice<T>(values: readonly T[], weight: (value: T) => number, random: RandomSource): T {
+  if (values.length === 0) throw new Error("Cannot choose from an empty weighted collection");
+  const total = values.reduce((sum, value) => sum + Math.max(0, weight(value)), 0);
+  if (total <= 0) return values[0];
+  let cursor = random() * total;
+  for (const value of values) {
+    cursor -= Math.max(0, weight(value));
+    if (cursor < 0) return value;
+  }
+  return values[values.length - 1];
+}
 
-const STARTER_BASES: Record<CharacterClassId, string> = {
-  amazon: "hunter-spear",
-  barbarian: "iron-cleaver",
-  sorceress: "ashwood-wand",
-};
+export function eligibleAffixTiers(definition: AffixDefinition, itemLevel: number): readonly AffixTierDefinition[] {
+  return definition.tiers.filter((candidate) => candidate.requiredItemLevel <= itemLevel);
+}
 
-const AFFIX_NAMES: Record<AffixTag, string[]> = {
-  fire: ["Scorching", "Ember-fed", "of Immolation"],
-  life: ["Stalwart", "Vigorous", "of the Ox"],
-  speed: ["Fleet", "Quickened", "of Haste"],
-  damage: ["Merciless", "Honed", "of Force"],
-  defense: ["Plated", "Steadfast", "of Warding"],
-};
-
-const SLOT_TAGS: Record<EquipmentSlot, AffixTag[]> = {
-  weapon: ["fire", "damage", "speed"],
-  chest: ["life", "defense"],
-  ring: ["fire", "life", "damage"],
-  boots: ["speed", "life", "defense"],
-};
-
-function createAffix(tag: AffixTag, itemLevel: number): Affix {
-  const maxTier = Math.max(1, 6 - Math.floor(itemLevel / 15));
-  const tier = randomInt(maxTier, Math.min(6, maxTier + 2));
-  const baseValue: Record<AffixTag, number> = {
-    fire: 5,
-    life: 9,
-    speed: 3,
-    damage: 4,
-    defense: 8,
+export function scaleBaseModifier(definition: ScaledModifierDefinition, itemLevel: number, source: string): StatModifier {
+  return {
+    stat: definition.stat,
+    mode: definition.mode,
+    value: Math.round((definition.base + (definition.perItemLevel ?? 0) * Math.max(0, itemLevel - 1)) * 100) / 100,
+    source,
   };
-  const value = baseValue[tag] + (7 - tier) * randomInt(2, 4);
+}
+
+function rollAffix(definition: AffixDefinition, itemLevel: number, random: RandomSource = Math.random): Affix {
+  const eligible = eligibleAffixTiers(definition, itemLevel);
+  if (eligible.length === 0) throw new Error(`No eligible tier for ${definition.id} at item level ${itemLevel}`);
+  const selectedTier = weightedChoice(eligible, (candidate) => candidate.weight, random);
+  const rolls = selectedTier.rolls.map((roll) => ({
+    ...roll,
+    value: randomInteger(roll.min, roll.max, random),
+    source: `affix:${definition.id}:t${selectedTier.tier}`,
+  }));
+  const primary = rolls[0];
   return {
     id: createId("affix"),
-    name: choose(AFFIX_NAMES[tag]),
-    tag,
-    tier,
-    value,
-    unit: tag === "life" || tag === "damage" || tag === "defense" ? "flat" : "percent",
+    definitionId: definition.id,
+    name: definition.name,
+    tag: definition.tag,
+    tier: selectedTier.tier,
+    requiredItemLevel: selectedTier.requiredItemLevel,
+    group: definition.group,
+    rolls,
+    value: primary.value,
+    unit: primary.mode === "flat" ? "flat" : "percent",
   };
 }
 
-function createEquipmentFromBase(base: BaseDefinition, itemLevel: number, forcedRarity?: Rarity): EquipmentItem {
-  const rarityRoll = Math.random();
-  const rarity: Rarity = forcedRarity ?? (rarityRoll > 0.94 ? "rare" : rarityRoll > 0.48 ? "magic" : "normal");
-  const affixCount = rarity === "rare" ? randomInt(3, 4) : rarity === "magic" ? randomInt(1, 2) : 0;
-  const affixes = Array.from({ length: affixCount }, () => createAffix(choose(SLOT_TAGS[base.slot]), itemLevel));
+function affixPool(slot: EquipmentSlot, excludedGroups: ReadonlySet<string>, tag?: AffixTag): readonly AffixDefinition[] {
+  return AFFIX_DEFINITIONS.filter((definition) => definition.slots.includes(slot) && !excludedGroups.has(definition.group) && (!tag || definition.tag === tag));
+}
 
-  return {
-    id: createId("item"),
-    baseId: base.id,
-    baseName: base.name,
-    slot: base.slot,
-    rarity,
-    itemLevel,
-    stability: 8,
-    maxStability: 8,
-    implicit: base.implicit,
-    affixes,
+export function createAffixForItem(item: Pick<EquipmentItem, "slot" | "itemLevel" | "affixes">, tag?: AffixTag, random: RandomSource = Math.random): Affix | null {
+  const pool = affixPool(item.slot, new Set(item.affixes.map((affix) => affix.group)), tag)
+    .filter((definition) => eligibleAffixTiers(definition, item.itemLevel).length > 0);
+  if (pool.length === 0) return null;
+  return rollAffix(pool[Math.floor(random() * pool.length)], item.itemLevel, random);
+}
+
+function createEquipmentFromBase(base: ItemBaseDefinition, itemLevel: number, forcedRarity?: Rarity, random: RandomSource = Math.random): EquipmentItem {
+  const rarityRoll = random();
+  const rarity: Rarity = forcedRarity ?? (rarityRoll > 0.97 ? "rare" : rarityRoll > 0.55 ? "magic" : "normal");
+  const affixCount = rarity === "rare" ? randomInteger(3, 4, random) : rarity === "magic" ? randomInteger(1, 2, random) : 0;
+  const draft: EquipmentItem = {
+    id: createId("item"), baseId: base.id, baseName: base.name, slot: base.slot, rarity, itemLevel,
+    stability: 8, maxStability: 8, implicit: base.implicit,
+    baseStats: base.baseStats.map((modifier) => scaleBaseModifier(modifier, itemLevel, `base:${base.id}`)),
+    implicitModifiers: base.implicitModifiers.map((modifier) => scaleBaseModifier(modifier, itemLevel, `implicit:${base.id}`)),
+    affixes: [],
   };
+  for (let index = 0; index < affixCount; index += 1) {
+    const affix = createAffixForItem(draft, undefined, random);
+    if (!affix) break;
+    draft.affixes.push(affix);
+  }
+  return draft;
 }
 
 export function generateEquipment(itemLevel: number, forcedRarity?: Rarity): EquipmentItem {
-  return createEquipmentFromBase(choose(BASES), itemLevel, forcedRarity);
+  return createEquipmentFromBase(choose(ITEM_BASES), itemLevel, forcedRarity);
+}
+
+export function generateEquipmentWithRandom(itemLevel: number, forcedRarity: Rarity | undefined, random: RandomSource): EquipmentItem {
+  const base = ITEM_BASES[Math.floor(random() * ITEM_BASES.length)];
+  return createEquipmentFromBase(base, itemLevel, forcedRarity, random);
 }
 
 export function generateStarterWeapon(classId: CharacterClassId): EquipmentItem {
-  const base = BASES.find((candidate) => candidate.id === STARTER_BASES[classId]);
-  if (!base) throw new Error(`Missing starter weapon for ${classId}`);
-  return createEquipmentFromBase(base, 1, "magic");
+  return createEquipmentFromBase(ITEM_BASES_BY_ID[STARTER_BASES[classId]], 1, "magic");
 }
 
 export function addFireAffix(item: EquipmentItem): EquipmentItem {
-  if (item.stability <= 0 || item.affixes.length >= 4) return item;
-  return {
-    ...item,
-    rarity: item.affixes.length >= 2 ? "rare" : "magic",
-    stability: item.stability - 2,
-    affixes: [...item.affixes, createAffix("fire", item.itemLevel)],
-  };
+  if (item.stability < 2 || item.affixes.length >= 4) return item;
+  const affix = createAffixForItem(item, "fire");
+  if (!affix) return item;
+  return { ...item, rarity: item.affixes.length >= 2 ? "rare" : "magic", stability: item.stability - 2, affixes: [...item.affixes, affix] };
 }
 
-export function rerollAffixValues(item: EquipmentItem): EquipmentItem {
+export function rerollAffixValues(item: EquipmentItem, random: RandomSource = Math.random): EquipmentItem {
   if (item.stability <= 0 || item.affixes.length === 0) return item;
   return {
     ...item,
     stability: item.stability - 1,
-    affixes: item.affixes.map((affix) => ({
-      ...affix,
-      value: Math.max(1, Math.round(affix.value * (0.85 + Math.random() * 0.35))),
-    })),
+    affixes: item.affixes.map((affix) => {
+      const rolls = affix.rolls.map((roll) => ({ ...roll, value: randomInteger(roll.min, roll.max, random) }));
+      return { ...affix, rolls, value: rolls[0].value, unit: rolls[0].mode === "flat" ? "flat" : "percent" };
+    }),
   };
+}
+
+export function normalizeEquipmentItem(item: EquipmentItem): EquipmentItem {
+  const base = ITEM_BASES_BY_ID[item.baseId as ItemBaseId] ?? ITEM_BASES.find((candidate) => candidate.name === item.baseName) ?? ITEM_BASES[0];
+  const baseStats = item.baseStats ?? base.baseStats.map((modifier) => scaleBaseModifier(modifier, item.itemLevel, `base:${base.id}`));
+  const implicitModifiers = item.implicitModifiers ?? base.implicitModifiers.map((modifier) => scaleBaseModifier(modifier, item.itemLevel, `implicit:${base.id}`));
+  const affixes = item.affixes.map((legacy) => {
+    if (legacy.rolls?.length) return legacy;
+    const fallbackStat = legacy.tag === "life" ? "maxLife" : legacy.tag === "defense" ? "armor" : legacy.tag === "speed" ? "moveSpeed" : "attackDamage";
+    const fallbackMode = legacy.unit === "percent" ? "increased" : "flat";
+    const configured = AFFIX_DEFINITIONS_BY_ID[legacy.definitionId];
+    return {
+      ...legacy,
+      definitionId: legacy.definitionId ?? `legacy-${legacy.tag}`,
+      requiredItemLevel: legacy.requiredItemLevel ?? 1,
+      group: legacy.group ?? configured?.group ?? `legacy-${legacy.tag}-${legacy.id}`,
+      rolls: [{ stat: fallbackStat, mode: fallbackMode, value: legacy.value, min: legacy.value, max: legacy.value, source: `legacy:${legacy.id}` }],
+    } as Affix;
+  });
+  return { ...item, baseId: base.id, baseName: base.name, baseStats, implicitModifiers, affixes };
 }
 
 export function itemDisplayName(item: EquipmentItem): string {
   if (item.rarity === "normal" || item.affixes.length === 0) return item.baseName;
-  if (item.rarity === "magic") {
-    return `${item.affixes[0]?.name ?? "Tempered"} ${item.baseName}`;
-  }
+  if (item.rarity === "magic") return `${item.affixes[0]?.name ?? "Tempered"} ${item.baseName}`;
   const rareNames = ["Ash Mark", "Dread Song", "Cinder Bite", "Iron Oath"];
   const hash = [...item.id].reduce((sum, character) => sum + character.charCodeAt(0), 0);
   return `${rareNames[hash % rareNames.length]} ${item.baseName}`;
