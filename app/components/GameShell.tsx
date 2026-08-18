@@ -8,8 +8,7 @@ import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/item
 import { addMapModifier, createMap, rerollMap } from "../game/maps";
 import { addMaterials, applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
 import type { WorldStation } from "../game2d/types";
-import { InventoryGrid } from "./InventoryGrid";
-import { ItemCard } from "./ItemCard";
+import { InventoryPanel } from "./InventoryPanel";
 import { ItemWorkbench } from "./ItemWorkbench";
 import { MapWorkshop } from "./MapWorkshop";
 import { PhaserWorld } from "./PhaserWorld";
@@ -28,6 +27,7 @@ export function GameShell() {
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [runItems, setRunItems] = useState<EquipmentItem[]>([]);
   const runLootRef = useRef<RunLootLedger>(emptyRunLoot());
 
   useEffect(() => {
@@ -53,8 +53,12 @@ export function GameShell() {
 
   useEffect(() => {
     const toggleInventory = (event: KeyboardEvent) => {
-      if (event.code !== "KeyI" || event.repeat || screen !== "hideout" || !profile?.character.created) return;
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.code === "Escape") {
+        setPanel(null);
+        return;
+      }
+      if (event.code !== "KeyI" || event.repeat || !profile?.character.created) return;
       setPanel((current) => current === "inventory" ? null : "inventory");
     };
     window.addEventListener("keydown", toggleInventory);
@@ -62,6 +66,7 @@ export function GameShell() {
   }, [profile?.character.created, screen]);
 
   const stats = useMemo(() => profile ? deriveStats(profile) : null, [profile]);
+  const arenaBalance = useMemo(() => profile?.openedMap ? buildArenaBalance(profile) : undefined, [profile]);
 
   if (!profile || !stats) {
     return <main className="loading-forge"><span className="forge-loader" /><strong>Lighting the forge</strong></main>;
@@ -93,20 +98,32 @@ export function GameShell() {
     );
   }
 
-  if (screen === "arena" && profile.openedMap) {
-    const arenaBalance = buildArenaBalance(profile);
+  const backpackItems = screen === "arena" ? [...runItems, ...profile.inventory] : profile.inventory;
+  const allItems = [...Object.values(profile.equipped).filter(Boolean), ...backpackItems, ...profile.stash] as EquipmentItem[];
+  const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id)) as Set<string>;
+  const selectedItem = allItems.find((item) => item.id === selectedItemId) ?? null;
+
+  if (screen === "arena" && profile.openedMap && arenaBalance) {
+    const inventoryOpen = panel === "inventory";
     return (
-      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive arenaBalance={arenaBalance} onLootPickup={collectMapDrop} onArenaComplete={completeArena}>
+      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={inventoryOpen} arenaBalance={arenaBalance} onLootPickup={collectMapDrop} onArenaComplete={completeArena}>
+        <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(inventoryOpen ? null : "inventory")}>Inventory <kbd>I</kbd></button>
         <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
+        {inventoryOpen && (
+          <div className="world-panel-backdrop arena-panel-backdrop">
+            <section className="world-panel panel-inventory" aria-label="Character inventory">
+              <header><div><span>Combat paused · equipment changes apply immediately</span><h2>Inventory</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close inventory">×</button></header>
+              <InventoryPanel profile={profile} backpackItems={backpackItems} selectedItem={selectedItem} selectedItemId={selectedItemId} onSelect={setSelectedItemId} onEquip={equipSelected} onUnequip={unequipSelected} />
+            </section>
+          </div>
+        )}
+        {notice && <div className="toast" role="status">{notice}</div>}
       </PhaserWorld>
     );
   }
 
   const xpRequired = XP_BY_LEVEL(profile.character.level);
   const xpPercent = profile.character.level === 99 ? 100 : (profile.character.xp / xpRequired) * 100;
-  const allItems = [...Object.values(profile.equipped).filter(Boolean), ...profile.inventory, ...profile.stash] as EquipmentItem[];
-  const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id)) as Set<string>;
-  const selectedItem = allItems.find((item) => item.id === selectedItemId) ?? null;
 
   function startCharacter() {
     if (!profile) return;
@@ -121,6 +138,8 @@ export function GameShell() {
     if (station === "map-device") setPanel("maps");
     if (station === "portal") {
       runLootRef.current = emptyRunLoot();
+      setRunItems([]);
+      setPanel(null);
       setScreen("arena");
     }
   }
@@ -163,6 +182,8 @@ export function GameShell() {
     setSelectedMapId(next.maps[0]?.id ?? null);
     setSelectedItemId(result.loot.items[0]?.id ?? next.inventory[0]?.id ?? null);
     runLootRef.current = emptyRunLoot();
+    setRunItems([]);
+    setPanel(null);
     setScreen("hideout");
     setNotice(`Map complete. ${result.loot.items.length} collected items recovered.`);
   }
@@ -170,7 +191,9 @@ export function GameShell() {
   function collectMapDrop(drop: MapDrop) {
     if (!profile?.openedMap) return;
     if (drop.kind === "equipment") {
-      runLootRef.current.items.push(generateEquipment(Math.max(2, profile.openedMap.tier) * 5, drop.rarity));
+      const item = generateEquipment(Math.max(2, profile.openedMap.tier) * 5, drop.rarity);
+      runLootRef.current.items.push(item);
+      setRunItems((current) => [...current, item]);
       return;
     }
     const current = runLootRef.current.materials[drop.material] ?? 0;
@@ -190,6 +213,8 @@ export function GameShell() {
     });
     setSelectedItemId(recovered.items[0]?.id ?? profile.inventory[0]?.id ?? null);
     runLootRef.current = emptyRunLoot();
+    setRunItems([]);
+    setPanel(null);
     setScreen("hideout");
     setNotice(`Map abandoned. ${recovered.items.length} collected items were kept.`);
   }
@@ -215,13 +240,30 @@ export function GameShell() {
 
   function equipSelected() {
     if (!profile || !selectedItem) return;
+    if (profile.equipped[selectedItem.slot]?.id === selectedItem.id) return;
     const previouslyEquipped = profile.equipped[selectedItem.slot];
+    const isRunItem = runItems.some((item) => item.id === selectedItem.id);
+    if (isRunItem) {
+      runLootRef.current.items = runLootRef.current.items.filter((item) => item.id !== selectedItem.id);
+      setRunItems((current) => current.filter((item) => item.id !== selectedItem.id));
+    }
     setProfile({
       ...profile,
       inventory: [...(previouslyEquipped ? [previouslyEquipped] : []), ...profile.inventory.filter((item) => item.id !== selectedItem.id)],
       stash: profile.stash.filter((item) => item.id !== selectedItem.id),
       equipped: { ...profile.equipped, [selectedItem.slot]: selectedItem },
     });
+    setNotice(`${selectedItem.baseName} equipped.`);
+  }
+
+  function unequipSelected() {
+    if (!profile || !selectedItem || profile.equipped[selectedItem.slot]?.id !== selectedItem.id) return;
+    setProfile({
+      ...profile,
+      inventory: [selectedItem, ...profile.inventory],
+      equipped: { ...profile.equipped, [selectedItem.slot]: undefined },
+    });
+    setNotice(`${selectedItem.baseName} moved to your backpack.`);
   }
 
   function transferSelected() {
@@ -253,19 +295,7 @@ export function GameShell() {
             {panel === "maps" && <MapWorkshop maps={profile.maps} selectedMapId={selectedMapId} materials={profile.materials} onSelect={setSelectedMapId} onCraft={craftMap} onEnter={openPortal} />}
             {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} materials={profile.materials} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
             {(panel === "inventory" || panel === "stash") && (
-              <div className="inventory-window">
-                <div className="equipment-paperdoll">
-                  <span className="eyebrow">Equipped</span>
-                  {(["weapon", "chest", "ring", "boots"] as const).map((slot) => <div className={`equipment-slot slot-${slot}`} key={slot}><small>{slot}</small>{profile.equipped[slot] ? <ItemCard compact item={profile.equipped[slot]} onClick={() => setSelectedItemId(profile.equipped[slot]?.id ?? null)} selected={selectedItemId === profile.equipped[slot]?.id} /> : <span>Empty</span>}</div>)}
-                </div>
-                <div className="inventory-containers">
-                  {panel === "stash" && <InventoryGrid items={profile.stash} columns={12} rows={8} selectedId={selectedItemId} onSelect={setSelectedItemId} label="Stash" />}
-                  <InventoryGrid items={profile.inventory} columns={12} rows={5} selectedId={selectedItemId} onSelect={setSelectedItemId} label="Backpack" />
-                </div>
-                <aside className="inventory-inspector">
-                  {selectedItem ? <><ItemCard item={selectedItem} /><button type="button" className="secondary-action" onClick={equipSelected}>Equip item</button>{panel === "stash" && <button type="button" className="secondary-action" onClick={transferSelected}>{profile.stash.some((item) => item.id === selectedItem.id) ? "Move to backpack" : "Move to stash"}</button>}</> : <p>Select an item to inspect it.</p>}
-                </aside>
-              </div>
+              <InventoryPanel profile={profile} backpackItems={profile.inventory} selectedItem={selectedItem} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquip={equipSelected} onUnequip={unequipSelected} onTransfer={transferSelected} />
             )}
           </section>
         </div>

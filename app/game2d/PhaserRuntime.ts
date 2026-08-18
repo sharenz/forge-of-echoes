@@ -131,12 +131,15 @@ class CraftyScene extends Phaser.Scene {
       dash: Phaser.Input.Keyboard.KeyCodes.E,
     }) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
-      if (this.options.mode === "arena") this.tryBasicAttack();
+      if (this.options.mode === "arena" && !this.options.paused) this.tryBasicAttack();
     });
   }
 
   update(_time: number, delta: number): void {
-    if (!this.player) return;
+    if (!this.player || this.options.paused) {
+      this.accumulator = 0;
+      return;
+    }
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.nova)) this.useSkill("nova");
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.dash)) this.useSkill("dash");
     this.accumulator += Math.min(delta, MAX_FRAME_DELTA);
@@ -149,7 +152,7 @@ class CraftyScene extends Phaser.Scene {
   }
 
   useSkill(skill: "nova" | "dash"): void {
-    if (this.options.mode !== "arena" || !this.player) return;
+    if (this.options.mode !== "arena" || !this.player || this.options.paused) return;
     if (skill === "nova" && this.novaCooldown <= 0 && this.focus >= 30) {
       this.focus -= 30;
       this.novaCooldown = 4;
@@ -184,6 +187,15 @@ class CraftyScene extends Phaser.Scene {
       groundDrops: this.groundDrops.length,
       lootCollected: this.lootCollected,
     };
+  }
+
+  updateArenaBalance(balance: NonNullable<WorldRuntimeOptions["arenaBalance"]>): void {
+    const previousMaxLife = this.options.arenaBalance?.maxLife ?? balance.maxLife;
+    const previousMaxFocus = this.options.arenaBalance?.maxFocus ?? balance.maxFocus;
+    this.life = Phaser.Math.Clamp(this.life * (balance.maxLife / previousMaxLife), 1, balance.maxLife);
+    this.focus = Phaser.Math.Clamp(this.focus * (balance.maxFocus / previousMaxFocus), 0, balance.maxFocus);
+    this.options.arenaBalance = balance;
+    this.options.onHud(this.getHud());
   }
 
   private fixedUpdate(delta: number): void {
@@ -609,6 +621,14 @@ export class PhaserRuntime {
 
   useSkill(skill: "nova" | "dash"): void {
     this.scene?.useSkill(skill);
+  }
+
+  setPaused(paused: boolean): void {
+    this.options.paused = paused;
+  }
+
+  updateArenaBalance(balance: NonNullable<WorldRuntimeOptions["arenaBalance"]>): void {
+    this.scene?.updateArenaBalance(balance);
   }
 
   resize(): void {

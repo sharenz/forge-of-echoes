@@ -32,7 +32,7 @@ npm test
 - `app/game2d/` owns the Phaser runtime and fixed-step simulation. It consumes normalized combat configuration instead of reading profile state directly.
 - `app/components/` adapts React state to the renderer and supplies the HUD, inventory, stash, workbench, and map-device interfaces.
 
-The hideout uses a fixed 960×960 logical canvas. Maps are 3840×3840—exactly 4×4 viewports—and use a non-rotating follow camera with a large dead zone so the screen remains still until scrolling is necessary. Enemies spawn as geographically distributed packs, idle in their territory, and engage when approached. Slain monsters create pooled physical ground drops; only drops touched by the character enter the run ledger and persistent inventory. Enemies, projectiles, and drops are GPU-batched while collision queries use a spatial hash. Phaser is dynamically loaded after the server-rendered shell.
+The hideout uses a fixed 960×960 logical canvas. Maps are 3840×3840—exactly 4×4 viewports—and use a non-rotating follow camera with a large dead zone so the screen remains still until scrolling is necessary. Enemies spawn as geographically distributed packs, idle in their territory, and engage when approached. Slain monsters create pooled physical ground drops; only drops touched by the character enter the run ledger and persistent inventory. Pressing `I` opens a paused in-map inventory where carried and newly collected equipment can be equipped immediately. Enemies, projectiles, and drops are GPU-batched while collision queries use a spatial hash. Phaser is dynamically loaded after the server-rendered shell.
 
 ## Current playable loop
 

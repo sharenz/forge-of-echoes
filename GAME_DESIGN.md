@@ -39,7 +39,7 @@ Early combat teaches enemy behaviors and positioning. Late combat supports large
 1. Choose or craft a map item, then consume it to open its arena.
 2. Enter the map, explore its regions, and defeat distributed monster packs.
 3. Run over physical drops to collect equipment and crafting materials.
-4. Defeat escalating waves without temporary powers or mid-run equipment changes.
+4. Defeat escalating waves without temporary powers; pause with the inventory to adjust persistent equipment.
 5. Defeat the map boss or continue into optional overrun waves.
 6. Return to the hideout, evaluate loot, craft item projects, allocate persistent progression, and prepare the next map.
 
@@ -423,7 +423,7 @@ Avoid long cleanup periods. Stragglers should become visible and aggressively ap
 
 ### No temporary run power
 
-Maps never grant temporary combat upgrades, bargain powers, or mid-run equipment swaps. Character power comes only from level, allocated skills, and persistent inventory. The crafted map item defines the run's danger and reward profile before the portal opens.
+Maps never grant temporary combat upgrades or bargain powers. Character power comes only from level, allocated skills, and persistent inventory. Players may pause a map to equip collected or carried items, while the crafted map item defines the run's danger and reward profile before the portal opens.
 
 ### Escalation
 
@@ -532,7 +532,7 @@ This is a product decision with major balance consequences and should be settled
 - Make the simulation authoritative enough that refreshing cannot duplicate rewards.
 - Persist at wave boundaries and after crafting actions.
 - Tooltips must work without requiring hover, so touch and trackpad users can inspect everything.
-- Keep transitions between waves brief and continuous; inventory and skill changes happen in the hideout.
+- Keep transitions between waves brief and continuous; inventory equipment changes pause the map, while crafting and skill allocation remain hideout activities.
 
 ## First playable vertical slice
 

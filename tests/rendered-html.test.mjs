@@ -28,11 +28,13 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, world, domain, content, profile, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, phaserWorld, inventoryPanel, world, domain, content, profile, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/PhaserWorld.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/InventoryPanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/content.ts", import.meta.url), "utf8"),
@@ -54,6 +56,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /rollGroundDrop/);
   assert.match(world, /updateGroundDrops/);
   assert.match(shell, /onLootPickup/);
+  assert.match(shell, /arena-inventory-toggle/);
+  assert.match(shell, /paused=\{inventoryOpen\}/);
+  assert.match(phaserWorld, /updateArenaBalance/);
+  assert.match(inventoryPanel, /Unequip item/);
   assert.doesNotMatch(content, /BARGAINS|Bargain/);
   assert.doesNotMatch(domain, /Bargain/);
   assert.match(domain, /interface MapItem/);

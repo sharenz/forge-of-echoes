@@ -22,6 +22,7 @@ export interface WorldRuntimeOptions {
   mode: WorldMode;
   classId: CharacterClassId;
   portalActive: boolean;
+  paused: boolean;
   arenaBalance?: ArenaBalance;
   onStation: (station: WorldStation) => void;
   onHud: (state: WorldHudState) => void;

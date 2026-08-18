@@ -10,6 +10,7 @@ interface PhaserWorldProps {
   mode: WorldMode;
   classId: CharacterClassId;
   portalActive?: boolean;
+  paused?: boolean;
   arenaBalance?: ArenaBalance;
   onStation?: (station: WorldStation) => void;
   onLootPickup?: (drop: MapDrop) => void;
@@ -17,13 +18,15 @@ interface PhaserWorldProps {
   children?: React.ReactNode;
 }
 
-export function PhaserWorld({ mode, classId, portalActive = false, arenaBalance, onStation, onLootPickup, onArenaComplete, children }: PhaserWorldProps) {
+export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, onStation, onLootPickup, onArenaComplete, children }: PhaserWorldProps) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
   const parentRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<PhaserRuntime | null>(null);
   const stationCallbackRef = useRef(onStation);
   const lootCallbackRef = useRef(onLootPickup);
   const completionCallbackRef = useRef(onArenaComplete);
+  const pausedRef = useRef(paused);
+  const arenaBalanceRef = useRef(arenaBalance);
   const [hud, setHud] = useState<WorldHudState | null>(null);
   const [loading, setLoading] = useState(true);
   const [rendererError, setRendererError] = useState(false);
@@ -33,6 +36,16 @@ export function PhaserWorld({ mode, classId, portalActive = false, arenaBalance,
     lootCallbackRef.current = onLootPickup;
     completionCallbackRef.current = onArenaComplete;
   }, [onArenaComplete, onLootPickup, onStation]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+    runtimeRef.current?.setPaused(paused);
+  }, [paused]);
+
+  useEffect(() => {
+    arenaBalanceRef.current = arenaBalance;
+    if (arenaBalance) runtimeRef.current?.updateArenaBalance(arenaBalance);
+  }, [arenaBalance]);
 
   useEffect(() => {
     const parent = parentRef.current;
@@ -48,7 +61,8 @@ export function PhaserWorld({ mode, classId, portalActive = false, arenaBalance,
         mode,
         classId: runtimeClassId,
         portalActive,
-        arenaBalance,
+        paused: pausedRef.current,
+        arenaBalance: arenaBalanceRef.current,
         onStation: (station) => stationCallbackRef.current?.(station),
         onHud: setHud,
         onLootPickup: (drop) => lootCallbackRef.current?.(drop),
@@ -71,7 +85,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, arenaBalance,
       runtimeRef.current = null;
       parent.replaceChildren();
     };
-  }, [arenaBalance, mode, portalActive, runtimeClassId]);
+  }, [mode, portalActive, runtimeClassId]);
 
   return (
     <main className={`pixel-shell mode-${mode}`}>

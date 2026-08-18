@@ -671,8 +671,14 @@ body:has(.pixel-shell) { overflow: hidden; }
 .world-skills button:hover { border-color: var(--ember); background: #26170f; }
 .world-skills kbd { width: 27px; height: 27px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid #8a5738; color: #f0a35d; font: 9px Arial; }
 .world-fps { position: absolute; z-index: 3; right: 25px; bottom: 24px; color: #766a5d; font-size: 7px; letter-spacing: .08em; pointer-events: none; }
+.arena-inventory-toggle,
 .return-hideout { position: absolute; z-index: 4; right: 25px; top: 24px; padding: 10px 13px; border: 1px solid #604a38; background: rgba(14,11,9,.86); color: #a99988; font-size: 8px; text-transform: uppercase; cursor: pointer; }
+.arena-inventory-toggle { right: 151px; border-color: #755134; color: #d6b083; }
+.arena-inventory-toggle kbd { margin-left: 7px; color: #f3a65e; font: inherit; }
+.arena-inventory-toggle:hover { border-color: var(--ember-bright); color: #fff; box-shadow: 0 0 18px rgba(215,122,57,.2); }
 .return-hideout:hover { border-color: #b25f34; color: #fff; }
+.arena-panel-backdrop { padding-top: 62px; background: rgba(2,2,2,.7); backdrop-filter: blur(6px) saturate(.72); }
+.arena-panel-backdrop .world-panel { max-height: calc(100vh - 84px); }
 
 @keyframes world-enter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes forge-turn { to { transform: rotate(405deg); } }
@@ -717,4 +723,6 @@ body:has(.pixel-shell) { overflow: hidden; }
   .world-skills button { min-width: 112px; }
   .world-fps { display: none; }
   .return-hideout { right: 10px; top: 10px; }
+  .arena-inventory-toggle { right: 133px; top: 10px; }
+  .arena-panel-backdrop { padding-top: 58px; }
 }
