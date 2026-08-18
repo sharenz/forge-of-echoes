@@ -6,6 +6,11 @@ export type MapDrop =
   | { kind: "equipment"; rarity: Rarity }
   | { kind: "material"; material: "scrap" | "essence" | "mapDust"; amount: number };
 
+export const ACTIVE_SKILLS = {
+  nova: { name: "Ember Nova", key: "Q", focusCost: 30, cooldown: 4 },
+  dash: { name: "Rift Step", key: "E", focusCost: 15, maxCharges: 3, recharge: 3 },
+} as const;
+
 export interface ArenaBalance {
   waves: number;
   tier: number;

@@ -30,6 +30,7 @@ body {
     var(--ink);
   color: var(--paper);
   font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
   min-height: 100vh;
 }
 
@@ -665,11 +666,22 @@ body:has(.pixel-shell) { overflow: hidden; }
 .world-vitals i b { display: block; height: 100%; background: linear-gradient(90deg, #6d1914, #cf4938); box-shadow: 0 0 8px #b02620; transition: width .15s linear; }
 .world-vitals > div:nth-child(2) i b { background: linear-gradient(90deg, #223968, #5586cc); box-shadow: 0 0 8px #3f78ba; }
 .world-vitals strong { color: #ddd0bf; font-size: 9px; }
-.world-skills { position: absolute; z-index: 3; left: 50%; bottom: 24px; display: flex; gap: 7px; transform: translateX(-50%); }
-.world-skills > span, .world-skills button { min-width: 125px; height: 44px; padding: 6px 10px; border: 1px solid #5c4432; background: rgba(15,11,9,.9); color: #b7a693; display: flex; align-items: center; gap: 8px; font-size: 8px; cursor: default; }
-.world-skills button { cursor: pointer; }
-.world-skills button:hover { border-color: var(--ember); background: #26170f; }
-.world-skills kbd { width: 27px; height: 27px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid #8a5738; color: #f0a35d; font: 9px Arial; }
+.world-skills { position: absolute; z-index: 3; left: 50%; bottom: 22px; display: flex; gap: 8px; transform: translateX(-50%); }
+.world-skills > span,
+.world-skills button { position: relative; min-width: 165px; height: 62px; padding: 8px 13px; overflow: hidden; border: 1px solid #5c4432; background: rgba(15,11,9,.94); color: #c8b7a2; display: flex; align-items: center; gap: 10px; cursor: default; box-shadow: 0 10px 28px #0009; }
+.world-skills button { min-width: 205px; cursor: pointer; text-align: left; transition: border-color .16s ease, background .16s ease, opacity .16s ease; }
+.world-skills button:hover:not(:disabled) { border-color: var(--ember); background: #2b190f; }
+.world-skills button:disabled { opacity: .72; cursor: default; }
+.world-skills kbd { position: relative; z-index: 2; width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid #8a5738; background: #17100c; color: #f0a35d; font: 12px Arial; box-shadow: inset 0 0 12px #8b3f1e33; }
+.world-skills .basic-skill > span,
+.world-skills .active-skill > span:not(.skill-charges) { position: relative; z-index: 2; display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.world-skills strong { color: #ead7bf; font: 13px Georgia, serif; white-space: nowrap; }
+.world-skills small { color: #9c8b78; font-size: 10px; white-space: nowrap; }
+.skill-recharge { position: absolute; z-index: 1; left: 0; bottom: 0; height: 4px; background: linear-gradient(90deg, #6f271b, #d25835); box-shadow: 0 0 10px #d25835; transition: width .12s linear; }
+.rift-skill .skill-recharge { background: linear-gradient(90deg, #3c2b68, #9b68d5); box-shadow: 0 0 10px #8c5cca; }
+.skill-charges { position: absolute; z-index: 3; top: 7px; right: 8px; display: flex; flex-direction: row !important; gap: 3px !important; }
+.skill-charges i { width: 7px; height: 7px; border: 1px solid #695746; background: #211913; transform: rotate(45deg); }
+.skill-charges i.ready { border-color: #d99a56; background: #f0a35d; box-shadow: 0 0 7px #dc7337; }
 .world-fps { position: absolute; z-index: 3; right: 25px; bottom: 24px; color: #766a5d; font-size: 7px; letter-spacing: .08em; pointer-events: none; }
 .arena-inventory-toggle,
 .return-hideout { position: absolute; z-index: 4; right: 25px; top: 24px; padding: 10px 13px; border: 1px solid #604a38; background: rgba(14,11,9,.86); color: #a99988; font-size: 8px; text-transform: uppercase; cursor: pointer; }
@@ -679,6 +691,48 @@ body:has(.pixel-shell) { overflow: hidden; }
 .return-hideout:hover { border-color: #b25f34; color: #fff; }
 .arena-panel-backdrop { padding-top: 62px; background: rgba(2,2,2,.7); backdrop-filter: blur(6px) saturate(.72); }
 .arena-panel-backdrop .world-panel { max-height: calc(100vh - 84px); }
+
+/* Readability pass: supporting copy stays compact without dropping below comfortable UI sizes. */
+.creation-header small,
+.creation-title span,
+.class-choice-row button > span,
+.creation-confirm label span,
+.hideout-character small,
+.hideout-hud nav button,
+.hideout-xp small,
+.hideout-prompt,
+.portal-notice span,
+.portal-notice small,
+.world-panel > header span,
+.equipment-slot > small,
+.poe-grid-label em,
+.world-wave > span,
+.world-wave small,
+.world-loot small,
+.world-fps,
+.arena-inventory-toggle,
+.return-hideout { font-size: 10px; }
+
+.creation-confirm > button small,
+.class-choice-row button em,
+.poe-grid-item > small,
+.item-card-kicker,
+.item-card.compact .item-implicit,
+.map-metrics span,
+.primary-action small,
+.world-loot span,
+.world-vitals > div,
+.world-vitals strong { font-size: 11px; }
+
+.class-choice-row button small,
+.item-implicit,
+.item-affix,
+.item-stability,
+.inventory-inspector .secondary-action,
+.map-list-item small,
+.map-affix span,
+.action-list small,
+.portal-notice strong { font-size: 12px; }
 
 @keyframes world-enter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes forge-turn { to { transform: rotate(405deg); } }
@@ -717,10 +771,14 @@ body:has(.pixel-shell) { overflow: hidden; }
   .poe-grid { --cell: calc((100vw - 52px) / 12); }
   .world-wave { top: 12px; }
   .world-loot { left: 10px; top: 10px; min-width: 112px; padding: 7px 9px; }
-  .world-loot span { font-size: 7px; }
+  .world-loot span { font-size: 10px; }
   .world-vitals { left: 12px; right: 12px; bottom: 76px; width: auto; }
   .world-skills { bottom: 17px; }
-  .world-skills button { min-width: 112px; }
+  .world-skills { width: calc(100vw - 20px); justify-content: center; }
+  .world-skills button { min-width: 0; max-width: 205px; flex: 1 1 0; padding: 7px 8px; gap: 7px; }
+  .world-skills kbd { width: 32px; height: 32px; }
+  .world-skills strong { font-size: 11px; }
+  .world-skills small { font-size: 9px; }
   .world-fps { display: none; }
   .return-hideout { right: 10px; top: 10px; }
   .arena-inventory-toggle { right: 133px; top: 10px; }

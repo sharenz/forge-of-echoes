@@ -15,6 +15,10 @@ export interface WorldHudState {
   maxFocus: number;
   groundDrops: number;
   lootCollected: number;
+  novaCooldown: number;
+  riftCharges: number;
+  riftMaxCharges: number;
+  riftRecharge: number;
 }
 
 export interface WorldRuntimeOptions {

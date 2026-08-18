@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import type { MapDrop } from "../game/combat";
+import { ACTIVE_SKILLS, type MapDrop } from "../game/combat";
 import type { CharacterClassId } from "../game/domain";
 import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
 
@@ -68,7 +68,8 @@ class CraftyScene extends Phaser.Scene {
   private accumulator = 0;
   private attackCooldown = 0;
   private novaCooldown = 0;
-  private dashCooldown = 0;
+  private riftCharges = ACTIVE_SKILLS.dash.maxCharges;
+  private riftRecharge = 0;
   private life: number;
   private focus: number;
   private lives = 3;
@@ -153,17 +154,18 @@ class CraftyScene extends Phaser.Scene {
 
   useSkill(skill: "nova" | "dash"): void {
     if (this.options.mode !== "arena" || !this.player || this.options.paused) return;
-    if (skill === "nova" && this.novaCooldown <= 0 && this.focus >= 30) {
-      this.focus -= 30;
-      this.novaCooldown = 4;
+    if (skill === "nova" && this.novaCooldown <= 0 && this.focus >= ACTIVE_SKILLS.nova.focusCost) {
+      this.focus -= ACTIVE_SKILLS.nova.focusCost;
+      this.novaCooldown = ACTIVE_SKILLS.nova.cooldown;
       for (let index = 0; index < 18; index += 1) {
         const angle = (Math.PI * 2 * index) / 18;
         this.spawnProjectile(Math.cos(angle), Math.sin(angle), 1.35);
       }
     }
-    if (skill === "dash" && this.dashCooldown <= 0 && this.focus >= 15) {
-      this.focus -= 15;
-      this.dashCooldown = 3;
+    if (skill === "dash" && this.riftCharges > 0 && this.focus >= ACTIVE_SKILLS.dash.focusCost) {
+      this.focus -= ACTIVE_SKILLS.dash.focusCost;
+      this.riftCharges -= 1;
+      if (this.riftRecharge <= 0) this.riftRecharge = ACTIVE_SKILLS.dash.recharge;
       const pointer = this.input.activePointer;
       const dx = pointer.worldX - this.player.x;
       const dy = pointer.worldY - this.player.y;
@@ -186,6 +188,10 @@ class CraftyScene extends Phaser.Scene {
       maxFocus: this.options.arenaBalance?.maxFocus ?? 100,
       groundDrops: this.groundDrops.length,
       lootCollected: this.lootCollected,
+      novaCooldown: this.novaCooldown,
+      riftCharges: this.riftCharges,
+      riftMaxCharges: ACTIVE_SKILLS.dash.maxCharges,
+      riftRecharge: this.riftRecharge,
     };
   }
 
@@ -203,7 +209,13 @@ class CraftyScene extends Phaser.Scene {
     this.elapsedSeconds += delta;
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
     this.novaCooldown = Math.max(0, this.novaCooldown - delta);
-    this.dashCooldown = Math.max(0, this.dashCooldown - delta);
+    if (this.riftCharges < ACTIVE_SKILLS.dash.maxCharges) {
+      this.riftRecharge = Math.max(0, this.riftRecharge - delta);
+      if (this.riftRecharge <= 0) {
+        this.riftCharges += 1;
+        this.riftRecharge = this.riftCharges < ACTIVE_SKILLS.dash.maxCharges ? ACTIVE_SKILLS.dash.recharge : 0;
+      }
+    }
     this.focus = Math.min(this.options.arenaBalance?.maxFocus ?? 100, this.focus + delta * (this.options.arenaBalance?.focusRegen ?? 8));
 
     let xInput = 0;
@@ -323,7 +335,7 @@ class CraftyScene extends Phaser.Scene {
     zone.on(Phaser.Input.Events.POINTER_DOWN, () => this.options.onStation(station));
     const text = this.add.text(x, y + height / 2 + 8, label, {
       fontFamily: "monospace",
-      fontSize: "12px",
+      fontSize: "14px",
       color: "#f4bf78",
       backgroundColor: "#11100ddd",
       padding: { x: 7, y: 4 },
@@ -539,7 +551,7 @@ class CraftyScene extends Phaser.Scene {
       : drop.material === "essence" ? "#c6a5ff" : drop.material === "mapDust" ? "#92e4df" : "#e2ac70";
     const label = this.add.text(x, y - 22, labelText, {
       fontFamily: "monospace",
-      fontSize: "10px",
+      fontSize: "12px",
       color,
       backgroundColor: "#08090bcc",
       padding: { x: 4, y: 2 },
@@ -563,7 +575,7 @@ class CraftyScene extends Phaser.Scene {
       groundDrop.label.destroy();
       const pickupText = this.add.text(groundDrop.x, groundDrop.y - 28, "COLLECTED", {
         fontFamily: "monospace",
-        fontSize: "11px",
+        fontSize: "12px",
         color: "#fff1c8",
         stroke: "#08090b",
         strokeThickness: 3,

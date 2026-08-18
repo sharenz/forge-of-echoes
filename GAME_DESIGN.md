@@ -570,7 +570,7 @@ Do not build the full passive tree, campaign, trade system, or dozens of uniques
 
 ### Build: Splinterburn
 
-The player fires Ember Lance through packs, leaving burning splinters in pierced enemies. Rift Step detonates splinters along the movement path. The build wants projectile count, piercing, burning duration, and a way to recover Focus while moving.
+The player fires Ember Lance through packs, leaving burning splinters in pierced enemies. Rift Step holds three charges that recover one at a time and detonates splinters along the movement path. The combat bar always communicates charges, the next recharge, cooldowns, and Focus costs. The build wants projectile count, piercing, burning duration, and a way to recover Focus while moving.
 
 Meaningful tension:
 

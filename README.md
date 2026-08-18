@@ -40,7 +40,7 @@ The hideout uses a fixed 960×960 logical canvas. Maps are 3840×3840—exactly 
 2. Move through the fixed-camera hideout with screen-aligned WASD.
 3. Use the stash, crafting bench, and map device as world stations.
 4. Craft a map item, consume it to open a portal, and enter the arena.
-5. Explore the map and defeat six increasingly dense, distributed pack waves; character stats and map modifiers affect combat and ground-drop rates.
+5. Explore the map and defeat six increasingly dense, distributed pack waves; the combat bar exposes live cooldowns, Focus costs, and Rift Step's three recharging charges.
 6. Run over equipment and materials to collect them, then return to improve persistent equipment and craft the next map. There are no temporary run powers.
 
 The broader systems and long-term progression targets are documented in [GAME_DESIGN.md](./GAME_DESIGN.md).

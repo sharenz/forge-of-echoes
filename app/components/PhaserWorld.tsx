@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ArenaBalance, ArenaSummary, MapDrop } from "../game/combat";
+import { ACTIVE_SKILLS, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import type { CharacterClassId } from "../game/domain";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
 import type { WorldHudState, WorldMode, WorldStation } from "../game2d/types";
@@ -87,6 +87,11 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
     };
   }, [mode, portalActive, runtimeClassId]);
 
+  const novaReady = Boolean(hud && hud.novaCooldown <= 0.05 && hud.focus >= ACTIVE_SKILLS.nova.focusCost);
+  const riftReady = Boolean(hud && hud.riftCharges > 0 && hud.focus >= ACTIVE_SKILLS.dash.focusCost);
+  const novaProgress = hud ? Math.min(100, (hud.novaCooldown / ACTIVE_SKILLS.nova.cooldown) * 100) : 0;
+  const riftProgress = hud ? Math.min(100, (hud.riftRecharge / ACTIVE_SKILLS.dash.recharge) * 100) : 0;
+
   return (
     <main className={`pixel-shell mode-${mode}`}>
       <div ref={parentRef} className="phaser-stage" aria-label={`${mode} pixel-art game world`} />
@@ -101,9 +106,20 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
             <div><span>Focus</span><i><b style={{ width: `${(hud.focus / hud.maxFocus) * 100}%` }} /></i><strong>{Math.floor(hud.focus)}</strong></div>
           </div>
           <div className="world-skills">
-            <span><kbd>Mouse</kbd> Ember Lance</span>
-            <button type="button" onClick={() => runtimeRef.current?.useSkill("nova")}><kbd>Q</kbd> Ember Nova</button>
-            <button type="button" onClick={() => runtimeRef.current?.useSkill("dash")}><kbd>E</kbd> Rift Step</button>
+            <span className="basic-skill"><kbd>Mouse</kbd><span><strong>Ember Lance</strong><small>Basic attack</small></span></span>
+            <button type="button" className="active-skill" disabled={!novaReady} onClick={() => runtimeRef.current?.useSkill("nova")}>
+              <i className="skill-recharge" style={{ width: `${novaProgress}%` }} />
+              <kbd>{ACTIVE_SKILLS.nova.key}</kbd>
+              <span><strong>{ACTIVE_SKILLS.nova.name}</strong><small>{hud.novaCooldown > 0.05 ? `${hud.novaCooldown.toFixed(1)}s recharge` : hud.focus < ACTIVE_SKILLS.nova.focusCost ? `Needs ${ACTIVE_SKILLS.nova.focusCost} Focus` : `Ready · ${ACTIVE_SKILLS.nova.focusCost} Focus`}</small></span>
+            </button>
+            <button type="button" className="active-skill rift-skill" disabled={!riftReady} onClick={() => runtimeRef.current?.useSkill("dash")}>
+              <i className="skill-recharge" style={{ width: `${riftProgress}%` }} />
+              <kbd>{ACTIVE_SKILLS.dash.key}</kbd>
+              <span><strong>{ACTIVE_SKILLS.dash.name}</strong><small>{hud.riftCharges}/{hud.riftMaxCharges} charges{hud.riftCharges < hud.riftMaxCharges ? ` · +1 in ${hud.riftRecharge.toFixed(1)}s` : ` · ${ACTIVE_SKILLS.dash.focusCost} Focus`}</small></span>
+              <span className="skill-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} Rift Step charges`}>
+                {Array.from({ length: hud.riftMaxCharges }, (_, index) => <i className={index < hud.riftCharges ? "ready" : ""} key={index} />)}
+              </span>
+            </button>
           </div>
         </>
       )}
