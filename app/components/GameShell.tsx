@@ -7,15 +7,17 @@ import type { CharacterClassId, CurrencyId, EquipmentItem, InventoryItem, MapIte
 import { addCurrencyToInventory, addItemsToInventory, isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency } from "../game/inventory";
 import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
 import { addMapModifier, rerollMap } from "../game/maps";
+import { purchaseMap } from "../game/merchant";
 import { addRecoveredItems, applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
 import type { WorldStation } from "../game2d/types";
 import { GameNotification } from "./GameNotification";
 import { InventoryPanel } from "./InventoryPanel";
 import { ItemWorkbench } from "./ItemWorkbench";
 import { MapWorkshop } from "./MapWorkshop";
+import { MapMerchant } from "./MapMerchant";
 import { PhaserWorld } from "./PhaserWorld";
 
-type HideoutPanel = "inventory" | "stash" | "bench" | "maps" | null;
+type HideoutPanel = "inventory" | "stash" | "bench" | "maps" | "merchant" | null;
 type GameScreen = "hideout" | "arena";
 interface RunLootLedger { items: InventoryItem[] }
 const emptyRunLoot = (): RunLootLedger => ({ items: [] });
@@ -137,6 +139,7 @@ export function GameShell() {
     if (station === "stash") setPanel("stash");
     if (station === "bench") setPanel("bench");
     if (station === "map-device") setPanel("maps");
+    if (station === "merchant") setPanel("merchant");
     if (station === "portal") {
       resetRunLoot();
       setPanel(null);
@@ -176,6 +179,18 @@ export function GameShell() {
   function removeMapFromDevice() {
     if (!profile?.mapDevice) return;
     setProfile({ ...profile, inventory: [profile.mapDevice, ...profile.inventory], mapDevice: null });
+  }
+
+  function buyMap(offerId: string) {
+    if (!profile) return;
+    const purchase = purchaseMap(profile, offerId);
+    if (!purchase) {
+      setNotice("You do not have enough Scrap for that map.");
+      return;
+    }
+    setProfile(purchase.profile);
+    setSelectedItemId(purchase.map.id);
+    setNotice(purchase.paid === 0 ? `${purchase.map.baseName} added to your backpack for free.` : `${purchase.map.baseName} purchased for ${purchase.paid} Scrap.`);
   }
 
   function completeArena(summary: ArenaSummary) {
@@ -314,8 +329,9 @@ export function GameShell() {
       {panel && (
         <div className="world-panel-backdrop">
           <section className={`world-panel panel-${panel}`}>
-            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : "Character equipment"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : "Inventory"}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
+            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : panel === "merchant" ? "Wayfinder's stock" : "Character equipment"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Map Merchant" : "Inventory"}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
             {panel === "maps" && <MapWorkshop maps={inventoryMaps} slottedMap={profile.mapDevice} currencies={currencies} portalActive={Boolean(profile.openedMap)} onSlot={slotMap} onRemove={removeMapFromDevice} onCraft={craftMap} onOpen={openPortal} />}
+            {panel === "merchant" && <MapMerchant scrap={currencies.scrap} onBuy={buyMap} />}
             {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} currencies={currencies} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
             {(panel === "inventory" || panel === "stash") && (
               <InventoryPanel profile={profile} backpackItems={profile.inventory} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onUnequipItem={unequipItem} onTransferItem={transferItem} />

@@ -2,7 +2,7 @@ import type { ArenaBalance, ArenaSummary, MapDrop } from "../game/combat";
 import type { CharacterClassId } from "../game/domain";
 
 export type WorldMode = "class-select" | "hideout" | "arena";
-export type WorldStation = "stash" | "bench" | "map-device" | "portal";
+export type WorldStation = "stash" | "bench" | "map-device" | "merchant" | "portal";
 
 export interface WorldHudState {
   fps: number;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AFFIX_DEFINITIONS_BY_ID } from "../app/game/config/affixes";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
+import { MAP_MERCHANT } from "../app/game/config/merchants";
 import type { EquipmentItem, PlayerProfile, StatModifier } from "../app/game/domain";
 import { addCurrencyToInventory, consumeCurrency, countCurrency, isCurrencyItem, isMapItem } from "../app/game/inventory";
 import {
@@ -13,6 +14,7 @@ import {
 } from "../app/game/items";
 import { calculateCharacterStats, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
+import { purchaseMap } from "../app/game/merchant";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -149,4 +151,30 @@ test("v3 counter saves migrate maps and currency into v4 inventory items", () =>
   } finally {
     Reflect.deleteProperty(globalThis, "window");
   }
+});
+
+test("the merchant always offers a free entry map and prices every harder map in Scrap", () => {
+  const [entry, ...harderMaps] = MAP_MERCHANT.offers;
+  assert.equal(entry.tier, 1);
+  assert.equal(entry.price.amount, 0);
+  for (const offer of harderMaps) {
+    assert.equal(offer.price.currency, "scrap");
+    assert.ok(offer.price.amount > 0);
+  }
+});
+
+test("map purchases create inventory items and consume real Scrap stacks", () => {
+  const profile = createInitialProfile();
+  const initialMaps = profile.inventory.filter(isMapItem).length;
+  const freePurchase = purchaseMap(profile, "free-ashen-t1");
+  assert.ok(freePurchase);
+  assert.equal(freePurchase.map.tier, 1);
+  assert.equal(freePurchase.profile.inventory.filter(isMapItem).length, initialMaps + 1);
+  assert.equal(countCurrency(freePurchase.profile.inventory, "scrap"), 12);
+
+  const paidPurchase = purchaseMap(freePurchase.profile, "iron-trial-t2");
+  assert.ok(paidPurchase);
+  assert.equal(paidPurchase.map.tier, 2);
+  assert.equal(countCurrency(paidPurchase.profile.inventory, "scrap"), 6);
+  assert.equal(purchaseMap(paidPurchase.profile, "ashen-descent-t4"), null);
 });

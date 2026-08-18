@@ -6,6 +6,9 @@ export const MAP_BASES = [
   { id: "iron-coliseum", name: "Iron Coliseum", implicit: "Equipment drops with +1 maximum Stability" },
 ] as const satisfies readonly MapBaseDefinition[];
 
+export type MapBaseId = (typeof MAP_BASES)[number]["id"];
+export const MAP_BASES_BY_ID = Object.fromEntries(MAP_BASES.map((base) => [base.id, base])) as Record<MapBaseId, (typeof MAP_BASES)[number]>;
+
 export const MAP_MODIFIERS: MapModifierConfig = {
   teeming: { id: "teeming", name: "Teeming", description: "Waves contain 30% more monsters.", rewardDescription: "+22% material and item yield", danger: 14, reward: 22, kind: "threat" },
   commanded: { id: "commanded", name: "Commanded", description: "Each wave contains an additional elite.", rewardDescription: "+26% rare item chance", danger: 18, reward: 26, kind: "threat" },

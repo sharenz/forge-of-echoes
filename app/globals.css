@@ -263,6 +263,34 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
 .craft-note { margin-top: 22px; padding-top: 17px; border-top: 1px solid var(--line); color: #74695d; font-size: 9px; line-height: 1.5; }
 .craft-note span { display: inline-grid; width: 15px; height: 15px; place-items: center; border: 1px solid #665645; margin-right: 6px; }
 
+.merchant-layout { max-width: 1050px; min-height: 520px; margin: 0 auto; display: grid; grid-template-columns: 290px 1fr; border: 1px solid var(--line); background: rgba(17,14,11,.95); box-shadow: 0 24px 75px #0007; }
+.merchant-portrait { display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center; background: radial-gradient(circle at 50% 20%, #3a2416, #12100d 62%); }
+.merchant-rune { width: 92px; height: 92px; display: grid; place-items: center; margin-top: 18px; border: 1px solid #9d653c; background: #21150e; color: #efac68; font: 42px Georgia, serif; transform: rotate(45deg); box-shadow: inset 0 0 28px #c55e2526, 0 0 24px #0008; }
+.merchant-portrait h2 { margin: 6px 0 4px; color: #f0dcc3; font: 30px Georgia, serif; }
+.merchant-portrait small { color: #927e69; font-size: 12px; }
+.merchant-portrait blockquote { margin: 12px 0; color: #bda990; font: italic 15px/1.55 Georgia, serif; }
+.merchant-wallet { width: 100%; margin-top: auto; padding: 13px 15px; border: 1px solid #513b2b; background: #100d0a; display: flex; align-items: center; justify-content: space-between; }
+.merchant-wallet span { color: #8f7d69; font-size: 12px; text-transform: uppercase; }
+.merchant-wallet strong { color: #efae69; font: 22px Georgia, serif; }
+.merchant-stock { border-left: 1px solid var(--line); }
+.merchant-stock > header { display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 19px; border-bottom: 1px solid var(--line); }
+.merchant-stock > header h2 { margin: 5px 0 0; color: #ead7bf; font: 25px Georgia, serif; }
+.merchant-stock > header > small { color: #786b5d; font-size: 11px; text-transform: uppercase; }
+.merchant-offers { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+.merchant-offer { min-height: 112px; padding: 14px; display: grid; grid-template-columns: 62px 1fr 130px; align-items: center; gap: 18px; border: 1px solid #49372a; background: linear-gradient(100deg, #17120e, #21160f); }
+.merchant-offer:hover { border-color: #795237; background: linear-gradient(100deg, #1d160f, #2a1a10); }
+.merchant-map-seal { width: 54px; height: 54px; display: grid; place-items: center; border: 1px solid #8e5a37; transform: rotate(45deg); }
+.merchant-map-seal span { color: #f0a45c; font: 15px Georgia, serif; transform: rotate(-45deg); }
+.merchant-offer > div:nth-child(2) { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.merchant-offer > div:nth-child(2) > span { color: #c67a43; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+.merchant-offer > div:nth-child(2) strong { color: #ead7be; font: 19px Georgia, serif; }
+.merchant-offer > div:nth-child(2) small { color: #958675; font-size: 12px; }
+.merchant-offer > button { min-height: 58px; padding: 9px; border: 1px solid #875638; background: #2c1a10; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.merchant-offer > button:hover:not(:disabled) { border-color: #e18d4b; background: #482516; }
+.merchant-offer > button:disabled { opacity: .38; cursor: default; }
+.merchant-offer > button strong { color: #f1bd82; font: 16px Georgia, serif; }
+.merchant-offer > button small { color: #927d68; font-size: 10px; text-transform: uppercase; }
+
 .empty-state { color: var(--muted); font-family: Georgia, serif; font-size: 12px; line-height: 1.5; }
 .empty-focus { height: 100%; min-height: 380px; display: grid; place-content: center; text-align: center; gap: 8px; color: var(--muted); }
 .empty-focus strong { color: var(--paper); font-family: Georgia, serif; font-size: 18px; }
@@ -370,6 +398,14 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
   .map-affix em { text-align: left; }
   .action-list { grid-template-columns: 1fr; }
   .game-footer { justify-content: center; }
+  .merchant-layout { display: flex; flex-direction: column; }
+  .merchant-portrait { min-height: 260px; }
+  .merchant-rune { width: 62px; height: 62px; font-size: 28px; }
+  .merchant-portrait blockquote { margin: 0; }
+  .merchant-stock { border-left: 0; border-top: 1px solid var(--line); }
+  .merchant-offer { grid-template-columns: 46px 1fr; }
+  .merchant-map-seal { width: 42px; height: 42px; }
+  .merchant-offer > button { grid-column: 1 / -1; }
   .arena-header { left: 12px; right: 12px; }
   .arena-run-stats { display: none; }
   .arena-header { grid-template-columns: 1fr auto; }

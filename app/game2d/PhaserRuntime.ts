@@ -326,6 +326,9 @@ class CraftyScene extends Phaser.Scene {
     this.addStation("stash", 116, 352, 135, 115, "STASH");
     this.addStation("bench", 817, 372, 150, 135, "CRAFT");
     this.addStation(this.options.portalActive ? "portal" : "map-device", 480, 177, 155, 145, this.options.portalActive ? "ENTER MAP" : "MAP DEVICE");
+    const merchant = this.add.image(248, 600, "player-sorceress").setScale(2.35).setTint(0xd9ad76).setDepth(12);
+    this.tweens.add({ targets: merchant, y: merchant.y - 3, duration: 1250, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+    this.addStation("merchant", 248, 592, 125, 105, "MAP MERCHANT");
     if (this.options.portalActive) {
       const aura = this.add.ellipse(480, 202, 105, 34, 0xff6a2e, 0.24).setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({ targets: aura, alpha: 0.55, scaleX: 1.18, scaleY: 1.18, duration: 760, yoyo: true, repeat: -1 });

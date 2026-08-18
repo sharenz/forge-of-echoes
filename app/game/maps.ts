@@ -1,9 +1,9 @@
-import { MAP_BASES, MAP_MODIFIERS, MAP_RARITY_LIMITS } from "./config/maps";
+import { MAP_BASES, MAP_BASES_BY_ID, MAP_MODIFIERS, MAP_RARITY_LIMITS, type MapBaseId } from "./config/maps";
 import type { MapItem, MapModifierId, Rarity } from "./domain";
 import { choose, createId, shuffle } from "./random";
 
-export function createMap(tier = 1): MapItem {
-  const base = choose(MAP_BASES);
+export function createMap(tier = 1, baseId?: MapBaseId): MapItem {
+  const base = baseId ? MAP_BASES_BY_ID[baseId] : choose(MAP_BASES);
   return {
     kind: "map",
     id: createId("map"),
