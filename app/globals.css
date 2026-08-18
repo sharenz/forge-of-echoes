@@ -786,6 +786,8 @@ body:has(.pixel-shell) { overflow: hidden; }
 .tooltip-affixes > small { color: #786d60; font: 12px Georgia, serif; font-style: italic; }
 .item-tooltip footer { margin-top: 2px; padding-top: 8px; display: flex; justify-content: space-between; border-top: 1px solid #41362d; color: #cf8c52; font-size: 11px; text-transform: uppercase; }
 .item-tooltip > small { color: #7f7366; font-size: 9px; }
+.item-tooltip > .tooltip-roll-hint { color: #9d8c77; letter-spacing: .035em; }
+.item-tooltip > .tooltip-roll-hint.active { color: #d1a55b; }
 .item-tooltip.rarity-magic { border-top-color: #7799e3; }
 .item-tooltip.rarity-rare { border-top-color: #e0bc5d; }
 .item-tooltip.rarity-unique { border-top-color: #d27038; }

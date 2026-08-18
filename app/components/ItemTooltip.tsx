@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { CURRENCY_DEFINITIONS } from "../game/config/currencies";
 import { EQUIPMENT_TYPE_LABELS } from "../game/config/equipment-slots";
@@ -8,7 +9,7 @@ import type { InventoryItem } from "../game/domain";
 import { isCurrencyItem, isEquipmentItem } from "../game/inventory";
 import { itemDisplayName } from "../game/items";
 import { mapDanger, mapModifierDescription, mapStatSummary } from "../game/maps";
-import { formatModifier } from "../game/stats";
+import { formatModifier, formatModifierWithRollRange } from "../game/stats";
 import { ItemIcon } from "./ItemIcon";
 
 interface ItemTooltipProps {
@@ -18,7 +19,27 @@ interface ItemTooltipProps {
   hint?: string;
 }
 
+function useAltKey(): boolean {
+  const [pressed, setPressed] = useState(false);
+
+  useEffect(() => {
+    const update = (event: KeyboardEvent) => setPressed(event.altKey);
+    const release = () => setPressed(false);
+    window.addEventListener("keydown", update);
+    window.addEventListener("keyup", update);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", update);
+      window.removeEventListener("keyup", update);
+      window.removeEventListener("blur", release);
+    };
+  }, []);
+
+  return pressed;
+}
+
 export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
+  const showRollRanges = useAltKey();
   if (typeof document === "undefined") return null;
   const left = Math.max(12, Math.min(x + 18, window.innerWidth - 322));
   const top = Math.max(12, Math.min(y + 18, window.innerHeight - 390));
@@ -67,11 +88,19 @@ export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
       <div className="tooltip-implicit">{item.implicit}</div>
       <div className="tooltip-affixes">
         {item.affixes.length > 0
-          ? item.affixes.map((affix) => <div key={affix.id}><i>T{affix.tier}</i><b>{affix.rolls.map(formatModifier).join(" · ")}</b></div>)
+          ? item.affixes.map((affix) => (
+            <div key={affix.id}>
+              <i>T{affix.tier}</i>
+              <b>{affix.rolls.map((roll) => formatModifierWithRollRange(roll, showRollRanges)).join(" · ")}</b>
+            </div>
+          ))
           : <small>No explicit modifiers</small>}
       </div>
       <footer><span>Stability</span><strong>{item.stability}/{item.maxStability}</strong></footer>
       {hint && <small>{hint}</small>}
+      <small className={`tooltip-roll-hint ${showRollRanges ? "active" : ""}`}>
+        {showRollRanges ? "Roll ranges shown" : "Hold Alt / Option for roll ranges"}
+      </small>
     </aside>,
     document.body,
   );

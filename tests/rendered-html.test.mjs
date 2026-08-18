@@ -204,6 +204,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(inventoryPanel, /CHARACTER_EQUIPMENT_SLOTS\.map/);
   assert.doesNotMatch(inventoryPanel, /inventory-inspector/);
   assert.match(itemTooltip, /tooltip-affixes/);
+  assert.match(itemTooltip, /Hold Alt \/ Option for roll ranges/);
+  assert.match(itemTooltip, /formatModifierWithRollRange/);
   assert.match(itemTooltip, /mapModifierDescription/);
   assert.match(inventoryPanel, /Collected this map/);
   assert.match(shell, /mapDevice/);

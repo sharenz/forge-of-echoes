@@ -21,7 +21,7 @@ import {
   rerollAffixValues,
   scaleBaseModifier,
 } from "../app/game/items";
-import { calculateCharacterStats, formatModifier, resolveStat } from "../app/game/stats";
+import { calculateCharacterStats, formatModifier, formatModifierWithRollRange, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
 import { purchaseMap } from "../app/game/merchant";
 import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, isArenaCleared, rollHitDamage, shouldSpawnNextWave } from "../app/game/combat";
@@ -559,6 +559,18 @@ test("character animation directions and release frames are config-driven", () =
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.south.run.sheet, "locomotion");
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.south.cast.sheet, "actions");
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.west.cast.row, CHARACTER_ANIMATIONS.sorceress.clips.east.cast.row);
+});
+
+test("advanced item descriptions expose the rolled affix range on demand", () => {
+  const attackSpeedRoll = {
+    stat: "attackSpeed",
+    mode: "increased",
+    value: 13,
+    min: 9,
+    max: 14,
+  } as const;
+  assert.equal(formatModifierWithRollRange(attackSpeedRoll, false), "13% increased attack speed");
+  assert.equal(formatModifierWithRollRange(attackSpeedRoll, true), "13% increased attack speed (9 - 14)");
 });
 
 test("every inventory base declares one stable icon asset", () => {

@@ -2,6 +2,7 @@ import { CHARACTER_CLASSES } from "./config/classes";
 import { ITEM_BASES_BY_ID, type ItemBaseId } from "./config/item-bases";
 import { DERIVED_STAT_RULES, UNARMED_ATTACKS_PER_SECOND, type StatContributionRule } from "./config/stat-rules";
 import type {
+  AffixRoll,
   AttributeKey,
   CharacterStats,
   EquipmentItem,
@@ -192,4 +193,17 @@ export function formatModifier(modifier: Pick<StatModifier<ModifierStatKey>, "st
   if (modifier.mode === "flat") return `${modifier.value >= 0 ? "+" : "-"}${absoluteValue} ${labels[modifier.stat]}`;
   if (modifier.mode === "increased") return `${absoluteValue}% ${modifier.value >= 0 ? "increased" : "reduced"} ${labels[modifier.stat]}`;
   return `${absoluteValue}% ${modifier.value >= 0 ? "more" : "less"} ${labels[modifier.stat]}`;
+}
+
+function formatRollBoundary(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
+}
+
+export function formatModifierWithRollRange(
+  modifier: Pick<AffixRoll, "stat" | "mode" | "value" | "min" | "max">,
+  showRollRange: boolean,
+): string {
+  const description = formatModifier(modifier);
+  if (!showRollRange) return description;
+  return `${description} (${formatRollBoundary(modifier.min)} - ${formatRollBoundary(modifier.max)})`;
 }
