@@ -1,4 +1,5 @@
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
+import "@babylonjs/core/Culling/ray";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
