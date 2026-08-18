@@ -1,7 +1,16 @@
 import Phaser from "phaser";
 import { ACTIVE_SKILLS, BASIC_ATTACK, isArenaCleared, rollHitDamage, shouldSpawnNextWave, type ArenaSummary, type MapDrop, type RolledHitDamage } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
-import { CHARACTER_SPRITE_SHEETS, characterDirectionVector, resolveCharacterDirection, type CharacterDirection } from "../game/config/character-animations";
+import {
+  CHARACTER_ANIMATIONS,
+  characterDefaultSpriteSheetKey,
+  characterDirectionVector,
+  characterSpriteSheetKey,
+  characterVisualOffsetY,
+  resolveCharacterDirection,
+  type CharacterDirection,
+  type CharacterSpriteSheetId,
+} from "../game/config/character-animations";
 import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
 import { MONSTER_PACK_RULES } from "../game/config/monster-packs";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
@@ -186,11 +195,14 @@ class CraftyScene extends Phaser.Scene {
     this.load.image("class-roster", "/class-roster-v2.png");
     this.load.image("player-sorceress-rendered", "/player-sorceress-v4.png");
     if (this.options.mode !== "class-select") {
-      const definition = CHARACTER_SPRITE_SHEETS[this.options.classId];
-      this.load.spritesheet(`player-${this.options.classId}-sheet`, definition.url, {
-        frameWidth: definition.frameWidth,
-        frameHeight: definition.frameHeight,
-      });
+      const definition = CHARACTER_ANIMATIONS[this.options.classId];
+      for (const [sheetId, sheet] of Object.entries(definition.sheets)) {
+        if (!sheet) continue;
+        this.load.spritesheet(characterSpriteSheetKey(this.options.classId, sheetId as CharacterSpriteSheetId), sheet.url, {
+          frameWidth: sheet.frameWidth,
+          frameHeight: sheet.frameHeight,
+        });
+      }
     }
   }
 
@@ -499,8 +511,8 @@ class CraftyScene extends Phaser.Scene {
     this.playerShadow = this.add.image(x, y + 25, "shadow").setScale(2.1, 1.45).setDepth(8);
     this.playerAura = this.add.image(x, y + 25, "player-aura").setScale(1.45).setTint(CLASS_COLORS[this.options.classId].magic).setAlpha(0.18).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
     this.player = this.add.sprite(x, y, "shadow").setVisible(false).setDepth(10);
-    const textureKey = `player-${this.options.classId}-sheet`;
-    this.playerVisual = this.add.sprite(x, y + 28, textureKey, 0).setDepth(10);
+    const textureKey = characterDefaultSpriteSheetKey(this.options.classId);
+    this.playerVisual = this.add.sprite(x, y + characterVisualOffsetY(this.options.classId), textureKey, 0).setDepth(10);
     this.playerAnimator = new CharacterAnimator(this, this.playerVisual, this.options.classId);
     this.tweens.add({ targets: this.playerAura, alpha: 0.38, scaleX: 1.4, scaleY: 1.28, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.InOut" });
   }
@@ -580,11 +592,13 @@ class CraftyScene extends Phaser.Scene {
           Phaser.Math.Linear(fromY, this.player.y, progress),
           this.playerVisual.texture.key,
           this.playerVisual.frame.name,
-        ).setScale(CHARACTER_SPRITE_SHEETS[this.options.classId].renderScale)
+        ).setOrigin(0.5, 1)
+          .setScale(CHARACTER_ANIMATIONS[this.options.classId].renderScale)
           .setFlipX(this.playerVisual.flipX)
           .setTint(0x9f75d8)
           .setAlpha(0.38 - index * 0.055)
           .setDepth(Math.round(Phaser.Math.Linear(fromY, this.player.y, progress) / 10) + 10);
+        afterimage.y += characterVisualOffsetY(this.options.classId);
         this.tweens.add({ targets: afterimage, alpha: 0, duration: 220 + index * 25, onComplete: () => afterimage.destroy() });
       }
       for (let index = 0; index < 14; index += 1) {

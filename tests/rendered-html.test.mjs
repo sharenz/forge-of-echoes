@@ -127,9 +127,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /class-roster/);
   assert.match(characterAnimator, /ANIMATION_UPDATE/);
   assert.match(characterAnimator, /releaseTextureFrame/);
+  assert.match(characterAnimator, /currentLoopKey/);
   assert.match(characterAnimator, /setWorldTransform/);
-  assert.match(characterAnimationConfig, /releaseFrame: 2/);
+  assert.match(characterAnimationConfig, /releaseFrame: 4/);
   assert.match(characterAnimationConfig, /player-amazon-sheet-v1\.png/);
+  assert.match(characterAnimationConfig, /player-sorceress-locomotion-v3\.png/);
+  assert.match(characterAnimationConfig, /player-sorceress-actions-v3\.png/);
   assert.match(world, /updateVfxParticles/);
   assert.match(world, /ember-sigil/);
   assert.match(world, /beginSkillAction/);
@@ -259,7 +262,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   await access(new URL("../public/player-sorceress-v4.png", import.meta.url));
   await access(new URL("../public/player-amazon-sheet-v1.png", import.meta.url));
   await access(new URL("../public/player-barbarian-sheet-v1.png", import.meta.url));
-  await access(new URL("../public/player-sorceress-sheet-v1.png", import.meta.url));
+  await access(new URL("../public/player-sorceress-locomotion-v3.png", import.meta.url));
+  await access(new URL("../public/player-sorceress-actions-v3.png", import.meta.url));
   const itemIcons = (await readdir(new URL("../public/item-icons", import.meta.url))).filter((name) => name.endsWith(".png"));
   assert.equal(itemIcons.length, 20);
 });

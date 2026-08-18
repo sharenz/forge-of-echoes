@@ -1,8 +1,9 @@
 import Phaser from "phaser";
 import {
-  CHARACTER_ANIMATION_CLIPS,
-  CHARACTER_SPRITE_SHEETS,
+  CHARACTER_ANIMATIONS,
   characterAnimationKey,
+  characterSpriteSheetKey,
+  characterVisualOffsetY,
   resolveCharacterDirection,
   type CharacterAnimationState,
   type CharacterDirection,
@@ -21,7 +22,7 @@ export class CharacterAnimator {
   private direction: CharacterDirection = "south";
   private moving = false;
   private pendingAction: PendingAction | null = null;
-  private currentLoop: "idle" | "run" | null = null;
+  private currentLoopKey: string | null = null;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -29,7 +30,7 @@ export class CharacterAnimator {
     private readonly classId: CharacterClassId,
   ) {
     this.registerAnimations();
-    this.sprite.setOrigin(0.5, 1).setScale(CHARACTER_SPRITE_SHEETS[classId].renderScale);
+    this.sprite.setOrigin(0.5, 1).setScale(CHARACTER_ANIMATIONS[classId].renderScale);
     this.sprite.on(Phaser.Animations.Events.ANIMATION_UPDATE, this.handleAnimationUpdate, this);
     this.sprite.on(Phaser.Animations.Events.ANIMATION_COMPLETE, this.handleAnimationComplete, this);
     this.playLocomotion(true);
@@ -54,11 +55,14 @@ export class CharacterAnimator {
   ): boolean {
     if (this.pendingAction) return false;
     this.direction = direction;
-    this.currentLoop = null;
-    const clip = CHARACTER_ANIMATION_CLIPS[direction][state];
+    this.currentLoopKey = null;
+    const definition = CHARACTER_ANIMATIONS[this.classId];
+    const clip = definition.clips[direction][state];
+    const sheet = definition.sheets[clip.sheet];
+    if (!sheet) throw new Error(`Missing ${this.classId} sprite sheet: ${clip.sheet}`);
     const sourceDirection = direction === "west" ? "west" : direction;
     const key = characterAnimationKey(this.classId, sourceDirection, state);
-    const releaseTextureFrame = clip.row * 8 + clip.startColumn + (clip.releaseFrame ?? clip.frameCount - 1);
+    const releaseTextureFrame = clip.row * sheet.columns + clip.startColumn + (clip.releaseFrame ?? clip.frameCount - 1);
     this.pendingAction = { key, releaseTextureFrame, released: false, onRelease, onComplete };
     this.applyDirectionFlip();
     this.sprite.anims.timeScale = Math.max(0.1, playbackRate);
@@ -67,7 +71,7 @@ export class CharacterAnimator {
   }
 
   setWorldTransform(x: number, y: number, depth: number): void {
-    this.sprite.setPosition(Math.round(x), Math.round(y + 28)).setDepth(depth);
+    this.sprite.setPosition(Math.round(x), Math.round(y + characterVisualOffsetY(this.classId))).setDepth(depth);
   }
 
   destroy(): void {
@@ -76,15 +80,18 @@ export class CharacterAnimator {
   }
 
   private registerAnimations(): void {
+    const definition = CHARACTER_ANIMATIONS[this.classId];
     for (const direction of ["south", "north", "east", "west"] as const) {
       for (const state of ["idle", "run", "attack", "cast", "dash"] as const) {
         const key = characterAnimationKey(this.classId, direction, state);
         if (this.scene.anims.exists(key)) continue;
-        const clip = CHARACTER_ANIMATION_CLIPS[direction][state];
-        const start = clip.row * 8 + clip.startColumn;
+        const clip = definition.clips[direction][state];
+        const sheet = definition.sheets[clip.sheet];
+        if (!sheet) throw new Error(`Missing ${this.classId} sprite sheet: ${clip.sheet}`);
+        const start = clip.row * sheet.columns + clip.startColumn;
         this.scene.anims.create({
           key,
-          frames: this.scene.anims.generateFrameNumbers(`player-${this.classId}-sheet`, {
+          frames: this.scene.anims.generateFrameNumbers(characterSpriteSheetKey(this.classId, clip.sheet), {
             start,
             end: start + clip.frameCount - 1,
           }),
@@ -97,11 +104,12 @@ export class CharacterAnimator {
 
   private playLocomotion(force = false): void {
     const state = this.moving ? "run" : "idle";
-    if (!force && this.currentLoop === state && this.sprite.anims.isPlaying) return;
-    this.currentLoop = state;
+    const key = characterAnimationKey(this.classId, this.direction, state);
+    if (!force && this.currentLoopKey === key && this.sprite.anims.isPlaying) return;
+    this.currentLoopKey = key;
     this.sprite.anims.timeScale = 1;
     this.applyDirectionFlip();
-    this.sprite.play(characterAnimationKey(this.classId, this.direction, state), true);
+    this.sprite.play(key, true);
   }
 
   private applyDirectionFlip(): void {
