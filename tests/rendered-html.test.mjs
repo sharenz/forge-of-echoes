@@ -28,8 +28,10 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, shell, world, domain, content, profile, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, world, domain, content, profile, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
@@ -39,6 +41,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   ]);
 
   assert.match(page, /<GameShell \/>/);
+  assert.match(layout, /<GameCursor \/>/);
+  assert.match(cursor, /data-mode="default"/);
   assert.match(shell, /<PhaserWorld/);
   assert.match(shell, /mode="class-select"/);
   assert.match(world, /class PhaserRuntime/);

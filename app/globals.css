@@ -37,6 +37,84 @@ button, input { font: inherit; }
 button { color: inherit; }
 button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3px; }
 
+/* Forged pointer: decorative only, with native cursors preserved for touch and coarse pointers. */
+.game-cursor { display: none; }
+
+@media (pointer: fine) {
+  html.cursor-enhanced,
+  html.cursor-enhanced * { cursor: none !important; }
+
+  .game-cursor { position: fixed; inset: 0; z-index: 10000; display: block; pointer-events: none; overflow: hidden; }
+  .game-cursor-ring-wrap,
+  .game-cursor-point-wrap { position: fixed; left: 0; top: 0; opacity: 0; will-change: transform; transition: opacity .16s ease; }
+  .game-cursor-ring-wrap[data-visible="true"],
+  .game-cursor-point-wrap[data-visible="true"] { opacity: 1; }
+
+  .game-cursor-ring {
+    position: absolute;
+    left: -14px;
+    top: -14px;
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(226, 167, 98, .78);
+    transform: rotate(45deg);
+    box-shadow: 0 0 9px rgba(215, 122, 57, .22), inset 0 0 7px rgba(215, 122, 57, .1);
+    transition: width .16s ease, height .16s ease, left .16s ease, top .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+    animation: cursor-breathe 2.8s ease-in-out infinite;
+  }
+  .game-cursor-ring::before,
+  .game-cursor-ring::after { content: ""; position: absolute; background: rgba(242, 170, 94, .74); box-shadow: 0 0 5px rgba(242, 170, 94, .48); }
+  .game-cursor-ring::before { width: 6px; height: 1px; left: -4px; top: 50%; }
+  .game-cursor-ring::after { width: 1px; height: 6px; left: 50%; top: -4px; }
+
+  .game-cursor-point {
+    position: absolute;
+    left: -2px;
+    top: -2px;
+    width: 4px;
+    height: 4px;
+    background: #ffe0a5;
+    transform: rotate(45deg);
+    box-shadow: 0 0 8px #e98843, 0 0 2px #fff3cf;
+    transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
+  }
+
+  .game-cursor-ring-wrap[data-mode="interactive"] .game-cursor-ring {
+    left: -10px;
+    top: -10px;
+    width: 20px;
+    height: 20px;
+    border-color: #edbc68;
+    box-shadow: 0 0 13px rgba(237, 188, 104, .45), inset 0 0 8px rgba(237, 188, 104, .18);
+    transform: rotate(135deg);
+  }
+  .game-cursor-point-wrap[data-mode="interactive"] .game-cursor-point { transform: rotate(45deg) scale(1.45); }
+
+  .game-cursor-ring-wrap[data-mode="combat"] .game-cursor-ring {
+    left: -17px;
+    top: -17px;
+    width: 34px;
+    height: 34px;
+    border-color: rgba(210, 83, 66, .9);
+    box-shadow: 0 0 15px rgba(189, 83, 71, .42), inset 0 0 10px rgba(189, 83, 71, .14);
+  }
+  .game-cursor-ring-wrap[data-mode="combat"] .game-cursor-ring::before,
+  .game-cursor-ring-wrap[data-mode="combat"] .game-cursor-ring::after { background: #da6756; box-shadow: 0 0 6px rgba(218, 103, 86, .65); }
+  .game-cursor-point-wrap[data-mode="combat"] .game-cursor-point { background: #ffb19c; box-shadow: 0 0 10px #d24f3e, 0 0 2px #fff1e9; }
+
+  .game-cursor-ring-wrap[data-pressed="true"] .game-cursor-ring { transform: rotate(45deg) scale(.72); }
+  .game-cursor-point-wrap[data-pressed="true"] .game-cursor-point { transform: rotate(45deg) scale(1.7); }
+}
+
+@keyframes cursor-breathe {
+  0%, 100% { filter: brightness(.92); }
+  50% { filter: brightness(1.28); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-cursor-ring { animation: none; }
+}
+
 .game-shell { min-height: 100vh; padding: 0 4vw 32px; }
 
 .game-header {
