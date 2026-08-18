@@ -12,6 +12,9 @@ const SPATIAL_COLUMNS = Math.ceil(MAP_SIZE / SPATIAL_CELL_SIZE) + 2;
 const FIXED_STEP = 1000 / 60;
 const MAX_FRAME_DELTA = 50;
 const PROJECTILE_POOL_SIZE = 160;
+const DAMAGE_NUMBER_POOL_SIZE = 160;
+const HEALTH_BAR_WIDTH = 42;
+const HEALTH_BAR_HEIGHT = 5;
 const ARENA_MONSTER = MONSTER_ARCHETYPES.ashling;
 
 interface EnemyState {
@@ -19,12 +22,14 @@ interface EnemyState {
   x: number;
   y: number;
   life: number;
+  maxLife: number;
   speed: number;
   contactDamage: number;
   homeX: number;
   homeY: number;
   phase: number;
   aggro: boolean;
+  healthLabel: Phaser.GameObjects.Text | null;
 }
 
 interface ProjectileState {
@@ -68,6 +73,9 @@ class CraftyScene extends Phaser.Scene {
   private enemyPool: Phaser.GameObjects.Group | null = null;
   private projectilePool: Phaser.GameObjects.Group | null = null;
   private dropPool: Phaser.GameObjects.Group | null = null;
+  private enemyHealthBars: Phaser.GameObjects.Graphics | null = null;
+  private healthLabelPool: Phaser.GameObjects.Text[] = [];
+  private damageNumberPool: Phaser.GameObjects.Text[] = [];
   private spatialBuckets = new Map<number, EnemyState[]>();
   private accumulator = 0;
   private attackCooldown = 0;
@@ -116,6 +124,7 @@ class CraftyScene extends Phaser.Scene {
       this.enemyPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: 1000, runChildUpdate: false });
       this.projectilePool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: PROJECTILE_POOL_SIZE, runChildUpdate: false });
       this.dropPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: 300, runChildUpdate: false });
+      this.enemyHealthBars = this.add.graphics().setDepth(470);
       this.cameras.main.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
       this.cameras.main.startFollow(this.player!, true, 1, 1);
       this.cameras.main.setDeadzone(360, 360);
@@ -252,6 +261,7 @@ class CraftyScene extends Phaser.Scene {
       this.rebuildSpatialBuckets();
       this.applyEnemyContactDamage(delta);
       this.updateProjectiles(delta);
+      this.renderEnemyHealth();
       this.updateGroundDrops(delta);
       this.advanceWaveIfReady();
     }
@@ -393,6 +403,7 @@ class CraftyScene extends Phaser.Scene {
         const y = centerY + Math.sin(angle) * radius;
         const sprite = this.enemyPool?.get(x, y, "enemy") as Phaser.GameObjects.Image | null;
         if (!sprite) break;
+        const maxLife = (ARENA_MONSTER.baseLife + wave * ARENA_MONSTER.lifePerWave) * (balance?.enemyHealthMultiplier ?? 1);
         sprite.setActive(true).setVisible(true).setPosition(x, y).setScale(1.6).setDepth(Math.round(y / 10) + 10);
         this.enemies.push({
           sprite,
@@ -402,9 +413,11 @@ class CraftyScene extends Phaser.Scene {
           homeY: y,
           phase: Phaser.Math.FloatBetween(0, Math.PI * 2),
           aggro: false,
-          life: (ARENA_MONSTER.baseLife + wave * ARENA_MONSTER.lifePerWave) * (balance?.enemyHealthMultiplier ?? 1),
+          life: maxLife,
+          maxLife,
           speed: Phaser.Math.FloatBetween(ARENA_MONSTER.speed.min, ARENA_MONSTER.speed.max) * (balance?.enemySpeedMultiplier ?? 1) + wave * ARENA_MONSTER.speed.perWave,
           contactDamage: (ARENA_MONSTER.contactDamage + wave * ARENA_MONSTER.contactDamagePerWave) * (balance?.enemyDamageMultiplier ?? 1),
+          healthLabel: null,
         });
       }
     });
@@ -430,6 +443,83 @@ class CraftyScene extends Phaser.Scene {
       }
       enemy.sprite.setPosition(Math.round(enemy.x), Math.round(enemy.y)).setFlipX(dx < 0).setDepth(Math.round(enemy.y / 10) + 10);
     }
+  }
+
+  private acquireHealthLabel(): Phaser.GameObjects.Text {
+    const existing = this.healthLabelPool.find((label) => !label.active);
+    if (existing) return existing.setActive(true).setVisible(false);
+    const label = this.add.text(0, 0, "", {
+      fontFamily: "monospace",
+      fontSize: "10px",
+      color: "#fff0d1",
+      stroke: "#08090b",
+      strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(471).setVisible(false);
+    this.healthLabelPool.push(label);
+    return label;
+  }
+
+  private releaseHealthLabel(label: Phaser.GameObjects.Text): void {
+    label.setActive(false).setVisible(false);
+  }
+
+  private renderEnemyHealth(): void {
+    const graphics = this.enemyHealthBars;
+    if (!graphics) return;
+    graphics.clear();
+    const view = this.cameras.main.worldView;
+    for (const enemy of this.enemies) {
+      const visible = enemy.x >= view.left - HEALTH_BAR_WIDTH && enemy.x <= view.right + HEALTH_BAR_WIDTH
+        && enemy.y >= view.top - 55 && enemy.y <= view.bottom + 25;
+      if (!visible) {
+        if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
+        enemy.healthLabel = null;
+        continue;
+      }
+      if (!enemy.healthLabel) enemy.healthLabel = this.acquireHealthLabel();
+      enemy.healthLabel.setVisible(true);
+      const left = Math.round(enemy.x - HEALTH_BAR_WIDTH / 2);
+      const top = Math.round(enemy.y - 34);
+      const ratio = Phaser.Math.Clamp(enemy.life / enemy.maxLife, 0, 1);
+      graphics.fillStyle(0x08090b, 0.9).fillRect(left - 1, top - 1, HEALTH_BAR_WIDTH + 2, HEALTH_BAR_HEIGHT + 2);
+      graphics.fillStyle(0x39211f, 1).fillRect(left, top, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT);
+      graphics.fillStyle(ratio > 0.5 ? 0xc95745 : ratio > 0.25 ? 0xdc8a3d : 0xe4b34b, 1).fillRect(left, top, Math.max(0, HEALTH_BAR_WIDTH * ratio), HEALTH_BAR_HEIGHT);
+      const healthText = `${Math.ceil(Math.max(0, enemy.life))}/${Math.ceil(enemy.maxLife)}`;
+      if (enemy.healthLabel.text !== healthText) enemy.healthLabel.setText(healthText);
+      enemy.healthLabel.setPosition(Math.round(enemy.x), top - 8);
+    }
+  }
+
+  private showDamageNumber(x: number, y: number, damage: number): void {
+    let label = this.damageNumberPool.find((candidate) => !candidate.active);
+    if (!label && this.damageNumberPool.length < DAMAGE_NUMBER_POOL_SIZE) {
+      label = this.add.text(0, 0, "", {
+        fontFamily: "monospace",
+        fontSize: "16px",
+        fontStyle: "bold",
+        color: "#ffd978",
+        stroke: "#35110c",
+        strokeThickness: 4,
+      }).setOrigin(0.5).setDepth(510).setActive(false).setVisible(false);
+      this.damageNumberPool.push(label);
+    }
+    if (!label) return;
+    this.tweens.killTweensOf(label);
+    label.setText(`${Math.max(1, Math.round(damage))}`)
+      .setPosition(Math.round(x + Phaser.Math.Between(-7, 7)), Math.round(y - 24))
+      .setAlpha(1)
+      .setScale(1)
+      .setActive(true)
+      .setVisible(true);
+    this.tweens.add({
+      targets: label,
+      y: label.y - 30,
+      alpha: 0,
+      scale: 1.18,
+      duration: 620,
+      ease: "Cubic.easeOut",
+      onComplete: () => label?.setActive(false).setVisible(false),
+    });
   }
 
   private applyEnemyContactDamage(delta: number): void {
@@ -514,6 +604,7 @@ class CraftyScene extends Phaser.Scene {
       const hit = this.nearbyEnemies(projectile.sprite.x, projectile.sprite.y).find((enemy) => Math.hypot(projectile.sprite.x - enemy.x, projectile.sprite.y - enemy.y) < 25);
       if (hit) {
         hit.life -= projectile.damage;
+        this.showDamageNumber(hit.x, hit.y, projectile.damage);
         projectile.remaining = 0;
         if (hit.life <= 0) this.releaseEnemy(hit);
       }
@@ -529,6 +620,7 @@ class CraftyScene extends Phaser.Scene {
     if (index < 0) return;
     this.enemies.splice(index, 1);
     this.enemyPool?.killAndHide(enemy.sprite);
+    if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
     this.slain += 1;
     this.rollGroundDrop(enemy.x, enemy.y);
   }
@@ -602,8 +694,12 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private releaseAllEnemies(): void {
-    for (const enemy of this.enemies) this.enemyPool?.killAndHide(enemy.sprite);
+    for (const enemy of this.enemies) {
+      this.enemyPool?.killAndHide(enemy.sprite);
+      if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
+    }
     this.enemies = [];
+    this.enemyHealthBars?.clear();
   }
 
   private advanceWaveIfReady(): void {

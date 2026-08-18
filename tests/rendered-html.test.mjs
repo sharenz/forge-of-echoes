@@ -77,6 +77,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /waveElapsedSeconds/);
   assert.match(world, /calculateHitDamage/);
   assert.doesNotMatch(world, /0\.85 \+ .*attackDamage/);
+  assert.match(world, /renderEnemyHealth/);
+  assert.match(world, /healthLabelPool/);
+  assert.match(world, /showDamageNumber/);
+  assert.match(world, /damageNumberPool/);
   assert.match(arenaConfig, /waveSpawnIntervalSeconds: 30/);
   assert.match(world, /rollGroundDrop/);
   assert.match(world, /updateGroundDrops/);
