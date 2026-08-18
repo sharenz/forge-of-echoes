@@ -25,9 +25,9 @@ const DAMAGE_NUMBER_POOL_SIZE = 160;
 const VFX_PARTICLE_POOL_SIZE = 240;
 const HEALTH_BAR_WIDTH = 42;
 const HEALTH_BAR_HEIGHT = 5;
-const PLAYER_SCALE = 2.15;
+const PLAYER_SCALE = 1.75;
 
-type PlayerPose = "idle" | "walk" | "attack";
+type PlayerPose = "idle" | "walk" | "attack" | "cast";
 
 interface EnemyState {
   sprite: Phaser.GameObjects.Image;
@@ -96,10 +96,10 @@ interface VfxParticleState {
   rotationSpeed: number;
 }
 
-const CLASS_COLORS: Record<CharacterClassId, { cloth: number; accent: number }> = {
-  amazon: { cloth: 0x536b38, accent: 0xe4b85f },
-  barbarian: { cloth: 0x7b352c, accent: 0xd97a4f },
-  sorceress: { cloth: 0x49345e, accent: 0xff8548 },
+const CLASS_COLORS: Record<CharacterClassId, { cloth: number; clothDark: number; accent: number; skin: number; hair: number; metal: number; magic: number }> = {
+  amazon: { cloth: 0x627d3f, clothDark: 0x26351f, accent: 0xd9a94d, skin: 0xc9855f, hair: 0x44251b, metal: 0xb8a06f, magic: 0xf6c76f },
+  barbarian: { cloth: 0x85372f, clothDark: 0x361817, accent: 0xd66a42, skin: 0xb96f50, hair: 0x2b1a18, metal: 0xa9a69d, magic: 0xff7345 },
+  sorceress: { cloth: 0x5b3a78, clothDark: 0x241932, accent: 0xe07a42, skin: 0xca8469, hair: 0x171522, metal: 0xd3a95e, magic: 0xb77cff },
 };
 
 const PACK_REGIONS = [
@@ -114,6 +114,7 @@ class CraftyScene extends Phaser.Scene {
   private readonly audio = new SkillAudio();
   private player: Phaser.GameObjects.Sprite | null = null;
   private playerShadow: Phaser.GameObjects.Image | null = null;
+  private playerAura: Phaser.GameObjects.Image | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key> | null = null;
   private enemies: EnemyState[] = [];
   private projectiles: ProjectileState[] = [];
@@ -149,6 +150,7 @@ class CraftyScene extends Phaser.Scene {
   private arenaComplete = false;
   private lastFacing = 1;
   private playerAnimationLock = 0;
+  private footstepElapsed = 0;
 
   constructor(options: WorldRuntimeOptions) {
     super("crafty-world");
@@ -165,6 +167,7 @@ class CraftyScene extends Phaser.Scene {
     this.load.image("pixel-forge", "/pixel-forge-hideout.webp");
     this.load.image("ashen-wilderness", "/pixel-ashen-wilderness.webp");
     this.load.image("ember-sigil", "/ember-sigil.png");
+    this.load.image("class-roster", "/class-roster-v2.png");
   }
 
   create(): void {
@@ -331,13 +334,32 @@ class CraftyScene extends Phaser.Scene {
       if (xInput) this.lastFacing = Math.sign(xInput);
       this.player.setFlipX(this.lastFacing < 0);
       this.clampPlayer();
+      this.footstepElapsed += delta;
+      if (this.footstepElapsed >= 0.14) {
+        this.footstepElapsed = 0;
+        this.emitVfxParticle(
+          this.player.x - this.lastFacing * 4,
+          this.player.y + 22,
+          0xb69a73,
+          Phaser.Math.Between(-18, 18),
+          Phaser.Math.Between(-16, -5),
+          0.3,
+          0.75,
+          1.25,
+          "vfx-dust",
+        );
+      }
+    } else {
+      this.footstepElapsed = 0.12;
     }
     if (this.playerAnimationLock <= 0) {
       this.playPlayerPose(xInput || yInput ? "walk" : "idle");
     }
     this.playerShadow?.setPosition(this.player.x, this.player.y + 15);
+    this.playerAura?.setPosition(this.player.x, this.player.y + 18);
     this.player.setDepth(Math.round(this.player.y / 10) + 11);
     this.playerShadow?.setDepth(Math.round(this.player.y / 10) + 9);
+    this.playerAura?.setDepth(Math.round(this.player.y / 10) + 9);
 
     if (this.options.mode === "arena") {
       if (this.keys?.attack.isDown || this.input.activePointer.isDown) this.tryBasicAttack();
@@ -382,6 +404,23 @@ class CraftyScene extends Phaser.Scene {
     spark.fillStyle(0xffffff).fillRect(3, 0, 2, 8).fillRect(0, 3, 8, 2);
     spark.fillStyle(0xffd26a).fillRect(2, 2, 4, 4);
     spark.generateTexture("vfx-spark", 8, 8).destroy();
+    const ember = this.make.graphics({ x: 0, y: 0 });
+    ember.fillStyle(0xff6b2f, 0.35).fillCircle(6, 6, 6);
+    ember.fillStyle(0xffb755, 0.85).fillCircle(6, 6, 3);
+    ember.fillStyle(0xfff1b8).fillRect(5, 4, 2, 3);
+    ember.generateTexture("vfx-ember", 12, 12).destroy();
+    const dust = this.make.graphics({ x: 0, y: 0 });
+    dust.fillStyle(0x6f5742, 0.55).fillRect(1, 3, 8, 4);
+    dust.fillStyle(0xb7956d, 0.45).fillRect(3, 1, 5, 3);
+    dust.generateTexture("vfx-dust", 10, 8).destroy();
+    const slash = this.make.graphics({ x: 0, y: 0 });
+    slash.lineStyle(5, 0xffe0a0, 0.18).beginPath().arc(32, 32, 23, -1.15, 1.1).strokePath();
+    slash.lineStyle(2, 0xffffff, 0.9).beginPath().arc(32, 32, 23, -1.15, 1.1).strokePath();
+    slash.generateTexture("vfx-slash", 64, 64).destroy();
+    const aura = this.make.graphics({ x: 0, y: 0 });
+    aura.lineStyle(2, 0xffffff, 0.42).strokeEllipse(30, 13, 54, 18);
+    aura.lineStyle(1, 0xffffff, 0.2).strokeEllipse(30, 13, 38, 12);
+    aura.generateTexture("player-aura", 60, 26).destroy();
     this.createDropTexture("drop-scrap", 0xc17a42, 0xf1c071);
     this.createDropTexture("drop-essence", 0x6c4ca4, 0xc6a5ff);
     this.createDropTexture("drop-mapDust", 0x317f89, 0x92e4df);
@@ -414,7 +453,7 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private createPlayerTextures(classId: CharacterClassId): void {
-    const frames: Record<PlayerPose, number> = { idle: 2, walk: 4, attack: 4 };
+    const frames: Record<PlayerPose, number> = { idle: 4, walk: 8, attack: 6, cast: 6 };
     (Object.entries(frames) as [PlayerPose, number][]).forEach(([pose, frameCount]) => {
       for (let frame = 0; frame < frameCount; frame += 1) this.createPlayerFrame(classId, pose, frame);
     });
@@ -422,52 +461,81 @@ class CraftyScene extends Phaser.Scene {
 
   private createPlayerFrame(classId: CharacterClassId, pose: PlayerPose, frame: number): void {
     const colors = CLASS_COLORS[classId];
-    const bob = pose === "walk" && (frame === 1 || frame === 3) ? -1 : pose === "idle" && frame === 1 ? -1 : 0;
-    const stride = pose === "walk" ? [0, 2, 0, -2][frame] : 0;
-    const lunge = pose === "attack" ? [0, 2, 5, 2][frame] : 0;
-    const bodyX = 7 + lunge;
-    const bodyY = 13 + bob;
+    const idleBob = [0, -1, -1, 0];
+    const walkBob = [0, -1, -2, -1, 0, -1, -2, -1];
+    const strideFrames = [-3, -2, 0, 2, 3, 2, 0, -2];
+    const attackLunge = [0, 2, 5, 8, 5, 1];
+    const castLift = [0, -1, -3, -4, -2, 0];
+    const bob = pose === "walk" ? walkBob[frame] : pose === "idle" ? idleBob[frame] : pose === "cast" ? castLift[frame] : 0;
+    const stride = pose === "walk" ? strideFrames[frame] : 0;
+    const lunge = pose === "attack" ? attackLunge[frame] : 0;
+    const bodyX = 18 + lunge;
+    const bodyY = 21 + bob;
     const graphics = this.make.graphics({ x: 0, y: 0 });
-    const leftFootX = bodyX + 2 + Math.max(0, stride);
-    const rightFootX = bodyX + 14 + Math.max(0, -stride);
-    graphics.fillStyle(0x100f16).fillRect(leftFootX - 1, 34 + bob, 8, 5).fillRect(rightFootX - 1, 34 + bob, 8, 5);
-    graphics.fillStyle(0x382922).fillRect(leftFootX, 33 + bob, 6, 4).fillRect(rightFootX, 33 + bob, 6, 4);
-    graphics.fillStyle(0x17141c).fillRect(bodyX - 2, bodyY - 2, 24, 23);
-    graphics.fillStyle(colors.cloth).fillRect(bodyX, bodyY, 20, 19);
-    graphics.fillStyle(0xffffff, 0.16).fillRect(bodyX + 2, bodyY + 2, 3, 14);
-    graphics.fillStyle(0x16131a, 0.35).fillRect(bodyX + 14, bodyY + 2, 6, 17);
-    graphics.fillStyle(colors.accent).fillRect(bodyX, bodyY + 10, 20, 4).fillRect(bodyX + 8, bodyY, 4, 19);
-    graphics.fillStyle(0x22171a).fillRect(bodyX + 1, 3 + bob, 18, 12);
-    graphics.fillStyle(0xc9845e).fillRect(bodyX + 3, 5 + bob, 14, 10);
-    graphics.fillStyle(0xe5a077).fillRect(bodyX + 5, 6 + bob, 5, 4);
-    graphics.fillStyle(0x2a1b1a).fillRect(bodyX + 2, 2 + bob, 16, 5);
-    graphics.fillStyle(0xf8dfb7).fillRect(bodyX + 6, 9 + bob, 2, 2).fillRect(bodyX + 13, 9 + bob, 2, 2);
-    graphics.fillStyle(0x16141b).fillRect(bodyX + 7, 13 + bob, 6, 2);
-    const armReach = pose === "attack" ? [0, 4, 8, 4][frame] : 0;
-    graphics.fillStyle(0x17141c).fillRect(bodyX + 18, bodyY + 1, 5 + armReach, 7);
-    graphics.fillStyle(colors.accent).fillRect(bodyX + 19, bodyY + 2, 3 + armReach, 4);
+    const leftFootX = bodyX + 2 + stride;
+    const rightFootX = bodyX + 14 - stride;
+    const capeSway = pose === "walk" ? [0, 1, 2, 1, 0, -1, -2, -1][frame] : pose === "cast" ? frame - 2 : 0;
+
+    // Back silhouette, cloak, and separated legs make the sprite readable in dense packs.
+    graphics.fillStyle(0x0d0d13).fillRect(bodyX - 4 + capeSway, bodyY - 1, 27, 25);
+    graphics.fillStyle(colors.clothDark).fillTriangle(bodyX - 3 + capeSway, bodyY + 3, bodyX + 8, bodyY + 25, bodyX + 18 + capeSway, bodyY + 7);
+    graphics.fillStyle(0x111018).fillRect(leftFootX - 1, 45 + bob, 8, 8).fillRect(rightFootX - 1, 45 + bob, 8, 8);
+    graphics.fillStyle(0x49352b).fillRect(leftFootX, 43 + bob, 6, 8).fillRect(rightFootX, 43 + bob, 6, 8);
+    graphics.fillStyle(colors.metal).fillRect(leftFootX + 1, 44 + bob, 4, 2).fillRect(rightFootX + 1, 44 + bob, 4, 2);
+
+    // Torso armor with outline, waist, shoulder plates, and one-pixel material highlights.
+    graphics.fillStyle(0x111018).fillRect(bodyX - 2, bodyY - 3, 25, 25);
+    graphics.fillStyle(colors.cloth).fillRect(bodyX, bodyY - 1, 20, 20);
+    graphics.fillStyle(colors.clothDark).fillRect(bodyX + 14, bodyY, 6, 19);
+    graphics.fillStyle(colors.accent).fillRect(bodyX, bodyY + 10, 20, 4).fillRect(bodyX + 8, bodyY, 3, 19);
+    graphics.fillStyle(0xffe1a0, 0.5).fillRect(bodyX + 2, bodyY + 1, 2, 10).fillRect(bodyX + 7, bodyY + 11, 6, 2);
+    graphics.fillStyle(colors.metal).fillRect(bodyX - 3, bodyY - 2, 7, 6).fillRect(bodyX + 17, bodyY - 2, 7, 6);
+    graphics.fillStyle(0xf4e1b0, 0.65).fillRect(bodyX - 1, bodyY - 1, 3, 2).fillRect(bodyX + 19, bodyY - 1, 3, 2);
+
+    const armReach = pose === "attack" ? [0, 3, 7, 11, 7, 2][frame] : pose === "cast" ? [0, 1, 2, 3, 2, 0][frame] : 0;
+    const armY = pose === "cast" ? bodyY - [0, 3, 7, 9, 5, 1][frame] : bodyY + 1;
+    graphics.fillStyle(0x111018).fillRect(bodyX + 18, armY, 6 + armReach, 8);
+    graphics.fillStyle(colors.skin).fillRect(bodyX + 20, armY + 2, 3 + armReach, 4);
+    graphics.fillStyle(colors.metal).fillRect(bodyX + 18, armY + 1, 4, 6);
+
+    // Face, hair, brows, eyes, and class-specific head silhouette.
+    graphics.fillStyle(0x100e14).fillRect(bodyX + 1, 6 + bob, 19, 15);
+    graphics.fillStyle(colors.skin).fillRect(bodyX + 3, 8 + bob, 15, 12);
+    graphics.fillStyle(0xe8a078).fillRect(bodyX + 5, 9 + bob, 5, 3);
+    graphics.fillStyle(colors.hair).fillRect(bodyX + 1, 5 + bob, 19, 6).fillRect(bodyX + 1, 9 + bob, 4, 12).fillRect(bodyX + 17, 8 + bob, 4, 13);
+    graphics.fillStyle(0xf7e7bc).fillRect(bodyX + 6, 13 + bob, 2, 2).fillRect(bodyX + 13, 13 + bob, 2, 2);
+    graphics.fillStyle(colors.magic).fillRect(bodyX + 7, 13 + bob, 1, 1).fillRect(bodyX + 14, 13 + bob, 1, 1);
+    graphics.fillStyle(0x25151a).fillRect(bodyX + 8, 17 + bob, 6, 2);
 
     if (classId === "amazon") {
-      const weaponX = pose === "attack" ? bodyX + 23 : bodyX + 26;
+      const weaponX = pose === "attack" ? bodyX + 23 : bodyX + 27;
       const weaponY = pose === "attack" ? bodyY + 4 : 3 + bob;
-      graphics.fillStyle(0xd7ad59).fillRect(weaponX, weaponY, pose === "attack" ? 15 : 2, pose === "attack" ? 2 : 31);
-      graphics.fillStyle(0xf1d287).fillTriangle(weaponX + (pose === "attack" ? 15 : -2), weaponY - 2, weaponX + (pose === "attack" ? 15 : 4), weaponY + 1, weaponX + (pose === "attack" ? 15 : -2), weaponY + 4);
-      graphics.fillStyle(0x6f8542).fillRect(bodyX - 2, bodyY + 3, 4, 14);
+      graphics.fillStyle(0x2f2119).fillRect(weaponX, weaponY, pose === "attack" ? 21 : 3, pose === "attack" ? 3 : 42);
+      graphics.fillStyle(0xd7ad59).fillRect(weaponX, weaponY, pose === "attack" ? 20 : 2, pose === "attack" ? 2 : 41);
+      graphics.fillStyle(0xf2e5c1).fillTriangle(weaponX + (pose === "attack" ? 21 : -3), weaponY - 3, weaponX + (pose === "attack" ? 21 : 5), weaponY + 1, weaponX + (pose === "attack" ? 21 : -3), weaponY + 5);
+      graphics.fillStyle(0x879c54).fillRect(bodyX - 4, bodyY + 2, 5, 17).fillRect(bodyX - 1, bodyY + 16, 7, 3);
+      graphics.fillStyle(colors.accent).fillRect(bodyX + 3, 6 + bob, 12, 2);
     }
     if (classId === "barbarian") {
       const weaponX = bodyX + 23 + armReach;
-      graphics.fillStyle(0x8d6a48).fillRect(weaponX, bodyY - 4, 3, 24);
-      graphics.fillStyle(0xb9b6ac).fillRect(weaponX - 4, bodyY - 6, 10, 7).fillRect(weaponX + 4, bodyY - 3, 4, 4);
-      graphics.fillStyle(0xe7d4b4).fillRect(bodyX + 1, bodyY - 1, 5, 7);
+      graphics.fillStyle(0x6a452d).fillRect(weaponX, bodyY - 7, 4, 30);
+      graphics.fillStyle(0x222229).fillRect(weaponX - 7, bodyY - 10, 16, 11);
+      graphics.fillStyle(colors.metal).fillRect(weaponX - 6, bodyY - 9, 14, 8).fillTriangle(weaponX - 10, bodyY - 6, weaponX - 5, bodyY - 13, weaponX - 5, bodyY + 1);
+      graphics.fillStyle(0xe6ded0).fillRect(weaponX - 4, bodyY - 8, 9, 2);
+      graphics.fillStyle(0xd7c3a1).fillRect(bodyX - 2, bodyY - 2, 6, 8).fillRect(bodyX + 17, bodyY - 2, 6, 8);
+      graphics.fillStyle(0x7a382e).fillRect(bodyX + 4, 6 + bob, 14, 3).fillRect(bodyX + 8, 18 + bob, 10, 5);
     }
     if (classId === "sorceress") {
       const staffX = bodyX + 25 + Math.floor(armReach * 0.5);
-      graphics.fillStyle(0x79529a).fillRect(staffX, 6 + bob, 3, 29);
-      graphics.fillStyle(0xff4e2d, 0.75).fillCircle(staffX + 1, 5 + bob, 5);
-      graphics.fillStyle(0xffd57a).fillCircle(staffX + 1, 5 + bob, 2);
-      graphics.fillStyle(0x492e61).fillRect(bodyX - 1, bodyY + 5, 4, 17);
+      graphics.fillStyle(0x31203e).fillRect(staffX, 7 + bob, 4, 39);
+      graphics.fillStyle(0x9d68c7).fillRect(staffX + 1, 8 + bob, 2, 37);
+      graphics.fillStyle(0xff4e2d, 0.5).fillCircle(staffX + 2, 6 + bob, 7);
+      graphics.fillStyle(colors.magic, 0.85).fillCircle(staffX + 2, 6 + bob, 4);
+      graphics.fillStyle(0xfff1c0).fillRect(staffX + 1, 4 + bob, 2, 4);
+      graphics.fillStyle(0x3b2850).fillTriangle(bodyX - 3, bodyY + 5, bodyX + 4, bodyY + 25, bodyX + 8, bodyY + 6);
+      graphics.fillStyle(colors.metal).fillRect(bodyX + 8, 5 + bob, 4, 3).fillRect(bodyX + 10, 3 + bob, 2, 3);
     }
-    graphics.generateTexture(`player-${classId}-${pose}-${frame}`, 48, 42).destroy();
+    graphics.generateTexture(`player-${classId}-${pose}-${frame}`, 72, 58).destroy();
   }
 
   private createPlayerAnimations(): void {
@@ -478,19 +546,21 @@ class CraftyScene extends Phaser.Scene {
         frameRate,
         repeat,
       });
-      animation("idle", 2, 2.5, -1);
-      animation("walk", 4, 9, -1);
-      animation("attack", 4, 18, 0);
+      animation("idle", 4, 4, -1);
+      animation("walk", 8, 13, -1);
+      animation("attack", 6, 20, 0);
+      animation("cast", 6, 16, 0);
     });
   }
 
   private buildClassShowcase(): void {
+    const roster = this.add.image(480, 548, "class-roster").setOrigin(0.5, 1).setDisplaySize(590, 590).setDepth(12).setAlpha(0.95);
+    this.tweens.add({ targets: roster, y: roster.y - 4, duration: 1450, yoyo: true, repeat: -1, ease: "Sine.InOut" });
     (["amazon", "barbarian", "sorceress"] as CharacterClassId[]).forEach((classId, index) => {
       const x = 285 + index * 195;
-      this.add.ellipse(x, 520, 112, 34, 0x0b0c0f, 0.7);
-      const sprite = this.add.sprite(x, 468, `player-${classId}-idle-0`).setScale(3.4).setOrigin(0.5, 1);
-      sprite.play(`player-${classId}-idle`);
-      this.tweens.add({ targets: sprite, y: sprite.y - 4, duration: 1100 + index * 130, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+      this.add.ellipse(x, 535, 158, 38, 0x0b0c0f, 0.78);
+      const glow = this.add.image(x, 528, "player-aura").setScale(2.1).setTint(CLASS_COLORS[classId].magic).setAlpha(0.24).setDepth(10);
+      this.tweens.add({ targets: glow, alpha: 0.48, scaleX: 2.35, scaleY: 2.25, duration: 900 + index * 120, yoyo: true, repeat: -1, ease: "Sine.InOut" });
     });
   }
 
@@ -498,8 +568,10 @@ class CraftyScene extends Phaser.Scene {
     const x = this.options.mode === "arena" ? MAP_SIZE / 2 : 480;
     const y = this.options.mode === "arena" ? MAP_SIZE / 2 : 700;
     this.playerShadow = this.add.image(x, y + 15, "shadow").setScale(1.6).setDepth(8);
+    this.playerAura = this.add.image(x, y + 17, "player-aura").setScale(1.2).setTint(CLASS_COLORS[this.options.classId].magic).setAlpha(0.2).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
     this.player = this.add.sprite(x, y, `player-${this.options.classId}-idle-0`).setScale(PLAYER_SCALE).setDepth(10);
     this.player.play(`player-${this.options.classId}-idle`);
+    this.tweens.add({ targets: this.playerAura, alpha: 0.38, scaleX: 1.4, scaleY: 1.28, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.InOut" });
   }
 
   private playPlayerPose(pose: PlayerPose): void {
@@ -519,8 +591,8 @@ class CraftyScene extends Phaser.Scene {
         ? Phaser.Math.Clamp(this.options.arenaBalance?.attackSpeed ?? 1, 0.8, 2.5)
         : 1;
       this.player.anims.timeScale = animationSpeed;
-      this.player.play(`player-${this.options.classId}-attack`);
-      this.playerAnimationLock = skill.presentation.animation === "cast" ? 0.28 : 0.22 / animationSpeed;
+      this.player.play(`player-${this.options.classId}-${skill.presentation.animation}`);
+      this.playerAnimationLock = skill.presentation.animation === "cast" ? 0.38 : 0.3 / animationSpeed;
     } else {
       this.playerAnimationLock = 0.14;
       this.player.setScale(PLAYER_SCALE * 1.08, PLAYER_SCALE * 0.9);
@@ -529,8 +601,17 @@ class CraftyScene extends Phaser.Scene {
 
     if (skill.presentation.vfx === "ember-lance") {
       const facing = this.lastFacing;
-      for (let index = 0; index < 3; index += 1) {
-        this.emitVfxParticle(this.player.x + facing * 23, this.player.y - 5, 0xff7a35, facing * Phaser.Math.Between(30, 70), Phaser.Math.Between(-35, 15), 0.16, 0.75, 0.08);
+      const palette = CLASS_COLORS[this.options.classId];
+      const slash = this.add.image(this.player.x + facing * 28, this.player.y - 4, "vfx-slash")
+        .setScale(0.55, 0.78)
+        .setFlipX(facing < 0)
+        .setTint(palette.magic)
+        .setAlpha(0.92)
+        .setDepth(Math.round(this.player.y / 10) + 90)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: slash, alpha: 0, scaleX: 1.05, scaleY: 1.02, duration: 150, ease: "Cubic.easeOut", onComplete: () => slash.destroy() });
+      for (let index = 0; index < 5; index += 1) {
+        this.emitVfxParticle(this.player.x + facing * 25, this.player.y - 5, palette.magic, facing * Phaser.Math.Between(45, 105), Phaser.Math.Between(-42, 22), 0.2, 0.85, 0.05, index % 2 ? "vfx-spark" : "vfx-ember");
       }
     } else if (skill.presentation.vfx === "ember-nova") {
       const sigil = this.add.image(this.player.x, this.player.y + 5, "ember-sigil")
@@ -540,19 +621,23 @@ class CraftyScene extends Phaser.Scene {
         .setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({
         targets: sigil,
-        scale: 0.48,
+        scale: 0.58,
         alpha: 0,
         angle: 35,
-        duration: 360,
+        duration: 430,
         ease: "Cubic.easeOut",
         onComplete: () => sigil.destroy(),
       });
-      this.emitRadialVfx(this.player.x, this.player.y, 12, 0xff6834, 110, 0.32);
+      const core = this.add.image(this.player.x, this.player.y - 2, "vfx-ember")
+        .setScale(0.25).setTint(0xffe3a0).setAlpha(1).setDepth(Math.round(this.player.y / 10) + 95).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: core, scale: 4.4, alpha: 0, duration: 260, ease: "Expo.easeOut", onComplete: () => core.destroy() });
+      this.emitRadialVfx(this.player.x, this.player.y, 20, 0xff6834, 145, 0.4);
+      this.emitRadialVfx(this.player.x, this.player.y, 10, 0xffd06c, 82, 0.48);
     } else if (skill.presentation.vfx === "rift-step") {
       const fromX = startX ?? this.player.x;
       const fromY = startY ?? this.player.y;
-      for (let index = 0; index < 3; index += 1) {
-        const progress = index / 3;
+      for (let index = 0; index < 5; index += 1) {
+        const progress = index / 5;
         const afterimage = this.add.image(
           Phaser.Math.Linear(fromX, this.player.x, progress),
           Phaser.Math.Linear(fromY, this.player.y, progress),
@@ -560,12 +645,12 @@ class CraftyScene extends Phaser.Scene {
         ).setScale(PLAYER_SCALE)
           .setFlipX(this.player.flipX)
           .setTint(0x9f75d8)
-          .setAlpha(0.3 - index * 0.06)
+          .setAlpha(0.38 - index * 0.055)
           .setDepth(Math.round(Phaser.Math.Linear(fromY, this.player.y, progress) / 10) + 10);
-        this.tweens.add({ targets: afterimage, alpha: 0, scale: PLAYER_SCALE * 0.92, duration: 190 + index * 30, onComplete: () => afterimage.destroy() });
+        this.tweens.add({ targets: afterimage, alpha: 0, scale: PLAYER_SCALE * 0.88, duration: 220 + index * 25, onComplete: () => afterimage.destroy() });
       }
-      for (let index = 0; index < 8; index += 1) {
-        const progress = index / 7;
+      for (let index = 0; index < 14; index += 1) {
+        const progress = index / 13;
         this.emitVfxParticle(
           Phaser.Math.Linear(fromX, this.player.x, progress),
           Phaser.Math.Linear(fromY, this.player.y, progress) + Phaser.Math.Between(-8, 8),
@@ -573,8 +658,9 @@ class CraftyScene extends Phaser.Scene {
           Phaser.Math.Between(-20, 20),
           Phaser.Math.Between(-24, 8),
           0.24,
-          0.65,
+          index % 3 === 0 ? 1 : 0.65,
           0.04,
+          index % 3 === 0 ? "vfx-ember" : "vfx-spark",
         );
       }
     }
@@ -588,10 +674,10 @@ class CraftyScene extends Phaser.Scene {
     }
   }
 
-  private emitVfxParticle(x: number, y: number, tint: number, vx: number, vy: number, lifetime: number, startScale: number, endScale: number): void {
+  private emitVfxParticle(x: number, y: number, tint: number, vx: number, vy: number, lifetime: number, startScale: number, endScale: number, textureKey: "vfx-spark" | "vfx-ember" | "vfx-dust" = "vfx-spark"): void {
     const sprite = this.vfxPool?.get(x, y, "vfx-spark") as Phaser.GameObjects.Image | null;
     if (!sprite) return;
-    sprite.setTexture("vfx-spark")
+    sprite.setTexture(textureKey)
       .setActive(true)
       .setVisible(true)
       .setPosition(x, y)
@@ -600,7 +686,7 @@ class CraftyScene extends Phaser.Scene {
       .setScale(startScale)
       .setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2))
       .setDepth(Math.round(y / 10) + 85)
-      .setBlendMode(Phaser.BlendModes.ADD);
+      .setBlendMode(textureKey === "vfx-dust" ? Phaser.BlendModes.NORMAL : Phaser.BlendModes.ADD);
     this.vfxParticles.push({
       sprite,
       vx,

@@ -113,6 +113,11 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /DAMAGE_TYPE_DEFINITIONS\[damage\.type\]\.label/);
   assert.match(world, /damageNumberPool/);
   assert.match(world, /createPlayerAnimations/);
+  assert.match(world, /animation\("walk", 8, 13, -1\)/);
+  assert.match(world, /animation\("cast", 6, 16, 0\)/);
+  assert.match(world, /vfx-slash/);
+  assert.match(world, /vfx-dust/);
+  assert.match(world, /class-roster/);
   assert.match(world, /playPlayerPose/);
   assert.match(world, /updateVfxParticles/);
   assert.match(world, /ember-sigil/);
@@ -237,6 +242,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(gameDesign, /The four map axes/);
   await access(new URL("../public/og.png", import.meta.url));
   await access(new URL("../public/ember-sigil.png", import.meta.url));
+  await access(new URL("../public/class-roster-v2.png", import.meta.url));
   const itemIcons = (await readdir(new URL("../public/item-icons", import.meta.url))).filter((name) => name.endsWith(".png"));
   assert.equal(itemIcons.length, 20);
 });
