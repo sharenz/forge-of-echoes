@@ -684,7 +684,10 @@ class CraftyScene extends Phaser.Scene {
 
   private addStation(station: WorldStation, x: number, y: number, width: number, height: number, label: string): void {
     const zone = this.add.zone(x, y, width, height).setInteractive({ cursor: "pointer" });
-    zone.on(Phaser.Input.Events.POINTER_DOWN, () => this.options.onStation(station));
+    zone.on(Phaser.Input.Events.POINTER_DOWN, () => {
+      if (this.options.paused) return;
+      this.options.onStation(station);
+    });
     const text = this.add.text(x, y + height / 2 + 8, label, {
       fontFamily: "monospace",
       fontSize: "16px",
@@ -1241,7 +1244,10 @@ class CraftyScene extends Phaser.Scene {
     const interaction = this.add.zone(x, y - 30, 112, 150)
       .setDepth(depth + 6)
       .setInteractive({ cursor: "pointer" });
-    interaction.on(Phaser.Input.Events.POINTER_DOWN, () => this.activateReturnPortal());
+    interaction.on(Phaser.Input.Events.POINTER_DOWN, () => {
+      if (this.options.paused) return;
+      this.activateReturnPortal();
+    });
     this.returnPortal = { x, y, elapsed: 0, particleElapsed: 0, summary, glow, outerRing, innerRing, sigil, label, prompt, interaction };
     this.emitRadialVfx(x, y - 28, 24, 0xb77cff, 118, 0.65);
   }
@@ -1279,7 +1285,7 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private activateReturnPortal(): void {
-    if (!this.returnPortal || this.returnPortalUsed) return;
+    if (this.options.paused || !this.returnPortal || this.returnPortalUsed) return;
     this.returnPortalUsed = true;
     this.returnPortal.interaction.disableInteractive();
     this.options.onArenaComplete(this.returnPortal.summary);

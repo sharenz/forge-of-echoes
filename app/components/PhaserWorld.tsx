@@ -171,7 +171,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
   const xpPercent = characterProgress?.level === MAX_CHARACTER_LEVEL ? 100 : Math.min(100, ((characterProgress?.xp ?? 0) / xpRequired) * 100);
 
   return (
-    <main className={`pixel-shell mode-${mode}`}>
+    <main className={`pixel-shell mode-${mode} ${paused ? "world-input-paused" : ""}`}>
       <div ref={parentRef} className="phaser-stage" aria-label={`${mode} pixel-art game world`} />
       {loading && <div className="world-loader"><span /><strong>Opening the wild forge</strong><small>Preparing the pixel world</small></div>}
       {rendererError && <div className="world-loader world-error"><strong>The game renderer could not start</strong><small>Enable WebGL or Canvas support, then reload.</small></div>}

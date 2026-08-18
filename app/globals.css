@@ -450,6 +450,10 @@ body:has(.pixel-shell) { overflow: hidden; }
   background: #071011;
 }
 
+.pixel-shell.world-input-paused .phaser-stage {
+  pointer-events: none;
+}
+
 .phaser-stage canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
 
 .pixel-shell::after {
@@ -654,7 +658,7 @@ body:has(.pixel-shell) { overflow: hidden; }
 .portal-notice small { color: #aa8f7a; font-size: 8px; }
 
 /* World panels and PoE-like inventory */
-.world-panel-backdrop { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 92px 28px 28px; background: rgba(2,2,2,.58); backdrop-filter: blur(4px); animation: panel-fade .18s ease both; }
+.world-panel-backdrop { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 92px 28px 28px; background: rgba(2,2,2,.58); backdrop-filter: blur(4px); animation: panel-fade .18s ease both; pointer-events: auto; }
 .world-panel { width: min(1420px, 96vw); max-height: calc(100vh - 120px); overflow: auto; border: 1px solid #73533b; background: linear-gradient(145deg, rgba(28,23,18,.99), rgba(11,9,7,.99)); box-shadow: 0 34px 100px #000; animation: panel-rise .25s ease both; }
 .world-panel > header { height: 72px; padding: 0 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #4b392b; }
 .world-panel > header > div { display: flex; flex-direction: column; gap: 4px; }

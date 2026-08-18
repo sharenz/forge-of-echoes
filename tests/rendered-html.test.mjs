@@ -119,6 +119,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /damageNumberPool/);
   assert.match(world, /playerVisual/);
   assert.match(world, /playerAnimator/);
+  assert.match(shell, /paused=\{Boolean\(panel\)\}/);
+  assert.match(phaserWorld, /world-input-paused/);
+  assert.match(globalStyles, /\.pixel-shell\.world-input-paused \.phaser-stage/);
+  assert.match(world, /if \(this\.options\.paused\) return;/);
   assert.match(world, /load\.spritesheet/);
   assert.doesNotMatch(world, /updatePlayerVisual|playerAnimationLock|tweens\.killTweensOf\(this\.playerVisual/);
   assert.doesNotMatch(world, /createPlayerFrame|createPlayerAnimations/);
