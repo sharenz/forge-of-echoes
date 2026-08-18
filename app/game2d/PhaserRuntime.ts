@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { ACTIVE_SKILLS, BASIC_ATTACK, isArenaCleared, rollHitDamage, shouldSpawnNextWave, type ArenaSummary, type MapDrop, type RolledHitDamage } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
+import { CHARACTER_SPRITE_SHEETS, characterDirectionVector, resolveCharacterDirection, type CharacterDirection } from "../game/config/character-animations";
 import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
 import { MONSTER_PACK_RULES } from "../game/config/monster-packs";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
@@ -10,6 +11,7 @@ import { monsterPackModifierNames, resolveMonsterStats, rollMonsterPack } from "
 import { dropChances, rollEquipmentRarity } from "../game/loot";
 import { monsterExperienceReward } from "../game/progression";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
+import { CharacterAnimator } from "./CharacterAnimator";
 import { SkillAudio } from "./SkillAudio";
 import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
 
@@ -25,9 +27,6 @@ const DAMAGE_NUMBER_POOL_SIZE = 160;
 const VFX_PARTICLE_POOL_SIZE = 240;
 const HEALTH_BAR_WIDTH = 42;
 const HEALTH_BAR_HEIGHT = 5;
-const PLAYER_RENDERED_HEIGHT = 128;
-
-type PlayerPose = "idle" | "walk" | "attack" | "cast";
 
 interface EnemyState {
   sprite: Phaser.GameObjects.Image;
@@ -128,7 +127,8 @@ class CraftyScene extends Phaser.Scene {
   private readonly options: WorldRuntimeOptions;
   private readonly audio = new SkillAudio();
   private player: Phaser.GameObjects.Sprite | null = null;
-  private playerVisual: Phaser.GameObjects.Image | null = null;
+  private playerVisual: Phaser.GameObjects.Sprite | null = null;
+  private playerAnimator: CharacterAnimator | null = null;
   private playerShadow: Phaser.GameObjects.Image | null = null;
   private playerAura: Phaser.GameObjects.Image | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key> | null = null;
@@ -166,10 +166,6 @@ class CraftyScene extends Phaser.Scene {
   private arenaComplete = false;
   private returnPortal: ReturnPortalState | null = null;
   private returnPortalUsed = false;
-  private lastFacing = 1;
-  private playerAnimationLock = 0;
-  private playerPose: PlayerPose = "idle";
-  private playerPoseElapsed = 0;
   private footstepElapsed = 0;
 
   constructor(options: WorldRuntimeOptions) {
@@ -188,9 +184,14 @@ class CraftyScene extends Phaser.Scene {
     this.load.image("ashen-wilderness", "/pixel-ashen-wilderness.webp");
     this.load.image("ember-sigil", "/ember-sigil.png");
     this.load.image("class-roster", "/class-roster-v2.png");
-    this.load.image("player-amazon-rendered", "/player-amazon-v4.png");
-    this.load.image("player-barbarian-rendered", "/player-barbarian-v4.png");
     this.load.image("player-sorceress-rendered", "/player-sorceress-v4.png");
+    if (this.options.mode !== "class-select") {
+      const definition = CHARACTER_SPRITE_SHEETS[this.options.classId];
+      this.load.spritesheet(`player-${this.options.classId}-sheet`, definition.url, {
+        frameWidth: definition.frameWidth,
+        frameHeight: definition.frameHeight,
+      });
+    }
   }
 
   create(): void {
@@ -237,7 +238,10 @@ class CraftyScene extends Phaser.Scene {
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
       if (this.options.mode === "arena" && !this.options.paused) this.tryBasicAttack();
     });
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.audio.dispose());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.playerAnimator?.destroy();
+      this.audio.dispose();
+    });
   }
 
   update(_time: number, delta: number): void {
@@ -257,28 +261,37 @@ class CraftyScene extends Phaser.Scene {
   useSkill(skill: "nova" | "dash"): void {
     if (this.options.mode !== "arena" || !this.player || this.options.paused) return;
     if (skill === "nova" && this.novaCooldown <= 0 && this.focus >= this.resolvedNova.focusCost) {
+      const pointer = this.input.activePointer;
+      const direction = resolveCharacterDirection(pointer.worldX - this.player.x, pointer.worldY - this.player.y, this.playerAnimator?.currentDirection);
+      const started = this.beginSkillAction(this.resolvedNova, direction, () => {
+        for (let index = 0; index < this.resolvedNova.projectileCount; index += 1) {
+          const angle = (Math.PI * 2 * index) / this.resolvedNova.projectileCount;
+          this.spawnProjectile(Math.cos(angle), Math.sin(angle), this.resolvedNova);
+        }
+      });
+      if (!started) return;
       this.focus -= this.resolvedNova.focusCost;
       this.novaCooldown = this.resolvedNova.cooldown;
-      this.playSkillPresentation(this.resolvedNova);
-      for (let index = 0; index < this.resolvedNova.projectileCount; index += 1) {
-        const angle = (Math.PI * 2 * index) / this.resolvedNova.projectileCount;
-        this.spawnProjectile(Math.cos(angle), Math.sin(angle), this.resolvedNova);
-      }
     }
     if (skill === "dash" && this.riftCharges > 0 && this.focus >= this.resolvedDash.focusCost) {
-      this.focus -= this.resolvedDash.focusCost;
-      this.riftCharges -= 1;
-      if (this.riftRecharge <= 0) this.riftRecharge = this.resolvedDash.recharge;
       const pointer = this.input.activePointer;
       const dx = pointer.worldX - this.player.x;
       const dy = pointer.worldY - this.player.y;
       const length = Math.hypot(dx, dy) || 1;
       const startX = this.player.x;
       const startY = this.player.y;
-      this.player.x += (dx / length) * 105;
-      this.player.y += (dy / length) * 105;
-      this.clampPlayer();
-      this.playSkillPresentation(this.resolvedDash, startX, startY);
+      const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
+      const started = this.beginSkillAction(this.resolvedDash, direction, () => {
+        if (!this.player) return;
+        this.player.x += (dx / length) * 105;
+        this.player.y += (dy / length) * 105;
+        this.clampPlayer();
+        this.playerAnimator?.setWorldTransform(this.player.x, this.player.y, Math.round(this.player.y / 10) + 11);
+      }, startX, startY);
+      if (!started) return;
+      this.focus -= this.resolvedDash.focusCost;
+      this.riftCharges -= 1;
+      if (this.riftRecharge <= 0) this.riftRecharge = this.resolvedDash.recharge;
     }
   }
 
@@ -334,7 +347,6 @@ class CraftyScene extends Phaser.Scene {
     this.waveElapsedSeconds += delta;
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
     this.novaCooldown = Math.max(0, this.novaCooldown - delta);
-    this.playerAnimationLock = Math.max(0, this.playerAnimationLock - delta);
     if (this.riftCharges < this.resolvedDash.maxCharges) {
       this.riftRecharge = Math.max(0, this.riftRecharge - delta);
       if (this.riftRecharge <= 0) {
@@ -355,14 +367,12 @@ class CraftyScene extends Phaser.Scene {
       const speed = (this.options.arenaBalance?.moveSpeed ?? 5.6) * 34;
       this.player.x += (xInput / length) * speed * delta;
       this.player.y += (yInput / length) * speed * delta;
-      if (xInput) this.lastFacing = Math.sign(xInput);
-      this.player.setFlipX(this.lastFacing < 0);
       this.clampPlayer();
       this.footstepElapsed += delta;
       if (this.footstepElapsed >= 0.14) {
         this.footstepElapsed = 0;
         this.emitVfxParticle(
-          this.player.x - this.lastFacing * 4,
+          this.player.x - (xInput / length) * 4,
           this.player.y + 22,
           0xb69a73,
           Phaser.Math.Between(-18, 18),
@@ -376,14 +386,11 @@ class CraftyScene extends Phaser.Scene {
     } else {
       this.footstepElapsed = 0.12;
     }
-    if (this.playerAnimationLock <= 0) {
-      this.playPlayerPose(xInput || yInput ? "walk" : "idle");
-    }
-    this.updatePlayerVisual(delta);
+    this.playerAnimator?.setLocomotion(xInput / length, yInput / length, Boolean(xInput || yInput));
     this.playerShadow?.setPosition(this.player.x, this.player.y + 25);
     this.playerAura?.setPosition(this.player.x, this.player.y + 25);
     this.player.setDepth(Math.round(this.player.y / 10) + 11);
-    this.playerVisual?.setDepth(Math.round(this.player.y / 10) + 11);
+    this.playerAnimator?.setWorldTransform(this.player.x, this.player.y, Math.round(this.player.y / 10) + 11);
     this.playerShadow?.setDepth(Math.round(this.player.y / 10) + 9);
     this.playerAura?.setDepth(Math.round(this.player.y / 10) + 9);
 
@@ -492,77 +499,56 @@ class CraftyScene extends Phaser.Scene {
     this.playerShadow = this.add.image(x, y + 25, "shadow").setScale(2.1, 1.45).setDepth(8);
     this.playerAura = this.add.image(x, y + 25, "player-aura").setScale(1.45).setTint(CLASS_COLORS[this.options.classId].magic).setAlpha(0.18).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
     this.player = this.add.sprite(x, y, "shadow").setVisible(false).setDepth(10);
-    const textureKey = `player-${this.options.classId}-rendered`;
-    this.playerVisual = this.add.image(x, y + 28, textureKey).setOrigin(0.5, 1).setDepth(10);
-    this.playerVisual.setScale(PLAYER_RENDERED_HEIGHT / this.playerVisual.height);
+    const textureKey = `player-${this.options.classId}-sheet`;
+    this.playerVisual = this.add.sprite(x, y + 28, textureKey, 0).setDepth(10);
+    this.playerAnimator = new CharacterAnimator(this, this.playerVisual, this.options.classId);
     this.tweens.add({ targets: this.playerAura, alpha: 0.38, scaleX: 1.4, scaleY: 1.28, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.InOut" });
   }
 
-  private playPlayerPose(pose: PlayerPose): void {
-    if (this.playerPose === pose) return;
-    this.playerPose = pose;
-    this.playerPoseElapsed = 0;
+  private beginSkillAction(
+    skill: SkillDefinition,
+    direction: CharacterDirection,
+    onRelease: () => void,
+    startX?: number,
+    startY?: number,
+  ): boolean {
+    if (!this.playerAnimator) return false;
+    const playbackRate = skill.presentation.animation === "attack"
+      ? Phaser.Math.Clamp(this.options.arenaBalance?.attackSpeed ?? 1, 0.8, 2.5)
+      : skill.presentation.animation === "dash" ? 1.35 : 1;
+    return this.playerAnimator.playAction(skill.presentation.animation, direction, playbackRate, () => {
+      onRelease();
+      this.audio.play(skill.presentation.audio);
+      this.playSkillReleaseVfx(skill, direction, startX, startY);
+    });
   }
 
-  private updatePlayerVisual(delta: number): void {
+  private playSkillReleaseVfx(skill: SkillDefinition, direction: CharacterDirection, startX?: number, startY?: number): void {
     if (!this.player || !this.playerVisual) return;
-    this.playerPoseElapsed += delta;
-    const baseScale = PLAYER_RENDERED_HEIGHT / this.playerVisual.height;
-    const locked = this.playerAnimationLock > 0;
-    const walkPhase = this.playerPoseElapsed * 13;
-    const idlePhase = this.playerPoseElapsed * 2.7;
-    const bob = locked ? 0 : this.playerPose === "walk" ? -Math.abs(Math.sin(walkPhase)) * 4 : Math.sin(idlePhase) * 1.4;
-    this.playerVisual.setPosition(this.player.x, this.player.y + 28 + bob).setFlipX(this.lastFacing < 0);
-    if (!locked) {
-      const stride = this.playerPose === "walk" ? Math.sin(walkPhase) : Math.sin(idlePhase) * 0.15;
-      const breath = this.playerPose === "idle" ? Math.sin(idlePhase) * 0.008 : 0;
-      this.playerVisual.setScale(baseScale * (1 + breath + Math.abs(stride) * 0.012), baseScale * (1 - Math.abs(stride) * 0.018));
-      this.playerVisual.setAngle(stride * (this.playerPose === "walk" ? 1.7 : 0.35));
-      this.playerVisual.clearTint().setAlpha(1);
-    }
-  }
-
-  private playSkillPresentation(skill: SkillDefinition, startX?: number, startY?: number): void {
-    if (!this.player || !this.playerVisual) return;
-    this.audio.play(skill.presentation.audio);
-    const baseScale = PLAYER_RENDERED_HEIGHT / this.playerVisual.height;
-    this.tweens.killTweensOf(this.playerVisual);
-    if (skill.presentation.animation === "attack" || skill.presentation.animation === "cast") {
-      const animationSpeed = skill.presentation.animation === "attack"
-        ? Phaser.Math.Clamp(this.options.arenaBalance?.attackSpeed ?? 1, 0.8, 2.5)
-        : 1;
-      this.playPlayerPose(skill.presentation.animation);
-      this.playerAnimationLock = skill.presentation.animation === "cast" ? 0.38 : 0.3 / animationSpeed;
-      const cast = skill.presentation.animation === "cast";
-      this.tweens.add({
-        targets: this.playerVisual,
-        scaleX: baseScale * (cast ? 1.06 : 1.12),
-        scaleY: baseScale * (cast ? 1.08 : 0.92),
-        angle: this.lastFacing * (cast ? -3 : 6),
-        duration: (cast ? 170 : 90) / animationSpeed,
-        yoyo: true,
-        ease: "Cubic.easeOut",
-      });
-    } else {
-      this.playPlayerPose("walk");
-      this.playerAnimationLock = 0.14;
-      this.playerVisual.setScale(baseScale * 1.12, baseScale * 0.86);
-      this.tweens.add({ targets: this.playerVisual, scaleX: baseScale, scaleY: baseScale, angle: 0, duration: 140, ease: "Cubic.easeOut" });
-    }
-
+    const facing = characterDirectionVector(direction);
     if (skill.presentation.vfx === "ember-lance") {
-      const facing = this.lastFacing;
       const palette = CLASS_COLORS[this.options.classId];
-      const slash = this.add.image(this.player.x + facing * 28, this.player.y - 4, "vfx-slash")
+      const slash = this.add.image(this.player.x + facing.x * 28, this.player.y + facing.y * 18 - 4, "vfx-slash")
         .setScale(0.55, 0.78)
-        .setFlipX(facing < 0)
+        .setRotation(Math.atan2(facing.y, facing.x))
+        .setFlipX(direction === "west")
         .setTint(palette.magic)
         .setAlpha(0.92)
         .setDepth(Math.round(this.player.y / 10) + 90)
         .setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({ targets: slash, alpha: 0, scaleX: 1.05, scaleY: 1.02, duration: 150, ease: "Cubic.easeOut", onComplete: () => slash.destroy() });
       for (let index = 0; index < 5; index += 1) {
-        this.emitVfxParticle(this.player.x + facing * 25, this.player.y - 5, palette.magic, facing * Phaser.Math.Between(45, 105), Phaser.Math.Between(-42, 22), 0.2, 0.85, 0.05, index % 2 ? "vfx-spark" : "vfx-ember");
+        this.emitVfxParticle(
+          this.player.x + facing.x * 25,
+          this.player.y + facing.y * 18 - 5,
+          palette.magic,
+          facing.x * Phaser.Math.Between(45, 105) + Phaser.Math.Between(-18, 18),
+          facing.y * Phaser.Math.Between(45, 105) + Phaser.Math.Between(-28, 18),
+          0.2,
+          0.85,
+          0.05,
+          index % 2 ? "vfx-spark" : "vfx-ember",
+        );
       }
     } else if (skill.presentation.vfx === "ember-nova") {
       const sigil = this.add.image(this.player.x, this.player.y + 5, "ember-sigil")
@@ -593,12 +579,13 @@ class CraftyScene extends Phaser.Scene {
           Phaser.Math.Linear(fromX, this.player.x, progress),
           Phaser.Math.Linear(fromY, this.player.y, progress),
           this.playerVisual.texture.key,
-        ).setScale(baseScale)
+          this.playerVisual.frame.name,
+        ).setScale(CHARACTER_SPRITE_SHEETS[this.options.classId].renderScale)
           .setFlipX(this.playerVisual.flipX)
           .setTint(0x9f75d8)
           .setAlpha(0.38 - index * 0.055)
           .setDepth(Math.round(Phaser.Math.Linear(fromY, this.player.y, progress) / 10) + 10);
-        this.tweens.add({ targets: afterimage, alpha: 0, scale: baseScale * 0.88, duration: 220 + index * 25, onComplete: () => afterimage.destroy() });
+        this.tweens.add({ targets: afterimage, alpha: 0, duration: 220 + index * 25, onComplete: () => afterimage.destroy() });
       }
       for (let index = 0; index < 14; index += 1) {
         const progress = index / 13;
@@ -1025,12 +1012,11 @@ class CraftyScene extends Phaser.Scene {
     const dx = pointer.worldX - this.player.x;
     const dy = pointer.worldY - this.player.y;
     const length = Math.hypot(dx, dy) || 1;
-    if (Math.abs(dx) > 2) {
-      this.lastFacing = Math.sign(dx);
-      this.player.setFlipX(this.lastFacing < 0);
-    }
-    this.playSkillPresentation(this.resolvedBasic);
-    this.spawnProjectile(dx / length, dy / length, this.resolvedBasic);
+    const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
+    const started = this.beginSkillAction(this.resolvedBasic, direction, () => {
+      this.spawnProjectile(dx / length, dy / length, this.resolvedBasic);
+    });
+    if (!started) return;
     this.attackCooldown = 1 / Math.max(0.01, this.options.arenaBalance?.attackSpeed ?? 1);
   }
 

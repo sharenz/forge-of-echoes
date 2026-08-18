@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, globalStyles, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemIcon, itemTooltip, world, skillAudio, domain, itemContainer, itemVisuals, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, globalStyles, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemIcon, itemTooltip, world, characterAnimator, skillAudio, domain, itemContainer, itemVisuals, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, characterAnimationConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -43,6 +43,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/components/ItemIcon.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ItemTooltip.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game2d/CharacterAnimator.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/SkillAudio.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/item-container.ts", import.meta.url), "utf8"),
@@ -59,6 +60,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game/config/audio.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/equipment-slots.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/arena.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/character-animations.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/maps.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/monster-packs.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/loot.ts", import.meta.url), "utf8"),
@@ -116,16 +118,21 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /DAMAGE_TYPE_DEFINITIONS\[damage\.type\]\.label/);
   assert.match(world, /damageNumberPool/);
   assert.match(world, /playerVisual/);
-  assert.match(world, /updatePlayerVisual/);
-  assert.match(world, /player-amazon-rendered/);
+  assert.match(world, /playerAnimator/);
+  assert.match(world, /load\.spritesheet/);
+  assert.doesNotMatch(world, /updatePlayerVisual|playerAnimationLock|tweens\.killTweensOf\(this\.playerVisual/);
   assert.doesNotMatch(world, /createPlayerFrame|createPlayerAnimations/);
   assert.match(world, /vfx-slash/);
   assert.match(world, /vfx-dust/);
   assert.match(world, /class-roster/);
-  assert.match(world, /playPlayerPose/);
+  assert.match(characterAnimator, /ANIMATION_UPDATE/);
+  assert.match(characterAnimator, /releaseTextureFrame/);
+  assert.match(characterAnimator, /setWorldTransform/);
+  assert.match(characterAnimationConfig, /releaseFrame: 2/);
+  assert.match(characterAnimationConfig, /player-amazon-sheet-v1\.png/);
   assert.match(world, /updateVfxParticles/);
   assert.match(world, /ember-sigil/);
-  assert.match(world, /playSkillPresentation/);
+  assert.match(world, /beginSkillAction/);
   assert.match(skillAudio, /class SkillAudio/);
   assert.match(audioConfig, /"ember-nova"/);
   assert.match(arenaConfig, /waveSpawnIntervalSeconds: 30/);
@@ -250,6 +257,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   await access(new URL("../public/player-amazon-v4.png", import.meta.url));
   await access(new URL("../public/player-barbarian-v4.png", import.meta.url));
   await access(new URL("../public/player-sorceress-v4.png", import.meta.url));
+  await access(new URL("../public/player-amazon-sheet-v1.png", import.meta.url));
+  await access(new URL("../public/player-barbarian-sheet-v1.png", import.meta.url));
+  await access(new URL("../public/player-sorceress-sheet-v1.png", import.meta.url));
   const itemIcons = (await readdir(new URL("../public/item-icons", import.meta.url))).filter((name) => name.endsWith(".png"));
   assert.equal(itemIcons.length, 20);
 });

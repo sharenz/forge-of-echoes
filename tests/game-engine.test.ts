@@ -3,6 +3,7 @@ import test from "node:test";
 import { AFFIX_DEFINITIONS_BY_ID } from "../app/game/config/affixes";
 import { ARENA_RULES } from "../app/game/config/arena";
 import { SKILL_AUDIO } from "../app/game/config/audio";
+import { CHARACTER_ANIMATION_CLIPS, characterDirectionVector, resolveCharacterDirection } from "../app/game/config/character-animations";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
 import { MAP_MERCHANT } from "../app/game/config/merchants";
 import { MAP_BASES, MAP_MODIFIERS } from "../app/game/config/maps";
@@ -543,6 +544,16 @@ test("every skill declares reusable animation, VFX, and audio presentation", () 
     assert.ok(skill.presentation.vfx);
     assert.ok(SKILL_AUDIO[skill.presentation.audio].tones.length >= 2);
   }
+});
+
+test("character animation directions and release frames are config-driven", () => {
+  assert.equal(resolveCharacterDirection(1, 0), "east");
+  assert.equal(resolveCharacterDirection(-1, 0), "west");
+  assert.equal(resolveCharacterDirection(0.2, -1), "north");
+  assert.equal(resolveCharacterDirection(0.2, 1), "south");
+  assert.deepEqual(characterDirectionVector("north"), { x: 0, y: -1 });
+  assert.equal(CHARACTER_ANIMATION_CLIPS.south.attack.releaseFrame, 2);
+  assert.equal(CHARACTER_ANIMATION_CLIPS.west.cast.row, CHARACTER_ANIMATION_CLIPS.east.cast.row);
 });
 
 test("every inventory base declares one stable icon asset", () => {
