@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, phaserWorld, inventoryPanel, itemTooltip, world, combat, domain, content, profile, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, phaserWorld, inventoryPanel, itemTooltip, world, domain, content, profile, stats, itemConfig, affixConfig, monsterConfig, skillConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
@@ -37,10 +37,14 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/components/InventoryPanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ItemTooltip.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/game/combat.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/stats.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/item-bases.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/affixes.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/monsters.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/skills.ts", import.meta.url), "utf8"),
     readFile(new URL("../GAME_DESIGN.md", import.meta.url), "utf8"),
   ]);
 
@@ -64,7 +68,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /paused=\{inventoryOpen\}/);
   assert.match(phaserWorld, /updateArenaBalance/);
   assert.match(phaserWorld, /riftRecharge\.toFixed\(1\)/);
-  assert.match(combat, /maxCharges: 3/);
+  assert.match(skillConfig, /maxCharges: 3/);
   assert.match(world, /riftCharges \+= 1/);
   assert.match(inventoryPanel, /dropIntoSlot/);
   assert.match(inventoryPanel, /onUnequipItem/);
@@ -72,15 +76,20 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(itemTooltip, /tooltip-affixes/);
   assert.match(inventoryPanel, /Collected this map/);
   assert.match(phaserWorld, /world-character-stats/);
-  assert.match(profile, /evadeChance/);
+  assert.match(stats, /evadeChance/);
   assert.match(world, /evadeMultiplier/);
   assert.match(world, /armorMultiplier/);
   assert.doesNotMatch(content, /BARGAINS|Bargain/);
   assert.doesNotMatch(domain, /Bargain/);
   assert.match(domain, /interface MapItem/);
   assert.match(domain, /interface EquipmentItem/);
-  assert.match(profile, /level < 99/);
+  assert.match(profile, /level < MAX_CHARACTER_LEVEL/);
   assert.match(profile, /localStorage/);
+  assert.match(stats, /sum\(increased\)|mode === "increased"/);
+  assert.match(stats, /moreMultiplier/);
+  assert.match(itemConfig, /perItemLevel/);
+  assert.match(affixConfig, /requiredItemLevel/);
+  assert.match(monsterConfig, /contactDamagePerWave/);
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);
   await access(new URL("../public/og.png", import.meta.url));

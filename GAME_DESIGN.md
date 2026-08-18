@@ -77,9 +77,9 @@ Characters can never lose a completed level. If a high-level death penalty is us
 
 Core attributes:
 
-- **Might:** physical power, armor requirements, a small amount of life.
-- **Finesse:** attack speed, accuracy, evasion requirements.
-- **Insight:** spell power, resource capacity, ward requirements.
+- **Strength:** physical power, armor requirements, and maximum life.
+- **Dexterity:** attack speed, accuracy, evasion, and movement.
+- **Intelligence:** spell power, Focus capacity, and ward requirements.
 
 Attributes should mostly unlock equipment and support build identity. They should not be universally optimal damage multipliers.
 
@@ -219,6 +219,26 @@ Design rules:
 - Powerful affixes may carry opportunity costs or belong to exclusive groups.
 - Top tiers should be rare, but lower tiers must remain useful while leveling.
 - The crafting UI must always show possible outcomes and exact odds when knowable.
+
+### Numerical engine contract
+
+All character, item, passive, skill, buff, and monster effects use the same typed modifier model. No feature may introduce its own hidden percentage arithmetic.
+
+For any stat, resolution is always:
+
+`(base + sum(flat)) × (1 + sum(increased) / 100) × product(1 + each more / 100)`
+
+- `flat` modifiers add a raw number before scaling.
+- all `increased` modifiers are additive with one another and form one multiplier.
+- every `more` modifier is a separate multiplier; it is reserved for scarcer, build-defining effects.
+- attributes resolve first, then their conversions establish the base values of derived stats.
+- item base stats scale from the item's immutable base definition and item level.
+- every affix tier defines its required item level, selection weight, numeric range, stat, and modifier mode.
+- item level only unlocks the affix tiers that may roll; it does not guarantee the highest available tier.
+- rerolling numeric values keeps the affix definition and tier fixed and rolls only inside that tier's original range.
+- modifier records retain a source identifier so the character sheet can eventually explain every result.
+
+Game content is data, not simulation logic. Definitions are separated by domain under `app/game/config`: classes, item bases, affixes, monsters, skills, maps, and progression. Runtime entities reference stable definition IDs and store only their rolled state. Calculation, generation, crafting, persistence, and rendering consume those definitions through dedicated engine modules.
 
 ### Loot philosophy
 

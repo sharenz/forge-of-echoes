@@ -669,6 +669,8 @@ body:has(.pixel-shell) { overflow: hidden; }
 .item-tooltip > strong { color: #eee0c7; font: 20px Georgia, serif; }
 .item-tooltip > em { color: #8e8173; font-size: 11px; font-style: normal; text-transform: capitalize; }
 .item-tooltip .tooltip-implicit { padding: 8px 0; border-top: 1px solid #41362d; border-bottom: 1px solid #41362d; color: #aebfe8; font-size: 12px; }
+.tooltip-base-stat { padding: 7px 0 0; color: #d9c9ad; font-size: 12px; }
+.item-base-stat { color: #d9c9ad; }
 .tooltip-affixes { display: flex; flex-direction: column; gap: 5px; }
 .tooltip-affixes > div { display: grid; grid-template-columns: 30px 1fr; gap: 8px; font-size: 12px; }
 .tooltip-affixes i { color: #d1a55b; font-style: normal; }

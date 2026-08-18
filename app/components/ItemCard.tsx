@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { EquipmentItem } from "../game/domain";
 import { itemDisplayName } from "../game/items";
+import { formatModifier } from "../game/stats";
 import { ItemTooltip } from "./ItemTooltip";
 
 interface ItemCardProps {
@@ -35,9 +36,12 @@ export function ItemCard({ item, compact = false, selected = false, onClick, dra
         <span className="item-card-kicker">{item.rarity} · item level {item.itemLevel}</span>
         <strong>{itemDisplayName(item)}</strong>
         <span className="item-implicit">{item.implicit}</span>
+        {!compact && item.baseStats.map((modifier) => (
+          <span className="item-affix item-base-stat" key={`${modifier.stat}-${modifier.mode}`}>Base: {formatModifier(modifier)}</span>
+        ))}
         {!compact && item.affixes.map((affix) => (
           <span className="item-affix" key={affix.id}>
-            <em>T{affix.tier}</em> +{affix.value}{affix.unit === "percent" ? "%" : ""} {affix.tag}
+            <em>T{affix.tier}</em> {affix.rolls.map(formatModifier).join(" · ")}
           </span>
         ))}
         {!compact && <span className="item-stability">Stability {item.stability}/{item.maxStability}</span>}

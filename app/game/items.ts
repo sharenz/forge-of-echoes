@@ -2,7 +2,7 @@ import { AFFIX_DEFINITIONS, AFFIX_DEFINITIONS_BY_ID } from "./config/affixes";
 import { ITEM_BASES, ITEM_BASES_BY_ID, STARTER_BASES, type ItemBaseId } from "./config/item-bases";
 import type { AffixDefinition, AffixTierDefinition, ItemBaseDefinition, ScaledModifierDefinition } from "./config/schema";
 import type { Affix, AffixTag, CharacterClassId, EquipmentItem, EquipmentSlot, Rarity, StatModifier } from "./domain";
-import { choose, createId, randomInt } from "./random";
+import { choose, createId } from "./random";
 
 export type RandomSource = () => number;
 
@@ -60,7 +60,7 @@ function rollAffix(definition: AffixDefinition, itemLevel: number, random: Rando
 }
 
 function affixPool(slot: EquipmentSlot, excludedGroups: ReadonlySet<string>, tag?: AffixTag): readonly AffixDefinition[] {
-  return AFFIX_DEFINITIONS.filter((definition) => definition.slots.includes(slot) && !excludedGroups.has(definition.group) && (!tag || definition.tag === tag));
+  return AFFIX_DEFINITIONS.filter((definition) => (definition.slots as readonly EquipmentSlot[]).includes(slot) && !excludedGroups.has(definition.group) && (!tag || definition.tag === tag));
 }
 
 export function createAffixForItem(item: Pick<EquipmentItem, "slot" | "itemLevel" | "affixes">, tag?: AffixTag, random: RandomSource = Math.random): Affix | null {

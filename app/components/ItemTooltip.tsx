@@ -3,6 +3,7 @@
 import { createPortal } from "react-dom";
 import type { EquipmentItem } from "../game/domain";
 import { itemDisplayName } from "../game/items";
+import { formatModifier } from "../game/stats";
 
 interface ItemTooltipProps {
   item: EquipmentItem;
@@ -21,10 +22,11 @@ export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
       <span>{item.rarity} · item level {item.itemLevel}</span>
       <strong>{itemDisplayName(item)}</strong>
       <em>{item.baseName} · {item.slot}</em>
+      {item.baseStats.map((modifier) => <div className="tooltip-base-stat" key={`${modifier.stat}-${modifier.mode}`}>Base: {formatModifier(modifier)}</div>)}
       <div className="tooltip-implicit">{item.implicit}</div>
       <div className="tooltip-affixes">
         {item.affixes.length > 0
-          ? item.affixes.map((affix) => <div key={affix.id}><i>T{affix.tier}</i><b>+{affix.value}{affix.unit === "percent" ? "%" : ""} {affix.tag}</b></div>)
+          ? item.affixes.map((affix) => <div key={affix.id}><i>T{affix.tier}</i><b>{affix.rolls.map(formatModifier).join(" · ")}</b></div>)
           : <small>No explicit modifiers</small>}
       </div>
       <footer><span>Stability</span><strong>{item.stability}/{item.maxStability}</strong></footer>

@@ -1,19 +1,6 @@
-import { MAP_MODIFIERS, MAP_RARITY_LIMITS } from "./content";
+import { MAP_BASES, MAP_MODIFIERS, MAP_RARITY_LIMITS } from "./config/maps";
 import type { MapItem, MapModifierId, Rarity } from "./domain";
 import { choose, createId, shuffle } from "./random";
-
-const MAP_BASES = [
-  {
-    id: "ashen-crucible",
-    name: "Ashen Crucible",
-    implicit: "Fire Essences are 20% more common",
-  },
-  {
-    id: "iron-coliseum",
-    name: "Iron Coliseum",
-    implicit: "Equipment drops with +1 maximum Stability",
-  },
-] as const;
 
 export function createMap(tier = 1): MapItem {
   const base = choose(MAP_BASES);
@@ -61,4 +48,3 @@ export function mapRewardBonus(map: MapItem): number {
 export function mapDanger(map: MapItem): number {
   return map.modifiers.reduce((sum, id) => sum + MAP_MODIFIERS[id].danger, map.tier * 3);
 }
-

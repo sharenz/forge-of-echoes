@@ -1,4 +1,5 @@
-import { CHARACTER_CLASSES, XP_BY_LEVEL } from "./content";
+import { CHARACTER_CLASSES } from "./config/classes";
+import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "./config/progression";
 import type {
   CharacterClassId,
   CharacterStats,
@@ -7,10 +8,12 @@ import type {
   PlayerProfile,
   RunResult,
 } from "./domain";
-import { generateStarterWeapon } from "./items";
+import { generateStarterWeapon, normalizeEquipmentItem } from "./items";
 import { createMap } from "./maps";
+import { calculateCharacterStats } from "./stats";
 
-const STORAGE_KEY = "crafty.profile.v2";
+const STORAGE_KEY = "crafty.profile.v3";
+const V2_STORAGE_KEY = "crafty.profile.v2";
 const LEGACY_STORAGE_KEY = "crafty.profile.v1";
 
 interface LegacyProfile extends Omit<PlayerProfile, "version" | "character" | "stash" | "openedMap"> {
@@ -18,9 +21,11 @@ interface LegacyProfile extends Omit<PlayerProfile, "version" | "character" | "s
   character: Omit<PlayerProfile["character"], "classId" | "created">;
 }
 
+type V2Profile = Omit<PlayerProfile, "version"> & { version: 2 };
+
 export function createInitialProfile(): PlayerProfile {
   return {
-    version: 2,
+    version: 3,
     character: {
       name: "",
       archetype: "Unchosen",
@@ -53,16 +58,26 @@ function migrateLegacy(profile: LegacyProfile): PlayerProfile {
   const recoveredEquipment = [
     ...Object.values(profile.equipped).filter(Boolean) as EquipmentItem[],
     ...profile.inventory,
-  ];
+  ].map(normalizeEquipmentItem);
   return {
     ...profile,
-    version: 2,
+    version: 3,
     character: { ...profile.character, classId: null, created: false },
     inventory: [],
     stash: recoveredEquipment,
     equipped: {},
     openedMap: null,
   };
+}
+
+function normalizeProfileEquipment(profile: Omit<PlayerProfile, "version"> & { version: number }): PlayerProfile {
+  return {
+    ...profile,
+    version: 3,
+    inventory: profile.inventory.map(normalizeEquipmentItem),
+    stash: profile.stash.map(normalizeEquipmentItem),
+    equipped: Object.fromEntries(Object.entries(profile.equipped).map(([slot, item]) => [slot, item ? normalizeEquipmentItem(item) : item])),
+  } as PlayerProfile;
 }
 
 export function createCharacter(profile: PlayerProfile, name: string, classId: CharacterClassId): PlayerProfile {
@@ -97,8 +112,10 @@ export function loadProfile(): PlayerProfile {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as PlayerProfile;
-      if (parsed.version === 2) return parsed;
+      if (parsed.version === 3) return normalizeProfileEquipment(parsed);
     }
+    const v2 = window.localStorage.getItem(V2_STORAGE_KEY);
+    if (v2) return normalizeProfileEquipment(JSON.parse(v2) as V2Profile);
     const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacy) return migrateLegacy(JSON.parse(legacy) as LegacyProfile);
     return createInitialProfile();
@@ -124,12 +141,12 @@ export function applyRunResult(profile: PlayerProfile, result: RunResult): Playe
   let level = profile.character.level;
   let xp = profile.character.xp + result.loot.xp;
   let gainedLevels = 0;
-  while (level < 99 && xp >= XP_BY_LEVEL(level)) {
+  while (level < MAX_CHARACTER_LEVEL && xp >= XP_BY_LEVEL(level)) {
     xp -= XP_BY_LEVEL(level);
     level += 1;
     gainedLevels += 1;
   }
-  if (level === 99) xp = 0;
+  if (level === MAX_CHARACTER_LEVEL) xp = 0;
 
   const maps = [...profile.maps];
   if (result.completed) maps.push(createMap(Math.min(16, Math.max(1, Math.ceil(level / 6)))));
@@ -154,19 +171,5 @@ export function applyRunResult(profile: PlayerProfile, result: RunResult): Playe
 }
 
 export function deriveStats(profile: PlayerProfile): CharacterStats {
-  const equipped = Object.values(profile.equipped).filter(Boolean) as EquipmentItem[];
-  const level = profile.character.level;
-  const classDefinition = profile.character.classId ? CHARACTER_CLASSES[profile.character.classId] : null;
-  const sumTag = (tag: string) =>
-    equipped.flatMap((item) => item.affixes).filter((affix) => affix.tag === tag).reduce((sum, affix) => sum + affix.value, 0);
-
-  return {
-    maxLife: (110 + level * 8 + sumTag("life")) * (classDefinition?.lifeMultiplier ?? 1),
-    maxFocus: profile.character.classId === "sorceress" ? 120 : 100,
-    moveSpeed: 250 * (classDefinition?.speedMultiplier ?? 1) * (1 + sumTag("speed") / 100),
-    attackDamage: (15 + level * 1.8 + sumTag("damage") + sumTag("fire") * 0.65) * (classDefinition?.damageMultiplier ?? 1),
-    attackSpeed: 1 + sumTag("speed") / 120,
-    armor: (10 + level * 2 + sumTag("defense")) * (classDefinition?.armorMultiplier ?? 1),
-    evadeChance: Math.min(60, 4 + level * 0.16 + sumTag("speed") * 0.24 + (profile.character.classId === "amazon" ? 6 : profile.character.classId === "sorceress" ? 2 : 0)),
-  };
+  return calculateCharacterStats(profile).stats;
 }

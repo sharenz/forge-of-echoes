@@ -129,6 +129,9 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
         <aside className="world-character-stats" aria-label="Character statistics">
           <header><span>Character</span><strong>Combat Stats</strong></header>
           <dl>
+            <div><dt>Strength</dt><dd>{characterStats.strength}</dd></div>
+            <div><dt>Dexterity</dt><dd>{characterStats.dexterity}</dd></div>
+            <div><dt>Intelligence</dt><dd>{characterStats.intelligence}</dd></div>
             <div><dt>Health</dt><dd>{mode === "arena" && hud ? `${Math.ceil(hud.life)} / ` : ""}{Math.round(characterStats.maxLife)}</dd></div>
             <div><dt>Focus <small>Mana</small></dt><dd>{mode === "arena" && hud ? `${Math.floor(hud.focus)} / ` : ""}{Math.round(characterStats.maxFocus)}</dd></div>
             <div><dt>Damage</dt><dd>{characterStats.attackDamage.toFixed(1)}</dd></div>

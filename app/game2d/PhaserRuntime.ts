@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { ACTIVE_SKILLS, type MapDrop } from "../game/combat";
+import { MONSTER_ARCHETYPES } from "../game/config/monsters";
 import type { CharacterClassId } from "../game/domain";
 import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
 
@@ -10,6 +11,7 @@ const SPATIAL_COLUMNS = Math.ceil(MAP_SIZE / SPATIAL_CELL_SIZE) + 2;
 const FIXED_STEP = 1000 / 60;
 const MAX_FRAME_DELTA = 50;
 const PROJECTILE_POOL_SIZE = 160;
+const ARENA_MONSTER = MONSTER_ARCHETYPES.ashling;
 
 interface EnemyState {
   sprite: Phaser.GameObjects.Image;
@@ -389,8 +391,8 @@ class CraftyScene extends Phaser.Scene {
           homeY: y,
           phase: Phaser.Math.FloatBetween(0, Math.PI * 2),
           aggro: false,
-          life: (1 + wave * 0.28) * (balance?.enemyHealthMultiplier ?? 1),
-          speed: Phaser.Math.FloatBetween(39, 58) * (balance?.enemySpeedMultiplier ?? 1) + wave * 1.2,
+          life: (ARENA_MONSTER.baseLife + wave * ARENA_MONSTER.lifePerWave) * (balance?.enemyHealthMultiplier ?? 1),
+          speed: Phaser.Math.FloatBetween(ARENA_MONSTER.speed.min, ARENA_MONSTER.speed.max) * (balance?.enemySpeedMultiplier ?? 1) + wave * ARENA_MONSTER.speed.perWave,
         });
       }
     });
@@ -403,7 +405,7 @@ class CraftyScene extends Phaser.Scene {
       const dx = this.player.x - enemy.x;
       const dy = this.player.y - enemy.y;
       const distance = Math.hypot(dx, dy) || 1;
-      if (distance < 720) enemy.aggro = true;
+      if (distance < ARENA_MONSTER.aggroRange) enemy.aggro = true;
       if (enemy.aggro) {
         enemy.x += (dx / distance) * enemy.speed * delta;
         enemy.y += (dy / distance) * enemy.speed * delta;
@@ -425,7 +427,7 @@ class CraftyScene extends Phaser.Scene {
         const evadeMultiplier = 1 - (this.options.arenaBalance?.evadeChance ?? 0) / 100;
         const armor = this.options.arenaBalance?.armor ?? 0;
         const armorMultiplier = 100 / (100 + armor);
-        this.life -= delta * (5 + this.wave * 0.8) * (this.options.arenaBalance?.enemyDamageMultiplier ?? 1) * evadeMultiplier * armorMultiplier;
+        this.life -= delta * (ARENA_MONSTER.contactDamage + this.wave * ARENA_MONSTER.contactDamagePerWave) * (this.options.arenaBalance?.enemyDamageMultiplier ?? 1) * evadeMultiplier * armorMultiplier;
       }
     }
     if (this.life <= 0) {
