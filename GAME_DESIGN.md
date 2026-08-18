@@ -388,11 +388,11 @@ Examples:
 | Map modifier | Encounter effect | Reward effect |
 | --- | --- | --- |
 | **Teeming** | Waves contain 30% more monsters | Increased material yield and base-item drops |
-| **Commanded** | Each wave contains an additional elite | Increased Catalyst and rare-item chance |
-| **Restless** | Waves begin sooner and overlap if cleared slowly | Increased quantity and overrun rewards |
-| **Volcanic** | Periodic eruptions deny parts of the arena | More fire Essences and fire-tagged bases |
-| **Vampiric** | Enemies recover life near wounded allies | Increased life-tagged crafting materials |
-| **Twin Crowned** | The final wave contains two linked bosses | Boss rewards are duplicated |
+| **Commanded** | Increased monster rarity produces more magic and rare packs | Increased item rarity |
+| **Restless** | Monsters have increased movement speed | Increased item quantity |
+| **Volcanic** | Monsters deal increased damage | Increased item quantity |
+| **Vampiric** | Monsters have increased maximum Life | Increased item quantity |
+| **Twin Crowned** | Monsters have substantially more maximum Life | Substantially increased item rarity |
 | **Unstable Forge** | Between-wave crafting can add a scar | Items found here have increased starting Stability |
 | **Exhausting** | Focus recovery is reduced | Increased skill and resource-related rewards |
 
@@ -403,6 +403,17 @@ Some modifiers can be build-bricking, but they must be uncommon, clearly marked,
 ### Map quality
 
 Map quality represents how thoroughly its location has been charted. Quality increases the map's base reward yield and slightly improves the chance of finding additional map items.
+
+### The four map axes
+
+Every map exposes four independent, resolved numbers:
+
+- **Item quantity** changes how often equipment and material drops are created. It never changes an item's rarity by itself.
+- **Item rarity** changes the normal/magic/rare weighting after an equipment drop has already been selected. It never creates an additional drop.
+- **Monster amount** changes the number of monsters assigned to waves and packs.
+- **Monster rarity** changes the probability that a pack is normal, magic, or rare.
+
+All four start from configured bases and accept flat, increased, and more modifiers from map affixes, map tier, map quality, waves, pack rarity, and future league mechanics. The map device shows the map-level contribution; wave-specific increases are applied after entry and are retained in the arena breakdown.
 
 Quality should be cheap to add to normal maps and progressively more expensive on magic or rare maps. This gives players a reason to prepare a promising map base before adding rarity and affixes.
 
@@ -504,6 +515,10 @@ Build enemy families from readable combat roles:
 Each family should combine three or four roles with a recognizable theme. Encounter difficulty comes from compositions, not random on-death effects everywhere.
 
 ### Elites
+
+Packs roll their rarity once. A magic pack promotes every member and gives all members the same rolled magic modifier. A rare pack promotes exactly one leader, gives that leader multiple stronger rare modifiers, and leaves its companions normal. Higher map tiers, later waves, and explicit monster-rarity map modifiers increase both magic- and rare-pack probability.
+
+Pack composition is rolled independently from pack rarity. Each pack selects one to three weighted monster archetypes from those eligible for its tier and wave, so mixed packs are common without requiring every role to appear every time. Archetype stats—Life, speed, damage, armor, and evade—are configured per monster and pass through the canonical resolver together with map, wave, and pack modifiers.
 
 Elite modifiers must be visible and mechanically legible. Prefer modifiers that change behavior:
 

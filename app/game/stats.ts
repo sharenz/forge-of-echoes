@@ -168,8 +168,10 @@ export function formatModifier(modifier: Pick<StatModifier<ModifierStatKey>, "st
     strength: "Strength", dexterity: "Dexterity", intelligence: "Intelligence",
     maxLife: "maximum Life", maxFocus: "maximum Focus", moveSpeed: "movement speed",
     attackDamage: "attack damage", attackSpeed: "attack speed", armor: "armor", evadeChance: "evade chance",
-    focusRegen: "Focus recovery rate", monsterCount: "monster count", monsterLife: "monster maximum Life",
-    monsterMoveSpeed: "monster movement speed", monsterDamage: "monster damage",
+    focusRegen: "Focus recovery rate", itemQuantity: "item quantity", itemRarity: "item rarity",
+    monsterCount: "monster count", monsterRarity: "monster rarity", monsterLife: "monster maximum Life",
+    monsterMoveSpeed: "monster movement speed", monsterDamage: "monster damage", monsterArmor: "monster armor",
+    monsterEvadeChance: "monster evade chance",
   };
   const absoluteValue = Math.abs(modifier.value);
   if (modifier.mode === "flat") return `${modifier.value >= 0 ? "+" : "-"}${absoluteValue} ${labels[modifier.stat]}`;

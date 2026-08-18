@@ -219,13 +219,12 @@ export function GameShell() {
     if (!profile) return;
     const current = profileRef.current ?? profile;
     const balance = buildArenaBalance(current);
-    const rewardMultiplier = 1 + balance.rewardBonus / 100;
     const recovered = runLootRef.current;
     const result: RunResult = {
       completed: true,
       ...summary,
       loot: {
-        xp: Math.round((220 + balance.tier * 65) * rewardMultiplier),
+        xp: Math.round(220 + balance.tier * 65),
         items: [],
       },
     };

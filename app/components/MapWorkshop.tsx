@@ -1,6 +1,6 @@
 import { MAP_MODIFIERS } from "../game/content";
 import type { CurrencyAmounts, MapItem } from "../game/domain";
-import { mapDanger, mapModifierDescription, mapModifierRewardDescription, mapRewardBonus } from "../game/maps";
+import { mapDanger, mapModifierDescription, mapModifierRewardDescription, mapStatSummary } from "../game/maps";
 
 interface MapWorkshopProps {
   maps: MapItem[];
@@ -21,6 +21,7 @@ const ACTIONS = [
 
 export function MapWorkshop({ maps, slottedMap, currencies, portalActive, onSlot, onRemove, onCraft, onOpen }: MapWorkshopProps) {
   const readMapId = (event: React.DragEvent) => event.dataTransfer.getData("application/x-crafty-map") || event.dataTransfer.getData("text/plain");
+  const mapStats = slottedMap ? mapStatSummary(slottedMap) : null;
 
   return (
     <section className="workshop-layout map-device-layout" aria-label="Map device">
@@ -76,8 +77,10 @@ export function MapWorkshop({ maps, slottedMap, currencies, portalActive, onSlot
           <>
             <div className="map-metrics">
               <div><span>Danger</span><strong>{mapDanger(slottedMap)}</strong></div>
-              <div><span>Reward bonus</span><strong>+{mapRewardBonus(slottedMap)}%</strong></div>
-              <div><span>Quality</span><strong>{slottedMap.quality}%</strong></div>
+              <div><span>Item quantity</span><strong>+{mapStats?.itemQuantity ?? 0}%</strong></div>
+              <div><span>Item rarity</span><strong>+{mapStats?.itemRarity ?? 0}%</strong></div>
+              <div><span>Monster amount</span><strong>+{mapStats?.monsterCount ?? 0}%</strong></div>
+              <div><span>Monster rarity</span><strong>+{mapStats?.monsterRarity ?? 0}%</strong></div>
               <div><span>Waves</span><strong>6</strong></div>
             </div>
             <div className="map-affixes compact-map-affixes">

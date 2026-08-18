@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, equipment, combat, mapsEngine, containerConfig, equipmentSlotConfig, arenaConfig, mapConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, equipmentSlotConfig, arenaConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
@@ -46,10 +46,14 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game/equipment.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/combat.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/maps.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/encounters.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/loot.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/containers.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/equipment-slots.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/arena.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/maps.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/monster-packs.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/loot.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/stats.ts", import.meta.url), "utf8"),
@@ -86,21 +90,40 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /calculateHitDamage/);
   assert.doesNotMatch(world, /0\.85 \+ .*attackDamage/);
   assert.doesNotMatch(world, /enemyHealthMultiplier|enemySpeedMultiplier|ARENA_MONSTER\.baseLife \+ wave/);
-  assert.match(world, /waveStats\.monsterLife/);
+  assert.match(world, /resolveMonsterStats/);
+  assert.match(world, /rollMonsterPack/);
+  assert.match(world, /spawnEnemyProjectile/);
+  assert.match(world, /updateEnemyProjectiles/);
+  assert.match(world, /archetype\.behavior === "jumper"/);
+  assert.match(world, /hit\.evadeChance/);
+  assert.match(world, /hit\.armor/);
   assert.match(world, /renderEnemyHealth/);
   assert.match(world, /healthLabelPool/);
   assert.match(world, /showDamageNumber/);
   assert.match(world, /damageNumberPool/);
   assert.match(arenaConfig, /waveSpawnIntervalSeconds: 30/);
   assert.match(arenaConfig, /tierModifiers/);
+  assert.match(arenaConfig, /waveModifiers/);
   assert.match(combat, /resolveArenaStat/);
   assert.match(combat, /resolveStat\(0/);
   assert.match(combat, /waveStats/);
   assert.doesNotMatch(combat, /modifiers\.has|\? 5\.6 : 8|enemyHealthMultiplier/);
   assert.match(mapConfig, /modifiers: \[\{ stat: "monsterCount", mode: "more", base: 30 \}\]/);
+  assert.match(mapConfig, /rewardModifiers/);
   assert.doesNotMatch(mapConfig, /description: "Waves|recover life while|erupt when slain|additional elite/);
   assert.match(mapsEngine, /mapModifierDescription/);
   assert.match(mapsEngine, /formatModifier/);
+  assert.match(mapWorkshop, /Item quantity/);
+  assert.match(mapWorkshop, /Monster rarity/);
+  assert.match(encounters, /rollMonsterPack/);
+  assert.match(encounters, /rareLeaderIndex/);
+  assert.match(encounters, /resolveMonsterStats/);
+  assert.match(monsterPackConfig, /MAGIC_PACK_MODIFIERS/);
+  assert.match(monsterPackConfig, /RARE_MONSTER_MODIFIERS/);
+  assert.match(monsterPackConfig, /rarityRewardModifiers/);
+  assert.match(lootEngine, /dropChances/);
+  assert.match(lootEngine, /rollEquipmentRarity/);
+  assert.match(lootConfig, /equipmentRarityWeights/);
   assert.match(world, /rollGroundDrop/);
   assert.match(world, /updateGroundDrops/);
   assert.match(shell, /onLootPickup/);
@@ -160,9 +183,16 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(affixConfig, /requiredItemLevel/);
   assert.match(monsterConfig, /contactDamagePerWave/);
   assert.match(monsterConfig, /baseLife: 18/);
+  assert.match(monsterConfig, /cinder-spitter/);
+  assert.match(monsterConfig, /behavior: "ranged"/);
+  assert.match(monsterConfig, /rift-stalker/);
+  assert.match(monsterConfig, /behavior: "jumper"/);
+  assert.match(monsterConfig, /ironhide-brute/);
+  assert.match(monsterConfig, /ember-skitter/);
   assert.match(skillConfig, /damageEffectiveness: 1\.35/);
   assert.match(world, /1 \/ Math\.max\(0\.01, this\.options\.arenaBalance\?\.attackSpeed/);
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);
+  assert.match(gameDesign, /The four map axes/);
   await access(new URL("../public/og.png", import.meta.url));
 });

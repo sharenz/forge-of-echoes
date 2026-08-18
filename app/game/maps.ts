@@ -1,7 +1,8 @@
 import { MAP_BASES, MAP_BASES_BY_ID, MAP_MODIFIERS, MAP_RARITY_LIMITS, type MapBaseId } from "./config/maps";
-import type { MapItem, MapModifierId, Rarity } from "./domain";
+import { ARENA_RULES } from "./config/arena";
+import type { ArenaStatKey, MapItem, MapModifierId, Rarity, StatModifier } from "./domain";
 import { choose, createId, shuffle } from "./random";
-import { formatModifier } from "./stats";
+import { formatModifier, resolveStat } from "./stats";
 
 export function createMap(tier = 1, baseId?: MapBaseId): MapItem {
   const base = baseId ? MAP_BASES_BY_ID[baseId] : choose(MAP_BASES);
@@ -42,11 +43,6 @@ export function rerollMap(map: MapItem): MapItem {
   return { ...map, modifiers, rarity: rarityForCount(modifiers.length) };
 }
 
-export function mapRewardBonus(map: MapItem): number {
-  const affixBonus = map.modifiers.reduce((sum, id) => sum + MAP_MODIFIERS[id].reward, 0);
-  return Math.round(affixBonus + map.quality * 1.2);
-}
-
 export function mapDanger(map: MapItem): number {
   return map.modifiers.reduce((sum, id) => sum + MAP_MODIFIERS[id].danger, map.tier * 3);
 }
@@ -61,5 +57,47 @@ export function mapModifierDescription(id: MapModifierId, tier = 1): string {
 }
 
 export function mapModifierRewardDescription(id: MapModifierId): string {
-  return `+${MAP_MODIFIERS[id].reward}% map rewards`;
+  return MAP_MODIFIERS[id].rewardModifiers.map((modifier) => formatModifier({
+    stat: modifier.stat,
+    mode: modifier.mode,
+    value: modifier.base,
+  })).join(" · ");
+}
+
+export interface MapStatSummary {
+  itemQuantity: number;
+  itemRarity: number;
+  monsterCount: number;
+  monsterRarity: number;
+}
+
+/** Relative map-device values. 100 is the unmodified baseline for each axis. */
+export function mapStatSummary(map: MapItem): MapStatSummary {
+  const baseStats: ArenaStatKey[] = ["itemQuantity", "itemRarity", "monsterCount", "monsterRarity"];
+  const modifiers: StatModifier<ArenaStatKey>[] = map.modifiers.flatMap((id) => [
+    ...MAP_MODIFIERS[id].modifiers,
+    ...MAP_MODIFIERS[id].rewardModifiers,
+  ]).map((modifier, index) => ({
+    stat: modifier.stat,
+    mode: modifier.mode,
+    value: modifier.base + (modifier.perTier ?? 0) * Math.max(0, map.tier - 1),
+    source: `map-summary:${index}`,
+  }));
+  modifiers.push(...ARENA_RULES.tierModifiers.map((modifier, index) => ({
+    stat: modifier.stat,
+    mode: modifier.mode,
+    value: modifier.base + (modifier.perTier ?? 0) * Math.max(0, map.tier - 1),
+    source: `map-summary:tier:${index}`,
+  })));
+  modifiers.push({ stat: "itemQuantity", mode: "increased", value: map.quality * 1.2, source: "map:quality" });
+  const resolved = Object.fromEntries(baseStats.map((stat) => [
+    stat,
+    resolveStat(100, modifiers.filter((modifier) => modifier.stat === stat)).value,
+  ])) as Record<(typeof baseStats)[number], number>;
+  return {
+    itemQuantity: Math.round(resolved.itemQuantity - 100),
+    itemRarity: Math.round(resolved.itemRarity - 100),
+    monsterCount: Math.round(resolved.monsterCount - 100),
+    monsterRarity: Math.round(resolved.monsterRarity - 100),
+  };
 }

@@ -7,7 +7,7 @@ import { MAP_MODIFIERS } from "../game/config/maps";
 import type { InventoryItem } from "../game/domain";
 import { isCurrencyItem, isEquipmentItem } from "../game/inventory";
 import { itemDisplayName } from "../game/items";
-import { mapDanger, mapModifierDescription, mapRewardBonus } from "../game/maps";
+import { mapDanger, mapModifierDescription, mapStatSummary } from "../game/maps";
 import { formatModifier } from "../game/stats";
 
 interface ItemTooltipProps {
@@ -36,6 +36,7 @@ export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
   }
 
   if (!isEquipmentItem(item)) {
+    const mapStats = mapStatSummary(item);
     return createPortal(
       <aside className={`item-tooltip rarity-${item.rarity}`} style={{ left, top }} role="tooltip">
         <span>{item.rarity} map · tier {item.tier}</span>
@@ -47,7 +48,7 @@ export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
             ? item.modifiers.map((id) => <div key={id}><i>◆</i><b>{MAP_MODIFIERS[id].name}: {mapModifierDescription(id, item.tier)}</b></div>)
             : <small>No explicit modifiers</small>}
         </div>
-        <footer><span>Danger {mapDanger(item)}</span><strong>+{mapRewardBonus(item)}% rewards</strong></footer>
+        <footer><span>Danger {mapDanger(item)} · +{mapStats.monsterCount}% monsters</span><strong>+{mapStats.itemQuantity}% quantity · +{mapStats.itemRarity}% rarity</strong></footer>
       </aside>,
       document.body,
     );

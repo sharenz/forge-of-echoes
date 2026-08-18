@@ -7,6 +7,7 @@ import { MAP_MERCHANT } from "../app/game/config/merchants";
 import { MAP_MODIFIERS } from "../app/game/config/maps";
 import { CHARACTER_EQUIPMENT_SLOTS } from "../app/game/config/equipment-slots";
 import { ITEM_BASES } from "../app/game/config/item-bases";
+import { MONSTER_ARCHETYPES } from "../app/game/config/monsters";
 import type { EquipmentItem, ItemContainer, PlayerProfile, StatModifier } from "../app/game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts } from "../app/game/equipment";
 import { addCurrencyToInventory, consumeCurrency, countCurrency, createCurrencyStack, isCurrencyItem, isMapItem } from "../app/game/inventory";
@@ -23,6 +24,8 @@ import { createInitialProfile, loadProfile } from "../app/game/profile";
 import { purchaseMap } from "../app/game/merchant";
 import { buildArenaBalance, calculateHitDamage, shouldSpawnNextWave } from "../app/game/combat";
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
+import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
+import { dropChances, rollEquipmentRarity } from "../app/game/loot";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -303,13 +306,67 @@ test("map descriptions are generated from the same executable modifier records",
   assert.equal(mapModifierDescription("teeming"), "30% more monster count");
   assert.equal(mapModifierDescription("exhausting"), "30% reduced Focus recovery rate");
   assert.equal(mapModifierDescription("volcanic"), "12% increased monster damage");
-  assert.equal(mapModifierRewardDescription("volcanic"), "+24% map rewards");
+  assert.equal(mapModifierRewardDescription("volcanic"), "24% increased item quantity");
   assert.equal(formatModifier({ stat: "monsterLife", mode: "more", value: -15 }), "15% less monster maximum Life");
 
   const profile = createInitialProfile();
   const openedMap = { ...createMap(1), modifiers: ["teeming", "commanded"] } satisfies PlayerProfile["openedMap"] & object;
   const firstWave = buildArenaBalance({ ...profile, openedMap }).waveStats[0];
-  assert.equal(firstWave.monsterCount, Math.round((28 + 16) * 1.3 * 1.08));
+  assert.equal(firstWave.monsterCount, Math.round((28 + 16) * 1.3));
+  assert.equal(firstWave.monsterRarity, 139);
+});
+
+test("packs randomly mix configured combat roles and enforce magic/rare pack rules", () => {
+  assert.equal(Object.keys(MONSTER_ARCHETYPES).length, 5);
+  assert.equal(MONSTER_ARCHETYPES["cinder-spitter"].behavior, "ranged");
+  assert.equal(MONSTER_ARCHETYPES["rift-stalker"].behavior, "jumper");
+
+  const magicPack = rollMonsterPack(8, 3, 2, 100, () => 0.05);
+  assert.equal(magicPack.rarity, "magic");
+  assert.equal(magicPack.rareLeaderIndex, null);
+  assert.equal(magicPack.modifierIds.length, 1);
+
+  const rarePack = rollMonsterPack(8, 5, 4, 200, () => 0);
+  assert.equal(rarePack.rarity, "rare");
+  assert.equal(rarePack.rareLeaderIndex, 0);
+  assert.equal(rarePack.modifierIds.length, 2);
+
+  let state = 12345;
+  const random = () => { state = (state * 16807) % 2147483647; return (state - 1) / 2147483646; };
+  const packs = Array.from({ length: 80 }, () => rollMonsterPack(12, 6, 4, 150, random));
+  assert.ok(packs.some((pack) => new Set(pack.archetypeIds).size === 1));
+  assert.ok(packs.some((pack) => new Set(pack.archetypeIds).size > 1));
+  assert.ok(packs.every((pack) => new Set(pack.archetypeIds).size <= 3));
+});
+
+test("later waves and harder maps increase monster rarity while archetypes retain real stat variation", () => {
+  const profile = createInitialProfile();
+  const low = buildArenaBalance({ ...profile, openedMap: createMap(1) });
+  const high = buildArenaBalance({ ...profile, openedMap: { ...createMap(4), modifiers: ["commanded"] } });
+  const earlyChances = packRarityChances(low.waveStats[0].monsterRarity);
+  const lateChances = packRarityChances(high.waveStats[5].monsterRarity);
+  assert.ok(lateChances.magic > earlyChances.magic);
+  assert.ok(lateChances.rare > earlyChances.rare);
+
+  const wave = high.waveStats[2];
+  const brute = resolveMonsterStats("ironhide-brute", wave, "normal", []);
+  const skitter = resolveMonsterStats("ember-skitter", wave, "normal", []);
+  const rareBrute = resolveMonsterStats("ironhide-brute", wave, "rare", ["juggernaut", "executioner"]);
+  assert.ok(brute.maxLife > skitter.maxLife * 3);
+  assert.ok(brute.moveSpeed.max < skitter.moveSpeed.min);
+  assert.ok(brute.armor > skitter.armor);
+  assert.ok(skitter.evadeChance > brute.evadeChance);
+  assert.ok(rareBrute.maxLife > brute.maxLife * 2);
+  assert.ok(rareBrute.damage > brute.damage * 1.5);
+  assert.ok(rareBrute.itemQuantity > brute.itemQuantity);
+  assert.ok(rareBrute.itemRarity > brute.itemRarity);
+});
+
+test("item quantity changes drop frequency while item rarity changes only rarity weights", () => {
+  assert.equal(dropChances(200).equipment, dropChances(100).equipment * 2);
+  assert.equal(dropChances(200).material, dropChances(100).material * 2);
+  assert.equal(rollEquipmentRarity(100, () => 0.02), "magic");
+  assert.equal(rollEquipmentRarity(400, () => 0.02), "rare");
 });
 
 test("runtime hit damage scales linearly with resolved attack damage", () => {

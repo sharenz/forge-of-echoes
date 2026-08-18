@@ -15,6 +15,7 @@ export interface ScaledModifierDefinition<TStat extends ModifierStatKey = StatKe
   base: number;
   perItemLevel?: number;
   perTier?: number;
+  perWave?: number;
 }
 
 export interface ItemBaseDefinition {
@@ -70,12 +71,37 @@ export interface CharacterClassDefinition {
 export interface MonsterDefinition {
   id: string;
   name: string;
+  behavior: "melee" | "ranged" | "jumper";
+  spawnWeight: number;
+  weightPerWave?: number;
+  weightPerTier?: number;
+  minimumWave?: number;
+  minimumTier?: number;
   baseLife: number;
   lifePerWave: number;
   speed: { min: number; max: number; perWave: number };
   contactDamage: number;
   contactDamagePerWave: number;
   aggroRange: number;
+  armor: number;
+  evadeChance: number;
+  visual: {
+    scale: number;
+    body: number;
+    accent: number;
+  };
+  ranged?: {
+    preferredRange: number;
+    projectileSpeed: number;
+    cooldown: number;
+    damageEffectiveness: number;
+  };
+  jump?: {
+    cooldown: number;
+    distance: number;
+    duration: number;
+    damageEffectiveness: number;
+  };
 }
 
 export interface SkillDefinition {
@@ -102,9 +128,9 @@ export interface MapModifierDefinition {
   id: MapModifierId;
   name: string;
   danger: number;
-  reward: number;
   kind: "threat" | "reward";
   modifiers: readonly ScaledModifierDefinition<ArenaStatKey>[];
+  rewardModifiers: readonly ScaledModifierDefinition<ArenaStatKey>[];
 }
 
 export type MapModifierConfig = Record<MapModifierId, MapModifierDefinition>;

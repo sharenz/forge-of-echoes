@@ -4,7 +4,6 @@ import { MONSTER_ARCHETYPES } from "./config/monsters";
 import type { ScaledModifierDefinition } from "./config/schema";
 import { ACTIVE_SKILLS, BASIC_ATTACK } from "./config/skills";
 import type { ArenaStatKey, CurrencyId, PlayerProfile, Rarity, StatModifier } from "./domain";
-import { mapRewardBonus } from "./maps";
 import { deriveStats } from "./profile";
 import { resolveStat, type StatResolution } from "./stats";
 
@@ -20,6 +19,11 @@ interface ArenaWaveBreakdown {
   monsterMoveSpeedMin: StatResolution<ArenaStatKey>;
   monsterMoveSpeedMax: StatResolution<ArenaStatKey>;
   monsterDamage: StatResolution<ArenaStatKey>;
+  monsterArmor: StatResolution<ArenaStatKey>;
+  monsterEvadeChance: StatResolution<ArenaStatKey>;
+  itemQuantity: StatResolution<ArenaStatKey>;
+  itemRarity: StatResolution<ArenaStatKey>;
+  monsterRarity: StatResolution<ArenaStatKey>;
 }
 
 export interface ArenaWaveBalance {
@@ -28,6 +32,12 @@ export interface ArenaWaveBalance {
   monsterLife: number;
   monsterMoveSpeed: { min: number; max: number };
   monsterDamage: number;
+  monsterArmor: number;
+  monsterEvadeChance: number;
+  itemQuantity: number;
+  itemRarity: number;
+  monsterRarity: number;
+  arenaModifiers: readonly StatModifier<ArenaStatKey>[];
   breakdown: ArenaWaveBreakdown;
 }
 
@@ -45,7 +55,6 @@ export interface ArenaBalance {
   focusRegenBreakdown: StatResolution<ArenaStatKey>;
   arenaModifiers: readonly StatModifier<ArenaStatKey>[];
   waveStats: readonly ArenaWaveBalance[];
-  rewardBonus: number;
 }
 
 export interface ArenaSummary {
@@ -69,13 +78,16 @@ export function calculateHitDamage(attackDamage: number, damageEffectiveness: nu
 function arenaModifier(
   definition: ScaledModifierDefinition<ArenaStatKey>,
   tier: number,
+  wave: number,
   source: string,
   label: string,
 ): StatModifier<ArenaStatKey> {
   return {
     stat: definition.stat,
     mode: definition.mode,
-    value: definition.base + (definition.perTier ?? 0) * Math.max(0, tier - 1),
+    value: definition.base
+      + (definition.perTier ?? 0) * Math.max(0, tier - 1)
+      + (definition.perWave ?? 0) * wave,
     source,
     label,
   };
@@ -96,29 +108,52 @@ function resolveArenaStat(
   ]);
 }
 
-function buildWaveBalance(wave: number, arenaModifiers: readonly StatModifier<ArenaStatKey>[]): ArenaWaveBalance {
+function buildWaveBalance(wave: number, tier: number, arenaModifiers: readonly StatModifier<ArenaStatKey>[]): ArenaWaveBalance {
   const monster = MONSTER_ARCHETYPES.ashling;
+  const waveModifiers = ARENA_RULES.waveModifiers.map((modifier, index) => arenaModifier(
+    modifier,
+    tier,
+    wave,
+    `wave:${wave}:scaling:${index}`,
+    `${modifier.perWave ?? 0}% per wave`,
+  ));
+  const resolvedArenaModifiers = [...arenaModifiers, ...waveModifiers];
   const monsterCount = resolveArenaStat("monsterCount", [
     flatArenaModifier("monsterCount", ARENA_RULES.baseMonsterCount, "arena:base-monster-count", "Base monsters per wave"),
     flatArenaModifier("monsterCount", ARENA_RULES.monsterCountPerWave * wave, `wave:${wave}:monster-count`, `+${ARENA_RULES.monsterCountPerWave} monsters per wave`),
-  ], arenaModifiers);
+  ], resolvedArenaModifiers);
   const monsterLife = resolveArenaStat("monsterLife", [
     flatArenaModifier("monsterLife", monster.baseLife, `monster:${monster.id}:base-life`, `${monster.name} base Life`),
     flatArenaModifier("monsterLife", monster.lifePerWave * wave, `monster:${monster.id}:wave-life`, `+${monster.lifePerWave} Life per wave`),
-  ], arenaModifiers);
+  ], resolvedArenaModifiers);
   const speedPerWave = flatArenaModifier("monsterMoveSpeed", monster.speed.perWave * wave, `monster:${monster.id}:wave-speed`, `+${monster.speed.perWave} movement speed per wave`);
   const monsterMoveSpeedMin = resolveArenaStat("monsterMoveSpeed", [
     flatArenaModifier("monsterMoveSpeed", monster.speed.min, `monster:${monster.id}:base-speed-min`, `${monster.name} minimum base movement speed`),
     speedPerWave,
-  ], arenaModifiers);
+  ], resolvedArenaModifiers);
   const monsterMoveSpeedMax = resolveArenaStat("monsterMoveSpeed", [
     flatArenaModifier("monsterMoveSpeed", monster.speed.max, `monster:${monster.id}:base-speed-max`, `${monster.name} maximum base movement speed`),
     speedPerWave,
-  ], arenaModifiers);
+  ], resolvedArenaModifiers);
   const monsterDamage = resolveArenaStat("monsterDamage", [
     flatArenaModifier("monsterDamage", monster.contactDamage, `monster:${monster.id}:base-damage`, `${monster.name} base damage`),
     flatArenaModifier("monsterDamage", monster.contactDamagePerWave * wave, `monster:${monster.id}:wave-damage`, `+${monster.contactDamagePerWave} damage per wave`),
-  ], arenaModifiers);
+  ], resolvedArenaModifiers);
+  const monsterArmor = resolveArenaStat("monsterArmor", [
+    flatArenaModifier("monsterArmor", monster.armor, `monster:${monster.id}:base-armor`, `${monster.name} base armor`),
+  ], resolvedArenaModifiers);
+  const monsterEvadeChance = resolveArenaStat("monsterEvadeChance", [
+    flatArenaModifier("monsterEvadeChance", monster.evadeChance, `monster:${monster.id}:base-evade`, `${monster.name} base evade chance`),
+  ], resolvedArenaModifiers);
+  const itemQuantity = resolveArenaStat("itemQuantity", [
+    flatArenaModifier("itemQuantity", ARENA_RULES.baseItemQuantity, "arena:base-item-quantity", "Base item quantity"),
+  ], resolvedArenaModifiers);
+  const itemRarity = resolveArenaStat("itemRarity", [
+    flatArenaModifier("itemRarity", ARENA_RULES.baseItemRarity, "arena:base-item-rarity", "Base item rarity"),
+  ], resolvedArenaModifiers);
+  const monsterRarity = resolveArenaStat("monsterRarity", [
+    flatArenaModifier("monsterRarity", ARENA_RULES.baseMonsterRarity, "arena:base-monster-rarity", "Base monster rarity"),
+  ], resolvedArenaModifiers);
 
   return {
     wave,
@@ -126,7 +161,16 @@ function buildWaveBalance(wave: number, arenaModifiers: readonly StatModifier<Ar
     monsterLife: monsterLife.value,
     monsterMoveSpeed: { min: monsterMoveSpeedMin.value, max: monsterMoveSpeedMax.value },
     monsterDamage: monsterDamage.value,
-    breakdown: { monsterCount, monsterLife, monsterMoveSpeedMin, monsterMoveSpeedMax, monsterDamage },
+    monsterArmor: monsterArmor.value,
+    monsterEvadeChance: monsterEvadeChance.value,
+    itemQuantity: itemQuantity.value,
+    itemRarity: itemRarity.value,
+    monsterRarity: monsterRarity.value,
+    arenaModifiers: resolvedArenaModifiers,
+    breakdown: {
+      monsterCount, monsterLife, monsterMoveSpeedMin, monsterMoveSpeedMax, monsterDamage,
+      monsterArmor, monsterEvadeChance, itemQuantity, itemRarity, monsterRarity,
+    },
   };
 }
 
@@ -136,20 +180,21 @@ export function buildArenaBalance(profile: PlayerProfile): ArenaBalance {
   const tier = map?.tier ?? 1;
   const mapModifiers = (map?.modifiers ?? []).flatMap((id) => {
     const definition = MAP_MODIFIERS[id];
-    return definition.modifiers.map((modifier, index) => arenaModifier(
-      modifier,
-      tier,
-      `map:${id}:${index}`,
-      `${definition.name} map modifier`,
+    return [...definition.modifiers, ...definition.rewardModifiers].map((modifier, index) => arenaModifier(
+      modifier, tier, 0, `map:${id}:${index}`, `${definition.name} map modifier`,
     ));
   });
   const tierModifiers = ARENA_RULES.tierModifiers.map((modifier, index) => arenaModifier(
-    modifier,
-    tier,
-    `map-tier:${tier}:${index}`,
-    `${modifier.perTier ?? 0}% per map tier above Tier 1`,
+    modifier, tier, 0, `map-tier:${tier}:${index}`, `${modifier.perTier ?? 0}% per map tier above Tier 1`,
   ));
-  const arenaModifiers = [...tierModifiers, ...mapModifiers];
+  const qualityModifier = arenaModifier(
+    { stat: "itemQuantity", mode: "increased", base: map?.quality ? map.quality * 1.2 : 0 },
+    tier,
+    0,
+    "map:quality",
+    "Map quality",
+  );
+  const arenaModifiers = [...tierModifiers, ...mapModifiers, qualityModifier];
   const focusRegenBreakdown = resolveArenaStat("focusRegen", [
     flatArenaModifier("focusRegen", ARENA_RULES.baseFocusRegen, "arena:base-focus-regen", "Base Focus recovery rate"),
   ], arenaModifiers);
@@ -167,7 +212,6 @@ export function buildArenaBalance(profile: PlayerProfile): ArenaBalance {
     focusRegen: focusRegenBreakdown.value,
     focusRegenBreakdown,
     arenaModifiers,
-    waveStats: Array.from({ length: ARENA_RULES.totalWaves }, (_, index) => buildWaveBalance(index + 1, arenaModifiers)),
-    rewardBonus: map ? mapRewardBonus(map) : 0,
+    waveStats: Array.from({ length: ARENA_RULES.totalWaves }, (_, index) => buildWaveBalance(index + 1, tier, arenaModifiers)),
   };
 }

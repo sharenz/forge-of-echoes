@@ -19,12 +19,18 @@ export type DerivedStatKey =
 export type StatKey = AttributeKey | DerivedStatKey;
 export type ArenaStatKey =
   | "focusRegen"
+  | "itemQuantity"
+  | "itemRarity"
   | "monsterCount"
+  | "monsterRarity"
   | "monsterLife"
   | "monsterMoveSpeed"
-  | "monsterDamage";
+  | "monsterDamage"
+  | "monsterArmor"
+  | "monsterEvadeChance";
 export type ModifierStatKey = StatKey | ArenaStatKey;
 export type ModifierMode = "flat" | "increased" | "more";
+export type MonsterRarity = "normal" | "magic" | "rare";
 
 /**
  * Every numerical effect in the game resolves through this representation.

@@ -228,9 +228,11 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
 .map-seal::before { content: ""; width: 50px; height: 50px; border: 1px solid #4e3b2e; grid-area: 1/1; }
 .map-seal span { grid-area: 1/1; transform: rotate(-45deg); color: var(--ember-bright); font-family: Georgia, serif; font-size: 25px; }
 
-.map-metrics { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.map-metrics { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); }
 .map-metrics div { padding: 18px 6px; display: flex; flex-direction: column; gap: 6px; }
 .map-metrics div + div { border-left: 1px solid var(--line); padding-left: 18px; }
+.map-metrics div:nth-child(4) { border-left: 0; }
+.map-metrics div:nth-child(n+4) { border-top: 1px solid var(--line); }
 .map-metrics span { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .14em; }
 .map-metrics strong { font-family: Georgia, serif; font-size: 17px; font-weight: normal; }
 
@@ -392,8 +394,8 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
   .map-focus { order: 1; padding: 28px 22px; }
   .craft-actions { order: 3; }
   .map-metrics { grid-template-columns: repeat(2, 1fr); }
-  .map-metrics div:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
-  .map-metrics div:nth-child(4) { border-top: 1px solid var(--line); }
+  .map-metrics div:nth-child(odd) { border-left: 0; }
+  .map-metrics div:nth-child(n+3) { border-top: 1px solid var(--line); }
   .map-affix { grid-template-columns: 1fr; gap: 5px; }
   .map-affix em { text-align: left; }
   .action-list { grid-template-columns: 1fr; }
