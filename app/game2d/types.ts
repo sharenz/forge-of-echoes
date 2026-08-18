@@ -20,6 +20,7 @@ export interface WorldHudState {
   riftCharges: number;
   riftMaxCharges: number;
   riftRecharge: number;
+  arenaComplete: boolean;
 }
 
 export interface WorldRuntimeOptions {

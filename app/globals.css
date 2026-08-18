@@ -897,6 +897,15 @@ body:has(.pixel-shell) { overflow: hidden; }
 .arena-inventory-toggle kbd { margin-left: 7px; color: #f3a65e; font: inherit; }
 .arena-inventory-toggle:hover { border-color: var(--ember-bright); color: #fff; box-shadow: 0 0 18px rgba(215,122,57,.2); }
 .return-hideout:hover { border-color: #b25f34; color: #fff; }
+.arena-complete-banner { position: absolute; z-index: 4; top: 104px; left: 50%; width: min(470px, calc(100% - 40px)); padding: 15px 24px 16px; border: 1px solid #8d61c5; background: linear-gradient(135deg, rgba(16,9,24,.94), rgba(37,19,54,.9)); box-shadow: 0 15px 42px #000b, 0 0 32px #9d5cdb45, inset 0 0 28px #bd82ef1f; text-align: center; pointer-events: none; transform: translateX(-50%); animation: arena-complete-in .42s cubic-bezier(.2,.9,.25,1); }
+.arena-complete-banner::before,
+.arena-complete-banner::after { content: ""; position: absolute; top: 50%; width: 46px; height: 1px; background: linear-gradient(90deg, transparent, #c99af0); }
+.arena-complete-banner::before { right: calc(100% + 10px); }
+.arena-complete-banner::after { left: calc(100% + 10px); transform: rotate(180deg); }
+.arena-complete-banner span { display: block; color: #c795ec; font-size: 12px; font-weight: 700; letter-spacing: .24em; text-transform: uppercase; }
+.arena-complete-banner strong { display: block; margin-top: 5px; color: #f1ddff; font: 24px Georgia, serif; text-shadow: 0 0 18px #c487f0; }
+.arena-complete-banner small { display: block; margin-top: 6px; color: #c8b5d4; font-size: 13px; line-height: 1.4; }
+@keyframes arena-complete-in { from { opacity: 0; transform: translate(-50%, -16px) scale(.94); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
 .arena-panel-backdrop { padding-top: 62px; background: rgba(2,2,2,.7); backdrop-filter: blur(6px) saturate(.72); }
 .arena-panel-backdrop .world-panel { max-height: calc(100vh - 84px); }
 

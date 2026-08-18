@@ -199,6 +199,13 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
               </span>
             </button>
           </div>
+          {hud.arenaComplete && (
+            <div className="arena-complete-banner" role="status" aria-live="polite">
+              <span>Map Cleared</span>
+              <strong>Return portal opened</strong>
+              <small>Collect any remaining loot, then enter the portal to return to your hideout.</small>
+            </div>
+          )}
         </>
       )}
       {mode !== "class-select" && characterProgress && (

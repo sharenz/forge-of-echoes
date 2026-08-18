@@ -10,6 +10,10 @@ export const ARENA_RULES = {
   baseMonsterCount: 28,
   baseMonsterRarity: 100,
   monsterCountPerWave: 16,
+  returnPortal: {
+    spawnOffset: 130,
+    triggerRadius: 58,
+  },
   tierModifiers: [
     { stat: "monsterLife", mode: "increased", base: 0, perTier: 8 },
     { stat: "monsterDamage", mode: "increased", base: 0, perTier: 7 },

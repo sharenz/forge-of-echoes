@@ -23,7 +23,7 @@ import {
 import { calculateCharacterStats, formatModifier, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
 import { purchaseMap } from "../app/game/merchant";
-import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, rollHitDamage, shouldSpawnNextWave } from "../app/game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, isArenaCleared, rollHitDamage, shouldSpawnNextWave } from "../app/game/combat";
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
 import { dropChances, rollEquipmentRarity } from "../app/game/loot";
@@ -423,6 +423,9 @@ test("waves advance when cleared or after the configured timeout", () => {
   assert.equal(shouldSpawnNextWave(1, 6, 0, 3), true);
   assert.equal(shouldSpawnNextWave(1, 6, 12, 30), true);
   assert.equal(shouldSpawnNextWave(6, 6, 0, 90), false);
+  assert.equal(isArenaCleared(5, 6, 0), false);
+  assert.equal(isArenaCleared(6, 6, 1), false);
+  assert.equal(isArenaCleared(6, 6, 0), true);
 });
 
 test("map, tier, wave, and monster scaling all resolve through typed arena modifiers", () => {

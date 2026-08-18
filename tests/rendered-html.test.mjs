@@ -96,6 +96,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /setDeadzone\(360, 360\)/);
   assert.match(world, /PACK_REGIONS/);
   assert.match(world, /shouldSpawnNextWave/);
+  assert.match(world, /spawnReturnPortal/);
+  assert.match(world, /activateReturnPortal/);
+  assert.doesNotMatch(world, /groundDrops\.length > 0/);
   assert.match(world, /waveElapsedSeconds/);
   assert.match(world, /rollHitDamage/);
   assert.doesNotMatch(world, /0\.85 \+ .*attackDamage/);

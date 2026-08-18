@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { ACTIVE_SKILLS, BASIC_ATTACK, rollHitDamage, shouldSpawnNextWave, type MapDrop, type RolledHitDamage } from "../game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, isArenaCleared, rollHitDamage, shouldSpawnNextWave, type ArenaSummary, type MapDrop, type RolledHitDamage } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
 import { MONSTER_PACK_RULES } from "../game/config/monster-packs";
@@ -96,6 +96,21 @@ interface VfxParticleState {
   rotationSpeed: number;
 }
 
+interface ReturnPortalState {
+  x: number;
+  y: number;
+  elapsed: number;
+  particleElapsed: number;
+  summary: ArenaSummary;
+  glow: Phaser.GameObjects.Ellipse;
+  outerRing: Phaser.GameObjects.Ellipse;
+  innerRing: Phaser.GameObjects.Ellipse;
+  sigil: Phaser.GameObjects.Image;
+  label: Phaser.GameObjects.Text;
+  prompt: Phaser.GameObjects.Text;
+  interaction: Phaser.GameObjects.Zone;
+}
+
 const CLASS_COLORS: Record<CharacterClassId, { magic: number }> = {
   amazon: { magic: 0xf6c76f },
   barbarian: { magic: 0xff7345 },
@@ -149,6 +164,8 @@ class CraftyScene extends Phaser.Scene {
   private elapsedSeconds = 0;
   private hudElapsed = 0;
   private arenaComplete = false;
+  private returnPortal: ReturnPortalState | null = null;
+  private returnPortalUsed = false;
   private lastFacing = 1;
   private playerAnimationLock = 0;
   private playerPose: PlayerPose = "idle";
@@ -284,6 +301,7 @@ class CraftyScene extends Phaser.Scene {
       riftCharges: this.riftCharges,
       riftMaxCharges: this.resolvedDash.maxCharges,
       riftRecharge: this.riftRecharge,
+      arenaComplete: this.arenaComplete,
     };
   }
 
@@ -380,6 +398,7 @@ class CraftyScene extends Phaser.Scene {
       this.renderEnemyHealth();
       this.updateGroundDrops(delta);
       this.advanceWaveIfReady();
+      this.updateReturnPortal(delta);
     }
 
     this.hudElapsed += delta;
@@ -1175,10 +1194,95 @@ class CraftyScene extends Phaser.Scene {
       this.startWave(this.wave + 1);
       return;
     }
-    if (this.wave < finalWave || this.enemies.length > 0) return;
-    if (this.groundDrops.length > 0) return;
+    if (!isArenaCleared(this.wave, finalWave, this.enemies.length)) return;
     this.arenaComplete = true;
-    this.options.onArenaComplete({ wave: this.wave, enemiesSlain: this.slain, elapsedSeconds: Math.round(this.elapsedSeconds) });
+    this.spawnReturnPortal({ wave: this.wave, enemiesSlain: this.slain, elapsedSeconds: Math.round(this.elapsedSeconds) });
+    this.options.onHud(this.getHud());
+  }
+
+  private spawnReturnPortal(summary: ArenaSummary): void {
+    if (!this.player || this.returnPortal) return;
+    const offset = ARENA_RULES.returnPortal.spawnOffset;
+    const x = this.player.x + offset <= MAP_SIZE - 100 ? this.player.x + offset : this.player.x - offset;
+    const y = Phaser.Math.Clamp(this.player.y, 100, MAP_SIZE - 100);
+    const depth = Math.round(y / 10) + 65;
+    const glow = this.add.ellipse(x, y - 38, 106, 146, 0x7138bc, 0.18)
+      .setDepth(depth)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const outerRing = this.add.ellipse(x, y - 38, 78, 122, 0x130d1b, 0.72)
+      .setStrokeStyle(7, 0x8b54d9, 0.9)
+      .setDepth(depth + 1)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const innerRing = this.add.ellipse(x, y - 38, 58, 102, 0x2a1747, 0.82)
+      .setStrokeStyle(2, 0xe0b3ff, 0.95)
+      .setDepth(depth + 2)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const sigil = this.add.image(x, y - 38, "ember-sigil")
+      .setScale(0.19)
+      .setTint(0xb77cff)
+      .setAlpha(0.48)
+      .setDepth(depth + 3)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const label = this.add.text(x, y + 38, "RETURN PORTAL", {
+      fontFamily: "monospace",
+      fontSize: "17px",
+      fontStyle: "bold",
+      color: "#ead6ff",
+      stroke: "#09060d",
+      strokeThickness: 5,
+    }).setOrigin(0.5).setDepth(depth + 5);
+    const prompt = this.add.text(x, y + 59, "ENTER TO RETURN TO HIDEOUT", {
+      fontFamily: "monospace",
+      fontSize: "12px",
+      color: "#c6a5ee",
+      backgroundColor: "#09060dcc",
+      padding: { x: 7, y: 4 },
+    }).setOrigin(0.5).setDepth(depth + 5);
+    const interaction = this.add.zone(x, y - 30, 112, 150)
+      .setDepth(depth + 6)
+      .setInteractive({ cursor: "pointer" });
+    interaction.on(Phaser.Input.Events.POINTER_DOWN, () => this.activateReturnPortal());
+    this.returnPortal = { x, y, elapsed: 0, particleElapsed: 0, summary, glow, outerRing, innerRing, sigil, label, prompt, interaction };
+    this.emitRadialVfx(x, y - 28, 24, 0xb77cff, 118, 0.65);
+  }
+
+  private updateReturnPortal(delta: number): void {
+    const portal = this.returnPortal;
+    if (!portal || !this.player || this.returnPortalUsed) return;
+    portal.elapsed += delta;
+    portal.particleElapsed += delta;
+    const pulse = Math.sin(portal.elapsed * 3.6);
+    portal.glow.setScale(1 + pulse * 0.08).setAlpha(0.2 + pulse * 0.06);
+    portal.outerRing.setScale(1 + pulse * 0.025, 1 - pulse * 0.018);
+    portal.innerRing.setScale(1 - pulse * 0.035, 1 + pulse * 0.025).setAlpha(0.82 + pulse * 0.12);
+    portal.sigil.setRotation(portal.sigil.rotation + delta * 0.45).setAlpha(0.42 + pulse * 0.13);
+    portal.label.setY(portal.y + 38 + pulse * 1.5);
+    portal.prompt.setAlpha(0.72 + Math.max(0, pulse) * 0.28);
+    if (portal.particleElapsed >= 0.09) {
+      portal.particleElapsed = 0;
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      this.emitVfxParticle(
+        portal.x + Math.cos(angle) * Phaser.Math.Between(24, 40),
+        portal.y - 38 + Math.sin(angle) * Phaser.Math.Between(38, 58),
+        Math.random() > 0.3 ? 0xb77cff : 0xe0b3ff,
+        Phaser.Math.Between(-12, 12),
+        Phaser.Math.Between(-42, -12),
+        0.55,
+        0.75,
+        0.05,
+        Math.random() > 0.5 ? "vfx-spark" : "vfx-ember",
+      );
+    }
+    if (Math.hypot(this.player.x - portal.x, this.player.y - portal.y) <= ARENA_RULES.returnPortal.triggerRadius) {
+      this.activateReturnPortal();
+    }
+  }
+
+  private activateReturnPortal(): void {
+    if (!this.returnPortal || this.returnPortalUsed) return;
+    this.returnPortalUsed = true;
+    this.returnPortal.interaction.disableInteractive();
+    this.options.onArenaComplete(this.returnPortal.summary);
   }
 }
 
