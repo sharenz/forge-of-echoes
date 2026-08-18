@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTER_CLASSES, XP_BY_LEVEL } from "../game/content";
 import { buildArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
-import type { CharacterClassId, CurrencyId, EquipmentItem, InventoryItem, MapItem, PlayerProfile, RunResult } from "../game/domain";
-import { addCurrencyToInventory, addItemsToInventory, isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency } from "../game/inventory";
+import type { CharacterClassId, CurrencyId, EquipmentItem, ItemContainerId, PlayerProfile, RunResult } from "../game/domain";
+import { isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency, createCurrencyStack } from "../game/inventory";
+import { containerItems, findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../game/item-container";
 import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
 import { addMapModifier, rerollMap } from "../game/maps";
 import { purchaseMap } from "../game/merchant";
-import { addRecoveredItems, applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
+import { applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
 import type { WorldStation } from "../game2d/types";
 import { GameNotification } from "./GameNotification";
 import { InventoryPanel } from "./InventoryPanel";
@@ -19,8 +20,8 @@ import { PhaserWorld } from "./PhaserWorld";
 
 type HideoutPanel = "inventory" | "stash" | "bench" | "maps" | "merchant" | null;
 type GameScreen = "hideout" | "arena";
-interface RunLootLedger { items: InventoryItem[] }
-const emptyRunLoot = (): RunLootLedger => ({ items: [] });
+interface RunLootLedger { collected: number; freshItemIds: string[] }
+const emptyRunLoot = (): RunLootLedger => ({ collected: 0, freshItemIds: [] });
 
 export function GameShell() {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
@@ -30,21 +31,26 @@ export function GameShell() {
   const [screen, setScreen] = useState<GameScreen>("hideout");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [runItems, setRunItems] = useState<InventoryItem[]>([]);
+  const [runFreshItemIds, setRunFreshItemIds] = useState<string[]>([]);
   const runLootRef = useRef<RunLootLedger>(emptyRunLoot());
+  const profileRef = useRef<PlayerProfile | null>(null);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       const loaded = loadProfile();
+      profileRef.current = loaded;
       setProfile(loaded);
-      const firstItem = loaded.inventory[0] ?? loaded.stash[0] ?? Object.values(loaded.equipped)[0];
+      const firstItem = loaded.inventory.entries[0]?.item ?? loaded.stash.entries[0]?.item ?? Object.values(loaded.equipped)[0];
       setSelectedItemId(firstItem?.id ?? null);
     }, 0);
     return () => window.clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
-    if (profile) saveProfile(profile);
+    if (profile) {
+      profileRef.current = profile;
+      saveProfile(profile);
+    }
   }, [profile]);
 
   useEffect(() => {
@@ -101,9 +107,10 @@ export function GameShell() {
     );
   }
 
-  const backpackItems: InventoryItem[] = screen === "arena" ? [...runItems, ...profile.inventory] : profile.inventory;
-  const allItems = [...Object.values(profile.equipped).filter(Boolean), ...backpackItems.filter(isEquipmentItem), ...profile.stash.filter(isEquipmentItem)] as EquipmentItem[];
-  const inventoryMaps = profile.inventory.filter(isMapItem);
+  const backpackItems = containerItems(profile.inventory);
+  const stashItems = containerItems(profile.stash);
+  const allItems = [...Object.values(profile.equipped).filter(Boolean), ...backpackItems.filter(isEquipmentItem), ...stashItems.filter(isEquipmentItem)] as EquipmentItem[];
+  const inventoryMaps = backpackItems.filter(isMapItem);
   const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id)) as Set<string>;
 
   if (screen === "arena" && profile.openedMap && arenaBalance) {
@@ -116,7 +123,7 @@ export function GameShell() {
           <div className="world-panel-backdrop arena-panel-backdrop">
             <section className="world-panel panel-inventory" aria-label="Character inventory">
               <header><div><span>Combat paused · equipment changes apply immediately</span><h2>Inventory</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close inventory">×</button></header>
-              <InventoryPanel profile={profile} backpackItems={backpackItems} selectedItemId={selectedItemId} freshItemIds={runItems.map((item) => item.id)} onSelect={setSelectedItemId} onEquipItem={equipItem} onUnequipItem={unequipItem} />
+              <InventoryPanel profile={profile} selectedItemId={selectedItemId} freshItemIds={runFreshItemIds} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} />
             </section>
           </div>
         )}
@@ -168,24 +175,36 @@ export function GameShell() {
 
   function slotMap(mapId: string) {
     if (!profile) return;
-    const map = profile.inventory.find((item): item is MapItem => isMapItem(item) && item.id === mapId);
-    if (!map) return;
-    const inventory = profile.inventory.filter((item) => item.id !== map.id);
-    if (profile.mapDevice) inventory.unshift(profile.mapDevice);
-    setProfile({ ...profile, inventory, mapDevice: map });
-    setSelectedItemId(map.id);
+    const removed = removeItem(profile.inventory, mapId);
+    if (!removed || !isMapItem(removed.entry.item)) return;
+    let inventory = removed.container;
+    if (profile.mapDevice) {
+      const returned = insertItem(inventory, profile.mapDevice, { x: removed.entry.x, y: removed.entry.y });
+      if (returned.unplaced.length > 0) {
+        setNotice("The previous map needs a free backpack cell first.");
+        return;
+      }
+      inventory = returned.container;
+    }
+    setProfile({ ...profile, inventory, mapDevice: removed.entry.item });
+    setSelectedItemId(removed.entry.item.id);
   }
 
   function removeMapFromDevice() {
     if (!profile?.mapDevice) return;
-    setProfile({ ...profile, inventory: [profile.mapDevice, ...profile.inventory], mapDevice: null });
+    const inserted = insertItem(profile.inventory, profile.mapDevice);
+    if (inserted.unplaced.length > 0) {
+      setNotice("Your backpack has no free cell for this map.");
+      return;
+    }
+    setProfile({ ...profile, inventory: inserted.container, mapDevice: null });
   }
 
   function buyMap(offerId: string) {
     if (!profile) return;
     const purchase = purchaseMap(profile, offerId);
     if (!purchase) {
-      setNotice("You do not have enough Scrap for that map.");
+      setNotice("Not enough Scrap, or no free backpack cell for that map.");
       return;
     }
     setProfile(purchase.profile);
@@ -195,7 +214,8 @@ export function GameShell() {
 
   function completeArena(summary: ArenaSummary) {
     if (!profile) return;
-    const balance = buildArenaBalance(profile);
+    const current = profileRef.current ?? profile;
+    const balance = buildArenaBalance(current);
     const rewardMultiplier = 1 + balance.rewardBonus / 100;
     const recovered = runLootRef.current;
     const result: RunResult = {
@@ -203,40 +223,54 @@ export function GameShell() {
       ...summary,
       loot: {
         xp: Math.round((220 + balance.tier * 65) * rewardMultiplier),
-        items: recovered.items,
+        items: [],
       },
     };
-    const next = applyRunResult(profile, result);
+    const next = applyRunResult(current, result);
+    profileRef.current = next;
     setProfile(next);
-    setSelectedItemId(result.loot.items[0]?.id ?? next.inventory[0]?.id ?? null);
+    setSelectedItemId(next.inventory.entries[0]?.item.id ?? null);
     resetRunLoot();
     setPanel(null);
     setScreen("hideout");
-    setNotice(`Map complete. ${result.loot.items.length} collected items recovered.`);
+    setNotice(`Map complete. ${recovered.collected} ground drops collected.`);
   }
 
-  function collectMapDrop(drop: MapDrop) {
-    if (!profile?.openedMap) return;
-    if (drop.kind === "equipment") {
-      const item = generateEquipment(Math.max(2, profile.openedMap.tier) * 5, drop.rarity);
-      runLootRef.current.items = [item, ...runLootRef.current.items];
-      setRunItems([...runLootRef.current.items]);
-      setSelectedItemId(item.id);
-      return;
+  function collectMapDrop(drop: MapDrop): boolean {
+    const current = profileRef.current;
+    if (!current?.openedMap) return false;
+    const item = drop.kind === "equipment"
+      ? generateEquipment(Math.max(2, current.openedMap.tier) * 5, drop.rarity)
+      : createCurrencyStack(drop.currency, drop.amount);
+    const inserted = insertItem(current.inventory, item);
+    if (inserted.unplaced.length > 0) {
+      setNotice("Backpack full — make room before collecting this drop.");
+      return false;
     }
-    runLootRef.current.items = addCurrencyToInventory(runLootRef.current.items, drop.currency, drop.amount);
-    setRunItems([...runLootRef.current.items]);
+    const next = { ...current, inventory: inserted.container };
+    profileRef.current = next;
+    setProfile(next);
+    runLootRef.current = {
+      collected: runLootRef.current.collected + 1,
+      freshItemIds: [...runLootRef.current.freshItemIds, item.id],
+    };
+    setRunFreshItemIds([...runLootRef.current.freshItemIds]);
+    if (drop.kind === "equipment") setSelectedItemId(item.id);
+    return true;
   }
 
   function leaveArena() {
     if (!profile) return;
+    const current = profileRef.current ?? profile;
     const recovered = runLootRef.current;
-    setProfile({ ...addRecoveredItems(profile, recovered.items), openedMap: null });
-    setSelectedItemId(recovered.items[0]?.id ?? profile.inventory[0]?.id ?? null);
+    const next = { ...current, openedMap: null };
+    profileRef.current = next;
+    setProfile(next);
+    setSelectedItemId(recovered.freshItemIds[0] ?? current.inventory.entries[0]?.item.id ?? null);
     resetRunLoot();
     setPanel(null);
     setScreen("hideout");
-    setNotice(`Map abandoned. ${recovered.items.length} collected items were kept.`);
+    setNotice(`Map abandoned. ${recovered.collected} collected drops were kept.`);
   }
 
   function craftItem(action: "scrap" | "essence") {
@@ -251,8 +285,8 @@ export function GameShell() {
       changed = next !== item;
       return next;
     };
-    const inventory = profile.inventory.map((item) => isEquipmentItem(item) ? update(item) : item);
-    const stash = profile.stash.map((item) => isEquipmentItem(item) ? update(item) : item);
+    const inventory = mapContainerItems(profile.inventory, (item) => isEquipmentItem(item) ? update(item) : item);
+    const stash = mapContainerItems(profile.stash, (item) => isEquipmentItem(item) ? update(item) : item);
     const equipped = Object.fromEntries(Object.entries(profile.equipped).map(([slot, item]) => [slot, item ? update(item) : item])) as PlayerProfile["equipped"];
     if (!changed) return;
     const paid = consumeProfileCurrency({ ...profile, inventory, stash, equipped }, currency, 1);
@@ -261,7 +295,7 @@ export function GameShell() {
 
   function resetRunLoot() {
     runLootRef.current = emptyRunLoot();
-    setRunItems([]);
+    setRunFreshItemIds([]);
   }
 
   function equipSelected() {
@@ -273,45 +307,60 @@ export function GameShell() {
     const item = allItems.find((candidate) => candidate.id === itemId);
     if (!item || profile.equipped[item.slot]?.id === item.id) return;
     const previouslyEquipped = profile.equipped[item.slot];
-    const isRunItem = runItems.some((candidate) => isEquipmentItem(candidate) && candidate.id === item.id);
-    if (isRunItem) {
-      runLootRef.current.items = runLootRef.current.items.filter((candidate) => candidate.id !== item.id);
-      setRunItems((current) => current.filter((candidate) => candidate.id !== item.id));
+    const inventoryEntry = findContainerEntry(profile.inventory, item.id);
+    const stashEntry = findContainerEntry(profile.stash, item.id);
+    const sourceKey = inventoryEntry ? "inventory" : stashEntry ? "stash" : null;
+    const sourceEntry = inventoryEntry ?? stashEntry;
+    if (!sourceKey || !sourceEntry) return;
+    const removed = removeItem(profile[sourceKey], item.id);
+    if (!removed) return;
+    let source = removed.container;
+    if (previouslyEquipped) {
+      const swapped = insertItem(source, previouslyEquipped, { x: sourceEntry.x, y: sourceEntry.y });
+      if (swapped.unplaced.length > 0) {
+        setNotice(`No fitting ${source.id} space for ${previouslyEquipped.baseName}.`);
+        return;
+      }
+      source = swapped.container;
     }
-    setProfile({
-      ...profile,
-      inventory: [...(previouslyEquipped ? [previouslyEquipped] : []), ...profile.inventory.filter((candidate) => candidate.id !== item.id)],
-      stash: profile.stash.filter((candidate) => candidate.id !== item.id),
-      equipped: { ...profile.equipped, [item.slot]: item },
-    });
+    setProfile({ ...profile, [sourceKey]: source, equipped: { ...profile.equipped, [item.slot]: item } });
     setSelectedItemId(item.id);
     setNotice(`${item.baseName} equipped.`);
   }
 
-  function unequipItem(itemId: string) {
+  function moveInventoryItem(itemId: string, targetId: ItemContainerId, x: number, y: number) {
     if (!profile) return;
-    const item = Object.values(profile.equipped).find((candidate) => candidate?.id === itemId);
-    if (!item || profile.equipped[item.slot]?.id !== item.id) return;
-    setProfile({
-      ...profile,
-      inventory: [item, ...profile.inventory],
-      equipped: { ...profile.equipped, [item.slot]: undefined },
-    });
-    setSelectedItemId(item.id);
-    setNotice(`${item.baseName} moved to your backpack.`);
-  }
-
-  function transferItem(itemId: string) {
-    if (!profile) return;
-    const item = [...profile.inventory, ...profile.stash].find((candidate) => candidate.id === itemId);
-    if (!item) return;
-    const inStash = profile.stash.some((candidate) => candidate.id === item.id);
-    if (inStash) {
-      setProfile({ ...profile, stash: profile.stash.filter((candidate) => candidate.id !== item.id), inventory: addItemsToInventory(profile.inventory, [item]) });
-    } else if (profile.inventory.some((candidate) => candidate.id === item.id)) {
-      setProfile({ ...profile, inventory: profile.inventory.filter((candidate) => candidate.id !== item.id), stash: addItemsToInventory(profile.stash, [item]) });
+    const targetKey = targetId === "backpack" ? "inventory" : "stash";
+    const equippedItem = Object.values(profile.equipped).find((candidate) => candidate?.id === itemId);
+    if (equippedItem) {
+      const inserted = insertItem(profile[targetKey], equippedItem, { x, y });
+      if (inserted.unplaced.length > 0) {
+        setNotice(`${equippedItem.baseName} does not fit there.`);
+        return;
+      }
+      setProfile({ ...profile, [targetKey]: inserted.container, equipped: { ...profile.equipped, [equippedItem.slot]: undefined } });
+      setSelectedItemId(equippedItem.id);
+      return;
     }
-    setSelectedItemId(item.id);
+
+    const sourceKey = findContainerEntry(profile.inventory, itemId) ? "inventory" : findContainerEntry(profile.stash, itemId) ? "stash" : null;
+    if (!sourceKey) return;
+    if (sourceKey === targetKey) {
+      const moved = moveItem(profile[sourceKey], itemId, x, y);
+      if (!moved) {
+        setNotice("That item does not fit there.");
+        return;
+      }
+      setProfile({ ...profile, [sourceKey]: moved });
+    } else {
+      const moved = transferItem(profile[sourceKey], profile[targetKey], itemId, x, y);
+      if (!moved) {
+        setNotice("That space is occupied or too small.");
+        return;
+      }
+      setProfile({ ...profile, [sourceKey]: moved.source, [targetKey]: moved.target });
+    }
+    setSelectedItemId(itemId);
   }
 
   return (
@@ -334,7 +383,7 @@ export function GameShell() {
             {panel === "merchant" && <MapMerchant scrap={currencies.scrap} onBuy={buyMap} />}
             {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} currencies={currencies} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
             {(panel === "inventory" || panel === "stash") && (
-              <InventoryPanel profile={profile} backpackItems={profile.inventory} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onUnequipItem={unequipItem} onTransferItem={transferItem} />
+              <InventoryPanel profile={profile} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} />
             )}
           </section>
         </div>

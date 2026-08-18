@@ -576,7 +576,7 @@ class CraftyScene extends Phaser.Scene {
       groundDrop.sprite.setPosition(groundDrop.x, groundDrop.y + bob);
       groundDrop.label.setPosition(groundDrop.x, groundDrop.y - 22 + bob);
       if (Math.hypot(this.player.x - groundDrop.x, this.player.y - groundDrop.y) >= 38) continue;
-      this.options.onLootPickup(groundDrop.drop);
+      if (!this.options.onLootPickup(groundDrop.drop)) continue;
       this.lootCollected += 1;
       this.groundDrops.splice(index, 1);
       this.dropPool?.killAndHide(groundDrop.sprite);

@@ -1,6 +1,7 @@
 import { MAP_MERCHANT } from "./config/merchants";
 import type { MapItem, PlayerProfile } from "./domain";
-import { addItemsToInventory, consumeProfileCurrency } from "./inventory";
+import { consumeProfileCurrency } from "./inventory";
+import { insertItem } from "./item-container";
 import { createMap } from "./maps";
 
 export interface MapPurchase {
@@ -17,8 +18,10 @@ export function purchaseMap(profile: PlayerProfile, offerId: string): MapPurchas
     : profile;
   if (!paidProfile) return null;
   const map = createMap(offer.tier, offer.mapBaseId);
+  const inserted = insertItem(paidProfile.inventory, map);
+  if (inserted.unplaced.length > 0) return null;
   return {
-    profile: { ...paidProfile, inventory: addItemsToInventory(paidProfile.inventory, [map]) },
+    profile: { ...paidProfile, inventory: inserted.container },
     map,
     paid: offer.price.amount,
   };

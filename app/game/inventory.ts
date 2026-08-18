@@ -1,5 +1,6 @@
 import { CURRENCY_DEFINITIONS } from "./config/currencies";
 import type { CurrencyAmounts, CurrencyId, CurrencyItem, EquipmentItem, InventoryItem, MapItem, PlayerProfile } from "./domain";
+import { containerItems, countContainerCurrency, consumeContainerCurrency } from "./item-container";
 import { createId } from "./random";
 
 export const isEquipmentItem = (item: InventoryItem): item is EquipmentItem => item.kind === "equipment";
@@ -72,15 +73,15 @@ export function consumeCurrency(items: readonly InventoryItem[], currencyId: Cur
 }
 
 export function profileCurrencyAmounts(profile: PlayerProfile): CurrencyAmounts {
-  return currencyAmounts([...profile.inventory, ...profile.stash]);
+  return currencyAmounts([...containerItems(profile.inventory), ...containerItems(profile.stash)]);
 }
 
 export function consumeProfileCurrency(profile: PlayerProfile, currencyId: CurrencyId, amount: number): PlayerProfile | null {
-  const inventoryAmount = countCurrency(profile.inventory, currencyId);
+  const inventoryAmount = countContainerCurrency(profile.inventory, currencyId);
   const fromInventory = Math.min(inventoryAmount, amount);
-  const inventory = fromInventory > 0 ? consumeCurrency(profile.inventory, currencyId, fromInventory) : [...profile.inventory];
+  const inventory = fromInventory > 0 ? consumeContainerCurrency(profile.inventory, currencyId, fromInventory) : profile.inventory;
   const remainder = amount - fromInventory;
-  const stash = remainder > 0 ? consumeCurrency(profile.stash, currencyId, remainder) : [...profile.stash];
+  const stash = remainder > 0 ? consumeContainerCurrency(profile.stash, currencyId, remainder) : profile.stash;
   if (!inventory || !stash) return null;
   return { ...profile, inventory, stash };
 }

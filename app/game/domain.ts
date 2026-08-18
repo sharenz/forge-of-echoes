@@ -104,6 +104,22 @@ export interface CurrencyItem {
 
 export type InventoryItem = EquipmentItem | MapItem | CurrencyItem;
 export type CurrencyAmounts = Record<CurrencyId, number>;
+export type ItemContainerId = "backpack" | "stash";
+
+export interface PlacedInventoryItem {
+  item: InventoryItem;
+  x: number;
+  y: number;
+}
+
+/**
+ * A persistent spatial container. Coordinates are part of the save state so
+ * rendering, transfers, crafting, and reloads can never implicitly re-sort it.
+ */
+export interface ItemContainer {
+  id: ItemContainerId;
+  entries: PlacedInventoryItem[];
+}
 
 export interface CharacterProgress {
   name: string;
@@ -118,10 +134,10 @@ export interface CharacterProgress {
 }
 
 export interface PlayerProfile {
-  version: 4;
+  version: 5;
   character: CharacterProgress;
-  inventory: InventoryItem[];
-  stash: InventoryItem[];
+  inventory: ItemContainer;
+  stash: ItemContainer;
   equipped: Partial<Record<EquipmentSlot, EquipmentItem>>;
   mapDevice: MapItem | null;
   openedMap: MapItem | null;

@@ -3,8 +3,9 @@ import test from "node:test";
 import { AFFIX_DEFINITIONS_BY_ID } from "../app/game/config/affixes";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
 import { MAP_MERCHANT } from "../app/game/config/merchants";
-import type { EquipmentItem, PlayerProfile, StatModifier } from "../app/game/domain";
-import { addCurrencyToInventory, consumeCurrency, countCurrency, isCurrencyItem, isMapItem } from "../app/game/inventory";
+import type { EquipmentItem, ItemContainer, PlayerProfile, StatModifier } from "../app/game/domain";
+import { addCurrencyToInventory, consumeCurrency, countCurrency, createCurrencyStack, isCurrencyItem, isMapItem } from "../app/game/inventory";
+import { canPlaceItem, containerItems, createItemContainer, insertItem, moveItem, transferItem } from "../app/game/item-container";
 import {
   createAffixForItem,
   eligibleAffixTiers,
@@ -77,9 +78,9 @@ test("character calculations combine item base, implicit, and explicit modifiers
     }],
   } satisfies EquipmentItem;
   const profile = {
-    version: 4,
+    version: 5,
     character: { name: "Test", archetype: "Test", classId: "amazon", created: true, level: 10, xp: 0, unspentPassives: 0, mapsCompleted: 0, highestWave: 0 },
-    inventory: [], stash: [], equipped: { weapon }, mapDevice: null, openedMap: null,
+    inventory: createItemContainer("backpack"), stash: createItemContainer("stash"), equipped: { weapon }, mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const calculation = calculateCharacterStats(profile);
   const attack = calculation.breakdown.attackDamage;
@@ -120,15 +121,16 @@ test("currency consumption removes quantities across actual inventory stacks", (
 
 test("new profiles contain map and currency items in the backpack", () => {
   const profile = createInitialProfile();
-  assert.equal(profile.version, 4);
+  const backpackItems = containerItems(profile.inventory);
+  assert.equal(profile.version, 5);
   assert.equal(profile.mapDevice, null);
-  assert.equal(profile.inventory.filter(isMapItem).length, 3);
-  assert.equal(countCurrency(profile.inventory, "scrap"), 12);
+  assert.equal(backpackItems.filter(isMapItem).length, 3);
+  assert.equal(countCurrency(backpackItems, "scrap"), 12);
   assert.equal("materials" in profile, false);
   assert.equal("maps" in profile, false);
 });
 
-test("v3 counter saves migrate maps and currency into v4 inventory items", () => {
+test("v3 counter saves migrate maps and currency into positioned v5 inventory items", () => {
   const oldMap = {
     id: "old-map", baseId: "ashen-crucible", baseName: "Ashen Crucible", tier: 3, rarity: "normal",
     quality: 0, corrupted: false, implicit: "Test", modifiers: [],
@@ -145,9 +147,10 @@ test("v3 counter saves migrate maps and currency into v4 inventory items", () =>
   });
   try {
     const migrated = loadProfile();
-    assert.equal(migrated.version, 4);
-    assert.equal(migrated.inventory.filter(isMapItem).length, 1);
-    assert.deepEqual(migrated.inventory.filter(isCurrencyItem).filter((item) => item.baseId === "scrap").map((item) => item.stackSize), [40, 5]);
+    const items = containerItems(migrated.inventory);
+    assert.equal(migrated.version, 5);
+    assert.equal(items.filter(isMapItem).length, 1);
+    assert.deepEqual(items.filter(isCurrencyItem).filter((item) => item.baseId === "scrap").map((item) => item.stackSize), [40, 5]);
   } finally {
     Reflect.deleteProperty(globalThis, "window");
   }
@@ -165,16 +168,48 @@ test("the merchant always offers a free entry map and prices every harder map in
 
 test("map purchases create inventory items and consume real Scrap stacks", () => {
   const profile = createInitialProfile();
-  const initialMaps = profile.inventory.filter(isMapItem).length;
+  const initialMaps = containerItems(profile.inventory).filter(isMapItem).length;
   const freePurchase = purchaseMap(profile, "free-ashen-t1");
   assert.ok(freePurchase);
   assert.equal(freePurchase.map.tier, 1);
-  assert.equal(freePurchase.profile.inventory.filter(isMapItem).length, initialMaps + 1);
-  assert.equal(countCurrency(freePurchase.profile.inventory, "scrap"), 12);
+  assert.equal(containerItems(freePurchase.profile.inventory).filter(isMapItem).length, initialMaps + 1);
+  assert.equal(countCurrency(containerItems(freePurchase.profile.inventory), "scrap"), 12);
 
   const paidPurchase = purchaseMap(freePurchase.profile, "iron-trial-t2");
   assert.ok(paidPurchase);
   assert.equal(paidPurchase.map.tier, 2);
-  assert.equal(countCurrency(paidPurchase.profile.inventory, "scrap"), 6);
+  assert.equal(countCurrency(containerItems(paidPurchase.profile.inventory), "scrap"), 6);
   assert.equal(purchaseMap(paidPurchase.profile, "ashen-descent-t4"), null);
+});
+
+test("grid moves preserve explicit coordinates and reject collisions", () => {
+  const weapon = {
+    kind: "equipment", id: "grid-weapon", baseId: "test", baseName: "Grid Weapon", slot: "weapon", rarity: "normal", itemLevel: 1,
+    stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [], affixes: [],
+  } satisfies EquipmentItem;
+  const ring = { ...weapon, id: "grid-ring", baseName: "Grid Ring", slot: "ring" } satisfies EquipmentItem;
+  const backpack = {
+    id: "backpack",
+    entries: [{ item: weapon, x: 0, y: 0 }, { item: ring, x: 4, y: 0 }],
+  } satisfies ItemContainer;
+  assert.equal(canPlaceItem(backpack, weapon, 3, 0, weapon.id), false);
+  assert.equal(moveItem(backpack, weapon.id, 3, 0), null);
+  const moved = moveItem(backpack, weapon.id, 6, 1);
+  assert.ok(moved);
+  assert.deepEqual(moved.entries.find((entry) => entry.item.id === weapon.id), { item: weapon, x: 6, y: 1 });
+  assert.deepEqual(moved.entries.find((entry) => entry.item.id === ring.id), { item: ring, x: 4, y: 0 });
+});
+
+test("cross-container transfers require the exact requested rectangle", () => {
+  const map = containerItems(createInitialProfile().inventory).find(isMapItem);
+  assert.ok(map);
+  const backpack = insertItem(createItemContainer("backpack"), map, { x: 2, y: 2 }).container;
+  const blocker = createCurrencyStack("scrap", 1);
+  const stash = insertItem(createItemContainer("stash"), blocker, { x: 5, y: 5 }).container;
+  assert.equal(transferItem(backpack, stash, map.id, 5, 5), null);
+  const transferred = transferItem(backpack, stash, map.id, 7, 4);
+  assert.ok(transferred);
+  assert.equal(transferred.source.entries.length, 0);
+  assert.deepEqual(transferred.target.entries.find((entry) => entry.item.id === map.id), { item: map, x: 7, y: 4 });
+  assert.deepEqual(transferred.target.entries.find((entry) => entry.item.id === blocker.id), { item: blocker, x: 5, y: 5 });
 });

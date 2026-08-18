@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, notification, mapMerchant, phaserWorld, inventoryPanel, itemTooltip, world, domain, content, profile, stats, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, notification, mapMerchant, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, containerConfig, content, profile, stats, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
@@ -37,9 +37,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/components/MapMerchant.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/PhaserWorld.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/InventoryPanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/InventoryGrid.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ItemTooltip.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/item-container.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/containers.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/stats.ts", import.meta.url), "utf8"),
@@ -72,8 +75,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /rollGroundDrop/);
   assert.match(world, /updateGroundDrops/);
   assert.match(shell, /onLootPickup/);
-  assert.match(shell, /runLootRef\.current\.items = \[item, \.\.\.runLootRef\.current\.items\]/);
-  assert.match(shell, /addCurrencyToInventory/);
+  assert.match(shell, /const inserted = insertItem\(current\.inventory, item\)/);
+  assert.match(world, /if \(!this\.options\.onLootPickup\(groundDrop\.drop\)\) continue/);
   assert.match(shell, /arena-inventory-toggle/);
   assert.match(shell, /paused=\{inventoryOpen\}/);
   assert.match(phaserWorld, /updateArenaBalance/);
@@ -81,7 +84,13 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(skillConfig, /maxCharges: 3/);
   assert.match(world, /riftCharges \+= 1/);
   assert.match(inventoryPanel, /dropIntoSlot/);
-  assert.match(inventoryPanel, /onUnequipItem/);
+  assert.match(inventoryPanel, /onMoveItem/);
+  assert.match(inventoryGrid, /canPlaceItem/);
+  assert.match(inventoryGrid, /grid-drop-preview/);
+  assert.doesNotMatch(inventoryGrid, /packItems/);
+  assert.match(itemContainer, /transferItem/);
+  assert.match(itemContainer, /ignoredItemId/);
+  assert.match(containerConfig, /columns: 12, rows: 8/);
   assert.doesNotMatch(inventoryPanel, /inventory-inspector/);
   assert.match(itemTooltip, /tooltip-affixes/);
   assert.match(inventoryPanel, /Collected this map/);

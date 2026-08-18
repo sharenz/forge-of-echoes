@@ -14,7 +14,7 @@ interface PhaserWorldProps {
   arenaBalance?: ArenaBalance;
   characterStats?: CharacterStats;
   onStation?: (station: WorldStation) => void;
-  onLootPickup?: (drop: MapDrop) => void;
+  onLootPickup?: (drop: MapDrop) => boolean;
   onArenaComplete?: (summary: ArenaSummary) => void;
   children?: React.ReactNode;
 }
@@ -66,7 +66,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
         arenaBalance: arenaBalanceRef.current,
         onStation: (station) => stationCallbackRef.current?.(station),
         onHud: setHud,
-        onLootPickup: (drop) => lootCallbackRef.current?.(drop),
+        onLootPickup: (drop) => lootCallbackRef.current?.(drop) ?? false,
         onArenaComplete: (summary) => completionCallbackRef.current?.(summary),
       });
       runtimeRef.current = runtime;

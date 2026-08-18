@@ -1,43 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import type { EquipmentItem, InventoryItem, PlayerProfile } from "../game/domain";
+import type { EquipmentItem, InventoryItem, ItemContainerId, PlayerProfile } from "../game/domain";
+import { containerItems } from "../game/item-container";
 import { currencyAmounts, isEquipmentItem } from "../game/inventory";
 import { InventoryGrid } from "./InventoryGrid";
 import { ItemCard } from "./ItemCard";
 
 interface InventoryPanelProps {
   profile: PlayerProfile;
-  backpackItems: InventoryItem[];
   selectedItemId: string | null;
   showStash?: boolean;
   freshItemIds?: string[];
   onSelect: (id: string) => void;
   onEquipItem: (id: string) => void;
-  onUnequipItem: (id: string) => void;
-  onTransferItem?: (id: string) => void;
+  onMoveItem: (id: string, target: ItemContainerId, x: number, y: number) => void;
 }
 
 const EQUIPMENT_SLOTS = ["weapon", "chest", "ring", "boots"] as const;
 
-export function InventoryPanel({
-  profile,
-  backpackItems,
-  selectedItemId,
-  showStash = false,
-  freshItemIds = [],
-  onSelect,
-  onEquipItem,
-  onUnequipItem,
-  onTransferItem,
-}: InventoryPanelProps) {
+export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem }: InventoryPanelProps) {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const freshItems = new Set(freshItemIds);
+  const backpackItems = containerItems(profile.inventory);
+  const stashItems = containerItems(profile.stash);
   const equippedItems = Object.values(profile.equipped).filter(Boolean) as EquipmentItem[];
-  const allItems: InventoryItem[] = [...equippedItems, ...backpackItems, ...profile.stash];
+  const allItems: InventoryItem[] = [...equippedItems, ...backpackItems, ...stashItems];
   const draggedItem = allItems.find((item) => item.id === draggedItemId) ?? null;
-  const draggedIsEquipped = Boolean(draggedItem && isEquipmentItem(draggedItem) && profile.equipped[draggedItem.slot]?.id === draggedItem.id);
-  const draggedIsInStash = Boolean(draggedItem && profile.stash.some((item) => item.id === draggedItem.id));
   const freshInventory = backpackItems.filter((item) => freshItems.has(item.id));
   const freshCurrency = currencyAmounts(freshInventory);
   const materialDrops = [
@@ -60,20 +49,6 @@ export function InventoryPanel({
     if (item && isEquipmentItem(item) && item.slot === slot) onEquipItem(item.id);
     endDrag();
   };
-  const dropIntoBackpack = (event: React.DragEvent) => {
-    event.preventDefault();
-    const itemId = readDroppedItem(event);
-    if (!itemId) return;
-    if (draggedIsEquipped) onUnequipItem(itemId);
-    else if (draggedIsInStash) onTransferItem?.(itemId);
-    endDrag();
-  };
-  const dropIntoStash = (event: React.DragEvent) => {
-    event.preventDefault();
-    const itemId = readDroppedItem(event);
-    if (itemId && !draggedIsEquipped && !draggedIsInStash) onTransferItem?.(itemId);
-    endDrag();
-  };
 
   return (
     <div className="inventory-window">
@@ -88,7 +63,7 @@ export function InventoryPanel({
           >
             <small>{slot}</small>
             {profile.equipped[slot]
-              ? <ItemCard compact draggable item={profile.equipped[slot]} onClick={() => onSelect(profile.equipped[slot]?.id ?? "")} onDragStart={(event) => { const id = profile.equipped[slot]?.id; if (!id) return; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-crafty-item", id); beginDrag(id); }} onDragEnd={endDrag} selected={selectedItemId === profile.equipped[slot]?.id} />
+              ? <ItemCard compact draggable item={profile.equipped[slot]} onClick={() => onSelect(profile.equipped[slot]?.id ?? "")} onDragStart={(event) => { const id = profile.equipped[slot]?.id; if (!id) return; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-crafty-item", id); event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify({ x: 0, y: 0 })); beginDrag(id); }} onDragEnd={endDrag} selected={selectedItemId === profile.equipped[slot]?.id} />
               : <span>Empty</span>}
           </div>
         ))}
@@ -105,14 +80,9 @@ export function InventoryPanel({
           </section>
         )}
         {showStash && (
-          <div className={`inventory-drop-zone ${draggedItem && !draggedIsEquipped && !draggedIsInStash ? "drop-compatible" : ""}`} onDragOver={(event) => { if (draggedItem && !draggedIsEquipped && !draggedIsInStash) event.preventDefault(); }} onDrop={dropIntoStash}>
-            <InventoryGrid items={profile.stash} columns={12} rows={8} selectedId={selectedItemId} onSelect={onSelect} onDragItem={beginDrag} onDragEnd={endDrag} label="Stash" />
-          </div>
+          <InventoryGrid container={profile.stash} selectedId={selectedItemId} onSelect={onSelect} draggedItem={draggedItem} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} />
         )}
-        <div className={`inventory-drop-zone ${draggedIsEquipped || draggedIsInStash ? "drop-compatible" : ""}`} onDragOver={(event) => { if (draggedIsEquipped || draggedIsInStash) event.preventDefault(); }} onDrop={dropIntoBackpack}>
-          {(draggedIsEquipped || draggedIsInStash) && <span className="drop-zone-prompt">Drop here to move into backpack</span>}
-          <InventoryGrid items={backpackItems} columns={12} rows={5} selectedId={selectedItemId} onSelect={onSelect} onDragItem={beginDrag} onDragEnd={endDrag} onEquipItem={onEquipItem} label="Backpack" highlightedIds={freshItems} />
-        </div>
+        <InventoryGrid container={profile.inventory} selectedId={selectedItemId} onSelect={onSelect} highlightedIds={freshItems} draggedItem={draggedItem} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} onEquipItem={onEquipItem} />
       </div>
     </div>
   );

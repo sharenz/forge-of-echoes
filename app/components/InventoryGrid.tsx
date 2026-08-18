@@ -1,66 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties, type DragEvent } from "react";
+import { ITEM_CONTAINER_DEFINITIONS } from "../game/config/containers";
 import { CURRENCY_DEFINITIONS } from "../game/config/currencies";
-import type { EquipmentItem, InventoryItem } from "../game/domain";
+import type { InventoryItem, ItemContainer } from "../game/domain";
+import { canPlaceItem, findContainerEntry, itemFootprint } from "../game/item-container";
 import { isCurrencyItem, isEquipmentItem, isMapItem } from "../game/inventory";
 import { itemDisplayName } from "../game/items";
 import { ItemTooltip } from "./ItemTooltip";
 
 interface InventoryGridProps {
-  items: InventoryItem[];
-  columns: number;
-  rows: number;
+  container: ItemContainer;
   selectedId?: string | null;
   onSelect: (id: string) => void;
-  label: string;
   highlightedIds?: ReadonlySet<string>;
+  draggedItem?: InventoryItem | null;
   onDragItem?: (id: string) => void;
   onDragEnd?: () => void;
+  onDropItem?: (id: string, containerId: ItemContainer["id"], x: number, y: number) => void;
   onEquipItem?: (id: string) => void;
 }
 
-interface Placement {
-  item: InventoryItem;
+interface DropPreview {
   x: number;
   y: number;
-  width: number;
-  height: number;
-}
-
-const EQUIPMENT_SIZE: Record<EquipmentItem["slot"], { width: number; height: number }> = {
-  weapon: { width: 2, height: 4 },
-  chest: { width: 2, height: 3 },
-  boots: { width: 2, height: 2 },
-  ring: { width: 1, height: 1 },
-};
-
-function itemSize(item: InventoryItem): { width: number; height: number } {
-  return isEquipmentItem(item) ? EQUIPMENT_SIZE[item.slot] : { width: 1, height: 1 };
-}
-
-function packItems(items: InventoryItem[], columns: number, rows: number): Placement[] {
-  const occupied = Array.from({ length: rows }, () => Array.from({ length: columns }, () => false));
-  const placements: Placement[] = [];
-  for (const item of items) {
-    const size = itemSize(item);
-    let placed = false;
-    for (let y = 0; y <= rows - size.height && !placed; y += 1) {
-      for (let x = 0; x <= columns - size.width && !placed; x += 1) {
-        let available = true;
-        for (let dy = 0; dy < size.height; dy += 1) {
-          for (let dx = 0; dx < size.width; dx += 1) if (occupied[y + dy][x + dx]) available = false;
-        }
-        if (!available) continue;
-        for (let dy = 0; dy < size.height; dy += 1) {
-          for (let dx = 0; dx < size.width; dx += 1) occupied[y + dy][x + dx] = true;
-        }
-        placements.push({ item, x, y, ...size });
-        placed = true;
-      }
-    }
-  }
-  return placements;
+  valid: boolean;
 }
 
 function itemTitle(item: InventoryItem): string {
@@ -69,14 +33,77 @@ function itemTitle(item: InventoryItem): string {
   return CURRENCY_DEFINITIONS[item.baseId].name;
 }
 
-export function InventoryGrid({ items, columns, rows, selectedId, onSelect, label, highlightedIds, onDragItem, onDragEnd, onEquipItem }: InventoryGridProps) {
-  const placements = packItems(items, columns, rows);
+function dragOffset(event: DragEvent, item: InventoryItem): { x: number; y: number } {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const size = itemFootprint(item);
+  return {
+    x: Math.max(0, Math.min(size.width - 1, Math.floor((event.clientX - rect.left) / (rect.width / size.width)))),
+    y: Math.max(0, Math.min(size.height - 1, Math.floor((event.clientY - rect.top) / (rect.height / size.height)))),
+  };
+}
+
+function readOffset(event: DragEvent): { x: number; y: number } {
+  try {
+    const parsed = JSON.parse(event.dataTransfer.getData("application/x-crafty-offset")) as { x?: number; y?: number };
+    return { x: Number.isInteger(parsed.x) ? parsed.x ?? 0 : 0, y: Number.isInteger(parsed.y) ? parsed.y ?? 0 : 0 };
+  } catch {
+    return { x: 0, y: 0 };
+  }
+}
+
+export function InventoryGrid({ container, selectedId, onSelect, highlightedIds, draggedItem, onDragItem, onDragEnd, onDropItem, onEquipItem }: InventoryGridProps) {
+  const definition = ITEM_CONTAINER_DEFINITIONS[container.id];
   const [tooltip, setTooltip] = useState<{ item: InventoryItem; x: number; y: number } | null>(null);
+  const [preview, setPreview] = useState<DropPreview | null>(null);
+
+  const targetFromEvent = (event: DragEvent): DropPreview | null => {
+    if (!draggedItem) return null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const offset = readOffset(event);
+    const x = Math.floor(((event.clientX - rect.left) / rect.width) * definition.columns) - offset.x;
+    const y = Math.floor(((event.clientY - rect.top) / rect.height) * definition.rows) - offset.y;
+    const ignoreId = findContainerEntry(container, draggedItem.id) ? draggedItem.id : undefined;
+    return { x, y, valid: canPlaceItem(container, draggedItem, x, y, ignoreId) };
+  };
+
   return (
     <div className="poe-grid-wrap">
-      <div className="poe-grid-label"><span>{label}</span><em>{placements.length}/{items.length} placed</em></div>
-      <div className="poe-grid" style={{ "--grid-columns": columns, "--grid-rows": rows } as React.CSSProperties} role="listbox" aria-label={label}>
-        {placements.map(({ item, x, y, width, height }) => {
+      <div className="poe-grid-label"><span>{definition.name}</span><em>{container.entries.length} items · positions saved</em></div>
+      <div
+        className={`poe-grid ${preview ? preview.valid ? "drop-valid" : "drop-invalid" : ""}`}
+        style={{ "--grid-columns": definition.columns, "--grid-rows": definition.rows } as CSSProperties}
+        role="listbox"
+        tabIndex={0}
+        aria-label={definition.name}
+        onDragOver={(event) => {
+          if (!draggedItem || !onDropItem) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          setPreview(targetFromEvent(event));
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPreview(null);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          const target = targetFromEvent(event);
+          const itemId = event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain") || draggedItem?.id;
+          if (target?.valid && itemId) onDropItem?.(itemId, container.id, target.x, target.y);
+          setPreview(null);
+          onDragEnd?.();
+        }}
+      >
+        {preview && draggedItem && (
+          <span
+            className={`grid-drop-preview ${preview.valid ? "valid" : "invalid"}`}
+            style={{
+              gridColumn: `${Math.max(0, Math.min(definition.columns - itemFootprint(draggedItem).width, preview.x)) + 1} / span ${itemFootprint(draggedItem).width}`,
+              gridRow: `${Math.max(0, Math.min(definition.rows - itemFootprint(draggedItem).height, preview.y)) + 1} / span ${itemFootprint(draggedItem).height}`,
+            }}
+          />
+        )}
+        {container.entries.map(({ item, x, y }) => {
+          const size = itemFootprint(item);
           const highlighted = highlightedIds?.has(item.id) ?? false;
           const currency = isCurrencyItem(item) ? CURRENCY_DEFINITIONS[item.baseId] : null;
           const visualClass = isEquipmentItem(item) || isMapItem(item) ? `rarity-${item.rarity}` : "inventory-currency";
@@ -86,18 +113,19 @@ export function InventoryGrid({ items, columns, rows, selectedId, onSelect, labe
               role="option"
               aria-selected={selectedId === item.id}
               className={`poe-grid-item ${visualClass} item-kind-${item.kind} ${selectedId === item.id ? "selected" : ""} ${highlighted ? "new-drop" : ""}`}
-              style={{ gridColumn: `${x + 1} / span ${width}`, gridRow: `${y + 1} / span ${height}` }}
+              style={{ gridColumn: `${x + 1} / span ${size.width}`, gridRow: `${y + 1} / span ${size.height}` }}
               onClick={() => onSelect(item.id)}
               onDoubleClick={() => { if (isEquipmentItem(item)) onEquipItem?.(item.id); }}
               draggable={Boolean(onDragItem)}
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = "move";
                 event.dataTransfer.setData("application/x-crafty-item", item.id);
+                event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify(dragOffset(event, item)));
                 event.dataTransfer.setData("text/plain", item.id);
                 setTooltip(null);
                 onDragItem?.(item.id);
               }}
-              onDragEnd={() => onDragEnd?.()}
+              onDragEnd={() => { setPreview(null); onDragEnd?.(); }}
               onPointerEnter={(event) => setTooltip({ item, x: event.clientX, y: event.clientY })}
               onPointerMove={(event) => setTooltip({ item, x: event.clientX, y: event.clientY })}
               onPointerLeave={() => setTooltip(null)}
@@ -109,12 +137,12 @@ export function InventoryGrid({ items, columns, rows, selectedId, onSelect, labe
               {highlighted && <em className="new-drop-badge">New</em>}
               <span>{isEquipmentItem(item) ? item.baseName.split(" ").map((word) => word[0]).join("") : isMapItem(item) ? `T${item.tier}` : currency?.symbol}</span>
               {isCurrencyItem(item) && <b className="stack-count">{item.stackSize}</b>}
-              {height > 1 && isEquipmentItem(item) && <small>{item.baseName}</small>}
+              {size.height > 1 && isEquipmentItem(item) && <small>{item.baseName}</small>}
             </button>
           );
         })}
       </div>
-      {tooltip && <ItemTooltip item={tooltip.item} x={tooltip.x} y={tooltip.y} hint={isEquipmentItem(tooltip.item) ? "Drag to a matching slot · double-click to equip" : undefined} />}
+      {tooltip && <ItemTooltip item={tooltip.item} x={tooltip.x} y={tooltip.y} hint={isEquipmentItem(tooltip.item) ? "Drag to move · double-click to equip" : "Drag to place"} />}
     </div>
   );
 }

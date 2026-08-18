@@ -30,6 +30,7 @@ export interface WorldRuntimeOptions {
   arenaBalance?: ArenaBalance;
   onStation: (station: WorldStation) => void;
   onHud: (state: WorldHudState) => void;
-  onLootPickup: (drop: MapDrop) => void;
+  /** Return false when the backpack rejected the drop, leaving it in the world. */
+  onLootPickup: (drop: MapDrop) => boolean;
   onArenaComplete: (summary: ArenaSummary) => void;
 }
