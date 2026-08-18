@@ -260,6 +260,23 @@ test("grid moves preserve explicit coordinates and reject collisions", () => {
   assert.deepEqual(moved.entries.find((entry) => entry.item.id === ring.id), { item: ring, x: 4, y: 0 });
 });
 
+test("a six-cell item fits directly below a four-cell item in the backpack", () => {
+  const helmet = {
+    kind: "equipment", id: "grid-helmet", baseId: "test", baseName: "Grid Helmet", slot: "helmet", rarity: "normal", itemLevel: 1,
+    stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [], affixes: [],
+  } satisfies EquipmentItem;
+  const chest = { ...helmet, id: "grid-chest", baseName: "Grid Chest", slot: "chest" } satisfies EquipmentItem;
+  const backpack = {
+    id: "backpack",
+    entries: [{ item: helmet, x: 4, y: 0 }, { item: chest, x: 0, y: 0 }],
+  } satisfies ItemContainer;
+
+  assert.equal(canPlaceItem(backpack, chest, 4, 2, chest.id), true);
+  const moved = moveItem(backpack, chest.id, 4, 2);
+  assert.ok(moved);
+  assert.deepEqual(moved.entries.find((entry) => entry.item.id === chest.id), { item: chest, x: 4, y: 2 });
+});
+
 test("cross-container transfers require the exact requested rectangle", () => {
   const map = containerItems(createInitialProfile().inventory).find(isMapItem);
   assert.ok(map);

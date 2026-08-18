@@ -6,7 +6,7 @@ import type { CharacterEquipmentSlot, EquipmentItem, InventoryItem, ItemContaine
 import { equipmentSlotAccepts } from "../game/equipment";
 import { containerItems } from "../game/item-container";
 import { currencyAmounts, isEquipmentItem } from "../game/inventory";
-import { InventoryGrid } from "./InventoryGrid";
+import { InventoryGrid, type GridOffset } from "./InventoryGrid";
 import { ItemCard } from "./ItemCard";
 
 interface InventoryPanelProps {
@@ -20,7 +20,8 @@ interface InventoryPanelProps {
 }
 
 export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem }: InventoryPanelProps) {
-  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dragState, setDragState] = useState<{ itemId: string; offset: GridOffset } | null>(null);
+  const draggedItemId = dragState?.itemId ?? null;
   const freshItems = new Set(freshItemIds);
   const backpackItems = containerItems(profile.inventory);
   const stashItems = containerItems(profile.stash);
@@ -36,11 +37,11 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
   ] as const;
   const hasRunPickups = freshItems.size > 0;
 
-  const beginDrag = (id: string) => {
-    setDraggedItemId(id);
+  const beginDrag = (id: string, offset: GridOffset = { x: 0, y: 0 }) => {
+    setDragState({ itemId: id, offset });
     onSelect(id);
   };
-  const endDrag = () => setDraggedItemId(null);
+  const endDrag = () => setDragState(null);
   const readDroppedItem = (event: React.DragEvent) => event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain") || draggedItemId;
   const dropIntoSlot = (event: React.DragEvent, slot: CharacterEquipmentSlot) => {
     event.preventDefault();
@@ -84,9 +85,9 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
           </section>
         )}
         {showStash && (
-          <InventoryGrid container={profile.stash} selectedId={selectedItemId} onSelect={onSelect} draggedItem={draggedItem} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} />
+          <InventoryGrid container={profile.stash} selectedId={selectedItemId} onSelect={onSelect} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} />
         )}
-        <InventoryGrid container={profile.inventory} selectedId={selectedItemId} onSelect={onSelect} highlightedIds={freshItems} draggedItem={draggedItem} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} onEquipItem={onEquipItem} />
+        <InventoryGrid container={profile.inventory} selectedId={selectedItemId} onSelect={onSelect} highlightedIds={freshItems} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} onEquipItem={onEquipItem} />
       </div>
     </div>
   );

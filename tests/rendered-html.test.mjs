@@ -69,6 +69,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(page, /<GameShell \/>/);
   assert.match(layout, /<GameCursor \/>/);
   assert.match(cursor, /data-mode="default"/);
+  assert.match(cursor, /addEventListener\("dragover"/);
+  assert.doesNotMatch(cursor, /requestAnimationFrame/);
   assert.match(shell, /<PhaserWorld/);
   assert.match(shell, /<GameNotification/);
   assert.match(shell, /<MapMerchant/);
@@ -138,6 +140,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(inventoryPanel, /dropIntoSlot/);
   assert.match(inventoryPanel, /onMoveItem/);
   assert.match(inventoryGrid, /canPlaceItem/);
+  assert.match(inventoryGrid, /draggedOffset \?\? readOffset/);
   assert.match(inventoryGrid, /grid-drop-preview/);
   assert.doesNotMatch(inventoryGrid, /packItems/);
   assert.match(itemContainer, /transferItem/);

@@ -15,7 +15,8 @@ interface InventoryGridProps {
   onSelect: (id: string) => void;
   highlightedIds?: ReadonlySet<string>;
   draggedItem?: InventoryItem | null;
-  onDragItem?: (id: string) => void;
+  draggedOffset?: GridOffset | null;
+  onDragItem?: (id: string, offset: GridOffset) => void;
   onDragEnd?: () => void;
   onDropItem?: (id: string, containerId: ItemContainer["id"], x: number, y: number) => void;
   onEquipItem?: (id: string) => void;
@@ -27,13 +28,18 @@ interface DropPreview {
   valid: boolean;
 }
 
+export interface GridOffset {
+  x: number;
+  y: number;
+}
+
 function itemTitle(item: InventoryItem): string {
   if (isEquipmentItem(item)) return itemDisplayName(item);
   if (isMapItem(item)) return `${item.baseName} · Tier ${item.tier}`;
   return CURRENCY_DEFINITIONS[item.baseId].name;
 }
 
-function dragOffset(event: DragEvent, item: InventoryItem): { x: number; y: number } {
+function dragOffset(event: DragEvent, item: InventoryItem): GridOffset {
   const rect = event.currentTarget.getBoundingClientRect();
   const size = itemFootprint(item);
   return {
@@ -51,7 +57,7 @@ function readOffset(event: DragEvent): { x: number; y: number } {
   }
 }
 
-export function InventoryGrid({ container, selectedId, onSelect, highlightedIds, draggedItem, onDragItem, onDragEnd, onDropItem, onEquipItem }: InventoryGridProps) {
+export function InventoryGrid({ container, selectedId, onSelect, highlightedIds, draggedItem, draggedOffset, onDragItem, onDragEnd, onDropItem, onEquipItem }: InventoryGridProps) {
   const definition = ITEM_CONTAINER_DEFINITIONS[container.id];
   const [tooltip, setTooltip] = useState<{ item: InventoryItem; x: number; y: number } | null>(null);
   const [preview, setPreview] = useState<DropPreview | null>(null);
@@ -59,7 +65,9 @@ export function InventoryGrid({ container, selectedId, onSelect, highlightedIds,
   const targetFromEvent = (event: DragEvent): DropPreview | null => {
     if (!draggedItem) return null;
     const rect = event.currentTarget.getBoundingClientRect();
-    const offset = readOffset(event);
+    // The HTML drag data store is protected during dragover in some browsers.
+    // Keep the grabbed cell in React state and use the payload only as a drop fallback.
+    const offset = draggedOffset ?? readOffset(event);
     const x = Math.floor(((event.clientX - rect.left) / rect.width) * definition.columns) - offset.x;
     const y = Math.floor(((event.clientY - rect.top) / rect.height) * definition.rows) - offset.y;
     const ignoreId = findContainerEntry(container, draggedItem.id) ? draggedItem.id : undefined;
@@ -118,12 +126,13 @@ export function InventoryGrid({ container, selectedId, onSelect, highlightedIds,
               onDoubleClick={() => { if (isEquipmentItem(item)) onEquipItem?.(item.id); }}
               draggable={Boolean(onDragItem)}
               onDragStart={(event) => {
+                const offset = dragOffset(event, item);
                 event.dataTransfer.effectAllowed = "move";
                 event.dataTransfer.setData("application/x-crafty-item", item.id);
-                event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify(dragOffset(event, item)));
+                event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify(offset));
                 event.dataTransfer.setData("text/plain", item.id);
                 setTooltip(null);
-                onDragItem?.(item.id);
+                onDragItem?.(item.id, offset);
               }}
               onDragEnd={() => { setPreview(null); onDragEnd?.(); }}
               onPointerEnter={(event) => setTooltip({ item, x: event.clientX, y: event.clientY })}
