@@ -5,12 +5,13 @@ import { CHARACTER_CLASSES, XP_BY_LEVEL } from "../game/content";
 import { buildArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import type { CharacterClassId, CharacterEquipmentSlot, CurrencyId, EquipmentItem, ItemContainerId, PlayerProfile, RunResult } from "../game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts, findEquippedSlot } from "../game/equipment";
-import { isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency, createCurrencyStack } from "../game/inventory";
+import { isCurrencyItem, isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency, createCurrencyStack } from "../game/inventory";
 import { containerItems, findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../game/item-container";
 import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
 import { addMapModifier, rerollMap } from "../game/maps";
 import { purchaseMap } from "../game/merchant";
 import { applyRunResult, createCharacter, loadProfile, saveProfile } from "../game/profile";
+import { activeStashTab, addStashTab, findStashEntry, mapStashItems, removeStashItem, renameStashTab, selectStashTab, stashItems as allStashItems, updateStashContainer } from "../game/stash";
 import { calculateCharacterStats } from "../game/stats";
 import type { WorldStation } from "../game2d/types";
 import { GameNotification } from "./GameNotification";
@@ -42,7 +43,7 @@ export function GameShell() {
       const loaded = loadProfile();
       profileRef.current = loaded;
       setProfile(loaded);
-      const firstItem = loaded.inventory.entries[0]?.item ?? loaded.stash.entries[0]?.item ?? Object.values(loaded.equipped)[0];
+      const firstItem = loaded.inventory.entries[0]?.item ?? activeStashTab(loaded.stash).container.entries[0]?.item ?? Object.values(loaded.equipped)[0];
       setSelectedItemId(firstItem?.id ?? null);
     }, 0);
     return () => window.clearTimeout(timeout);
@@ -111,7 +112,7 @@ export function GameShell() {
   }
 
   const backpackItems = containerItems(profile.inventory);
-  const stashItems = containerItems(profile.stash);
+  const stashItems = allStashItems(profile.stash);
   const allItems = [...Object.values(profile.equipped).filter(Boolean), ...backpackItems.filter(isEquipmentItem), ...stashItems.filter(isEquipmentItem)] as EquipmentItem[];
   const inventoryMaps = backpackItems.filter(isMapItem);
   const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id)) as Set<string>;
@@ -126,7 +127,7 @@ export function GameShell() {
           <div className="world-panel-backdrop arena-panel-backdrop">
             <section className="world-panel panel-inventory" aria-label="Character inventory">
               <header><div><span>Combat paused · equipment changes apply immediately</span><h2>Inventory</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close inventory">×</button></header>
-              <InventoryPanel profile={profile} selectedItemId={selectedItemId} freshItemIds={runFreshItemIds} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} />
+              <InventoryPanel profile={profile} selectedItemId={selectedItemId} freshItemIds={runFreshItemIds} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} />
             </section>
           </div>
         )}
@@ -288,7 +289,7 @@ export function GameShell() {
       return next;
     };
     const inventory = mapContainerItems(profile.inventory, (item) => isEquipmentItem(item) ? update(item) : item);
-    const stash = mapContainerItems(profile.stash, (item) => isEquipmentItem(item) ? update(item) : item);
+    const stash = mapStashItems(profile.stash, (item) => isEquipmentItem(item) ? update(item) : item);
     const equipped = Object.fromEntries(Object.entries(profile.equipped).map(([slot, item]) => [slot, item ? update(item) : item])) as PlayerProfile["equipped"];
     if (!changed) return;
     const paid = consumeProfileCurrency({ ...profile, inventory, stash, equipped }, currency, 1);
@@ -324,61 +325,125 @@ export function GameShell() {
       : chooseEquipmentSlot(item, profile.equipped);
     const previouslyEquipped = profile.equipped[targetSlot];
     const inventoryEntry = findContainerEntry(profile.inventory, item.id);
-    const stashEntry = findContainerEntry(profile.stash, item.id);
-    const sourceKey = inventoryEntry ? "inventory" : stashEntry ? "stash" : null;
-    const sourceEntry = inventoryEntry ?? stashEntry;
-    if (!sourceKey || !sourceEntry) return;
-    const removed = removeItem(profile[sourceKey], item.id);
-    if (!removed) return;
-    let source = removed.container;
-    if (previouslyEquipped) {
-      const swapped = insertItem(source, previouslyEquipped, { x: sourceEntry.x, y: sourceEntry.y });
-      if (swapped.unplaced.length > 0) {
-        setNotice(`No fitting ${source.id} space for ${previouslyEquipped.baseName}.`);
-        return;
+    const stashEntry = findStashEntry(profile.stash, item.id);
+    if (!inventoryEntry && !stashEntry) return;
+    if (inventoryEntry) {
+      const removed = removeItem(profile.inventory, item.id);
+      if (!removed) return;
+      let inventory = removed.container;
+      if (previouslyEquipped) {
+        const swapped = insertItem(inventory, previouslyEquipped, { x: inventoryEntry.x, y: inventoryEntry.y });
+        if (swapped.unplaced.length > 0) {
+          setNotice(`No fitting backpack space for ${previouslyEquipped.baseName}.`);
+          return;
+        }
+        inventory = swapped.container;
       }
-      source = swapped.container;
+      setProfile({ ...profile, inventory, equipped: { ...profile.equipped, [targetSlot]: item } });
+    } else if (stashEntry) {
+      const removed = removeStashItem(profile.stash, item.id);
+      if (!removed) return;
+      let container = removed.stash.tabs.find((tab) => tab.id === removed.tabId)?.container;
+      if (!container) return;
+      if (previouslyEquipped) {
+        const swapped = insertItem(container, previouslyEquipped, { x: stashEntry.entry.x, y: stashEntry.entry.y });
+        if (swapped.unplaced.length > 0) {
+          setNotice(`No fitting stash space for ${previouslyEquipped.baseName}.`);
+          return;
+        }
+        container = swapped.container;
+      }
+      setProfile({ ...profile, stash: updateStashContainer(removed.stash, removed.tabId, container), equipped: { ...profile.equipped, [targetSlot]: item } });
     }
-    setProfile({ ...profile, [sourceKey]: source, equipped: { ...profile.equipped, [targetSlot]: item } });
     setSelectedItemId(item.id);
     setNotice(`${item.baseName} equipped.`);
   }
 
   function moveInventoryItem(itemId: string, targetId: ItemContainerId, x: number, y: number) {
     if (!profile) return;
-    const targetKey = targetId === "backpack" ? "inventory" : "stash";
+    const activeTab = activeStashTab(profile.stash);
     const equippedItem = Object.values(profile.equipped).find((candidate) => candidate?.id === itemId);
     if (equippedItem) {
       const equippedSlot = findEquippedSlot(profile.equipped, equippedItem.id);
       if (!equippedSlot) return;
-      const inserted = insertItem(profile[targetKey], equippedItem, { x, y });
+      const target = targetId === "backpack" ? profile.inventory : activeTab.container;
+      const inserted = insertItem(target, equippedItem, { x, y });
       if (inserted.unplaced.length > 0) {
         setNotice(`${equippedItem.baseName} does not fit there.`);
         return;
       }
-      setProfile({ ...profile, [targetKey]: inserted.container, equipped: { ...profile.equipped, [equippedSlot]: undefined } });
+      setProfile(targetId === "backpack"
+        ? { ...profile, inventory: inserted.container, equipped: { ...profile.equipped, [equippedSlot]: undefined } }
+        : { ...profile, stash: updateStashContainer(profile.stash, activeTab.id, inserted.container), equipped: { ...profile.equipped, [equippedSlot]: undefined } });
       setSelectedItemId(equippedItem.id);
       return;
     }
 
-    const sourceKey = findContainerEntry(profile.inventory, itemId) ? "inventory" : findContainerEntry(profile.stash, itemId) ? "stash" : null;
-    if (!sourceKey) return;
-    if (sourceKey === targetKey) {
-      const moved = moveItem(profile[sourceKey], itemId, x, y);
+    const inventoryEntry = findContainerEntry(profile.inventory, itemId);
+    const stashEntry = findStashEntry(profile.stash, itemId);
+    if (!inventoryEntry && !stashEntry) return;
+    if (inventoryEntry && targetId === "backpack") {
+      const moved = moveItem(profile.inventory, itemId, x, y);
       if (!moved) {
         setNotice("That item does not fit there.");
         return;
       }
-      setProfile({ ...profile, [sourceKey]: moved });
-    } else {
-      const moved = transferItem(profile[sourceKey], profile[targetKey], itemId, x, y);
+      setProfile({ ...profile, inventory: moved });
+    } else if (stashEntry && targetId === "stash" && stashEntry.tab.id === activeTab.id) {
+      const moved = moveItem(activeTab.container, itemId, x, y);
+      if (!moved) {
+        setNotice("That item does not fit there.");
+        return;
+      }
+      setProfile({ ...profile, stash: updateStashContainer(profile.stash, activeTab.id, moved) });
+    } else if (inventoryEntry && targetId === "stash") {
+      const moved = transferItem(profile.inventory, activeTab.container, itemId, x, y);
       if (!moved) {
         setNotice("That space is occupied or too small.");
         return;
       }
-      setProfile({ ...profile, [sourceKey]: moved.source, [targetKey]: moved.target });
+      setProfile({ ...profile, inventory: moved.source, stash: updateStashContainer(profile.stash, activeTab.id, moved.target) });
+    } else if (stashEntry && targetId === "backpack") {
+      const moved = transferItem(stashEntry.tab.container, profile.inventory, itemId, x, y);
+      if (!moved) {
+        setNotice("That space is occupied or too small.");
+        return;
+      }
+      setProfile({ ...profile, inventory: moved.target, stash: updateStashContainer(profile.stash, stashEntry.tab.id, moved.source) });
     }
     setSelectedItemId(itemId);
+  }
+
+  function quickStashItem(itemId: string) {
+    if (!profile) return;
+    const removed = removeItem(profile.inventory, itemId);
+    if (!removed) return;
+    const tab = activeStashTab(profile.stash);
+    const inserted = insertItem(tab.container, removed.entry.item);
+    if (inserted.unplaced.length > 0) {
+      setNotice(`${tab.name} has no fitting space.`);
+      return;
+    }
+    setProfile({ ...profile, inventory: removed.container, stash: updateStashContainer(profile.stash, tab.id, inserted.container) });
+    const selectedId = inserted.container.entries.find((entry) => entry.item.id === itemId)?.item.id
+      ?? (isCurrencyItem(removed.entry.item)
+        ? inserted.container.entries.find((entry) => isCurrencyItem(entry.item) && entry.item.baseId === removed.entry.item.baseId)?.item.id
+        : null)
+      ?? null;
+    setSelectedItemId(selectedId);
+    setNotice(`${removed.entry.item.kind === "equipment" ? removed.entry.item.baseName : "Item"} moved to ${tab.name}.`);
+  }
+
+  function selectStash(tabId: string) {
+    setProfile((current) => current ? { ...current, stash: selectStashTab(current.stash, tabId) } : current);
+  }
+
+  function renameStash(tabId: string, name: string) {
+    setProfile((current) => current ? { ...current, stash: renameStashTab(current.stash, tabId, name) } : current);
+  }
+
+  function createStashTab() {
+    setProfile((current) => current ? { ...current, stash: addStashTab(current.stash) } : current);
   }
 
   return (
@@ -401,7 +466,7 @@ export function GameShell() {
             {panel === "merchant" && <MapMerchant scrap={currencies.scrap} onBuy={buyMap} />}
             {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} currencies={currencies} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
             {(panel === "inventory" || panel === "stash") && (
-              <InventoryPanel profile={profile} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} />
+              <InventoryPanel profile={profile} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} />
             )}
           </section>
         </div>

@@ -26,6 +26,7 @@ import { buildArenaBalance, calculateHitDamage, shouldSpawnNextWave } from "../a
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
 import { dropChances, rollEquipmentRarity } from "../app/game/loot";
+import { activeStashTab, addStashTab, createStash, insertItemsIntoStash, renameStashTab, selectStashTab, stashItems } from "../app/game/stash";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -88,9 +89,9 @@ test("character calculations combine item base, implicit, and explicit modifiers
     }],
   } satisfies EquipmentItem;
   const profile = {
-    version: 6,
+    version: 7,
     character: { name: "Test", archetype: "Test", classId: "amazon", created: true, level: 10, xp: 0, unspentPassives: 0, mapsCompleted: 0, highestWave: 0 },
-    inventory: createItemContainer("backpack"), stash: createItemContainer("stash"), equipped: { mainHand: weapon }, mapDevice: null, openedMap: null,
+    inventory: createItemContainer("backpack"), stash: createStash(), equipped: { mainHand: weapon }, mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const calculation = calculateCharacterStats(profile);
   const attack = calculation.breakdown.attackDamage;
@@ -110,9 +111,9 @@ test("weapon-local APS is the base scaled by sourced increased attack speed", ()
     stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [], affixes: [],
   });
   const baseProfile = {
-    version: 6,
+    version: 7,
     character: { name: "Test", archetype: "Test", classId: "amazon", created: true, level: 1, xp: 0, unspentPassives: 0, mapsCompleted: 0, highestWave: 0 },
-    inventory: createItemContainer("backpack"), stash: createItemContainer("stash"), equipped: {}, mapDevice: null, openedMap: null,
+    inventory: createItemContainer("backpack"), stash: createStash(), equipped: {}, mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const spear = calculateCharacterStats({ ...baseProfile, equipped: { mainHand: createWeapon("hunter-spear", "Hunter Spear") } });
   const cleaver = calculateCharacterStats({ ...baseProfile, equipped: { mainHand: createWeapon("iron-cleaver", "Iron Cleaver") } });
@@ -160,7 +161,8 @@ test("currency consumption removes quantities across actual inventory stacks", (
 test("new profiles contain map and currency items in the backpack", () => {
   const profile = createInitialProfile();
   const backpackItems = containerItems(profile.inventory);
-  assert.equal(profile.version, 6);
+  assert.equal(profile.version, 7);
+  assert.deepEqual(profile.stash.tabs.map((tab) => tab.name), ["General", "Gear", "Maps", "Materials"]);
   assert.equal(profile.mapDevice, null);
   assert.equal(backpackItems.filter(isMapItem).length, 3);
   assert.equal(countCurrency(backpackItems, "scrap"), 12);
@@ -168,7 +170,7 @@ test("new profiles contain map and currency items in the backpack", () => {
   assert.equal("maps" in profile, false);
 });
 
-test("v3 counter saves migrate maps and currency into positioned v6 inventory items", () => {
+test("v3 counter saves migrate maps and currency into positioned v7 inventory items", () => {
   const oldMap = {
     id: "old-map", baseId: "ashen-crucible", baseName: "Ashen Crucible", tier: 3, rarity: "normal",
     quality: 0, corrupted: false, implicit: "Test", modifiers: [],
@@ -186,7 +188,7 @@ test("v3 counter saves migrate maps and currency into positioned v6 inventory it
   try {
     const migrated = loadProfile();
     const items = containerItems(migrated.inventory);
-    assert.equal(migrated.version, 6);
+    assert.equal(migrated.version, 7);
     assert.equal(items.filter(isMapItem).length, 1);
     assert.deepEqual(items.filter(isCurrencyItem).filter((item) => item.baseId === "scrap").map((item) => item.stackSize), [40, 5]);
   } finally {
@@ -200,20 +202,55 @@ test("v5 saves migrate legacy weapon equipment into main hand", () => {
     stability: 8, maxStability: 8, implicit: "8% increased attack speed", baseStats: [], implicitModifiers: [], affixes: [],
   };
   const current = createInitialProfile();
-  const v5 = { ...current, version: 5, equipped: { weapon: legacyWeapon } };
+  const v5 = { ...current, version: 5, stash: createItemContainer("stash"), equipped: { weapon: legacyWeapon } };
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: { localStorage: { getItem: (key: string) => key === "crafty.profile.v5" ? JSON.stringify(v5) : null } },
   });
   try {
     const migrated = loadProfile();
-    assert.equal(migrated.version, 6);
+    assert.equal(migrated.version, 7);
     assert.equal(migrated.equipped.mainHand?.id, "legacy-equipped");
     assert.equal(migrated.equipped.mainHand?.slot, "mainHand");
     assert.equal("weapon" in migrated.equipped, false);
   } finally {
     Reflect.deleteProperty(globalThis, "window");
   }
+});
+
+test("v6 saves migrate their positioned stash into the first named tab", () => {
+  const current = createInitialProfile();
+  const stack = createCurrencyStack("essence", 3);
+  const legacyStash = insertItem(createItemContainer("stash"), stack, { x: 3, y: 2 }).container;
+  const v6 = { ...current, version: 6, stash: legacyStash };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: { getItem: (key: string) => key === "crafty.profile.v6" ? JSON.stringify(v6) : null } },
+  });
+  try {
+    const migrated = loadProfile();
+    const firstTab = activeStashTab(migrated.stash);
+    assert.equal(migrated.version, 7);
+    assert.equal(firstTab.name, "General");
+    assert.deepEqual(firstTab.container.entries[0], { item: stack, x: 3, y: 2 });
+  } finally {
+    Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
+test("stash tabs are selectable, renamable, expandable, and insert into the active tab first", () => {
+  let stash = createStash();
+  stash = renameStashTab(stash, stash.activeTabId, "  Expedition Gear  ");
+  assert.equal(activeStashTab(stash).name, "Expedition Gear");
+  stash = selectStashTab(stash, stash.tabs[1].id);
+  const stack = createCurrencyStack("scrap", 4);
+  const inserted = insertItemsIntoStash(stash, [stack]);
+  assert.equal(inserted.unplaced.length, 0);
+  assert.equal(activeStashTab(inserted.stash).container.entries[0].item.id, stack.id);
+  assert.equal(stashItems(inserted.stash).length, 1);
+  const expanded = addStashTab(inserted.stash);
+  assert.equal(expanded.tabs.length, 5);
+  assert.equal(activeStashTab(expanded).name, "Tab 5");
 });
 
 test("the merchant always offers a free entry map and prices every harder map in Scrap", () => {

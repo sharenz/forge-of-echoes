@@ -129,6 +129,17 @@ export interface ItemContainer {
   entries: PlacedInventoryItem[];
 }
 
+export interface StashTab {
+  id: string;
+  name: string;
+  container: ItemContainer;
+}
+
+export interface StashState {
+  activeTabId: string;
+  tabs: StashTab[];
+}
+
 export interface CharacterProgress {
   name: string;
   archetype: string;
@@ -142,10 +153,10 @@ export interface CharacterProgress {
 }
 
 export interface PlayerProfile {
-  version: 6;
+  version: 7;
   character: CharacterProgress;
   inventory: ItemContainer;
-  stash: ItemContainer;
+  stash: StashState;
   equipped: Partial<Record<CharacterEquipmentSlot, EquipmentItem>>;
   mapDevice: MapItem | null;
   openedMap: MapItem | null;

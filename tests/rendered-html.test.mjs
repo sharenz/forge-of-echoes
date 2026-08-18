@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, equipmentSlotConfig, arenaConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, equipmentSlotConfig, arenaConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
@@ -43,12 +43,14 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/item-container.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/stash.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/equipment.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/combat.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/maps.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/encounters.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/loot.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/containers.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/stash.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/equipment-slots.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/arena.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/maps.ts", import.meta.url), "utf8"),
@@ -129,6 +131,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /rollGroundDrop/);
   assert.match(world, /updateGroundDrops/);
   assert.match(shell, /onLootPickup/);
+  assert.match(shell, /quickStashItem/);
+  assert.match(shell, /activeStashTab/);
   assert.match(shell, /const inserted = insertItem\(current\.inventory, item\)/);
   assert.match(world, /if \(!this\.options\.onLootPickup\(groundDrop\.drop\)\) continue/);
   assert.match(shell, /arena-inventory-toggle/);
@@ -139,11 +143,18 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /riftCharges \+= 1/);
   assert.match(inventoryPanel, /dropIntoSlot/);
   assert.match(inventoryPanel, /onMoveItem/);
+  assert.match(inventoryPanel, /role="tablist"/);
+  assert.match(inventoryPanel, /Rename active stash tab/);
+  assert.match(inventoryPanel, /onQuickMove=\{showStash/);
   assert.match(inventoryGrid, /canPlaceItem/);
+  assert.match(inventoryGrid, /event\.ctrlKey && onQuickMove/);
   assert.match(inventoryGrid, /draggedOffset \?\? readOffset/);
   assert.match(inventoryGrid, /grid-drop-preview/);
   assert.doesNotMatch(inventoryGrid, /packItems/);
   assert.match(itemContainer, /transferItem/);
+  assert.match(stashEngine, /insertItemsIntoStash/);
+  assert.match(stashEngine, /renameStashTab/);
+  assert.match(stashConfig, /maximumTabs: 8/);
   assert.match(itemContainer, /ignoredItemId/);
   assert.match(containerConfig, /columns: 12, rows: 8/);
   assert.match(equipmentSlotConfig, /ringLeft/);
@@ -171,9 +182,13 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.doesNotMatch(content, /BARGAINS|Bargain/);
   assert.doesNotMatch(domain, /Bargain/);
   assert.match(domain, /interface MapItem/);
+  assert.match(domain, /interface StashState/);
+  assert.match(domain, /version: 7/);
   assert.match(domain, /interface EquipmentItem/);
   assert.match(profile, /level < MAX_CHARACTER_LEVEL/);
   assert.match(profile, /localStorage/);
+  assert.match(profile, /crafty\.profile\.v7/);
+  assert.match(profile, /migrateV6Profile/);
   assert.match(stats, /sum\(increased\)|mode === "increased"/);
   assert.match(stats, /moreMultiplier/);
   assert.match(itemConfig, /perItemLevel/);

@@ -2,6 +2,7 @@ import { CHARACTER_CLASSES } from "./config/classes";
 import { STARTING_CURRENCY } from "./config/currencies";
 import { CHARACTER_EQUIPMENT_SLOTS } from "./config/equipment-slots";
 import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "./config/progression";
+import { STASH_RULES } from "./config/stash";
 import type {
   CharacterEquipmentSlot,
   CharacterClassId,
@@ -16,15 +17,18 @@ import type {
   PlayerProfile,
   PlacedInventoryItem,
   RunResult,
+  StashState,
 } from "./domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts } from "./equipment";
 import { addCurrencyToInventory, isCurrencyItem, isEquipmentItem, isMapItem } from "./inventory";
 import { containerItems, createItemContainer, insertItems, normalizeItemContainer } from "./item-container";
 import { generateStarterWeapon, normalizeEquipmentItem } from "./items";
 import { createMap } from "./maps";
+import { activeStashTab, createStash, insertItemsIntoStash, updateStashContainer } from "./stash";
 import { calculateCharacterStats } from "./stats";
 
-const STORAGE_KEY = "crafty.profile.v6";
+const STORAGE_KEY = "crafty.profile.v7";
+const V6_STORAGE_KEY = "crafty.profile.v6";
 const V5_STORAGE_KEY = "crafty.profile.v5";
 const V4_STORAGE_KEY = "crafty.profile.v4";
 const V3_STORAGE_KEY = "crafty.profile.v3";
@@ -43,6 +47,16 @@ interface V4Profile {
 
 interface V5Profile {
   version: 5;
+  character: CharacterProgress;
+  inventory: ItemContainer;
+  stash: ItemContainer;
+  equipped: Record<string, EquipmentItem | undefined>;
+  mapDevice: MapItem | null;
+  openedMap: MapItem | null;
+}
+
+interface V6Profile {
+  version: 6;
   character: CharacterProgress;
   inventory: ItemContainer;
   stash: ItemContainer;
@@ -72,13 +86,13 @@ function startingInventory(): InventoryItem[] {
 
 export function createInitialProfile(): PlayerProfile {
   return {
-    version: 6,
+    version: 7,
     character: {
       name: "", archetype: "Unchosen", classId: null, created: false, level: 1, xp: 0,
       unspentPassives: 0, mapsCompleted: 0, highestWave: 0,
     },
     inventory: createItemContainer("backpack", startingInventory()),
-    stash: createItemContainer("stash"),
+    stash: createStash(),
     equipped: {},
     mapDevice: null,
     openedMap: null,
@@ -126,16 +140,16 @@ function migrateCounterProfile(profile: CounterProfile): PlayerProfile {
     inventory = addCurrencyToInventory(inventory, currencyId, amount);
   }
   const backpack = insertItems(createItemContainer("backpack"), normalizeInventory(inventory));
-  const stash = insertItems(createItemContainer("stash"), [...profile.stash.map(normalizeEquipmentItem), ...backpack.unplaced]);
+  const stash = insertItemsIntoStash(createStash(), [...profile.stash.map(normalizeEquipmentItem), ...backpack.unplaced]);
   return {
-    version: 6,
+    version: 7,
     character: {
       ...profile.character,
       classId: profile.character.classId ?? null,
       created: profile.character.created ?? false,
     },
     inventory: backpack.container,
-    stash: stash.container,
+    stash: stash.stash,
     equipped: normalizeEquipped(profile.equipped),
     mapDevice: null,
     openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
@@ -144,12 +158,12 @@ function migrateCounterProfile(profile: CounterProfile): PlayerProfile {
 
 function migrateV4Profile(profile: V4Profile): PlayerProfile {
   const backpack = insertItems(createItemContainer("backpack"), normalizeInventory(profile.inventory ?? []));
-  const stash = insertItems(createItemContainer("stash"), [...normalizeInventory(profile.stash ?? []), ...backpack.unplaced]);
+  const stash = insertItemsIntoStash(createStash(), [...normalizeInventory(profile.stash ?? []), ...backpack.unplaced]);
   return {
     ...profile,
-    version: 6,
+    version: 7,
     inventory: backpack.container,
-    stash: stash.container,
+    stash: stash.stash,
     equipped: normalizeEquipped(profile.equipped ?? {}),
     mapDevice: profile.mapDevice ? normalizeMapItem(profile.mapDevice) : null,
     openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
@@ -163,12 +177,40 @@ function normalizePlacedEntries(entries: readonly PlacedInventoryItem[]): Placed
   }));
 }
 
+function stashFromLegacyContainer(container: ItemContainer): StashState {
+  const stash = createStash();
+  return updateStashContainer(stash, activeStashTab(stash).id, normalizeItemContainer("stash", normalizePlacedEntries(container?.entries ?? [])));
+}
+
+function normalizeStashState(stash: StashState): StashState {
+  const fallback = createStash();
+  if (!stash?.tabs?.length) return fallback;
+  const usedIds = new Set<string>();
+  const tabs = stash.tabs.slice(0, STASH_RULES.maximumTabs).map((tab, index) => {
+    const requestedId = typeof tab.id === "string" && tab.id ? tab.id : `stash-tab-${index + 1}`;
+    let id = requestedId;
+    let suffix = 1;
+    while (usedIds.has(id)) {
+      id = `stash-tab-${index + 1}-${suffix}`;
+      suffix += 1;
+    }
+    usedIds.add(id);
+    return {
+      id,
+      name: typeof tab.name === "string" && tab.name.trim() ? tab.name.trim().slice(0, STASH_RULES.maximumNameLength) : `Tab ${index + 1}`,
+      container: normalizeItemContainer("stash", normalizePlacedEntries(tab.container?.entries ?? [])),
+    };
+  });
+  const activeTabId = tabs.some((tab) => tab.id === stash.activeTabId) ? stash.activeTabId : tabs[0].id;
+  return { activeTabId, tabs };
+}
+
 function normalizeProfile(profile: PlayerProfile): PlayerProfile {
   return {
     ...profile,
-    version: 6,
+    version: 7,
     inventory: normalizeItemContainer("backpack", normalizePlacedEntries(profile.inventory?.entries ?? [])),
-    stash: normalizeItemContainer("stash", normalizePlacedEntries(profile.stash?.entries ?? [])),
+    stash: normalizeStashState(profile.stash),
     equipped: normalizeEquipped(profile.equipped),
     mapDevice: profile.mapDevice ? normalizeMapItem(profile.mapDevice) : null,
     openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
@@ -176,7 +218,27 @@ function normalizeProfile(profile: PlayerProfile): PlayerProfile {
 }
 
 function migrateV5Profile(profile: V5Profile): PlayerProfile {
-  return normalizeProfile({ ...profile, version: 6 } as PlayerProfile);
+  return {
+    ...profile,
+    version: 7,
+    inventory: normalizeItemContainer("backpack", normalizePlacedEntries(profile.inventory?.entries ?? [])),
+    stash: stashFromLegacyContainer(profile.stash),
+    equipped: normalizeEquipped(profile.equipped),
+    mapDevice: profile.mapDevice ? normalizeMapItem(profile.mapDevice) : null,
+    openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
+  };
+}
+
+function migrateV6Profile(profile: V6Profile): PlayerProfile {
+  return {
+    ...profile,
+    version: 7,
+    inventory: normalizeItemContainer("backpack", normalizePlacedEntries(profile.inventory?.entries ?? [])),
+    stash: stashFromLegacyContainer(profile.stash),
+    equipped: normalizeEquipped(profile.equipped),
+    mapDevice: profile.mapDevice ? normalizeMapItem(profile.mapDevice) : null,
+    openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
+  };
 }
 
 export function createCharacter(profile: PlayerProfile, name: string, classId: CharacterClassId): PlayerProfile {
@@ -184,7 +246,7 @@ export function createCharacter(profile: PlayerProfile, name: string, classId: C
   const equippedItems = Object.values(profile.equipped).filter(Boolean) as EquipmentItem[];
   const backpackEquipment = containerItems(profile.inventory).filter(isEquipmentItem);
   const inventory = { ...profile.inventory, entries: profile.inventory.entries.filter((entry) => !isEquipmentItem(entry.item)) };
-  const stash = insertItems(profile.stash, [...equippedItems, ...backpackEquipment]).container;
+  const stash = insertItemsIntoStash(profile.stash, [...equippedItems, ...backpackEquipment]).stash;
   return {
     ...profile,
     character: {
@@ -211,8 +273,10 @@ export function loadProfile(): PlayerProfile {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as PlayerProfile;
-      if (parsed.version === 6) return normalizeProfile(parsed);
+      if (parsed.version === 7) return normalizeProfile(parsed);
     }
+    const v6 = window.localStorage.getItem(V6_STORAGE_KEY);
+    if (v6) return migrateV6Profile(JSON.parse(v6) as V6Profile);
     const v5 = window.localStorage.getItem(V5_STORAGE_KEY);
     if (v5) return migrateV5Profile(JSON.parse(v5) as V5Profile);
     const v4 = window.localStorage.getItem(V4_STORAGE_KEY);
@@ -263,11 +327,11 @@ export function applyRunResult(profile: PlayerProfile, result: RunResult): Playe
 
 export function addRecoveredItems(profile: PlayerProfile, items: readonly InventoryItem[]): PlayerProfile {
   const backpackResult = insertItems(profile.inventory, items);
-  const stashResult = insertItems(profile.stash, backpackResult.unplaced);
+  const stashResult = insertItemsIntoStash(profile.stash, backpackResult.unplaced);
   return {
     ...profile,
     inventory: backpackResult.container,
-    stash: stashResult.container,
+    stash: stashResult.stash,
   };
 }
 

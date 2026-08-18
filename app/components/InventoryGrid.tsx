@@ -20,6 +20,7 @@ interface InventoryGridProps {
   onDragEnd?: () => void;
   onDropItem?: (id: string, containerId: ItemContainer["id"], x: number, y: number) => void;
   onEquipItem?: (id: string) => void;
+  onQuickMove?: (id: string) => void;
 }
 
 interface DropPreview {
@@ -57,7 +58,7 @@ function readOffset(event: DragEvent): { x: number; y: number } {
   }
 }
 
-export function InventoryGrid({ container, selectedId, onSelect, highlightedIds, draggedItem, draggedOffset, onDragItem, onDragEnd, onDropItem, onEquipItem }: InventoryGridProps) {
+export function InventoryGrid({ container, selectedId, onSelect, highlightedIds, draggedItem, draggedOffset, onDragItem, onDragEnd, onDropItem, onEquipItem, onQuickMove }: InventoryGridProps) {
   const definition = ITEM_CONTAINER_DEFINITIONS[container.id];
   const [tooltip, setTooltip] = useState<{ item: InventoryItem; x: number; y: number } | null>(null);
   const [preview, setPreview] = useState<DropPreview | null>(null);
@@ -122,8 +123,11 @@ export function InventoryGrid({ container, selectedId, onSelect, highlightedIds,
               aria-selected={selectedId === item.id}
               className={`poe-grid-item ${visualClass} item-kind-${item.kind} ${selectedId === item.id ? "selected" : ""} ${highlighted ? "new-drop" : ""}`}
               style={{ gridColumn: `${x + 1} / span ${size.width}`, gridRow: `${y + 1} / span ${size.height}` }}
-              onClick={() => onSelect(item.id)}
-              onDoubleClick={() => { if (isEquipmentItem(item)) onEquipItem?.(item.id); }}
+              onClick={(event) => {
+                if (event.ctrlKey && onQuickMove) onQuickMove(item.id);
+                else onSelect(item.id);
+              }}
+              onDoubleClick={(event) => { if (!event.ctrlKey && isEquipmentItem(item)) onEquipItem?.(item.id); }}
               draggable={Boolean(onDragItem)}
               onDragStart={(event) => {
                 const offset = dragOffset(event, item);
@@ -151,7 +155,7 @@ export function InventoryGrid({ container, selectedId, onSelect, highlightedIds,
           );
         })}
       </div>
-      {tooltip && <ItemTooltip item={tooltip.item} x={tooltip.x} y={tooltip.y} hint={isEquipmentItem(tooltip.item) ? "Drag to move · double-click to equip" : "Drag to place"} />}
+      {tooltip && <ItemTooltip item={tooltip.item} x={tooltip.x} y={tooltip.y} hint={onQuickMove ? "Ctrl-click to stash · drag to place" : isEquipmentItem(tooltip.item) ? "Drag to move · double-click to equip" : "Drag to place"} />}
     </div>
   );
 }
