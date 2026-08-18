@@ -5,18 +5,19 @@ import type {
   AttributeKey,
   CharacterStats,
   EquipmentItem,
+  ModifierStatKey,
   PlayerProfile,
   StatKey,
   StatModifier,
 } from "./domain";
 
-export interface StatResolution {
+export interface StatResolution<TStat extends ModifierStatKey = StatKey> {
   base: number;
   flat: number;
   increased: number;
   more: number[];
   value: number;
-  contributions: readonly StatModifier[];
+  contributions: readonly StatModifier<TStat>[];
 }
 
 export interface CharacterStatCalculation {
@@ -31,7 +32,7 @@ const STAT_KEYS: readonly StatKey[] = [
   "attackSpeed", "armor", "evadeChance",
 ];
 
-export function resolveStat(base: number, modifiers: readonly StatModifier[]): StatResolution {
+export function resolveStat<TStat extends ModifierStatKey>(base: number, modifiers: readonly StatModifier<TStat>[]): StatResolution<TStat> {
   const flat = modifiers.filter((modifier) => modifier.mode === "flat").reduce((sum, modifier) => sum + modifier.value, 0);
   const increased = modifiers.filter((modifier) => modifier.mode === "increased").reduce((sum, modifier) => sum + modifier.value, 0);
   const more = modifiers.filter((modifier) => modifier.mode === "more").map((modifier) => modifier.value);
@@ -162,12 +163,16 @@ export function calculateCharacterStats(profile: PlayerProfile): CharacterStatCa
   return { stats, modifiers, breakdown };
 }
 
-export function formatModifier(modifier: Pick<StatModifier, "stat" | "mode" | "value">): string {
-  const labels: Record<StatKey, string> = {
+export function formatModifier(modifier: Pick<StatModifier<ModifierStatKey>, "stat" | "mode" | "value">): string {
+  const labels: Record<ModifierStatKey, string> = {
     strength: "Strength", dexterity: "Dexterity", intelligence: "Intelligence",
     maxLife: "maximum Life", maxFocus: "maximum Focus", moveSpeed: "movement speed",
     attackDamage: "attack damage", attackSpeed: "attack speed", armor: "armor", evadeChance: "evade chance",
+    focusRegen: "Focus recovery rate", monsterCount: "monster count", monsterLife: "monster maximum Life",
+    monsterMoveSpeed: "monster movement speed", monsterDamage: "monster damage",
   };
-  if (modifier.mode === "flat") return `+${modifier.value} ${labels[modifier.stat]}`;
-  return `${modifier.value}% ${modifier.mode} ${labels[modifier.stat]}`;
+  const absoluteValue = Math.abs(modifier.value);
+  if (modifier.mode === "flat") return `${modifier.value >= 0 ? "+" : "-"}${absoluteValue} ${labels[modifier.stat]}`;
+  if (modifier.mode === "increased") return `${absoluteValue}% ${modifier.value >= 0 ? "increased" : "reduced"} ${labels[modifier.stat]}`;
+  return `${absoluteValue}% ${modifier.value >= 0 ? "more" : "less"} ${labels[modifier.stat]}`;
 }

@@ -17,6 +17,13 @@ export type DerivedStatKey =
   | "armor"
   | "evadeChance";
 export type StatKey = AttributeKey | DerivedStatKey;
+export type ArenaStatKey =
+  | "focusRegen"
+  | "monsterCount"
+  | "monsterLife"
+  | "monsterMoveSpeed"
+  | "monsterDamage";
+export type ModifierStatKey = StatKey | ArenaStatKey;
 export type ModifierMode = "flat" | "increased" | "more";
 
 /**
@@ -24,8 +31,8 @@ export type ModifierMode = "flat" | "increased" | "more";
  * flat values are added first, increased values are summed into one multiplier,
  * and each more value is a separate multiplicative multiplier.
  */
-export interface StatModifier {
-  stat: StatKey;
+export interface StatModifier<TStat extends ModifierStatKey = StatKey> {
+  stat: TStat;
   mode: ModifierMode;
   value: number;
   source: string;
@@ -33,7 +40,7 @@ export interface StatModifier {
   label?: string;
 }
 
-export interface AffixRoll extends StatModifier {
+export interface AffixRoll extends StatModifier<StatKey> {
   min: number;
   max: number;
 }
@@ -76,16 +83,6 @@ export type MapModifierId =
   | "vampiric"
   | "twin-crowned"
   | "exhausting";
-
-export interface MapModifier {
-  id: MapModifierId;
-  name: string;
-  description: string;
-  rewardDescription: string;
-  danger: number;
-  reward: number;
-  kind: "threat" | "reward";
-}
 
 export interface MapItem {
   kind: "map";

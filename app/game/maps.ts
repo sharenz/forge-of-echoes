@@ -1,6 +1,7 @@
 import { MAP_BASES, MAP_BASES_BY_ID, MAP_MODIFIERS, MAP_RARITY_LIMITS, type MapBaseId } from "./config/maps";
 import type { MapItem, MapModifierId, Rarity } from "./domain";
 import { choose, createId, shuffle } from "./random";
+import { formatModifier } from "./stats";
 
 export function createMap(tier = 1, baseId?: MapBaseId): MapItem {
   const base = baseId ? MAP_BASES_BY_ID[baseId] : choose(MAP_BASES);
@@ -48,4 +49,17 @@ export function mapRewardBonus(map: MapItem): number {
 
 export function mapDanger(map: MapItem): number {
   return map.modifiers.reduce((sum, id) => sum + MAP_MODIFIERS[id].danger, map.tier * 3);
+}
+
+/** Mechanical map copy is rendered from the exact modifier records the arena consumes. */
+export function mapModifierDescription(id: MapModifierId, tier = 1): string {
+  return MAP_MODIFIERS[id].modifiers.map((modifier) => formatModifier({
+    stat: modifier.stat,
+    mode: modifier.mode,
+    value: modifier.base + (modifier.perTier ?? 0) * Math.max(0, tier - 1),
+  })).join(" · ");
+}
+
+export function mapModifierRewardDescription(id: MapModifierId): string {
+  return `+${MAP_MODIFIERS[id].reward}% map rewards`;
 }

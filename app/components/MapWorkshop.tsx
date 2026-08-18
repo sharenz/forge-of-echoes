@@ -1,6 +1,6 @@
 import { MAP_MODIFIERS } from "../game/content";
 import type { CurrencyAmounts, MapItem } from "../game/domain";
-import { mapDanger, mapRewardBonus } from "../game/maps";
+import { mapDanger, mapModifierDescription, mapModifierRewardDescription, mapRewardBonus } from "../game/maps";
 
 interface MapWorkshopProps {
   maps: MapItem[];
@@ -85,7 +85,7 @@ export function MapWorkshop({ maps, slottedMap, currencies, portalActive, onSlot
               {slottedMap.modifiers.length === 0 && <p className="empty-affixes">Unmodified. Safe, predictable, and modestly rewarding.</p>}
               {slottedMap.modifiers.map((id) => {
                 const modifier = MAP_MODIFIERS[id];
-                return <div className="map-affix" key={id}><div><strong>{modifier.name}</strong><span>{modifier.description}</span></div><em>{modifier.rewardDescription}</em></div>;
+                return <div className="map-affix" key={id}><div><strong>{modifier.name}</strong><span>{mapModifierDescription(id, slottedMap.tier)}</span></div><em>{mapModifierRewardDescription(id)}</em></div>;
               })}
             </div>
           </>

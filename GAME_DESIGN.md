@@ -238,6 +238,8 @@ For any stat, resolution is always:
 - item level only unlocks the affix tiers that may roll; it does not guarantee the highest available tier.
 - rerolling numeric values keeps the affix definition and tier fixed and rolls only inside that tier's original range.
 - modifier records retain a stable source identifier and a player-facing label so the character sheet can explain every result now.
+- map affixes, map-tier scaling, wave growth, and monster bases use typed arena modifiers and the same resolver; the renderer receives only fully resolved wave values.
+- map effect and reward descriptions are generated from their executable modifier and reward records rather than maintained as parallel handwritten claims.
 
 Game content is data, not simulation logic. Definitions are separated by domain under `app/game/config`: classes, stat contribution rules, item bases, affixes, monsters, skills, maps, and progression. Runtime entities reference stable definition IDs and store only their rolled state. Calculation, generation, crafting, persistence, and rendering consume those definitions through dedicated engine modules.
 

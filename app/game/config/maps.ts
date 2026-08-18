@@ -10,13 +10,13 @@ export type MapBaseId = (typeof MAP_BASES)[number]["id"];
 export const MAP_BASES_BY_ID = Object.fromEntries(MAP_BASES.map((base) => [base.id, base])) as Record<MapBaseId, (typeof MAP_BASES)[number]>;
 
 export const MAP_MODIFIERS: MapModifierConfig = {
-  teeming: { id: "teeming", name: "Teeming", description: "Waves contain 30% more monsters.", rewardDescription: "+22% material and item yield", danger: 14, reward: 22, kind: "threat" },
-  commanded: { id: "commanded", name: "Commanded", description: "Each wave contains an additional elite.", rewardDescription: "+26% rare item chance", danger: 18, reward: 26, kind: "threat" },
-  restless: { id: "restless", name: "Restless", description: "Enemies arrive faster and move 12% faster.", rewardDescription: "+18% quantity", danger: 12, reward: 18, kind: "threat" },
-  volcanic: { id: "volcanic", name: "Volcanic", description: "Volatile enemies erupt when slain.", rewardDescription: "+35% Essence yield", danger: 16, reward: 24, kind: "reward" },
-  vampiric: { id: "vampiric", name: "Vampiric", description: "Enemies recover life while near wounded allies.", rewardDescription: "+28% equipment yield", danger: 15, reward: 23, kind: "reward" },
-  "twin-crowned": { id: "twin-crowned", name: "Twin Crowned", description: "The final wave contains two linked bosses.", rewardDescription: "Final rewards are doubled", danger: 25, reward: 42, kind: "threat" },
-  exhausting: { id: "exhausting", name: "Exhausting", description: "Focus recovery is reduced by 30%.", rewardDescription: "+30% crafting material yield", danger: 17, reward: 25, kind: "reward" },
+  teeming: { id: "teeming", name: "Teeming", danger: 14, reward: 22, kind: "threat", modifiers: [{ stat: "monsterCount", mode: "more", base: 30 }] },
+  commanded: { id: "commanded", name: "Commanded", danger: 18, reward: 26, kind: "threat", modifiers: [{ stat: "monsterCount", mode: "more", base: 8 }] },
+  restless: { id: "restless", name: "Restless", danger: 12, reward: 18, kind: "threat", modifiers: [{ stat: "monsterMoveSpeed", mode: "increased", base: 12 }] },
+  volcanic: { id: "volcanic", name: "Volcanic", danger: 16, reward: 24, kind: "reward", modifiers: [{ stat: "monsterDamage", mode: "increased", base: 12 }] },
+  vampiric: { id: "vampiric", name: "Vampiric", danger: 15, reward: 23, kind: "reward", modifiers: [{ stat: "monsterLife", mode: "increased", base: 12 }] },
+  "twin-crowned": { id: "twin-crowned", name: "Twin Crowned", danger: 25, reward: 42, kind: "threat", modifiers: [{ stat: "monsterLife", mode: "more", base: 25 }] },
+  exhausting: { id: "exhausting", name: "Exhausting", danger: 17, reward: 25, kind: "reward", modifiers: [{ stat: "focusRegen", mode: "increased", base: -30 }] },
 };
 
 export const MAP_RARITY_LIMITS = { normal: 0, magic: 2, rare: 4, unique: 4 } as const;

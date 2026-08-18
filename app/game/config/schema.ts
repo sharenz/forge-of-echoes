@@ -1,18 +1,20 @@
 import type {
   AffixTag,
+  ArenaStatKey,
   CharacterClassId,
   EquipmentSlot,
-  MapModifier,
   MapModifierId,
+  ModifierStatKey,
   ModifierMode,
   StatKey,
 } from "../domain";
 
-export interface ScaledModifierDefinition {
-  stat: StatKey;
+export interface ScaledModifierDefinition<TStat extends ModifierStatKey = StatKey> {
+  stat: TStat;
   mode: ModifierMode;
   base: number;
   perItemLevel?: number;
+  perTier?: number;
 }
 
 export interface ItemBaseDefinition {
@@ -96,4 +98,13 @@ export interface MapBaseDefinition {
   implicit: string;
 }
 
-export type MapModifierConfig = Record<MapModifierId, MapModifier>;
+export interface MapModifierDefinition {
+  id: MapModifierId;
+  name: string;
+  danger: number;
+  reward: number;
+  kind: "threat" | "reward";
+  modifiers: readonly ScaledModifierDefinition<ArenaStatKey>[];
+}
+
+export type MapModifierConfig = Record<MapModifierId, MapModifierDefinition>;

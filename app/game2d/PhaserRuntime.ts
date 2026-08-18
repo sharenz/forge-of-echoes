@@ -234,7 +234,7 @@ class CraftyScene extends Phaser.Scene {
         this.riftRecharge = this.riftCharges < ACTIVE_SKILLS.dash.maxCharges ? ACTIVE_SKILLS.dash.recharge : 0;
       }
     }
-    this.focus = Math.min(this.options.arenaBalance?.maxFocus ?? 100, this.focus + delta * (this.options.arenaBalance?.focusRegen ?? 8));
+    this.focus = Math.min(this.options.arenaBalance?.maxFocus ?? 100, this.focus + delta * (this.options.arenaBalance?.focusRegen ?? ARENA_RULES.baseFocusRegen));
 
     let xInput = 0;
     let yInput = 0;
@@ -380,7 +380,9 @@ class CraftyScene extends Phaser.Scene {
     this.wave = wave;
     this.waveElapsedSeconds = 0;
     const balance = this.options.arenaBalance;
-    const count = Math.round((28 + wave * 16) * (balance?.enemyCountMultiplier ?? 1));
+    const waveStats = balance?.waveStats[wave - 1];
+    if (!waveStats) throw new Error(`Missing resolved arena stats for wave ${wave}`);
+    const count = waveStats.monsterCount;
     const groupCount = Math.min(PACK_REGIONS.length, 4 + Math.ceil(wave / 2));
     const playerX = this.player?.x ?? MAP_SIZE / 2;
     const playerY = this.player?.y ?? MAP_SIZE / 2;
@@ -403,7 +405,7 @@ class CraftyScene extends Phaser.Scene {
         const y = centerY + Math.sin(angle) * radius;
         const sprite = this.enemyPool?.get(x, y, "enemy") as Phaser.GameObjects.Image | null;
         if (!sprite) break;
-        const maxLife = (ARENA_MONSTER.baseLife + wave * ARENA_MONSTER.lifePerWave) * (balance?.enemyHealthMultiplier ?? 1);
+        const maxLife = waveStats.monsterLife;
         sprite.setActive(true).setVisible(true).setPosition(x, y).setScale(1.6).setDepth(Math.round(y / 10) + 10);
         this.enemies.push({
           sprite,
@@ -415,8 +417,8 @@ class CraftyScene extends Phaser.Scene {
           aggro: false,
           life: maxLife,
           maxLife,
-          speed: Phaser.Math.FloatBetween(ARENA_MONSTER.speed.min, ARENA_MONSTER.speed.max) * (balance?.enemySpeedMultiplier ?? 1) + wave * ARENA_MONSTER.speed.perWave,
-          contactDamage: (ARENA_MONSTER.contactDamage + wave * ARENA_MONSTER.contactDamagePerWave) * (balance?.enemyDamageMultiplier ?? 1),
+          speed: Phaser.Math.FloatBetween(waveStats.monsterMoveSpeed.min, waveStats.monsterMoveSpeed.max),
+          contactDamage: waveStats.monsterDamage,
           healthLabel: null,
         });
       }

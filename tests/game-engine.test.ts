@@ -4,6 +4,7 @@ import { AFFIX_DEFINITIONS_BY_ID } from "../app/game/config/affixes";
 import { ARENA_RULES } from "../app/game/config/arena";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
 import { MAP_MERCHANT } from "../app/game/config/merchants";
+import { MAP_MODIFIERS } from "../app/game/config/maps";
 import { CHARACTER_EQUIPMENT_SLOTS } from "../app/game/config/equipment-slots";
 import { ITEM_BASES } from "../app/game/config/item-bases";
 import type { EquipmentItem, ItemContainer, PlayerProfile, StatModifier } from "../app/game/domain";
@@ -17,10 +18,11 @@ import {
   rerollAffixValues,
   scaleBaseModifier,
 } from "../app/game/items";
-import { calculateCharacterStats, resolveStat } from "../app/game/stats";
+import { calculateCharacterStats, formatModifier, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
 import { purchaseMap } from "../app/game/merchant";
-import { calculateHitDamage, shouldSpawnNextWave } from "../app/game/combat";
+import { buildArenaBalance, calculateHitDamage, shouldSpawnNextWave } from "../app/game/combat";
+import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -275,6 +277,39 @@ test("waves advance when cleared or after the configured timeout", () => {
   assert.equal(shouldSpawnNextWave(1, 6, 0, 3), true);
   assert.equal(shouldSpawnNextWave(1, 6, 12, 30), true);
   assert.equal(shouldSpawnNextWave(6, 6, 0, 90), false);
+});
+
+test("map, tier, wave, and monster scaling all resolve through typed arena modifiers", () => {
+  const profile = createInitialProfile();
+  const openedMap = {
+    ...createMap(4),
+    modifiers: ["vampiric", "volcanic", "restless", "exhausting"],
+  } satisfies PlayerProfile["openedMap"] & object;
+  const balance = buildArenaBalance({ ...profile, openedMap });
+  const firstWave = balance.waveStats[0];
+
+  assert.equal(balance.focusRegen, 8 * 0.7);
+  assert.equal(balance.focusRegenBreakdown.increased, -30);
+  assert.equal(firstWave.monsterLife, (18 + 4) * (1 + (3 * 8 + 12) / 100));
+  assert.equal(firstWave.monsterDamage, (5 + 0.8) * (1 + (3 * 7 + 12) / 100));
+  assert.equal(firstWave.monsterMoveSpeed.min, (39 + 1.2) * 1.12);
+  assert.ok(firstWave.breakdown.monsterMoveSpeedMin.contributions.some((entry) => entry.source === "monster:ashling:wave-speed"));
+  assert.ok(firstWave.breakdown.monsterMoveSpeedMin.contributions.some((entry) => entry.source === "map:restless:0"));
+  assert.ok(firstWave.breakdown.monsterLife.contributions.some((entry) => entry.source.startsWith("map-tier:4:")));
+});
+
+test("map descriptions are generated from the same executable modifier records", () => {
+  assert.deepEqual(MAP_MODIFIERS.teeming.modifiers, [{ stat: "monsterCount", mode: "more", base: 30 }]);
+  assert.equal(mapModifierDescription("teeming"), "30% more monster count");
+  assert.equal(mapModifierDescription("exhausting"), "30% reduced Focus recovery rate");
+  assert.equal(mapModifierDescription("volcanic"), "12% increased monster damage");
+  assert.equal(mapModifierRewardDescription("volcanic"), "+24% map rewards");
+  assert.equal(formatModifier({ stat: "monsterLife", mode: "more", value: -15 }), "15% less monster maximum Life");
+
+  const profile = createInitialProfile();
+  const openedMap = { ...createMap(1), modifiers: ["teeming", "commanded"] } satisfies PlayerProfile["openedMap"] & object;
+  const firstWave = buildArenaBalance({ ...profile, openedMap }).waveStats[0];
+  assert.equal(firstWave.monsterCount, Math.round((28 + 16) * 1.3 * 1.08));
 });
 
 test("runtime hit damage scales linearly with resolved attack damage", () => {

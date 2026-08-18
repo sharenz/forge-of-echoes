@@ -7,7 +7,7 @@ import { MAP_MODIFIERS } from "../game/config/maps";
 import type { InventoryItem } from "../game/domain";
 import { isCurrencyItem, isEquipmentItem } from "../game/inventory";
 import { itemDisplayName } from "../game/items";
-import { mapDanger, mapRewardBonus } from "../game/maps";
+import { mapDanger, mapModifierDescription, mapRewardBonus } from "../game/maps";
 import { formatModifier } from "../game/stats";
 
 interface ItemTooltipProps {
@@ -44,7 +44,7 @@ export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
         <div className="tooltip-implicit">{item.implicit}</div>
         <div className="tooltip-affixes">
           {item.modifiers.length > 0
-            ? item.modifiers.map((id) => <div key={id}><i>◆</i><b>{MAP_MODIFIERS[id].name}: {MAP_MODIFIERS[id].description}</b></div>)
+            ? item.modifiers.map((id) => <div key={id}><i>◆</i><b>{MAP_MODIFIERS[id].name}: {mapModifierDescription(id, item.tier)}</b></div>)
             : <small>No explicit modifiers</small>}
         </div>
         <footer><span>Danger {mapDanger(item)}</span><strong>+{mapRewardBonus(item)}% rewards</strong></footer>
