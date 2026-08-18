@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
-import type { CharacterClassId, CharacterStats } from "../game/domain";
+import type { CharacterClassId, CharacterStats, StatKey, StatModifier } from "../game/domain";
+import type { CharacterStatCalculation, StatResolution } from "../game/stats";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
 import type { WorldHudState, WorldMode, WorldStation } from "../game2d/types";
 
@@ -14,13 +15,59 @@ interface PhaserWorldProps {
   paused?: boolean;
   arenaBalance?: ArenaBalance;
   characterStats?: CharacterStats;
+  characterStatBreakdown?: CharacterStatCalculation["breakdown"];
   onStation?: (station: WorldStation) => void;
   onLootPickup?: (drop: MapDrop) => boolean;
   onArenaComplete?: (summary: ArenaSummary) => void;
   children?: React.ReactNode;
 }
 
-export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, onStation, onLootPickup, onArenaComplete, children }: PhaserWorldProps) {
+interface CharacterStatRowProps {
+  stat: StatKey;
+  label: string;
+  hint?: string;
+  value: string;
+  resolution?: StatResolution;
+}
+
+function compactNumber(value: number): string {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function contributionAmount(modifier: StatModifier): string {
+  const value = compactNumber(modifier.value);
+  if (modifier.mode === "flat") return `${modifier.value >= 0 ? "+" : ""}${value}`;
+  return `${modifier.value >= 0 ? "+" : ""}${value}% ${modifier.mode}`;
+}
+
+function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterStatRowProps) {
+  const contributions = resolution?.contributions.filter((modifier) => Math.abs(modifier.value) > 0.0001) ?? [];
+  return (
+    <details className="character-stat-row" data-stat={stat}>
+      <summary><span>{label}{hint && <small>{hint}</small>}</span><strong>{value}</strong></summary>
+      {resolution && (
+        <div className="character-stat-breakdown">
+          <header><span>{label}</span><strong>{compactNumber(resolution.value)}</strong></header>
+          <div className="stat-contributions">
+            {contributions.map((modifier, index) => (
+              <div key={`${modifier.source}-${index}`}>
+                <span>{modifier.label ?? modifier.source}</span>
+                <strong>{contributionAmount(modifier)}</strong>
+              </div>
+            ))}
+          </div>
+          <footer>
+            <span>{compactNumber(resolution.flat)} flat</span>
+            <span>{compactNumber(resolution.increased)}% increased</span>
+            {resolution.more.length > 0 && <span>{resolution.more.map((value) => `${compactNumber(value)}% more`).join(" × ")}</span>}
+          </footer>
+        </div>
+      )}
+    </details>
+  );
+}
+
+export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterStatBreakdown, onStation, onLootPickup, onArenaComplete, children }: PhaserWorldProps) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
   const parentRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<PhaserRuntime | null>(null);
@@ -128,19 +175,19 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
       {hud && <div className="world-fps">{hud.fps} FPS · WebGL sprites</div>}
       {mode !== "class-select" && characterStats && (
         <aside className="world-character-stats" aria-label="Character statistics">
-          <header><span>Character</span><strong>Combat Stats</strong></header>
-          <dl>
-            <div><dt>Strength</dt><dd>{characterStats.strength}</dd></div>
-            <div><dt>Dexterity</dt><dd>{characterStats.dexterity}</dd></div>
-            <div><dt>Intelligence</dt><dd>{characterStats.intelligence}</dd></div>
-            <div><dt>Health</dt><dd>{mode === "arena" && hud ? `${Math.ceil(hud.life)} / ` : ""}{Math.round(characterStats.maxLife)}</dd></div>
-            <div><dt>Focus <small>Mana</small></dt><dd>{mode === "arena" && hud ? `${Math.floor(hud.focus)} / ` : ""}{Math.round(characterStats.maxFocus)}</dd></div>
-            <div><dt>Damage</dt><dd>{characterStats.attackDamage.toFixed(1)}</dd></div>
-            <div><dt>Attack speed</dt><dd>{characterStats.attackSpeed.toFixed(2)}/s</dd></div>
-            <div><dt>Armor</dt><dd>{Math.round(characterStats.armor)}</dd></div>
-            <div><dt>Evade</dt><dd>{characterStats.evadeChance.toFixed(1)}%</dd></div>
-            <div><dt>Move speed</dt><dd>{Math.round(characterStats.moveSpeed)}</dd></div>
-          </dl>
+          <header><span>Character · select a stat for sources</span><strong>Combat Stats</strong></header>
+          <div className="character-stat-list">
+            <CharacterStatRow stat="strength" label="Strength" value={`${characterStats.strength}`} resolution={characterStatBreakdown?.strength} />
+            <CharacterStatRow stat="dexterity" label="Dexterity" value={`${characterStats.dexterity}`} resolution={characterStatBreakdown?.dexterity} />
+            <CharacterStatRow stat="intelligence" label="Intelligence" value={`${characterStats.intelligence}`} resolution={characterStatBreakdown?.intelligence} />
+            <CharacterStatRow stat="maxLife" label="Health" value={`${mode === "arena" && hud ? `${Math.ceil(hud.life)} / ` : ""}${Math.round(characterStats.maxLife)}`} resolution={characterStatBreakdown?.maxLife} />
+            <CharacterStatRow stat="maxFocus" label="Focus" hint="Mana" value={`${mode === "arena" && hud ? `${Math.floor(hud.focus)} / ` : ""}${Math.round(characterStats.maxFocus)}`} resolution={characterStatBreakdown?.maxFocus} />
+            <CharacterStatRow stat="attackDamage" label="Damage" value={characterStats.attackDamage.toFixed(1)} resolution={characterStatBreakdown?.attackDamage} />
+            <CharacterStatRow stat="attackSpeed" label="Attack speed" value={`${characterStats.attackSpeed.toFixed(2)}/s`} resolution={characterStatBreakdown?.attackSpeed} />
+            <CharacterStatRow stat="armor" label="Armor" value={`${Math.round(characterStats.armor)}`} resolution={characterStatBreakdown?.armor} />
+            <CharacterStatRow stat="evadeChance" label="Evade" value={`${characterStats.evadeChance.toFixed(1)}%`} resolution={characterStatBreakdown?.evadeChance} />
+            <CharacterStatRow stat="moveSpeed" label="Move speed" value={`${Math.round(characterStats.moveSpeed)}`} resolution={characterStatBreakdown?.moveSpeed} />
+          </div>
         </aside>
       )}
       {children}

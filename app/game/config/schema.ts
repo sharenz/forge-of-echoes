@@ -23,6 +23,10 @@ export interface ItemBaseDefinition {
   implicit: string;
   baseStats: readonly ScaledModifierDefinition[];
   implicitModifiers: readonly ScaledModifierDefinition[];
+  /** Weapon-local attacks per second. Increased attack speed scales this value. */
+  weapon?: {
+    attacksPerSecond: number;
+  };
 }
 
 export interface AffixRollDefinition {

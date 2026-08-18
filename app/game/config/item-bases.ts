@@ -7,18 +7,21 @@ export const ITEM_BASES = [
     implicit: "8% increased attack speed",
     baseStats: [{ stat: "attackDamage", mode: "flat", base: 7, perItemLevel: 0.42 }],
     implicitModifiers: [{ stat: "attackSpeed", mode: "increased", base: 8 }],
+    weapon: { attacksPerSecond: 1.45 },
   },
   {
     id: "ashwood-wand", name: "Ashwood Wand", slot: "mainHand", requiredLevel: 1,
     implicit: "10% increased attack damage",
     baseStats: [{ stat: "attackDamage", mode: "flat", base: 6, perItemLevel: 0.38 }],
     implicitModifiers: [{ stat: "attackDamage", mode: "increased", base: 10 }],
+    weapon: { attacksPerSecond: 1.25 },
   },
   {
     id: "iron-cleaver", name: "Iron Cleaver", slot: "mainHand", requiredLevel: 1,
     implicit: "+4 attack damage",
     baseStats: [{ stat: "attackDamage", mode: "flat", base: 9, perItemLevel: 0.48 }],
     implicitModifiers: [{ stat: "attackDamage", mode: "flat", base: 4 }],
+    weapon: { attacksPerSecond: 1.1 },
   },
   {
     id: "riveted-coat", name: "Riveted Coat", slot: "chest", requiredLevel: 1,
@@ -72,7 +75,7 @@ export const ITEM_BASES = [
 
 export type ItemBaseId = (typeof ITEM_BASES)[number]["id"];
 
-export const ITEM_BASES_BY_ID = Object.fromEntries(ITEM_BASES.map((base) => [base.id, base])) as Record<ItemBaseId, (typeof ITEM_BASES)[number]>;
+export const ITEM_BASES_BY_ID = Object.fromEntries(ITEM_BASES.map((base) => [base.id, base])) as unknown as Record<ItemBaseId, ItemBaseDefinition>;
 
 export const STARTER_BASES: Record<CharacterClassId, ItemBaseId> = {
   amazon: "hunter-spear",

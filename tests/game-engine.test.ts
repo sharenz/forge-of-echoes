@@ -89,10 +89,37 @@ test("character calculations combine item base, implicit, and explicit modifiers
   } satisfies PlayerProfile;
   const calculation = calculateCharacterStats(profile);
   const attack = calculation.breakdown.attackDamage;
-  assert.equal(attack.flat, 10);
+  assert.equal(attack.base, 0);
+  assert.ok(attack.flat > 10);
   assert.equal(attack.increased, 20);
   assert.deepEqual(attack.more, [50]);
-  assert.equal(attack.value, (attack.base + 10) * 1.2 * 1.5);
+  assert.equal(attack.value, attack.flat * 1.2 * 1.5);
+  assert.ok(attack.contributions.some((entry) => entry.source === "level:attack-damage"));
+  assert.ok(attack.contributions.some((entry) => entry.source === "attribute:strength:attack-damage"));
+  assert.ok(attack.contributions.some((entry) => entry.source === "base:test" && entry.label === "Test Weapon base"));
+});
+
+test("weapon-local APS is the base scaled by sourced increased attack speed", () => {
+  const createWeapon = (baseId: "hunter-spear" | "iron-cleaver", baseName: string): EquipmentItem => ({
+    kind: "equipment", id: baseId, baseId, baseName, slot: "mainHand", rarity: "normal", itemLevel: 1,
+    stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [], affixes: [],
+  });
+  const baseProfile = {
+    version: 6,
+    character: { name: "Test", archetype: "Test", classId: "amazon", created: true, level: 1, xp: 0, unspentPassives: 0, mapsCompleted: 0, highestWave: 0 },
+    inventory: createItemContainer("backpack"), stash: createItemContainer("stash"), equipped: {}, mapDevice: null, openedMap: null,
+  } satisfies PlayerProfile;
+  const spear = calculateCharacterStats({ ...baseProfile, equipped: { mainHand: createWeapon("hunter-spear", "Hunter Spear") } });
+  const cleaver = calculateCharacterStats({ ...baseProfile, equipped: { mainHand: createWeapon("iron-cleaver", "Iron Cleaver") } });
+
+  assert.equal(spear.breakdown.attackSpeed.base, 0);
+  assert.equal(spear.breakdown.attackSpeed.flat, 1.45);
+  assert.equal(spear.breakdown.attackSpeed.increased, 8);
+  assert.equal(spear.stats.attackSpeed, 1.45 * 1.08);
+  assert.equal(cleaver.breakdown.attackSpeed.flat, 1.1);
+  assert.ok(spear.stats.attackSpeed > cleaver.stats.attackSpeed);
+  assert.ok(spear.breakdown.attackSpeed.contributions.some((entry) => entry.source === "weapon:hunter-spear:attacks-per-second"));
+  assert.ok(spear.breakdown.attackSpeed.contributions.some((entry) => entry.source === "attribute:dexterity:attack-speed"));
 });
 
 test("legacy equipment is normalized without losing its rolled value", () => {

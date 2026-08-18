@@ -578,7 +578,7 @@ class CraftyScene extends Phaser.Scene {
     const dy = pointer.worldY - this.player.y;
     const length = Math.hypot(dx, dy) || 1;
     this.spawnProjectile(dx / length, dy / length, BASIC_ATTACK.projectileScale, BASIC_ATTACK.damageEffectiveness);
-    this.attackCooldown = Math.max(0.11, 0.34 / (this.options.arenaBalance?.attackSpeed ?? 1));
+    this.attackCooldown = 1 / Math.max(0.01, this.options.arenaBalance?.attackSpeed ?? 1);
   }
 
   private spawnProjectile(directionX: number, directionY: number, visualScale: number, damageEffectiveness: number): void {

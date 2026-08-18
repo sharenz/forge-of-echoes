@@ -10,7 +10,8 @@ import { containerItems, findContainerEntry, insertItem, mapContainerItems, move
 import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
 import { addMapModifier, rerollMap } from "../game/maps";
 import { purchaseMap } from "../game/merchant";
-import { applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
+import { applyRunResult, createCharacter, loadProfile, saveProfile } from "../game/profile";
+import { calculateCharacterStats } from "../game/stats";
 import type { WorldStation } from "../game2d/types";
 import { GameNotification } from "./GameNotification";
 import { InventoryPanel } from "./InventoryPanel";
@@ -74,7 +75,8 @@ export function GameShell() {
     return () => window.removeEventListener("keydown", toggleInventory);
   }, [profile?.character.created, screen]);
 
-  const stats = useMemo(() => profile ? deriveStats(profile) : null, [profile]);
+  const statCalculation = useMemo(() => profile ? calculateCharacterStats(profile) : null, [profile]);
+  const stats = statCalculation?.stats ?? null;
   const arenaBalance = useMemo(() => profile?.openedMap ? buildArenaBalance(profile) : undefined, [profile]);
   const currencies = useMemo(() => profile ? profileCurrencyAmounts(profile) : null, [profile]);
 
@@ -117,7 +119,7 @@ export function GameShell() {
   if (screen === "arena" && profile.openedMap && arenaBalance) {
     const inventoryOpen = panel === "inventory";
     return (
-      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={inventoryOpen} arenaBalance={arenaBalance} characterStats={stats} onLootPickup={collectMapDrop} onArenaComplete={completeArena}>
+      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={inventoryOpen} arenaBalance={arenaBalance} characterStats={stats} characterStatBreakdown={statCalculation?.breakdown} onLootPickup={collectMapDrop} onArenaComplete={completeArena}>
         <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(inventoryOpen ? null : "inventory")}>Inventory <kbd>I</kbd></button>
         <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
         {inventoryOpen && (
@@ -381,7 +383,7 @@ export function GameShell() {
   }
 
   return (
-    <PhaserWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} characterStats={stats} onStation={handleStation}>
+    <PhaserWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} characterStats={stats} characterStatBreakdown={statCalculation?.breakdown} onStation={handleStation}>
       <header className="hideout-hud">
         <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
         <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId].name}</small></div></div>

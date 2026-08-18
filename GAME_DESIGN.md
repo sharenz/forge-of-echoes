@@ -231,14 +231,15 @@ For any stat, resolution is always:
 - `flat` modifiers add a raw number before scaling.
 - all `increased` modifiers are additive with one another and form one multiplier.
 - every `more` modifier is a separate multiplier; it is reserved for scarcer, build-defining effects.
-- attributes resolve first, then their conversions establish the base values of derived stats.
+- attributes resolve first; configured per-level and per-attribute rules then materialize as ordinary sourced modifiers for derived stats.
+- attack speed starts from the equipped weapon base's attacks per second (or the configured unarmed base), then uses the same increased and more multipliers as every other stat.
 - item base stats scale from the item's immutable base definition and item level.
 - every affix tier defines its required item level, selection weight, numeric range, stat, and modifier mode.
 - item level only unlocks the affix tiers that may roll; it does not guarantee the highest available tier.
 - rerolling numeric values keeps the affix definition and tier fixed and rolls only inside that tier's original range.
-- modifier records retain a source identifier so the character sheet can eventually explain every result.
+- modifier records retain a stable source identifier and a player-facing label so the character sheet can explain every result now.
 
-Game content is data, not simulation logic. Definitions are separated by domain under `app/game/config`: classes, item bases, affixes, monsters, skills, maps, and progression. Runtime entities reference stable definition IDs and store only their rolled state. Calculation, generation, crafting, persistence, and rendering consume those definitions through dedicated engine modules.
+Game content is data, not simulation logic. Definitions are separated by domain under `app/game/config`: classes, stat contribution rules, item bases, affixes, monsters, skills, maps, and progression. Runtime entities reference stable definition IDs and store only their rolled state. Calculation, generation, crafting, persistence, and rendering consume those definitions through dedicated engine modules.
 
 ### Loot philosophy
 

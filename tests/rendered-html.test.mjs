@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, notification, mapMerchant, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, equipment, containerConfig, equipmentSlotConfig, arenaConfig, content, profile, stats, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, notification, mapMerchant, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, equipment, containerConfig, equipmentSlotConfig, arenaConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
@@ -49,6 +49,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/stats.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/stat-rules.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/item-bases.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/affixes.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/monsters.ts", import.meta.url), "utf8"),
@@ -114,7 +115,14 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /mapDevice/);
   assert.match(domain, /type InventoryItem/);
   assert.match(phaserWorld, /world-character-stats/);
+  assert.match(phaserWorld, /character-stat-breakdown/);
+  assert.match(shell, /characterStatBreakdown/);
   assert.match(stats, /evadeChance/);
+  assert.match(stats, /materializeRule/);
+  assert.match(stats, /weaponAttackSpeedModifier/);
+  assert.doesNotMatch(stats, /82 \+ level|1 \+ dexterity \* 0\.0025/);
+  assert.match(statRuleConfig, /DERIVED_STAT_RULES/);
+  assert.match(statRuleConfig, /perAttribute/);
   assert.match(world, /evadeMultiplier/);
   assert.match(world, /armorMultiplier/);
   assert.doesNotMatch(content, /BARGAINS|Bargain/);
@@ -126,6 +134,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(stats, /sum\(increased\)|mode === "increased"/);
   assert.match(stats, /moreMultiplier/);
   assert.match(itemConfig, /perItemLevel/);
+  assert.match(itemConfig, /attacksPerSecond/);
   assert.match(itemConfig, /slot: "helmet"/);
   assert.match(itemConfig, /slot: "offHand"/);
   assert.match(itemConfig, /slot: "amulet"/);
@@ -135,6 +144,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(monsterConfig, /contactDamagePerWave/);
   assert.match(monsterConfig, /baseLife: 18/);
   assert.match(skillConfig, /damageEffectiveness: 1\.35/);
+  assert.match(world, /1 \/ Math\.max\(0\.01, this\.options\.arenaBalance\?\.attackSpeed/);
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);
   await access(new URL("../public/og.png", import.meta.url));

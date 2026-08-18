@@ -1,9 +1,10 @@
 import { CHARACTER_CLASSES } from "./config/classes";
+import { ITEM_BASES_BY_ID, type ItemBaseId } from "./config/item-bases";
+import { DERIVED_STAT_RULES, UNARMED_ATTACKS_PER_SECOND, type StatContributionRule } from "./config/stat-rules";
 import type {
   AttributeKey,
   CharacterStats,
   EquipmentItem,
-  ModifierMode,
   PlayerProfile,
   StatKey,
   StatModifier,
@@ -15,6 +16,7 @@ export interface StatResolution {
   increased: number;
   more: number[];
   value: number;
+  contributions: readonly StatModifier[];
 }
 
 export interface CharacterStatCalculation {
@@ -23,9 +25,10 @@ export interface CharacterStatCalculation {
   breakdown: Record<StatKey, StatResolution>;
 }
 
+const ATTRIBUTE_KEYS: readonly AttributeKey[] = ["strength", "dexterity", "intelligence"];
 const STAT_KEYS: readonly StatKey[] = [
-  "strength", "dexterity", "intelligence", "maxLife", "maxFocus",
-  "moveSpeed", "attackDamage", "attackSpeed", "armor", "evadeChance",
+  ...ATTRIBUTE_KEYS, "maxLife", "maxFocus", "moveSpeed", "attackDamage",
+  "attackSpeed", "armor", "evadeChance",
 ];
 
 export function resolveStat(base: number, modifiers: readonly StatModifier[]): StatResolution {
@@ -33,14 +36,21 @@ export function resolveStat(base: number, modifiers: readonly StatModifier[]): S
   const increased = modifiers.filter((modifier) => modifier.mode === "increased").reduce((sum, modifier) => sum + modifier.value, 0);
   const more = modifiers.filter((modifier) => modifier.mode === "more").map((modifier) => modifier.value);
   const moreMultiplier = more.reduce((product, value) => product * (1 + value / 100), 1);
-  return { base, flat, increased, more, value: (base + flat) * (1 + increased / 100) * moreMultiplier };
+  return {
+    base,
+    flat,
+    increased,
+    more,
+    value: (base + flat) * (1 + increased / 100) * moreMultiplier,
+    contributions: modifiers,
+  };
 }
 
 export function itemModifiers(item: EquipmentItem): StatModifier[] {
   return [
-    ...item.baseStats,
-    ...item.implicitModifiers,
-    ...item.affixes.flatMap((affix) => affix.rolls),
+    ...item.baseStats.map((modifier) => ({ ...modifier, label: `${item.baseName} base` })),
+    ...item.implicitModifiers.map((modifier) => ({ ...modifier, label: `${item.baseName} implicit` })),
+    ...item.affixes.flatMap((affix) => affix.rolls.map((modifier) => ({ ...modifier, label: `${affix.name} (Tier ${affix.tier})` }))),
   ];
 }
 
@@ -48,9 +58,58 @@ function modifiersFor(stat: StatKey, modifiers: readonly StatModifier[]): StatMo
   return modifiers.filter((modifier) => modifier.stat === stat);
 }
 
-function baseAttribute(classId: NonNullable<PlayerProfile["character"]["classId"]>, attribute: AttributeKey, level: number): number {
+function classAttributeModifiers(
+  classId: NonNullable<PlayerProfile["character"]["classId"]>,
+  level: number,
+): StatModifier[] {
   const definition = CHARACTER_CLASSES[classId];
-  return definition.startingAttributes[attribute] + definition.attributesPerLevel[attribute] * Math.max(0, level - 1);
+  return ATTRIBUTE_KEYS.flatMap((attribute) => [
+    {
+      stat: attribute,
+      mode: "flat",
+      value: definition.startingAttributes[attribute],
+      source: `class:${classId}:starting-${attribute}`,
+      label: `${definition.name} starting ${attribute}`,
+    },
+    {
+      stat: attribute,
+      mode: "flat",
+      value: definition.attributesPerLevel[attribute] * Math.max(0, level - 1),
+      source: `class:${classId}:${attribute}-per-level`,
+      label: `+${definition.attributesPerLevel[attribute]} ${attribute} per level`,
+    },
+  ] satisfies StatModifier[]);
+}
+
+function materializeRule(
+  rule: StatContributionRule,
+  level: number,
+  attributes: Record<AttributeKey, number>,
+  classId: NonNullable<PlayerProfile["character"]["classId"]>,
+): StatModifier | null {
+  if (rule.classes && !rule.classes.includes(classId)) return null;
+  const units = rule.kind === "constant"
+    ? 1
+    : rule.kind === "perLevel"
+      ? Math.max(0, level - 1) / (rule.levelsPerUnit ?? 1)
+      : attributes[rule.attribute] / (rule.attributePointsPerUnit ?? 1);
+  const resolvedUnits = rule.kind !== "constant" && rule.wholeUnits ? Math.floor(units) : units;
+  const value = rule.kind === "constant"
+    ? rule.value
+    : rule.valuePerUnit * resolvedUnits;
+  return { stat: rule.stat, mode: rule.mode, value, source: rule.source, label: rule.label };
+}
+
+function weaponAttackSpeedModifier(mainHand: EquipmentItem | undefined): StatModifier {
+  const base = mainHand ? ITEM_BASES_BY_ID[mainHand.baseId as ItemBaseId] : undefined;
+  const attacksPerSecond = base?.weapon?.attacksPerSecond ?? UNARMED_ATTACKS_PER_SECOND;
+  return {
+    stat: "attackSpeed",
+    mode: "flat",
+    value: attacksPerSecond,
+    source: base?.weapon ? `weapon:${base.id}:attacks-per-second` : "character:unarmed-attacks-per-second",
+    label: base?.weapon ? `${base.name} base attacks per second` : "Unarmed base attacks per second",
+  };
 }
 
 export function calculateCharacterStats(profile: PlayerProfile): CharacterStatCalculation {
@@ -59,38 +118,38 @@ export function calculateCharacterStats(profile: PlayerProfile): CharacterStatCa
   const level = profile.character.level;
   const equipped = Object.values(profile.equipped).filter(Boolean) as EquipmentItem[];
   const itemModifierList = equipped.flatMap(itemModifiers);
+  const attributeModifiers = classAttributeModifiers(classId, level);
   const classModifiers: StatModifier[] = Object.entries(classDefinition.baseStats).map(([stat, value]) => ({
     stat: stat as StatKey,
-    mode: "flat" as ModifierMode,
+    mode: "flat",
     value: value ?? 0,
-    source: `class:${classId}`,
+    source: `class:${classId}:base-${stat}`,
+    label: `${classDefinition.name} class bonus`,
   }));
-  const modifiers = [...classModifiers, ...itemModifierList];
+  const initialModifiers = [...attributeModifiers, ...classModifiers, ...itemModifierList];
 
-  const strength = resolveStat(baseAttribute(classId, "strength", level), modifiersFor("strength", modifiers)).value;
-  const dexterity = resolveStat(baseAttribute(classId, "dexterity", level), modifiersFor("dexterity", modifiers)).value;
-  const intelligence = resolveStat(baseAttribute(classId, "intelligence", level), modifiersFor("intelligence", modifiers)).value;
+  const attributes = Object.fromEntries(ATTRIBUTE_KEYS.map((attribute) => [
+    attribute,
+    resolveStat(0, modifiersFor(attribute, initialModifiers)).value,
+  ])) as Record<AttributeKey, number>;
 
-  // Attribute conversions are intentionally centralized here. They create base
-  // values; all flat/increased/more modifiers still use the universal formula.
-  const bases: Record<StatKey, number> = {
-    strength: baseAttribute(classId, "strength", level),
-    dexterity: baseAttribute(classId, "dexterity", level),
-    intelligence: baseAttribute(classId, "intelligence", level),
-    maxLife: 82 + level * 7 + strength * 2,
-    maxFocus: 52 + level * 1.5 + intelligence * 1.65,
-    moveSpeed: 250 + dexterity * 0.22,
-    attackDamage: 9 + level * 1.15 + strength * 0.12 + dexterity * 0.1 + intelligence * 0.08,
-    attackSpeed: 1 + dexterity * 0.0025,
-    armor: 6 + level * 1.25 + strength * 0.52,
-    evadeChance: 2 + level * 0.1 + dexterity * 0.16,
-  };
-
-  const breakdown = Object.fromEntries(STAT_KEYS.map((stat) => [stat, resolveStat(bases[stat], modifiersFor(stat, modifiers))])) as Record<StatKey, StatResolution>;
+  const derivedModifiers = DERIVED_STAT_RULES.flatMap((rule) => {
+    const modifier = materializeRule(rule, level, attributes, classId);
+    return modifier ? [modifier] : [];
+  });
+  const modifiers = [
+    ...initialModifiers,
+    ...derivedModifiers,
+    weaponAttackSpeedModifier(profile.equipped.mainHand),
+  ];
+  const breakdown = Object.fromEntries(STAT_KEYS.map((stat) => [
+    stat,
+    resolveStat(0, modifiersFor(stat, modifiers)),
+  ])) as Record<StatKey, StatResolution>;
   const stats: CharacterStats = {
-    strength: Math.round(strength),
-    dexterity: Math.round(dexterity),
-    intelligence: Math.round(intelligence),
+    strength: Math.round(breakdown.strength.value),
+    dexterity: Math.round(breakdown.dexterity.value),
+    intelligence: Math.round(breakdown.intelligence.value),
     maxLife: breakdown.maxLife.value,
     maxFocus: breakdown.maxFocus.value,
     moveSpeed: breakdown.moveSpeed.value,

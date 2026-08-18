@@ -29,6 +29,8 @@ export interface StatModifier {
   mode: ModifierMode;
   value: number;
   source: string;
+  /** Human-readable origin used by stat breakdowns; source remains the stable ID. */
+  label?: string;
 }
 
 export interface AffixRoll extends StatModifier {
