@@ -1,6 +1,7 @@
 import { mapRewardBonus } from "./maps";
 import { deriveStats } from "./profile";
 import type { CurrencyId, PlayerProfile, Rarity } from "./domain";
+import { ARENA_RULES } from "./config/arena";
 import { ACTIVE_SKILLS } from "./config/skills";
 
 export type MapDrop =
@@ -33,6 +34,11 @@ export interface ArenaSummary {
   elapsedSeconds: number;
 }
 
+export function shouldSpawnNextWave(currentWave: number, totalWaves: number, remainingEnemies: number, waveElapsedSeconds: number): boolean {
+  if (currentWave >= totalWaves) return false;
+  return remainingEnemies === 0 || waveElapsedSeconds >= ARENA_RULES.waveSpawnIntervalSeconds;
+}
+
 export function buildArenaBalance(profile: PlayerProfile): ArenaBalance {
   const stats = deriveStats(profile);
   const map = profile.openedMap;
@@ -40,7 +46,7 @@ export function buildArenaBalance(profile: PlayerProfile): ArenaBalance {
   const tier = map?.tier ?? 1;
 
   return {
-    waves: 6,
+    waves: ARENA_RULES.totalWaves,
     tier,
     maxLife: Math.round(stats.maxLife),
     maxFocus: Math.round(stats.maxFocus),

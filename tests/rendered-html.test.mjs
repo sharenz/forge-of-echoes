@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, notification, mapMerchant, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, containerConfig, content, profile, stats, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, notification, mapMerchant, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, containerConfig, arenaConfig, content, profile, stats, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
@@ -43,6 +43,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/item-container.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/containers.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/arena.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/stats.ts", import.meta.url), "utf8"),
@@ -72,6 +73,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /MAP_SIZE = VIEW_SIZE \* 4/);
   assert.match(world, /setDeadzone\(360, 360\)/);
   assert.match(world, /PACK_REGIONS/);
+  assert.match(world, /shouldSpawnNextWave/);
+  assert.match(world, /waveElapsedSeconds/);
+  assert.match(arenaConfig, /waveSpawnIntervalSeconds: 30/);
   assert.match(world, /rollGroundDrop/);
   assert.match(world, /updateGroundDrops/);
   assert.match(shell, /onLootPickup/);

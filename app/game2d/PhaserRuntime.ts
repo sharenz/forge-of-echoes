@@ -1,5 +1,6 @@
 import Phaser from "phaser";
-import { ACTIVE_SKILLS, type MapDrop } from "../game/combat";
+import { ACTIVE_SKILLS, shouldSpawnNextWave, type MapDrop } from "../game/combat";
+import { ARENA_RULES } from "../game/config/arena";
 import { MONSTER_ARCHETYPES } from "../game/config/monsters";
 import type { CharacterClassId } from "../game/domain";
 import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
@@ -19,6 +20,7 @@ interface EnemyState {
   y: number;
   life: number;
   speed: number;
+  contactDamage: number;
   homeX: number;
   homeY: number;
   phase: number;
@@ -76,6 +78,7 @@ class CraftyScene extends Phaser.Scene {
   private focus: number;
   private lives = 3;
   private wave = 1;
+  private waveElapsedSeconds = 0;
   private slain = 0;
   private lootCollected = 0;
   private elapsedSeconds = 0;
@@ -184,6 +187,9 @@ class CraftyScene extends Phaser.Scene {
       mode: this.options.mode,
       wave: this.wave,
       enemies: this.enemies.length,
+      nextWaveIn: this.wave < (this.options.arenaBalance?.waves ?? ARENA_RULES.totalWaves)
+        ? Math.max(0, ARENA_RULES.waveSpawnIntervalSeconds - this.waveElapsedSeconds)
+        : null,
       life: Math.max(0, this.life),
       maxLife: this.options.arenaBalance?.maxLife ?? 100,
       focus: this.focus,
@@ -209,6 +215,7 @@ class CraftyScene extends Phaser.Scene {
   private fixedUpdate(delta: number): void {
     if (!this.player) return;
     this.elapsedSeconds += delta;
+    this.waveElapsedSeconds += delta;
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
     this.novaCooldown = Math.max(0, this.novaCooldown - delta);
     if (this.riftCharges < ACTIVE_SKILLS.dash.maxCharges) {
@@ -246,7 +253,7 @@ class CraftyScene extends Phaser.Scene {
       this.applyEnemyContactDamage(delta);
       this.updateProjectiles(delta);
       this.updateGroundDrops(delta);
-      this.advanceWaveIfClear();
+      this.advanceWaveIfReady();
     }
 
     this.hudElapsed += delta;
@@ -361,6 +368,7 @@ class CraftyScene extends Phaser.Scene {
 
   private startWave(wave: number): void {
     this.wave = wave;
+    this.waveElapsedSeconds = 0;
     const balance = this.options.arenaBalance;
     const count = Math.round((28 + wave * 16) * (balance?.enemyCountMultiplier ?? 1));
     const groupCount = Math.min(PACK_REGIONS.length, 4 + Math.ceil(wave / 2));
@@ -396,6 +404,7 @@ class CraftyScene extends Phaser.Scene {
           aggro: false,
           life: (ARENA_MONSTER.baseLife + wave * ARENA_MONSTER.lifePerWave) * (balance?.enemyHealthMultiplier ?? 1),
           speed: Phaser.Math.FloatBetween(ARENA_MONSTER.speed.min, ARENA_MONSTER.speed.max) * (balance?.enemySpeedMultiplier ?? 1) + wave * ARENA_MONSTER.speed.perWave,
+          contactDamage: (ARENA_MONSTER.contactDamage + wave * ARENA_MONSTER.contactDamagePerWave) * (balance?.enemyDamageMultiplier ?? 1),
         });
       }
     });
@@ -430,7 +439,7 @@ class CraftyScene extends Phaser.Scene {
         const evadeMultiplier = 1 - (this.options.arenaBalance?.evadeChance ?? 0) / 100;
         const armor = this.options.arenaBalance?.armor ?? 0;
         const armorMultiplier = 100 / (100 + armor);
-        this.life -= delta * (ARENA_MONSTER.contactDamage + this.wave * ARENA_MONSTER.contactDamagePerWave) * (this.options.arenaBalance?.enemyDamageMultiplier ?? 1) * evadeMultiplier * armorMultiplier;
+        this.life -= delta * enemy.contactDamage * evadeMultiplier * armorMultiplier;
       }
     }
     if (this.life <= 0) {
@@ -597,13 +606,14 @@ class CraftyScene extends Phaser.Scene {
     this.enemies = [];
   }
 
-  private advanceWaveIfClear(): void {
-    if (this.enemies.length > 0 || this.arenaComplete) return;
-    const finalWave = this.options.arenaBalance?.waves ?? 6;
-    if (this.wave < finalWave) {
+  private advanceWaveIfReady(): void {
+    if (this.arenaComplete) return;
+    const finalWave = this.options.arenaBalance?.waves ?? ARENA_RULES.totalWaves;
+    if (shouldSpawnNextWave(this.wave, finalWave, this.enemies.length, this.waveElapsedSeconds)) {
       this.startWave(this.wave + 1);
       return;
     }
+    if (this.wave < finalWave || this.enemies.length > 0) return;
     if (this.groundDrops.length > 0) return;
     this.arenaComplete = true;
     this.options.onArenaComplete({ wave: this.wave, enemiesSlain: this.slain, elapsedSeconds: Math.round(this.elapsedSeconds) });

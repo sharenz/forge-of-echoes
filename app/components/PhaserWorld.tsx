@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ACTIVE_SKILLS, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
+import { ARENA_RULES } from "../game/config/arena";
 import type { CharacterClassId, CharacterStats } from "../game/domain";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
 import type { WorldHudState, WorldMode, WorldStation } from "../game2d/types";
@@ -100,7 +101,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
       {rendererError && <div className="world-loader world-error"><strong>The game renderer could not start</strong><small>Enable WebGL or Canvas support, then reload.</small></div>}
       {mode === "arena" && hud && (
         <>
-          <div className="world-wave"><span>Wave</span><strong>{hud.wave}<em>/{arenaBalance?.waves ?? 6}</em></strong><small>{hud.enemies} remain</small></div>
+          <div className="world-wave"><span>Wave</span><strong>{hud.wave}<em>/{arenaBalance?.waves ?? ARENA_RULES.totalWaves}</em></strong><small>{hud.enemies} remain{hud.nextWaveIn !== null ? ` · next in ${Math.ceil(hud.nextWaveIn)}s` : " · final wave"}</small></div>
           <div className="world-loot"><span>{hud.lootCollected} collected</span><strong>{hud.groundDrops}</strong><small>drops on ground</small></div>
           <div className="world-vitals">
             <div><span>Life</span><i><b style={{ width: `${(hud.life / hud.maxLife) * 100}%` }} /></i><strong>{Math.ceil(hud.life)}</strong></div>

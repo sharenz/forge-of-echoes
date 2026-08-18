@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AFFIX_DEFINITIONS_BY_ID } from "../app/game/config/affixes";
+import { ARENA_RULES } from "../app/game/config/arena";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
 import { MAP_MERCHANT } from "../app/game/config/merchants";
 import type { EquipmentItem, ItemContainer, PlayerProfile, StatModifier } from "../app/game/domain";
@@ -16,6 +17,7 @@ import {
 import { calculateCharacterStats, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
 import { purchaseMap } from "../app/game/merchant";
+import { shouldSpawnNextWave } from "../app/game/combat";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -212,4 +214,12 @@ test("cross-container transfers require the exact requested rectangle", () => {
   assert.equal(transferred.source.entries.length, 0);
   assert.deepEqual(transferred.target.entries.find((entry) => entry.item.id === map.id), { item: map, x: 7, y: 4 });
   assert.deepEqual(transferred.target.entries.find((entry) => entry.item.id === blocker.id), { item: blocker, x: 5, y: 5 });
+});
+
+test("waves advance when cleared or after the configured timeout", () => {
+  assert.equal(ARENA_RULES.waveSpawnIntervalSeconds, 30);
+  assert.equal(shouldSpawnNextWave(1, 6, 12, 29.99), false);
+  assert.equal(shouldSpawnNextWave(1, 6, 0, 3), true);
+  assert.equal(shouldSpawnNextWave(1, 6, 12, 30), true);
+  assert.equal(shouldSpawnNextWave(6, 6, 0, 90), false);
 });

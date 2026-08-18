@@ -9,6 +9,7 @@ export interface WorldHudState {
   mode: WorldMode;
   wave: number;
   enemies: number;
+  nextWaveIn: number | null;
   life: number;
   maxLife: number;
   focus: number;
