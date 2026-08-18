@@ -43,6 +43,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /class PhaserRuntime/);
   assert.match(world, /pixelArt: true/);
   assert.match(world, /spatialBuckets/);
+  assert.match(world, /MAP_SIZE = VIEW_SIZE \* 4/);
+  assert.match(world, /setDeadzone\(360, 360\)/);
+  assert.match(world, /PACK_REGIONS/);
   assert.match(domain, /interface MapItem/);
   assert.match(domain, /interface EquipmentItem/);
   assert.match(profile, /level < 99/);

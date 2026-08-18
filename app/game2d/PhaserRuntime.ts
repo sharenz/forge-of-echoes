@@ -2,7 +2,10 @@ import Phaser from "phaser";
 import type { CharacterClassId } from "../game/domain";
 import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
 
-const WORLD_SIZE = 960;
+const VIEW_SIZE = 960;
+const MAP_SIZE = VIEW_SIZE * 4;
+const SPATIAL_CELL_SIZE = 64;
+const SPATIAL_COLUMNS = Math.ceil(MAP_SIZE / SPATIAL_CELL_SIZE) + 2;
 const FIXED_STEP = 1000 / 60;
 const MAX_FRAME_DELTA = 50;
 const PROJECTILE_POOL_SIZE = 160;
@@ -13,6 +16,10 @@ interface EnemyState {
   y: number;
   life: number;
   speed: number;
+  homeX: number;
+  homeY: number;
+  phase: number;
+  aggro: boolean;
 }
 
 interface ProjectileState {
@@ -28,6 +35,13 @@ const CLASS_COLORS: Record<CharacterClassId, { cloth: number; accent: number }> 
   barbarian: { cloth: 0x7b352c, accent: 0xd97a4f },
   sorceress: { cloth: 0x49345e, accent: 0xff8548 },
 };
+
+const PACK_REGIONS = [
+  [0.14, 0.15], [0.49, 0.13], [0.82, 0.16],
+  [0.22, 0.34], [0.48, 0.36], [0.77, 0.36],
+  [0.12, 0.54], [0.36, 0.56], [0.68, 0.55], [0.87, 0.58],
+  [0.18, 0.79], [0.47, 0.81], [0.79, 0.8],
+] as const;
 
 class CraftyScene extends Phaser.Scene {
   private readonly options: WorldRuntimeOptions;
@@ -62,15 +76,17 @@ class CraftyScene extends Phaser.Scene {
 
   preload(): void {
     this.load.image("pixel-forge", "/pixel-forge-hideout.webp");
+    this.load.image("ashen-wilderness", "/pixel-ashen-wilderness.webp");
   }
 
   create(): void {
     this.createTextures();
-    const background = this.add.image(WORLD_SIZE / 2, WORLD_SIZE / 2, "pixel-forge").setDisplaySize(WORLD_SIZE, WORLD_SIZE);
-    if (this.options.mode === "arena") background.setTint(0xbda99a);
+    const worldSize = this.options.mode === "arena" ? MAP_SIZE : VIEW_SIZE;
+    const backgroundKey = this.options.mode === "arena" ? "ashen-wilderness" : "pixel-forge";
+    const background = this.add.image(worldSize / 2, worldSize / 2, backgroundKey).setDisplaySize(worldSize, worldSize);
     if (this.options.mode === "class-select") {
       background.setTint(0x746d67);
-      this.add.rectangle(WORLD_SIZE / 2, WORLD_SIZE / 2, WORLD_SIZE, WORLD_SIZE, 0x07090b, 0.5);
+      this.add.rectangle(VIEW_SIZE / 2, VIEW_SIZE / 2, VIEW_SIZE, VIEW_SIZE, 0x07090b, 0.5);
       this.buildClassShowcase();
       return;
     }
@@ -80,6 +96,10 @@ class CraftyScene extends Phaser.Scene {
     if (this.options.mode === "arena") {
       this.enemyPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: 1000, runChildUpdate: false });
       this.projectilePool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: PROJECTILE_POOL_SIZE, runChildUpdate: false });
+      this.cameras.main.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
+      this.cameras.main.startFollow(this.player!, true, 1, 1);
+      this.cameras.main.setDeadzone(360, 360);
+      this.cameras.main.roundPixels = true;
       this.startWave(1);
     }
 
@@ -238,8 +258,10 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private createPlayer(): void {
-    this.playerShadow = this.add.image(480, 715, "shadow").setScale(1.6).setDepth(8);
-    this.player = this.add.image(480, 700, `player-${this.options.classId}`).setScale(2.15).setDepth(10);
+    const x = this.options.mode === "arena" ? MAP_SIZE / 2 : 480;
+    const y = this.options.mode === "arena" ? MAP_SIZE / 2 : 700;
+    this.playerShadow = this.add.image(x, y + 15, "shadow").setScale(1.6).setDepth(8);
+    this.player = this.add.image(x, y, `player-${this.options.classId}`).setScale(2.15).setDepth(10);
   }
 
   private buildHideoutStations(): void {
@@ -267,6 +289,11 @@ class CraftyScene extends Phaser.Scene {
 
   private clampPlayer(): void {
     if (!this.player) return;
+    if (this.options.mode === "arena") {
+      this.player.x = Phaser.Math.Clamp(this.player.x, 90, MAP_SIZE - 90);
+      this.player.y = Phaser.Math.Clamp(this.player.y, 90, MAP_SIZE - 90);
+      return;
+    }
     this.player.x = Phaser.Math.Clamp(this.player.x, 175, 785);
     this.player.y = Phaser.Math.Clamp(this.player.y, 310, 805);
   }
@@ -275,23 +302,43 @@ class CraftyScene extends Phaser.Scene {
     this.wave = wave;
     const balance = this.options.arenaBalance;
     const count = Math.round((28 + wave * 16) * (balance?.enemyCountMultiplier ?? 1));
-    for (let index = 0; index < count; index += 1) {
-      const angle = (index / count) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.08, 0.08);
-      const radiusX = Phaser.Math.Between(305, 345);
-      const radiusY = Phaser.Math.Between(240, 285);
-      const sprite = this.enemyPool?.get(0, 0, "enemy") as Phaser.GameObjects.Image | null;
-      if (!sprite) break;
-      const x = 480 + Math.cos(angle) * radiusX;
-      const y = 525 + Math.sin(angle) * radiusY;
-      sprite.setActive(true).setVisible(true).setPosition(x, y).setScale(1.6).setDepth(9);
-      this.enemies.push({
-        sprite,
-        x,
-        y,
-        life: (1 + wave * 0.28) * (balance?.enemyHealthMultiplier ?? 1),
-        speed: Phaser.Math.FloatBetween(39, 58) * (balance?.enemySpeedMultiplier ?? 1) + wave * 1.2,
-      });
-    }
+    const groupCount = Math.min(PACK_REGIONS.length, 4 + Math.ceil(wave / 2));
+    const playerX = this.player?.x ?? MAP_SIZE / 2;
+    const playerY = this.player?.y ?? MAP_SIZE / 2;
+    const nearestRegion = [...PACK_REGIONS].sort((left, right) => (
+      Math.hypot(left[0] * MAP_SIZE - playerX, left[1] * MAP_SIZE - playerY)
+      - Math.hypot(right[0] * MAP_SIZE - playerX, right[1] * MAP_SIZE - playerY)
+    ))[0];
+    const otherRegions = Phaser.Utils.Array.Shuffle(PACK_REGIONS.filter((region) => region !== nearestRegion));
+    const regions = [nearestRegion, ...otherRegions].slice(0, groupCount);
+    let remaining = count;
+    regions.forEach(([normalizedX, normalizedY], groupIndex) => {
+      const members = Math.ceil(remaining / (regions.length - groupIndex));
+      remaining -= members;
+      const centerX = normalizedX * MAP_SIZE;
+      const centerY = normalizedY * MAP_SIZE;
+      for (let member = 0; member < members; member += 1) {
+        const angle = (member / members) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.2, 0.2);
+        const radius = Phaser.Math.Between(24, 105);
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius;
+        const sprite = this.enemyPool?.get(x, y, "enemy") as Phaser.GameObjects.Image | null;
+        if (!sprite) break;
+        sprite.setActive(true).setVisible(true).setPosition(x, y).setScale(1.6).setDepth(Math.round(y / 10) + 10);
+        this.enemies.push({
+          sprite,
+          x,
+          y,
+          homeX: x,
+          homeY: y,
+          phase: Phaser.Math.FloatBetween(0, Math.PI * 2),
+          aggro: false,
+          life: (1 + wave * 0.28) * (balance?.enemyHealthMultiplier ?? 1),
+          speed: Phaser.Math.FloatBetween(39, 58) * (balance?.enemySpeedMultiplier ?? 1) + wave * 1.2,
+        });
+      }
+    });
+    this.rebuildSpatialBuckets();
   }
 
   private updateEnemies(delta: number): void {
@@ -300,8 +347,17 @@ class CraftyScene extends Phaser.Scene {
       const dx = this.player.x - enemy.x;
       const dy = this.player.y - enemy.y;
       const distance = Math.hypot(dx, dy) || 1;
-      enemy.x += (dx / distance) * enemy.speed * delta;
-      enemy.y += (dy / distance) * enemy.speed * delta;
+      if (distance < 720) enemy.aggro = true;
+      if (enemy.aggro) {
+        enemy.x += (dx / distance) * enemy.speed * delta;
+        enemy.y += (dy / distance) * enemy.speed * delta;
+      } else {
+        enemy.phase += delta * 0.8;
+        const idleX = enemy.homeX + Math.cos(enemy.phase) * 14;
+        const idleY = enemy.homeY + Math.sin(enemy.phase * 0.8) * 10;
+        enemy.x += (idleX - enemy.x) * delta * 1.8;
+        enemy.y += (idleY - enemy.y) * delta * 1.8;
+      }
       enemy.sprite.setPosition(Math.round(enemy.x), Math.round(enemy.y)).setFlipX(dx < 0).setDepth(Math.round(enemy.y / 10) + 10);
     }
   }
@@ -316,7 +372,7 @@ class CraftyScene extends Phaser.Scene {
     if (this.life <= 0) {
       this.lives -= 1;
       this.life = this.options.arenaBalance?.maxLife ?? 100;
-      this.player.setPosition(480, 650);
+      this.player.setPosition(MAP_SIZE / 2, MAP_SIZE / 2);
       if (this.lives <= 0) {
         this.lives = 3;
         this.releaseAllEnemies();
@@ -336,16 +392,16 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private bucketKey(x: number, y: number): number {
-    return Math.floor(x / 64) + Math.floor(y / 64) * 32;
+    return Math.floor(x / SPATIAL_CELL_SIZE) + Math.floor(y / SPATIAL_CELL_SIZE) * SPATIAL_COLUMNS;
   }
 
   private nearbyEnemies(x: number, y: number): EnemyState[] {
     const result: EnemyState[] = [];
-    const cellX = Math.floor(x / 64);
-    const cellY = Math.floor(y / 64);
+    const cellX = Math.floor(x / SPATIAL_CELL_SIZE);
+    const cellY = Math.floor(y / SPATIAL_CELL_SIZE);
     for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
       for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-        const bucket = this.spatialBuckets.get(cellX + offsetX + (cellY + offsetY) * 32);
+        const bucket = this.spatialBuckets.get(cellX + offsetX + (cellY + offsetY) * SPATIAL_COLUMNS);
         if (bucket) result.push(...bucket);
       }
     }
@@ -434,8 +490,8 @@ export class PhaserRuntime {
     this.game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: this.options.parent,
-      width: WORLD_SIZE,
-      height: WORLD_SIZE,
+      width: VIEW_SIZE,
+      height: VIEW_SIZE,
       backgroundColor: "#071011",
       pixelArt: true,
       antialias: false,
