@@ -1,4 +1,4 @@
-import type { ArenaBalance, ArenaSummary } from "../game/combat";
+import type { ArenaBalance, ArenaSummary, MapDrop } from "../game/combat";
 import type { CharacterClassId } from "../game/domain";
 
 export type WorldMode = "class-select" | "hideout" | "arena";
@@ -13,6 +13,8 @@ export interface WorldHudState {
   maxLife: number;
   focus: number;
   maxFocus: number;
+  groundDrops: number;
+  lootCollected: number;
 }
 
 export interface WorldRuntimeOptions {
@@ -23,5 +25,6 @@ export interface WorldRuntimeOptions {
   arenaBalance?: ArenaBalance;
   onStation: (station: WorldStation) => void;
   onHud: (state: WorldHudState) => void;
+  onLootPickup: (drop: MapDrop) => void;
   onArenaComplete: (summary: ArenaSummary) => void;
 }

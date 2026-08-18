@@ -1,6 +1,10 @@
 import { mapRewardBonus } from "./maps";
 import { deriveStats } from "./profile";
-import type { PlayerProfile } from "./domain";
+import type { PlayerProfile, Rarity } from "./domain";
+
+export type MapDrop =
+  | { kind: "equipment"; rarity: Rarity }
+  | { kind: "material"; material: "scrap" | "essence" | "mapDust"; amount: number };
 
 export interface ArenaBalance {
   waves: number;

@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import type { MapDrop } from "../game/combat";
 import type { CharacterClassId } from "../game/domain";
 import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
 
@@ -30,6 +31,15 @@ interface ProjectileState {
   remaining: number;
 }
 
+interface GroundDropState {
+  sprite: Phaser.GameObjects.Image;
+  label: Phaser.GameObjects.Text;
+  x: number;
+  y: number;
+  phase: number;
+  drop: MapDrop;
+}
+
 const CLASS_COLORS: Record<CharacterClassId, { cloth: number; accent: number }> = {
   amazon: { cloth: 0x536b38, accent: 0xe4b85f },
   barbarian: { cloth: 0x7b352c, accent: 0xd97a4f },
@@ -50,8 +60,10 @@ class CraftyScene extends Phaser.Scene {
   private keys: Record<string, Phaser.Input.Keyboard.Key> | null = null;
   private enemies: EnemyState[] = [];
   private projectiles: ProjectileState[] = [];
+  private groundDrops: GroundDropState[] = [];
   private enemyPool: Phaser.GameObjects.Group | null = null;
   private projectilePool: Phaser.GameObjects.Group | null = null;
+  private dropPool: Phaser.GameObjects.Group | null = null;
   private spatialBuckets = new Map<number, EnemyState[]>();
   private accumulator = 0;
   private attackCooldown = 0;
@@ -62,6 +74,7 @@ class CraftyScene extends Phaser.Scene {
   private lives = 3;
   private wave = 1;
   private slain = 0;
+  private lootCollected = 0;
   private elapsedSeconds = 0;
   private hudElapsed = 0;
   private arenaComplete = false;
@@ -96,6 +109,7 @@ class CraftyScene extends Phaser.Scene {
     if (this.options.mode === "arena") {
       this.enemyPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: 1000, runChildUpdate: false });
       this.projectilePool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: PROJECTILE_POOL_SIZE, runChildUpdate: false });
+      this.dropPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: 300, runChildUpdate: false });
       this.cameras.main.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
       this.cameras.main.startFollow(this.player!, true, 1, 1);
       this.cameras.main.setDeadzone(360, 360);
@@ -167,6 +181,8 @@ class CraftyScene extends Phaser.Scene {
       maxLife: this.options.arenaBalance?.maxLife ?? 100,
       focus: this.focus,
       maxFocus: this.options.arenaBalance?.maxFocus ?? 100,
+      groundDrops: this.groundDrops.length,
+      lootCollected: this.lootCollected,
     };
   }
 
@@ -203,6 +219,7 @@ class CraftyScene extends Phaser.Scene {
       this.rebuildSpatialBuckets();
       this.applyEnemyContactDamage(delta);
       this.updateProjectiles(delta);
+      this.updateGroundDrops(delta);
       this.advanceWaveIfClear();
     }
 
@@ -231,6 +248,21 @@ class CraftyScene extends Phaser.Scene {
     const shadow = this.make.graphics({ x: 0, y: 0 });
     shadow.fillStyle(0x071011, 0.5).fillEllipse(0, 0, 27, 9);
     shadow.generateTexture("shadow", 28, 10).destroy();
+    this.createDropTexture("drop-scrap", 0xc17a42, 0xf1c071);
+    this.createDropTexture("drop-essence", 0x6c4ca4, 0xc6a5ff);
+    this.createDropTexture("drop-mapDust", 0x317f89, 0x92e4df);
+    this.createDropTexture("drop-equipment-normal", 0x7c756c, 0xded5c9);
+    this.createDropTexture("drop-equipment-magic", 0x4c64a4, 0x96b4ff);
+    this.createDropTexture("drop-equipment-rare", 0x9b782e, 0xffd867);
+  }
+
+  private createDropTexture(key: string, outerColor: number, innerColor: number): void {
+    const graphics = this.make.graphics({ x: 0, y: 0 });
+    graphics.fillStyle(0x08090b, 0.7).fillRect(2, 3, 12, 12);
+    graphics.fillStyle(outerColor).fillRect(3, 1, 10, 14);
+    graphics.fillStyle(innerColor).fillRect(6, 4, 4, 7);
+    graphics.fillStyle(0xffffff, 0.8).fillRect(7, 3, 2, 2);
+    graphics.generateTexture(key, 16, 17).destroy();
   }
 
   private createPlayerTexture(classId: CharacterClassId): void {
@@ -453,9 +485,79 @@ class CraftyScene extends Phaser.Scene {
 
   private releaseEnemy(enemy: EnemyState): void {
     const index = this.enemies.indexOf(enemy);
-    if (index >= 0) this.enemies.splice(index, 1);
+    if (index < 0) return;
+    this.enemies.splice(index, 1);
     this.enemyPool?.killAndHide(enemy.sprite);
     this.slain += 1;
+    this.rollGroundDrop(enemy.x, enemy.y);
+  }
+
+  private rollGroundDrop(x: number, y: number): void {
+    const rewardMultiplier = 1 + (this.options.arenaBalance?.rewardBonus ?? 0) / 100;
+    const equipmentChance = Math.min(0.14, 0.055 * rewardMultiplier);
+    const materialChance = Math.min(0.35, 0.16 * rewardMultiplier);
+    const roll = Math.random();
+    let drop: MapDrop | null = null;
+    if (roll < equipmentChance) {
+      const rarityRoll = Math.random();
+      const rareChance = Math.min(0.04, 0.0125 * rewardMultiplier);
+      drop = { kind: "equipment", rarity: rarityRoll < rareChance ? "rare" : rarityRoll < 0.5 ? "magic" : "normal" };
+    } else if (roll < equipmentChance + materialChance) {
+      const materialRoll = Math.random();
+      drop = materialRoll < 0.08
+        ? { kind: "material", material: "mapDust", amount: 1 }
+        : materialRoll < 0.28
+          ? { kind: "material", material: "essence", amount: 1 }
+          : { kind: "material", material: "scrap", amount: Phaser.Math.Between(1, 2) };
+    }
+    if (!drop) return;
+    this.spawnGroundDrop(x, y, drop);
+  }
+
+  private spawnGroundDrop(x: number, y: number, drop: MapDrop): void {
+    const texture = drop.kind === "equipment" ? `drop-equipment-${drop.rarity}` : `drop-${drop.material}`;
+    const sprite = this.dropPool?.get(x, y, texture) as Phaser.GameObjects.Image | null;
+    if (!sprite) return;
+    sprite.setTexture(texture).setActive(true).setVisible(true).setPosition(x, y).setScale(1.8).setDepth(Math.round(y / 10) + 30);
+    const labelText = drop.kind === "equipment"
+      ? `${drop.rarity.toUpperCase()} ITEM`
+      : `${drop.amount} ${drop.material === "mapDust" ? "MAP DUST" : drop.material.toUpperCase()}`;
+    const color = drop.kind === "equipment"
+      ? drop.rarity === "rare" ? "#ffda68" : drop.rarity === "magic" ? "#9bb8ff" : "#ded5c9"
+      : drop.material === "essence" ? "#c6a5ff" : drop.material === "mapDust" ? "#92e4df" : "#e2ac70";
+    const label = this.add.text(x, y - 22, labelText, {
+      fontFamily: "monospace",
+      fontSize: "10px",
+      color,
+      backgroundColor: "#08090bcc",
+      padding: { x: 4, y: 2 },
+    }).setOrigin(0.5).setDepth(Math.round(y / 10) + 31);
+    this.groundDrops.push({ sprite, label, x, y, phase: Phaser.Math.FloatBetween(0, Math.PI * 2), drop });
+  }
+
+  private updateGroundDrops(delta: number): void {
+    if (!this.player) return;
+    for (let index = this.groundDrops.length - 1; index >= 0; index -= 1) {
+      const groundDrop = this.groundDrops[index];
+      groundDrop.phase += delta * 3;
+      const bob = Math.sin(groundDrop.phase) * 3;
+      groundDrop.sprite.setPosition(groundDrop.x, groundDrop.y + bob);
+      groundDrop.label.setPosition(groundDrop.x, groundDrop.y - 22 + bob);
+      if (Math.hypot(this.player.x - groundDrop.x, this.player.y - groundDrop.y) >= 38) continue;
+      this.options.onLootPickup(groundDrop.drop);
+      this.lootCollected += 1;
+      this.groundDrops.splice(index, 1);
+      this.dropPool?.killAndHide(groundDrop.sprite);
+      groundDrop.label.destroy();
+      const pickupText = this.add.text(groundDrop.x, groundDrop.y - 28, "COLLECTED", {
+        fontFamily: "monospace",
+        fontSize: "11px",
+        color: "#fff1c8",
+        stroke: "#08090b",
+        strokeThickness: 3,
+      }).setOrigin(0.5).setDepth(500);
+      this.tweens.add({ targets: pickupText, y: pickupText.y - 24, alpha: 0, duration: 650, onComplete: () => pickupText.destroy() });
+    }
   }
 
   private releaseAllEnemies(): void {
@@ -470,6 +572,7 @@ class CraftyScene extends Phaser.Scene {
       this.startWave(this.wave + 1);
       return;
     }
+    if (this.groundDrops.length > 0) return;
     this.arenaComplete = true;
     this.options.onArenaComplete({ wave: this.wave, enemiesSlain: this.slain, elapsedSeconds: Math.round(this.elapsedSeconds) });
   }

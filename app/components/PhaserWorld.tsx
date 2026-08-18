@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ArenaBalance, ArenaSummary } from "../game/combat";
+import type { ArenaBalance, ArenaSummary, MapDrop } from "../game/combat";
 import type { CharacterClassId } from "../game/domain";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
 import type { WorldHudState, WorldMode, WorldStation } from "../game2d/types";
@@ -12,15 +12,17 @@ interface PhaserWorldProps {
   portalActive?: boolean;
   arenaBalance?: ArenaBalance;
   onStation?: (station: WorldStation) => void;
+  onLootPickup?: (drop: MapDrop) => void;
   onArenaComplete?: (summary: ArenaSummary) => void;
   children?: React.ReactNode;
 }
 
-export function PhaserWorld({ mode, classId, portalActive = false, arenaBalance, onStation, onArenaComplete, children }: PhaserWorldProps) {
+export function PhaserWorld({ mode, classId, portalActive = false, arenaBalance, onStation, onLootPickup, onArenaComplete, children }: PhaserWorldProps) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
   const parentRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<PhaserRuntime | null>(null);
   const stationCallbackRef = useRef(onStation);
+  const lootCallbackRef = useRef(onLootPickup);
   const completionCallbackRef = useRef(onArenaComplete);
   const [hud, setHud] = useState<WorldHudState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,8 +30,9 @@ export function PhaserWorld({ mode, classId, portalActive = false, arenaBalance,
 
   useEffect(() => {
     stationCallbackRef.current = onStation;
+    lootCallbackRef.current = onLootPickup;
     completionCallbackRef.current = onArenaComplete;
-  }, [onArenaComplete, onStation]);
+  }, [onArenaComplete, onLootPickup, onStation]);
 
   useEffect(() => {
     const parent = parentRef.current;
@@ -48,6 +51,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, arenaBalance,
         arenaBalance,
         onStation: (station) => stationCallbackRef.current?.(station),
         onHud: setHud,
+        onLootPickup: (drop) => lootCallbackRef.current?.(drop),
         onArenaComplete: (summary) => completionCallbackRef.current?.(summary),
       });
       runtimeRef.current = runtime;
@@ -77,6 +81,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, arenaBalance,
       {mode === "arena" && hud && (
         <>
           <div className="world-wave"><span>Wave</span><strong>{hud.wave}<em>/{arenaBalance?.waves ?? 6}</em></strong><small>{hud.enemies} remain</small></div>
+          <div className="world-loot"><span>{hud.lootCollected} collected</span><strong>{hud.groundDrops}</strong><small>drops on ground</small></div>
           <div className="world-vitals">
             <div><span>Life</span><i><b style={{ width: `${(hud.life / hud.maxLife) * 100}%` }} /></i><strong>{Math.ceil(hud.life)}</strong></div>
             <div><span>Focus</span><i><b style={{ width: `${(hud.focus / hud.maxFocus) * 100}%` }} /></i><strong>{Math.floor(hud.focus)}</strong></div>

@@ -28,11 +28,12 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, shell, world, domain, profile, gameDesign] = await Promise.all([
+  const [page, shell, world, domain, content, profile, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
     readFile(new URL("../GAME_DESIGN.md", import.meta.url), "utf8"),
   ]);
@@ -46,10 +47,16 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /MAP_SIZE = VIEW_SIZE \* 4/);
   assert.match(world, /setDeadzone\(360, 360\)/);
   assert.match(world, /PACK_REGIONS/);
+  assert.match(world, /rollGroundDrop/);
+  assert.match(world, /updateGroundDrops/);
+  assert.match(shell, /onLootPickup/);
+  assert.doesNotMatch(content, /BARGAINS|Bargain/);
+  assert.doesNotMatch(domain, /Bargain/);
   assert.match(domain, /interface MapItem/);
   assert.match(domain, /interface EquipmentItem/);
   assert.match(profile, /level < 99/);
   assert.match(profile, /localStorage/);
   assert.match(gameDesign, /hard cap of level 99/i);
+  assert.match(gameDesign, /No temporary run power/);
   await access(new URL("../public/og.png", import.meta.url));
 });

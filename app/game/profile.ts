@@ -133,6 +133,7 @@ export function applyRunResult(profile: PlayerProfile, result: RunResult): Playe
 
   const maps = [...profile.maps];
   if (result.completed) maps.push(createMap(Math.min(16, Math.max(1, Math.ceil(level / 6)))));
+  const recoveredItems = [...result.loot.items, ...profile.inventory];
 
   return {
     ...profile,
@@ -145,7 +146,8 @@ export function applyRunResult(profile: PlayerProfile, result: RunResult): Playe
       highestWave: Math.max(profile.character.highestWave, result.wave),
     },
     materials: addMaterials(profile.materials, result.loot.materials),
-    inventory: [...result.loot.items, ...profile.inventory].slice(0, 24),
+    inventory: recoveredItems.slice(0, 24),
+    stash: [...recoveredItems.slice(24), ...profile.stash],
     maps,
     openedMap: null,
   };
@@ -167,4 +169,3 @@ export function deriveStats(profile: PlayerProfile): CharacterStats {
     armor: (10 + level * 2 + sumTag("defense")) * (classDefinition?.armorMultiplier ?? 1),
   };
 }
-

@@ -28,7 +28,7 @@ Characters can become highly specialized, but players should understand why a bu
 
 ### 4. Waves create mounting pressure
 
-A map is a sequence of increasingly dense waves. Between waves, the player makes reward and difficulty choices. Staying longer improves rewards but puts the run at risk.
+A map is a sequence of increasingly dense, geographically distributed waves. Risk and reward are determined before entry by the crafted map item; there are no temporary power choices between waves.
 
 ### 5. Combat scales from deliberate to spectacular
 
@@ -37,15 +37,15 @@ Early combat teaches enemy behaviors and positioning. Late combat supports large
 ## Core loop
 
 1. Choose or craft a map item, then consume it to open its arena.
-2. Enter the arena and defeat a wave.
-3. Pick one of several **wave bargains**: add danger in exchange for targeted rewards.
-4. Every few waves, use a temporary forge, change equipment, or extract safely.
+2. Enter the map, explore its regions, and defeat distributed monster packs.
+3. Run over physical drops to collect equipment and crafting materials.
+4. Defeat escalating waves without temporary powers or mid-run equipment changes.
 5. Defeat the map boss or continue into optional overrun waves.
-6. Return to town, salvage loot, craft item projects, allocate progression, and prepare the next map.
+6. Return to the hideout, evaluate loot, craft item projects, allocate persistent progression, and prepare the next map.
 
 This creates two nested rhythms:
 
-- **Short rhythm:** fight → choose a bargain → fight.
+- **Short rhythm:** find a pack → fight → collect physical drops → hunt the next pack.
 - **Long rhythm:** acquire a base → develop it through several runs → complete a build-defining item.
 
 ## Character model
@@ -227,7 +227,8 @@ Do not solve loot spam with an increasingly complicated filter. Prevent the spam
 - Common monsters mostly drop materials and currency shards.
 - Elite monsters have a good chance to drop a relevant base.
 - Wave bosses can drop magic items, rare items, uniques, and special crafting components.
-- Reward bargains let the player target base types, affix tags, unique families, or crafting materials.
+- Crafted map modifiers let the player target base types, affix tags, unique families, or crafting materials before entry.
+- Drops remain physical world objects until the character runs over them; only collected drops enter the inventory.
 - Item drops are identified immediately; discovery comes from evaluation, not an identify-scroll tax.
 
 ## Crafting system: the Workbench
@@ -394,7 +395,7 @@ Corruption should create exciting stories, not routinely erase the item. A corru
 - Lieutenants and bosses are the main source of new map items.
 - A completed map tends to drop maps of its tier, with a chance for the next tier.
 - Completing new map bases and bosses unlocks permanent Forge Route progress.
-- Reward bargains can target map drops or particular map families.
+- Crafted map modifiers can target map drops or particular map families.
 - Failed or abandoned maps are consumed, maintaining pressure on the map economy.
 
 Players should maintain a small collection of maps worth evaluating and crafting, not hundreds of indistinguishable copies. A dedicated map case can organize them by base, tier, rarity, and crafting potential.
@@ -416,27 +417,13 @@ Each wave has three phases:
 
 1. **Tell:** a brief preview shows enemy families and dangerous modifiers.
 2. **Fight:** enemies arrive through spawn points, portals, burrows, or environmental events.
-3. **Decision:** collect rewards, choose a bargain, and optionally extract at a checkpoint.
+3. **Collection:** recover physical drops, then continue toward the next distributed pack.
 
 Avoid long cleanup periods. Stragglers should become visible and aggressively approach the player.
 
-### Wave bargains
+### No temporary run power
 
-After most waves, choose one of three bargains. Each combines a danger with a reward direction.
-
-Examples:
-
-- Enemies gain 25% movement speed; the next lieutenant drops weapon bases.
-- Two additional elite packs spawn; fire Essences are tripled.
-- Healing is reduced until the boss; the map boss drops an extra unique fragment.
-- Monsters leave burning ground; all item bases gain bonus starting Stability.
-
-Bargains stack through the run, producing an emergent map identity. Choices should display their cumulative effect alongside the persistent modifiers crafted onto the map item.
-
-The two systems serve different purposes:
-
-- **Map crafting** is advance planning: the player chooses the baseline risk and reward direction before entering.
-- **Wave bargains** are adaptation: the player reacts to the build's performance and decides how much further to push.
+Maps never grant temporary combat upgrades, bargain powers, or mid-run equipment swaps. Character power comes only from level, allocated skills, and persistent inventory. The crafted map item defines the run's danger and reward profile before the portal opens.
 
 ### Escalation
 
@@ -507,7 +494,7 @@ A short campaign introduces systems one at a time:
 
 - Act 1: combat, normal/magic items, basic shaping.
 - Act 2: resistances, rare items, preserving and removing affixes.
-- Act 3: specializations, map bargains, Stability.
+- Act 3: specializations, advanced map crafting, Stability.
 - Act 4: bosses, transformation crafts, endgame map forge.
 
 The campaign should be replayable but brisk. Its purpose is onboarding and worldbuilding, not delaying the main system.
@@ -545,7 +532,7 @@ This is a product decision with major balance consequences and should be settled
 - Make the simulation authoritative enough that refreshing cannot duplicate rewards.
 - Persist at wave boundaries and after crafting actions.
 - Tooltips must work without requiring hover, so touch and trackpad users can inspect everything.
-- Pause solo play between waves, but never during combat.
+- Keep transitions between waves brief and continuous; inventory and skill changes happen in the hideout.
 
 ## First playable vertical slice
 
@@ -571,7 +558,7 @@ The first slice should prove combat, waves, loot, and crafting together.
 ### Questions the slice must answer
 
 - Is killing a dense wave satisfying before deep progression exists?
-- Does choosing the next bargain create anticipation?
+- Does hunting the next distributed pack create anticipation?
 - Can players understand why one item is better than another?
 - Does crafting produce a story rather than a sequence of random rerolls?
 - Are players excited to find a normal base?

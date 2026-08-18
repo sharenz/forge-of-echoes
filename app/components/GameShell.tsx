@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTER_CLASSES, XP_BY_LEVEL } from "../game/content";
-import { buildArenaBalance, type ArenaSummary } from "../game/combat";
-import type { CharacterClassId, EquipmentItem, PlayerProfile, RunResult } from "../game/domain";
+import { buildArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
+import type { CharacterClassId, EquipmentItem, Materials, PlayerProfile, RunResult } from "../game/domain";
 import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
 import { addMapModifier, createMap, rerollMap } from "../game/maps";
-import { applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
+import { addMaterials, applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
 import type { WorldStation } from "../game2d/types";
 import { InventoryGrid } from "./InventoryGrid";
 import { ItemCard } from "./ItemCard";
@@ -16,6 +16,8 @@ import { PhaserWorld } from "./PhaserWorld";
 
 type HideoutPanel = "inventory" | "stash" | "bench" | "maps" | null;
 type GameScreen = "hideout" | "arena";
+interface RunLootLedger { items: EquipmentItem[]; materials: Partial<Materials> }
+const emptyRunLoot = (): RunLootLedger => ({ items: [], materials: {} });
 
 export function GameShell() {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
@@ -26,6 +28,7 @@ export function GameShell() {
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const runLootRef = useRef<RunLootLedger>(emptyRunLoot());
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -93,8 +96,8 @@ export function GameShell() {
   if (screen === "arena" && profile.openedMap) {
     const arenaBalance = buildArenaBalance(profile);
     return (
-      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive arenaBalance={arenaBalance} onArenaComplete={completeArena}>
-        <button type="button" className="return-hideout" onClick={() => setScreen("hideout")}>Return to hideout</button>
+      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive arenaBalance={arenaBalance} onLootPickup={collectMapDrop} onArenaComplete={completeArena}>
+        <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
       </PhaserWorld>
     );
   }
@@ -116,7 +119,10 @@ export function GameShell() {
     if (station === "stash") setPanel("stash");
     if (station === "bench") setPanel("bench");
     if (station === "map-device") setPanel("maps");
-    if (station === "portal") setScreen("arena");
+    if (station === "portal") {
+      runLootRef.current = emptyRunLoot();
+      setScreen("arena");
+    }
   }
 
   function craftMap(action: "dust" | "threat" | "reward") {
@@ -141,23 +147,51 @@ export function GameShell() {
     if (!profile) return;
     const balance = buildArenaBalance(profile);
     const rewardMultiplier = 1 + balance.rewardBonus / 100;
-    const rareChance = Math.min(0.34, 0.06 + balance.rewardBonus / 350);
+    const recovered = runLootRef.current;
     const result: RunResult = {
       completed: true,
       ...summary,
       loot: {
         xp: Math.round((220 + balance.tier * 65) * rewardMultiplier),
-        materials: { scrap: Math.round(8 * rewardMultiplier), essence: Math.max(1, Math.round(2 * rewardMultiplier)), mapDust: 1 },
-        items: [generateEquipment(Math.max(2, balance.tier) * 5, Math.random() < rareChance ? "rare" : "magic")],
+        materials: recovered.materials,
+        items: recovered.items,
       },
     };
     let next = applyRunResult(profile, result);
     if (next.maps.length === 0) next = { ...next, maps: [createMap(1)] };
     setProfile(next);
     setSelectedMapId(next.maps[0]?.id ?? null);
-    setSelectedItemId(result.loot.items[0].id);
+    setSelectedItemId(result.loot.items[0]?.id ?? next.inventory[0]?.id ?? null);
+    runLootRef.current = emptyRunLoot();
     setScreen("hideout");
-    setNotice("Map complete. Rewards moved to your inventory.");
+    setNotice(`Map complete. ${result.loot.items.length} collected items recovered.`);
+  }
+
+  function collectMapDrop(drop: MapDrop) {
+    if (!profile?.openedMap) return;
+    if (drop.kind === "equipment") {
+      runLootRef.current.items.push(generateEquipment(Math.max(2, profile.openedMap.tier) * 5, drop.rarity));
+      return;
+    }
+    const current = runLootRef.current.materials[drop.material] ?? 0;
+    runLootRef.current.materials[drop.material] = current + drop.amount;
+  }
+
+  function leaveArena() {
+    if (!profile) return;
+    const recovered = runLootRef.current;
+    const combinedItems = [...recovered.items, ...profile.inventory];
+    setProfile({
+      ...profile,
+      materials: addMaterials(profile.materials, recovered.materials),
+      inventory: combinedItems.slice(0, 24),
+      stash: [...combinedItems.slice(24), ...profile.stash],
+      openedMap: null,
+    });
+    setSelectedItemId(recovered.items[0]?.id ?? profile.inventory[0]?.id ?? null);
+    runLootRef.current = emptyRunLoot();
+    setScreen("hideout");
+    setNotice(`Map abandoned. ${recovered.items.length} collected items were kept.`);
   }
 
   function craftItem(action: "scrap" | "essence") {

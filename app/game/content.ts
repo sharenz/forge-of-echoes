@@ -1,4 +1,4 @@
-import type { Bargain, CharacterClassId, MapModifier, MapModifierId } from "./domain";
+import type { CharacterClassId, MapModifier, MapModifierId } from "./domain";
 
 export interface CharacterClassDefinition {
   id: CharacterClassId;
@@ -117,50 +117,6 @@ export const MAP_MODIFIERS: Record<MapModifierId, MapModifier> = {
     kind: "reward",
   },
 };
-
-export const BARGAINS: Bargain[] = [
-  {
-    id: "swarming",
-    name: "Call the Swarm",
-    danger: "Future waves contain 25% more enemies.",
-    reward: "+24% material yield",
-    packMultiplier: 1.25,
-    rewardMultiplier: 1.24,
-  },
-  {
-    id: "frenzied",
-    name: "Feed the Frenzy",
-    danger: "Enemies move and attack 18% faster.",
-    reward: "+22% item yield",
-    speedMultiplier: 1.18,
-    rewardMultiplier: 1.22,
-  },
-  {
-    id: "armored",
-    name: "Temper Their Flesh",
-    danger: "Enemies gain 35% maximum life.",
-    reward: "+30% rare-item chance",
-    healthMultiplier: 1.35,
-    rewardMultiplier: 1.3,
-  },
-  {
-    id: "volatile",
-    name: "Unseal the Crucible",
-    danger: "Enemies deal 22% more damage.",
-    reward: "+28% Essence yield",
-    damageMultiplier: 1.22,
-    rewardMultiplier: 1.28,
-  },
-  {
-    id: "bountiful",
-    name: "Demand Tribute",
-    danger: "Future waves gain an additional elite.",
-    reward: "+20% to all rewards",
-    healthMultiplier: 1.12,
-    damageMultiplier: 1.08,
-    rewardMultiplier: 1.2,
-  },
-];
 
 export const XP_BY_LEVEL = (level: number): number =>
   Math.max(80, Math.floor(65 * Math.pow(level, 1.58)));

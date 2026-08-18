@@ -248,25 +248,6 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
 .abandon-run { position: absolute; right: 22px; bottom: 22px; border: 0; background: none; color: #766b60; font-size: 9px; text-transform: uppercase; letter-spacing: .12em; cursor: pointer; }
 .abandon-run:hover { color: #cf7768; }
 
-.decision-overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 30px; background: rgba(5,5,4,.72); backdrop-filter: blur(5px); }
-.decision-card { width: min(830px, 96vw); border: 1px solid #745239; background: #17130f; padding: 34px; box-shadow: 0 30px 100px #000; text-align: center; }
-.decision-card h2 { font-family: Georgia, serif; font-size: clamp(26px, 4vw, 43px); font-weight: normal; margin: 9px 0; }
-.decision-card > p { color: var(--muted); font-family: Georgia, serif; font-size: 12px; margin: 0 auto 27px; }
-.bargain-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.bargain-grid button { min-height: 190px; display: flex; flex-direction: column; align-items: center; gap: 11px; padding: 22px 17px; border: 1px solid var(--line); background: #1b1713; cursor: pointer; }
-.bargain-grid button:hover { border-color: var(--ember); background: #251b15; transform: translateY(-2px); }
-.bargain-mark { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid #925a38; color: var(--ember-bright); font-family: Georgia, serif; font-size: 18px; transform: rotate(45deg); }
-.bargain-grid strong { margin-top: 5px; font-family: Georgia, serif; font-size: 14px; }
-.bargain-grid small { color: var(--muted); font-size: 9px; line-height: 1.4; }
-.bargain-grid em { margin-top: auto; color: var(--gold); font-size: 9px; font-style: normal; }
-
-.result-card { width: min(620px, 95vw); }
-.result-metrics { display: grid; grid-template-columns: repeat(4, 1fr); margin: 28px 0; border: 1px solid var(--line); }
-.result-metrics div { padding: 18px 8px; display: flex; flex-direction: column; gap: 5px; }
-.result-metrics div + div { border-left: 1px solid var(--line); }
-.result-metrics strong { font-family: Georgia, serif; font-size: 22px; font-weight: normal; }
-.result-metrics span { color: var(--muted); font-size: 8px; text-transform: uppercase; }
-
 @media (max-width: 1000px) {
   .game-header { grid-template-columns: 1fr 1fr; }
   .town-nav { order: 3; grid-column: 1 / -1; height: 44px; justify-content: center; border-top: 1px solid var(--line); }
@@ -307,12 +288,6 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
   .skill-slot { flex: 1; width: auto; min-width: 0; padding-left: 32px; }
   .skill-slot.basic { display: none; }
   .abandon-run { top: 86px; bottom: auto; right: 14px; }
-  .decision-card { padding: 25px 15px; }
-  .bargain-grid { grid-template-columns: 1fr; max-height: 60vh; overflow: auto; }
-  .bargain-grid button { min-height: 125px; }
-  .result-metrics { grid-template-columns: repeat(2, 1fr); }
-  .result-metrics div:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
-  .result-metrics div:nth-child(4) { border-top: 1px solid var(--line); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -602,6 +577,10 @@ body:has(.pixel-shell) { overflow: hidden; }
 .world-wave strong { color: #f2b06a; font: 30px Georgia, serif; }
 .world-wave strong em { color: #766655; font-size: 13px; font-style: normal; }
 .world-wave small { display: block; color: #a89886; font-size: 8px; }
+.world-loot { position: absolute; z-index: 3; left: 25px; top: 24px; min-width: 150px; padding: 10px 14px; border-left: 2px solid #d99a4b; background: rgba(9,8,7,.87); box-shadow: 0 12px 30px #0008; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 3px 12px; }
+.world-loot span { color: #d8c6ae; font-size: 9px; text-transform: uppercase; }
+.world-loot strong { grid-row: 1 / span 2; grid-column: 2; color: #ffcf74; font: 24px Georgia, serif; }
+.world-loot small { color: #817363; font-size: 7px; letter-spacing: .08em; text-transform: uppercase; }
 .world-vitals { position: absolute; z-index: 3; left: 26px; bottom: 28px; width: min(340px, 38vw); display: flex; flex-direction: column; gap: 5px; }
 .world-vitals > div { display: grid; grid-template-columns: 38px 1fr 32px; align-items: center; gap: 8px; color: #a89a88; font-size: 8px; text-transform: uppercase; }
 .world-vitals i { height: 12px; border: 1px solid #543b2c; background: #110b09; padding: 2px; }
@@ -653,6 +632,8 @@ body:has(.pixel-shell) { overflow: hidden; }
   .equipment-paperdoll { min-height: 320px; }
   .poe-grid { --cell: calc((100vw - 52px) / 12); }
   .world-wave { top: 12px; }
+  .world-loot { left: 10px; top: 10px; min-width: 112px; padding: 7px 9px; }
+  .world-loot span { font-size: 7px; }
   .world-vitals { left: 12px; right: 12px; bottom: 76px; width: auto; }
   .world-skills { bottom: 17px; }
   .world-skills button { min-width: 112px; }

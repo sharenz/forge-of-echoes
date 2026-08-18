@@ -98,20 +98,6 @@ export interface CharacterStats {
   armor: number;
 }
 
-export type BargainId = "swarming" | "frenzied" | "armored" | "volatile" | "bountiful";
-
-export interface Bargain {
-  id: BargainId;
-  name: string;
-  danger: string;
-  reward: string;
-  packMultiplier?: number;
-  speedMultiplier?: number;
-  healthMultiplier?: number;
-  damageMultiplier?: number;
-  rewardMultiplier: number;
-}
-
 export interface RunLoot {
   materials: Partial<Materials>;
   items: EquipmentItem[];
