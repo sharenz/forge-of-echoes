@@ -281,8 +281,6 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
 .last-run button { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; }
 
 .game-footer { max-width: 1440px; justify-content: space-between; margin: 14px auto 0; color: #655c52; font-size: 9px; }
-.toast { position: fixed; left: 50%; bottom: 25px; z-index: 50; transform: translateX(-50%); padding: 11px 18px; border: 1px solid #8b5b38; background: #211812; color: var(--paper); box-shadow: 0 12px 40px #000; font-family: Georgia, serif; font-size: 12px; }
-
 .loading-forge { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 24px; color: var(--muted); font-family: Georgia, serif; letter-spacing: .08em; }
 .forge-loader { width: 42px; height: 42px; border: 1px solid var(--ember); animation: turn 2s linear infinite; box-shadow: inset 0 0 18px rgba(215,122,57,.25); }
 @keyframes turn { to { transform: rotate(360deg); } }
@@ -682,7 +680,42 @@ body:has(.pixel-shell) { overflow: hidden; }
 .item-tooltip.rarity-rare { border-top-color: #e0bc5d; }
 .item-tooltip.rarity-unique { border-top-color: #d27038; }
 
-.toast { position: absolute; z-index: 24; left: 50%; top: 96px; padding: 12px 18px; border: 1px solid #9a5e37; background: #1b120d; box-shadow: 0 14px 50px #000b; color: #eac5a4; font: 11px Georgia, serif; transform: translateX(-50%); animation: toast-in .3s ease both; }
+.game-notification {
+  position: fixed;
+  z-index: 40;
+  top: 92px;
+  left: 50%;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  min-height: 46px;
+  padding: 9px 18px 9px 11px;
+  border: 1px solid #8c5a37;
+  border-left: 3px solid #d68645;
+  background: linear-gradient(135deg, rgba(37,25,17,.98), rgba(17,12,9,.98));
+  box-shadow: 0 12px 34px rgba(0,0,0,.58), inset 0 0 22px rgba(184,83,31,.08);
+  color: #ecd3b5;
+  font: 15px/1.35 Georgia, serif;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: notification-in .24s ease-out both;
+}
+.game-notification-mark {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #8e5b36;
+  background: #1a100b;
+  color: #ef9d58;
+  font: 10px Arial, sans-serif;
+  transform: rotate(45deg);
+  box-shadow: 0 0 12px rgba(216,112,53,.18);
+}
+.game-notification > span:last-child { overflow-wrap: anywhere; }
 
 /* Combat HUD */
 .world-wave { position: absolute; z-index: 3; top: 25px; left: 50%; min-width: 150px; padding: 10px 22px; border: 1px solid #654a34; background: rgba(10,8,6,.86); text-align: center; transform: translateX(-50%); box-shadow: 0 12px 35px #0009; }
@@ -862,7 +895,7 @@ body:has(.pixel-shell) { overflow: hidden; }
 @keyframes forge-turn { to { transform: rotate(405deg); } }
 @keyframes panel-fade { from { opacity: 0; } }
 @keyframes panel-rise { from { opacity: 0; transform: translateY(14px) scale(.99); } }
-@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -9px); } }
+@keyframes notification-in { from { opacity: 0; transform: translate(-50%, -8px) scale(.98); } }
 @keyframes portal-pulse { 50% { border-left-color: #ffad5e; box-shadow: 0 0 48px #df481142; } }
 @keyframes new-drop-glow { 50% { box-shadow: inset 0 0 25px #d9682c44, 0 0 10px #e1783466; } }
 
@@ -915,4 +948,5 @@ body:has(.pixel-shell) { overflow: hidden; }
   .return-hideout { right: 10px; top: 10px; }
   .arena-inventory-toggle { right: 133px; top: 10px; }
   .arena-panel-backdrop { padding-top: 58px; }
+  .game-notification { top: 76px; max-width: calc(100vw - 20px); white-space: normal; }
 }

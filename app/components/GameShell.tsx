@@ -8,6 +8,7 @@ import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/item
 import { addMapModifier, createMap, rerollMap } from "../game/maps";
 import { addMaterials, applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
 import type { WorldStation } from "../game2d/types";
+import { GameNotification } from "./GameNotification";
 import { InventoryPanel } from "./InventoryPanel";
 import { ItemWorkbench } from "./ItemWorkbench";
 import { MapWorkshop } from "./MapWorkshop";
@@ -117,7 +118,7 @@ export function GameShell() {
             </section>
           </div>
         )}
-        {notice && <div className="toast" role="status">{notice}</div>}
+        {notice && <GameNotification key={notice} message={notice} />}
       </PhaserWorld>
     );
   }
@@ -317,7 +318,7 @@ export function GameShell() {
           </section>
         </div>
       )}
-      {notice && <div className="toast" role="status">{notice}</div>}
+      {notice && <GameNotification key={notice} message={notice} />}
     </PhaserWorld>
   );
 }

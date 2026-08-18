@@ -28,11 +28,12 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, phaserWorld, inventoryPanel, itemTooltip, world, domain, content, profile, stats, itemConfig, affixConfig, monsterConfig, skillConfig, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, notification, phaserWorld, inventoryPanel, itemTooltip, world, domain, content, profile, stats, itemConfig, affixConfig, monsterConfig, skillConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/GameNotification.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/PhaserWorld.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/InventoryPanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ItemTooltip.tsx", import.meta.url), "utf8"),
@@ -52,6 +53,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(layout, /<GameCursor \/>/);
   assert.match(cursor, /data-mode="default"/);
   assert.match(shell, /<PhaserWorld/);
+  assert.match(shell, /<GameNotification/);
+  assert.match(notification, /aria-live="polite"/);
+  assert.doesNotMatch(shell, /className="toast"/);
   assert.match(shell, /mode="class-select"/);
   assert.match(world, /class PhaserRuntime/);
   assert.match(world, /pixelArt: true/);
