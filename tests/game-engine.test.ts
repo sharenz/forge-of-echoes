@@ -17,7 +17,7 @@ import {
 import { calculateCharacterStats, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
 import { purchaseMap } from "../app/game/merchant";
-import { shouldSpawnNextWave } from "../app/game/combat";
+import { calculateHitDamage, shouldSpawnNextWave } from "../app/game/combat";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -222,4 +222,13 @@ test("waves advance when cleared or after the configured timeout", () => {
   assert.equal(shouldSpawnNextWave(1, 6, 0, 3), true);
   assert.equal(shouldSpawnNextWave(1, 6, 12, 30), true);
   assert.equal(shouldSpawnNextWave(6, 6, 0, 90), false);
+});
+
+test("runtime hit damage scales linearly with resolved attack damage", () => {
+  assert.equal(calculateHitDamage(15, 1), 15);
+  assert.equal(calculateHitDamage(30, 1), 30);
+  assert.equal(calculateHitDamage(30, 1.35), 40.5);
+  const base = resolveStat(20, []);
+  const fiftyMore = resolveStat(20, [modifier("more", 50)]);
+  assert.equal(calculateHitDamage(fiftyMore.value, 1) / calculateHitDamage(base.value, 1), 1.5);
 });

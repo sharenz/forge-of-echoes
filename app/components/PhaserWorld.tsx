@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ACTIVE_SKILLS, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import type { CharacterClassId, CharacterStats } from "../game/domain";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
@@ -108,11 +108,11 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
             <div><span>Focus</span><i><b style={{ width: `${(hud.focus / hud.maxFocus) * 100}%` }} /></i><strong>{Math.floor(hud.focus)}</strong></div>
           </div>
           <div className="world-skills">
-            <span className="basic-skill"><kbd>Mouse</kbd><span><strong>Ember Lance</strong><small>Basic attack</small></span></span>
+            <span className="basic-skill"><kbd>{BASIC_ATTACK.key}</kbd><span><strong>{BASIC_ATTACK.name}</strong><small>{Math.round(BASIC_ATTACK.damageEffectiveness * 100)}% attack damage</small></span></span>
             <button type="button" className="active-skill" disabled={!novaReady} onClick={() => runtimeRef.current?.useSkill("nova")}>
               <i className="skill-recharge" style={{ width: `${novaProgress}%` }} />
               <kbd>{ACTIVE_SKILLS.nova.key}</kbd>
-              <span><strong>{ACTIVE_SKILLS.nova.name}</strong><small>{hud.novaCooldown > 0.05 ? `${hud.novaCooldown.toFixed(1)}s recharge` : hud.focus < ACTIVE_SKILLS.nova.focusCost ? `Needs ${ACTIVE_SKILLS.nova.focusCost} Focus` : `Ready · ${ACTIVE_SKILLS.nova.focusCost} Focus`}</small></span>
+              <span><strong>{ACTIVE_SKILLS.nova.name}</strong><small>{hud.novaCooldown > 0.05 ? `${hud.novaCooldown.toFixed(1)}s recharge` : hud.focus < ACTIVE_SKILLS.nova.focusCost ? `Needs ${ACTIVE_SKILLS.nova.focusCost} Focus` : `Ready · ${Math.round(ACTIVE_SKILLS.nova.damageEffectiveness * 100)}% damage`}</small></span>
             </button>
             <button type="button" className="active-skill rift-skill" disabled={!riftReady} onClick={() => runtimeRef.current?.useSkill("dash")}>
               <i className="skill-recharge" style={{ width: `${riftProgress}%` }} />

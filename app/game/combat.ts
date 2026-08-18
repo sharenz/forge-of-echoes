@@ -2,13 +2,13 @@ import { mapRewardBonus } from "./maps";
 import { deriveStats } from "./profile";
 import type { CurrencyId, PlayerProfile, Rarity } from "./domain";
 import { ARENA_RULES } from "./config/arena";
-import { ACTIVE_SKILLS } from "./config/skills";
+import { ACTIVE_SKILLS, BASIC_ATTACK } from "./config/skills";
 
 export type MapDrop =
   | { kind: "equipment"; rarity: Rarity }
   | { kind: "currency"; currency: Extract<CurrencyId, "scrap" | "essence" | "mapDust">; amount: number };
 
-export { ACTIVE_SKILLS };
+export { ACTIVE_SKILLS, BASIC_ATTACK };
 
 export interface ArenaBalance {
   waves: number;
@@ -37,6 +37,13 @@ export interface ArenaSummary {
 export function shouldSpawnNextWave(currentWave: number, totalWaves: number, remainingEnemies: number, waveElapsedSeconds: number): boolean {
   if (currentWave >= totalWaves) return false;
   return remainingEnemies === 0 || waveElapsedSeconds >= ARENA_RULES.waveSpawnIntervalSeconds;
+}
+
+/** Character damage is already fully resolved (flat → increased → more). */
+export function calculateHitDamage(attackDamage: number, damageEffectiveness: number): number {
+  if (!Number.isFinite(attackDamage) || attackDamage < 0) throw new Error("Attack damage must be a finite non-negative number");
+  if (!Number.isFinite(damageEffectiveness) || damageEffectiveness < 0) throw new Error("Damage effectiveness must be a finite non-negative number");
+  return attackDamage * damageEffectiveness;
 }
 
 export function buildArenaBalance(profile: PlayerProfile): ArenaBalance {

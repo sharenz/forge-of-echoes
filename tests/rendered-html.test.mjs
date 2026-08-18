@@ -75,6 +75,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /PACK_REGIONS/);
   assert.match(world, /shouldSpawnNextWave/);
   assert.match(world, /waveElapsedSeconds/);
+  assert.match(world, /calculateHitDamage/);
+  assert.doesNotMatch(world, /0\.85 \+ .*attackDamage/);
   assert.match(arenaConfig, /waveSpawnIntervalSeconds: 30/);
   assert.match(world, /rollGroundDrop/);
   assert.match(world, /updateGroundDrops/);
@@ -115,6 +117,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(itemConfig, /perItemLevel/);
   assert.match(affixConfig, /requiredItemLevel/);
   assert.match(monsterConfig, /contactDamagePerWave/);
+  assert.match(monsterConfig, /baseLife: 18/);
+  assert.match(skillConfig, /damageEffectiveness: 1\.35/);
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);
   await access(new URL("../public/og.png", import.meta.url));

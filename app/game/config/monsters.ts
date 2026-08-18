@@ -4,8 +4,8 @@ export const MONSTER_ARCHETYPES = {
   ashling: {
     id: "ashling",
     name: "Ashling",
-    baseLife: 1,
-    lifePerWave: 0.28,
+    baseLife: 18,
+    lifePerWave: 4,
     speed: { min: 39, max: 58, perWave: 1.2 },
     contactDamage: 5,
     contactDamagePerWave: 0.8,

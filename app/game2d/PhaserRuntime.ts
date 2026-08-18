@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { ACTIVE_SKILLS, shouldSpawnNextWave, type MapDrop } from "../game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, calculateHitDamage, shouldSpawnNextWave, type MapDrop } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import { MONSTER_ARCHETYPES } from "../game/config/monsters";
 import type { CharacterClassId } from "../game/domain";
@@ -164,7 +164,7 @@ class CraftyScene extends Phaser.Scene {
       this.novaCooldown = ACTIVE_SKILLS.nova.cooldown;
       for (let index = 0; index < 18; index += 1) {
         const angle = (Math.PI * 2 * index) / 18;
-        this.spawnProjectile(Math.cos(angle), Math.sin(angle), 1.35);
+        this.spawnProjectile(Math.cos(angle), Math.sin(angle), ACTIVE_SKILLS.nova.projectileScale, ACTIVE_SKILLS.nova.damageEffectiveness);
       }
     }
     if (skill === "dash" && this.riftCharges > 0 && this.focus >= ACTIVE_SKILLS.dash.focusCost) {
@@ -487,20 +487,20 @@ class CraftyScene extends Phaser.Scene {
     const dx = pointer.worldX - this.player.x;
     const dy = pointer.worldY - this.player.y;
     const length = Math.hypot(dx, dy) || 1;
-    this.spawnProjectile(dx / length, dy / length, 1);
+    this.spawnProjectile(dx / length, dy / length, BASIC_ATTACK.projectileScale, BASIC_ATTACK.damageEffectiveness);
     this.attackCooldown = Math.max(0.11, 0.34 / (this.options.arenaBalance?.attackSpeed ?? 1));
   }
 
-  private spawnProjectile(directionX: number, directionY: number, scale: number): void {
+  private spawnProjectile(directionX: number, directionY: number, visualScale: number, damageEffectiveness: number): void {
     if (!this.player) return;
     const sprite = this.projectilePool?.get(this.player.x, this.player.y, "projectile") as Phaser.GameObjects.Image | null;
     if (!sprite) return;
-    sprite.setActive(true).setVisible(true).setScale(scale * 1.35).setDepth(80).setBlendMode(Phaser.BlendModes.ADD);
+    sprite.setActive(true).setVisible(true).setScale(visualScale * 1.35).setDepth(80).setBlendMode(Phaser.BlendModes.ADD);
     this.projectiles.push({
       sprite,
       vx: directionX * 520,
       vy: directionY * 520,
-      damage: (0.85 + (this.options.arenaBalance?.attackDamage ?? 15) / 52) * scale,
+      damage: calculateHitDamage(this.options.arenaBalance?.attackDamage ?? 15, damageEffectiveness),
       remaining: 1.35,
     });
   }

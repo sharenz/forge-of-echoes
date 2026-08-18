@@ -80,6 +80,9 @@ export interface SkillDefinition {
   cooldown?: number;
   maxCharges?: number;
   recharge?: number;
+  /** Multiplier applied directly to the character sheet's attack damage. */
+  damageEffectiveness?: number;
+  projectileScale?: number;
   modifiers?: readonly ScaledModifierDefinition[];
 }
 
