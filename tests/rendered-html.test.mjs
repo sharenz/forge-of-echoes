@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, equipmentSlotConfig, arenaConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, skillAudio, domain, itemContainer, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
@@ -41,6 +41,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/components/InventoryGrid.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ItemTooltip.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game2d/SkillAudio.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/item-container.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/stash.ts", import.meta.url), "utf8"),
@@ -52,6 +53,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game/config/containers.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/stash.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/damage.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/audio.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/equipment-slots.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/arena.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/maps.ts", import.meta.url), "utf8"),
@@ -107,6 +109,13 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /showDamageNumber/);
   assert.match(world, /DAMAGE_TYPE_DEFINITIONS\[damage\.type\]\.label/);
   assert.match(world, /damageNumberPool/);
+  assert.match(world, /createPlayerAnimations/);
+  assert.match(world, /playPlayerPose/);
+  assert.match(world, /updateVfxParticles/);
+  assert.match(world, /ember-sigil/);
+  assert.match(world, /playSkillPresentation/);
+  assert.match(skillAudio, /class SkillAudio/);
+  assert.match(audioConfig, /"ember-nova"/);
   assert.match(arenaConfig, /waveSpawnIntervalSeconds: 30/);
   assert.match(arenaConfig, /tierModifiers/);
   assert.match(arenaConfig, /waveModifiers/);
@@ -212,10 +221,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(monsterConfig, /ironhide-brute/);
   assert.match(monsterConfig, /ember-skitter/);
   assert.match(skillConfig, /type: "fire", effectiveness: 1\.35/);
+  assert.match(skillConfig, /presentation: \{ animation: "attack", vfx: "ember-lance", audio: "ember-lance" \}/);
   assert.match(phaserWorld, /damageSummary\(BASIC_ATTACK\.damage\)/);
   assert.match(world, /1 \/ Math\.max\(0\.01, this\.options\.arenaBalance\?\.attackSpeed/);
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);
   assert.match(gameDesign, /The four map axes/);
   await access(new URL("../public/og.png", import.meta.url));
+  await access(new URL("../public/ember-sigil.png", import.meta.url));
 });

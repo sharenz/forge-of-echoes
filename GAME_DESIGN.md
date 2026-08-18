@@ -89,6 +89,10 @@ The character sheet's attack damage is the expected average, not a fixed hit. Ev
 
 Floating combat text always includes the final damage type, such as `37 (Fire)`. Physical, fire, cold, lightning, and chaos are engine-level damage types so later resistance, conversion, penetration, and ailment systems can consume the same typed damage packet instead of inferring behavior from skill names.
 
+### Combat presentation
+
+Every skill config owns presentation identifiers for character animation, compact VFX, and audio. The runtime resolves those identifiers through reusable animation, particle-pool, and audio systems; combat code never hardcodes a unique asset pipeline for one skill. Player movement switches between idle and walk loops, while attacks and casts briefly lock an action animation so movement cannot overwrite the important frames. Effects should remain small and layered: readable silhouettes, a short cast accent, restrained trails, a compact impact, and a brief audio envelope instead of screen-filling flashes.
+
 ### Defenses
 
 Use a small set of layered defenses:

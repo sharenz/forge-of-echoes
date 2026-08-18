@@ -6,6 +6,9 @@ import type {
   EquipmentSlot,
   MapModifierId,
   ModifierStatKey,
+  SkillAnimationId,
+  SkillAudioId,
+  SkillVfxId,
   ModifierMode,
   StatKey,
 } from "../domain";
@@ -121,6 +124,11 @@ export interface SkillDefinition {
     range: { minMultiplier: number; maxMultiplier: number };
   };
   projectileScale?: number;
+  presentation: {
+    animation: SkillAnimationId;
+    vfx: SkillVfxId;
+    audio: SkillAudioId;
+  };
   modifiers?: readonly ScaledModifierDefinition[];
 }
 

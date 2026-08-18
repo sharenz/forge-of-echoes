@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AFFIX_DEFINITIONS_BY_ID } from "../app/game/config/affixes";
 import { ARENA_RULES } from "../app/game/config/arena";
+import { SKILL_AUDIO } from "../app/game/config/audio";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
 import { MAP_MERCHANT } from "../app/game/config/merchants";
 import { MAP_MODIFIERS } from "../app/game/config/maps";
@@ -22,7 +23,7 @@ import {
 import { calculateCharacterStats, formatModifier, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
 import { purchaseMap } from "../app/game/merchant";
-import { BASIC_ATTACK, buildArenaBalance, calculateHitDamage, rollHitDamage, shouldSpawnNextWave } from "../app/game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, rollHitDamage, shouldSpawnNextWave } from "../app/game/combat";
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
 import { dropChances, rollEquipmentRarity } from "../app/game/loot";
@@ -442,6 +443,15 @@ test("runtime hit damage scales linearly with resolved attack damage", () => {
       / rollHitDamage(base.value, BASIC_ATTACK.damage, () => 0.17).amount,
     1.5,
   );
+});
+
+test("every skill declares reusable animation, VFX, and audio presentation", () => {
+  const skills = [BASIC_ATTACK, ACTIVE_SKILLS.nova, ACTIVE_SKILLS.dash];
+  for (const skill of skills) {
+    assert.ok(skill.presentation.animation);
+    assert.ok(skill.presentation.vfx);
+    assert.ok(SKILL_AUDIO[skill.presentation.audio].tones.length >= 2);
+  }
 });
 
 test("character equipment exposes ten positions and fills both ring slots independently", () => {

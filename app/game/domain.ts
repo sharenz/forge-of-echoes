@@ -32,6 +32,9 @@ export type ModifierStatKey = StatKey | ArenaStatKey;
 export type ModifierMode = "flat" | "increased" | "more";
 export type MonsterRarity = "normal" | "magic" | "rare";
 export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos";
+export type SkillAnimationId = "attack" | "cast" | "dash";
+export type SkillVfxId = "ember-lance" | "ember-nova" | "rift-step";
+export type SkillAudioId = "ember-lance" | "ember-nova" | "rift-step";
 
 /**
  * Every numerical effect in the game resolves through this representation.
