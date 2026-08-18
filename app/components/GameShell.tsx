@@ -15,17 +15,30 @@ import { allocateAttributePoint, allocateSkillPoint, grantCharacterExperience } 
 import { activeStashTab, addStashTab, findStashEntry, mapStashItems, removeStashItem, renameStashTab, selectStashTab, stashItems as allStashItems, updateStashContainer } from "../game/stash";
 import { calculateCharacterStats } from "../game/stats";
 import type { WorldStation } from "../game2d/types";
+import { AttributesPanel } from "./AttributesPanel";
+import { CharacterPanelTabs, type CharacterPanelView } from "./CharacterPanelTabs";
 import { GameNotification } from "./GameNotification";
 import { InventoryPanel } from "./InventoryPanel";
 import { ItemWorkbench } from "./ItemWorkbench";
 import { MapWorkshop } from "./MapWorkshop";
 import { MapMerchant } from "./MapMerchant";
 import { PhaserWorld } from "./PhaserWorld";
+import { SkillTreePanel } from "./SkillTreePanel";
 
-type HideoutPanel = "inventory" | "stash" | "bench" | "maps" | "merchant" | null;
+type HideoutPanel = CharacterPanelView | "stash" | "bench" | "maps" | "merchant" | null;
 type GameScreen = "hideout" | "arena";
 interface RunLootLedger { collected: number; freshItemIds: string[] }
 const emptyRunLoot = (): RunLootLedger => ({ collected: 0, freshItemIds: [] });
+
+function isCharacterPanel(panel: HideoutPanel): panel is CharacterPanelView {
+  return panel === "inventory" || panel === "attributes" || panel === "skills";
+}
+
+function characterPanelTitle(panel: CharacterPanelView): string {
+  if (panel === "attributes") return "Attributes";
+  if (panel === "skills") return "Skill Tree";
+  return "Inventory";
+}
 
 export function GameShell() {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
@@ -119,16 +132,19 @@ export function GameShell() {
   const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id)) as Set<string>;
 
   if (screen === "arena" && profile.openedMap && arenaBalance) {
-    const inventoryOpen = panel === "inventory";
+    const characterPanelOpen = isCharacterPanel(panel);
     return (
-      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={inventoryOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} onLootPickup={collectMapDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena}>
-        <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(inventoryOpen ? null : "inventory")}>Inventory <kbd>I</kbd></button>
+      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} onLootPickup={collectMapDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena}>
+        <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(characterPanelOpen ? null : "inventory")}>Character <kbd>I</kbd></button>
         <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
-        {inventoryOpen && (
+        {characterPanelOpen && (
           <div className="world-panel-backdrop arena-panel-backdrop">
-            <section className="world-panel panel-inventory" aria-label="Character inventory">
-              <header><div><span>Combat paused · equipment changes apply immediately</span><h2>Inventory</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close inventory">×</button></header>
-              <InventoryPanel profile={profile} selectedItemId={selectedItemId} freshItemIds={runFreshItemIds} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} onAllocateAttribute={allocateAttribute} onAllocateSkill={allocateSkill} />
+            <section className={`world-panel character-panel panel-${panel}`} aria-label={`Character ${panel}`}>
+              <header><div><span>Combat paused · character changes apply immediately</span><h2>{characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></header>
+              <CharacterPanelTabs active={panel} onChange={setPanel} />
+              {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={selectedItemId} freshItemIds={runFreshItemIds} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} />}
+              {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation!.breakdown} onAllocate={allocateAttribute} />}
+              {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={allocateSkill} />}
             </section>
           </div>
         )}
@@ -480,7 +496,12 @@ export function GameShell() {
       <header className="hideout-hud">
         <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
         <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId].name}</small></div></div>
-        <nav><button type="button" onClick={() => setPanel("inventory")}>Inventory <kbd>I</kbd></button><button type="button" onClick={() => setPanel("maps")}>Maps <strong>{inventoryMaps.length + (profile.mapDevice ? 1 : 0)}</strong></button></nav>
+        <nav>
+          <button type="button" onClick={() => setPanel("inventory")}>Inventory <kbd>I</kbd></button>
+          <button type="button" onClick={() => setPanel("attributes")}>Attributes <strong>{profile.character.unspentAttributePoints}</strong></button>
+          <button type="button" onClick={() => setPanel("skills")}>Skills <strong>{profile.character.unspentSkillPoints}</strong></button>
+          <button type="button" onClick={() => setPanel("maps")}>Maps <strong>{inventoryMaps.length + (profile.mapDevice ? 1 : 0)}</strong></button>
+        </nav>
         <div className="hideout-xp"><span style={{ width: `${xpPercent}%` }} /><small>{profile.character.xp}/{xpRequired} XP</small></div>
       </header>
 
@@ -489,14 +510,17 @@ export function GameShell() {
 
       {panel && (
         <div className="world-panel-backdrop">
-          <section className={`world-panel panel-${panel}`}>
-            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : panel === "merchant" ? "Wayfinder's stock" : "Character equipment"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Map Merchant" : "Inventory"}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
+          <section className={`world-panel panel-${panel} ${isCharacterPanel(panel) ? "character-panel" : ""}`}>
+            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : panel === "merchant" ? "Wayfinder's stock" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Map Merchant" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
+            {isCharacterPanel(panel) && <CharacterPanelTabs active={panel} onChange={setPanel} />}
             {panel === "maps" && <MapWorkshop maps={inventoryMaps} slottedMap={profile.mapDevice} currencies={currencies} portalActive={Boolean(profile.openedMap)} onSlot={slotMap} onRemove={removeMapFromDevice} onCraft={craftMap} onOpen={openPortal} />}
             {panel === "merchant" && <MapMerchant scrap={currencies.scrap} onBuy={buyMap} />}
             {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} currencies={currencies} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
             {(panel === "inventory" || panel === "stash") && (
-              <InventoryPanel profile={profile} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} onAllocateAttribute={allocateAttribute} onAllocateSkill={allocateSkill} />
+              <InventoryPanel profile={profile} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} />
             )}
+            {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation!.breakdown} onAllocate={allocateAttribute} />}
+            {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={allocateSkill} />}
           </section>
         </div>
       )}

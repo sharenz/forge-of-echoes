@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, globalStyles, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemIcon, itemTooltip, world, characterAnimator, skillAudio, domain, itemContainer, itemVisuals, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, characterAnimationConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, globalStyles, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, attributesPanel, skillTreePanel, characterPanelTabs, inventoryGrid, itemIcon, itemTooltip, world, characterAnimator, skillAudio, domain, itemContainer, itemVisuals, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, characterAnimationConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -39,6 +39,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/components/MapWorkshop.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/PhaserWorld.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/InventoryPanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/AttributesPanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/SkillTreePanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/CharacterPanelTabs.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/InventoryGrid.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ItemIcon.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ItemTooltip.tsx", import.meta.url), "utf8"),
@@ -174,7 +177,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /const inserted = insertItem\(current\.inventory, item\)/);
   assert.match(world, /if \(!this\.options\.onLootPickup\(groundDrop\.drop\)\) continue/);
   assert.match(shell, /arena-inventory-toggle/);
-  assert.match(shell, /paused=\{inventoryOpen\}/);
+  assert.match(shell, /paused=\{characterPanelOpen\}/);
   assert.match(phaserWorld, /updateArenaBalance/);
   assert.match(phaserWorld, /riftRecharge\.toFixed\(1\)/);
   assert.match(skillConfig, /maxCharges: 3/);
@@ -206,7 +209,21 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(equipmentSlotConfig, /Main Hand/);
   assert.match(equipment, /chooseEquipmentSlot/);
   assert.match(inventoryPanel, /CHARACTER_EQUIPMENT_SLOTS\.map/);
+  assert.doesNotMatch(inventoryPanel, /CharacterProgression|onAllocateAttribute|onAllocateSkill/);
   assert.doesNotMatch(inventoryPanel, /inventory-inspector/);
+  assert.match(attributesPanel, /DERIVED_STAT_RULES/);
+  assert.match(attributesPanel, /unspentAttributePoints/);
+  assert.match(attributesPanel, /derived-stat-grid/);
+  assert.match(skillTreePanel, /skill-node-track/);
+  assert.match(skillTreePanel, /\[5, 10, 15, 20\]/);
+  assert.match(skillTreePanel, /nextLevelSummary/);
+  assert.match(characterPanelTabs, /"inventory"/);
+  assert.match(characterPanelTabs, /"attributes"/);
+  assert.match(characterPanelTabs, /"skills"/);
+  assert.match(shell, /panel === "attributes"/);
+  assert.match(shell, /panel === "skills"/);
+  assert.match(globalStyles, /\.attributes-interface/);
+  assert.match(globalStyles, /\.skill-tree-interface/);
   assert.match(itemTooltip, /tooltip-affixes/);
   assert.match(itemTooltip, /Hold Alt \/ Option for roll ranges/);
   assert.match(itemTooltip, /formatModifierWithRollRange/);
