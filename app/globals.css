@@ -30,7 +30,7 @@ body {
     var(--ink);
   color: var(--paper);
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 16px;
+  font-size: 18px;
   min-height: 100vh;
 }
 
@@ -775,6 +775,87 @@ body:has(.pixel-shell) { overflow: hidden; }
 .action-list small,
 .portal-notice strong { font-size: 12px; }
 
+/* Large-type pass for game-distance readability. */
+.creation-header small,
+.creation-title span,
+.class-choice-row button > span,
+.creation-confirm label span,
+.hideout-character small,
+.hideout-hud nav button,
+.hideout-xp small,
+.hideout-prompt,
+.portal-notice span,
+.portal-notice small,
+.world-panel > header span,
+.equipment-slot > small,
+.poe-grid-label em,
+.world-wave > span,
+.world-wave small,
+.world-loot small,
+.world-fps,
+.arena-inventory-toggle,
+.return-hideout { font-size: 12px; }
+
+.creation-confirm > button small,
+.class-choice-row button em,
+.poe-grid-item > small,
+.item-card-kicker,
+.item-card.compact .item-implicit,
+.map-metrics span,
+.primary-action small,
+.world-loot span,
+.world-vitals > div,
+.world-vitals strong { font-size: 13px; }
+
+.class-choice-row button small,
+.item-implicit,
+.item-affix,
+.item-stability,
+.map-list-item small,
+.map-affix span,
+.action-list small { font-size: 14px; }
+
+.creation-title p,
+.panel-copy,
+.map-title-row p,
+.empty-state,
+.empty-focus span { font-size: 15px; }
+.hideout-character strong { font-size: 18px; }
+.portal-notice strong { font-size: 17px; }
+.world-panel > header h2 { font-size: 30px; }
+.poe-grid-label span { font-size: 17px; }
+.map-list-item strong,
+.action-list strong { font-size: 15px; }
+.map-affix strong { font-size: 16px; }
+.item-card strong { font-size: 20px; }
+.item-card.compact strong { font-size: 15px; }
+.item-tooltip > span { font-size: 12px; }
+.item-tooltip > strong { font-size: 23px; }
+.item-tooltip > em,
+.item-tooltip .tooltip-implicit,
+.tooltip-affixes > div,
+.tooltip-affixes > small { font-size: 14px; }
+.item-tooltip footer { font-size: 13px; }
+.item-tooltip > small { font-size: 11px; }
+.run-pickup-ledger > header span,
+.run-pickup-ledger > header > small,
+.run-material small { font-size: 12px; }
+.run-pickup-ledger > header strong,
+.run-material strong { font-size: 17px; }
+.world-skills > span,
+.world-skills button { height: 68px; }
+.world-skills button { min-width: 220px; }
+.world-skills kbd { width: 40px; height: 40px; font-size: 14px; }
+.world-skills strong { font-size: 15px; }
+.world-skills small { font-size: 12px; }
+.world-character-stats { width: 228px; }
+.world-character-stats > header span { font-size: 11px; }
+.world-character-stats > header strong { font-size: 18px; }
+.world-character-stats dl > div { min-height: 30px; }
+.world-character-stats dt { font-size: 12px; }
+.world-character-stats dt small { font-size: 10px; }
+.world-character-stats dd { font-size: 15px; }
+
 @keyframes world-enter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes forge-turn { to { transform: rotate(405deg); } }
 @keyframes panel-fade { from { opacity: 0; } }
@@ -797,7 +878,7 @@ body:has(.pixel-shell) { overflow: hidden; }
   .creation-title { top: 10vh; }
   .class-choice-row { bottom: 105px; width: calc(100vw - 24px); gap: 5px; }
   .class-choice-row button { min-height: 84px; padding: 10px; }
-  .class-choice-row button strong { font-size: 15px; }
+  .class-choice-row button strong { font-size: 17px; }
   .class-choice-row button small, .class-choice-row button em { display: none; }
   .creation-confirm { bottom: 18px; width: calc(100vw - 24px); height: 65px; grid-template-columns: 1fr 155px; }
   .hideout-hud { top: 10px; left: 10px; right: 10px; min-height: 56px; padding: 0 10px; }
@@ -811,7 +892,7 @@ body:has(.pixel-shell) { overflow: hidden; }
   .run-pickup-ledger > header > small { display: none; }
   .run-material { grid-template-columns: 20px 1fr auto; padding: 4px; }
   .run-material i { width: 18px; height: 18px; }
-  .run-material small { font-size: 9px; }
+  .run-material small { font-size: 11px; }
   .equipment-paperdoll { min-height: 320px; }
   .poe-grid { --cell: calc((100vw - 52px) / 12); }
   .world-wave { top: 12px; }
@@ -822,10 +903,10 @@ body:has(.pixel-shell) { overflow: hidden; }
   .world-skills { width: calc(100vw - 20px); justify-content: center; }
   .world-skills button { min-width: 0; max-width: 205px; flex: 1 1 0; padding: 7px 8px; gap: 7px; }
   .world-skills kbd { width: 32px; height: 32px; }
-  .world-skills strong { font-size: 11px; }
-  .world-skills small { font-size: 9px; }
+  .world-skills strong { font-size: 13px; }
+  .world-skills small { font-size: 11px; }
   .world-fps { display: none; }
-  .world-character-stats { right: 10px; top: 63px; bottom: auto; width: 164px; }
+  .world-character-stats { right: 10px; top: 63px; bottom: auto; width: 188px; }
   .world-character-stats > header { padding: 7px 9px; }
   .world-character-stats dl { padding: 5px 9px 7px; }
   .world-character-stats dl > div { min-height: 22px; }

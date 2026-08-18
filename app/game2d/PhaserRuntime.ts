@@ -335,7 +335,7 @@ class CraftyScene extends Phaser.Scene {
     zone.on(Phaser.Input.Events.POINTER_DOWN, () => this.options.onStation(station));
     const text = this.add.text(x, y + height / 2 + 8, label, {
       fontFamily: "monospace",
-      fontSize: "14px",
+      fontSize: "16px",
       color: "#f4bf78",
       backgroundColor: "#11100ddd",
       padding: { x: 7, y: 4 },
@@ -554,7 +554,7 @@ class CraftyScene extends Phaser.Scene {
       : drop.material === "essence" ? "#c6a5ff" : drop.material === "mapDust" ? "#92e4df" : "#e2ac70";
     const label = this.add.text(x, y - 22, labelText, {
       fontFamily: "monospace",
-      fontSize: "12px",
+      fontSize: "14px",
       color,
       backgroundColor: "#08090bcc",
       padding: { x: 4, y: 2 },
@@ -578,7 +578,7 @@ class CraftyScene extends Phaser.Scene {
       groundDrop.label.destroy();
       const pickupText = this.add.text(groundDrop.x, groundDrop.y - 28, "COLLECTED", {
         fontFamily: "monospace",
-        fontSize: "12px",
+        fontSize: "14px",
         color: "#fff1c8",
         stroke: "#08090b",
         strokeThickness: 3,
