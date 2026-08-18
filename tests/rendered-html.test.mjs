@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, equipmentSlotConfig, arenaConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, inventoryGrid, itemTooltip, world, domain, itemContainer, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, equipmentSlotConfig, arenaConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
@@ -51,6 +51,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game/loot.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/containers.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/stash.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/damage.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/equipment-slots.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/arena.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/maps.ts", import.meta.url), "utf8"),
@@ -91,7 +92,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /PACK_REGIONS/);
   assert.match(world, /shouldSpawnNextWave/);
   assert.match(world, /waveElapsedSeconds/);
-  assert.match(world, /calculateHitDamage/);
+  assert.match(world, /rollHitDamage/);
   assert.doesNotMatch(world, /0\.85 \+ .*attackDamage/);
   assert.doesNotMatch(world, /enemyHealthMultiplier|enemySpeedMultiplier|ARENA_MONSTER\.baseLife \+ wave/);
   assert.match(world, /resolveMonsterStats/);
@@ -104,11 +105,13 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /renderEnemyHealth/);
   assert.match(world, /healthLabelPool/);
   assert.match(world, /showDamageNumber/);
+  assert.match(world, /DAMAGE_TYPE_DEFINITIONS\[damage\.type\]\.label/);
   assert.match(world, /damageNumberPool/);
   assert.match(arenaConfig, /waveSpawnIntervalSeconds: 30/);
   assert.match(arenaConfig, /tierModifiers/);
   assert.match(arenaConfig, /waveModifiers/);
   assert.match(combat, /resolveArenaStat/);
+  assert.match(combat, /rollHitDamage/);
   assert.match(combat, /resolveStat\(0/);
   assert.match(combat, /waveStats/);
   assert.doesNotMatch(combat, /modifiers\.has|\? 5\.6 : 8|enemyHealthMultiplier/);
@@ -155,6 +158,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(stashEngine, /insertItemsIntoStash/);
   assert.match(stashEngine, /renameStashTab/);
   assert.match(stashConfig, /maximumTabs: 8/);
+  assert.match(damageConfig, /fire: \{ label: "Fire"/);
   assert.match(itemContainer, /ignoredItemId/);
   assert.match(containerConfig, /columns: 12, rows: 8/);
   assert.match(equipmentSlotConfig, /ringLeft/);
@@ -207,7 +211,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(monsterConfig, /behavior: "jumper"/);
   assert.match(monsterConfig, /ironhide-brute/);
   assert.match(monsterConfig, /ember-skitter/);
-  assert.match(skillConfig, /damageEffectiveness: 1\.35/);
+  assert.match(skillConfig, /type: "fire", effectiveness: 1\.35/);
+  assert.match(phaserWorld, /damageSummary\(BASIC_ATTACK\.damage\)/);
   assert.match(world, /1 \/ Math\.max\(0\.01, this\.options\.arenaBalance\?\.attackSpeed/);
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);

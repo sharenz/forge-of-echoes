@@ -31,6 +31,7 @@ export type ArenaStatKey =
 export type ModifierStatKey = StatKey | ArenaStatKey;
 export type ModifierMode = "flat" | "increased" | "more";
 export type MonsterRarity = "normal" | "magic" | "rare";
+export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos";
 
 /**
  * Every numerical effect in the game resolves through this representation.

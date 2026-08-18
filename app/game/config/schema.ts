@@ -2,6 +2,7 @@ import type {
   AffixTag,
   ArenaStatKey,
   CharacterClassId,
+  DamageType,
   EquipmentSlot,
   MapModifierId,
   ModifierStatKey,
@@ -112,8 +113,13 @@ export interface SkillDefinition {
   cooldown?: number;
   maxCharges?: number;
   recharge?: number;
-  /** Multiplier applied directly to the character sheet's attack damage. */
-  damageEffectiveness?: number;
+  damage?: {
+    type: DamageType;
+    /** Multiplier applied directly to the character sheet's average attack damage. */
+    effectiveness: number;
+    /** Multipliers around the average; their midpoint should remain 1. */
+    range: { minMultiplier: number; maxMultiplier: number };
+  };
   projectileScale?: number;
   modifiers?: readonly ScaledModifierDefinition[];
 }

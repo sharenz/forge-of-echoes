@@ -5,11 +5,11 @@ export const BASIC_ATTACK = {
   name: "Ember Lance",
   key: "Mouse",
   focusCost: 0,
-  damageEffectiveness: 1,
+  damage: { type: "fire", effectiveness: 1, range: { minMultiplier: 0.8, maxMultiplier: 1.2 } },
   projectileScale: 1,
 } as const satisfies SkillDefinition;
 
 export const ACTIVE_SKILLS = {
-  nova: { id: "nova", name: "Ember Nova", key: "Q", focusCost: 30, cooldown: 4, damageEffectiveness: 1.35, projectileScale: 1.35 },
+  nova: { id: "nova", name: "Ember Nova", key: "Q", focusCost: 30, cooldown: 4, damage: { type: "fire", effectiveness: 1.35, range: { minMultiplier: 0.8, maxMultiplier: 1.2 } }, projectileScale: 1.35 },
   dash: { id: "dash", name: "Rift Step", key: "E", focusCost: 15, maxCharges: 3, recharge: 3 },
 } as const satisfies Record<string, SkillDefinition>;

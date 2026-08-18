@@ -1,9 +1,11 @@
 import Phaser from "phaser";
-import { ACTIVE_SKILLS, BASIC_ATTACK, calculateHitDamage, shouldSpawnNextWave, type MapDrop } from "../game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, rollHitDamage, shouldSpawnNextWave, type MapDrop, type RolledHitDamage } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
+import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
 import { MONSTER_PACK_RULES } from "../game/config/monster-packs";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
-import type { CharacterClassId, MonsterRarity } from "../game/domain";
+import type { SkillDefinition } from "../game/config/schema";
+import type { CharacterClassId, DamageType, MonsterRarity } from "../game/domain";
 import { monsterPackModifierNames, resolveMonsterStats, rollMonsterPack } from "../game/encounters";
 import { dropChances, rollEquipmentRarity } from "../game/loot";
 import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
@@ -55,6 +57,7 @@ interface ProjectileState {
   vx: number;
   vy: number;
   damage: number;
+  damageType: DamageType;
   remaining: number;
 }
 
@@ -199,7 +202,7 @@ class CraftyScene extends Phaser.Scene {
       this.novaCooldown = ACTIVE_SKILLS.nova.cooldown;
       for (let index = 0; index < 18; index += 1) {
         const angle = (Math.PI * 2 * index) / 18;
-        this.spawnProjectile(Math.cos(angle), Math.sin(angle), ACTIVE_SKILLS.nova.projectileScale, ACTIVE_SKILLS.nova.damageEffectiveness);
+        this.spawnProjectile(Math.cos(angle), Math.sin(angle), ACTIVE_SKILLS.nova);
       }
     }
     if (skill === "dash" && this.riftCharges > 0 && this.focus >= ACTIVE_SKILLS.dash.focusCost) {
@@ -563,6 +566,7 @@ class CraftyScene extends Phaser.Scene {
       vx: directionX * speed,
       vy: directionY * speed,
       damage: enemy.contactDamage * damageEffectiveness,
+      damageType: "fire",
       remaining: 2.8,
     });
   }
@@ -634,7 +638,7 @@ class CraftyScene extends Phaser.Scene {
     }
   }
 
-  private showDamageNumber(x: number, y: number, damage: number | "EVADE"): void {
+  private showDamageNumber(x: number, y: number, damage: RolledHitDamage | "EVADE"): void {
     let label = this.damageNumberPool.find((candidate) => !candidate.active);
     if (!label && this.damageNumberPool.length < DAMAGE_NUMBER_POOL_SIZE) {
       label = this.add.text(0, 0, "", {
@@ -649,7 +653,11 @@ class CraftyScene extends Phaser.Scene {
     }
     if (!label) return;
     this.tweens.killTweensOf(label);
-    label.setText(damage === "EVADE" ? damage : `${Math.max(1, Math.round(damage))}`)
+    const damageText = damage === "EVADE"
+      ? damage
+      : `${Math.max(1, Math.round(damage.amount))} (${DAMAGE_TYPE_DEFINITIONS[damage.type].label})`;
+    label.setColor(damage === "EVADE" ? "#aeb4bd" : DAMAGE_TYPE_DEFINITIONS[damage.type].color);
+    label.setText(damageText)
       .setPosition(Math.round(x + Phaser.Math.Between(-7, 7)), Math.round(y - 24))
       .setAlpha(1)
       .setScale(1)
@@ -727,20 +735,22 @@ class CraftyScene extends Phaser.Scene {
     const dx = pointer.worldX - this.player.x;
     const dy = pointer.worldY - this.player.y;
     const length = Math.hypot(dx, dy) || 1;
-    this.spawnProjectile(dx / length, dy / length, BASIC_ATTACK.projectileScale, BASIC_ATTACK.damageEffectiveness);
+    this.spawnProjectile(dx / length, dy / length, BASIC_ATTACK);
     this.attackCooldown = 1 / Math.max(0.01, this.options.arenaBalance?.attackSpeed ?? 1);
   }
 
-  private spawnProjectile(directionX: number, directionY: number, visualScale: number, damageEffectiveness: number): void {
-    if (!this.player) return;
+  private spawnProjectile(directionX: number, directionY: number, skill: SkillDefinition): void {
+    if (!this.player || !skill.damage) return;
     const sprite = this.projectilePool?.get(this.player.x, this.player.y, "projectile") as Phaser.GameObjects.Image | null;
     if (!sprite) return;
-    sprite.setActive(true).setVisible(true).setScale(visualScale * 1.35).setDepth(80).setBlendMode(Phaser.BlendModes.ADD);
+    sprite.setActive(true).setVisible(true).setScale((skill.projectileScale ?? 1) * 1.35).setDepth(80).setBlendMode(Phaser.BlendModes.ADD);
+    const rolledDamage = rollHitDamage(this.options.arenaBalance?.attackDamage ?? 15, skill.damage);
     this.projectiles.push({
       sprite,
       vx: directionX * 520,
       vy: directionY * 520,
-      damage: calculateHitDamage(this.options.arenaBalance?.attackDamage ?? 15, damageEffectiveness),
+      damage: rolledDamage.amount,
+      damageType: rolledDamage.type,
       remaining: 1.35,
     });
   }
@@ -756,7 +766,7 @@ class CraftyScene extends Phaser.Scene {
         const evaded = Math.random() < hit.evadeChance / 100;
         const damage = evaded ? 0 : projectile.damage * (100 / (100 + hit.armor));
         if (!evaded) hit.life -= damage;
-        this.showDamageNumber(hit.x, hit.y, evaded ? "EVADE" : damage);
+        this.showDamageNumber(hit.x, hit.y, evaded ? "EVADE" : { amount: damage, type: projectile.damageType });
         projectile.remaining = 0;
         if (hit.life <= 0) this.releaseEnemy(hit);
       }

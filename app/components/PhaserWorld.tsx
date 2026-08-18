@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
+import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
+import type { SkillDefinition } from "../game/config/schema";
 import type { CharacterClassId, CharacterStats, StatKey, StatModifier } from "../game/domain";
 import type { CharacterStatCalculation, StatResolution } from "../game/stats";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
@@ -38,6 +40,12 @@ function contributionAmount(modifier: StatModifier): string {
   const value = compactNumber(modifier.value);
   if (modifier.mode === "flat") return `${modifier.value >= 0 ? "+" : ""}${value}`;
   return `${modifier.value >= 0 ? "+" : ""}${value}% ${modifier.mode}`;
+}
+
+function damageSummary(damage: NonNullable<SkillDefinition["damage"]>): string {
+  const minimum = Math.round(damage.effectiveness * damage.range.minMultiplier * 100);
+  const maximum = Math.round(damage.effectiveness * damage.range.maxMultiplier * 100);
+  return `${minimum}–${maximum}% ${DAMAGE_TYPE_DEFINITIONS[damage.type].label} damage`;
 }
 
 function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterStatRowProps) {
@@ -155,11 +163,11 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
             <div><span>Focus</span><i><b style={{ width: `${(hud.focus / hud.maxFocus) * 100}%` }} /></i><strong>{Math.floor(hud.focus)}</strong></div>
           </div>
           <div className="world-skills">
-            <span className="basic-skill"><kbd>{BASIC_ATTACK.key}</kbd><span><strong>{BASIC_ATTACK.name}</strong><small>{Math.round(BASIC_ATTACK.damageEffectiveness * 100)}% attack damage</small></span></span>
+            <span className="basic-skill"><kbd>{BASIC_ATTACK.key}</kbd><span><strong>{BASIC_ATTACK.name}</strong><small>{damageSummary(BASIC_ATTACK.damage)}</small></span></span>
             <button type="button" className="active-skill" disabled={!novaReady} onClick={() => runtimeRef.current?.useSkill("nova")}>
               <i className="skill-recharge" style={{ width: `${novaProgress}%` }} />
               <kbd>{ACTIVE_SKILLS.nova.key}</kbd>
-              <span><strong>{ACTIVE_SKILLS.nova.name}</strong><small>{hud.novaCooldown > 0.05 ? `${hud.novaCooldown.toFixed(1)}s recharge` : hud.focus < ACTIVE_SKILLS.nova.focusCost ? `Needs ${ACTIVE_SKILLS.nova.focusCost} Focus` : `Ready · ${Math.round(ACTIVE_SKILLS.nova.damageEffectiveness * 100)}% damage`}</small></span>
+              <span><strong>{ACTIVE_SKILLS.nova.name}</strong><small>{hud.novaCooldown > 0.05 ? `${hud.novaCooldown.toFixed(1)}s recharge` : hud.focus < ACTIVE_SKILLS.nova.focusCost ? `Needs ${ACTIVE_SKILLS.nova.focusCost} Focus` : `Ready · ${damageSummary(ACTIVE_SKILLS.nova.damage)}`}</small></span>
             </button>
             <button type="button" className="active-skill rift-skill" disabled={!riftReady} onClick={() => runtimeRef.current?.useSkill("dash")}>
               <i className="skill-recharge" style={{ width: `${riftProgress}%` }} />

@@ -22,7 +22,7 @@ import {
 import { calculateCharacterStats, formatModifier, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
 import { purchaseMap } from "../app/game/merchant";
-import { buildArenaBalance, calculateHitDamage, shouldSpawnNextWave } from "../app/game/combat";
+import { BASIC_ATTACK, buildArenaBalance, calculateHitDamage, rollHitDamage, shouldSpawnNextWave } from "../app/game/combat";
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
 import { dropChances, rollEquipmentRarity } from "../app/game/loot";
@@ -430,6 +430,18 @@ test("runtime hit damage scales linearly with resolved attack damage", () => {
   const base = resolveStat(20, []);
   const fiftyMore = resolveStat(20, [modifier("more", 50)]);
   assert.equal(calculateHitDamage(fiftyMore.value, 1) / calculateHitDamage(base.value, 1), 1.5);
+  assert.deepEqual(rollHitDamage(30, BASIC_ATTACK.damage, () => 0), { amount: 24, type: "fire" });
+  assert.deepEqual(rollHitDamage(30, BASIC_ATTACK.damage, () => 0.5), { amount: 30, type: "fire" });
+  assert.deepEqual(rollHitDamage(30, BASIC_ATTACK.damage, () => 1), { amount: 36, type: "fire" });
+  assert.throws(
+    () => rollHitDamage(30, { ...BASIC_ATTACK.damage, range: { minMultiplier: 0.8, maxMultiplier: 1.1 } }),
+    /midpoint must be 1/,
+  );
+  assert.equal(
+    rollHitDamage(fiftyMore.value, BASIC_ATTACK.damage, () => 0.17).amount
+      / rollHitDamage(base.value, BASIC_ATTACK.damage, () => 0.17).amount,
+    1.5,
+  );
 });
 
 test("character equipment exposes ten positions and fills both ring slots independently", () => {

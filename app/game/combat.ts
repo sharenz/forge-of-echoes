@@ -1,7 +1,7 @@
 import { ARENA_RULES } from "./config/arena";
 import { MAP_MODIFIERS } from "./config/maps";
 import { MONSTER_ARCHETYPES } from "./config/monsters";
-import type { ScaledModifierDefinition } from "./config/schema";
+import type { ScaledModifierDefinition, SkillDefinition } from "./config/schema";
 import { ACTIVE_SKILLS, BASIC_ATTACK } from "./config/skills";
 import type { ArenaStatKey, CurrencyId, PlayerProfile, Rarity, StatModifier } from "./domain";
 import { deriveStats } from "./profile";
@@ -73,6 +73,32 @@ export function calculateHitDamage(attackDamage: number, damageEffectiveness: nu
   if (!Number.isFinite(attackDamage) || attackDamage < 0) throw new Error("Attack damage must be a finite non-negative number");
   if (!Number.isFinite(damageEffectiveness) || damageEffectiveness < 0) throw new Error("Damage effectiveness must be a finite non-negative number");
   return attackDamage * damageEffectiveness;
+}
+
+export interface RolledHitDamage {
+  amount: number;
+  type: NonNullable<SkillDefinition["damage"]>["type"];
+}
+
+/** Rolls around the character sheet's average damage without changing its expected value. */
+export function rollHitDamage(
+  attackDamage: number,
+  definition: NonNullable<SkillDefinition["damage"]>,
+  random: () => number = Math.random,
+): RolledHitDamage {
+  const { minMultiplier, maxMultiplier } = definition.range;
+  if (!Number.isFinite(minMultiplier) || !Number.isFinite(maxMultiplier) || minMultiplier < 0 || maxMultiplier < minMultiplier) {
+    throw new Error("Damage range must contain finite, ordered, non-negative multipliers");
+  }
+  if (Math.abs((minMultiplier + maxMultiplier) / 2 - 1) > 0.000001) {
+    throw new Error("Damage range midpoint must be 1 so character-sheet damage remains the average");
+  }
+  const roll = Math.min(1, Math.max(0, random()));
+  const rangeMultiplier = minMultiplier + (maxMultiplier - minMultiplier) * roll;
+  return {
+    amount: calculateHitDamage(attackDamage, definition.effectiveness) * rangeMultiplier,
+    type: definition.type,
+  };
 }
 
 function arenaModifier(

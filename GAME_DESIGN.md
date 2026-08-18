@@ -83,6 +83,12 @@ Core attributes:
 
 Attributes should mostly unlock equipment and support build identity. They should not be universally optimal damage multipliers.
 
+### Damage rolls and types
+
+The character sheet's attack damage is the expected average, not a fixed hit. Every damaging skill config declares a damage type, damage effectiveness, and a symmetric range around that average. A hit rolls once when its projectile or attack is created, then applies defenses to that rolled value. Because the range midpoint is always 1, additive, increased, and more modifiers preserve their exact meaning across both the minimum and maximum hit.
+
+Floating combat text always includes the final damage type, such as `37 (Fire)`. Physical, fire, cold, lightning, and chaos are engine-level damage types so later resistance, conversion, penetration, and ailment systems can consume the same typed damage packet instead of inferring behavior from skill names.
+
 ### Defenses
 
 Use a small set of layered defenses:
