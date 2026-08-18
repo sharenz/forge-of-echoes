@@ -19,7 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const baseUrl = new URL(`${protocol}://${host}`);
   const title = "Crafty — The Crucible";
-  const description = "Create a hero, craft maps and rare equipment, then survive escalating monster waves in a real-time 3D action RPG.";
+  const description = "Create a hero, craft maps and rare equipment, then survive escalating monster waves in a fixed-camera pixel-art action RPG.";
 
   return {
     metadataBase: baseUrl,

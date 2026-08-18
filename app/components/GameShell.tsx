@@ -7,12 +7,12 @@ import type { CharacterClassId, EquipmentItem, PlayerProfile, RunResult } from "
 import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
 import { addMapModifier, createMap, rerollMap } from "../game/maps";
 import { applyRunResult, createCharacter, deriveStats, loadProfile, saveProfile } from "../game/profile";
-import type { WorldStation } from "../game3d/types";
-import { BabylonWorld } from "./BabylonWorld";
+import type { WorldStation } from "../game2d/types";
 import { InventoryGrid } from "./InventoryGrid";
 import { ItemCard } from "./ItemCard";
 import { ItemWorkbench } from "./ItemWorkbench";
 import { MapWorkshop } from "./MapWorkshop";
+import { PhaserWorld } from "./PhaserWorld";
 
 type HideoutPanel = "inventory" | "stash" | "bench" | "maps" | null;
 type GameScreen = "hideout" | "arena";
@@ -67,7 +67,7 @@ export function GameShell() {
   if (!profile.character.created || !profile.character.classId) {
     const selected = CHARACTER_CLASSES[selectedClass];
     return (
-      <BabylonWorld mode="class-select" classId={selectedClass}>
+      <PhaserWorld mode="class-select" classId={selectedClass}>
         <div className="creation-header"><span className="brand-rune">C</span><div><strong>CRAFTY</strong><small>Choose who enters the Crucible</small></div></div>
         <section className="character-creation">
           <div className="creation-title"><span>Begin your first life</span><h1>Choose your class</h1><p>Each class changes your starting attributes and weapon. Your passive tree remains open.</p></div>
@@ -86,16 +86,16 @@ export function GameShell() {
             <button type="submit"><span>Enter the Hideout</span><small>Begin as {selected.name}</small></button>
           </form>
         </section>
-      </BabylonWorld>
+      </PhaserWorld>
     );
   }
 
   if (screen === "arena" && profile.openedMap) {
     const arenaBalance = buildArenaBalance(profile);
     return (
-      <BabylonWorld mode="arena" classId={profile.character.classId} portalActive arenaBalance={arenaBalance} onArenaComplete={completeArena}>
+      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive arenaBalance={arenaBalance} onArenaComplete={completeArena}>
         <button type="button" className="return-hideout" onClick={() => setScreen("hideout")}>Return to hideout</button>
-      </BabylonWorld>
+      </PhaserWorld>
     );
   }
 
@@ -201,7 +201,7 @@ export function GameShell() {
   }
 
   return (
-    <BabylonWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} onStation={handleStation}>
+    <PhaserWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} onStation={handleStation}>
       <header className="hideout-hud">
         <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
         <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId].name}</small></div></div>
@@ -209,7 +209,7 @@ export function GameShell() {
         <div className="hideout-xp"><span style={{ width: `${xpPercent}%` }} /><small>{profile.character.xp}/{xpRequired} XP</small></div>
       </header>
 
-      <div className="hideout-prompt"><span>WASD</span> move <i /> click ground to travel <i /> select a world object to interact</div>
+      <div className="hideout-prompt"><span>WASD</span> screen-aligned movement <i /> fixed camera <i /> select a labeled world station</div>
       {profile.openedMap && <div className="portal-notice"><span>Portal open</span><strong>{profile.openedMap.baseName}</strong><small>Click the portal to enter</small></div>}
 
       {panel && (
@@ -237,6 +237,6 @@ export function GameShell() {
         </div>
       )}
       {notice && <div className="toast" role="status">{notice}</div>}
-    </BabylonWorld>
+    </PhaserWorld>
   );
 }

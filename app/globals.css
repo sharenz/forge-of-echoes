@@ -319,10 +319,10 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 
-/* Babylon world shell */
-body:has(.babylon-shell) { overflow: hidden; }
+/* Fixed-camera pixel world shell */
+body:has(.pixel-shell) { overflow: hidden; }
 
-.babylon-shell {
+.pixel-shell {
   position: fixed;
   inset: 0;
   overflow: hidden;
@@ -331,17 +331,18 @@ body:has(.babylon-shell) { overflow: hidden; }
   animation: world-enter .7s ease both;
 }
 
-.babylon-canvas {
+.phaser-stage {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  display: block;
   touch-action: none;
-  outline: 0;
+  background: #071011;
 }
 
-.babylon-shell::after {
+.phaser-stage canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+.pixel-shell::after {
   content: "";
   position: absolute;
   inset: 0;
