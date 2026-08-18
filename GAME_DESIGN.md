@@ -228,7 +228,7 @@ Do not solve loot spam with an increasingly complicated filter. Prevent the spam
 - Elite monsters have a good chance to drop a relevant base.
 - Wave bosses can drop magic items, rare items, uniques, and special crafting components.
 - Crafted map modifiers let the player target base types, affix tags, unique families, or crafting materials before entry.
-- Drops remain physical world objects until the character runs over them; only collected drops enter the inventory.
+- Drops remain physical world objects until the character runs over them; collected equipment appears immediately at the front of the in-map backpack, while collected crafting materials appear in its pickup ledger.
 - Item drops are identified immediately; discovery comes from evaluation, not an identify-scroll tax.
 
 ## Crafting system: the Workbench

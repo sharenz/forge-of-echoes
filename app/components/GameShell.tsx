@@ -28,6 +28,7 @@ export function GameShell() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [runItems, setRunItems] = useState<EquipmentItem[]>([]);
+  const [runMaterials, setRunMaterials] = useState<Partial<Materials>>({});
   const runLootRef = useRef<RunLootLedger>(emptyRunLoot());
 
   useEffect(() => {
@@ -113,7 +114,7 @@ export function GameShell() {
           <div className="world-panel-backdrop arena-panel-backdrop">
             <section className="world-panel panel-inventory" aria-label="Character inventory">
               <header><div><span>Combat paused · equipment changes apply immediately</span><h2>Inventory</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close inventory">×</button></header>
-              <InventoryPanel profile={profile} backpackItems={backpackItems} selectedItem={selectedItem} selectedItemId={selectedItemId} onSelect={setSelectedItemId} onEquip={equipSelected} onUnequip={unequipSelected} />
+              <InventoryPanel profile={profile} backpackItems={backpackItems} selectedItem={selectedItem} selectedItemId={selectedItemId} freshItemIds={runItems.map((item) => item.id)} runMaterials={runMaterials} onSelect={setSelectedItemId} onEquip={equipSelected} onUnequip={unequipSelected} />
             </section>
           </div>
         )}
@@ -137,8 +138,7 @@ export function GameShell() {
     if (station === "bench") setPanel("bench");
     if (station === "map-device") setPanel("maps");
     if (station === "portal") {
-      runLootRef.current = emptyRunLoot();
-      setRunItems([]);
+      resetRunLoot();
       setPanel(null);
       setScreen("arena");
     }
@@ -181,8 +181,7 @@ export function GameShell() {
     setProfile(next);
     setSelectedMapId(next.maps[0]?.id ?? null);
     setSelectedItemId(result.loot.items[0]?.id ?? next.inventory[0]?.id ?? null);
-    runLootRef.current = emptyRunLoot();
-    setRunItems([]);
+    resetRunLoot();
     setPanel(null);
     setScreen("hideout");
     setNotice(`Map complete. ${result.loot.items.length} collected items recovered.`);
@@ -193,11 +192,13 @@ export function GameShell() {
     if (drop.kind === "equipment") {
       const item = generateEquipment(Math.max(2, profile.openedMap.tier) * 5, drop.rarity);
       runLootRef.current.items.push(item);
-      setRunItems((current) => [...current, item]);
+      setRunItems((current) => [item, ...current]);
+      setSelectedItemId(item.id);
       return;
     }
     const current = runLootRef.current.materials[drop.material] ?? 0;
     runLootRef.current.materials[drop.material] = current + drop.amount;
+    setRunMaterials((materials) => ({ ...materials, [drop.material]: (materials[drop.material] ?? 0) + drop.amount }));
   }
 
   function leaveArena() {
@@ -212,8 +213,7 @@ export function GameShell() {
       openedMap: null,
     });
     setSelectedItemId(recovered.items[0]?.id ?? profile.inventory[0]?.id ?? null);
-    runLootRef.current = emptyRunLoot();
-    setRunItems([]);
+    resetRunLoot();
     setPanel(null);
     setScreen("hideout");
     setNotice(`Map abandoned. ${recovered.items.length} collected items were kept.`);
@@ -236,6 +236,12 @@ export function GameShell() {
     const equipped = Object.fromEntries(Object.entries(profile.equipped).map(([slot, item]) => [slot, item ? update(item) : item])) as PlayerProfile["equipped"];
     if (!changed) return;
     setProfile({ ...profile, inventory, stash, equipped, materials: { ...profile.materials, [material]: profile.materials[material] - 1 } });
+  }
+
+  function resetRunLoot() {
+    runLootRef.current = emptyRunLoot();
+    setRunItems([]);
+    setRunMaterials({});
   }
 
   function equipSelected() {

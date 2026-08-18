@@ -617,6 +617,19 @@ body:has(.pixel-shell) { overflow: hidden; }
 .equipment-slot > span { color: #4f463d; font: 10px Georgia, serif; }
 .equipment-slot .item-card { width: 100%; min-height: 75px; }
 .inventory-containers { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.run-pickup-ledger { padding: 13px 14px; border: 1px solid #5f4935; border-left: 3px solid #d48643; background: linear-gradient(100deg, #26190f, #100d0a); box-shadow: inset 0 0 24px #c05c1d12; }
+.run-pickup-ledger > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 11px; }
+.run-pickup-ledger > header > div { display: flex; flex-direction: column; gap: 3px; }
+.run-pickup-ledger > header span { color: #e49a58; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+.run-pickup-ledger > header strong { color: #ead9c3; font: 15px Georgia, serif; }
+.run-pickup-ledger > header > small { color: #8f806f; font-size: 10px; text-transform: uppercase; }
+.run-pickup-ledger > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.run-material { min-height: 34px; padding: 5px 8px; display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 7px; border: 1px solid #44372b; background: #110e0b; }
+.run-material i { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid #875738; color: #e8ab6b; font: 11px Georgia, serif; transform: rotate(45deg); }
+.run-material small { color: #a99a88; font-size: 10px; }
+.run-material strong { color: #f0d6b7; font: 15px Georgia, serif; }
+.run-material.material-essence i { border-color: #7459a2; color: #c6a5ff; }
+.run-material.material-map-dust i { border-color: #3d7c83; color: #92e4df; }
 .inventory-inspector { padding: 15px; border-left: 1px solid #433529; background: #100d0b; }
 .inventory-inspector > p { color: var(--muted); font: 12px/1.5 Georgia, serif; }
 .inventory-inspector .item-card { width: 100%; }
@@ -639,7 +652,7 @@ body:has(.pixel-shell) { overflow: hidden; }
   background-size: var(--cell) var(--cell), var(--cell) var(--cell), 100% 100%;
   box-shadow: inset 0 0 36px #000;
 }
-.poe-grid-item { min-width: 0; min-height: 0; margin: 2px; padding: 4px; overflow: hidden; border: 1px solid #655747; background: radial-gradient(circle at 50% 35%, #2e2a25, #11100e); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.poe-grid-item { position: relative; min-width: 0; min-height: 0; margin: 2px; padding: 4px; overflow: hidden; border: 1px solid #655747; background: radial-gradient(circle at 50% 35%, #2e2a25, #11100e); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
 .poe-grid-item:hover, .poe-grid-item.selected { filter: brightness(1.28); box-shadow: inset 0 0 20px #b2672b33; z-index: 2; }
 .poe-grid-item.selected { outline: 1px solid #f0a45a; }
 .poe-grid-item > span { color: #dacdbd; font: 16px Georgia, serif; }
@@ -647,6 +660,8 @@ body:has(.pixel-shell) { overflow: hidden; }
 .poe-grid-item.rarity-magic { border-color: #617dc0; background: radial-gradient(circle at 50% 35%, #202b4b, #0e111b); }
 .poe-grid-item.rarity-rare { border-color: #b9963e; background: radial-gradient(circle at 50% 35%, #443816, #151208); }
 .poe-grid-item.rarity-unique { border-color: #b25e2c; background: radial-gradient(circle at 50% 35%, #4e2614, #170c08); }
+.poe-grid-item.new-drop { border-color: #e28a45; animation: new-drop-glow 1.6s ease-in-out infinite; }
+.new-drop-badge { position: absolute; z-index: 3; left: 3px; top: 3px; padding: 2px 4px; background: #a84721; color: #ffe1b9; font-size: 8px; font-style: normal; letter-spacing: .08em; text-transform: uppercase; box-shadow: 0 0 9px #e76f2f88; }
 
 .toast { position: absolute; z-index: 24; left: 50%; top: 96px; padding: 12px 18px; border: 1px solid #9a5e37; background: #1b120d; box-shadow: 0 14px 50px #000b; color: #eac5a4; font: 11px Georgia, serif; transform: translateX(-50%); animation: toast-in .3s ease both; }
 
@@ -740,6 +755,7 @@ body:has(.pixel-shell) { overflow: hidden; }
 @keyframes panel-rise { from { opacity: 0; transform: translateY(14px) scale(.99); } }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -9px); } }
 @keyframes portal-pulse { 50% { border-left-color: #ffad5e; box-shadow: 0 0 48px #df481142; } }
+@keyframes new-drop-glow { 50% { box-shadow: inset 0 0 25px #d9682c44, 0 0 10px #e1783466; } }
 
 @media (max-width: 900px) {
   .hideout-hud { grid-template-columns: 1fr 1fr; }
@@ -767,6 +783,10 @@ body:has(.pixel-shell) { overflow: hidden; }
   .world-panel-backdrop { padding: 76px 8px 8px; }
   .world-panel { width: 100%; max-height: calc(100vh - 84px); }
   .inventory-window { display: flex; flex-direction: column; padding: 12px; }
+  .run-pickup-ledger > header > small { display: none; }
+  .run-material { grid-template-columns: 20px 1fr auto; padding: 4px; }
+  .run-material i { width: 18px; height: 18px; }
+  .run-material small { font-size: 9px; }
   .equipment-paperdoll { min-height: 320px; }
   .poe-grid { --cell: calc((100vw - 52px) / 12); }
   .world-wave { top: 12px; }

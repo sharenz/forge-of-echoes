@@ -1,4 +1,4 @@
-import type { EquipmentItem, PlayerProfile } from "../game/domain";
+import type { EquipmentItem, Materials, PlayerProfile } from "../game/domain";
 import { InventoryGrid } from "./InventoryGrid";
 import { ItemCard } from "./ItemCard";
 
@@ -8,6 +8,8 @@ interface InventoryPanelProps {
   selectedItem: EquipmentItem | null;
   selectedItemId: string | null;
   showStash?: boolean;
+  freshItemIds?: string[];
+  runMaterials?: Partial<Materials>;
   onSelect: (id: string) => void;
   onEquip: () => void;
   onUnequip: () => void;
@@ -22,6 +24,8 @@ export function InventoryPanel({
   selectedItem,
   selectedItemId,
   showStash = false,
+  freshItemIds = [],
+  runMaterials,
   onSelect,
   onEquip,
   onUnequip,
@@ -29,6 +33,13 @@ export function InventoryPanel({
 }: InventoryPanelProps) {
   const selectedIsEquipped = Boolean(selectedItem && profile.equipped[selectedItem.slot]?.id === selectedItem.id);
   const selectedIsInStash = Boolean(selectedItem && profile.stash.some((item) => item.id === selectedItem.id));
+  const freshItems = new Set(freshItemIds);
+  const materialDrops = [
+    ["scrap", "Scrap", runMaterials?.scrap ?? 0],
+    ["essence", "Essence", runMaterials?.essence ?? 0],
+    ["map-dust", "Map Dust", runMaterials?.mapDust ?? 0],
+  ] as const;
+  const hasRunPickups = freshItems.size > 0 || materialDrops.some(([, , amount]) => amount > 0);
 
   return (
     <div className="inventory-window">
@@ -44,8 +55,18 @@ export function InventoryPanel({
         ))}
       </div>
       <div className="inventory-containers">
+        {hasRunPickups && (
+          <section className="run-pickup-ledger" aria-label="Items collected in this map">
+            <header><div><span>Collected this map</span><strong>{freshItems.size} new equipment</strong></div><small>Picked up and secured</small></header>
+            <div>
+              {materialDrops.map(([kind, label, amount]) => (
+                <span className={`run-material material-${kind}`} key={kind}><i>{label.charAt(0)}</i><small>{label}</small><strong>{amount}</strong></span>
+              ))}
+            </div>
+          </section>
+        )}
         {showStash && <InventoryGrid items={profile.stash} columns={12} rows={8} selectedId={selectedItemId} onSelect={onSelect} label="Stash" />}
-        <InventoryGrid items={backpackItems} columns={12} rows={5} selectedId={selectedItemId} onSelect={onSelect} label="Backpack" />
+        <InventoryGrid items={backpackItems} columns={12} rows={5} selectedId={selectedItemId} onSelect={onSelect} label="Backpack" highlightedIds={freshItems} />
       </div>
       <aside className="inventory-inspector">
         {selectedItem ? (

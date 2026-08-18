@@ -8,6 +8,7 @@ interface InventoryGridProps {
   selectedId?: string | null;
   onSelect: (id: string) => void;
   label: string;
+  highlightedIds?: ReadonlySet<string>;
 }
 
 interface Placement {
@@ -51,7 +52,7 @@ function packItems(items: EquipmentItem[], columns: number, rows: number): Place
   return placements;
 }
 
-export function InventoryGrid({ items, columns, rows, selectedId, onSelect, label }: InventoryGridProps) {
+export function InventoryGrid({ items, columns, rows, selectedId, onSelect, label, highlightedIds }: InventoryGridProps) {
   const placements = packItems(items, columns, rows);
   return (
     <div className="poe-grid-wrap">
@@ -62,23 +63,26 @@ export function InventoryGrid({ items, columns, rows, selectedId, onSelect, labe
         role="listbox"
         aria-label={label}
       >
-        {placements.map(({ item, x, y, width, height }) => (
-          <button
-            type="button"
-            role="option"
-            aria-selected={selectedId === item.id}
-            className={`poe-grid-item rarity-${item.rarity} ${selectedId === item.id ? "selected" : ""}`}
-            style={{ gridColumn: `${x + 1} / span ${width}`, gridRow: `${y + 1} / span ${height}` }}
-            onClick={() => onSelect(item.id)}
-            title={itemDisplayName(item)}
-            key={item.id}
-          >
-            <span>{item.baseName.split(" ").map((word) => word[0]).join("")}</span>
-            {height > 1 && <small>{item.baseName}</small>}
-          </button>
-        ))}
+        {placements.map(({ item, x, y, width, height }) => {
+          const highlighted = highlightedIds?.has(item.id) ?? false;
+          return (
+            <button
+              type="button"
+              role="option"
+              aria-selected={selectedId === item.id}
+              className={`poe-grid-item rarity-${item.rarity} ${selectedId === item.id ? "selected" : ""} ${highlighted ? "new-drop" : ""}`}
+              style={{ gridColumn: `${x + 1} / span ${width}`, gridRow: `${y + 1} / span ${height}` }}
+              onClick={() => onSelect(item.id)}
+              title={itemDisplayName(item)}
+              key={item.id}
+            >
+              {highlighted && <em className="new-drop-badge">New</em>}
+              <span>{item.baseName.split(" ").map((word) => word[0]).join("")}</span>
+              {height > 1 && <small>{item.baseName}</small>}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
-
