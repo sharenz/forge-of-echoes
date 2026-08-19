@@ -22,12 +22,12 @@ export const CHARACTER_EQUIPMENT_SLOTS = [
   { id: "helmet", label: "Helmet", accepts: "helmet" },
   { id: "amulet", label: "Amulet", accepts: "amulet" },
   { id: "mainHand", label: "Main Hand", accepts: "mainHand" },
-  { id: "offHand", label: "Off Hand", accepts: "offHand" },
   { id: "chest", label: "Chest", accepts: "chest" },
+  { id: "offHand", label: "Off Hand", accepts: "offHand" },
   { id: "gloves", label: "Gloves", accepts: "gloves" },
   { id: "ringLeft", label: "Ring I", accepts: "ring" },
-  { id: "ringRight", label: "Ring II", accepts: "ring" },
   { id: "belt", label: "Belt", accepts: "belt" },
+  { id: "ringRight", label: "Ring II", accepts: "ring" },
   { id: "boots", label: "Boots", accepts: "boots" },
 ] as const satisfies readonly CharacterEquipmentSlotDefinition[];
 

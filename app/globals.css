@@ -671,14 +671,23 @@ body:has(.pixel-shell) { overflow: hidden; }
 .character-panel-tabs button.active small { color: #b79b80; }
 
 .inventory-window { min-height: 590px; padding: 22px; display: grid; grid-template-columns: minmax(390px, 430px) minmax(480px, 1fr); gap: 24px; background: radial-gradient(circle at 15% 35%, #3923151c, transparent 34%); }
-.equipment-paperdoll { position: relative; min-height: 590px; padding: 64px 17px 18px; border: 1px solid #5a4230; background: radial-gradient(ellipse at 50% 43%, #332315, #0d0b09 66%); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: ". helmet ." "amulet chest ringLeft" "mainHand chest offHand" "gloves belt ringRight" ". boots ."; grid-template-rows: repeat(5, minmax(86px, auto)); gap: 8px; align-content: center; box-shadow: inset 0 0 70px #000, 0 12px 38px #0007; }
-.equipment-paperdoll::before { content: ""; position: absolute; left: 50%; top: 127px; width: 118px; height: 330px; border: 1px solid #7e59353d; border-radius: 46% 46% 20% 20%; background: radial-gradient(ellipse at 50% 28%, #c46c3021, transparent 58%); transform: translateX(-50%); box-shadow: inset 0 0 75px #9a4f2425, 0 0 42px #d66b2520; }
-.equipment-paperdoll::after { content: ""; position: absolute; left: 50%; top: 194px; width: 58px; height: 58px; border: 1px solid #8c5e38; transform: translateX(-50%) rotate(45deg); box-shadow: inset 0 0 24px #ae59252e, 0 0 22px #c66d2930; }
-.paperdoll-heading { position: absolute; z-index: 2; left: 18px; right: 18px; top: 15px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.equipment-paperdoll { position: relative; min-height: 590px; overflow: hidden; padding: 74px 18px 24px; border: 1px solid #6a4932; background: radial-gradient(ellipse at 50% 42%, #4a2b1747, transparent 40%), radial-gradient(circle at 50% 62%, #9f4a1b12, transparent 48%), linear-gradient(145deg, #17110d, #080706 72%); display: grid; grid-template-columns: 64px 62px 86px 62px 64px; grid-template-areas: ". . helmet amulet ." "mainHand . chest . offHand" "mainHand gloves chest . offHand" "mainHand . chest . offHand" ". ringLeft belt ringRight ." ". . boots . ."; grid-template-rows: 64px repeat(3, 76px) 60px 64px; justify-content: center; align-content: center; gap: 8px; box-shadow: inset 0 0 86px #000, inset 0 0 0 4px #24170f, 0 12px 38px #0007; }
+.equipment-paperdoll::before { content: ""; position: absolute; z-index: 0; left: 50%; top: 51%; width: 245px; height: 420px; border: 1px solid #83533335; border-radius: 48% 48% 28% 28%; background: radial-gradient(ellipse, #b45c2721, transparent 66%); transform: translate(-50%, -50%); box-shadow: inset 0 0 75px #9a4f2420, 0 0 46px #d66b2520; }
+.equipment-paperdoll::after { content: ""; position: absolute; z-index: 0; left: 50%; top: 52%; width: 292px; height: 292px; border: 1px solid #8052352e; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: inset 0 0 0 18px #08070655, inset 0 0 48px #b45f2420; }
+.paperdoll-character { position: absolute; z-index: 1; left: 50%; top: 51%; width: 190px; height: 370px; pointer-events: none; transform: translate(-50%, -50%); }
+.paperdoll-character::before { content: ""; position: absolute; left: 50%; bottom: 20px; width: 148px; height: 30px; border-radius: 50%; background: #000b; filter: blur(8px); transform: translateX(-50%); }
+.paperdoll-character > i { position: absolute; inset: 0; display: block; background-position: center; background-repeat: no-repeat; background-size: contain; image-rendering: pixelated; opacity: .58; filter: drop-shadow(0 8px 8px #000) drop-shadow(0 0 12px #d16a303d) saturate(.88); }
+.paperdoll-amazon .paperdoll-character > i { background-image: url("/player-amazon-v4.png"); }
+.paperdoll-barbarian .paperdoll-character > i { background-image: url("/player-barbarian-v4.png"); }
+.paperdoll-sorceress .paperdoll-character > i { background-image: url("/player-sorceress-v4.png"); }
+.paperdoll-heading { position: absolute; z-index: 4; left: 18px; right: 18px; top: 15px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .paperdoll-heading .eyebrow { color: #db8e4c; font: 17px Georgia, serif; }
-.paperdoll-heading small { color: #9d8b77; font-size: 11px; text-align: right; }
-.equipment-slot { position: relative; z-index: 1; min-height: 86px; padding: 22px 6px 7px; border: 1px solid #5a4533; background: linear-gradient(145deg, rgba(24,19,15,.96), rgba(10,8,7,.92)); display: grid; place-items: center; transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, opacity .16s ease; box-shadow: inset 0 0 18px #0008; }
-.equipment-slot:hover { border-color: #846043; box-shadow: inset 0 0 24px #9b55221d; }
+.paperdoll-heading small { color: #9d8b77; font-size: 11px; text-align: right; text-transform: capitalize; }
+.equipment-slot { position: relative; z-index: 3; min-width: 0; min-height: 0; padding: 21px 5px 5px; overflow: visible; border: 1px solid #63482f; border-radius: 2px; background: linear-gradient(145deg, rgba(31,22,16,.82), rgba(7,6,5,.74)); display: grid; place-items: center; transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, opacity .16s ease; box-shadow: inset 0 0 18px #000a, 0 3px 9px #0008; }
+.equipment-slot::before, .equipment-slot::after { content: ""; position: absolute; width: 8px; height: 8px; pointer-events: none; }
+.equipment-slot::before { left: -1px; top: -1px; border-left: 2px solid #a76b3d; border-top: 2px solid #a76b3d; }
+.equipment-slot::after { right: -1px; bottom: -1px; border-right: 2px solid #553a29; border-bottom: 2px solid #553a29; }
+.equipment-slot:hover { z-index: 5; border-color: #b97846; background: linear-gradient(145deg, rgba(58,35,21,.9), rgba(12,8,6,.86)); box-shadow: inset 0 0 24px #9b552233, 0 0 15px #b95d2730; }
 .equipment-slot.slot-helmet { grid-area: helmet; }
 .equipment-slot.slot-amulet { grid-area: amulet; }
 .equipment-slot.slot-ringLeft { grid-area: ringLeft; }
@@ -691,9 +700,15 @@ body:has(.pixel-shell) { overflow: hidden; }
 .equipment-slot.slot-boots { grid-area: boots; }
 .equipment-slot.drop-compatible { border-color: #da8b49; background: rgba(66,38,19,.94); box-shadow: inset 0 0 24px #c55d252e, 0 0 12px #d4793340; }
 .equipment-slot.drop-incompatible { opacity: .42; }
-.equipment-slot > small { position: absolute; top: 7px; left: 8px; color: #8e7d6a; font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
-.equipment-slot > span { color: #4f463d; font: 10px Georgia, serif; }
-.equipment-slot .item-card { width: 100%; min-height: 59px; }
+.equipment-slot > small { position: absolute; z-index: 4; top: 5px; left: 6px; right: 5px; overflow: hidden; color: #a88a6c; font-size: 8px; letter-spacing: .07em; line-height: 11px; text-align: center; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.equipment-slot > span { width: 15px; height: 15px; border: 1px solid #5b4938; font-size: 0; opacity: .58; transform: rotate(45deg); box-shadow: inset 0 0 7px #000; }
+.equipment-slot .item-card { --equipped-rarity: #b8afa3; position: absolute; inset: 19px 4px 4px; width: auto; min-height: 0; padding: 0; overflow: visible; border: 1px solid color-mix(in srgb, var(--equipped-rarity), transparent 45%); border-radius: 2px; background: radial-gradient(circle, color-mix(in srgb, var(--equipped-rarity), transparent 82%), #090706a8 72%); box-shadow: inset 0 0 15px #000a, 0 0 8px color-mix(in srgb, var(--equipped-rarity), transparent 80%); }
+.equipment-slot .item-card.rarity-magic { --equipped-rarity: #749cff; }
+.equipment-slot .item-card.rarity-rare { --equipped-rarity: #ffe06a; }
+.equipment-slot .item-card.rarity-unique { --equipped-rarity: #dc7b3f; }
+.equipment-slot .item-card:hover, .equipment-slot .item-card.selected { border-color: var(--equipped-rarity); background: radial-gradient(circle, color-mix(in srgb, var(--equipped-rarity), transparent 70%), #120b08d9 76%); box-shadow: inset 0 0 18px #0008, 0 0 13px color-mix(in srgb, var(--equipped-rarity), transparent 55%); }
+.equipment-slot .item-card > :not(.item-card-icon) { display: none; }
+.equipment-slot .item-card .item-card-icon { inset: 4px; width: auto; height: auto; opacity: .98; transform: none; filter: drop-shadow(0 4px 4px #000) saturate(1.02); }
 .inventory-containers { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
 .inventory-overview { min-height: 92px; padding: 13px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; border: 1px solid #5b4432; background: linear-gradient(120deg, #25180f, #100d0a 65%); box-shadow: inset 0 0 32px #ba572014; }
 .inventory-overview > div { min-width: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; border: 1px solid #493629; background: #0d0b09a8; }
@@ -1442,7 +1457,8 @@ body:has(.pixel-shell) { overflow: hidden; }
   .character-panel-tabs button small { display: none; }
   .character-panel-tabs button strong { font-size: 13px; }
   .inventory-window { display: flex; flex-direction: column; padding: 12px; }
-  .equipment-paperdoll { min-height: 550px; grid-template-rows: repeat(5, minmax(78px, auto)); }
+  .equipment-paperdoll { min-height: 530px; padding: 68px 10px 18px; grid-template-columns: 50px 48px 68px 48px 50px; grid-template-rows: 58px repeat(3, 68px) 54px 58px; gap: 6px; }
+  .paperdoll-character { width: 160px; height: 330px; }
   .inventory-overview { grid-template-columns: 1fr 1fr; }
   .inventory-overview > div:last-child { grid-column: 1 / -1; }
   .attributes-interface, .skill-tree-interface { padding: 12px; }

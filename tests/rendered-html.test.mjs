@@ -217,6 +217,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(skillConfig, /maxCharges: 3/);
   assert.match(world, /riftCharges \+= 1/);
   assert.match(inventoryPanel, /dropIntoSlot/);
+  assert.match(inventoryPanel, /paperdoll-character/);
+  assert.match(inventoryPanel, /paperdoll-\$\{profile\.character\.classId/);
+  assert.match(globalStyles, /player-sorceress-v4\.png/);
+  assert.match(globalStyles, /\.equipment-slot \.item-card > :not\(\.item-card-icon\)/);
   assert.match(inventoryPanel, /Drop to ground/);
   assert.match(inventoryPanel, /onDropToGround/);
   assert.match(globalStyles, /\.inventory-ground-drop/);

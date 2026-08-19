@@ -843,7 +843,7 @@ test("every inventory base declares one stable icon asset", () => {
 test("character equipment exposes ten positions and fills both ring slots independently", () => {
   assert.equal(CHARACTER_EQUIPMENT_SLOTS.length, 10);
   assert.deepEqual(CHARACTER_EQUIPMENT_SLOTS.map((slot) => slot.id), [
-    "helmet", "amulet", "mainHand", "offHand", "chest", "gloves", "ringLeft", "ringRight", "belt", "boots",
+    "helmet", "amulet", "mainHand", "chest", "offHand", "gloves", "ringLeft", "belt", "ringRight", "boots",
   ]);
   const ring = {
     kind: "equipment", id: "ring-a", baseId: "ember-ring", baseName: "Ember Ring", slot: "ring", rarity: "normal", itemLevel: 1,

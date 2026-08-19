@@ -79,8 +79,9 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
 
   return (
     <div className="inventory-window">
-      <div className="equipment-paperdoll">
-        <div className="paperdoll-heading"><span className="eyebrow">Equipped</span><small>Drag gear into a matching slot</small></div>
+      <div className={`equipment-paperdoll paperdoll-${profile.character.classId ?? "amazon"}`}>
+        <div className="paperdoll-heading"><span className="eyebrow">Equipped</span><small>{profile.character.classId ?? "Character"} paper doll · drag to equip</small></div>
+        <div className="paperdoll-character" aria-hidden="true"><i /></div>
         {CHARACTER_EQUIPMENT_SLOTS.map((slot) => {
           const equipped = profile.equipped[slot.id];
           const compatible = Boolean(draggedItem && isEquipmentItem(draggedItem) && equipmentSlotAccepts(slot.id, draggedItem));
