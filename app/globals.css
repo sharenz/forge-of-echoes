@@ -1061,7 +1061,7 @@ body:has(.pixel-shell) { overflow: hidden; }
 .flask-hotkey[data-tooltip]::after { content: attr(data-tooltip); position: absolute; left: 50%; bottom: calc(100% + 9px); width: max-content; padding: 6px 9px; border: 1px solid #715039; border-radius: 3px; background: #100c0afa; color: #dfcbb2; font: 11px Georgia, serif; white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-50%, 4px); transition: .12s ease; }
 .flask-hotkey:hover::after { opacity: 1; transform: translate(-50%, 0); }
 .world-fps { position: absolute; z-index: 3; right: 24px; bottom: 24px; color: #766a5d; font-size: 7px; letter-spacing: .08em; pointer-events: none; }
-.world-experience { position: absolute; z-index: 8; left: 19.15%; right: 19.15%; bottom: 17.1%; height: 3.8%; min-height: 9px; pointer-events: auto; cursor: help; filter: drop-shadow(0 2px 5px #000c); }
+.world-experience { position: absolute; z-index: 8; left: 19.15%; right: 19.15%; bottom: 18.4%; height: 3.8%; min-height: 9px; pointer-events: auto; cursor: help; filter: drop-shadow(0 2px 5px #000c); }
 .world-experience::after { content: attr(data-tooltip); position: absolute; z-index: 20; left: 50%; bottom: calc(100% + 12px); width: max-content; padding: 8px 11px; border: 1px solid #765034; border-radius: 3px; background: rgba(13,9,7,.98); color: #ead8c3; font: 12px Georgia, serif; white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-50%, 5px); transition: opacity .14s ease, transform .14s ease; box-shadow: 0 8px 24px #000c; }
 .world-experience:hover::after,
 .world-experience:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
@@ -1325,7 +1325,7 @@ body:has(.pixel-shell) { overflow: hidden; }
   .skill-icon { inset: 4px; }
   .action-slot[data-tooltip]::after { display: none; }
   .world-fps { display: none; }
-  .world-experience { left: 19.15%; right: 19.15%; bottom: 17.1%; height: 4%; min-height: 6px; }
+  .world-experience { left: 19.15%; right: 19.15%; bottom: 18.4%; height: 4%; min-height: 6px; }
   .world-experience::after { display: none; }
   .world-character-stats { right: 10px; top: 63px; bottom: auto; width: 188px; }
   .world-character-stats > header { padding: 7px 9px; }
