@@ -11,6 +11,8 @@ export interface WorldHudState {
   wave: number;
   enemies: number;
   nextWaveIn: number | null;
+  finalRageIn: number | null;
+  finalRageActive: boolean;
   life: number;
   maxLife: number;
   focus: number;

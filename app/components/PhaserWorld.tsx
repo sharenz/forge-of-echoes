@@ -223,6 +223,9 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
   const displayedMaxLife = mode === "arena" && hud ? hud.maxLife : characterStats?.maxLife ?? 0;
   const displayedMana = mode === "arena" && hud ? hud.focus : characterStats?.maxFocus ?? 0;
   const displayedMaxMana = mode === "arena" && hud ? hud.maxFocus : characterStats?.maxFocus ?? 0;
+  const finalRageProgress = hud?.finalRageIn !== null && hud?.finalRageIn !== undefined
+    ? Math.max(0, Math.min(100, ((ARENA_RULES.finalWaveRageDelaySeconds - hud.finalRageIn) / ARENA_RULES.finalWaveRageDelaySeconds) * 100))
+    : 100;
 
   return (
     <main className={`pixel-shell mode-${mode} ${paused ? "world-input-paused" : ""}`}>
@@ -231,7 +234,18 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
       {rendererError && <div className="world-loader world-error"><strong>The game renderer could not start</strong><small>Enable WebGL or Canvas support, then reload.</small></div>}
       {mode === "arena" && hud && (
         <>
-          <div className="world-wave"><span>Wave</span><strong>{hud.wave}<em>/{arenaBalance?.waves ?? ARENA_RULES.totalWaves}</em></strong><small>{hud.enemies} remain{hud.nextWaveIn !== null ? ` · next in ${Math.ceil(hud.nextWaveIn)}s` : " · final wave"}</small></div>
+          <div className={`world-wave ${hud.finalRageActive ? "is-enraged" : hud.finalRageIn !== null ? "rage-countdown" : ""}`} role="status" aria-live="polite">
+            <span>{hud.finalRageActive ? "Final Rage" : "Wave"}</span>
+            <strong>{hud.wave}<em>/{arenaBalance?.waves ?? ARENA_RULES.totalWaves}</em></strong>
+            <small>{hud.enemies} remain{hud.nextWaveIn !== null
+              ? ` · next in ${Math.ceil(hud.nextWaveIn)}s`
+              : hud.finalRageActive
+                ? " · all monsters are hunting"
+                : hud.finalRageIn !== null
+                  ? ` · rage in ${Math.ceil(hud.finalRageIn)}s`
+                  : " · final wave"}</small>
+            {hud.finalRageIn !== null && <i className="final-rage-meter" aria-hidden="true"><b style={{ width: `${finalRageProgress}%` }} /></i>}
+          </div>
           <div className="world-loot"><span>{hud.lootCollected} collected</span><strong>{hud.groundDrops}</strong><small>drops on ground</small></div>
           {hud.arenaComplete && (
             <div className="arena-complete-banner" role="status" aria-live="polite">

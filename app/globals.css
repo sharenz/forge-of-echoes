@@ -1152,6 +1152,13 @@ body:has(.pixel-shell) { overflow: hidden; }
 .world-wave strong { color: #f2b06a; font: 30px Georgia, serif; }
 .world-wave strong em { color: #766655; font-size: 13px; font-style: normal; }
 .world-wave small { display: block; color: #a89886; font-size: 8px; }
+.world-wave.rage-countdown { border-color: #8d4a32; box-shadow: 0 12px 35px #0009, inset 0 0 24px #8c2d1617; }
+.world-wave.rage-countdown > span { color: #d87b58; }
+.final-rage-meter { position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; overflow: hidden; background: #1b0b08; }
+.final-rage-meter > b { display: block; height: 100%; background: linear-gradient(90deg, #7a1f18, #f05e35); box-shadow: 0 0 9px #e43e27; transition: width .2s linear; }
+.world-wave.is-enraged { border-color: #db4f32; background: linear-gradient(145deg, rgba(48,10,8,.94), rgba(12,6,5,.94)); box-shadow: 0 12px 35px #0009, 0 0 28px #d52b2138, inset 0 0 26px #c72a1d2b; animation: final-rage-pulse .8s ease-in-out infinite alternate; }
+.world-wave.is-enraged > span, .world-wave.is-enraged strong { color: #ff7655; text-shadow: 0 0 12px #e63525; }
+.world-wave.is-enraged small { color: #f0a08b; text-transform: uppercase; }
 .world-loot { position: absolute; z-index: 3; left: 25px; top: 24px; min-width: 150px; padding: 10px 14px; border-left: 2px solid #d99a4b; background: rgba(9,8,7,.87); box-shadow: 0 12px 30px #0008; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 3px 12px; }
 .world-loot span { color: #d8c6ae; font-size: 9px; text-transform: uppercase; }
 .world-loot strong { grid-row: 1 / span 2; grid-column: 2; color: #ffcf74; font: 24px Georgia, serif; }
@@ -1404,6 +1411,7 @@ body:has(.pixel-shell) { overflow: hidden; }
 @keyframes globe-surface { 50% { transform: translateX(3%) scaleY(.72); } }
 @keyframes experience-shimmer { from { transform: translateX(-45%); } to { transform: translateX(115%); } }
 @keyframes ward-slot-active { to { filter: brightness(1.2); } }
+@keyframes final-rage-pulse { to { border-color: #ff8a58; box-shadow: 0 12px 35px #0009, 0 0 38px #e43b2a5c, inset 0 0 34px #d62f2238; } }
 
 @media (max-width: 1200px) {
   .inventory-window { grid-template-columns: minmax(340px, 390px) minmax(430px, 1fr); }

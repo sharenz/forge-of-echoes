@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { ACTIVE_SKILLS, BASIC_ATTACK, isArenaCleared, rollHitDamage, shouldSpawnNextWave, type ArenaSummary, type MapDrop, type RolledHitDamage } from "../game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, isArenaCleared, rollHitDamage, shouldActivateFinalWaveRage, shouldSpawnNextWave, type ArenaSummary, type MapDrop, type RolledHitDamage } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import {
   CHARACTER_ANIMATIONS,
@@ -200,6 +200,7 @@ class CraftyScene extends Phaser.Scene {
   private elapsedSeconds = 0;
   private hudElapsed = 0;
   private arenaComplete = false;
+  private finalWaveRageActive = false;
   private returnPortal: ReturnPortalState | null = null;
   private returnPortalUsed = false;
   private arenaFailed = false;
@@ -427,14 +428,19 @@ class CraftyScene extends Phaser.Scene {
   }
 
   getHud(): WorldHudState {
+    const finalWave = this.options.arenaBalance?.waves ?? ARENA_RULES.totalWaves;
     return {
       fps: Math.round(this.game.loop.actualFps || 0),
       mode: this.options.mode,
       wave: this.wave,
       enemies: this.enemies.length,
-      nextWaveIn: this.wave < (this.options.arenaBalance?.waves ?? ARENA_RULES.totalWaves)
+      nextWaveIn: this.wave < finalWave
         ? Math.max(0, ARENA_RULES.waveSpawnIntervalSeconds - this.waveElapsedSeconds)
         : null,
+      finalRageIn: this.wave === finalWave && !this.finalWaveRageActive && !this.arenaComplete
+        ? Math.max(0, ARENA_RULES.finalWaveRageDelaySeconds - this.waveElapsedSeconds)
+        : null,
+      finalRageActive: this.finalWaveRageActive,
       life: Math.max(0, this.life),
       maxLife: this.options.arenaBalance?.maxLife ?? 100,
       focus: this.focus,
@@ -551,6 +557,7 @@ class CraftyScene extends Phaser.Scene {
 
     if (this.options.mode === "arena") {
       if (this.keys?.attack.isDown || this.input.activePointer.isDown) this.tryBasicAttack();
+      this.updateFinalWaveRage();
       this.updateEnemies(delta);
       this.updateEnemyProjectiles(delta);
       this.rebuildSpatialBuckets();
@@ -985,6 +992,7 @@ class CraftyScene extends Phaser.Scene {
   private startWave(wave: number): void {
     this.wave = wave;
     this.waveElapsedSeconds = 0;
+    this.finalWaveRageActive = false;
     const balance = this.options.arenaBalance;
     if (!balance) throw new Error("Arena balance is required before spawning a wave");
     const waveStats = balance.waveStats[wave - 1];
@@ -1071,6 +1079,7 @@ class CraftyScene extends Phaser.Scene {
       const dx = this.player.x - enemy.x;
       const dy = this.player.y - enemy.y;
       const distance = Math.hypot(dx, dy) || 1;
+      if (this.finalWaveRageActive) enemy.aggro = true;
       if (distance < archetype.aggroRange) enemy.aggro = true;
       if (enemy.jumpRemaining > 0 && archetype.jump) {
         enemy.jumpRemaining = Math.max(0, enemy.jumpRemaining - delta);
@@ -1124,6 +1133,17 @@ class CraftyScene extends Phaser.Scene {
         .setFlipX(dx < 0)
         .setDepth(Math.round(enemy.y / 10) + 10);
     }
+  }
+
+  private updateFinalWaveRage(): void {
+    if (this.arenaComplete || this.enemies.length === 0) return;
+    const finalWave = this.options.arenaBalance?.waves ?? ARENA_RULES.totalWaves;
+    if (!shouldActivateFinalWaveRage(this.wave, finalWave, this.waveElapsedSeconds, this.finalWaveRageActive)) return;
+    this.finalWaveRageActive = true;
+    for (const enemy of this.enemies) enemy.aggro = true;
+    this.cameras.main.flash(320, 142, 25, 14, false);
+    if (this.player) this.emitRadialVfx(this.player.x, this.player.y, 18, 0xe4472f, 130, 0.5);
+    this.options.onHud(this.getHud());
   }
 
   private spawnEnemyProjectile(enemy: EnemyState, directionX: number, directionY: number, speed: number, damageEffectiveness: number): void {

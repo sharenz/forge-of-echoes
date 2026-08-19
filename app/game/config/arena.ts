@@ -4,6 +4,7 @@ import type { ScaledModifierDefinition } from "./schema";
 export const ARENA_RULES = {
   totalWaves: 6,
   waveSpawnIntervalSeconds: 30,
+  finalWaveRageDelaySeconds: 30,
   baseFocusRegen: 8,
   baseItemQuantity: 100,
   baseItemRarity: 100,

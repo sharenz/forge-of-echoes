@@ -118,6 +118,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(phaserWorld, /ResourceGlobe kind="life"/);
   assert.doesNotMatch(world, /groundDrops\.length > 0/);
   assert.match(world, /waveElapsedSeconds/);
+  assert.match(world, /updateFinalWaveRage/);
+  assert.match(world, /enemy\.aggro = true/);
+  assert.match(phaserWorld, /rage in \$\{Math\.ceil\(hud\.finalRageIn\)\}s/);
+  assert.match(globalStyles, /\.world-wave\.is-enraged/);
   assert.match(world, /rollHitDamage/);
   assert.doesNotMatch(world, /0\.85 \+ .*attackDamage/);
   assert.doesNotMatch(world, /enemyHealthMultiplier|enemySpeedMultiplier|ARENA_MONSTER\.baseLife \+ wave/);

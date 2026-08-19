@@ -29,7 +29,7 @@ import {
 import { calculateCharacterStats, formatModifier, formatModifierWithRollRange, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
 import { purchaseFlask, purchaseMap } from "../app/game/merchant";
-import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, isArenaCleared, rollHitDamage, shouldSpawnNextWave } from "../app/game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, isArenaCleared, rollHitDamage, shouldActivateFinalWaveRage, shouldSpawnNextWave } from "../app/game/combat";
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
 import { dropChances, equipmentDropPresentation, rollEquipmentRarity, rollFlaskDrop } from "../app/game/loot";
@@ -679,6 +679,14 @@ test("waves advance when cleared or after the configured timeout", () => {
   assert.equal(isArenaCleared(5, 6, 0), false);
   assert.equal(isArenaCleared(6, 6, 1), false);
   assert.equal(isArenaCleared(6, 6, 0), true);
+});
+
+test("the final wave enrages every survivor after its configured countdown", () => {
+  assert.equal(ARENA_RULES.finalWaveRageDelaySeconds, 30);
+  assert.equal(shouldActivateFinalWaveRage(5, 6, 60, false), false);
+  assert.equal(shouldActivateFinalWaveRage(6, 6, 29.99, false), false);
+  assert.equal(shouldActivateFinalWaveRage(6, 6, 30, false), true);
+  assert.equal(shouldActivateFinalWaveRage(6, 6, 60, true), false);
 });
 
 test("map, tier, wave, and monster scaling all resolve through typed arena modifiers", () => {

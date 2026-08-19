@@ -74,6 +74,12 @@ export function isArenaCleared(currentWave: number, totalWaves: number, remainin
   return currentWave >= totalWaves && remainingEnemies === 0;
 }
 
+export function shouldActivateFinalWaveRage(currentWave: number, totalWaves: number, waveElapsedSeconds: number, alreadyActive: boolean): boolean {
+  return !alreadyActive
+    && currentWave === totalWaves
+    && waveElapsedSeconds >= ARENA_RULES.finalWaveRageDelaySeconds;
+}
+
 /** Character damage is already fully resolved (flat → increased → more). */
 export function calculateHitDamage(attackDamage: number, damageEffectiveness: number): number {
   if (!Number.isFinite(attackDamage) || attackDamage < 0) throw new Error("Attack damage must be a finite non-negative number");
