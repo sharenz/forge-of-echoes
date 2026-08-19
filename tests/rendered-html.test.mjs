@@ -208,11 +208,13 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(inventoryGrid, /event\.ctrlKey && onQuickMove/);
   assert.match(inventoryGrid, /draggedOffset \?\? readOffset/);
   assert.match(inventoryGrid, /grid-drop-preview/);
+  assert.match(inventoryGrid, /container-\$\{container\.id\}/);
   assert.match(inventoryGrid, /<ItemIcon item=\{item\}/);
   assert.match(itemIcon, /inventoryItemIcon\(item\)/);
   assert.match(itemTooltip, /tooltip-item-icon/);
   assert.match(itemVisuals, /CURRENCY_DEFINITIONS\[item\.baseId\]\.icon/);
   assert.match(globalStyles, /\.poe-grid-item > \.item-icon/);
+  assert.match(globalStyles, /\.poe-grid-wrap\.container-backpack \.poe-grid/);
   assert.doesNotMatch(inventoryGrid, /packItems/);
   assert.match(itemContainer, /transferItem/);
   assert.match(stashEngine, /insertItemsIntoStash/);
