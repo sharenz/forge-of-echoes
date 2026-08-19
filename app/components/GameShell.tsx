@@ -10,6 +10,7 @@ import { isCurrencyItem, isEquipmentItem, isMapItem, profileCurrencyAmounts, con
 import { consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, storePickedUpFlask, unloadFlaskFromBelt } from "../game/flasks";
 import { containerItems, findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../game/item-container";
 import { addFireAffix, rerollAffixValues } from "../game/items";
+import { takeProfileItem } from "../game/item-drop";
 import { addMapModifier, rerollMap } from "../game/maps";
 import { purchaseFlask, purchaseMap } from "../game/merchant";
 import { applyRunResult, createCharacter, loadProfile, saveProfile } from "../game/profile";
@@ -24,7 +25,7 @@ import { InventoryPanel } from "./InventoryPanel";
 import { ItemWorkbench } from "./ItemWorkbench";
 import { MapWorkshop } from "./MapWorkshop";
 import { MapMerchant } from "./MapMerchant";
-import { PhaserWorld } from "./PhaserWorld";
+import { PhaserWorld, type PhaserWorldHandle } from "./PhaserWorld";
 import { SkillTreePanel } from "./SkillTreePanel";
 
 type HideoutPanel = CharacterPanelView | "stash" | "bench" | "maps" | "merchant" | null;
@@ -53,6 +54,7 @@ export function GameShell() {
   const [runFreshItemIds, setRunFreshItemIds] = useState<string[]>([]);
   const runLootRef = useRef<RunLootLedger>(emptyRunLoot());
   const profileRef = useRef<PlayerProfile | null>(null);
+  const worldRef = useRef<PhaserWorldHandle>(null);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -136,7 +138,7 @@ export function GameShell() {
   if (screen === "arena" && profile.openedMap && arenaBalance) {
     const characterPanelOpen = isCharacterPanel(panel);
     return (
-      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onFlaskLoad={loadFlask} onLootPickup={collectMapDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena} onPlayerDeath={failArena}>
+      <PhaserWorld ref={worldRef} mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onFlaskLoad={loadFlask} onLootPickup={collectGroundDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena} onPlayerDeath={failArena}>
         <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(characterPanelOpen ? null : "inventory")}>Character <kbd>I</kbd></button>
         <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
         {characterPanelOpen && (
@@ -144,7 +146,7 @@ export function GameShell() {
             <section className={`world-panel character-panel panel-${panel}`} aria-label={`Character ${panel}`}>
               <header><div><span>Combat paused · character changes apply immediately</span><h2>{characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></header>
               <CharacterPanelTabs active={panel} onChange={setPanel} />
-              {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={selectedItemId} freshItemIds={runFreshItemIds} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} onLoadFlask={loadFlask} onUnloadFlask={unloadFlask} />}
+              {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={selectedItemId} freshItemIds={runFreshItemIds} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} onLoadFlask={loadFlask} onUnloadFlask={unloadFlask} onDropToGround={dropItemToGround} />}
               {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation!.breakdown} onAllocate={allocateAttribute} />}
               {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={allocateSkill} />}
             </section>
@@ -332,9 +334,22 @@ export function GameShell() {
     setProfile(next);
   }
 
-  function collectMapDrop(drop: MapDrop): boolean {
+  function collectGroundDrop(drop: MapDrop): boolean {
     const current = profileRef.current;
-    if (!current?.openedMap) return false;
+    if (!current) return false;
+    if (drop.kind === "inventory") {
+      const inserted = insertItem(current.inventory, drop.item);
+      if (inserted.unplaced.length > 0) {
+        setNotice("Backpack full — make room before collecting this item.");
+        return false;
+      }
+      const next = { ...current, inventory: inserted.container };
+      profileRef.current = next;
+      setProfile(next);
+      setSelectedItemId(drop.item.id);
+      return true;
+    }
+    if (!current.openedMap) return false;
     if (drop.kind === "flask") {
       const flask = createFlaskStack(drop.flask, drop.amount);
       const stored = storePickedUpFlask(current, flask);
@@ -371,6 +386,34 @@ export function GameShell() {
     setRunFreshItemIds([...runLootRef.current.freshItemIds]);
     if (drop.kind === "equipment") setSelectedItemId(item.id);
     return true;
+  }
+
+  function dropItemToGround(itemId: string) {
+    const current = profileRef.current;
+    if (!current) return;
+    const taken = takeProfileItem(current, itemId);
+    if (!taken) {
+      setNotice("That item is no longer available.");
+      return;
+    }
+    if (!worldRef.current?.dropItem(taken.item)) {
+      setNotice("There is no safe place to drop that item here.");
+      return;
+    }
+    profileRef.current = taken.profile;
+    setProfile(taken.profile);
+    setSelectedItemId(null);
+    runLootRef.current = {
+      ...runLootRef.current,
+      freshItemIds: runLootRef.current.freshItemIds.filter((id) => id !== itemId),
+    };
+    setRunFreshItemIds([...runLootRef.current.freshItemIds]);
+    const label = taken.item.kind === "equipment" || taken.item.kind === "map"
+      ? taken.item.baseName
+      : taken.item.kind === "flask"
+        ? "Flask stack"
+        : "Currency stack";
+    setNotice(`${label} dropped beside you.`);
   }
 
   function leaveArena() {
@@ -572,7 +615,7 @@ export function GameShell() {
   }
 
   return (
-    <PhaserWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onFlaskLoad={loadFlask} onStation={handleStation}>
+    <PhaserWorld ref={worldRef} mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onFlaskLoad={loadFlask} onLootPickup={collectGroundDrop} onStation={handleStation}>
       <header className="hideout-hud">
         <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
         <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId].name}</small></div></div>
@@ -596,7 +639,7 @@ export function GameShell() {
             {panel === "merchant" && <MapMerchant scrap={currencies.scrap} onBuy={buyMap} onBuyFlask={buyFlask} />}
             {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} currencies={currencies} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
             {(panel === "inventory" || panel === "stash") && (
-              <InventoryPanel profile={profile} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} onLoadFlask={loadFlask} onUnloadFlask={unloadFlask} />
+              <InventoryPanel profile={profile} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} onLoadFlask={loadFlask} onUnloadFlask={unloadFlask} onDropToGround={dropItemToGround} />
             )}
             {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation!.breakdown} onAllocate={allocateAttribute} />}
             {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={allocateSkill} />}

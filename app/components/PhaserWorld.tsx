@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type CSSProperties } from "react";
 import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import { FLASK_DEFINITIONS, type FlaskDefinition } from "../game/config/flasks";
 import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "../game/config/progression";
-import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, StatKey, StatModifier } from "../game/domain";
+import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, InventoryItem, StatKey, StatModifier } from "../game/domain";
 import { resolveSkillDefinition } from "../game/skills";
 import type { CharacterStatCalculation, StatResolution } from "../game/stats";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
@@ -29,6 +29,10 @@ interface PhaserWorldProps {
   onFlaskUse?: (slotIndex: number) => FlaskDefinition | null;
   onFlaskLoad?: (itemId: string, slotIndex: number) => void;
   children?: React.ReactNode;
+}
+
+export interface PhaserWorldHandle {
+  dropItem: (item: InventoryItem) => boolean;
 }
 
 interface CharacterStatRowProps {
@@ -99,7 +103,7 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
 
 const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null, null];
 
-export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, onFlaskUse, onFlaskLoad, children }: PhaserWorldProps) {
+export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, onFlaskUse, onFlaskLoad, children }, ref) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
   const novaLevel = characterProgress?.skillLevels.nova ?? 1;
   const dashLevel = characterProgress?.skillLevels.dash ?? 1;
@@ -121,6 +125,10 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
   const [flaskDropSlot, setFlaskDropSlot] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [rendererError, setRendererError] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    dropItem: (item) => runtimeRef.current?.dropInventoryItem(item) ?? false,
+  }), []);
 
   useEffect(() => {
     stationCallbackRef.current = onStation;
@@ -341,4 +349,4 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
       {children}
     </main>
   );
-}
+});

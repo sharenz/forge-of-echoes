@@ -12,13 +12,15 @@ import {
   type CharacterSpriteSheetId,
 } from "../game/config/character-animations";
 import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
+import { CURRENCY_DEFINITIONS } from "../game/config/currencies";
 import { FLASK_DEFINITIONS, type FlaskDefinition } from "../game/config/flasks";
 import { MONSTER_PACK_RULES } from "../game/config/monster-packs";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
 import type { SkillDefinition } from "../game/config/schema";
-import type { CharacterClassId, DamageType, FlaskBelt, MonsterRarity, SkillLevels } from "../game/domain";
+import type { CharacterClassId, DamageType, FlaskBelt, InventoryItem, MonsterRarity, SkillLevels } from "../game/domain";
 import { monsterPackModifierNames, resolveMonsterStats, rollMonsterPack } from "../game/encounters";
 import { advanceFlaskRecovery } from "../game/flasks";
+import { isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "../game/inventory";
 import { equipmentDropPresentation, dropChances, rollEquipmentRarity, rollFlaskDrop } from "../game/loot";
 import { generateEquipment } from "../game/items";
 import { monsterExperienceReward } from "../game/progression";
@@ -257,12 +259,12 @@ class CraftyScene extends Phaser.Scene {
     }
 
     this.createPlayer();
+    this.dropPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: 300, runChildUpdate: false });
     if (this.options.mode === "hideout") this.buildHideoutStations();
     if (this.options.mode === "arena") {
       this.enemyPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: 1000, runChildUpdate: false });
       this.projectilePool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: PROJECTILE_POOL_SIZE, runChildUpdate: false });
       this.enemyProjectilePool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: ENEMY_PROJECTILE_POOL_SIZE, runChildUpdate: false });
-      this.dropPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: 300, runChildUpdate: false });
       this.corpsePool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: ARENA_RULES.corpses.maximumVisible, runChildUpdate: false });
       this.vfxPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: VFX_PARTICLE_POOL_SIZE, runChildUpdate: false });
       this.enemyHealthBars = this.add.graphics().setDepth(470);
@@ -393,6 +395,19 @@ class CraftyScene extends Phaser.Scene {
       this.focus -= this.resolvedFlameWave.focusCost;
       this.flameWaveCooldown = this.resolvedFlameWave.cooldown;
     }
+  }
+
+  dropInventoryItem(item: InventoryItem): boolean {
+    if (!this.player || this.options.mode === "class-select") return false;
+    const worldSize = this.options.mode === "arena" ? MAP_SIZE : VIEW_SIZE;
+    const direction = characterDirectionVector(this.playerAnimator?.currentDirection ?? "south");
+    let x = Phaser.Math.Clamp(this.player.x + direction.x * 64, 24, worldSize - 24);
+    let y = Phaser.Math.Clamp(this.player.y + direction.y * 64, 24, worldSize - 24);
+    if (Math.hypot(this.player.x - x, this.player.y - y) < 48) {
+      x = Phaser.Math.Clamp(this.player.x - direction.x * 64, 24, worldSize - 24);
+      y = Phaser.Math.Clamp(this.player.y - direction.y * 64, 24, worldSize - 24);
+    }
+    return this.spawnGroundDrop(x, y, { kind: "inventory", item });
   }
 
   useFlask(slotIndex: number): void {
@@ -544,10 +559,10 @@ class CraftyScene extends Phaser.Scene {
       this.updateVfxParticles(delta);
       this.updateCorpses(delta);
       this.renderEnemyHealth();
-      this.updateGroundDrops(delta);
       this.advanceWaveIfReady();
       this.updateReturnPortal(delta);
     }
+    this.updateGroundDrops(delta);
 
     this.hudElapsed += delta;
     if (this.hudElapsed >= 0.2) {
@@ -594,6 +609,8 @@ class CraftyScene extends Phaser.Scene {
     this.createDropTexture("drop-scrap", 0xc17a42, 0xf1c071);
     this.createDropTexture("drop-essence", 0x6c4ca4, 0xc6a5ff);
     this.createDropTexture("drop-mapDust", 0x317f89, 0x92e4df);
+    this.createDropTexture("drop-currency", 0x74572e, 0xd9b66d);
+    this.createDropTexture("drop-map", 0x725526, 0xf0ce72);
     this.createDropTexture("drop-weak-health-flask", 0x7e171d, 0xff6a58);
     this.createDropTexture("drop-weak-mana-flask", 0x183d82, 0x66b7ff);
     this.createDropTexture("drop-equipment-normal", 0x7c756c, 0xded5c9);
@@ -1465,22 +1482,45 @@ class CraftyScene extends Phaser.Scene {
     this.spawnGroundDrop(enemy.x, enemy.y, drop);
   }
 
-  private spawnGroundDrop(x: number, y: number, drop: MapDrop): void {
-    const equipmentPresentation = drop.kind === "equipment" ? equipmentDropPresentation(drop.item) : null;
-    const texture = drop.kind === "equipment" ? `drop-equipment-${drop.item.rarity}` : drop.kind === "currency" ? `drop-${drop.currency}` : `drop-${drop.flask}`;
+  private spawnGroundDrop(x: number, y: number, drop: MapDrop): boolean {
+    let texture = "drop-currency";
+    let labelText = "ITEM";
+    let color = "#ded5c9";
+    if (drop.kind === "equipment") {
+      const presentation = equipmentDropPresentation(drop.item);
+      texture = `drop-equipment-${drop.item.rarity}`;
+      labelText = presentation.label;
+      color = presentation.color;
+    } else if (drop.kind === "currency") {
+      texture = `drop-${drop.currency}`;
+      labelText = `${drop.amount} ${drop.currency === "mapDust" ? "MAP DUST" : drop.currency.toUpperCase()}`;
+      color = drop.currency === "essence" ? "#c6a5ff" : drop.currency === "mapDust" ? "#92e4df" : "#e2ac70";
+    } else if (drop.kind === "flask") {
+      texture = `drop-${drop.flask}`;
+      labelText = FLASK_DEFINITIONS[drop.flask].name.toUpperCase();
+      color = FLASK_DEFINITIONS[drop.flask].resource === "life" ? "#ff8b78" : "#84c4ff";
+    } else if (isEquipmentItem(drop.item)) {
+      const presentation = equipmentDropPresentation(drop.item);
+      texture = `drop-equipment-${drop.item.rarity}`;
+      labelText = presentation.label;
+      color = presentation.color;
+    } else if (isMapItem(drop.item)) {
+      texture = "drop-map";
+      labelText = `${drop.item.baseName.toUpperCase()} · T${drop.item.tier}`;
+      color = drop.item.rarity === "rare" ? "#ffd867" : drop.item.rarity === "magic" ? "#96b4ff" : "#ded5c9";
+    } else if (isCurrencyItem(drop.item)) {
+      const exactTexture = `drop-${drop.item.baseId}`;
+      texture = this.textures.exists(exactTexture) ? exactTexture : "drop-currency";
+      labelText = `${drop.item.stackSize} ${CURRENCY_DEFINITIONS[drop.item.baseId].name.toUpperCase()}`;
+      color = drop.item.baseId === "essence" ? "#c6a5ff" : drop.item.baseId === "mapDust" ? "#92e4df" : "#e2ac70";
+    } else if (isFlaskItem(drop.item)) {
+      texture = `drop-${drop.item.baseId}`;
+      labelText = `${drop.item.stackSize} ${FLASK_DEFINITIONS[drop.item.baseId].name.toUpperCase()}`;
+      color = FLASK_DEFINITIONS[drop.item.baseId].resource === "life" ? "#ff8b78" : "#84c4ff";
+    }
     const sprite = this.dropPool?.get(x, y, texture) as Phaser.GameObjects.Image | null;
-    if (!sprite) return;
+    if (!sprite) return false;
     sprite.setTexture(texture).setActive(true).setVisible(true).setPosition(x, y).setScale(1.8).setDepth(Math.round(y / 10) + 30);
-    const labelText = drop.kind === "equipment"
-      ? equipmentPresentation!.label
-      : drop.kind === "currency"
-        ? `${drop.amount} ${drop.currency === "mapDust" ? "MAP DUST" : drop.currency.toUpperCase()}`
-        : drop.flask === "weak-health-flask" ? "WEAK HEALTH FLASK" : "WEAK MANA FLASK";
-    const color = drop.kind === "equipment"
-      ? equipmentPresentation!.color
-      : drop.kind === "currency"
-        ? drop.currency === "essence" ? "#c6a5ff" : drop.currency === "mapDust" ? "#92e4df" : "#e2ac70"
-        : drop.flask === "weak-health-flask" ? "#ff8b78" : "#84c4ff";
     const label = this.add.text(x, y - 22, labelText, {
       fontFamily: "monospace",
       fontSize: "14px",
@@ -1489,6 +1529,7 @@ class CraftyScene extends Phaser.Scene {
       padding: { x: 4, y: 2 },
     }).setOrigin(0.5).setDepth(Math.round(y / 10) + 31);
     this.groundDrops.push({ sprite, label, x, y, phase: Phaser.Math.FloatBetween(0, Math.PI * 2), drop });
+    return true;
   }
 
   private updateGroundDrops(delta: number): void {
@@ -1501,7 +1542,7 @@ class CraftyScene extends Phaser.Scene {
       groundDrop.label.setPosition(groundDrop.x, groundDrop.y - 22 + bob);
       if (Math.hypot(this.player.x - groundDrop.x, this.player.y - groundDrop.y) >= 38) continue;
       if (!this.options.onLootPickup(groundDrop.drop)) continue;
-      this.lootCollected += 1;
+      if (groundDrop.drop.kind !== "inventory") this.lootCollected += 1;
       this.groundDrops.splice(index, 1);
       this.dropPool?.killAndHide(groundDrop.sprite);
       groundDrop.label.destroy();
@@ -1666,6 +1707,10 @@ export class PhaserRuntime {
 
   useSkill(skill: "basic" | "nova" | "dash" | "ward" | "flameWave"): void {
     this.scene?.useSkill(skill);
+  }
+
+  dropInventoryItem(item: InventoryItem): boolean {
+    return this.scene?.dropInventoryItem(item) ?? false;
   }
 
   useFlask(slotIndex: number): void {

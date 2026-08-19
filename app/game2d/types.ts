@@ -38,7 +38,7 @@ export interface WorldRuntimeOptions {
   arenaBalance?: ArenaBalance;
   onStation: (station: WorldStation) => void;
   onHud: (state: WorldHudState) => void;
-  /** Return false when the backpack rejected the drop, leaving it in the world. */
+  /** Return false when storage rejected the drop, leaving it in the world. */
   onLootPickup: (drop: MapDrop) => boolean;
   onExperienceGain: (amount: number) => void;
   onArenaComplete: (summary: ArenaSummary) => void;

@@ -81,6 +81,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../GAME_DESIGN.md", import.meta.url), "utf8"),
   ]);
   const itemComparison = await readFile(new URL("../app/game/item-comparison.ts", import.meta.url), "utf8");
+  const itemDrop = await readFile(new URL("../app/game/item-drop.ts", import.meta.url), "utf8");
 
   assert.match(page, /<GameShell \/>/);
   assert.match(layout, /<GameCursor \/>/);
@@ -186,7 +187,11 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /item: generateEquipment/);
   assert.doesNotMatch(world, /rarity\.toUpperCase\(\).*ITEM/);
   assert.match(world, /updateGroundDrops/);
+  assert.match(world, /dropInventoryItem/);
+  assert.match(combat, /kind: "inventory"/);
   assert.match(shell, /onLootPickup/);
+  assert.match(shell, /takeProfileItem/);
+  assert.match(shell, /worldRef\.current\?\.dropItem/);
   assert.match(shell, /quickStashItem/);
   assert.match(shell, /activeStashTab/);
   assert.match(shell, /const inserted = insertItem\(current\.inventory, item\)/);
@@ -210,6 +215,11 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(skillConfig, /maxCharges: 3/);
   assert.match(world, /riftCharges \+= 1/);
   assert.match(inventoryPanel, /dropIntoSlot/);
+  assert.match(inventoryPanel, /Drop to ground/);
+  assert.match(inventoryPanel, /onDropToGround/);
+  assert.match(globalStyles, /\.inventory-ground-drop/);
+  assert.match(phaserWorld, /useImperativeHandle/);
+  assert.match(itemDrop, /source: "backpack" \| "stash" \| "equipment"/);
   assert.match(inventoryPanel, /onMoveItem/);
   assert.match(inventoryPanel, /role="tablist"/);
   assert.match(inventoryPanel, /Rename active stash tab/);

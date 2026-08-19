@@ -17,6 +17,7 @@ import { addCurrencyToInventory, consumeCurrency, countCurrency, createCurrencyS
 import { advanceFlaskRecovery, consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, storePickedUpFlask, unloadFlaskFromBelt } from "../app/game/flasks";
 import { canPlaceItem, containerItems, createItemContainer, insertItem, moveItem, transferItem } from "../app/game/item-container";
 import { compareEquipmentToCurrent } from "../app/game/item-comparison";
+import { takeProfileItem } from "../app/game/item-drop";
 import {
   createAffixForItem,
   eligibleAffixTiers,
@@ -468,6 +469,33 @@ test("stash tabs are selectable, renamable, expandable, and insert into the acti
   const expanded = addStashTab(inserted.stash);
   assert.equal(expanded.tabs.length, 5);
   assert.equal(activeStashTab(expanded).name, "Tab 5");
+});
+
+test("dropping removes the exact item from backpack, stash, or equipment without mutating it", () => {
+  const initial = createInitialProfile();
+  const backpackItem = initial.inventory.entries[0].item;
+  const fromBackpack = takeProfileItem(initial, backpackItem.id);
+  assert.ok(fromBackpack);
+  assert.equal(fromBackpack.source, "backpack");
+  assert.equal(fromBackpack.item, backpackItem);
+  assert.equal(fromBackpack.profile.inventory.entries.some((entry) => entry.item.id === backpackItem.id), false);
+
+  const weapon = generateStarterWeapon("amazon");
+  const equippedProfile = { ...initial, equipped: { mainHand: weapon } } satisfies PlayerProfile;
+  const fromEquipment = takeProfileItem(equippedProfile, weapon.id);
+  assert.ok(fromEquipment);
+  assert.equal(fromEquipment.source, "equipment");
+  assert.equal(fromEquipment.item, weapon);
+  assert.equal(fromEquipment.profile.equipped.mainHand, undefined);
+
+  const stashStack = createCurrencyStack("scrap", 7);
+  const stashed = insertItemsIntoStash(initial.stash, [stashStack]);
+  const stashProfile = { ...initial, stash: stashed.stash };
+  const fromStash = takeProfileItem(stashProfile, stashStack.id);
+  assert.ok(fromStash);
+  assert.equal(fromStash.source, "stash");
+  assert.deepEqual(fromStash.item, stashStack);
+  assert.equal(stashItems(fromStash.profile.stash).some((item) => item.id === stashStack.id), false);
 });
 
 test("the merchant always offers a free entry map and prices every harder map in Scrap", () => {

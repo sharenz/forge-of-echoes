@@ -29,9 +29,10 @@ interface InventoryPanelProps {
   onCreateStashTab: () => void;
   onLoadFlask: (id: string, slotIndex: number) => void;
   onUnloadFlask: (slotIndex: number) => void;
+  onDropToGround: (id: string) => void;
 }
 
-export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem, onQuickStash, onSelectStashTab, onRenameStashTab, onCreateStashTab, onLoadFlask, onUnloadFlask }: InventoryPanelProps) {
+export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem, onQuickStash, onSelectStashTab, onRenameStashTab, onCreateStashTab, onLoadFlask, onUnloadFlask, onDropToGround }: InventoryPanelProps) {
   const [dragState, setDragState] = useState<{ itemId: string; offset: GridOffset } | null>(null);
   const draggedItemId = dragState?.itemId ?? null;
   const freshItems = new Set(freshItemIds);
@@ -118,6 +119,25 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
               );
             })}
           </div>
+        </section>
+        <section
+          className={`inventory-ground-drop ${draggedItem ? "drop-ready" : ""}`}
+          aria-label="Drop item on the ground"
+          onDragOver={(event) => {
+            if (!draggedItem) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const itemId = readDroppedItem(event);
+            if (itemId) onDropToGround(itemId);
+            endDrag();
+          }}
+        >
+          <i aria-hidden="true"><b>↓</b></i>
+          <div><span>Drop to ground</span><strong>Drag an item here to place it beside your character</strong></div>
+          <small>It remains in this area until you leave.</small>
         </section>
         <section className="inventory-overview" aria-label="Inventory overview">
           <div><span>Backpack space</span><strong>{occupiedBackpackCells}<small> / {backpackCapacity} cells</small></strong><i><b style={{ width: `${occupiedBackpackCells / backpackCapacity * 100}%` }} /></i></div>
