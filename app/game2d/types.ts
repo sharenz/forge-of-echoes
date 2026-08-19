@@ -23,6 +23,7 @@ export interface WorldHudState {
   riftRecharge: number;
   wardCooldown: number;
   wardRemaining: number;
+  flameWaveCooldown: number;
   arenaComplete: boolean;
 }
 

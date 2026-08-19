@@ -4,7 +4,7 @@ import { findContainerEntry, insertItem, removeItem } from "./item-container";
 import { createId } from "./random";
 
 export function createEmptyFlaskBelt(): FlaskBelt {
-  return [null, null, null, null];
+  return [null, null, null, null, null];
 }
 
 export function createFlaskStack(baseId: FlaskId, stackSize: number, preferredId?: string): FlaskItem {

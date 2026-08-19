@@ -337,7 +337,7 @@ export function createCharacter(profile: PlayerProfile, name: string, classId: C
     inventory,
     stash,
     equipped: { mainHand: generateStarterWeapon(classId) },
-    flaskBelt: [createFlaskStack("weak-health-flask", 3), createFlaskStack("weak-mana-flask", 3), null, null],
+    flaskBelt: [createFlaskStack("weak-health-flask", 3), createFlaskStack("weak-mana-flask", 3), null, null, null],
     openedMap: null,
   };
 }

@@ -5,7 +5,7 @@ import { ARENA_RULES } from "../app/game/config/arena";
 import { SKILL_AUDIO } from "../app/game/config/audio";
 import { CHARACTER_ANIMATIONS, characterDirectionVector, resolveCharacterDirection, resolveLocomotionDirection } from "../app/game/config/character-animations";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
-import { FLASK_DEFINITIONS } from "../app/game/config/flasks";
+import { FLASK_BELT_SLOT_COUNT, FLASK_DEFINITIONS } from "../app/game/config/flasks";
 import { MAP_MERCHANT } from "../app/game/config/merchants";
 import { MAP_BASES, MAP_MODIFIERS } from "../app/game/config/maps";
 import { CHARACTER_EQUIPMENT_SLOTS } from "../app/game/config/equipment-slots";
@@ -103,7 +103,7 @@ test("character calculations combine item base, implicit, and explicit modifiers
   const profile = {
     version: 9,
     character: characterProgress(10),
-    inventory: createItemContainer("backpack"), stash: createStash(), equipped: { mainHand: weapon }, flaskBelt: [null, null, null, null], mapDevice: null, openedMap: null,
+    inventory: createItemContainer("backpack"), stash: createStash(), equipped: { mainHand: weapon }, flaskBelt: [null, null, null, null, null], mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const calculation = calculateCharacterStats(profile);
   const attack = calculation.breakdown.attackDamage;
@@ -125,7 +125,7 @@ test("weapon-local APS is the base scaled by sourced increased attack speed", ()
   const baseProfile = {
     version: 9,
     character: characterProgress(),
-    inventory: createItemContainer("backpack"), stash: createStash(), equipped: {}, flaskBelt: [null, null, null, null], mapDevice: null, openedMap: null,
+    inventory: createItemContainer("backpack"), stash: createStash(), equipped: {}, flaskBelt: [null, null, null, null, null], mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const spear = calculateCharacterStats({ ...baseProfile, equipped: { mainHand: createWeapon("hunter-spear", "Hunter Spear") } });
   const cleaver = calculateCharacterStats({ ...baseProfile, equipped: { mainHand: createWeapon("iron-cleaver", "Iron Cleaver") } });
@@ -279,7 +279,7 @@ test("v7 saves gain explicit unspent progression points without losing character
   }
 });
 
-test("v8 saves migrate to an empty four-slot flask belt", () => {
+test("legacy saves migrate to an empty five-slot flask belt", () => {
   const current = createInitialProfile();
   const legacy = { ...current, version: 8, flaskBelt: undefined };
   Object.defineProperty(globalThis, "window", {
@@ -289,7 +289,27 @@ test("v8 saves migrate to an empty four-slot flask belt", () => {
   try {
     const migrated = loadProfile();
     assert.equal(migrated.version, 9);
-    assert.deepEqual(migrated.flaskBelt, [null, null, null, null]);
+    assert.deepEqual(migrated.flaskBelt, [null, null, null, null, null]);
+  } finally {
+    Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
+test("existing v9 four-slot belts gain the fifth slot without losing flasks", () => {
+  const current = createInitialProfile();
+  const fourSlotSave = {
+    ...current,
+    flaskBelt: [createFlaskStack("weak-health-flask", 4), null, null, null],
+  };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: { getItem: (key: string) => key === "crafty.profile.v9" ? JSON.stringify(fourSlotSave) : null } },
+  });
+  try {
+    const migrated = loadProfile();
+    assert.equal(migrated.flaskBelt.length, 5);
+    assert.equal(migrated.flaskBelt[0]?.stackSize, 4);
+    assert.deepEqual(migrated.flaskBelt.slice(1), [null, null, null, null]);
   } finally {
     Reflect.deleteProperty(globalThis, "window");
   }
@@ -311,7 +331,7 @@ test("monster kills grant XP, levels award points, and allocated attributes affe
   assert.ok(calculateCharacterStats(allocated).breakdown.strength.contributions.some((entry) => entry.source === "character:allocated-strength"));
 });
 
-test("Nova and Rift Step resolve all twenty levels and Cinder Ward stays config-driven", () => {
+test("active skills resolve their level, damage, cooldown, and hotkey configuration", () => {
   const nova1 = resolveSkillDefinition(ACTIVE_SKILLS.nova, 1);
   const nova5 = resolveSkillDefinition(ACTIVE_SKILLS.nova, 5);
   const nova20 = resolveSkillDefinition(ACTIVE_SKILLS.nova, 20);
@@ -333,6 +353,13 @@ test("Nova and Rift Step resolve all twenty levels and Cinder Ward stays config-
   assert.equal(ward.key, "R");
   assert.equal(ward.duration, 4);
   assert.equal(ward.damageReduction, 45);
+
+  const flameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, 1);
+  assert.equal(flameWave.key, "F");
+  assert.equal(flameWave.projectileCount, 7);
+  assert.equal(flameWave.piercing, 1);
+  assert.equal(flameWave.cooldown, 5.5);
+  assert.equal(flameWave.damage?.effectiveness, 1.65);
 
   let profile = { ...createInitialProfile(), character: { ...characterProgress(), unspentSkillPoints: 30 } };
   for (let index = 0; index < 30; index += 1) profile = allocateSkillPoint(profile, "nova");
@@ -394,6 +421,8 @@ test("map purchases create inventory items and consume real Scrap stacks", () =>
 
 test("flasks stack to twenty in inventory and five in each belt slot", () => {
   const profile = createInitialProfile();
+  assert.equal(FLASK_BELT_SLOT_COUNT, 5);
+  assert.equal(profile.flaskBelt.length, 5);
   const flask = createFlaskStack("weak-health-flask", 20);
   const inserted = insertItem(profile.inventory, flask);
   assert.equal(inserted.unplaced.length, 0);
@@ -424,6 +453,7 @@ test("picked-up flasks refill matching belt stacks before entering the backpack"
       createFlaskStack("weak-mana-flask", 3),
       null,
       null,
+      null,
     ],
   } satisfies PlayerProfile;
 
@@ -447,7 +477,7 @@ test("picked-up flasks never auto-fill an empty belt slot", () => {
   assert.ok(stored);
   assert.equal(stored.beltAdded, 0);
   assert.equal(stored.inventoryAdded, 1);
-  assert.deepEqual(stored.profile.flaskBelt, [null, null, null, null]);
+  assert.deepEqual(stored.profile.flaskBelt, [null, null, null, null, null]);
   assert.deepEqual(containerItems(stored.profile.inventory).filter(isFlaskItem).map((item) => item.stackSize), [1]);
 });
 
@@ -649,7 +679,7 @@ test("runtime hit damage scales linearly with resolved attack damage", () => {
 });
 
 test("every skill declares reusable animation, VFX, and audio presentation", () => {
-  const skills = [BASIC_ATTACK, ACTIVE_SKILLS.nova, ACTIVE_SKILLS.dash, ACTIVE_SKILLS.ward];
+  const skills = [BASIC_ATTACK, ACTIVE_SKILLS.nova, ACTIVE_SKILLS.dash, ACTIVE_SKILLS.ward, ACTIVE_SKILLS.flameWave];
   for (const skill of skills) {
     assert.ok(skill.presentation.animation);
     assert.ok(skill.presentation.vfx);

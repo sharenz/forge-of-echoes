@@ -97,7 +97,7 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
   );
 }
 
-const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null];
+const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null, null];
 
 export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, onFlaskUse, onFlaskLoad, children }: PhaserWorldProps) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
@@ -198,12 +198,15 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
   const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel);
   const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel);
   const resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, 1);
+  const resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, 1);
   const novaReady = Boolean(hud && hud.novaCooldown <= 0.05 && hud.focus >= resolvedNova.focusCost);
   const riftReady = Boolean(hud && hud.riftCharges > 0 && hud.focus >= resolvedDash.focusCost);
   const wardReady = Boolean(hud && hud.wardCooldown <= 0.05 && hud.focus >= resolvedWard.focusCost);
+  const flameWaveReady = Boolean(hud && hud.flameWaveCooldown <= 0.05 && hud.focus >= resolvedFlameWave.focusCost);
   const novaProgress = hud ? Math.min(100, (hud.novaCooldown / resolvedNova.cooldown) * 100) : 0;
   const riftProgress = hud ? Math.min(100, (hud.riftRecharge / resolvedDash.recharge) * 100) : 0;
   const wardProgress = hud ? Math.min(100, (hud.wardCooldown / resolvedWard.cooldown) * 100) : 0;
+  const flameWaveProgress = hud ? Math.min(100, (hud.flameWaveCooldown / resolvedFlameWave.cooldown) * 100) : 0;
   const xpRequired = characterProgress ? XP_BY_LEVEL(characterProgress.level) : 1;
   const xpPercent = characterProgress?.level === MAX_CHARACTER_LEVEL ? 100 : Math.min(100, ((characterProgress?.xp ?? 0) / xpRequired) * 100);
   const displayedLife = mode === "arena" && hud ? hud.life : characterStats?.maxLife ?? 0;
@@ -290,6 +293,11 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
                     <span className="skill-cooldown" style={{ height: `${wardProgress}%` }} />
                     <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.ward.key}</kbd>
                     {hud && hud.wardCooldown > 0.05 && <strong>{hud.wardCooldown.toFixed(1)}</strong>}
+                  </button>
+                  <button type="button" className="action-slot flame-wave-slot" disabled={mode !== "arena" || !flameWaveReady} data-tooltip={`${resolvedFlameWave.name} · ${resolvedFlameWave.projectileCount} piercing projectiles`} onClick={() => runtimeRef.current?.useSkill("flameWave")}>
+                    <span className="skill-cooldown" style={{ height: `${flameWaveProgress}%` }} />
+                    <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.flameWave.key}</kbd>
+                    {hud && hud.flameWaveCooldown > 0.05 && <strong>{hud.flameWaveCooldown.toFixed(1)}</strong>}
                   </button>
                 </div>
               </div>

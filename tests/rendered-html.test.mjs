@@ -203,6 +203,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(phaserWorld, /onFlaskLoad\?\.\(itemId, index\)/);
   assert.match(phaserWorld, /wardCooldown\.toFixed\(1\)/);
   assert.match(phaserWorld, /useSkill\("ward"\)/);
+  assert.match(phaserWorld, /flameWaveCooldown\.toFixed\(1\)/);
+  assert.match(phaserWorld, /useSkill\("flameWave"\)/);
   assert.doesNotMatch(shell, /hideout-prompt/);
   assert.match(skillConfig, /maxCharges: 3/);
   assert.match(world, /riftCharges \+= 1/);
@@ -304,12 +306,15 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(skillConfig, /presentation: \{ animation: "attack", vfx: "ember-lance", audio: "ember-lance" \}/);
   assert.match(skillConfig, /name: "Cinder Ward", key: "R"/);
   assert.match(skillConfig, /damageReduction: 45/);
+  assert.match(skillConfig, /name: "Flame Wave", key: "F"/);
+  assert.match(skillConfig, /projectileCount: 7/);
   assert.match(flaskConfig, /maxInventoryStack: 20/);
   assert.match(flaskConfig, /maxBeltStack: 5/);
   assert.match(flaskConfig, /recovery: 20/);
   assert.match(flaskConfig, /recovery: 25/);
   assert.match(flaskEngine, /advanceFlaskRecovery/);
   assert.match(world, /KeyCodes\.ONE/);
+  assert.match(world, /KeyCodes\.FIVE/);
   assert.match(phaserWorld, /world-flask-belt/);
   assert.match(inventoryPanel, /inventory-flask-belt/);
   assert.match(world, /1 \/ Math\.max\(0\.01, this\.options\.arenaBalance\?\.attackSpeed/);

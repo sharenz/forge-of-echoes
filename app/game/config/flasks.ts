@@ -37,4 +37,4 @@ export const FLASK_DEFINITIONS: Record<FlaskId, FlaskDefinition> = {
   },
 };
 
-export const FLASK_BELT_SLOT_COUNT = 4;
+export const FLASK_BELT_SLOT_COUNT = 5;

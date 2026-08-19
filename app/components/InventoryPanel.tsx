@@ -100,7 +100,7 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
       </div>
       <div className="inventory-containers">
         <section className="inventory-flask-belt" aria-label="Flask belt slots">
-          <header><div><span>Flask belt</span><strong>Combat consumables</strong></div><small>Keys 1–4 · 5 per slot</small></header>
+          <header><div><span>Flask belt</span><strong>Combat consumables</strong></div><small>Keys 1–5 · 5 per slot</small></header>
           <div>
             {profile.flaskBelt.map((flask, index) => {
               const compatible = Boolean(draggedItem && isFlaskItem(draggedItem) && (!flask || flask.baseId === draggedItem.baseId));

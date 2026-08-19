@@ -35,8 +35,8 @@ export type ModifierMode = "flat" | "increased" | "more";
 export type MonsterRarity = "normal" | "magic" | "rare";
 export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos";
 export type SkillAnimationId = "attack" | "cast" | "dash";
-export type SkillVfxId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward";
-export type SkillAudioId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward";
+export type SkillVfxId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward" | "flame-wave";
+export type SkillAudioId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward" | "flame-wave";
 export type ActiveSkillId = "nova" | "dash";
 export type SkillLevels = Record<ActiveSkillId, number>;
 
@@ -126,7 +126,13 @@ export interface FlaskItem {
 }
 
 export type InventoryItem = EquipmentItem | MapItem | CurrencyItem | FlaskItem;
-export type FlaskBelt = [FlaskItem | null, FlaskItem | null, FlaskItem | null, FlaskItem | null];
+export type FlaskBelt = [
+  FlaskItem | null,
+  FlaskItem | null,
+  FlaskItem | null,
+  FlaskItem | null,
+  FlaskItem | null,
+];
 export type CurrencyAmounts = Record<CurrencyId, number>;
 export type ItemContainerId = "backpack" | "stash";
 

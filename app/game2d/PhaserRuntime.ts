@@ -179,6 +179,7 @@ class CraftyScene extends Phaser.Scene {
   private riftRecharge = 0;
   private wardCooldown = 0;
   private wardRemaining = 0;
+  private flameWaveCooldown = 0;
   private lifeRecoveryRemaining = 0;
   private manaRecoveryRemaining = 0;
   private lifeRecoveryRate = 0;
@@ -187,6 +188,7 @@ class CraftyScene extends Phaser.Scene {
   private resolvedNova: ResolvedSkillDefinition;
   private resolvedDash: ResolvedSkillDefinition;
   private resolvedWard: ResolvedSkillDefinition;
+  private resolvedFlameWave: ResolvedSkillDefinition;
   private life: number;
   private focus: number;
   private wave = 1;
@@ -212,6 +214,7 @@ class CraftyScene extends Phaser.Scene {
     this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, options.skillLevels.nova);
     this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, options.skillLevels.dash);
     this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, 1);
+    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, 1);
     this.riftCharges = this.resolvedDash.maxCharges;
     this.life = options.arenaBalance?.maxLife ?? 100;
     this.focus = options.arenaBalance?.maxFocus ?? 100;
@@ -282,10 +285,12 @@ class CraftyScene extends Phaser.Scene {
       nova: Phaser.Input.Keyboard.KeyCodes.Q,
       dash: Phaser.Input.Keyboard.KeyCodes.E,
       ward: Phaser.Input.Keyboard.KeyCodes.R,
+      flameWave: Phaser.Input.Keyboard.KeyCodes.F,
       flask1: Phaser.Input.Keyboard.KeyCodes.ONE,
       flask2: Phaser.Input.Keyboard.KeyCodes.TWO,
       flask3: Phaser.Input.Keyboard.KeyCodes.THREE,
       flask4: Phaser.Input.Keyboard.KeyCodes.FOUR,
+      flask5: Phaser.Input.Keyboard.KeyCodes.FIVE,
     }) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
       if (this.options.mode === "arena" && !this.options.paused) this.tryBasicAttack();
@@ -304,10 +309,12 @@ class CraftyScene extends Phaser.Scene {
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.nova)) this.useSkill("nova");
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.dash)) this.useSkill("dash");
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.ward)) this.useSkill("ward");
+    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flameWave)) this.useSkill("flameWave");
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask1)) this.useFlask(0);
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask2)) this.useFlask(1);
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask3)) this.useFlask(2);
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask4)) this.useFlask(3);
+    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask5)) this.useFlask(4);
     this.accumulator += Math.min(delta, MAX_FRAME_DELTA);
     while (this.accumulator >= FIXED_STEP) {
       this.previousPlayerX = this.player.x;
@@ -318,7 +325,7 @@ class CraftyScene extends Phaser.Scene {
     this.renderPlayer(this.accumulator / FIXED_STEP);
   }
 
-  useSkill(skill: "basic" | "nova" | "dash" | "ward"): void {
+  useSkill(skill: "basic" | "nova" | "dash" | "ward" | "flameWave"): void {
     if (this.options.mode !== "arena" || !this.player || this.options.paused) return;
     if (skill === "basic") {
       this.tryBasicAttack();
@@ -367,6 +374,25 @@ class CraftyScene extends Phaser.Scene {
       this.focus -= this.resolvedWard.focusCost;
       this.wardCooldown = this.resolvedWard.cooldown;
     }
+    if (skill === "flameWave" && this.flameWaveCooldown <= 0 && this.focus >= this.resolvedFlameWave.focusCost) {
+      const pointer = this.input.activePointer;
+      const dx = pointer.worldX - this.player.x;
+      const dy = pointer.worldY - this.player.y;
+      const centerAngle = Math.atan2(dy, dx);
+      const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
+      const started = this.beginSkillAction(this.resolvedFlameWave, direction, () => {
+        const projectileCount = this.resolvedFlameWave.projectileCount;
+        const spreadRadians = 0.78;
+        for (let index = 0; index < projectileCount; index += 1) {
+          const offset = projectileCount === 1 ? 0 : (index / (projectileCount - 1) - 0.5) * spreadRadians;
+          const angle = centerAngle + offset;
+          this.spawnProjectile(Math.cos(angle), Math.sin(angle), this.resolvedFlameWave);
+        }
+      });
+      if (!started) return;
+      this.focus -= this.resolvedFlameWave.focusCost;
+      this.flameWaveCooldown = this.resolvedFlameWave.cooldown;
+    }
   }
 
   useFlask(slotIndex: number): void {
@@ -406,6 +432,7 @@ class CraftyScene extends Phaser.Scene {
       riftRecharge: this.riftRecharge,
       wardCooldown: this.wardCooldown,
       wardRemaining: this.wardRemaining,
+      flameWaveCooldown: this.flameWaveCooldown,
       arenaComplete: this.arenaComplete,
     };
   }
@@ -444,6 +471,7 @@ class CraftyScene extends Phaser.Scene {
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
     this.novaCooldown = Math.max(0, this.novaCooldown - delta);
     this.wardCooldown = Math.max(0, this.wardCooldown - delta);
+    this.flameWaveCooldown = Math.max(0, this.flameWaveCooldown - delta);
     this.wardRemaining = Math.max(0, this.wardRemaining - delta);
     this.updateFlaskRecovery(delta);
     if (this.riftCharges < this.resolvedDash.maxCharges) {
@@ -808,6 +836,31 @@ class CraftyScene extends Phaser.Scene {
       this.tweens.add({ targets: sigil, scale: 0.42, alpha: 0, angle: -28, duration: 520, ease: "Cubic.easeOut", onComplete: () => sigil.destroy() });
       this.emitRadialVfx(this.player.x, this.player.y - 4, 16, 0xffb45f, 92, 0.48);
       this.emitRadialVfx(this.player.x, this.player.y - 4, 8, 0xffe5a5, 52, 0.6);
+    } else if (skill.presentation.vfx === "flame-wave") {
+      const angle = Math.atan2(facing.y, facing.x);
+      const sigil = this.add.image(this.player.x + facing.x * 22, this.player.y + facing.y * 14 + 5, "ember-sigil")
+        .setScale(0.1, 0.05)
+        .setRotation(angle)
+        .setTint(0xff7b35)
+        .setAlpha(0.86)
+        .setDepth(Math.round(this.player.y / 10) + 8)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: sigil, scaleX: 0.58, scaleY: 0.24, alpha: 0, duration: 320, ease: "Cubic.easeOut", onComplete: () => sigil.destroy() });
+      for (let index = 0; index < 18; index += 1) {
+        const particleAngle = angle + Phaser.Math.FloatBetween(-0.42, 0.42);
+        const velocity = Phaser.Math.Between(85, 185);
+        this.emitVfxParticle(
+          this.player.x + facing.x * 24,
+          this.player.y + facing.y * 16 + Phaser.Math.Between(-5, 5),
+          index % 3 === 0 ? 0xffd37a : 0xff6630,
+          Math.cos(particleAngle) * velocity,
+          Math.sin(particleAngle) * velocity,
+          Phaser.Math.FloatBetween(0.22, 0.4),
+          index % 3 === 0 ? 0.9 : 0.65,
+          0.04,
+          index % 2 === 0 ? "vfx-ember" : "vfx-spark",
+        );
+      }
     }
   }
 
@@ -1609,7 +1662,7 @@ export class PhaserRuntime {
     });
   }
 
-  useSkill(skill: "basic" | "nova" | "dash" | "ward"): void {
+  useSkill(skill: "basic" | "nova" | "dash" | "ward" | "flameWave"): void {
     this.scene?.useSkill(skill);
   }
 

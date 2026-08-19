@@ -48,4 +48,12 @@ export const SKILL_AUDIO: Record<SkillAudioId, SkillAudioDefinition> = {
       { wave: "sine", frequency: 920, endFrequency: 680, delay: 0.08, duration: 0.2, gain: 0.18 },
     ],
   },
+  "flame-wave": {
+    volume: 0.23,
+    tones: [
+      { wave: "sawtooth", frequency: 170, endFrequency: 62, delay: 0, duration: 0.3, gain: 0.58 },
+      { wave: "triangle", frequency: 480, endFrequency: 170, delay: 0.025, duration: 0.22, gain: 0.34 },
+      { wave: "sine", frequency: 980, endFrequency: 360, delay: 0.04, duration: 0.15, gain: 0.2 },
+    ],
+  },
 };

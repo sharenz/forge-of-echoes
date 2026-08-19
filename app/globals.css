@@ -1041,6 +1041,13 @@ body:has(.pixel-shell) { overflow: hidden; }
 .ward-slot { --slot-color: #d9923f; }
 .ward-slot .skill-icon i { width: 48%; height: 61%; border: 3px solid #ffe1a0; border-radius: 50% 50% 45% 45% / 35% 35% 70% 70%; background: linear-gradient(135deg, #fff3be70, #b44d2066); box-shadow: 0 0 9px #ffb24d, inset 0 0 8px #fff3b955; }
 .ward-slot.is-active { border-color: #ffd584; box-shadow: inset 0 0 0 2px #52321b, 0 0 18px #ffb3498c; animation: ward-slot-active .9s ease-in-out infinite alternate; }
+.flame-wave-slot { --slot-color: #ef692c; }
+.flame-wave-slot .skill-icon { background: radial-gradient(circle at 30% 50%, #fff0a4 0 6%, #ff973e 7% 17%, transparent 18%), linear-gradient(135deg, #641c18, #f06b2b 50%, #210d0c); }
+.flame-wave-slot .skill-icon i { width: 68%; height: 52%; border: solid #ffd98c; border-width: 3px 4px 3px 0; border-radius: 0 80% 80% 0; box-shadow: 5px 0 8px #ff8a35, inset -4px 0 6px #ff5a28; transform: translate(-42%, -50%) skewX(-18deg); }
+.flame-wave-slot .skill-icon i::before,
+.flame-wave-slot .skill-icon i::after { content: ""; position: absolute; left: 8%; width: 68%; height: 3px; background: #fff0b0; box-shadow: 0 0 7px #ff822e; }
+.flame-wave-slot .skill-icon i::before { top: 6px; transform: rotate(-15deg); }
+.flame-wave-slot .skill-icon i::after { bottom: 6px; transform: rotate(15deg); }
 .action-slot kbd { position: absolute; z-index: 6; left: -3px; bottom: -4px; min-width: 23px; height: 20px; padding: 0 4px; display: grid; place-items: center; border: 1px solid #9d704c; border-radius: 3px; background: #120d0a; color: #ffd19d; font: 700 10px Arial, sans-serif; letter-spacing: -.02em; box-shadow: 0 2px 5px #000; }
 .action-slot > strong { position: absolute; z-index: 7; inset: 0; display: grid; place-items: center; color: #fff3da; font: 700 15px Arial, sans-serif; text-shadow: 0 2px 4px #000, 0 0 5px #000; }
 .skill-cooldown { position: absolute; z-index: 5; left: 5px; right: 5px; top: 5px; border-radius: 2px; background: rgba(4,3,4,.76); backdrop-filter: grayscale(1); pointer-events: none; transition: height .1s linear; }

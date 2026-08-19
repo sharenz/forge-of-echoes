@@ -33,4 +33,12 @@ export const ACTIVE_SKILLS = {
     damageReduction: 45,
     presentation: { animation: "cast", vfx: "cinder-ward", audio: "cinder-ward" },
   },
+  flameWave: {
+    id: "flame-wave", name: "Flame Wave", key: "F", focusCost: 22, cooldown: 5.5,
+    damage: { type: "fire", effectiveness: 1.65, range: { minMultiplier: 0.8, maxMultiplier: 1.2 } },
+    projectileScale: 1.18,
+    projectileCount: 7,
+    piercing: 1,
+    presentation: { animation: "cast", vfx: "flame-wave", audio: "flame-wave" },
+  },
 } as const satisfies Record<string, SkillDefinition>;
