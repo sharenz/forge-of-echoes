@@ -16,6 +16,7 @@ import { CURRENCY_DEFINITIONS } from "../game/config/currencies";
 import { FLASK_DEFINITIONS, type FlaskDefinition } from "../game/config/flasks";
 import { MONSTER_PACK_RULES } from "../game/config/monster-packs";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
+import { MAP_COMPLETION_REWARDS } from "../game/config/rewards";
 import type { SkillDefinition } from "../game/config/schema";
 import type { CharacterClassId, DamageType, FlaskBelt, InventoryItem, MonsterRarity, SkillLevels } from "../game/domain";
 import { monsterPackModifierNames, resolveMonsterStats, rollMonsterPack } from "../game/encounters";
@@ -24,6 +25,7 @@ import { isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "../game
 import { equipmentDropPresentation, dropChances, rollEquipmentRarity, rollFlaskDrop } from "../game/loot";
 import { generateEquipment } from "../game/items";
 import { monsterExperienceReward } from "../game/progression";
+import { createMapCompletionRewards } from "../game/rewards";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
 import { CharacterAnimator } from "./CharacterAnimator";
 import { SkillAudio } from "./SkillAudio";
@@ -131,6 +133,18 @@ interface ReturnPortalState {
   interaction: Phaser.GameObjects.Zone;
 }
 
+interface CompletionChestState {
+  x: number;
+  y: number;
+  elapsed: number;
+  opened: boolean;
+  glow: Phaser.GameObjects.Ellipse;
+  sprite: Phaser.GameObjects.Image;
+  label: Phaser.GameObjects.Text;
+  prompt: Phaser.GameObjects.Text;
+  interaction: Phaser.GameObjects.Zone;
+}
+
 const CLASS_COLORS: Record<CharacterClassId, { magic: number }> = {
   amazon: { magic: 0xf6c76f },
   barbarian: { magic: 0xff7345 },
@@ -203,6 +217,7 @@ class CraftyScene extends Phaser.Scene {
   private finalWaveRageActive = false;
   private returnPortal: ReturnPortalState | null = null;
   private returnPortalUsed = false;
+  private completionChest: CompletionChestState | null = null;
   private arenaFailed = false;
   private footstepElapsed = 0;
   private previousPlayerX = 0;
@@ -296,7 +311,7 @@ class CraftyScene extends Phaser.Scene {
       flask5: Phaser.Input.Keyboard.KeyCodes.FIVE,
     }) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
-      if (this.options.mode === "arena" && !this.options.paused) this.tryBasicAttack();
+      if (this.options.mode === "arena" && !this.options.paused && !this.arenaComplete) this.tryBasicAttack();
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.playerAnimator?.destroy();
@@ -567,6 +582,7 @@ class CraftyScene extends Phaser.Scene {
       this.updateCorpses(delta);
       this.renderEnemyHealth();
       this.advanceWaveIfReady();
+      this.updateCompletionChest(delta);
       this.updateReturnPortal(delta);
     }
     this.updateGroundDrops(delta);
@@ -623,6 +639,35 @@ class CraftyScene extends Phaser.Scene {
     this.createDropTexture("drop-equipment-normal", 0x7c756c, 0xded5c9);
     this.createDropTexture("drop-equipment-magic", 0x4c64a4, 0x96b4ff);
     this.createDropTexture("drop-equipment-rare", 0x9b782e, 0xffd867);
+    this.createCompletionChestTextures();
+  }
+
+  private createCompletionChestTextures(): void {
+    const closed = this.make.graphics({ x: 0, y: 0 });
+    closed.fillStyle(0x08090b, 0.55).fillEllipse(32, 45, 58, 13);
+    closed.fillStyle(0x2b160c).fillRect(5, 17, 54, 28);
+    closed.fillStyle(0x713b19).fillRect(7, 19, 50, 22);
+    closed.fillStyle(0xb16a2c).fillRect(7, 19, 50, 6);
+    closed.fillStyle(0x3b1d0c).fillRect(7, 33, 50, 8);
+    closed.fillStyle(0xc89b52).fillRect(8, 15, 48, 4).fillRect(10, 39, 44, 4);
+    closed.fillStyle(0x8b5c29).fillRect(14, 14, 5, 29).fillRect(45, 14, 5, 29);
+    closed.fillStyle(0xf4ce73).fillRect(28, 26, 8, 10);
+    closed.fillStyle(0xffefb0).fillRect(30, 27, 4, 3);
+    closed.generateTexture("reward-chest-closed", 64, 52).destroy();
+
+    const opened = this.make.graphics({ x: 0, y: 0 });
+    opened.fillStyle(0x08090b, 0.55).fillEllipse(32, 47, 58, 13);
+    opened.fillStyle(0xf7c957, 0.18).fillTriangle(12, 37, 52, 37, 32, 1);
+    opened.fillStyle(0x2b160c).fillRect(5, 27, 54, 19);
+    opened.fillStyle(0x713b19).fillRect(7, 28, 50, 14);
+    opened.fillStyle(0xc89b52).fillRect(8, 26, 48, 4).fillRect(10, 40, 44, 4);
+    opened.fillStyle(0x3b1d0c).fillRect(8, 9, 48, 11);
+    opened.fillStyle(0xb16a2c).fillRect(10, 7, 44, 7);
+    opened.fillStyle(0xc89b52).fillRect(8, 17, 48, 4);
+    opened.fillStyle(0x8b5c29).fillRect(14, 7, 5, 14).fillRect(45, 7, 5, 14);
+    opened.fillStyle(0xffdf72).fillRect(15, 31, 34, 4);
+    opened.fillStyle(0xfff3bc).fillRect(22, 30, 6, 3).fillRect(38, 32, 4, 2);
+    opened.generateTexture("reward-chest-open", 64, 54).destroy();
   }
 
   private createDropTexture(key: string, outerColor: number, innerColor: number): void {
@@ -1603,8 +1648,90 @@ class CraftyScene extends Phaser.Scene {
     }
     if (!isArenaCleared(this.wave, finalWave, this.enemies.length)) return;
     this.arenaComplete = true;
+    this.spawnCompletionChest();
     this.spawnReturnPortal({ wave: this.wave, enemiesSlain: this.slain, elapsedSeconds: Math.round(this.elapsedSeconds) });
     this.options.onHud(this.getHud());
+  }
+
+  private spawnCompletionChest(): void {
+    if (!this.player || this.completionChest) return;
+    const rules = MAP_COMPLETION_REWARDS.chest;
+    const yDirection = this.player.y + rules.spawnDistance <= MAP_SIZE - 100 ? 1 : -1;
+    const x = Phaser.Math.Clamp(this.player.x, 100, MAP_SIZE - 100);
+    const y = Phaser.Math.Clamp(this.player.y + yDirection * rules.spawnDistance, 100, MAP_SIZE - 100);
+    const depth = Math.round(y / 10) + 70;
+    const glow = this.add.ellipse(x, y + 1, 112, 54, 0xf2b84b, 0.2)
+      .setDepth(depth - 1)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const sprite = this.add.image(x, y, "reward-chest-closed")
+      .setScale(1.55)
+      .setDepth(depth);
+    const label = this.add.text(x, y - 55, "VICTORY CACHE", {
+      fontFamily: "monospace",
+      fontSize: "17px",
+      fontStyle: "bold",
+      color: "#ffe391",
+      stroke: "#09060d",
+      strokeThickness: 5,
+    }).setOrigin(0.5).setDepth(depth + 2);
+    const prompt = this.add.text(x, y - 34, "CLICK TO OPEN", {
+      fontFamily: "monospace",
+      fontSize: "12px",
+      color: "#fff0bd",
+      backgroundColor: "#120c05dd",
+      padding: { x: 7, y: 4 },
+    }).setOrigin(0.5).setDepth(depth + 2);
+    const interaction = this.add.zone(x, y, rules.interactionWidth, rules.interactionHeight)
+      .setDepth(depth + 3)
+      .setInteractive({ cursor: "pointer" });
+    interaction.on(Phaser.Input.Events.POINTER_DOWN, () => {
+      if (this.options.paused) return;
+      this.openCompletionChest();
+    });
+    this.completionChest = { x, y, elapsed: 0, opened: false, glow, sprite, label, prompt, interaction };
+    this.emitRadialVfx(x, y - 4, 20, 0xffce62, 92, 0.55);
+  }
+
+  private updateCompletionChest(delta: number): void {
+    const chest = this.completionChest;
+    if (!chest) return;
+    chest.elapsed += delta;
+    const pulse = Math.sin(chest.elapsed * (chest.opened ? 2.1 : 3.2));
+    chest.glow.setScale(1 + pulse * 0.08).setAlpha((chest.opened ? 0.12 : 0.22) + pulse * 0.05);
+    if (!chest.opened) {
+      chest.sprite.setY(chest.y + pulse * 1.5);
+      chest.prompt.setAlpha(0.74 + Math.max(0, pulse) * 0.26);
+    }
+  }
+
+  private openCompletionChest(): void {
+    const chest = this.completionChest;
+    if (!chest || chest.opened || this.options.paused) return;
+    chest.opened = true;
+    chest.sprite.setTexture("reward-chest-open").setY(chest.y - 2);
+    chest.interaction.disableInteractive();
+    chest.label.setText("CACHE OPENED").setColor("#fff0bd");
+    chest.prompt.setText("COLLECT YOUR REWARDS").setAlpha(0.92);
+    const tier = this.options.arenaBalance?.tier ?? 1;
+    const itemLevel = Math.max(
+      MAP_COMPLETION_REWARDS.minimumItemLevel,
+      tier * MAP_COMPLETION_REWARDS.itemLevelsPerMapTier,
+    );
+    const finalWave = this.options.arenaBalance?.waveStats.at(-1);
+    const rewards = createMapCompletionRewards(itemLevel, finalWave?.itemRarity ?? 100);
+    const radius = MAP_COMPLETION_REWARDS.chest.lootScatterRadius;
+    rewards.forEach((reward, index) => {
+      const angle = -Math.PI / 2 + (Math.PI * 2 * index) / rewards.length;
+      const distance = radius * (index % 2 === 0 ? 1 : 0.72);
+      this.spawnGroundDrop(
+        Phaser.Math.Clamp(chest.x + Math.cos(angle) * distance, 60, MAP_SIZE - 60),
+        Phaser.Math.Clamp(chest.y + Math.sin(angle) * distance, 60, MAP_SIZE - 60),
+        reward,
+      );
+    });
+    this.emitRadialVfx(chest.x, chest.y - 8, 42, 0xffd66f, 155, 0.8);
+    this.cameras.main.shake(180, 0.0035);
+    if (this.returnPortal) this.returnPortal.prompt.setText("ENTER TO RETURN TO HIDEOUT");
   }
 
   private spawnReturnPortal(summary: ArenaSummary): void {
@@ -1638,7 +1765,7 @@ class CraftyScene extends Phaser.Scene {
       stroke: "#09060d",
       strokeThickness: 5,
     }).setOrigin(0.5).setDepth(depth + 5);
-    const prompt = this.add.text(x, y + 59, "ENTER TO RETURN TO HIDEOUT", {
+    const prompt = this.add.text(x, y + 59, this.completionChest?.opened ? "ENTER TO RETURN TO HIDEOUT" : "OPEN VICTORY CACHE FIRST", {
       fontFamily: "monospace",
       fontSize: "12px",
       color: "#c6a5ee",
@@ -1690,6 +1817,11 @@ class CraftyScene extends Phaser.Scene {
 
   private activateReturnPortal(): void {
     if (this.options.paused || !this.returnPortal || this.returnPortalUsed) return;
+    if (this.completionChest && !this.completionChest.opened) {
+      this.completionChest.prompt.setAlpha(1);
+      this.returnPortal.prompt.setText("OPEN VICTORY CACHE FIRST");
+      return;
+    }
     this.returnPortalUsed = true;
     this.returnPortal.interaction.disableInteractive();
     this.options.onArenaComplete(this.returnPortal.summary);

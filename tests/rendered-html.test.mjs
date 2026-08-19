@@ -82,6 +82,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   ]);
   const itemComparison = await readFile(new URL("../app/game/item-comparison.ts", import.meta.url), "utf8");
   const itemDrop = await readFile(new URL("../app/game/item-drop.ts", import.meta.url), "utf8");
+  const completionRewardConfig = await readFile(new URL("../app/game/config/rewards.ts", import.meta.url), "utf8");
+  const completionRewards = await readFile(new URL("../app/game/rewards.ts", import.meta.url), "utf8");
 
   assert.match(page, /<GameShell \/>/);
   assert.match(layout, /<GameCursor \/>/);
@@ -111,6 +113,18 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /shouldSpawnNextWave/);
   assert.match(world, /spawnReturnPortal/);
   assert.match(world, /activateReturnPortal/);
+  assert.match(world, /spawnCompletionChest/);
+  assert.match(world, /openCompletionChest/);
+  assert.match(world, /reward-chest-closed/);
+  assert.match(world, /OPEN VICTORY CACHE FIRST/);
+  assert.match(world, /createMapCompletionRewards/);
+  assert.match(completionRewardConfig, /equipmentCount: 2/);
+  assert.match(completionRewardConfig, /minimumGuaranteedEquipmentRarity: "magic"/);
+  assert.match(completionRewardConfig, /currency: "scrap"/);
+  assert.match(completionRewardConfig, /currency: "essence"/);
+  assert.match(completionRewardConfig, /currency: "mapDust"/);
+  assert.match(completionRewards, /atLeastRarity/);
+  assert.match(completionRewards, /generateEquipmentWithRandom/);
   assert.match(world, /renderPlayerResources/);
   assert.match(world, /this\.options\.onPlayerDeath\(\)/);
   assert.doesNotMatch(world, /this\.lives/);

@@ -36,6 +36,8 @@ import { dropChances, equipmentDropPresentation, rollEquipmentRarity, rollFlaskD
 import { activeStashTab, addStashTab, createStash, insertItemsIntoStash, renameStashTab, selectStashTab, stashItems } from "../app/game/stash";
 import { allocateAttributePoint, allocateSkillPoint, grantCharacterExperience, monsterExperienceReward } from "../app/game/progression";
 import { resolveSkillDefinition } from "../app/game/skills";
+import { MAP_COMPLETION_REWARDS } from "../app/game/config/rewards";
+import { createMapCompletionRewards } from "../app/game/rewards";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -44,6 +46,19 @@ const characterProgress = (level = 1): PlayerProfile["character"] => ({
   allocatedAttributes: { strength: 0, dexterity: 0, intelligence: 0 },
   unspentAttributePoints: 0, skillLevels: { nova: 1, dash: 1, ward: 1, flameWave: 1 }, unspentSkillPoints: 0,
   mapsCompleted: 0, highestWave: 0,
+});
+
+test("map completion rewards guarantee two equipment items, one magic-or-better, and crafting materials", () => {
+  const rewards = createMapCompletionRewards(20, 100, () => 0.999999);
+  const equipment = rewards.filter((reward) => reward.kind === "equipment");
+  const currencies = rewards.filter((reward) => reward.kind === "currency");
+  assert.equal(equipment.length, 2);
+  assert.ok(equipment.some((reward) => reward.kind === "equipment" && reward.item.rarity !== "normal"));
+  for (const configured of MAP_COMPLETION_REWARDS.materials) {
+    const reward = currencies.find((candidate) => candidate.kind === "currency" && candidate.currency === configured.currency);
+    assert.ok(reward && reward.kind === "currency");
+    assert.ok(reward.amount >= configured.minimum && reward.amount <= configured.maximum);
+  }
 });
 
 test("resolves flat, increased, and more modifiers in the canonical order", () => {
