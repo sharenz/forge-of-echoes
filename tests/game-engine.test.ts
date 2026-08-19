@@ -14,7 +14,7 @@ import { MONSTER_ARCHETYPES } from "../app/game/config/monsters";
 import type { EquipmentItem, ItemContainer, PlayerProfile, StatModifier } from "../app/game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts } from "../app/game/equipment";
 import { addCurrencyToInventory, consumeCurrency, countCurrency, createCurrencyStack, isCurrencyItem, isFlaskItem, isMapItem } from "../app/game/inventory";
-import { advanceFlaskRecovery, consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, storePickedUpFlask, unloadFlaskFromBelt } from "../app/game/flasks";
+import { advanceFlaskRecovery, consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, normalizeFlaskBelt, storePickedUpFlask, unloadFlaskFromBelt } from "../app/game/flasks";
 import { canPlaceItem, containerItems, createItemContainer, insertItem, moveItem, transferItem } from "../app/game/item-container";
 import { compareEquipmentToCurrent } from "../app/game/item-comparison";
 import { takeProfileItem } from "../app/game/item-drop";
@@ -574,6 +574,24 @@ test("picked-up flasks refill matching belt stacks before entering the backpack"
   assert.equal(overflow.beltAdded, 0);
   assert.equal(overflow.inventoryAdded, 2);
   assert.deepEqual(containerItems(overflow.profile.inventory).filter(isFlaskItem).map((item) => item.stackSize), [2]);
+});
+
+test("using the last flask preserves its belt assignment and the next pickup refills it", () => {
+  const profile = {
+    ...createInitialProfile(),
+    flaskBelt: [createFlaskStack("weak-health-flask", 1), null, null, null, null],
+  } satisfies PlayerProfile;
+  const consumed = consumeFlaskFromBelt(profile, 0);
+  assert.ok(consumed);
+  assert.equal(consumed.profile.flaskBelt[0]?.baseId, "weak-health-flask");
+  assert.equal(consumed.profile.flaskBelt[0]?.stackSize, 0);
+  assert.equal(normalizeFlaskBelt(consumed.profile.flaskBelt)[0]?.stackSize, 0);
+
+  const refilled = storePickedUpFlask(consumed.profile, createFlaskStack("weak-health-flask", 1));
+  assert.ok(refilled);
+  assert.equal(refilled.profile.flaskBelt[0]?.stackSize, 1);
+  assert.equal(refilled.beltAdded, 1);
+  assert.equal(refilled.inventoryAdded, 0);
 });
 
 test("picked-up flasks never auto-fill an empty belt slot", () => {

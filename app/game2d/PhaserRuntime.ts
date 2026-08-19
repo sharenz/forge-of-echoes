@@ -413,7 +413,7 @@ class CraftyScene extends Phaser.Scene {
   useFlask(slotIndex: number): void {
     if (this.options.mode !== "arena" || !this.player || this.options.paused) return;
     const flask = this.options.flaskBelt[slotIndex];
-    if (!flask) return;
+    if (!flask || flask.stackSize <= 0) return;
     const configured = FLASK_DEFINITIONS[flask.baseId];
     const maxLife = this.options.arenaBalance?.maxLife ?? 100;
     const maxMana = this.options.arenaBalance?.maxFocus ?? 100;

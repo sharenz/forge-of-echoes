@@ -271,7 +271,7 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
                         <button
                           type="button"
                           className={`flask-hotkey ${definition ? `flask-${definition.resource}` : "empty"}`}
-                          disabled={mode !== "arena" || !flask || resourceFull}
+                          disabled={mode !== "arena" || !flask || flask.stackSize <= 0 || resourceFull}
                           data-tooltip={definition ? `${definition.name} · Restores ${definition.recovery} ${definition.resource}` : "Empty flask slot · drag a flask here"}
                           onClick={() => runtimeRef.current?.useFlask(index)}
                         >

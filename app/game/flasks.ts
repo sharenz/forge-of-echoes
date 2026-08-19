@@ -21,7 +21,7 @@ export function normalizeFlaskBelt(raw: readonly (FlaskItem | null | undefined)[
     const item = raw?.[index];
     if (!item || item.kind !== "flask" || !FLASK_DEFINITIONS[item.baseId]) continue;
     const maximum = FLASK_DEFINITIONS[item.baseId].maxBeltStack;
-    const stackSize = Math.min(maximum, Math.max(1, Math.floor(item.stackSize ?? 1)));
+    const stackSize = Math.min(maximum, Math.max(0, Math.floor(item.stackSize ?? 1)));
     belt[index] = { ...item, stackSize };
   }
   return belt;
@@ -58,6 +58,11 @@ export function unloadFlaskFromBelt(profile: PlayerProfile, slotIndex: number): 
   if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= FLASK_BELT_SLOT_COUNT) return null;
   const flask = profile.flaskBelt[slotIndex];
   if (!flask) return null;
+  if (flask.stackSize <= 0) {
+    const flaskBelt = [...profile.flaskBelt] as FlaskBelt;
+    flaskBelt[slotIndex] = null;
+    return { ...profile, flaskBelt };
+  }
   const inserted = insertItem(profile.inventory, flask);
   if (inserted.unplaced.length > 0) return null;
   const flaskBelt = [...profile.flaskBelt] as FlaskBelt;
@@ -73,9 +78,9 @@ export interface ConsumedFlask {
 export function consumeFlaskFromBelt(profile: PlayerProfile, slotIndex: number): ConsumedFlask | null {
   if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= FLASK_BELT_SLOT_COUNT) return null;
   const flask = profile.flaskBelt[slotIndex];
-  if (!flask) return null;
+  if (!flask || flask.stackSize <= 0) return null;
   const flaskBelt = [...profile.flaskBelt] as FlaskBelt;
-  flaskBelt[slotIndex] = flask.stackSize > 1 ? { ...flask, stackSize: flask.stackSize - 1 } : null;
+  flaskBelt[slotIndex] = { ...flask, stackSize: flask.stackSize - 1 };
   return { profile: { ...profile, flaskBelt }, definition: FLASK_DEFINITIONS[flask.baseId] };
 }
 
@@ -93,7 +98,8 @@ export interface StorePickedUpFlaskResult {
 }
 
 /**
- * Refills existing matching belt stacks before sending overflow to the backpack.
+ * Refills existing matching belt stacks, including depleted assigned slots,
+ * before sending overflow to the backpack.
  * Empty belt slots are deliberately not auto-filled: belt layout remains a
  * player choice, while a configured flask slot behaves like a pickup reserve.
  */

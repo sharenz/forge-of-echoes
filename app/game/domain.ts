@@ -126,6 +126,7 @@ export interface FlaskItem {
 }
 
 export type InventoryItem = EquipmentItem | MapItem | CurrencyItem | FlaskItem;
+/** A zero-sized flask stack is valid only in the belt and preserves its refill assignment. */
 export type FlaskBelt = [
   FlaskItem | null,
   FlaskItem | null,
