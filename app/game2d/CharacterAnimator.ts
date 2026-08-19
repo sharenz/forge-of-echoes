@@ -4,7 +4,7 @@ import {
   characterAnimationKey,
   characterSpriteSheetKey,
   characterVisualOffsetY,
-  resolveCharacterDirection,
+  resolveLocomotionDirection,
   type CharacterAnimationState,
   type CharacterDirection,
 } from "../game/config/character-animations";
@@ -23,6 +23,7 @@ export class CharacterAnimator {
   private moving = false;
   private pendingAction: PendingAction | null = null;
   private currentLoopKey: string | null = null;
+  private locomotionPlaybackRate = 1;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -40,9 +41,10 @@ export class CharacterAnimator {
     return this.direction;
   }
 
-  setLocomotion(x: number, y: number, moving: boolean): void {
+  setLocomotion(x: number, y: number, moving: boolean, speedRatio = 1): void {
     this.moving = moving;
-    if (moving && !this.pendingAction) this.direction = resolveCharacterDirection(x, y, this.direction);
+    this.locomotionPlaybackRate = moving ? Phaser.Math.Clamp(0.82 + speedRatio * 0.22, 0.82, 1.04) : 1;
+    if (moving && !this.pendingAction) this.direction = resolveLocomotionDirection(x, y, this.direction);
     if (!this.pendingAction) this.playLocomotion();
   }
 
@@ -71,7 +73,7 @@ export class CharacterAnimator {
   }
 
   setWorldTransform(x: number, y: number, depth: number): void {
-    this.sprite.setPosition(Math.round(x), Math.round(y + characterVisualOffsetY(this.classId))).setDepth(depth);
+    this.sprite.setPosition(x, y + characterVisualOffsetY(this.classId)).setDepth(depth);
   }
 
   destroy(): void {
@@ -105,9 +107,12 @@ export class CharacterAnimator {
   private playLocomotion(force = false): void {
     const state = this.moving ? "run" : "idle";
     const key = characterAnimationKey(this.classId, this.direction, state);
-    if (!force && this.currentLoopKey === key && this.sprite.anims.isPlaying) return;
+    if (!force && this.currentLoopKey === key && this.sprite.anims.isPlaying) {
+      this.sprite.anims.timeScale = this.locomotionPlaybackRate;
+      return;
+    }
     this.currentLoopKey = key;
-    this.sprite.anims.timeScale = 1;
+    this.sprite.anims.timeScale = this.locomotionPlaybackRate;
     this.applyDirectionFlip();
     this.sprite.play(key, true);
   }

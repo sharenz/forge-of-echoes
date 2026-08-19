@@ -36,6 +36,8 @@ const DAMAGE_NUMBER_POOL_SIZE = 160;
 const VFX_PARTICLE_POOL_SIZE = 240;
 const HEALTH_BAR_WIDTH = 42;
 const HEALTH_BAR_HEIGHT = 5;
+const MOVEMENT_ACCELERATION = 18;
+const MOVEMENT_DECELERATION = 24;
 
 interface EnemyState {
   sprite: Phaser.GameObjects.Image;
@@ -140,6 +142,7 @@ class CraftyScene extends Phaser.Scene {
   private playerAnimator: CharacterAnimator | null = null;
   private playerShadow: Phaser.GameObjects.Image | null = null;
   private playerAura: Phaser.GameObjects.Image | null = null;
+  private cameraTarget: Phaser.GameObjects.Zone | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key> | null = null;
   private enemies: EnemyState[] = [];
   private projectiles: ProjectileState[] = [];
@@ -176,6 +179,10 @@ class CraftyScene extends Phaser.Scene {
   private returnPortal: ReturnPortalState | null = null;
   private returnPortalUsed = false;
   private footstepElapsed = 0;
+  private previousPlayerX = 0;
+  private previousPlayerY = 0;
+  private playerVelocityX = 0;
+  private playerVelocityY = 0;
 
   constructor(options: WorldRuntimeOptions) {
     super("crafty-world");
@@ -228,9 +235,8 @@ class CraftyScene extends Phaser.Scene {
       this.vfxPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: VFX_PARTICLE_POOL_SIZE, runChildUpdate: false });
       this.enemyHealthBars = this.add.graphics().setDepth(470);
       this.cameras.main.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
-      this.cameras.main.startFollow(this.player!, true, 1, 1);
-      this.cameras.main.setDeadzone(360, 360);
-      this.cameras.main.roundPixels = true;
+      this.cameras.main.startFollow(this.cameraTarget!, true, 0.16, 0.16);
+      this.cameras.main.roundPixels = false;
       this.startWave(1);
     }
 
@@ -265,9 +271,12 @@ class CraftyScene extends Phaser.Scene {
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.dash)) this.useSkill("dash");
     this.accumulator += Math.min(delta, MAX_FRAME_DELTA);
     while (this.accumulator >= FIXED_STEP) {
+      this.previousPlayerX = this.player.x;
+      this.previousPlayerY = this.player.y;
       this.fixedUpdate(FIXED_STEP / 1000);
       this.accumulator -= FIXED_STEP;
     }
+    this.renderPlayer(this.accumulator / FIXED_STEP);
   }
 
   useSkill(skill: "nova" | "dash"): void {
@@ -374,17 +383,32 @@ class CraftyScene extends Phaser.Scene {
       xInput = Number(this.keys.right.isDown || this.keys.rightAlt.isDown) - Number(this.keys.left.isDown || this.keys.leftAlt.isDown);
       yInput = Number(this.keys.down.isDown || this.keys.downAlt.isDown) - Number(this.keys.up.isDown || this.keys.upAlt.isDown);
     }
-    const length = Math.hypot(xInput, yInput) || 1;
-    if (xInput || yInput) {
-      const speed = (this.options.arenaBalance?.moveSpeed ?? 5.6) * 34;
-      this.player.x += (xInput / length) * speed * delta;
-      this.player.y += (yInput / length) * speed * delta;
+    const inputLength = Math.hypot(xInput, yInput) || 1;
+    const speed = (this.options.arenaBalance?.moveSpeed ?? 5.6) * 34;
+    const hasInput = Boolean(xInput || yInput);
+    const targetVelocityX = hasInput ? (xInput / inputLength) * speed : 0;
+    const targetVelocityY = hasInput ? (yInput / inputLength) * speed : 0;
+    const response = hasInput ? MOVEMENT_ACCELERATION : MOVEMENT_DECELERATION;
+    const velocityBlend = 1 - Math.exp(-response * delta);
+    this.playerVelocityX = Phaser.Math.Linear(this.playerVelocityX, targetVelocityX, velocityBlend);
+    this.playerVelocityY = Phaser.Math.Linear(this.playerVelocityY, targetVelocityY, velocityBlend);
+    if (!hasInput && Math.hypot(this.playerVelocityX, this.playerVelocityY) < 0.5) {
+      this.playerVelocityX = 0;
+      this.playerVelocityY = 0;
+    }
+
+    const movementSpeed = Math.hypot(this.playerVelocityX, this.playerVelocityY);
+    const isMoving = movementSpeed > 2;
+    if (isMoving) {
+      this.player.x += this.playerVelocityX * delta;
+      this.player.y += this.playerVelocityY * delta;
       this.clampPlayer();
       this.footstepElapsed += delta;
-      if (this.footstepElapsed >= 0.14) {
+      const speedRatio = Phaser.Math.Clamp(movementSpeed / speed, 0, 1);
+      if (speedRatio > 0.35 && this.footstepElapsed >= Phaser.Math.Linear(0.2, 0.14, speedRatio)) {
         this.footstepElapsed = 0;
         this.emitVfxParticle(
-          this.player.x - (xInput / length) * 4,
+          this.player.x - (this.playerVelocityX / movementSpeed) * 4,
           this.player.y + 22,
           0xb69a73,
           Phaser.Math.Between(-18, 18),
@@ -398,13 +422,9 @@ class CraftyScene extends Phaser.Scene {
     } else {
       this.footstepElapsed = 0.12;
     }
-    this.playerAnimator?.setLocomotion(xInput / length, yInput / length, Boolean(xInput || yInput));
-    this.playerShadow?.setPosition(this.player.x, this.player.y + 25);
-    this.playerAura?.setPosition(this.player.x, this.player.y + 25);
-    this.player.setDepth(Math.round(this.player.y / 10) + 11);
-    this.playerAnimator?.setWorldTransform(this.player.x, this.player.y, Math.round(this.player.y / 10) + 11);
-    this.playerShadow?.setDepth(Math.round(this.player.y / 10) + 9);
-    this.playerAura?.setDepth(Math.round(this.player.y / 10) + 9);
+    const directionX = isMoving ? this.playerVelocityX / movementSpeed : xInput / inputLength;
+    const directionY = isMoving ? this.playerVelocityY / movementSpeed : yInput / inputLength;
+    this.playerAnimator?.setLocomotion(directionX, directionY, isMoving, speed > 0 ? movementSpeed / speed : 0);
 
     if (this.options.mode === "arena") {
       if (this.keys?.attack.isDown || this.input.activePointer.isDown) this.tryBasicAttack();
@@ -511,10 +531,24 @@ class CraftyScene extends Phaser.Scene {
     this.playerShadow = this.add.image(x, y + 25, "shadow").setScale(2.1, 1.45).setDepth(8);
     this.playerAura = this.add.image(x, y + 25, "player-aura").setScale(1.45).setTint(CLASS_COLORS[this.options.classId].magic).setAlpha(0.18).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
     this.player = this.add.sprite(x, y, "shadow").setVisible(false).setDepth(10);
+    this.previousPlayerX = x;
+    this.previousPlayerY = y;
+    this.cameraTarget = this.add.zone(x, y, 1, 1);
     const textureKey = characterDefaultSpriteSheetKey(this.options.classId);
     this.playerVisual = this.add.sprite(x, y + characterVisualOffsetY(this.options.classId), textureKey, 0).setDepth(10);
     this.playerAnimator = new CharacterAnimator(this, this.playerVisual, this.options.classId);
     this.tweens.add({ targets: this.playerAura, alpha: 0.38, scaleX: 1.4, scaleY: 1.28, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+  }
+
+  private renderPlayer(interpolation: number): void {
+    if (!this.player) return;
+    const x = Phaser.Math.Linear(this.previousPlayerX, this.player.x, Phaser.Math.Clamp(interpolation, 0, 1));
+    const y = Phaser.Math.Linear(this.previousPlayerY, this.player.y, Phaser.Math.Clamp(interpolation, 0, 1));
+    const playerDepth = Math.round(y / 10) + 11;
+    this.playerAnimator?.setWorldTransform(x, y, playerDepth);
+    this.playerShadow?.setPosition(x, y + 25).setDepth(playerDepth - 2);
+    this.playerAura?.setPosition(x, y + 25).setDepth(playerDepth - 2);
+    this.cameraTarget?.setPosition(x, y);
   }
 
   private beginSkillAction(
@@ -701,12 +735,20 @@ class CraftyScene extends Phaser.Scene {
   private clampPlayer(): void {
     if (!this.player) return;
     if (this.options.mode === "arena") {
-      this.player.x = Phaser.Math.Clamp(this.player.x, 90, MAP_SIZE - 90);
-      this.player.y = Phaser.Math.Clamp(this.player.y, 90, MAP_SIZE - 90);
+      const clampedX = Phaser.Math.Clamp(this.player.x, 90, MAP_SIZE - 90);
+      const clampedY = Phaser.Math.Clamp(this.player.y, 90, MAP_SIZE - 90);
+      if (clampedX !== this.player.x) this.playerVelocityX = 0;
+      if (clampedY !== this.player.y) this.playerVelocityY = 0;
+      this.player.x = clampedX;
+      this.player.y = clampedY;
       return;
     }
-    this.player.x = Phaser.Math.Clamp(this.player.x, 175, 785);
-    this.player.y = Phaser.Math.Clamp(this.player.y, 310, 805);
+    const clampedX = Phaser.Math.Clamp(this.player.x, 175, 785);
+    const clampedY = Phaser.Math.Clamp(this.player.y, 310, 805);
+    if (clampedX !== this.player.x) this.playerVelocityX = 0;
+    if (clampedY !== this.player.y) this.playerVelocityY = 0;
+    this.player.x = clampedX;
+    this.player.y = clampedY;
   }
 
   private startWave(wave: number): void {
@@ -1312,8 +1354,8 @@ export class PhaserRuntime {
       backgroundColor: "#071011",
       pixelArt: true,
       antialias: false,
-      roundPixels: true,
-      render: { antialias: false, pixelArt: true, roundPixels: true, powerPreference: "high-performance" },
+      roundPixels: false,
+      render: { antialias: false, pixelArt: true, roundPixels: false, powerPreference: "high-performance" },
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
       scene,
       fps: { target: 60, smoothStep: true },

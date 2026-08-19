@@ -140,6 +140,31 @@ export function resolveCharacterDirection(x: number, y: number, fallback: Charac
   return x < 0 ? "west" : "east";
 }
 
+/**
+ * Keeps four-direction locomotion stable while the player crosses a diagonal.
+ * Without this hysteresis, tiny input/velocity changes repeatedly restart two
+ * different animation clips and make the character appear to flicker or jump.
+ */
+export function resolveLocomotionDirection(
+  x: number,
+  y: number,
+  current: CharacterDirection = "south",
+): CharacterDirection {
+  const absoluteX = Math.abs(x);
+  const absoluteY = Math.abs(y);
+  if (absoluteX < 0.0001 && absoluteY < 0.0001) return current;
+
+  const currentIsVertical = current === "north" || current === "south";
+  const switchBias = 1.3;
+  const useVerticalAxis = currentIsVertical
+    ? absoluteX <= absoluteY * switchBias
+    : absoluteY > absoluteX * switchBias;
+
+  if (useVerticalAxis && absoluteY >= 0.0001) return y < 0 ? "north" : "south";
+  if (absoluteX >= 0.0001) return x < 0 ? "west" : "east";
+  return y < 0 ? "north" : "south";
+}
+
 export function characterDirectionVector(direction: CharacterDirection): { x: number; y: number } {
   if (direction === "north") return { x: 0, y: -1 };
   if (direction === "south") return { x: 0, y: 1 };

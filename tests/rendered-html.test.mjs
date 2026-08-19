@@ -98,7 +98,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /pixelArt: true/);
   assert.match(world, /spatialBuckets/);
   assert.match(world, /MAP_SIZE = VIEW_SIZE \* 4/);
-  assert.match(world, /setDeadzone\(360, 360\)/);
+  assert.doesNotMatch(world, /setDeadzone\(/);
+  assert.match(world, /startFollow\(this\.cameraTarget!, true, 0\.16, 0\.16\)/);
+  assert.match(world, /renderPlayer\(this\.accumulator \/ FIXED_STEP\)/);
+  assert.match(world, /MOVEMENT_ACCELERATION/);
   assert.match(world, /PACK_REGIONS/);
   assert.match(world, /shouldSpawnNextWave/);
   assert.match(world, /spawnReturnPortal/);
