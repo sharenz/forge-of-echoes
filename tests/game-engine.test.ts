@@ -750,6 +750,10 @@ test("later waves and harder maps increase monster rarity while archetypes retai
 });
 
 test("item quantity changes drop frequency while item rarity changes only rarity weights", () => {
+  const standard = dropChances(100);
+  assert.equal(standard.equipment, 0.0055);
+  assert.equal(standard.material, 0.016);
+  assert.equal(standard.flask, 0.011);
   assert.equal(dropChances(200).equipment, dropChances(100).equipment * 2);
   assert.equal(dropChances(200).material, dropChances(100).material * 2);
   assert.equal(rollEquipmentRarity(100, () => 0.02), "magic");
