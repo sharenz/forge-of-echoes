@@ -994,12 +994,12 @@ body:has(.pixel-shell) { overflow: hidden; }
 .world-loot span { color: #d8c6ae; font-size: 9px; text-transform: uppercase; }
 .world-loot strong { grid-row: 1 / span 2; grid-column: 2; color: #ffcf74; font: 24px Georgia, serif; }
 .world-loot small { color: #817363; font-size: 7px; letter-spacing: .08em; text-transform: uppercase; }
-.world-hud-safe-area { position: absolute; z-index: 3; left: 50%; top: 50%; width: var(--game-view-size); height: var(--game-view-size); pointer-events: none; transform: translate(-50%, -50%); }
-.world-bottom-hud { position: absolute; z-index: 8; left: 1.8%; right: 1.8%; bottom: .5%; height: clamp(148px, 22.5%, 220px); display: grid; grid-template-columns: clamp(102px, 18%, 178px) minmax(0, 1fr) clamp(102px, 18%, 178px); align-items: end; pointer-events: none; filter: drop-shadow(0 14px 17px #000c); }
-.world-bottom-hud::before { content: ""; position: absolute; z-index: 0; left: 10%; right: 10%; bottom: 25px; height: 45px; border: 1px solid #4b3425; border-radius: 50%; background: linear-gradient(180deg, #241810f2, #090605fa); box-shadow: inset 0 1px #b37b4930, inset 0 0 22px #000, 0 7px 18px #000c; }
-.world-bottom-hud > .resource-tank { z-index: 5; width: 100%; max-width: 178px; align-self: end; justify-self: start; }
-.world-bottom-hud > .resource-tank:last-child { justify-self: end; }
-.world-command-deck { position: relative; z-index: 3; width: min(100%, 1120px); aspect-ratio: 2039 / 472; min-width: 0; align-self: end; justify-self: center; margin-bottom: 2px; background: url("/ui/bottom-command-frame-v1.png") center / 100% 100% no-repeat; image-rendering: auto; filter: drop-shadow(0 10px 12px #000e) drop-shadow(0 0 10px #db67242e); pointer-events: auto; }
+.world-hud-safe-area { position: absolute; z-index: 22; left: 50%; top: 50%; width: var(--game-view-size); height: var(--game-view-size); pointer-events: none; transform: translate(-50%, -50%); }
+.world-bottom-hud { position: absolute; z-index: 8; left: 1.8%; right: 1.8%; bottom: .5%; height: clamp(190px, 28%, 310px); display: flex; align-items: end; justify-content: center; pointer-events: none; filter: drop-shadow(0 14px 17px #000c); }
+.world-command-deck { position: relative; z-index: 3; width: min(100%, 1280px); aspect-ratio: 2039 / 472; min-width: 0; background: url("/ui/bottom-command-frame-v2.png") center / 100% 100% no-repeat; image-rendering: auto; filter: drop-shadow(0 10px 12px #000e) drop-shadow(0 0 10px #db67242e); pointer-events: auto; }
+.world-command-deck > .resource-tank { position: absolute; z-index: 5; top: 15%; width: 14.7%; max-width: none; }
+.world-command-deck > .life-tank { left: .5%; }
+.world-command-deck > .mana-tank { right: .5%; }
 .world-command-row { position: absolute; z-index: 2; left: 17.5%; right: 17.5%; top: 54%; display: flex; align-items: center; justify-content: center; gap: 0; transform: translateY(-50%); }
 .command-deck-divider { width: clamp(126px, 14vw, 204px); height: 1px; flex: 0 0 auto; opacity: 0; }
 .hud-section-label { position: absolute; left: 50%; top: -17px; color: #e1a567; font: 700 8px Arial, sans-serif; letter-spacing: .22em; text-transform: uppercase; text-shadow: 0 2px 4px #000, 0 0 5px #000; transform: translateX(-50%); }
@@ -1060,13 +1060,13 @@ body:has(.pixel-shell) { overflow: hidden; }
 .flask-hotkey > strong { position: absolute; z-index: 3; right: 2px; bottom: 1px; min-width: 18px; padding: 1px 3px; border: 1px solid #79583e; border-radius: 8px; background: #100b08e8; color: #fff0d5; font: 700 11px Arial, sans-serif; text-align: center; }
 .flask-hotkey[data-tooltip]::after { content: attr(data-tooltip); position: absolute; left: 50%; bottom: calc(100% + 9px); width: max-content; padding: 6px 9px; border: 1px solid #715039; border-radius: 3px; background: #100c0afa; color: #dfcbb2; font: 11px Georgia, serif; white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-50%, 4px); transition: .12s ease; }
 .flask-hotkey:hover::after { opacity: 1; transform: translate(-50%, 0); }
-.world-fps { position: absolute; z-index: 3; right: 188px; bottom: 42px; color: #766a5d; font-size: 7px; letter-spacing: .08em; pointer-events: none; }
-.world-experience { position: absolute; z-index: 4; left: 16%; right: 16%; bottom: 6.5%; height: 31px; pointer-events: none; filter: drop-shadow(0 4px 6px #000b); }
-.world-experience::after { content: ""; position: absolute; z-index: 4; inset: 10px 0 0; border: 1px solid #7f542f; background: linear-gradient(180deg, #27150c, #080504); box-shadow: inset 0 0 7px #000, 0 0 4px #d96d292e; }
-.world-experience > span { position: absolute; z-index: 5; left: 1%; right: 1%; top: -5px; height: 12px; display: flex; align-items: center; justify-content: space-between; color: #f1d7b8; text-shadow: 0 1px 3px #000; }
-.world-experience strong { font: 12px Georgia, serif; }
-.world-experience small { color: #d2b493; font-size: 10px; }
-.world-experience > i { position: absolute; z-index: 5; left: 3px; right: 3px; top: 13px; height: 8px; overflow: hidden; border-radius: 1px; background: #090605; box-shadow: inset 0 0 8px #000; }
+.world-fps { position: absolute; z-index: 3; right: 24px; bottom: 24px; color: #766a5d; font-size: 7px; letter-spacing: .08em; pointer-events: none; }
+.world-experience { position: absolute; z-index: 8; left: 19.15%; right: 19.15%; bottom: 17.1%; height: 3.8%; min-height: 9px; pointer-events: auto; cursor: help; filter: drop-shadow(0 2px 5px #000c); }
+.world-experience::after { content: attr(data-tooltip); position: absolute; z-index: 20; left: 50%; bottom: calc(100% + 12px); width: max-content; padding: 8px 11px; border: 1px solid #765034; border-radius: 3px; background: rgba(13,9,7,.98); color: #ead8c3; font: 12px Georgia, serif; white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-50%, 5px); transition: opacity .14s ease, transform .14s ease; box-shadow: 0 8px 24px #000c; }
+.world-experience:hover::after,
+.world-experience:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
+.world-experience:focus-visible { outline: 1px solid #e09a57; outline-offset: 3px; }
+.world-experience > i { position: absolute; z-index: 5; inset: 0; overflow: hidden; border: 1px solid #4c2d1d; border-radius: 1px; background: #090605; box-shadow: inset 0 0 8px #000, 0 0 3px #d96d2928; }
 .world-experience > i > b { position: relative; display: block; height: 100%; background: linear-gradient(90deg, #7f2c1b, #d65a28 64%, #ffc16e); box-shadow: 0 0 12px #d95a29; transition: width .2s ease; }
 .world-experience > i > b::after { content: ""; position: absolute; inset: 1px 0 auto; height: 35%; background: linear-gradient(90deg, #ffffff08, #ffd39a6b, #ffffff08); animation: experience-shimmer 2.6s linear infinite; }
 .world-character-stats { position: absolute; z-index: 3; right: 24px; top: 78px; width: 205px; border: 1px solid #594432; border-right: 2px solid #bd713d; background: linear-gradient(135deg, rgba(16,12,9,.94), rgba(27,19,13,.9)); box-shadow: 0 15px 38px #0009, inset 0 0 28px #a4491f12; }
@@ -1310,10 +1310,9 @@ body:has(.pixel-shell) { overflow: hidden; }
   .world-wave { top: 12px; }
   .world-loot { left: 10px; top: 10px; min-width: 112px; padding: 7px 9px; }
   .world-loot span { font-size: 10px; }
-  .world-bottom-hud { left: 1%; right: 1%; bottom: .3%; height: 132px; grid-template-columns: 64px minmax(0, 1fr) 64px; }
-  .world-bottom-hud::before { left: 8%; right: 8%; height: 55%; }
-  .world-bottom-hud > .resource-tank { width: 72px; margin-bottom: 2px; }
-  .world-command-deck { width: calc(100% + 20px); margin: 0 -10px 8px; padding: 0; }
+  .world-bottom-hud { left: 0; right: 0; bottom: 0; height: 150px; }
+  .world-command-deck { width: calc(100% + 10px); margin: 0 -5px 4px; }
+  .world-command-deck > .resource-tank { top: 16%; width: 15.4%; }
   .world-command-row { left: 12%; right: 12%; gap: 0; }
   .command-deck-divider { display: block; width: clamp(32px, 9vw, 50px); }
   .hud-section-label { display: none; }
@@ -1326,10 +1325,8 @@ body:has(.pixel-shell) { overflow: hidden; }
   .skill-icon { inset: 4px; }
   .action-slot[data-tooltip]::after { display: none; }
   .world-fps { display: none; }
-  .world-experience { left: 16%; right: 16%; bottom: 5%; height: 25px; }
-  .world-experience > span { display: none; }
-  .world-experience::after { inset: 8px 0 0; }
-  .world-experience > i { top: 11px; height: 6px; }
+  .world-experience { left: 19.15%; right: 19.15%; bottom: 17.1%; height: 4%; min-height: 6px; }
+  .world-experience::after { display: none; }
   .world-character-stats { right: 10px; top: 63px; bottom: auto; width: 188px; }
   .world-character-stats > header { padding: 7px 9px; }
   .character-stat-list { padding: 5px 9px 7px; }

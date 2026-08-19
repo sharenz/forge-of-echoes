@@ -232,8 +232,8 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
       {mode !== "class-select" && characterProgress && characterStats && (
         <div className="world-hud-safe-area" aria-label="Character resources">
           <div className="world-bottom-hud">
-            <ResourceGlobe kind="life" label="Life" current={displayedLife} maximum={displayedMaxLife} />
             <div className="world-command-deck">
+              <ResourceGlobe kind="life" label="Life" current={displayedLife} maximum={displayedMaxLife} />
               <div className="world-command-row">
                 <div className="world-flask-belt" aria-label="Flask belt">
                   <span className="hud-section-label">Flasks</span>
@@ -293,12 +293,20 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
                   </button>
                 </div>
               </div>
-              <div className="world-experience" aria-label={`Level ${characterProgress.level} experience`}>
-                <span><strong>Level {characterProgress.level}</strong><small>{characterProgress.level === MAX_CHARACTER_LEVEL ? "Maximum level" : `${characterProgress.xp} / ${xpRequired} XP`}</small></span>
+              <div
+                className="world-experience"
+                aria-label={`Level ${characterProgress.level} experience`}
+                aria-valuemin={0}
+                aria-valuemax={characterProgress.level === MAX_CHARACTER_LEVEL ? 100 : xpRequired}
+                aria-valuenow={characterProgress.level === MAX_CHARACTER_LEVEL ? 100 : characterProgress.xp}
+                data-tooltip={characterProgress.level === MAX_CHARACTER_LEVEL ? `Level ${characterProgress.level} · Maximum level` : `Level ${characterProgress.level} · ${characterProgress.xp} / ${xpRequired} XP`}
+                role="progressbar"
+                tabIndex={0}
+              >
                 <i><b style={{ width: `${xpPercent}%` }} /></i>
               </div>
+              <ResourceGlobe kind="mana" label="Mana" current={displayedMana} maximum={displayedMaxMana} />
             </div>
-            <ResourceGlobe kind="mana" label="Mana" current={displayedMana} maximum={displayedMaxMana} />
           </div>
         </div>
       )}
