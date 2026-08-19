@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { EquipmentItem } from "../game/domain";
+import type { EquipmentItem, PlayerProfile } from "../game/domain";
 import { itemDisplayName } from "../game/items";
 import { formatModifier } from "../game/stats";
 import { ItemIcon } from "./ItemIcon";
@@ -9,6 +9,7 @@ import { ItemTooltip } from "./ItemTooltip";
 
 interface ItemCardProps {
   item: EquipmentItem;
+  profile?: PlayerProfile;
   compact?: boolean;
   selected?: boolean;
   onClick?: () => void;
@@ -17,7 +18,7 @@ interface ItemCardProps {
   onDragEnd?: React.DragEventHandler<HTMLButtonElement>;
 }
 
-export function ItemCard({ item, compact = false, selected = false, onClick, draggable = false, onDragStart, onDragEnd }: ItemCardProps) {
+export function ItemCard({ item, profile, compact = false, selected = false, onClick, draggable = false, onDragStart, onDragEnd }: ItemCardProps) {
   const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null);
   return (
     <>
@@ -48,7 +49,7 @@ export function ItemCard({ item, compact = false, selected = false, onClick, dra
         ))}
         {!compact && <span className="item-stability">Stability {item.stability}/{item.maxStability}</span>}
       </button>
-      {compact && tooltip && <ItemTooltip item={item} x={tooltip.x} y={tooltip.y} hint={draggable ? "Drag to move this equipped item" : undefined} />}
+      {compact && tooltip && <ItemTooltip item={item} profile={profile} x={tooltip.x} y={tooltip.y} hint={draggable ? "Drag to move this equipped item" : undefined} />}
     </>
   );
 }

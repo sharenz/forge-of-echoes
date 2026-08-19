@@ -80,6 +80,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game/config/flasks.ts", import.meta.url), "utf8"),
     readFile(new URL("../GAME_DESIGN.md", import.meta.url), "utf8"),
   ]);
+  const itemComparison = await readFile(new URL("../app/game/item-comparison.ts", import.meta.url), "utf8");
 
   assert.match(page, /<GameShell \/>/);
   assert.match(layout, /<GameCursor \/>/);
@@ -256,8 +257,17 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(globalStyles, /\.attributes-interface/);
   assert.match(globalStyles, /\.skill-tree-interface/);
   assert.match(itemTooltip, /tooltip-affixes/);
-  assert.match(itemTooltip, /Hold Alt \/ Option for roll ranges/);
+  assert.match(itemTooltip, /Hold Alt \/ Option for ranges \+ equipped comparison/);
   assert.match(itemTooltip, /formatModifierWithRollRange/);
+  assert.match(itemTooltip, /Currently equipped/);
+  assert.match(itemTooltip, /Change after replacement/);
+  assert.match(itemTooltip, /equipmentComparisons\.map/);
+  assert.match(itemTooltip, /ranges \+ equipped comparison/);
+  assert.match(itemComparison, /calculateCharacterStats/);
+  assert.match(itemComparison, /CHARACTER_EQUIPMENT_SLOTS/);
+  assert.match(globalStyles, /\.comparison-count-3/);
+  assert.match(inventoryGrid, /profile=\{profile\}/);
+  assert.match(globalStyles, /\.tooltip-stat-comparison/);
   assert.match(itemTooltip, /mapModifierDescription/);
   assert.match(inventoryPanel, /Collected this map/);
   assert.match(shell, /mapDevice/);

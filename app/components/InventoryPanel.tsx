@@ -92,7 +92,7 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
             >
               <small>{slot.label}</small>
               {equipped
-                ? <ItemCard compact draggable item={equipped} onClick={() => onSelect(equipped.id)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-crafty-item", equipped.id); event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify({ x: 0, y: 0 })); beginDrag(equipped.id); }} onDragEnd={endDrag} selected={selectedItemId === equipped.id} />
+                ? <ItemCard compact draggable item={equipped} profile={profile} onClick={() => onSelect(equipped.id)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-crafty-item", equipped.id); event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify({ x: 0, y: 0 })); beginDrag(equipped.id); }} onDragEnd={endDrag} selected={selectedItemId === equipped.id} />
                 : <span>Empty</span>}
             </div>
           );
@@ -167,10 +167,10 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
               </label>
               <small>Ctrl-click a backpack item to send it to this tab.</small>
             </div>
-            <InventoryGrid container={currentStashTab.container} selectedId={selectedItemId} onSelect={onSelect} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} />
+            <InventoryGrid container={currentStashTab.container} profile={profile} selectedId={selectedItemId} onSelect={onSelect} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} />
           </section>
         )}
-        <InventoryGrid container={profile.inventory} selectedId={selectedItemId} onSelect={onSelect} highlightedIds={freshItems} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} onEquipItem={onEquipItem} onActivateItem={loadFirstFlaskSlot} onQuickMove={showStash ? onQuickStash : undefined} />
+        <InventoryGrid container={profile.inventory} profile={profile} selectedId={selectedItemId} onSelect={onSelect} highlightedIds={freshItems} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} onEquipItem={onEquipItem} onActivateItem={loadFirstFlaskSlot} onQuickMove={showStash ? onQuickStash : undefined} />
       </div>
     </div>
   );

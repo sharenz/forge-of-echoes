@@ -4,7 +4,7 @@ import { useState, type CSSProperties, type DragEvent } from "react";
 import { ITEM_CONTAINER_DEFINITIONS } from "../game/config/containers";
 import { CURRENCY_DEFINITIONS } from "../game/config/currencies";
 import { FLASK_DEFINITIONS } from "../game/config/flasks";
-import type { InventoryItem, ItemContainer } from "../game/domain";
+import type { InventoryItem, ItemContainer, PlayerProfile } from "../game/domain";
 import { canPlaceItem, findContainerEntry, itemFootprint } from "../game/item-container";
 import { isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "../game/inventory";
 import { itemDisplayName } from "../game/items";
@@ -13,6 +13,7 @@ import { ItemTooltip } from "./ItemTooltip";
 
 interface InventoryGridProps {
   container: ItemContainer;
+  profile?: PlayerProfile;
   selectedId?: string | null;
   onSelect: (id: string) => void;
   highlightedIds?: ReadonlySet<string>;
@@ -62,7 +63,7 @@ function readOffset(event: DragEvent): { x: number; y: number } {
   }
 }
 
-export function InventoryGrid({ container, selectedId, onSelect, highlightedIds, draggedItem, draggedOffset, onDragItem, onDragEnd, onDropItem, onEquipItem, onActivateItem, onQuickMove }: InventoryGridProps) {
+export function InventoryGrid({ container, profile, selectedId, onSelect, highlightedIds, draggedItem, draggedOffset, onDragItem, onDragEnd, onDropItem, onEquipItem, onActivateItem, onQuickMove }: InventoryGridProps) {
   const definition = ITEM_CONTAINER_DEFINITIONS[container.id];
   const [tooltip, setTooltip] = useState<{ item: InventoryItem; x: number; y: number } | null>(null);
   const [preview, setPreview] = useState<DropPreview | null>(null);
@@ -163,7 +164,7 @@ export function InventoryGrid({ container, selectedId, onSelect, highlightedIds,
           );
         })}
       </div>
-      {tooltip && <ItemTooltip item={tooltip.item} x={tooltip.x} y={tooltip.y} hint={onQuickMove ? "Ctrl-click to stash · drag to place" : isEquipmentItem(tooltip.item) ? "Drag to move · double-click to equip" : isFlaskItem(tooltip.item) ? "Drag to a belt slot · double-click to load" : "Drag to place"} />}
+      {tooltip && <ItemTooltip item={tooltip.item} profile={profile} x={tooltip.x} y={tooltip.y} hint={onQuickMove ? "Ctrl-click to stash · drag to place" : isEquipmentItem(tooltip.item) ? "Drag to move · double-click to equip" : isFlaskItem(tooltip.item) ? "Drag to a belt slot · double-click to load" : "Drag to place"} />}
     </div>
   );
 }

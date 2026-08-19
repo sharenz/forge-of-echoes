@@ -16,9 +16,11 @@ import { chooseEquipmentSlot, equipmentSlotAccepts } from "../app/game/equipment
 import { addCurrencyToInventory, consumeCurrency, countCurrency, createCurrencyStack, isCurrencyItem, isFlaskItem, isMapItem } from "../app/game/inventory";
 import { advanceFlaskRecovery, consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, storePickedUpFlask, unloadFlaskFromBelt } from "../app/game/flasks";
 import { canPlaceItem, containerItems, createItemContainer, insertItem, moveItem, transferItem } from "../app/game/item-container";
+import { compareEquipmentToCurrent } from "../app/game/item-comparison";
 import {
   createAffixForItem,
   eligibleAffixTiers,
+  generateStarterWeapon,
   normalizeEquipmentItem,
   rerollAffixValues,
   scaleBaseModifier,
@@ -138,6 +140,64 @@ test("weapon-local APS is the base scaled by sourced increased attack speed", ()
   assert.ok(spear.stats.attackSpeed > cleaver.stats.attackSpeed);
   assert.ok(spear.breakdown.attackSpeed.contributions.some((entry) => entry.source === "weapon:hunter-spear:attacks-per-second"));
   assert.ok(spear.breakdown.attackSpeed.contributions.some((entry) => entry.source === "attribute:dexterity:attack-speed"));
+});
+
+test("equipment comparison resolves replacement deltas through the character stat engine", () => {
+  const equippedWeapon = {
+    kind: "equipment", id: "equipped-spear", baseId: "hunter-spear", baseName: "Hunter Spear", slot: "mainHand", rarity: "normal", itemLevel: 1,
+    stability: 8, maxStability: 8, implicit: "", baseStats: [{ stat: "attackDamage", mode: "flat", value: 7, source: "base:old" }],
+    implicitModifiers: [{ stat: "attackSpeed", mode: "increased", value: 8, source: "implicit:old" }], affixes: [],
+  } satisfies EquipmentItem;
+  const candidateWeapon = {
+    kind: "equipment", id: "candidate-cleaver", baseId: "iron-cleaver", baseName: "Iron Cleaver", slot: "mainHand", rarity: "rare", itemLevel: 20,
+    stability: 8, maxStability: 8, implicit: "", baseStats: [{ stat: "attackDamage", mode: "flat", value: 24, source: "base:new" }],
+    implicitModifiers: [{ stat: "attackDamage", mode: "flat", value: 4, source: "implicit:new" }], affixes: [],
+  } satisfies EquipmentItem;
+  const profile = {
+    version: 9,
+    character: characterProgress(10),
+    inventory: createItemContainer("backpack"), stash: createStash(), equipped: { mainHand: equippedWeapon }, flaskBelt: [null, null, null, null, null], mapDevice: null, openedMap: null,
+  } satisfies PlayerProfile;
+
+  const comparisons = compareEquipmentToCurrent(profile, candidateWeapon);
+  assert.equal(comparisons.length, 1);
+  const comparison = comparisons[0];
+  assert.equal(comparison.slot, "mainHand");
+  assert.equal(comparison.slotLabel, "Main Hand");
+  assert.equal(comparison.equippedItem?.id, equippedWeapon.id);
+  assert.ok(comparison.statDeltas.some((delta) => delta.stat === "attackDamage" && delta.delta > 0));
+  assert.ok(comparison.statDeltas.some((delta) => delta.stat === "attackSpeed" && delta.delta < 0));
+
+  const expected = calculateCharacterStats({ ...profile, equipped: { mainHand: candidateWeapon } }).stats;
+  const attackDamage = comparison.statDeltas.find((delta) => delta.stat === "attackDamage");
+  assert.equal(attackDamage?.candidate, expected.attackDamage);
+});
+
+test("equipped items do not compare against themselves", () => {
+  const equipped = generateStarterWeapon("amazon");
+  const profile = { ...createInitialProfile(), equipped: { mainHand: equipped } };
+  assert.deepEqual(compareEquipmentToCurrent(profile, equipped), []);
+});
+
+test("multi-slot equipment compares independently against every supported slot", () => {
+  const ring = (id: string, focus: number): EquipmentItem => ({
+    kind: "equipment", id, baseId: "ember-ring", baseName: "Ember Ring", slot: "ring", rarity: "magic", itemLevel: 10,
+    stability: 8, maxStability: 8, implicit: `+${focus} maximum Focus`, baseStats: [],
+    implicitModifiers: [{ stat: "maxFocus", mode: "flat", value: focus, source: `implicit:${id}` }], affixes: [],
+  });
+  const left = ring("left-ring", 8);
+  const right = ring("right-ring", 12);
+  const candidate = ring("candidate-ring", 20);
+  const profile = {
+    ...createInitialProfile(),
+    character: characterProgress(10),
+    equipped: { ringLeft: left, ringRight: right },
+  } satisfies PlayerProfile;
+
+  const comparisons = compareEquipmentToCurrent(profile, candidate);
+  assert.deepEqual(comparisons.map((comparison) => comparison.slot), ["ringLeft", "ringRight"]);
+  assert.deepEqual(comparisons.map((comparison) => comparison.equippedItem?.id), [left.id, right.id]);
+  assert.ok(comparisons[0].statDeltas.find((delta) => delta.stat === "maxFocus")!.delta > comparisons[1].statDeltas.find((delta) => delta.stat === "maxFocus")!.delta);
 });
 
 test("legacy equipment is normalized without losing its rolled value", () => {

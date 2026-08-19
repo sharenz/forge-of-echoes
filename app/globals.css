@@ -947,6 +947,66 @@ body:has(.pixel-shell) { overflow: hidden; }
 .item-tooltip.rarity-rare { border-top-color: #e0bc5d; }
 .item-tooltip.rarity-unique { border-top-color: #d27038; }
 
+.item-tooltip.equipment-tooltip {
+  width: 304px;
+  max-height: calc(100vh - 24px);
+  padding: 0;
+  overflow-y: auto;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.item-tooltip.equipment-tooltip.is-comparing { width: 636px; }
+.equipment-tooltip-grid { display: grid; grid-template-columns: 304px; align-items: start; gap: 12px; }
+.equipment-tooltip.is-comparing .equipment-tooltip-grid { grid-template-columns: repeat(2, 312px); }
+.item-tooltip.equipment-tooltip.comparison-count-3 { width: 960px; max-width: calc(100vw - 24px); overflow-x: auto; }
+.equipment-tooltip.comparison-count-3 .equipment-tooltip-grid { grid-template-columns: repeat(3, 312px); }
+.item-tooltip-card {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid #75604b;
+  border-top: 2px solid #b5aa9c;
+  background: linear-gradient(145deg, #211c17f7, #0b0908fc);
+  box-shadow: 0 18px 55px #000, inset 0 0 35px #8b4c2220;
+}
+.item-tooltip-card.rarity-magic { border-top-color: #7799e3; }
+.item-tooltip-card.rarity-rare { border-top-color: #e0bc5d; }
+.item-tooltip-card.rarity-unique { border-top-color: #d27038; }
+.item-tooltip-card > .tooltip-item-icon { position: absolute; top: 8px; right: 8px; width: 66px; height: 66px; opacity: .82; filter: drop-shadow(0 5px 5px #000); }
+.item-tooltip-card > span,
+.item-tooltip-card > strong,
+.item-tooltip-card > em { max-width: 218px; }
+.item-tooltip-card > span { color: #a89886; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+.item-tooltip-card > strong { color: #eee0c7; font: 23px Georgia, serif; }
+.item-tooltip-card > em { color: #8e8173; font-size: 14px; font-style: normal; text-transform: capitalize; }
+.equipment-tooltip > .tooltip-roll-hint { display: block; margin-top: 6px; padding: 5px 9px; border: 1px solid #4d3d30; background: #100c0af2; color: #9d8c77; font-size: 11px; letter-spacing: .035em; text-align: center; }
+.equipment-tooltip > .tooltip-roll-hint.active { color: #d1a55b; }
+.tooltip-stat-comparison { margin-top: 3px; padding-top: 9px; border-top: 1px solid #554435; display: flex; flex-direction: column; gap: 5px; }
+.tooltip-stat-comparison > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+.tooltip-stat-comparison > header span { color: #e1b777; font: 12px Georgia, serif; text-transform: uppercase; letter-spacing: .06em; }
+.tooltip-stat-comparison > header small { color: #786d60; font-size: 9px; text-align: right; text-transform: uppercase; }
+.tooltip-stat-comparison > div { min-height: 24px; padding: 4px 5px; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 7px; border-left: 2px solid; background: #0004; }
+.tooltip-stat-comparison > div > span { color: #cdbfae; font-size: 11px; }
+.tooltip-stat-comparison > div > small { color: #81766a; font-size: 10px; white-space: nowrap; }
+.tooltip-stat-comparison > div > strong { min-width: 48px; font: 13px Georgia, serif; text-align: right; }
+.tooltip-stat-comparison .stat-gain { border-left-color: #71b97c; }
+.tooltip-stat-comparison .stat-gain > strong { color: #82d78f; }
+.tooltip-stat-comparison .stat-loss { border-left-color: #c65f52; }
+.tooltip-stat-comparison .stat-loss > strong { color: #eb776a; }
+.tooltip-stat-comparison > p { margin: 2px 0 0; color: #8f8375; font: italic 12px Georgia, serif; }
+.empty-comparison-slot { min-height: 180px; justify-content: center; border-style: dashed; background: linear-gradient(145deg, #181511f4, #090807fa); }
+.empty-comparison-slot > strong { color: #85786a; }
+
+@media (max-width: 700px) {
+  .item-tooltip.equipment-tooltip.is-comparing { width: min(304px, calc(100vw - 24px)); }
+  .equipment-tooltip.is-comparing .equipment-tooltip-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 .game-notification {
   position: fixed;
   z-index: 40;
