@@ -109,6 +109,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /renderPlayerResources/);
   assert.match(world, /this\.options\.onPlayerDeath\(\)/);
   assert.doesNotMatch(world, /this\.lives/);
+  assert.match(phaserWorld, /world-hud-safe-area/);
+  assert.match(phaserWorld, /ResourceGlobe kind="life"/);
   assert.doesNotMatch(world, /groundDrops\.length > 0/);
   assert.match(world, /waveElapsedSeconds/);
   assert.match(world, /rollHitDamage/);
@@ -293,6 +295,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   await access(new URL("../public/player-barbarian-sheet-v1.png", import.meta.url));
   await access(new URL("../public/player-sorceress-locomotion-v3.png", import.meta.url));
   await access(new URL("../public/player-sorceress-actions-v3.png", import.meta.url));
+  await access(new URL("../public/ui/resource-globe-frame-v1.png", import.meta.url));
+  await access(new URL("../public/ui/experience-frame-v1.png", import.meta.url));
   const itemIcons = (await readdir(new URL("../public/item-icons", import.meta.url))).filter((name) => name.endsWith(".png"));
   assert.equal(itemIcons.length, 20);
 });

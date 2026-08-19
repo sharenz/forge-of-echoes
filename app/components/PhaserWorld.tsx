@@ -53,6 +53,27 @@ function damageSummary(damage: NonNullable<SkillDefinition["damage"]>): string {
   return `${minimum}–${maximum}% ${DAMAGE_TYPE_DEFINITIONS[damage.type].label} damage`;
 }
 
+interface ResourceGlobeProps {
+  kind: "life" | "mana";
+  label: string;
+  current: number;
+  maximum: number;
+}
+
+function ResourceGlobe({ kind, label, current, maximum }: ResourceGlobeProps) {
+  const percentage = maximum > 0 ? Math.max(0, Math.min(100, (current / maximum) * 100)) : 0;
+  const displayedCurrent = kind === "life" ? Math.ceil(current) : Math.floor(current);
+  const displayedMaximum = kind === "life" ? Math.ceil(maximum) : Math.floor(maximum);
+  return (
+    <div className={`resource-tank ${kind}-tank`} aria-label={`${label}: ${displayedCurrent} of ${displayedMaximum}`}>
+      <div className="globe-reservoir" style={{ "--resource-level": `${percentage}%` } as CSSProperties}>
+        <i className="globe-liquid" />
+        <strong><span>{label}</span>{displayedCurrent}<small>/{displayedMaximum}</small></strong>
+      </div>
+    </div>
+  );
+}
+
 function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterStatRowProps) {
   const contributions = resolution?.contributions.filter((modifier) => Math.abs(modifier.value) > 0.0001) ?? [];
   return (
@@ -173,6 +194,10 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
   const riftProgress = hud ? Math.min(100, (hud.riftRecharge / resolvedDash.recharge) * 100) : 0;
   const xpRequired = characterProgress ? XP_BY_LEVEL(characterProgress.level) : 1;
   const xpPercent = characterProgress?.level === MAX_CHARACTER_LEVEL ? 100 : Math.min(100, ((characterProgress?.xp ?? 0) / xpRequired) * 100);
+  const displayedLife = mode === "arena" && hud ? hud.life : characterStats?.maxLife ?? 0;
+  const displayedMaxLife = mode === "arena" && hud ? hud.maxLife : characterStats?.maxLife ?? 0;
+  const displayedMana = mode === "arena" && hud ? hud.focus : characterStats?.maxFocus ?? 0;
+  const displayedMaxMana = mode === "arena" && hud ? hud.maxFocus : characterStats?.maxFocus ?? 0;
 
   return (
     <main className={`pixel-shell mode-${mode} ${paused ? "world-input-paused" : ""}`}>
@@ -183,20 +208,6 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
         <>
           <div className="world-wave"><span>Wave</span><strong>{hud.wave}<em>/{arenaBalance?.waves ?? ARENA_RULES.totalWaves}</em></strong><small>{hud.enemies} remain{hud.nextWaveIn !== null ? ` · next in ${Math.ceil(hud.nextWaveIn)}s` : " · final wave"}</small></div>
           <div className="world-loot"><span>{hud.lootCollected} collected</span><strong>{hud.groundDrops}</strong><small>drops on ground</small></div>
-          <div className="world-vitals">
-            <div className="resource-tank life-tank">
-              <div className="globe-reservoir" style={{ "--resource-level": `${Math.max(0, Math.min(100, (hud.life / hud.maxLife) * 100))}%` } as CSSProperties}>
-                <i className="globe-liquid" />
-                <strong><span>Life</span>{Math.ceil(hud.life)}<small>/{Math.ceil(hud.maxLife)}</small></strong>
-              </div>
-            </div>
-            <div className="resource-tank mana-tank">
-              <div className="globe-reservoir" style={{ "--resource-level": `${Math.max(0, Math.min(100, (hud.focus / hud.maxFocus) * 100))}%` } as CSSProperties}>
-                <i className="globe-liquid" />
-                <strong><span>Mana</span>{Math.floor(hud.focus)}<small>/{Math.floor(hud.maxFocus)}</small></strong>
-              </div>
-            </div>
-          </div>
           <div className="world-skills">
             <span className="basic-skill"><kbd>{BASIC_ATTACK.key}</kbd><span><strong>{BASIC_ATTACK.name}</strong><small>{damageSummary(BASIC_ATTACK.damage)}</small></span></span>
             <button type="button" className="active-skill" disabled={!novaReady} onClick={() => runtimeRef.current?.useSkill("nova")}>
@@ -222,10 +233,16 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
           )}
         </>
       )}
-      {mode !== "class-select" && characterProgress && (
-        <div className="world-experience" aria-label={`Level ${characterProgress.level} experience`}>
-          <span><strong>Level {characterProgress.level}</strong><small>{characterProgress.level === MAX_CHARACTER_LEVEL ? "Maximum level" : `${characterProgress.xp} / ${xpRequired} XP`}</small></span>
-          <i><b style={{ width: `${xpPercent}%` }} /></i>
+      {mode !== "class-select" && characterProgress && characterStats && (
+        <div className="world-hud-safe-area" aria-label="Character resources">
+          <div className="world-vitals">
+            <ResourceGlobe kind="life" label="Life" current={displayedLife} maximum={displayedMaxLife} />
+            <ResourceGlobe kind="mana" label="Mana" current={displayedMana} maximum={displayedMaxMana} />
+          </div>
+          <div className="world-experience" aria-label={`Level ${characterProgress.level} experience`}>
+            <span><strong>Level {characterProgress.level}</strong><small>{characterProgress.level === MAX_CHARACTER_LEVEL ? "Maximum level" : `${characterProgress.xp} / ${xpRequired} XP`}</small></span>
+            <i><b style={{ width: `${xpPercent}%` }} /></i>
+          </div>
         </div>
       )}
       {hud && <div className="world-fps">{hud.fps} FPS · WebGL sprites</div>}

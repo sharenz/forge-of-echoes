@@ -433,6 +433,7 @@ button:focus-visible { outline: 2px solid var(--ember-bright); outline-offset: 3
 body:has(.pixel-shell) { overflow: hidden; }
 
 .pixel-shell {
+  --game-view-size: min(100vw, 100vh);
   position: fixed;
   inset: 0;
   overflow: hidden;
@@ -967,21 +968,21 @@ body:has(.pixel-shell) { overflow: hidden; }
 .world-loot span { color: #d8c6ae; font-size: 9px; text-transform: uppercase; }
 .world-loot strong { grid-row: 1 / span 2; grid-column: 2; color: #ffcf74; font: 24px Georgia, serif; }
 .world-loot small { color: #817363; font-size: 7px; letter-spacing: .08em; text-transform: uppercase; }
-.world-vitals { position: absolute; z-index: 3; left: 22px; right: 22px; bottom: 34px; display: flex; align-items: flex-end; justify-content: space-between; pointer-events: none; }
-.resource-tank { position: relative; width: 150px; height: 150px; padding: 11px; border: 2px solid #725a43; border-radius: 50%; background: radial-gradient(circle at 48% 42%, #3e3328, #130f0c 66%, #050403 72%); box-shadow: inset 0 0 0 4px #0a0807, inset 0 0 18px #c28b5738, 0 12px 32px #000d, 0 0 0 3px #17110d; }
-.resource-tank::before { content: ""; position: absolute; z-index: -1; left: 11px; right: 11px; bottom: -8px; height: 31px; border: 2px solid #604934; border-radius: 50%; background: linear-gradient(#2e241c, #0b0806); box-shadow: 0 9px 17px #000b; }
-.resource-tank::after { content: "◆"; position: absolute; z-index: 4; left: 50%; top: -9px; width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid #816248; background: #17110d; color: #b58a62; font-size: 9px; transform: translateX(-50%) rotate(45deg); box-shadow: 0 3px 9px #000; }
-.globe-reservoir { position: relative; width: 100%; height: 100%; overflow: hidden; border: 2px solid #0a0807; border-radius: 50%; background: radial-gradient(circle at 50% 70%, #190d0d, #070507 74%); box-shadow: inset 0 0 22px #000, inset 0 0 0 2px #ffffff0d; }
+.world-hud-safe-area { position: absolute; z-index: 3; left: 50%; top: 50%; width: var(--game-view-size); height: var(--game-view-size); pointer-events: none; transform: translate(-50%, -50%); }
+.world-vitals { position: absolute; z-index: 3; left: 2.1%; right: 2.1%; bottom: 2.8%; display: flex; align-items: flex-end; justify-content: space-between; pointer-events: none; }
+.resource-tank { position: relative; width: clamp(78px, 18%, 172px); aspect-ratio: 487 / 512; filter: drop-shadow(0 10px 12px #000c) drop-shadow(0 0 8px #c26c2728); }
+.resource-tank::after { content: ""; position: absolute; z-index: 5; inset: 0; background: url("/ui/resource-globe-frame-v1.png") center / 100% 100% no-repeat; image-rendering: pixelated; }
+.globe-reservoir { position: absolute; z-index: 1; left: 50%; top: 45.5%; width: 63%; aspect-ratio: 1; overflow: hidden; border: 2px solid #0a0807; border-radius: 50%; background: radial-gradient(circle at 50% 70%, #190d0d, #070507 74%); box-shadow: inset 0 0 22px #000, inset 0 0 0 2px #ffffff0d, 0 0 12px #000; transform: translate(-50%, -50%); }
 .globe-reservoir::before { content: ""; position: absolute; z-index: 3; inset: 8px 18px 42% 18px; border-radius: 50%; background: linear-gradient(115deg, #ffffff38, #ffffff08 38%, transparent 42%); filter: blur(1px); transform: rotate(-12deg); }
 .globe-reservoir::after { content: ""; position: absolute; z-index: 2; inset: 0; border-radius: 50%; box-shadow: inset 10px 0 20px #0008, inset -10px -8px 23px #0009, inset 0 0 14px #fff1; }
 .globe-liquid { position: absolute; left: -5%; right: -5%; bottom: -2px; height: var(--resource-level); display: block; transition: height .22s cubic-bezier(.2,.7,.3,1); animation: globe-breathe 2.8s ease-in-out infinite; }
 .globe-liquid::before { content: ""; position: absolute; left: 0; right: 0; top: -6px; height: 13px; border-radius: 50%; background: inherit; filter: brightness(1.35); animation: globe-surface 2.2s ease-in-out infinite; }
 .life-tank .globe-liquid { background: radial-gradient(circle at 42% 18%, #ff7663, #b52627 45%, #581018 83%); box-shadow: inset 0 12px 18px #ff8a6b24, 0 -5px 16px #e3403959; }
 .mana-tank .globe-liquid { background: radial-gradient(circle at 42% 18%, #67c8ff, #276fc4 45%, #172f77 83%); box-shadow: inset 0 12px 18px #99ddff24, 0 -5px 16px #3d99f059; animation-delay: -.9s; }
-.globe-reservoir strong { position: absolute; z-index: 5; left: 50%; top: 50%; display: flex; align-items: baseline; color: #fff4e5; font: 22px Georgia, serif; text-shadow: 0 2px 5px #000, 0 0 8px #000; transform: translate(-50%, -42%); }
+.globe-reservoir strong { position: absolute; z-index: 5; left: 50%; top: 50%; display: flex; align-items: baseline; color: #fff4e5; font: clamp(13px, 2.25vw, 22px) Georgia, serif; text-shadow: 0 2px 5px #000, 0 0 8px #000; transform: translate(-50%, -42%); }
 .globe-reservoir strong span { position: absolute; left: 50%; bottom: calc(100% + 5px); color: #ead3b9; font: 10px Arial, sans-serif; letter-spacing: .18em; text-transform: uppercase; transform: translateX(-50%); }
 .globe-reservoir strong small { margin-left: 2px; color: #d2bfa9; font: 11px Arial, sans-serif; }
-.world-skills { position: absolute; z-index: 3; left: 50%; bottom: 42px; display: flex; gap: 8px; transform: translateX(-50%); }
+.world-skills { position: absolute; z-index: 3; left: 50%; bottom: calc((100vh - var(--game-view-size)) / 2 + 84px); display: flex; gap: 8px; transform: translateX(-50%); }
 .world-skills > span,
 .world-skills button { position: relative; min-width: 165px; height: 62px; padding: 8px 13px; overflow: hidden; border: 1px solid #5c4432; background: rgba(15,11,9,.94); color: #c8b7a2; display: flex; align-items: center; gap: 10px; cursor: default; box-shadow: 0 10px 28px #0009; }
 .world-skills button { min-width: 205px; cursor: pointer; text-align: left; transition: border-color .16s ease, background .16s ease, opacity .16s ease; }
@@ -998,12 +999,14 @@ body:has(.pixel-shell) { overflow: hidden; }
 .skill-charges i { width: 7px; height: 7px; border: 1px solid #695746; background: #211913; transform: rotate(45deg); }
 .skill-charges i.ready { border-color: #d99a56; background: #f0a35d; box-shadow: 0 0 7px #dc7337; }
 .world-fps { position: absolute; z-index: 3; right: 188px; bottom: 42px; color: #766a5d; font-size: 7px; letter-spacing: .08em; pointer-events: none; }
-.world-experience { position: absolute; z-index: 4; left: 18px; right: 18px; bottom: 10px; height: 20px; pointer-events: none; }
-.world-experience > span { position: absolute; z-index: 2; inset: 0 8px; display: flex; align-items: center; justify-content: space-between; color: #f1d7b8; text-shadow: 0 1px 3px #000; }
+.world-experience { position: absolute; z-index: 4; left: 15.5%; right: 15.5%; bottom: .7%; height: clamp(38px, 7.3%, 70px); pointer-events: none; filter: drop-shadow(0 7px 9px #000b); }
+.world-experience::after { content: ""; position: absolute; z-index: 4; inset: 0; background: url("/ui/experience-frame-v1.png") center / 100% 100% no-repeat; image-rendering: pixelated; }
+.world-experience > span { position: absolute; z-index: 3; left: 8%; right: 8%; top: 35%; bottom: 34%; display: flex; align-items: center; justify-content: space-between; color: #f1d7b8; text-shadow: 0 1px 3px #000; }
 .world-experience strong { font: 12px Georgia, serif; }
 .world-experience small { color: #d2b493; font-size: 10px; }
-.world-experience > i { position: absolute; inset: 0; padding: 3px; border: 1px solid #66412b; background: #0b0807e8; box-shadow: 0 5px 16px #000a; }
-.world-experience > i > b { display: block; height: 100%; background: linear-gradient(90deg, #7f2c1b, #e37738 70%, #ffc16e); box-shadow: 0 0 10px #d95a29; transition: width .2s ease; }
+.world-experience > i { position: absolute; z-index: 2; left: 7.1%; right: 7.1%; top: 39%; height: 25%; overflow: hidden; border-radius: 2px; background: #0b0807; box-shadow: inset 0 0 8px #000; }
+.world-experience > i > b { position: relative; display: block; height: 100%; background: linear-gradient(90deg, #7f2c1b, #d65a28 64%, #ffc16e); box-shadow: 0 0 12px #d95a29; transition: width .2s ease; }
+.world-experience > i > b::after { content: ""; position: absolute; inset: 1px 0 auto; height: 35%; background: linear-gradient(90deg, #ffffff08, #ffd39a6b, #ffffff08); animation: experience-shimmer 2.6s linear infinite; }
 .world-character-stats { position: absolute; z-index: 3; right: 24px; top: 78px; width: 205px; border: 1px solid #594432; border-right: 2px solid #bd713d; background: linear-gradient(135deg, rgba(16,12,9,.94), rgba(27,19,13,.9)); box-shadow: 0 15px 38px #0009, inset 0 0 28px #a4491f12; }
 .world-character-stats > header { padding: 10px 12px 9px; display: flex; flex-direction: column; gap: 3px; border-bottom: 1px solid #49372a; }
 .world-character-stats > header span { color: #d18349; font-size: 9px; letter-spacing: .18em; text-transform: uppercase; }
@@ -1075,9 +1078,7 @@ body:has(.pixel-shell) { overflow: hidden; }
 .item-card.compact .item-implicit,
 .map-metrics span,
 .primary-action small,
-.world-loot span,
-.world-vitals > div,
-.world-vitals strong { font-size: 11px; }
+.world-loot span { font-size: 11px; }
 
 .class-choice-row button small,
 .item-implicit,
@@ -1116,9 +1117,7 @@ body:has(.pixel-shell) { overflow: hidden; }
 .item-card.compact .item-implicit,
 .map-metrics span,
 .primary-action small,
-.world-loot span,
-.world-vitals > div,
-.world-vitals strong { font-size: 13px; }
+.world-loot span { font-size: 13px; }
 
 .class-choice-row button small,
 .item-implicit,
@@ -1180,6 +1179,9 @@ body:has(.pixel-shell) { overflow: hidden; }
 @keyframes new-drop-glow { 50% { box-shadow: inset 0 0 25px #d9682c44, 0 0 10px #e1783466; } }
 @keyframes globe-breathe { 50% { filter: brightness(1.08) saturate(1.08); } }
 @keyframes globe-surface { 50% { transform: translateX(3%) scaleY(.72); } }
+@keyframes experience-shimmer { from { transform: translateX(-45%); } to { transform: translateX(115%); } }
+
+.mode-hideout .hideout-prompt { bottom: calc((100vh - var(--game-view-size)) / 2 + 82px); }
 
 @media (max-width: 1200px) {
   .inventory-window { grid-template-columns: minmax(340px, 390px) minmax(430px, 1fr); }
@@ -1255,21 +1257,19 @@ body:has(.pixel-shell) { overflow: hidden; }
   .world-wave { top: 12px; }
   .world-loot { left: 10px; top: 10px; min-width: 112px; padding: 7px 9px; }
   .world-loot span { font-size: 10px; }
-  .world-vitals { left: 10px; right: 10px; bottom: 75px; }
-  .resource-tank { width: 96px; height: 96px; padding: 7px; }
-  .resource-tank::before { bottom: -6px; height: 21px; }
-  .resource-tank::after { top: -7px; width: 17px; height: 17px; font-size: 6px; }
+  .world-vitals { left: 1.5%; right: 1.5%; bottom: 3.2%; }
+  .resource-tank { width: clamp(78px, 18%, 110px); }
   .globe-reservoir strong { font-size: 16px; }
   .globe-reservoir strong span { font-size: 8px; }
   .globe-reservoir strong small { font-size: 8px; }
-  .world-skills { bottom: 37px; }
+  .world-skills { bottom: calc((100vh - var(--game-view-size)) / 2 + 58px); }
   .world-skills { width: calc(100vw - 20px); justify-content: center; }
   .world-skills button { min-width: 0; max-width: 205px; flex: 1 1 0; padding: 7px 8px; gap: 7px; }
   .world-skills kbd { width: 32px; height: 32px; }
   .world-skills strong { font-size: 13px; }
   .world-skills small { font-size: 11px; }
   .world-fps { display: none; }
-  .world-experience { left: 8px; right: 8px; bottom: 6px; }
+  .world-experience { left: 14%; right: 14%; bottom: .5%; height: clamp(38px, 8%, 52px); }
   .world-character-stats { right: 10px; top: 63px; bottom: auto; width: 188px; }
   .world-character-stats > header { padding: 7px 9px; }
   .character-stat-list { padding: 5px 9px 7px; }
