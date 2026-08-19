@@ -7,7 +7,7 @@ import { buildArenaBalance, type ArenaSummary, type MapDrop } from "../game/comb
 import type { ActiveSkillId, AttributeKey, CharacterClassId, CharacterEquipmentSlot, CurrencyId, EquipmentItem, ItemContainerId, PlayerProfile, RunResult } from "../game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts, findEquippedSlot } from "../game/equipment";
 import { isCurrencyItem, isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency, createCurrencyStack } from "../game/inventory";
-import { consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, unloadFlaskFromBelt } from "../game/flasks";
+import { consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, storePickedUpFlask, unloadFlaskFromBelt } from "../game/flasks";
 import { containerItems, findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../game/item-container";
 import { addFireAffix, rerollAffixValues } from "../game/items";
 import { addMapModifier, rerollMap } from "../game/maps";
@@ -335,11 +335,27 @@ export function GameShell() {
   function collectMapDrop(drop: MapDrop): boolean {
     const current = profileRef.current;
     if (!current?.openedMap) return false;
+    if (drop.kind === "flask") {
+      const flask = createFlaskStack(drop.flask, drop.amount);
+      const stored = storePickedUpFlask(current, flask);
+      if (!stored) {
+        setNotice("Backpack full — make room before collecting this drop.");
+        return false;
+      }
+      profileRef.current = stored.profile;
+      setProfile(stored.profile);
+      runLootRef.current = {
+        collected: runLootRef.current.collected + 1,
+        freshItemIds: stored.inventoryAdded > 0
+          ? [...runLootRef.current.freshItemIds, flask.id]
+          : runLootRef.current.freshItemIds,
+      };
+      setRunFreshItemIds([...runLootRef.current.freshItemIds]);
+      return true;
+    }
     const item = drop.kind === "equipment"
       ? drop.item
-      : drop.kind === "currency"
-        ? createCurrencyStack(drop.currency, drop.amount)
-        : createFlaskStack(drop.flask, drop.amount);
+      : createCurrencyStack(drop.currency, drop.amount);
     const inserted = insertItem(current.inventory, item);
     if (inserted.unplaced.length > 0) {
       setNotice("Backpack full — make room before collecting this drop.");

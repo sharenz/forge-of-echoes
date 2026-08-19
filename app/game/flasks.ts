@@ -86,6 +86,47 @@ export function firstCompatibleFlaskSlot(profile: PlayerProfile, flaskId: FlaskI
   return empty >= 0 ? empty : null;
 }
 
+export interface StorePickedUpFlaskResult {
+  profile: PlayerProfile;
+  beltAdded: number;
+  inventoryAdded: number;
+}
+
+/**
+ * Refills existing matching belt stacks before sending overflow to the backpack.
+ * Empty belt slots are deliberately not auto-filled: belt layout remains a
+ * player choice, while a configured flask slot behaves like a pickup reserve.
+ */
+export function storePickedUpFlask(profile: PlayerProfile, flask: FlaskItem): StorePickedUpFlaskResult | null {
+  const maximum = FLASK_DEFINITIONS[flask.baseId].maxBeltStack;
+  const flaskBelt = [...profile.flaskBelt] as FlaskBelt;
+  let remaining = flask.stackSize;
+
+  for (let index = 0; index < flaskBelt.length && remaining > 0; index += 1) {
+    const slot = flaskBelt[index];
+    if (!slot || slot.baseId !== flask.baseId || slot.stackSize >= maximum) continue;
+    const moved = Math.min(maximum - slot.stackSize, remaining);
+    flaskBelt[index] = { ...slot, stackSize: slot.stackSize + moved };
+    remaining -= moved;
+  }
+
+  if (remaining === 0) {
+    return {
+      profile: { ...profile, flaskBelt },
+      beltAdded: flask.stackSize,
+      inventoryAdded: 0,
+    };
+  }
+
+  const inserted = insertItem(profile.inventory, { ...flask, stackSize: remaining });
+  if (inserted.unplaced.length > 0) return null;
+  return {
+    profile: { ...profile, flaskBelt, inventory: inserted.container },
+    beltAdded: flask.stackSize - remaining,
+    inventoryAdded: remaining,
+  };
+}
+
 export interface RecoveryTick {
   value: number;
   remaining: number;

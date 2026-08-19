@@ -14,7 +14,7 @@ import { MONSTER_ARCHETYPES } from "../app/game/config/monsters";
 import type { EquipmentItem, ItemContainer, PlayerProfile, StatModifier } from "../app/game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts } from "../app/game/equipment";
 import { addCurrencyToInventory, consumeCurrency, countCurrency, createCurrencyStack, isCurrencyItem, isFlaskItem, isMapItem } from "../app/game/inventory";
-import { advanceFlaskRecovery, consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, unloadFlaskFromBelt } from "../app/game/flasks";
+import { advanceFlaskRecovery, consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, storePickedUpFlask, unloadFlaskFromBelt } from "../app/game/flasks";
 import { canPlaceItem, containerItems, createItemContainer, insertItem, moveItem, transferItem } from "../app/game/item-container";
 import {
   createAffixForItem,
@@ -413,6 +413,42 @@ test("flasks stack to twenty in inventory and five in each belt slot", () => {
   assert.ok(unloaded);
   assert.equal(unloaded.flaskBelt[0], null);
   assert.deepEqual(containerItems(unloaded.inventory).filter(isFlaskItem).map((item) => item.stackSize), [19]);
+});
+
+test("picked-up flasks refill matching belt stacks before entering the backpack", () => {
+  const profile = createInitialProfile();
+  const equipped = {
+    ...profile,
+    flaskBelt: [
+      createFlaskStack("weak-health-flask", 4),
+      createFlaskStack("weak-mana-flask", 3),
+      null,
+      null,
+    ],
+  } satisfies PlayerProfile;
+
+  const refilled = storePickedUpFlask(equipped, createFlaskStack("weak-health-flask", 1));
+  assert.ok(refilled);
+  assert.equal(refilled.beltAdded, 1);
+  assert.equal(refilled.inventoryAdded, 0);
+  assert.equal(refilled.profile.flaskBelt[0]?.stackSize, 5);
+  assert.equal(containerItems(refilled.profile.inventory).filter(isFlaskItem).length, 0);
+
+  const overflow = storePickedUpFlask(refilled.profile, createFlaskStack("weak-health-flask", 2));
+  assert.ok(overflow);
+  assert.equal(overflow.beltAdded, 0);
+  assert.equal(overflow.inventoryAdded, 2);
+  assert.deepEqual(containerItems(overflow.profile.inventory).filter(isFlaskItem).map((item) => item.stackSize), [2]);
+});
+
+test("picked-up flasks never auto-fill an empty belt slot", () => {
+  const profile = createInitialProfile();
+  const stored = storePickedUpFlask(profile, createFlaskStack("weak-health-flask", 1));
+  assert.ok(stored);
+  assert.equal(stored.beltAdded, 0);
+  assert.equal(stored.inventoryAdded, 1);
+  assert.deepEqual(stored.profile.flaskBelt, [null, null, null, null]);
+  assert.deepEqual(containerItems(stored.profile.inventory).filter(isFlaskItem).map((item) => item.stackSize), [1]);
 });
 
 test("weak flasks recover over time and stop exactly at the resource maximum", () => {
