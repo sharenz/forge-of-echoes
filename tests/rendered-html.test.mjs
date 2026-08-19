@@ -129,6 +129,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /this\.options\.onPlayerDeath\(\)/);
   assert.doesNotMatch(world, /this\.lives/);
   assert.match(phaserWorld, /world-hud-safe-area/);
+  assert.match(phaserWorld, /world-map-stats/);
+  assert.match(phaserWorld, /Monster level/);
+  assert.match(phaserWorld, /mapModifierDescription/);
+  assert.match(phaserWorld, /mapModifierRewardDescription/);
+  assert.match(globalStyles, /\.world-stat-stack/);
+  assert.match(globalStyles, /\.map-active-modifiers/);
   assert.match(phaserWorld, /ResourceGlobe kind="life"/);
   assert.doesNotMatch(world, /groundDrops\.length > 0/);
   assert.match(world, /waveElapsedSeconds/);

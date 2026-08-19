@@ -46,6 +46,7 @@ export interface ArenaWaveBalance {
 export interface ArenaBalance {
   waves: number;
   tier: number;
+  monsterLevel: number;
   maxLife: number;
   maxFocus: number;
   moveSpeed: number;
@@ -57,6 +58,13 @@ export interface ArenaBalance {
   focusRegenBreakdown: StatResolution<ArenaStatKey>;
   arenaModifiers: readonly StatModifier<ArenaStatKey>[];
   waveStats: readonly ArenaWaveBalance[];
+}
+
+export function monsterLevelForMapTier(tier: number): number {
+  return Math.min(
+    ARENA_RULES.monsterLevel.maximum,
+    Math.max(ARENA_RULES.monsterLevel.minimum, Math.floor(tier) * ARENA_RULES.monsterLevel.levelsPerMapTier),
+  );
 }
 
 export interface ArenaSummary {
@@ -240,6 +248,7 @@ export function buildArenaBalance(profile: PlayerProfile): ArenaBalance {
   return {
     waves: ARENA_RULES.totalWaves,
     tier,
+    monsterLevel: monsterLevelForMapTier(tier),
     maxLife: Math.round(stats.maxLife),
     maxFocus: Math.round(stats.maxFocus),
     moveSpeed: stats.moveSpeed / 45,

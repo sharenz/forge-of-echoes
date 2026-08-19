@@ -1532,7 +1532,7 @@ class CraftyScene extends Phaser.Scene {
     let drop: MapDrop | null = null;
     if (roll < chances.equipment) {
       const rarity = rollEquipmentRarity(enemy.itemRarity);
-      drop = { kind: "equipment", item: generateEquipment(Math.max(2, this.options.arenaBalance?.tier ?? 1) * 5, rarity) };
+      drop = { kind: "equipment", item: generateEquipment(this.options.arenaBalance?.monsterLevel ?? ARENA_RULES.monsterLevel.minimum, rarity) };
     } else if (roll < chances.equipment + chances.material) {
       const materialRoll = Math.random();
       drop = materialRoll < 0.08
@@ -1712,11 +1712,7 @@ class CraftyScene extends Phaser.Scene {
     chest.interaction.disableInteractive();
     chest.label.setText("CACHE OPENED").setColor("#fff0bd");
     chest.prompt.setText("COLLECT YOUR REWARDS").setAlpha(0.92);
-    const tier = this.options.arenaBalance?.tier ?? 1;
-    const itemLevel = Math.max(
-      MAP_COMPLETION_REWARDS.minimumItemLevel,
-      tier * MAP_COMPLETION_REWARDS.itemLevelsPerMapTier,
-    );
+    const itemLevel = this.options.arenaBalance?.monsterLevel ?? ARENA_RULES.monsterLevel.minimum;
     const finalWave = this.options.arenaBalance?.waveStats.at(-1);
     const rewards = createMapCompletionRewards(itemLevel, finalWave?.itemRarity ?? 100);
     const radius = MAP_COMPLETION_REWARDS.chest.lootScatterRadius;

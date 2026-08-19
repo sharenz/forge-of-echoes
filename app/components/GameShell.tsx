@@ -138,7 +138,7 @@ export function GameShell() {
   if (screen === "arena" && profile.openedMap && arenaBalance) {
     const characterPanelOpen = isCharacterPanel(panel);
     return (
-      <PhaserWorld ref={worldRef} mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onFlaskLoad={loadFlask} onLootPickup={collectGroundDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena} onPlayerDeath={failArena}>
+      <PhaserWorld ref={worldRef} mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} activeMap={profile.openedMap} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onFlaskLoad={loadFlask} onLootPickup={collectGroundDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena} onPlayerDeath={failArena}>
         <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(characterPanelOpen ? null : "inventory")}>Character <kbd>I</kbd></button>
         <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
         {characterPanelOpen && (

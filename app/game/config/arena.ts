@@ -11,6 +11,11 @@ export const ARENA_RULES = {
   baseMonsterCount: 28,
   baseMonsterRarity: 100,
   monsterCountPerWave: 16,
+  monsterLevel: {
+    minimum: 10,
+    levelsPerMapTier: 5,
+    maximum: 99,
+  },
   returnPortal: {
     spawnOffset: 130,
     triggerRadius: 58,

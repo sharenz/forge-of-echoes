@@ -4,8 +4,10 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type CSSP
 import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import { FLASK_DEFINITIONS, type FlaskDefinition } from "../game/config/flasks";
+import { MAP_MODIFIERS } from "../game/config/maps";
 import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "../game/config/progression";
-import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, InventoryItem, StatKey, StatModifier } from "../game/domain";
+import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, InventoryItem, MapItem, StatKey, StatModifier } from "../game/domain";
+import { mapModifierDescription, mapModifierRewardDescription } from "../game/maps";
 import { resolveSkillDefinition } from "../game/skills";
 import type { CharacterStatCalculation, StatResolution } from "../game/stats";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
@@ -17,6 +19,7 @@ interface PhaserWorldProps {
   portalActive?: boolean;
   paused?: boolean;
   arenaBalance?: ArenaBalance;
+  activeMap?: MapItem;
   characterStats?: CharacterStats;
   characterProgress?: CharacterProgress;
   characterStatBreakdown?: CharacterStatCalculation["breakdown"];
@@ -103,7 +106,7 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
 
 const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null, null];
 
-export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, onFlaskUse, onFlaskLoad, children }, ref) {
+export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, activeMap, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, onFlaskUse, onFlaskLoad, children }, ref) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
   const novaLevel = characterProgress?.skillLevels.nova ?? 1;
   const dashLevel = characterProgress?.skillLevels.dash ?? 1;
@@ -223,6 +226,7 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
   const displayedMaxLife = mode === "arena" && hud ? hud.maxLife : characterStats?.maxLife ?? 0;
   const displayedMana = mode === "arena" && hud ? hud.focus : characterStats?.maxFocus ?? 0;
   const displayedMaxMana = mode === "arena" && hud ? hud.maxFocus : characterStats?.maxFocus ?? 0;
+  const currentWaveBalance = arenaBalance?.waveStats[Math.max(0, Math.min(arenaBalance.waveStats.length - 1, (hud?.wave ?? 1) - 1))];
   const finalRageProgress = hud?.finalRageIn !== null && hud?.finalRageIn !== undefined
     ? Math.max(0, Math.min(100, ((ARENA_RULES.finalWaveRageDelaySeconds - hud.finalRageIn) / ARENA_RULES.finalWaveRageDelaySeconds) * 100))
     : 100;
@@ -344,21 +348,53 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
       )}
       {hud && <div className="world-fps">{hud.fps} FPS · WebGL sprites</div>}
       {mode !== "class-select" && characterStats && (
-        <aside className="world-character-stats" aria-label="Character statistics">
-          <header><span>Character · select a stat for sources</span><strong>Combat Stats</strong></header>
-          <div className="character-stat-list">
-            <CharacterStatRow stat="strength" label="Strength" value={`${characterStats.strength}`} resolution={characterStatBreakdown?.strength} />
-            <CharacterStatRow stat="dexterity" label="Dexterity" value={`${characterStats.dexterity}`} resolution={characterStatBreakdown?.dexterity} />
-            <CharacterStatRow stat="intelligence" label="Intelligence" value={`${characterStats.intelligence}`} resolution={characterStatBreakdown?.intelligence} />
-            <CharacterStatRow stat="maxLife" label="Health" value={`${mode === "arena" && hud ? `${Math.ceil(hud.life)} / ` : ""}${Math.round(characterStats.maxLife)}`} resolution={characterStatBreakdown?.maxLife} />
-            <CharacterStatRow stat="maxFocus" label="Focus" hint="Mana" value={`${mode === "arena" && hud ? `${Math.floor(hud.focus)} / ` : ""}${Math.round(characterStats.maxFocus)}`} resolution={characterStatBreakdown?.maxFocus} />
-            <CharacterStatRow stat="attackDamage" label="Damage" value={characterStats.attackDamage.toFixed(1)} resolution={characterStatBreakdown?.attackDamage} />
-            <CharacterStatRow stat="attackSpeed" label="Attack speed" value={`${characterStats.attackSpeed.toFixed(2)}/s`} resolution={characterStatBreakdown?.attackSpeed} />
-            <CharacterStatRow stat="armor" label="Armor" value={`${Math.round(characterStats.armor)}`} resolution={characterStatBreakdown?.armor} />
-            <CharacterStatRow stat="evadeChance" label="Evade" value={`${characterStats.evadeChance.toFixed(1)}%`} resolution={characterStatBreakdown?.evadeChance} />
-            <CharacterStatRow stat="moveSpeed" label="Move speed" value={`${Math.round(characterStats.moveSpeed)}`} resolution={characterStatBreakdown?.moveSpeed} />
-          </div>
-        </aside>
+        <div className="world-stat-stack">
+          <aside className="world-character-stats" aria-label="Character statistics">
+            <header><span>Character · select a stat for sources</span><strong>Combat Stats</strong></header>
+            <div className="character-stat-list">
+              <CharacterStatRow stat="strength" label="Strength" value={`${characterStats.strength}`} resolution={characterStatBreakdown?.strength} />
+              <CharacterStatRow stat="dexterity" label="Dexterity" value={`${characterStats.dexterity}`} resolution={characterStatBreakdown?.dexterity} />
+              <CharacterStatRow stat="intelligence" label="Intelligence" value={`${characterStats.intelligence}`} resolution={characterStatBreakdown?.intelligence} />
+              <CharacterStatRow stat="maxLife" label="Health" value={`${mode === "arena" && hud ? `${Math.ceil(hud.life)} / ` : ""}${Math.round(characterStats.maxLife)}`} resolution={characterStatBreakdown?.maxLife} />
+              <CharacterStatRow stat="maxFocus" label="Focus" hint="Mana" value={`${mode === "arena" && hud ? `${Math.floor(hud.focus)} / ` : ""}${Math.round(characterStats.maxFocus)}`} resolution={characterStatBreakdown?.maxFocus} />
+              <CharacterStatRow stat="attackDamage" label="Damage" value={characterStats.attackDamage.toFixed(1)} resolution={characterStatBreakdown?.attackDamage} />
+              <CharacterStatRow stat="attackSpeed" label="Attack speed" value={`${characterStats.attackSpeed.toFixed(2)}/s`} resolution={characterStatBreakdown?.attackSpeed} />
+              <CharacterStatRow stat="armor" label="Armor" value={`${Math.round(characterStats.armor)}`} resolution={characterStatBreakdown?.armor} />
+              <CharacterStatRow stat="evadeChance" label="Evade" value={`${characterStats.evadeChance.toFixed(1)}%`} resolution={characterStatBreakdown?.evadeChance} />
+              <CharacterStatRow stat="moveSpeed" label="Move speed" value={`${Math.round(characterStats.moveSpeed)}`} resolution={characterStatBreakdown?.moveSpeed} />
+            </div>
+          </aside>
+          {mode === "arena" && activeMap && arenaBalance && currentWaveBalance && (
+            <aside className={`world-map-stats rarity-${activeMap.rarity}`} aria-label="Map statistics">
+              <header>
+                <span>Active map · Tier {activeMap.tier}</span>
+                <strong>{activeMap.baseName}</strong>
+                <small>{activeMap.quality > 0 ? `+${activeMap.quality}% quality · ` : ""}{activeMap.rarity}</small>
+              </header>
+              <div className="map-stat-list">
+                <div><span>Monster level</span><strong>{arenaBalance.monsterLevel}</strong></div>
+                <div><span>Wave monsters</span><strong>{currentWaveBalance.monsterCount}</strong></div>
+                <div><span>Monster life</span><strong>{Math.round(currentWaveBalance.monsterLife)}</strong></div>
+                <div><span>Monster damage</span><strong>{currentWaveBalance.monsterDamage.toFixed(1)}</strong></div>
+                <div><span>Item quantity</span><strong>+{Math.round(currentWaveBalance.itemQuantity - 100)}%</strong></div>
+                <div><span>Item rarity</span><strong>+{Math.round(currentWaveBalance.itemRarity - 100)}%</strong></div>
+                <div><span>Monster rarity</span><strong>+{Math.round(currentWaveBalance.monsterRarity - 100)}%</strong></div>
+              </div>
+              <div className="map-active-modifiers">
+                <h3>Map modifiers</h3>
+                {activeMap.modifiers.length === 0
+                  ? <p>Unmodified map</p>
+                  : activeMap.modifiers.map((modifierId) => (
+                    <div key={modifierId}>
+                      <strong>{MAP_MODIFIERS[modifierId].name}</strong>
+                      <span>{mapModifierDescription(modifierId, activeMap.tier)}</span>
+                      <small>{mapModifierRewardDescription(modifierId)}</small>
+                    </div>
+                  ))}
+              </div>
+            </aside>
+          )}
+        </div>
       )}
       {children}
     </main>

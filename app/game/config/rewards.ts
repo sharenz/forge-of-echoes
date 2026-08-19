@@ -11,8 +11,6 @@ interface CompletionMaterialReward {
 interface MapCompletionRewardDefinition {
   equipmentCount: number;
   minimumGuaranteedEquipmentRarity: Extract<Rarity, "magic" | "rare">;
-  minimumItemLevel: number;
-  itemLevelsPerMapTier: number;
   materials: readonly CompletionMaterialReward[];
   chest: {
     spawnDistance: number;
@@ -25,8 +23,6 @@ interface MapCompletionRewardDefinition {
 export const MAP_COMPLETION_REWARDS = {
   equipmentCount: 2,
   minimumGuaranteedEquipmentRarity: "magic",
-  minimumItemLevel: 10,
-  itemLevelsPerMapTier: 5,
   materials: [
     { currency: "scrap", minimum: 5, maximum: 9 },
     { currency: "essence", minimum: 2, maximum: 4 },

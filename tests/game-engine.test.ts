@@ -29,7 +29,7 @@ import {
 import { calculateCharacterStats, formatModifier, formatModifierWithRollRange, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
 import { purchaseFlask, purchaseMap } from "../app/game/merchant";
-import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, isArenaCleared, rollHitDamage, shouldActivateFinalWaveRage, shouldSpawnNextWave } from "../app/game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, isArenaCleared, monsterLevelForMapTier, rollHitDamage, shouldActivateFinalWaveRage, shouldSpawnNextWave } from "../app/game/combat";
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
 import { dropChances, equipmentDropPresentation, rollEquipmentRarity, rollFlaskDrop } from "../app/game/loot";
@@ -59,6 +59,12 @@ test("map completion rewards guarantee two equipment items, one magic-or-better,
     assert.ok(reward && reward.kind === "currency");
     assert.ok(reward.amount >= configured.minimum && reward.amount <= configured.maximum);
   }
+});
+
+test("map tier resolves one canonical monster level for UI, monsters, and item drops", () => {
+  assert.equal(monsterLevelForMapTier(1), ARENA_RULES.monsterLevel.minimum);
+  assert.equal(monsterLevelForMapTier(3), 15);
+  assert.equal(monsterLevelForMapTier(999), ARENA_RULES.monsterLevel.maximum);
 });
 
 test("resolves flat, increased, and more modifiers in the canonical order", () => {
