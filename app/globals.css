@@ -880,9 +880,21 @@ body:has(.pixel-shell) { overflow: hidden; }
   background-size: var(--cell) var(--cell), var(--cell) var(--cell), 100% 100%;
   box-shadow: inset 0 0 36px #000;
 }
+.poe-grid-wrap.container-backpack { width: 100%; }
 .poe-grid-wrap.container-backpack .poe-grid {
-  --cell: clamp(36px, 3.4vw, 48px);
+  width: 100%;
+  max-width: none;
+  aspect-ratio: var(--grid-columns) / var(--grid-rows);
+  grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--grid-rows), minmax(0, 1fr));
+  background-size: calc(100% / var(--grid-columns)) calc(100% / var(--grid-rows)), calc(100% / var(--grid-columns)) calc(100% / var(--grid-rows)), 100% 100%;
 }
+.poe-grid-wrap.container-backpack .poe-grid-item > small {
+  padding: 4px 2px;
+  font-size: clamp(9px, .65vw, 12px);
+}
+.poe-grid-wrap.container-backpack .poe-grid-item .stack-count { font-size: clamp(12px, .75vw, 15px); }
+.poe-grid-wrap.container-backpack .new-drop-badge { font-size: clamp(9px, .6vw, 11px); }
 .grid-drop-preview { z-index: 8; margin: 2px; border: 2px solid; pointer-events: none; animation: grid-drop-pulse .8s ease-in-out infinite alternate; }
 .grid-drop-preview.valid { border-color: #7fd28b; background: #4cba6338; box-shadow: inset 0 0 18px #66dc7a55, 0 0 12px #66dc7a40; }
 .grid-drop-preview.invalid { border-color: #dc604d; background: #c8473b45; box-shadow: inset 0 0 18px #ed493d55; }
@@ -1230,7 +1242,6 @@ body:has(.pixel-shell) { overflow: hidden; }
   .character-panel-tabs button { padding: 8px; }
   .character-panel-tabs button > i { display: none; }
   .inventory-window { grid-template-columns: minmax(310px, 350px) minmax(390px, 1fr); gap: 14px; padding: 14px; }
-  .poe-grid-wrap.container-backpack .poe-grid { --cell: clamp(32px, 4vw, 36px); }
   .inventory-overview { grid-template-columns: 1fr; }
   .attribute-card-grid { grid-template-columns: 1fr; }
   .derived-stat-grid { grid-template-columns: repeat(3, 1fr); }
@@ -1285,8 +1296,7 @@ body:has(.pixel-shell) { overflow: hidden; }
   .run-material { grid-template-columns: 20px 1fr auto; padding: 4px; }
   .run-material i { width: 18px; height: 18px; }
   .run-material small { font-size: 11px; }
-  .poe-grid,
-  .poe-grid-wrap.container-backpack .poe-grid { --cell: calc((100vw - 52px) / 12); }
+  .poe-grid { --cell: calc((100vw - 52px) / 12); }
   .world-wave { top: 12px; }
   .world-loot { left: 10px; top: 10px; min-width: 112px; padding: 7px 9px; }
   .world-loot span { font-size: 10px; }

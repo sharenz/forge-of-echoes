@@ -215,6 +215,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(itemVisuals, /CURRENCY_DEFINITIONS\[item\.baseId\]\.icon/);
   assert.match(globalStyles, /\.poe-grid-item > \.item-icon/);
   assert.match(globalStyles, /\.poe-grid-wrap\.container-backpack \.poe-grid/);
+  assert.match(globalStyles, /aspect-ratio: var\(--grid-columns\) \/ var\(--grid-rows\)/);
   assert.doesNotMatch(inventoryGrid, /packItems/);
   assert.match(itemContainer, /transferItem/);
   assert.match(stashEngine, /insertItemsIntoStash/);
