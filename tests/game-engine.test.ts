@@ -756,10 +756,10 @@ test("item quantity changes drop frequency while item rarity changes only rarity
   assert.equal(rollEquipmentRarity(400, () => 0.02), "rare");
 });
 
-test("ground equipment labels show item type and use canonical rarity colors", () => {
-  assert.deepEqual(equipmentDropPresentation({ slot: "gloves", rarity: "normal" }), { label: "GLOVES", color: "#f2eee6" });
-  assert.deepEqual(equipmentDropPresentation({ slot: "belt", rarity: "magic" }), { label: "BELT", color: "#749cff" });
-  assert.deepEqual(equipmentDropPresentation({ slot: "helmet", rarity: "rare" }), { label: "HELMET", color: "#ffe06a" });
+test("ground equipment labels show the concrete base type and use canonical rarity colors", () => {
+  assert.deepEqual(equipmentDropPresentation({ baseName: "Ashwood Wand", rarity: "normal" }), { label: "ASHWOOD WAND", color: "#f2eee6" });
+  assert.deepEqual(equipmentDropPresentation({ baseName: "Hunter Spear", rarity: "magic" }), { label: "HUNTER SPEAR", color: "#749cff" });
+  assert.deepEqual(equipmentDropPresentation({ baseName: "Riveted Coat", rarity: "rare" }), { label: "RIVETED COAT", color: "#ffe06a" });
 });
 
 test("runtime hit damage scales linearly with resolved attack damage", () => {

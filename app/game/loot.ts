@@ -1,6 +1,5 @@
 import { EQUIPMENT_DROP_COLORS, LOOT_RULES } from "./config/loot";
 import { FLASK_DEFINITIONS } from "./config/flasks";
-import { EQUIPMENT_TYPE_LABELS } from "./config/equipment-slots";
 import type { EquipmentItem, FlaskId, Rarity } from "./domain";
 
 export interface DropChances {
@@ -30,9 +29,9 @@ export function rollFlaskDrop(random: () => number = Math.random): FlaskId {
   return definitions[definitions.length - 1].id;
 }
 
-export function equipmentDropPresentation(item: Pick<EquipmentItem, "slot" | "rarity">): { label: string; color: string } {
+export function equipmentDropPresentation(item: Pick<EquipmentItem, "baseName" | "rarity">): { label: string; color: string } {
   return {
-    label: EQUIPMENT_TYPE_LABELS[item.slot].toUpperCase(),
+    label: item.baseName.toUpperCase(),
     color: EQUIPMENT_DROP_COLORS[item.rarity],
   };
 }
