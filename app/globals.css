@@ -997,9 +997,9 @@ body:has(.pixel-shell) { overflow: hidden; }
 .world-hud-safe-area { position: absolute; z-index: 22; left: 50%; top: 50%; width: var(--game-view-size); height: var(--game-view-size); pointer-events: none; transform: translate(-50%, -50%); }
 .world-bottom-hud { position: absolute; z-index: 8; left: 1.8%; right: 1.8%; bottom: .5%; height: clamp(190px, 28%, 310px); display: flex; align-items: end; justify-content: center; pointer-events: none; filter: drop-shadow(0 14px 17px #000c); }
 .world-command-deck { position: relative; z-index: 3; width: min(100%, 1280px); aspect-ratio: 2039 / 472; min-width: 0; background: url("/ui/bottom-command-frame-v2.png") center / 100% 100% no-repeat; image-rendering: auto; filter: drop-shadow(0 10px 12px #000e) drop-shadow(0 0 10px #db67242e); pointer-events: auto; }
-.world-command-deck > .resource-tank { position: absolute; z-index: 5; top: 15%; width: 14.7%; max-width: none; }
-.world-command-deck > .life-tank { left: .5%; }
-.world-command-deck > .mana-tank { right: .5%; }
+.world-command-deck > .resource-tank { position: absolute; z-index: 5; top: 11.5%; width: 14.7%; max-width: none; }
+.world-command-deck > .life-tank { left: 1.35%; }
+.world-command-deck > .mana-tank { right: 1.35%; }
 .world-command-row { position: absolute; z-index: 2; left: 17.5%; right: 17.5%; top: 54%; display: flex; align-items: center; justify-content: center; gap: 0; transform: translateY(-50%); }
 .command-deck-divider { width: clamp(126px, 14vw, 204px); height: 1px; flex: 0 0 auto; opacity: 0; }
 .hud-section-label { position: absolute; left: 50%; top: -17px; color: #e1a567; font: 700 8px Arial, sans-serif; letter-spacing: .22em; text-transform: uppercase; text-shadow: 0 2px 4px #000, 0 0 5px #000; transform: translateX(-50%); }
@@ -1312,7 +1312,7 @@ body:has(.pixel-shell) { overflow: hidden; }
   .world-loot span { font-size: 10px; }
   .world-bottom-hud { left: 0; right: 0; bottom: 0; height: 150px; }
   .world-command-deck { width: calc(100% + 10px); margin: 0 -5px 4px; }
-  .world-command-deck > .resource-tank { top: 16%; width: 15.4%; }
+  .world-command-deck > .resource-tank { top: 12.5%; width: 15.4%; }
   .world-command-row { left: 12%; right: 12%; gap: 0; }
   .command-deck-divider { display: block; width: clamp(32px, 9vw, 50px); }
   .hud-section-label { display: none; }
