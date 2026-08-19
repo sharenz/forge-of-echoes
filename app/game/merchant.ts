@@ -1,5 +1,6 @@
 import { MAP_MERCHANT } from "./config/merchants";
-import type { MapItem, PlayerProfile } from "./domain";
+import type { FlaskItem, MapItem, PlayerProfile } from "./domain";
+import { createFlaskStack } from "./flasks";
 import { consumeProfileCurrency } from "./inventory";
 import { insertItem } from "./item-container";
 import { createMap } from "./maps";
@@ -8,6 +9,23 @@ export interface MapPurchase {
   profile: PlayerProfile;
   map: MapItem;
   paid: number;
+}
+
+export interface FlaskPurchase {
+  profile: PlayerProfile;
+  flask: FlaskItem;
+  paid: number;
+}
+
+export function purchaseFlask(profile: PlayerProfile, offerId: string): FlaskPurchase | null {
+  const offer = MAP_MERCHANT.flaskOffers.find((candidate) => candidate.id === offerId);
+  if (!offer) return null;
+  const paidProfile = consumeProfileCurrency(profile, offer.price.currency, offer.price.amount);
+  if (!paidProfile) return null;
+  const flask = createFlaskStack(offer.flaskId, offer.amount);
+  const inserted = insertItem(paidProfile.inventory, flask);
+  if (inserted.unplaced.length > 0) return null;
+  return { profile: { ...paidProfile, inventory: inserted.container }, flask, paid: offer.price.amount };
 }
 
 export function purchaseMap(profile: PlayerProfile, offerId: string): MapPurchase | null {

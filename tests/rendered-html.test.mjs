@@ -28,7 +28,7 @@ test("server-renders the Crafty application shell and production metadata", asyn
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, globalStyles, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, attributesPanel, skillTreePanel, characterPanelTabs, inventoryGrid, itemIcon, itemTooltip, world, characterAnimator, skillAudio, domain, itemContainer, itemVisuals, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, characterAnimationConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, gameDesign] = await Promise.all([
+  const [page, layout, globalStyles, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, attributesPanel, skillTreePanel, characterPanelTabs, inventoryGrid, itemIcon, itemTooltip, world, characterAnimator, skillAudio, domain, itemContainer, itemVisuals, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, characterAnimationConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, flaskEngine, flaskConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -76,6 +76,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game/config/monsters.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/skills.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/merchants.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/flasks.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/config/flasks.ts", import.meta.url), "utf8"),
     readFile(new URL("../GAME_DESIGN.md", import.meta.url), "utf8"),
   ]);
 
@@ -87,10 +89,11 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /<PhaserWorld/);
   assert.match(shell, /<GameNotification/);
   assert.match(shell, /<MapMerchant/);
-  assert.match(mapMerchant, /Maps for sale/);
+  assert.match(mapMerchant, /Maps &amp; supplies/);
+  assert.match(mapMerchant, /Flask supplies/);
   assert.match(mapWorkshop, /mapModifierDescription/);
   assert.match(merchantConfig, /amount: 0/);
-  assert.match(world, /MAP MERCHANT/);
+  assert.match(world, /MERCHANT/);
   assert.match(notification, /aria-live="polite"/);
   assert.doesNotMatch(shell, /className="toast"/);
   assert.match(shell, /mode="class-select"/);
@@ -257,11 +260,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.doesNotMatch(domain, /Bargain/);
   assert.match(domain, /interface MapItem/);
   assert.match(domain, /interface StashState/);
-  assert.match(domain, /version: 8/);
+  assert.match(domain, /version: 9/);
   assert.match(domain, /interface EquipmentItem/);
   assert.match(profile, /grantCharacterExperience/);
   assert.match(profile, /localStorage/);
-  assert.match(profile, /crafty\.profile\.v8/);
+  assert.match(profile, /crafty\.profile\.v9/);
+  assert.match(profile, /V8_STORAGE_KEY/);
   assert.match(profile, /migrateV7Profile/);
   assert.match(stats, /sum\(increased\)|mode === "increased"/);
   assert.match(stats, /moreMultiplier/);
@@ -285,6 +289,14 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(skillConfig, /presentation: \{ animation: "attack", vfx: "ember-lance", audio: "ember-lance" \}/);
   assert.match(skillConfig, /name: "Cinder Ward", key: "R"/);
   assert.match(skillConfig, /damageReduction: 45/);
+  assert.match(flaskConfig, /maxInventoryStack: 20/);
+  assert.match(flaskConfig, /maxBeltStack: 5/);
+  assert.match(flaskConfig, /recovery: 20/);
+  assert.match(flaskConfig, /recovery: 25/);
+  assert.match(flaskEngine, /advanceFlaskRecovery/);
+  assert.match(world, /KeyCodes\.ONE/);
+  assert.match(phaserWorld, /world-flask-belt/);
+  assert.match(inventoryPanel, /inventory-flask-belt/);
   assert.match(world, /1 \/ Math\.max\(0\.01, this\.options\.arenaBalance\?\.attackSpeed/);
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);
@@ -294,6 +306,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   await access(new URL("../public/class-roster-v2.png", import.meta.url));
   await access(new URL("../public/player-amazon-v4.png", import.meta.url));
   await access(new URL("../public/player-barbarian-v4.png", import.meta.url));
+  await access(new URL("../public/item-icons/weak-health-flask.png", import.meta.url));
+  await access(new URL("../public/item-icons/weak-mana-flask.png", import.meta.url));
   await access(new URL("../public/player-sorceress-v4.png", import.meta.url));
   await access(new URL("../public/player-amazon-sheet-v1.png", import.meta.url));
   await access(new URL("../public/player-barbarian-sheet-v1.png", import.meta.url));
@@ -302,5 +316,5 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   await access(new URL("../public/ui/resource-globe-frame-v1.png", import.meta.url));
   await access(new URL("../public/ui/experience-frame-v1.png", import.meta.url));
   const itemIcons = (await readdir(new URL("../public/item-icons", import.meta.url))).filter((name) => name.endsWith(".png"));
-  assert.equal(itemIcons.length, 20);
+  assert.equal(itemIcons.length, 22);
 });

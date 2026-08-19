@@ -5,6 +5,7 @@ import { ARENA_RULES } from "../app/game/config/arena";
 import { SKILL_AUDIO } from "../app/game/config/audio";
 import { CHARACTER_ANIMATIONS, characterDirectionVector, resolveCharacterDirection, resolveLocomotionDirection } from "../app/game/config/character-animations";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
+import { FLASK_DEFINITIONS } from "../app/game/config/flasks";
 import { MAP_MERCHANT } from "../app/game/config/merchants";
 import { MAP_BASES, MAP_MODIFIERS } from "../app/game/config/maps";
 import { CHARACTER_EQUIPMENT_SLOTS } from "../app/game/config/equipment-slots";
@@ -12,7 +13,8 @@ import { ITEM_BASES } from "../app/game/config/item-bases";
 import { MONSTER_ARCHETYPES } from "../app/game/config/monsters";
 import type { EquipmentItem, ItemContainer, PlayerProfile, StatModifier } from "../app/game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts } from "../app/game/equipment";
-import { addCurrencyToInventory, consumeCurrency, countCurrency, createCurrencyStack, isCurrencyItem, isMapItem } from "../app/game/inventory";
+import { addCurrencyToInventory, consumeCurrency, countCurrency, createCurrencyStack, isCurrencyItem, isFlaskItem, isMapItem } from "../app/game/inventory";
+import { advanceFlaskRecovery, consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, unloadFlaskFromBelt } from "../app/game/flasks";
 import { canPlaceItem, containerItems, createItemContainer, insertItem, moveItem, transferItem } from "../app/game/item-container";
 import {
   createAffixForItem,
@@ -23,11 +25,11 @@ import {
 } from "../app/game/items";
 import { calculateCharacterStats, formatModifier, formatModifierWithRollRange, resolveStat } from "../app/game/stats";
 import { createInitialProfile, loadProfile } from "../app/game/profile";
-import { purchaseMap } from "../app/game/merchant";
+import { purchaseFlask, purchaseMap } from "../app/game/merchant";
 import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, isArenaCleared, rollHitDamage, shouldSpawnNextWave } from "../app/game/combat";
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
-import { dropChances, rollEquipmentRarity } from "../app/game/loot";
+import { dropChances, rollEquipmentRarity, rollFlaskDrop } from "../app/game/loot";
 import { activeStashTab, addStashTab, createStash, insertItemsIntoStash, renameStashTab, selectStashTab, stashItems } from "../app/game/stash";
 import { allocateAttributePoint, allocateSkillPoint, grantCharacterExperience, monsterExperienceReward } from "../app/game/progression";
 import { resolveSkillDefinition } from "../app/game/skills";
@@ -99,9 +101,9 @@ test("character calculations combine item base, implicit, and explicit modifiers
     }],
   } satisfies EquipmentItem;
   const profile = {
-    version: 8,
+    version: 9,
     character: characterProgress(10),
-    inventory: createItemContainer("backpack"), stash: createStash(), equipped: { mainHand: weapon }, mapDevice: null, openedMap: null,
+    inventory: createItemContainer("backpack"), stash: createStash(), equipped: { mainHand: weapon }, flaskBelt: [null, null, null, null], mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const calculation = calculateCharacterStats(profile);
   const attack = calculation.breakdown.attackDamage;
@@ -121,9 +123,9 @@ test("weapon-local APS is the base scaled by sourced increased attack speed", ()
     stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [], affixes: [],
   });
   const baseProfile = {
-    version: 8,
+    version: 9,
     character: characterProgress(),
-    inventory: createItemContainer("backpack"), stash: createStash(), equipped: {}, mapDevice: null, openedMap: null,
+    inventory: createItemContainer("backpack"), stash: createStash(), equipped: {}, flaskBelt: [null, null, null, null], mapDevice: null, openedMap: null,
   } satisfies PlayerProfile;
   const spear = calculateCharacterStats({ ...baseProfile, equipped: { mainHand: createWeapon("hunter-spear", "Hunter Spear") } });
   const cleaver = calculateCharacterStats({ ...baseProfile, equipped: { mainHand: createWeapon("iron-cleaver", "Iron Cleaver") } });
@@ -171,7 +173,7 @@ test("currency consumption removes quantities across actual inventory stacks", (
 test("new profiles contain map and currency items in the backpack", () => {
   const profile = createInitialProfile();
   const backpackItems = containerItems(profile.inventory);
-  assert.equal(profile.version, 8);
+  assert.equal(profile.version, 9);
   assert.deepEqual(profile.stash.tabs.map((tab) => tab.name), ["General", "Gear", "Maps", "Materials"]);
   assert.equal(profile.mapDevice, null);
   assert.equal(backpackItems.filter(isMapItem).length, 3);
@@ -180,7 +182,7 @@ test("new profiles contain map and currency items in the backpack", () => {
   assert.equal("maps" in profile, false);
 });
 
-test("v3 counter saves migrate maps and currency into positioned v8 inventory items", () => {
+test("v3 counter saves migrate maps and currency into positioned v9 inventory items", () => {
   const oldMap = {
     id: "old-map", baseId: "ashen-crucible", baseName: "Ashen Crucible", tier: 3, rarity: "normal",
     quality: 0, corrupted: false, implicit: "Test", modifiers: [],
@@ -198,7 +200,7 @@ test("v3 counter saves migrate maps and currency into positioned v8 inventory it
   try {
     const migrated = loadProfile();
     const items = containerItems(migrated.inventory);
-    assert.equal(migrated.version, 8);
+    assert.equal(migrated.version, 9);
     assert.equal(migrated.character.unspentAttributePoints, 55);
     assert.equal(migrated.character.unspentSkillPoints, 0);
     assert.equal(items.filter(isMapItem).length, 1);
@@ -221,7 +223,7 @@ test("v5 saves migrate legacy weapon equipment into main hand", () => {
   });
   try {
     const migrated = loadProfile();
-    assert.equal(migrated.version, 8);
+    assert.equal(migrated.version, 9);
     assert.equal(migrated.equipped.mainHand?.id, "legacy-equipped");
     assert.equal(migrated.equipped.mainHand?.slot, "mainHand");
     assert.equal("weapon" in migrated.equipped, false);
@@ -242,7 +244,7 @@ test("v6 saves migrate their positioned stash into the first named tab", () => {
   try {
     const migrated = loadProfile();
     const firstTab = activeStashTab(migrated.stash);
-    assert.equal(migrated.version, 8);
+    assert.equal(migrated.version, 9);
     assert.equal(firstTab.name, "General");
     assert.deepEqual(firstTab.container.entries[0], { item: stack, x: 3, y: 2 });
   } finally {
@@ -266,12 +268,28 @@ test("v7 saves gain explicit unspent progression points without losing character
   });
   try {
     const migrated = loadProfile();
-    assert.equal(migrated.version, 8);
+    assert.equal(migrated.version, 9);
     assert.equal(migrated.character.level, 6);
     assert.equal(migrated.character.xp, 17);
     assert.equal(migrated.character.unspentAttributePoints, 25);
     assert.equal(migrated.character.unspentSkillPoints, 2);
     assert.deepEqual(migrated.character.skillLevels, { nova: 1, dash: 1 });
+  } finally {
+    Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
+test("v8 saves migrate to an empty four-slot flask belt", () => {
+  const current = createInitialProfile();
+  const legacy = { ...current, version: 8, flaskBelt: undefined };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: { getItem: (key: string) => key === "crafty.profile.v8" ? JSON.stringify(legacy) : null } },
+  });
+  try {
+    const migrated = loadProfile();
+    assert.equal(migrated.version, 9);
+    assert.deepEqual(migrated.flaskBelt, [null, null, null, null]);
   } finally {
     Reflect.deleteProperty(globalThis, "window");
   }
@@ -372,6 +390,46 @@ test("map purchases create inventory items and consume real Scrap stacks", () =>
   assert.equal(paidPurchase.map.tier, 2);
   assert.equal(countCurrency(containerItems(paidPurchase.profile.inventory), "scrap"), 6);
   assert.equal(purchaseMap(paidPurchase.profile, "ashen-descent-t4"), null);
+});
+
+test("flasks stack to twenty in inventory and five in each belt slot", () => {
+  const profile = createInitialProfile();
+  const flask = createFlaskStack("weak-health-flask", 20);
+  const inserted = insertItem(profile.inventory, flask);
+  assert.equal(inserted.unplaced.length, 0);
+  const withFlasks = { ...profile, inventory: inserted.container };
+  const loaded = loadFlaskIntoBelt(withFlasks, flask.id, 0);
+  assert.ok(loaded);
+  assert.equal(loaded.flaskBelt[0]?.stackSize, 5);
+  assert.equal(containerItems(loaded.inventory).filter(isFlaskItem)[0].stackSize, 15);
+  assert.equal(FLASK_DEFINITIONS["weak-health-flask"].maxInventoryStack, 20);
+  assert.equal(FLASK_DEFINITIONS["weak-health-flask"].maxBeltStack, 5);
+
+  const consumed = consumeFlaskFromBelt(loaded, 0);
+  assert.ok(consumed);
+  assert.equal(consumed.definition.recovery, 20);
+  assert.equal(consumed.profile.flaskBelt[0]?.stackSize, 4);
+  const unloaded = unloadFlaskFromBelt(consumed.profile, 0);
+  assert.ok(unloaded);
+  assert.equal(unloaded.flaskBelt[0], null);
+  assert.deepEqual(containerItems(unloaded.inventory).filter(isFlaskItem).map((item) => item.stackSize), [19]);
+});
+
+test("weak flasks recover over time and stop exactly at the resource maximum", () => {
+  assert.deepEqual(advanceFlaskRecovery(40, 100, 20, 10, 1), { value: 50, remaining: 10 });
+  assert.deepEqual(advanceFlaskRecovery(95, 100, 20, 10, 1), { value: 100, remaining: 0 });
+  assert.deepEqual(advanceFlaskRecovery(100, 100, 20, 10, 1), { value: 100, remaining: 0 });
+});
+
+test("merchant sells both weak flask types and monsters roll configured flask drops", () => {
+  const profile = createInitialProfile();
+  const health = purchaseFlask(profile, "weak-health-supply");
+  assert.ok(health);
+  assert.equal(countCurrency(containerItems(health.profile.inventory), "scrap"), 11);
+  assert.equal(containerItems(health.profile.inventory).filter(isFlaskItem)[0].baseId, "weak-health-flask");
+  assert.equal(rollFlaskDrop(() => 0), "weak-health-flask");
+  assert.equal(rollFlaskDrop(() => 0.999), "weak-mana-flask");
+  assert.ok(dropChances(100).flask > 0);
 });
 
 test("grid moves preserve explicit coordinates and reject collisions", () => {
@@ -543,7 +601,7 @@ test("runtime hit damage scales linearly with resolved attack damage", () => {
 });
 
 test("every skill declares reusable animation, VFX, and audio presentation", () => {
-  const skills = [BASIC_ATTACK, ACTIVE_SKILLS.nova, ACTIVE_SKILLS.dash];
+  const skills = [BASIC_ATTACK, ACTIVE_SKILLS.nova, ACTIVE_SKILLS.dash, ACTIVE_SKILLS.ward];
   for (const skill of skills) {
     assert.ok(skill.presentation.animation);
     assert.ok(skill.presentation.vfx);

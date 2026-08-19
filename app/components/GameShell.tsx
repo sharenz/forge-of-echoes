@@ -2,14 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTER_CLASSES, XP_BY_LEVEL } from "../game/content";
+import type { FlaskDefinition } from "../game/config/flasks";
 import { buildArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import type { ActiveSkillId, AttributeKey, CharacterClassId, CharacterEquipmentSlot, CurrencyId, EquipmentItem, ItemContainerId, PlayerProfile, RunResult } from "../game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts, findEquippedSlot } from "../game/equipment";
 import { isCurrencyItem, isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency, createCurrencyStack } from "../game/inventory";
+import { consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, unloadFlaskFromBelt } from "../game/flasks";
 import { containerItems, findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../game/item-container";
 import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
 import { addMapModifier, rerollMap } from "../game/maps";
-import { purchaseMap } from "../game/merchant";
+import { purchaseFlask, purchaseMap } from "../game/merchant";
 import { applyRunResult, createCharacter, loadProfile, saveProfile } from "../game/profile";
 import { allocateAttributePoint, allocateSkillPoint, grantCharacterExperience } from "../game/progression";
 import { activeStashTab, addStashTab, findStashEntry, mapStashItems, removeStashItem, renameStashTab, selectStashTab, stashItems as allStashItems, updateStashContainer } from "../game/stash";
@@ -134,7 +136,7 @@ export function GameShell() {
   if (screen === "arena" && profile.openedMap && arenaBalance) {
     const characterPanelOpen = isCharacterPanel(panel);
     return (
-      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} onLootPickup={collectMapDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena} onPlayerDeath={failArena}>
+      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onLootPickup={collectMapDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena} onPlayerDeath={failArena}>
         <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(characterPanelOpen ? null : "inventory")}>Character <kbd>I</kbd></button>
         <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
         {characterPanelOpen && (
@@ -142,7 +144,7 @@ export function GameShell() {
             <section className={`world-panel character-panel panel-${panel}`} aria-label={`Character ${panel}`}>
               <header><div><span>Combat paused · character changes apply immediately</span><h2>{characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></header>
               <CharacterPanelTabs active={panel} onChange={setPanel} />
-              {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={selectedItemId} freshItemIds={runFreshItemIds} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} />}
+              {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={selectedItemId} freshItemIds={runFreshItemIds} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} onLoadFlask={loadFlask} onUnloadFlask={unloadFlask} />}
               {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation!.breakdown} onAllocate={allocateAttribute} />}
               {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={allocateSkill} />}
             </section>
@@ -233,6 +235,52 @@ export function GameShell() {
     setNotice(purchase.paid === 0 ? `${purchase.map.baseName} added to your backpack for free.` : `${purchase.map.baseName} purchased for ${purchase.paid} Scrap.`);
   }
 
+  function buyFlask(offerId: string) {
+    if (!profile) return;
+    const purchase = purchaseFlask(profile, offerId);
+    if (!purchase) {
+      setNotice("Not enough Scrap, or no free backpack cell for that flask.");
+      return;
+    }
+    profileRef.current = purchase.profile;
+    setProfile(purchase.profile);
+    setNotice(`${purchase.flask.baseId === "weak-health-flask" ? "Weak Health Flask" : "Weak Mana Flask"} purchased for ${purchase.paid} Scrap.`);
+  }
+
+  function useBeltFlask(slotIndex: number): FlaskDefinition | null {
+    const current = profileRef.current;
+    if (!current) return null;
+    const consumed = consumeFlaskFromBelt(current, slotIndex);
+    if (!consumed) return null;
+    profileRef.current = consumed.profile;
+    setProfile(consumed.profile);
+    return consumed.definition;
+  }
+
+  function loadFlask(itemId: string, slotIndex: number) {
+    const current = profileRef.current;
+    if (!current) return;
+    const next = loadFlaskIntoBelt(current, itemId, slotIndex);
+    if (!next) {
+      setNotice("That flask slot is full or contains another flask type.");
+      return;
+    }
+    profileRef.current = next;
+    setProfile(next);
+  }
+
+  function unloadFlask(slotIndex: number) {
+    const current = profileRef.current;
+    if (!current) return;
+    const next = unloadFlaskFromBelt(current, slotIndex);
+    if (!next) {
+      setNotice("Your backpack has no free space for that flask stack.");
+      return;
+    }
+    profileRef.current = next;
+    setProfile(next);
+  }
+
   function completeArena(summary: ArenaSummary) {
     if (!profile) return;
     const current = profileRef.current ?? profile;
@@ -289,7 +337,9 @@ export function GameShell() {
     if (!current?.openedMap) return false;
     const item = drop.kind === "equipment"
       ? generateEquipment(Math.max(2, current.openedMap.tier) * 5, drop.rarity)
-      : createCurrencyStack(drop.currency, drop.amount);
+      : drop.kind === "currency"
+        ? createCurrencyStack(drop.currency, drop.amount)
+        : createFlaskStack(drop.flask, drop.amount);
     const inserted = insertItem(current.inventory, item);
     if (inserted.unplaced.length > 0) {
       setNotice("Backpack full — make room before collecting this drop.");
@@ -506,7 +556,7 @@ export function GameShell() {
   }
 
   return (
-    <PhaserWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} onStation={handleStation}>
+    <PhaserWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onStation={handleStation}>
       <header className="hideout-hud">
         <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
         <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId].name}</small></div></div>
@@ -524,13 +574,13 @@ export function GameShell() {
       {panel && (
         <div className="world-panel-backdrop">
           <section className={`world-panel panel-${panel} ${isCharacterPanel(panel) ? "character-panel" : ""}`}>
-            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : panel === "merchant" ? "Wayfinder's stock" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Map Merchant" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
+            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : panel === "merchant" ? "Maps and supplies" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Rook's Shop" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
             {isCharacterPanel(panel) && <CharacterPanelTabs active={panel} onChange={setPanel} />}
             {panel === "maps" && <MapWorkshop maps={inventoryMaps} slottedMap={profile.mapDevice} currencies={currencies} portalActive={Boolean(profile.openedMap)} onSlot={slotMap} onRemove={removeMapFromDevice} onCraft={craftMap} onOpen={openPortal} />}
-            {panel === "merchant" && <MapMerchant scrap={currencies.scrap} onBuy={buyMap} />}
+            {panel === "merchant" && <MapMerchant scrap={currencies.scrap} onBuy={buyMap} onBuyFlask={buyFlask} />}
             {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} currencies={currencies} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
             {(panel === "inventory" || panel === "stash") && (
-              <InventoryPanel profile={profile} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} />
+              <InventoryPanel profile={profile} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} onLoadFlask={loadFlask} onUnloadFlask={unloadFlask} />
             )}
             {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation!.breakdown} onAllocate={allocateAttribute} />}
             {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={allocateSkill} />}

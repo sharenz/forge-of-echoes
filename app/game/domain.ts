@@ -6,6 +6,8 @@ export type CharacterEquipmentSlot = "helmet" | "mainHand" | "offHand" | "amulet
 export type AffixTag = "fire" | "life" | "speed" | "damage" | "defense";
 export type CharacterClassId = "amazon" | "barbarian" | "sorceress";
 export type CurrencyId = "scrap" | "essence" | "seal" | "solvent" | "mapDust" | "threatGlyph" | "rewardInk";
+export type FlaskId = "weak-health-flask" | "weak-mana-flask";
+export type FlaskResource = "life" | "mana";
 
 export type AttributeKey = "strength" | "dexterity" | "intelligence";
 export type DerivedStatKey =
@@ -116,7 +118,15 @@ export interface CurrencyItem {
   stackSize: number;
 }
 
-export type InventoryItem = EquipmentItem | MapItem | CurrencyItem;
+export interface FlaskItem {
+  kind: "flask";
+  id: string;
+  baseId: FlaskId;
+  stackSize: number;
+}
+
+export type InventoryItem = EquipmentItem | MapItem | CurrencyItem | FlaskItem;
+export type FlaskBelt = [FlaskItem | null, FlaskItem | null, FlaskItem | null, FlaskItem | null];
 export type CurrencyAmounts = Record<CurrencyId, number>;
 export type ItemContainerId = "backpack" | "stash";
 
@@ -162,11 +172,12 @@ export interface CharacterProgress {
 }
 
 export interface PlayerProfile {
-  version: 8;
+  version: 9;
   character: CharacterProgress;
   inventory: ItemContainer;
   stash: StashState;
   equipped: Partial<Record<CharacterEquipmentSlot, EquipmentItem>>;
+  flaskBelt: FlaskBelt;
   mapDevice: MapItem | null;
   openedMap: MapItem | null;
 }

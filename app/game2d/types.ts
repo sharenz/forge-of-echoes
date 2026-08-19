@@ -1,5 +1,6 @@
 import type { ArenaBalance, ArenaSummary, MapDrop } from "../game/combat";
-import type { CharacterClassId, SkillLevels } from "../game/domain";
+import type { CharacterClassId, FlaskBelt, SkillLevels } from "../game/domain";
+import type { FlaskDefinition } from "../game/config/flasks";
 
 export type WorldMode = "class-select" | "hideout" | "arena";
 export type WorldStation = "stash" | "bench" | "map-device" | "merchant" | "portal";
@@ -32,6 +33,7 @@ export interface WorldRuntimeOptions {
   portalActive: boolean;
   paused: boolean;
   skillLevels: SkillLevels;
+  flaskBelt: FlaskBelt;
   arenaBalance?: ArenaBalance;
   onStation: (station: WorldStation) => void;
   onHud: (state: WorldHudState) => void;
@@ -40,4 +42,5 @@ export interface WorldRuntimeOptions {
   onExperienceGain: (amount: number) => void;
   onArenaComplete: (summary: ArenaSummary) => void;
   onPlayerDeath: () => void;
+  onFlaskUse: (slotIndex: number) => FlaskDefinition | null;
 }

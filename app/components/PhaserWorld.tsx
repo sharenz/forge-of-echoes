@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
+import { FLASK_DEFINITIONS, type FlaskDefinition } from "../game/config/flasks";
 import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "../game/config/progression";
-import type { CharacterClassId, CharacterProgress, CharacterStats, StatKey, StatModifier } from "../game/domain";
+import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, StatKey, StatModifier } from "../game/domain";
 import { resolveSkillDefinition } from "../game/skills";
 import type { CharacterStatCalculation, StatResolution } from "../game/stats";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
@@ -19,11 +20,13 @@ interface PhaserWorldProps {
   characterStats?: CharacterStats;
   characterProgress?: CharacterProgress;
   characterStatBreakdown?: CharacterStatCalculation["breakdown"];
+  flaskBelt?: FlaskBelt;
   onStation?: (station: WorldStation) => void;
   onLootPickup?: (drop: MapDrop) => boolean;
   onExperienceGain?: (amount: number) => void;
   onArenaComplete?: (summary: ArenaSummary) => void;
   onPlayerDeath?: () => void;
+  onFlaskUse?: (slotIndex: number) => FlaskDefinition | null;
   children?: React.ReactNode;
 }
 
@@ -93,7 +96,9 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
   );
 }
 
-export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, children }: PhaserWorldProps) {
+const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null];
+
+export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, onFlaskUse, children }: PhaserWorldProps) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
   const novaLevel = characterProgress?.skillLevels.nova ?? 1;
   const dashLevel = characterProgress?.skillLevels.dash ?? 1;
@@ -104,6 +109,8 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
   const completionCallbackRef = useRef(onArenaComplete);
   const deathCallbackRef = useRef(onPlayerDeath);
   const experienceCallbackRef = useRef(onExperienceGain);
+  const flaskUseCallbackRef = useRef(onFlaskUse);
+  const flaskBeltRef = useRef(flaskBelt);
   const skillLevelsRef = useRef({ nova: novaLevel, dash: dashLevel });
   const pausedRef = useRef(paused);
   const arenaBalanceRef = useRef(arenaBalance);
@@ -117,7 +124,13 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
     completionCallbackRef.current = onArenaComplete;
     deathCallbackRef.current = onPlayerDeath;
     experienceCallbackRef.current = onExperienceGain;
-  }, [onArenaComplete, onExperienceGain, onLootPickup, onPlayerDeath, onStation]);
+    flaskUseCallbackRef.current = onFlaskUse;
+  }, [onArenaComplete, onExperienceGain, onFlaskUse, onLootPickup, onPlayerDeath, onStation]);
+
+  useEffect(() => {
+    flaskBeltRef.current = flaskBelt;
+    runtimeRef.current?.updateFlaskBelt(flaskBelt);
+  }, [flaskBelt]);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -151,6 +164,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
         portalActive,
         paused: pausedRef.current,
         skillLevels: skillLevelsRef.current,
+        flaskBelt: flaskBeltRef.current,
         arenaBalance: arenaBalanceRef.current,
         onStation: (station) => stationCallbackRef.current?.(station),
         onHud: setHud,
@@ -158,6 +172,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
         onExperienceGain: (amount) => experienceCallbackRef.current?.(amount),
         onArenaComplete: (summary) => completionCallbackRef.current?.(summary),
         onPlayerDeath: () => deathCallbackRef.current?.(),
+        onFlaskUse: (slotIndex) => flaskUseCallbackRef.current?.(slotIndex) ?? null,
       });
       runtimeRef.current = runtime;
       runtime.initialize();
@@ -237,6 +252,28 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
               <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.ward.key}</kbd>
               {hud && hud.wardCooldown > 0.05 && <strong>{hud.wardCooldown.toFixed(1)}</strong>}
             </button>
+          </div>
+          <div className="world-flask-belt" aria-label="Flask belt">
+            {flaskBelt.map((flask, index) => {
+              const definition = flask ? FLASK_DEFINITIONS[flask.baseId] : null;
+              const resourceFull = definition?.resource === "life"
+                ? !hud || hud.life >= hud.maxLife
+                : !hud || hud.focus >= hud.maxFocus;
+              return (
+                <button
+                  type="button"
+                  className={`flask-hotkey ${definition ? `flask-${definition.resource}` : "empty"}`}
+                  disabled={mode !== "arena" || !flask || resourceFull}
+                  data-tooltip={definition ? `${definition.name} · Restores ${definition.recovery} ${definition.resource}` : "Empty flask slot"}
+                  onClick={() => runtimeRef.current?.useFlask(index)}
+                  key={index}
+                >
+                  {definition && <span className="flask-icon" style={{ "--flask-icon": `url(${definition.icon})` } as CSSProperties} />}
+                  <kbd>{index + 1}</kbd>
+                  {flask && <strong>{flask.stackSize}</strong>}
+                </button>
+              );
+            })}
           </div>
           <div className="world-experience" aria-label={`Level ${characterProgress.level} experience`}>
             <span><strong>Level {characterProgress.level}</strong><small>{characterProgress.level === MAX_CHARACTER_LEVEL ? "Maximum level" : `${characterProgress.xp} / ${xpRequired} XP`}</small></span>

@@ -189,6 +189,8 @@ Examples:
 
 Keep the number of slots familiar. Depth should come from affixes and interactions, not inventory bureaucracy. Inventory items expose complete stats in hover/focus tooltips and equip by dragging them directly into a matching paper-doll slot. The persistent character sheet shows the actual derived combat values, including evade.
 
+The equipped belt also owns four consumable flask slots bound to keys 1–4. A flask stack holds at most 5 uses in a belt slot and 20 in the backpack or stash. Flasks are physical, stackable items: they can be bought, dropped, moved between containers, and consumed one use at a time. The initial weak Health and Mana flasks recover their configured amount over time rather than instantly, matching the deliberate potion rhythm of classic ARPG combat.
+
 ### Rarities
 
 #### Normal
@@ -258,7 +260,7 @@ For any stat, resolution is always:
 - map affixes, map-tier scaling, wave growth, and monster bases use typed arena modifiers and the same resolver; the renderer receives only fully resolved wave values.
 - map effect and reward descriptions are generated from their executable modifier and reward records rather than maintained as parallel handwritten claims.
 
-Game content is data, not simulation logic. Definitions are separated by domain under `app/game/config`: classes, stat contribution rules, item bases, affixes, monsters, skills, maps, and progression. Runtime entities reference stable definition IDs and store only their rolled state. Calculation, generation, crafting, persistence, and rendering consume those definitions through dedicated engine modules.
+Game content is data, not simulation logic. Definitions are separated by domain under `app/game/config`: classes, stat contribution rules, item bases, affixes, monsters, skills, flasks, merchants, maps, and progression. Runtime entities reference stable definition IDs and store only their rolled state. Calculation, generation, crafting, persistence, and rendering consume those definitions through dedicated engine modules.
 
 ### Loot philosophy
 

@@ -5,8 +5,9 @@ import { createPortal } from "react-dom";
 import { CURRENCY_DEFINITIONS } from "../game/config/currencies";
 import { EQUIPMENT_TYPE_LABELS } from "../game/config/equipment-slots";
 import { MAP_MODIFIERS } from "../game/config/maps";
+import { FLASK_DEFINITIONS } from "../game/config/flasks";
 import type { InventoryItem } from "../game/domain";
-import { isCurrencyItem, isEquipmentItem } from "../game/inventory";
+import { isCurrencyItem, isEquipmentItem, isFlaskItem } from "../game/inventory";
 import { itemDisplayName } from "../game/items";
 import { mapDanger, mapModifierDescription, mapStatSummary } from "../game/maps";
 import { formatModifier, formatModifierWithRollRange } from "../game/stats";
@@ -53,6 +54,21 @@ export function ItemTooltip({ item, x, y, hint }: ItemTooltipProps) {
         <strong>{definition.name}</strong>
         <em>{item.stackSize} / {definition.maxStackSize} per stack</em>
         <div className="tooltip-implicit">{definition.description}</div>
+      </aside>,
+      document.body,
+    );
+  }
+
+  if (isFlaskItem(item)) {
+    const definition = FLASK_DEFINITIONS[item.baseId];
+    return createPortal(
+      <aside className={`item-tooltip flask-tooltip flask-${definition.resource}`} style={{ left, top }} role="tooltip">
+        <ItemIcon item={item} className="tooltip-item-icon" />
+        <span>Stackable consumable</span>
+        <strong>{definition.name}</strong>
+        <em>{item.stackSize} / {definition.maxInventoryStack} in inventory · {definition.maxBeltStack} in belt</em>
+        <div className="tooltip-implicit">Restores {definition.recovery} {definition.resource === "life" ? "Life" : "Mana"} over {definition.durationSeconds} seconds.</div>
+        {hint && <small>{hint}</small>}
       </aside>,
       document.body,
     );

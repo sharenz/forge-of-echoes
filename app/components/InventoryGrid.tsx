@@ -3,9 +3,10 @@
 import { useState, type CSSProperties, type DragEvent } from "react";
 import { ITEM_CONTAINER_DEFINITIONS } from "../game/config/containers";
 import { CURRENCY_DEFINITIONS } from "../game/config/currencies";
+import { FLASK_DEFINITIONS } from "../game/config/flasks";
 import type { InventoryItem, ItemContainer } from "../game/domain";
 import { canPlaceItem, findContainerEntry, itemFootprint } from "../game/item-container";
-import { isCurrencyItem, isEquipmentItem, isMapItem } from "../game/inventory";
+import { isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "../game/inventory";
 import { itemDisplayName } from "../game/items";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
@@ -21,6 +22,7 @@ interface InventoryGridProps {
   onDragEnd?: () => void;
   onDropItem?: (id: string, containerId: ItemContainer["id"], x: number, y: number) => void;
   onEquipItem?: (id: string) => void;
+  onActivateItem?: (id: string) => void;
   onQuickMove?: (id: string) => void;
 }
 
@@ -38,6 +40,7 @@ export interface GridOffset {
 function itemTitle(item: InventoryItem): string {
   if (isEquipmentItem(item)) return itemDisplayName(item);
   if (isMapItem(item)) return `${item.baseName} · Tier ${item.tier}`;
+  if (isFlaskItem(item)) return FLASK_DEFINITIONS[item.baseId].name;
   return CURRENCY_DEFINITIONS[item.baseId].name;
 }
 
@@ -59,7 +62,7 @@ function readOffset(event: DragEvent): { x: number; y: number } {
   }
 }
 
-export function InventoryGrid({ container, selectedId, onSelect, highlightedIds, draggedItem, draggedOffset, onDragItem, onDragEnd, onDropItem, onEquipItem, onQuickMove }: InventoryGridProps) {
+export function InventoryGrid({ container, selectedId, onSelect, highlightedIds, draggedItem, draggedOffset, onDragItem, onDragEnd, onDropItem, onEquipItem, onActivateItem, onQuickMove }: InventoryGridProps) {
   const definition = ITEM_CONTAINER_DEFINITIONS[container.id];
   const [tooltip, setTooltip] = useState<{ item: InventoryItem; x: number; y: number } | null>(null);
   const [preview, setPreview] = useState<DropPreview | null>(null);
@@ -115,7 +118,7 @@ export function InventoryGrid({ container, selectedId, onSelect, highlightedIds,
         {container.entries.map(({ item, x, y }) => {
           const size = itemFootprint(item);
           const highlighted = highlightedIds?.has(item.id) ?? false;
-          const visualClass = isEquipmentItem(item) || isMapItem(item) ? `rarity-${item.rarity}` : "inventory-currency";
+          const visualClass = isEquipmentItem(item) || isMapItem(item) ? `rarity-${item.rarity}` : isFlaskItem(item) ? `inventory-flask flask-${item.baseId}` : "inventory-currency";
           return (
             <button
               type="button"
@@ -127,7 +130,11 @@ export function InventoryGrid({ container, selectedId, onSelect, highlightedIds,
                 if (event.ctrlKey && onQuickMove) onQuickMove(item.id);
                 else onSelect(item.id);
               }}
-              onDoubleClick={(event) => { if (!event.ctrlKey && isEquipmentItem(item)) onEquipItem?.(item.id); }}
+              onDoubleClick={(event) => {
+                if (event.ctrlKey) return;
+                if (isEquipmentItem(item)) onEquipItem?.(item.id);
+                else if (isFlaskItem(item)) onActivateItem?.(item.id);
+              }}
               draggable={Boolean(onDragItem)}
               onDragStart={(event) => {
                 const offset = dragOffset(event, item);
@@ -150,13 +157,13 @@ export function InventoryGrid({ container, selectedId, onSelect, highlightedIds,
               {highlighted && <em className="new-drop-badge">New</em>}
               <ItemIcon item={item} />
               {isMapItem(item) && <b className="item-tier-badge">T{item.tier}</b>}
-              {isCurrencyItem(item) && <b className="stack-count">{item.stackSize}</b>}
+              {(isCurrencyItem(item) || isFlaskItem(item)) && <b className="stack-count">{item.stackSize}</b>}
               {size.height > 1 && isEquipmentItem(item) && <small>{item.baseName}</small>}
             </button>
           );
         })}
       </div>
-      {tooltip && <ItemTooltip item={tooltip.item} x={tooltip.x} y={tooltip.y} hint={onQuickMove ? "Ctrl-click to stash · drag to place" : isEquipmentItem(tooltip.item) ? "Drag to move · double-click to equip" : "Drag to place"} />}
+      {tooltip && <ItemTooltip item={tooltip.item} x={tooltip.x} y={tooltip.y} hint={onQuickMove ? "Ctrl-click to stash · drag to place" : isEquipmentItem(tooltip.item) ? "Drag to move · double-click to equip" : isFlaskItem(tooltip.item) ? "Drag to a belt slot · double-click to load" : "Drag to place"} />}
     </div>
   );
 }

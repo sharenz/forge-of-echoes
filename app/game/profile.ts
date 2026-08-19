@@ -11,6 +11,7 @@ import type {
   CurrencyAmounts,
   CurrencyId,
   EquipmentItem,
+  FlaskBelt,
   InventoryItem,
   ItemContainer,
   MapItem,
@@ -20,15 +21,17 @@ import type {
   StashState,
 } from "./domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts } from "./equipment";
-import { addCurrencyToInventory, isCurrencyItem, isEquipmentItem, isMapItem } from "./inventory";
+import { addCurrencyToInventory, isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "./inventory";
 import { containerItems, createItemContainer, insertItems, normalizeItemContainer } from "./item-container";
 import { generateStarterWeapon, normalizeEquipmentItem } from "./items";
 import { createMap } from "./maps";
+import { createEmptyFlaskBelt, createFlaskStack, normalizeFlaskBelt } from "./flasks";
 import { ATTRIBUTE_POINTS_PER_LEVEL, grantCharacterExperience } from "./progression";
 import { activeStashTab, createStash, insertItemsIntoStash, updateStashContainer } from "./stash";
 import { calculateCharacterStats } from "./stats";
 
-const STORAGE_KEY = "crafty.profile.v8";
+const STORAGE_KEY = "crafty.profile.v9";
+const V8_STORAGE_KEY = "crafty.profile.v8";
 const V7_STORAGE_KEY = "crafty.profile.v7";
 const V6_STORAGE_KEY = "crafty.profile.v6";
 const V5_STORAGE_KEY = "crafty.profile.v5";
@@ -50,6 +53,11 @@ interface V7Profile {
   mapDevice: MapItem | null;
   openedMap: MapItem | null;
 }
+
+type V8Profile = Omit<PlayerProfile, "version" | "flaskBelt"> & {
+  version: 8;
+  flaskBelt?: FlaskBelt;
+};
 
 interface V4Profile {
   version: 4;
@@ -102,7 +110,7 @@ function startingInventory(): InventoryItem[] {
 
 export function createInitialProfile(): PlayerProfile {
   return {
-    version: 8,
+    version: 9,
     character: {
       name: "", archetype: "Unchosen", classId: null, created: false, level: 1, xp: 0,
       allocatedAttributes: { strength: 0, dexterity: 0, intelligence: 0 },
@@ -114,6 +122,7 @@ export function createInitialProfile(): PlayerProfile {
     inventory: createItemContainer("backpack", startingInventory()),
     stash: createStash(),
     equipped: {},
+    flaskBelt: createEmptyFlaskBelt(),
     mapDevice: null,
     openedMap: null,
   };
@@ -156,6 +165,8 @@ function normalizeInventory(items: readonly InventoryItem[]): InventoryItem[] {
       result = addCurrencyToInventory(result, item.baseId, item.stackSize);
     } else if (isMapItem(item)) {
       result.push(normalizeMapItem(item));
+    } else if (isFlaskItem(item)) {
+      result.push(item);
     } else {
       result.push(normalizeEquipmentItem(item));
     }
@@ -188,11 +199,12 @@ function migrateCounterProfile(profile: CounterProfile): PlayerProfile {
   const backpack = insertItems(createItemContainer("backpack"), normalizeInventory(inventory));
   const stash = insertItemsIntoStash(createStash(), [...profile.stash.map(normalizeEquipmentItem), ...backpack.unplaced]);
   return {
-    version: 8,
+    version: 9,
     character: normalizeCharacterProgress(profile.character),
     inventory: backpack.container,
     stash: stash.stash,
     equipped: normalizeEquipped(profile.equipped),
+    flaskBelt: createEmptyFlaskBelt(),
     mapDevice: null,
     openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
   } as PlayerProfile;
@@ -203,11 +215,12 @@ function migrateV4Profile(profile: V4Profile): PlayerProfile {
   const stash = insertItemsIntoStash(createStash(), [...normalizeInventory(profile.stash ?? []), ...backpack.unplaced]);
   return {
     ...profile,
-    version: 8,
+    version: 9,
     character: normalizeCharacterProgress(profile.character),
     inventory: backpack.container,
     stash: stash.stash,
     equipped: normalizeEquipped(profile.equipped ?? {}),
+    flaskBelt: createEmptyFlaskBelt(),
     mapDevice: profile.mapDevice ? normalizeMapItem(profile.mapDevice) : null,
     openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
   } as PlayerProfile;
@@ -248,14 +261,15 @@ function normalizeStashState(stash: StashState): StashState {
   return { activeTabId, tabs };
 }
 
-function normalizeProfile(profile: PlayerProfile): PlayerProfile {
+function normalizeProfile(profile: PlayerProfile | V8Profile): PlayerProfile {
   return {
     ...profile,
-    version: 8,
+    version: 9,
     character: normalizeCharacterProgress(profile.character),
     inventory: normalizeItemContainer("backpack", normalizePlacedEntries(profile.inventory?.entries ?? [])),
     stash: normalizeStashState(profile.stash),
     equipped: normalizeEquipped(profile.equipped),
+    flaskBelt: normalizeFlaskBelt(profile.flaskBelt),
     mapDevice: profile.mapDevice ? normalizeMapItem(profile.mapDevice) : null,
     openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
   } as PlayerProfile;
@@ -264,11 +278,12 @@ function normalizeProfile(profile: PlayerProfile): PlayerProfile {
 function migrateV5Profile(profile: V5Profile): PlayerProfile {
   return {
     ...profile,
-    version: 8,
+    version: 9,
     character: normalizeCharacterProgress(profile.character),
     inventory: normalizeItemContainer("backpack", normalizePlacedEntries(profile.inventory?.entries ?? [])),
     stash: stashFromLegacyContainer(profile.stash),
     equipped: normalizeEquipped(profile.equipped),
+    flaskBelt: createEmptyFlaskBelt(),
     mapDevice: profile.mapDevice ? normalizeMapItem(profile.mapDevice) : null,
     openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
   };
@@ -277,11 +292,12 @@ function migrateV5Profile(profile: V5Profile): PlayerProfile {
 function migrateV6Profile(profile: V6Profile): PlayerProfile {
   return {
     ...profile,
-    version: 8,
+    version: 9,
     character: normalizeCharacterProgress(profile.character),
     inventory: normalizeItemContainer("backpack", normalizePlacedEntries(profile.inventory?.entries ?? [])),
     stash: stashFromLegacyContainer(profile.stash),
     equipped: normalizeEquipped(profile.equipped),
+    flaskBelt: createEmptyFlaskBelt(),
     mapDevice: profile.mapDevice ? normalizeMapItem(profile.mapDevice) : null,
     openedMap: profile.openedMap ? normalizeMapItem(profile.openedMap) : null,
   };
@@ -290,8 +306,9 @@ function migrateV6Profile(profile: V6Profile): PlayerProfile {
 function migrateV7Profile(profile: V7Profile): PlayerProfile {
   return normalizeProfile({
     ...profile,
-    version: 8,
+    version: 9,
     character: normalizeCharacterProgress(profile.character),
+    flaskBelt: createEmptyFlaskBelt(),
   });
 }
 
@@ -320,6 +337,7 @@ export function createCharacter(profile: PlayerProfile, name: string, classId: C
     inventory,
     stash,
     equipped: { mainHand: generateStarterWeapon(classId) },
+    flaskBelt: [createFlaskStack("weak-health-flask", 3), createFlaskStack("weak-mana-flask", 3), null, null],
     openedMap: null,
   };
 }
@@ -330,8 +348,10 @@ export function loadProfile(): PlayerProfile {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as PlayerProfile;
-      if (parsed.version === 8) return normalizeProfile(parsed);
+      if (parsed.version === 9) return normalizeProfile(parsed);
     }
+    const v8 = window.localStorage.getItem(V8_STORAGE_KEY);
+    if (v8) return normalizeProfile(JSON.parse(v8) as V8Profile);
     const v7 = window.localStorage.getItem(V7_STORAGE_KEY);
     if (v7) return migrateV7Profile(JSON.parse(v7) as V7Profile);
     const v6 = window.localStorage.getItem(V6_STORAGE_KEY);

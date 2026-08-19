@@ -1,6 +1,7 @@
 import { ITEM_CONTAINER_DEFINITIONS } from "./config/containers";
 import { CURRENCY_DEFINITIONS } from "./config/currencies";
-import type { CurrencyId, CurrencyItem, InventoryItem, ItemContainer, ItemContainerId, PlacedInventoryItem } from "./domain";
+import { FLASK_DEFINITIONS } from "./config/flasks";
+import type { CurrencyId, CurrencyItem, FlaskItem, InventoryItem, ItemContainer, ItemContainerId, PlacedInventoryItem } from "./domain";
 import { createId } from "./random";
 
 export interface ItemFootprint {
@@ -31,6 +32,18 @@ const EQUIPMENT_FOOTPRINTS = {
 } as const;
 
 const isCurrencyItem = (item: InventoryItem): item is CurrencyItem => item.kind === "currency";
+const isFlaskItem = (item: InventoryItem): item is FlaskItem => item.kind === "flask";
+const isStackableItem = (item: InventoryItem): item is CurrencyItem | FlaskItem => isCurrencyItem(item) || isFlaskItem(item);
+
+function maximumStackSize(item: CurrencyItem | FlaskItem): number {
+  return isCurrencyItem(item) ? CURRENCY_DEFINITIONS[item.baseId].maxStackSize : FLASK_DEFINITIONS[item.baseId].maxInventoryStack;
+}
+
+function createStackItem(item: CurrencyItem | FlaskItem, stackSize: number, preferredId?: string): CurrencyItem | FlaskItem {
+  return isCurrencyItem(item)
+    ? { kind: "currency", id: preferredId ?? createId("currency"), baseId: item.baseId, stackSize }
+    : { kind: "flask", id: preferredId ?? createId("flask"), baseId: item.baseId, stackSize };
+}
 
 export function itemFootprint(item: InventoryItem): ItemFootprint {
   return item.kind === "equipment" ? EQUIPMENT_FOOTPRINTS[item.slot] : { width: 1, height: 1 };
@@ -73,6 +86,12 @@ export function createItemContainer(id: ItemContainerId, items: readonly Invento
 export function normalizeItemContainer(id: ItemContainerId, entries: readonly PlacedInventoryItem[]): ItemContainer {
   let container: ItemContainer = { id, entries: [] };
   for (const entry of entries) {
+    if (isStackableItem(entry.item)) {
+      const positioned = insertItem(container, entry.item, { x: entry.x, y: entry.y });
+      const inserted = positioned.unplaced.length > 0 ? insertItems(positioned.container, positioned.unplaced) : positioned;
+      container = inserted.container;
+      continue;
+    }
     if (canPlaceItem(container, entry.item, entry.x, entry.y)) {
       container = { ...container, entries: [...container.entries, { ...entry }] };
       continue;
@@ -83,25 +102,21 @@ export function normalizeItemContainer(id: ItemContainerId, entries: readonly Pl
   return container;
 }
 
-function createCurrencyItem(baseId: CurrencyId, stackSize: number, preferredId?: string): CurrencyItem {
-  return { kind: "currency", id: preferredId ?? createId("currency"), baseId, stackSize };
-}
-
 export function insertItem(container: ItemContainer, item: InventoryItem, preferred?: { x: number; y: number }): InsertResult {
-  if (!isCurrencyItem(item)) {
+  if (!isStackableItem(item)) {
     const position = preferred && canPlaceItem(container, item, preferred.x, preferred.y) ? preferred : preferred ? null : findFirstFit(container, item);
     if (!position) return { container, unplaced: [item] };
     return { container: { ...container, entries: [...container.entries, { item, ...position }] }, unplaced: [] };
   }
 
-  const maxStackSize = CURRENCY_DEFINITIONS[item.baseId].maxStackSize;
+  const maxStackSize = maximumStackSize(item);
   let remaining = item.stackSize;
   let next = container;
   // Stacking changes quantities only; it never changes another item's position.
   next = {
     ...next,
     entries: next.entries.map((entry) => {
-      if (!isCurrencyItem(entry.item) || entry.item.baseId !== item.baseId || entry.item.stackSize >= maxStackSize || remaining === 0) return entry;
+      if (!isStackableItem(entry.item) || entry.item.kind !== item.kind || entry.item.baseId !== item.baseId || entry.item.stackSize >= maxStackSize || remaining === 0) return entry;
       const added = Math.min(maxStackSize - entry.item.stackSize, remaining);
       remaining -= added;
       return { ...entry, item: { ...entry.item, stackSize: entry.item.stackSize + added } };
@@ -110,10 +125,10 @@ export function insertItem(container: ItemContainer, item: InventoryItem, prefer
   let isFirstStack = true;
   while (remaining > 0) {
     const stackSize = Math.min(maxStackSize, remaining);
-    const stack = createCurrencyItem(item.baseId, stackSize, isFirstStack ? item.id : undefined);
+    const stack = createStackItem(item, stackSize, isFirstStack ? item.id : undefined);
     const exact = isFirstStack ? preferred : undefined;
     const position = exact && canPlaceItem(next, stack, exact.x, exact.y) ? exact : exact ? null : findFirstFit(next, stack);
-    if (!position) return { container: next, unplaced: [createCurrencyItem(item.baseId, remaining, isFirstStack ? item.id : undefined)] };
+    if (!position) return { container: next, unplaced: [createStackItem(item, remaining, isFirstStack ? item.id : undefined)] };
     next = { ...next, entries: [...next.entries, { item: stack, ...position }] };
     remaining -= stackSize;
     isFirstStack = false;

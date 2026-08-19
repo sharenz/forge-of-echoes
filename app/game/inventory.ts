@@ -1,5 +1,5 @@
 import { CURRENCY_DEFINITIONS } from "./config/currencies";
-import type { CurrencyAmounts, CurrencyId, CurrencyItem, EquipmentItem, InventoryItem, MapItem, PlayerProfile } from "./domain";
+import type { CurrencyAmounts, CurrencyId, CurrencyItem, EquipmentItem, FlaskItem, InventoryItem, MapItem, PlayerProfile } from "./domain";
 import { containerItems, countContainerCurrency, consumeContainerCurrency } from "./item-container";
 import { createId } from "./random";
 import { consumeStashCurrency, stashItems } from "./stash";
@@ -7,6 +7,7 @@ import { consumeStashCurrency, stashItems } from "./stash";
 export const isEquipmentItem = (item: InventoryItem): item is EquipmentItem => item.kind === "equipment";
 export const isMapItem = (item: InventoryItem): item is MapItem => item.kind === "map";
 export const isCurrencyItem = (item: InventoryItem): item is CurrencyItem => item.kind === "currency";
+export const isFlaskItem = (item: InventoryItem): item is FlaskItem => item.kind === "flask";
 
 export function createCurrencyStack(currencyId: CurrencyId, stackSize: number): CurrencyItem {
   const maxStackSize = CURRENCY_DEFINITIONS[currencyId].maxStackSize;

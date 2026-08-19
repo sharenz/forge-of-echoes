@@ -3,13 +3,14 @@ import { MAP_MODIFIERS } from "./config/maps";
 import { MONSTER_ARCHETYPES } from "./config/monsters";
 import type { ScaledModifierDefinition, SkillDefinition } from "./config/schema";
 import { ACTIVE_SKILLS, BASIC_ATTACK } from "./config/skills";
-import type { ArenaStatKey, CurrencyId, PlayerProfile, Rarity, StatModifier } from "./domain";
+import type { ArenaStatKey, CurrencyId, FlaskId, PlayerProfile, Rarity, StatModifier } from "./domain";
 import { deriveStats } from "./profile";
 import { resolveStat, type StatResolution } from "./stats";
 
 export type MapDrop =
   | { kind: "equipment"; rarity: Rarity }
-  | { kind: "currency"; currency: Extract<CurrencyId, "scrap" | "essence" | "mapDust">; amount: number };
+  | { kind: "currency"; currency: Extract<CurrencyId, "scrap" | "essence" | "mapDust">; amount: number }
+  | { kind: "flask"; flask: FlaskId; amount: number };
 
 export { ACTIVE_SKILLS, BASIC_ATTACK };
 

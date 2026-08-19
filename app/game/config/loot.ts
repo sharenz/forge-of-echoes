@@ -1,8 +1,11 @@
 export const LOOT_RULES = {
   baseEquipmentDropChance: 0.055,
   baseMaterialDropChance: 0.16,
+  baseFlaskDropChance: 0.11,
   maximumEquipmentDropChance: 0.42,
   maximumMaterialDropChance: 0.72,
+  maximumFlaskDropChance: 0.26,
+  maximumAnyDropChance: 0.92,
   equipmentRarityWeights: {
     normal: 50,
     magic: 48.75,

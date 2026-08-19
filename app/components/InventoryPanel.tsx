@@ -4,13 +4,16 @@ import { useState } from "react";
 import { ITEM_CONTAINER_DEFINITIONS } from "../game/config/containers";
 import { CHARACTER_EQUIPMENT_SLOTS } from "../game/config/equipment-slots";
 import { STASH_RULES } from "../game/config/stash";
+import { FLASK_DEFINITIONS } from "../game/config/flasks";
 import type { CharacterEquipmentSlot, EquipmentItem, InventoryItem, ItemContainerId, PlayerProfile } from "../game/domain";
 import { equipmentSlotAccepts } from "../game/equipment";
 import { containerItems, itemFootprint } from "../game/item-container";
-import { currencyAmounts, isEquipmentItem } from "../game/inventory";
+import { currencyAmounts, isEquipmentItem, isFlaskItem } from "../game/inventory";
+import { firstCompatibleFlaskSlot } from "../game/flasks";
 import { activeStashTab, stashItems as allStashItems } from "../game/stash";
 import { InventoryGrid, type GridOffset } from "./InventoryGrid";
 import { ItemCard } from "./ItemCard";
+import { ItemIcon } from "./ItemIcon";
 
 interface InventoryPanelProps {
   profile: PlayerProfile;
@@ -24,9 +27,11 @@ interface InventoryPanelProps {
   onSelectStashTab: (tabId: string) => void;
   onRenameStashTab: (tabId: string, name: string) => void;
   onCreateStashTab: () => void;
+  onLoadFlask: (id: string, slotIndex: number) => void;
+  onUnloadFlask: (slotIndex: number) => void;
 }
 
-export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem, onQuickStash, onSelectStashTab, onRenameStashTab, onCreateStashTab }: InventoryPanelProps) {
+export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem, onQuickStash, onSelectStashTab, onRenameStashTab, onCreateStashTab, onLoadFlask, onUnloadFlask }: InventoryPanelProps) {
   const [dragState, setDragState] = useState<{ itemId: string; offset: GridOffset } | null>(null);
   const draggedItemId = dragState?.itemId ?? null;
   const freshItems = new Set(freshItemIds);
@@ -34,7 +39,7 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
   const currentStashTab = activeStashTab(profile.stash);
   const stashItems = allStashItems(profile.stash);
   const equippedItems = Object.values(profile.equipped).filter(Boolean) as EquipmentItem[];
-  const allItems: InventoryItem[] = [...equippedItems, ...backpackItems, ...stashItems];
+  const allItems: InventoryItem[] = [...equippedItems, ...profile.flaskBelt.filter(Boolean), ...backpackItems, ...stashItems] as InventoryItem[];
   const draggedItem = allItems.find((item) => item.id === draggedItemId) ?? null;
   const freshInventory = backpackItems.filter((item) => freshItems.has(item.id));
   const freshCurrency = currencyAmounts(freshInventory);
@@ -64,6 +69,12 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
     if (item && isEquipmentItem(item) && equipmentSlotAccepts(slot, item)) onEquipItem(item.id, slot);
     endDrag();
   };
+  const loadFirstFlaskSlot = (itemId: string) => {
+    const item = backpackItems.find((candidate) => candidate.id === itemId);
+    if (!item || !isFlaskItem(item)) return;
+    const slotIndex = firstCompatibleFlaskSlot(profile, item.baseId);
+    if (slotIndex !== null) onLoadFlask(item.id, slotIndex);
+  };
 
   return (
     <div className="inventory-window">
@@ -88,6 +99,26 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
         })}
       </div>
       <div className="inventory-containers">
+        <section className="inventory-flask-belt" aria-label="Flask belt slots">
+          <header><div><span>Flask belt</span><strong>Combat consumables</strong></div><small>Keys 1–4 · 5 per slot</small></header>
+          <div>
+            {profile.flaskBelt.map((flask, index) => {
+              const compatible = Boolean(draggedItem && isFlaskItem(draggedItem) && (!flask || flask.baseId === draggedItem.baseId));
+              const definition = flask ? FLASK_DEFINITIONS[flask.baseId] : null;
+              return (
+                <div
+                  className={`inventory-flask-slot ${definition ? `flask-${definition.resource}` : "empty"} ${draggedItem ? compatible ? "drop-compatible" : "drop-incompatible" : ""}`}
+                  onDragOver={(event) => { if (compatible) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
+                  onDrop={(event) => { event.preventDefault(); const id = readDroppedItem(event); if (id) onLoadFlask(id, index); endDrag(); }}
+                  key={index}
+                >
+                  <kbd>{index + 1}</kbd>
+                  {flask && definition ? <><ItemIcon item={flask} /><strong>{flask.stackSize}</strong><button type="button" onClick={() => onUnloadFlask(index)} aria-label={`Move ${definition.name} to backpack`}>×</button></> : <span>Empty</span>}
+                </div>
+              );
+            })}
+          </div>
+        </section>
         <section className="inventory-overview" aria-label="Inventory overview">
           <div><span>Backpack space</span><strong>{occupiedBackpackCells}<small> / {backpackCapacity} cells</small></strong><i><b style={{ width: `${occupiedBackpackCells / backpackCapacity * 100}%` }} /></i></div>
           <div><span>Equipped</span><strong>{equippedItems.length}<small> / {CHARACTER_EQUIPMENT_SLOTS.length} slots</small></strong></div>
@@ -139,7 +170,7 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
             <InventoryGrid container={currentStashTab.container} selectedId={selectedItemId} onSelect={onSelect} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} />
           </section>
         )}
-        <InventoryGrid container={profile.inventory} selectedId={selectedItemId} onSelect={onSelect} highlightedIds={freshItems} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} onEquipItem={onEquipItem} onQuickMove={showStash ? onQuickStash : undefined} />
+        <InventoryGrid container={profile.inventory} selectedId={selectedItemId} onSelect={onSelect} highlightedIds={freshItems} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} onEquipItem={onEquipItem} onActivateItem={loadFirstFlaskSlot} onQuickMove={showStash ? onQuickStash : undefined} />
       </div>
     </div>
   );

@@ -12,12 +12,14 @@ import {
   type CharacterSpriteSheetId,
 } from "../game/config/character-animations";
 import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
+import { FLASK_DEFINITIONS, type FlaskDefinition } from "../game/config/flasks";
 import { MONSTER_PACK_RULES } from "../game/config/monster-packs";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
 import type { SkillDefinition } from "../game/config/schema";
-import type { CharacterClassId, DamageType, MonsterRarity, SkillLevels } from "../game/domain";
+import type { CharacterClassId, DamageType, FlaskBelt, MonsterRarity, SkillLevels } from "../game/domain";
 import { monsterPackModifierNames, resolveMonsterStats, rollMonsterPack } from "../game/encounters";
-import { dropChances, rollEquipmentRarity } from "../game/loot";
+import { advanceFlaskRecovery } from "../game/flasks";
+import { dropChances, rollEquipmentRarity, rollFlaskDrop } from "../game/loot";
 import { monsterExperienceReward } from "../game/progression";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
 import { CharacterAnimator } from "./CharacterAnimator";
@@ -169,6 +171,10 @@ class CraftyScene extends Phaser.Scene {
   private riftRecharge = 0;
   private wardCooldown = 0;
   private wardRemaining = 0;
+  private lifeRecoveryRemaining = 0;
+  private manaRecoveryRemaining = 0;
+  private lifeRecoveryRate = 0;
+  private manaRecoveryRate = 0;
   private resolvedBasic: ResolvedSkillDefinition;
   private resolvedNova: ResolvedSkillDefinition;
   private resolvedDash: ResolvedSkillDefinition;
@@ -261,6 +267,10 @@ class CraftyScene extends Phaser.Scene {
       nova: Phaser.Input.Keyboard.KeyCodes.Q,
       dash: Phaser.Input.Keyboard.KeyCodes.E,
       ward: Phaser.Input.Keyboard.KeyCodes.R,
+      flask1: Phaser.Input.Keyboard.KeyCodes.ONE,
+      flask2: Phaser.Input.Keyboard.KeyCodes.TWO,
+      flask3: Phaser.Input.Keyboard.KeyCodes.THREE,
+      flask4: Phaser.Input.Keyboard.KeyCodes.FOUR,
     }) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
       if (this.options.mode === "arena" && !this.options.paused) this.tryBasicAttack();
@@ -279,6 +289,10 @@ class CraftyScene extends Phaser.Scene {
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.nova)) this.useSkill("nova");
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.dash)) this.useSkill("dash");
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.ward)) this.useSkill("ward");
+    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask1)) this.useFlask(0);
+    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask2)) this.useFlask(1);
+    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask3)) this.useFlask(2);
+    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask4)) this.useFlask(3);
     this.accumulator += Math.min(delta, MAX_FRAME_DELTA);
     while (this.accumulator >= FIXED_STEP) {
       this.previousPlayerX = this.player.x;
@@ -340,6 +354,22 @@ class CraftyScene extends Phaser.Scene {
     }
   }
 
+  useFlask(slotIndex: number): void {
+    if (this.options.mode !== "arena" || !this.player || this.options.paused) return;
+    const flask = this.options.flaskBelt[slotIndex];
+    if (!flask) return;
+    const configured = FLASK_DEFINITIONS[flask.baseId];
+    const maxLife = this.options.arenaBalance?.maxLife ?? 100;
+    const maxMana = this.options.arenaBalance?.maxFocus ?? 100;
+    if (configured.resource === "life" && this.life >= maxLife) return;
+    if (configured.resource === "mana" && this.focus >= maxMana) return;
+    const consumed = this.options.onFlaskUse(slotIndex);
+    if (!consumed) return;
+    this.queueFlaskRecovery(consumed);
+    this.playFlaskVfx(consumed);
+    this.options.onHud(this.getHud());
+  }
+
   getHud(): WorldHudState {
     return {
       fps: Math.round(this.game.loop.actualFps || 0),
@@ -388,6 +418,10 @@ class CraftyScene extends Phaser.Scene {
     this.options.onHud(this.getHud());
   }
 
+  updateFlaskBelt(flaskBelt: FlaskBelt): void {
+    this.options.flaskBelt = flaskBelt;
+  }
+
   private fixedUpdate(delta: number): void {
     if (!this.player || this.arenaFailed) return;
     this.elapsedSeconds += delta;
@@ -396,6 +430,7 @@ class CraftyScene extends Phaser.Scene {
     this.novaCooldown = Math.max(0, this.novaCooldown - delta);
     this.wardCooldown = Math.max(0, this.wardCooldown - delta);
     this.wardRemaining = Math.max(0, this.wardRemaining - delta);
+    this.updateFlaskRecovery(delta);
     if (this.riftCharges < this.resolvedDash.maxCharges) {
       this.riftRecharge = Math.max(0, this.riftRecharge - delta);
       if (this.riftRecharge <= 0) {
@@ -514,6 +549,8 @@ class CraftyScene extends Phaser.Scene {
     this.createDropTexture("drop-scrap", 0xc17a42, 0xf1c071);
     this.createDropTexture("drop-essence", 0x6c4ca4, 0xc6a5ff);
     this.createDropTexture("drop-mapDust", 0x317f89, 0x92e4df);
+    this.createDropTexture("drop-weak-health-flask", 0x7e171d, 0xff6a58);
+    this.createDropTexture("drop-weak-mana-flask", 0x183d82, 0x66b7ff);
     this.createDropTexture("drop-equipment-normal", 0x7c756c, 0xded5c9);
     this.createDropTexture("drop-equipment-magic", 0x4c64a4, 0x96b4ff);
     this.createDropTexture("drop-equipment-rare", 0x9b782e, 0xffd867);
@@ -627,6 +664,39 @@ class CraftyScene extends Phaser.Scene {
     if (this.playerManaLabel.text !== manaText) this.playerManaLabel.setText(manaText);
     this.playerLifeLabel.setPosition(x, top + height / 2).setDepth(depth + 1);
     this.playerManaLabel.setPosition(x, top + 12 + height / 2).setDepth(depth + 1);
+  }
+
+  private queueFlaskRecovery(definition: FlaskDefinition): void {
+    const rate = definition.recovery / definition.durationSeconds;
+    if (definition.resource === "life") {
+      this.lifeRecoveryRemaining += definition.recovery;
+      this.lifeRecoveryRate = Math.max(this.lifeRecoveryRate, rate);
+    } else {
+      this.manaRecoveryRemaining += definition.recovery;
+      this.manaRecoveryRate = Math.max(this.manaRecoveryRate, rate);
+    }
+  }
+
+  private updateFlaskRecovery(delta: number): void {
+    const maxLife = this.options.arenaBalance?.maxLife ?? 100;
+    const maxMana = this.options.arenaBalance?.maxFocus ?? 100;
+    const life = advanceFlaskRecovery(this.life, maxLife, this.lifeRecoveryRemaining, this.lifeRecoveryRate, delta);
+    const mana = advanceFlaskRecovery(this.focus, maxMana, this.manaRecoveryRemaining, this.manaRecoveryRate, delta);
+    this.life = life.value;
+    this.lifeRecoveryRemaining = life.remaining;
+    this.focus = mana.value;
+    this.manaRecoveryRemaining = mana.remaining;
+  }
+
+  private playFlaskVfx(definition: FlaskDefinition): void {
+    if (!this.player) return;
+    const isLife = definition.resource === "life";
+    const color = isLife ? 0xff5a50 : 0x55a9ff;
+    this.emitRadialVfx(this.player.x, this.player.y - 10, 8, color, 55, 0.45);
+    const label = this.add.text(this.player.x, this.player.y - 96, `+${definition.recovery} ${isLife ? "LIFE" : "MANA"}`, {
+      fontFamily: "monospace", fontSize: "13px", fontStyle: "bold", color: isLife ? "#ff9a8c" : "#8dccff", stroke: "#090607", strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(520);
+    this.tweens.add({ targets: label, y: label.y - 24, alpha: 0, duration: 750, ease: "Cubic.easeOut", onComplete: () => label.destroy() });
   }
 
   private beginSkillAction(
@@ -797,7 +867,7 @@ class CraftyScene extends Phaser.Scene {
     const merchant = this.add.image(248, 620, "player-sorceress-rendered").setOrigin(0.5, 1).setDisplaySize(59, 96).setTint(0xd9ad76).setDepth(12);
     this.tweens.add({ targets: merchant, y: merchant.y - 2, duration: 1350, yoyo: true, repeat: -1, ease: "Sine.InOut" });
     this.tweens.add({ targets: merchant, y: merchant.y - 3, duration: 1250, yoyo: true, repeat: -1, ease: "Sine.InOut" });
-    this.addStation("merchant", 248, 592, 125, 105, "MAP MERCHANT");
+    this.addStation("merchant", 248, 592, 125, 105, "MERCHANT");
     if (this.options.portalActive) {
       const aura = this.add.ellipse(480, 202, 105, 34, 0xff6a2e, 0.24).setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({ targets: aura, alpha: 0.55, scaleX: 1.18, scaleY: 1.18, duration: 760, yoyo: true, repeat: -1 });
@@ -1253,22 +1323,28 @@ class CraftyScene extends Phaser.Scene {
         : materialRoll < 0.28
           ? { kind: "currency", currency: "essence", amount: 1 }
           : { kind: "currency", currency: "scrap", amount: Phaser.Math.Between(1, 2) };
+    } else if (roll < chances.equipment + chances.material + chances.flask) {
+      drop = { kind: "flask", flask: rollFlaskDrop(), amount: 1 };
     }
     if (!drop) return;
     this.spawnGroundDrop(enemy.x, enemy.y, drop);
   }
 
   private spawnGroundDrop(x: number, y: number, drop: MapDrop): void {
-    const texture = drop.kind === "equipment" ? `drop-equipment-${drop.rarity}` : `drop-${drop.currency}`;
+    const texture = drop.kind === "equipment" ? `drop-equipment-${drop.rarity}` : drop.kind === "currency" ? `drop-${drop.currency}` : `drop-${drop.flask}`;
     const sprite = this.dropPool?.get(x, y, texture) as Phaser.GameObjects.Image | null;
     if (!sprite) return;
     sprite.setTexture(texture).setActive(true).setVisible(true).setPosition(x, y).setScale(1.8).setDepth(Math.round(y / 10) + 30);
     const labelText = drop.kind === "equipment"
       ? `${drop.rarity.toUpperCase()} ITEM`
-      : `${drop.amount} ${drop.currency === "mapDust" ? "MAP DUST" : drop.currency.toUpperCase()}`;
+      : drop.kind === "currency"
+        ? `${drop.amount} ${drop.currency === "mapDust" ? "MAP DUST" : drop.currency.toUpperCase()}`
+        : drop.flask === "weak-health-flask" ? "WEAK HEALTH FLASK" : "WEAK MANA FLASK";
     const color = drop.kind === "equipment"
       ? drop.rarity === "rare" ? "#ffda68" : drop.rarity === "magic" ? "#9bb8ff" : "#ded5c9"
-      : drop.currency === "essence" ? "#c6a5ff" : drop.currency === "mapDust" ? "#92e4df" : "#e2ac70";
+      : drop.kind === "currency"
+        ? drop.currency === "essence" ? "#c6a5ff" : drop.currency === "mapDust" ? "#92e4df" : "#e2ac70"
+        : drop.flask === "weak-health-flask" ? "#ff8b78" : "#84c4ff";
     const label = this.add.text(x, y - 22, labelText, {
       fontFamily: "monospace",
       fontSize: "14px",
@@ -1452,6 +1528,14 @@ export class PhaserRuntime {
 
   useSkill(skill: "basic" | "nova" | "dash" | "ward"): void {
     this.scene?.useSkill(skill);
+  }
+
+  useFlask(slotIndex: number): void {
+    this.scene?.useFlask(slotIndex);
+  }
+
+  updateFlaskBelt(flaskBelt: FlaskBelt): void {
+    this.scene?.updateFlaskBelt(flaskBelt);
   }
 
   updateSkillLevels(skillLevels: SkillLevels): void {
