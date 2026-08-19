@@ -558,6 +558,8 @@ test("character animation directions and release frames are config-driven", () =
   assert.deepEqual(characterDirectionVector("north"), { x: 0, y: -1 });
   assert.equal(CHARACTER_ANIMATIONS.amazon.clips.south.attack.releaseFrame, 2);
   assert.equal(CHARACTER_ANIMATIONS.amazon.clips.south.run.frameCount, 4);
+  assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.east.run.frameCount, 8);
+  assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.west.run.frameCount, 8);
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.south.run.frameCount, 8);
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.south.attack.releaseFrame, 4);
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.south.run.sheet, "locomotion");

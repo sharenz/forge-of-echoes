@@ -63,14 +63,16 @@ const sorceressRows = {
 
 function sorceressClipsForDirection(direction: keyof typeof sorceressRows): Record<CharacterAnimationState, CharacterAnimationClipDefinition> {
   const rows = sorceressRows[direction];
-  // The generated east-facing strip has seven complete poses. West mirrors it.
-  const frameCount = direction === "east" ? 7 : 8;
+  // All eight side-facing locomotion poses are required: the final pose bridges
+  // the stride back to frame zero. West mirrors this same seamless strip.
+  const sideRunFrameCount = 8;
+  const defaultFrameCount = direction === "east" ? 7 : 8;
   return {
-    idle: { sheet: "locomotion", row: rows.idle, startColumn: 0, frameCount, frameRate: 7, repeat: -1 },
-    run: { sheet: "locomotion", row: rows.run, startColumn: 0, frameCount, frameRate: 13, repeat: -1 },
-    attack: { sheet: "actions", row: rows.attack, startColumn: 0, frameCount, frameRate: 14, repeat: 0, releaseFrame: 4 },
-    cast: { sheet: "actions", row: rows.cast, startColumn: 0, frameCount, frameRate: 12, repeat: 0, releaseFrame: 4 },
-    dash: { sheet: "locomotion", row: rows.run, startColumn: 0, frameCount, frameRate: 18, repeat: 0, releaseFrame: 2 },
+    idle: { sheet: "locomotion", row: rows.idle, startColumn: 0, frameCount: defaultFrameCount, frameRate: 7, repeat: -1 },
+    run: { sheet: "locomotion", row: rows.run, startColumn: 0, frameCount: sideRunFrameCount, frameRate: 13, repeat: -1 },
+    attack: { sheet: "actions", row: rows.attack, startColumn: 0, frameCount: defaultFrameCount, frameRate: 14, repeat: 0, releaseFrame: 4 },
+    cast: { sheet: "actions", row: rows.cast, startColumn: 0, frameCount: defaultFrameCount, frameRate: 12, repeat: 0, releaseFrame: 4 },
+    dash: { sheet: "locomotion", row: rows.run, startColumn: 0, frameCount: sideRunFrameCount, frameRate: 18, repeat: 0, releaseFrame: 2 },
   };
 }
 
