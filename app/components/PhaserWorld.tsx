@@ -27,6 +27,7 @@ interface PhaserWorldProps {
   onArenaComplete?: (summary: ArenaSummary) => void;
   onPlayerDeath?: () => void;
   onFlaskUse?: (slotIndex: number) => FlaskDefinition | null;
+  onFlaskLoad?: (itemId: string, slotIndex: number) => void;
   children?: React.ReactNode;
 }
 
@@ -98,7 +99,7 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
 
 const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null];
 
-export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, onFlaskUse, children }: PhaserWorldProps) {
+export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, onFlaskUse, onFlaskLoad, children }: PhaserWorldProps) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
   const novaLevel = characterProgress?.skillLevels.nova ?? 1;
   const dashLevel = characterProgress?.skillLevels.dash ?? 1;
@@ -115,6 +116,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
   const pausedRef = useRef(paused);
   const arenaBalanceRef = useRef(arenaBalance);
   const [hud, setHud] = useState<WorldHudState | null>(null);
+  const [flaskDropSlot, setFlaskDropSlot] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [rendererError, setRendererError] = useState(false);
 
@@ -260,18 +262,30 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
                 ? !hud || hud.life >= hud.maxLife
                 : !hud || hud.focus >= hud.maxFocus;
               return (
-                <button
-                  type="button"
-                  className={`flask-hotkey ${definition ? `flask-${definition.resource}` : "empty"}`}
-                  disabled={mode !== "arena" || !flask || resourceFull}
-                  data-tooltip={definition ? `${definition.name} · Restores ${definition.recovery} ${definition.resource}` : "Empty flask slot"}
-                  onClick={() => runtimeRef.current?.useFlask(index)}
+                <div
+                  className={`world-flask-slot-target ${flaskDropSlot === index ? "drop-ready" : ""}`}
+                  onDragOver={(event) => { if (onFlaskLoad) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setFlaskDropSlot(index); } }}
+                  onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFlaskDropSlot(null); }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const itemId = event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain");
+                    if (itemId) onFlaskLoad?.(itemId, index);
+                    setFlaskDropSlot(null);
+                  }}
                   key={index}
                 >
-                  {definition && <span className="flask-icon" style={{ "--flask-icon": `url(${definition.icon})` } as CSSProperties} />}
-                  <kbd>{index + 1}</kbd>
-                  {flask && <strong>{flask.stackSize}</strong>}
-                </button>
+                  <button
+                    type="button"
+                    className={`flask-hotkey ${definition ? `flask-${definition.resource}` : "empty"}`}
+                    disabled={mode !== "arena" || !flask || resourceFull}
+                    data-tooltip={definition ? `${definition.name} · Restores ${definition.recovery} ${definition.resource}` : "Empty flask slot · drag a flask here"}
+                    onClick={() => runtimeRef.current?.useFlask(index)}
+                  >
+                    {definition && <span className="flask-icon" style={{ "--flask-icon": `url(${definition.icon})` } as CSSProperties} />}
+                    <kbd>{index + 1}</kbd>
+                    {flask && <strong>{flask.stackSize}</strong>}
+                  </button>
+                </div>
               );
             })}
           </div>

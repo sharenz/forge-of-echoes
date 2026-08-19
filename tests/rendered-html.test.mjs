@@ -191,9 +191,13 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /const inserted = insertItem\(current\.inventory, item\)/);
   assert.match(world, /if \(!this\.options\.onLootPickup\(groundDrop\.drop\)\) continue/);
   assert.match(shell, /arena-inventory-toggle/);
+  assert.match(shell, /character-interface-backdrop/);
+  assert.match(shell, /onFlaskLoad=\{loadFlask\}/);
   assert.match(shell, /paused=\{characterPanelOpen\}/);
   assert.match(phaserWorld, /updateArenaBalance/);
   assert.match(phaserWorld, /world-action-bar/);
+  assert.match(phaserWorld, /world-flask-slot-target/);
+  assert.match(phaserWorld, /onFlaskLoad\?\.\(itemId, index\)/);
   assert.match(phaserWorld, /wardCooldown\.toFixed\(1\)/);
   assert.match(phaserWorld, /useSkill\("ward"\)/);
   assert.doesNotMatch(shell, /hideout-prompt/);

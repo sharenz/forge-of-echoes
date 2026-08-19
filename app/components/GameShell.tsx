@@ -136,11 +136,11 @@ export function GameShell() {
   if (screen === "arena" && profile.openedMap && arenaBalance) {
     const characterPanelOpen = isCharacterPanel(panel);
     return (
-      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onLootPickup={collectMapDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena} onPlayerDeath={failArena}>
+      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onFlaskLoad={loadFlask} onLootPickup={collectMapDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena} onPlayerDeath={failArena}>
         <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(characterPanelOpen ? null : "inventory")}>Character <kbd>I</kbd></button>
         <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
         {characterPanelOpen && (
-          <div className="world-panel-backdrop arena-panel-backdrop">
+          <div className="world-panel-backdrop arena-panel-backdrop character-interface-backdrop">
             <section className={`world-panel character-panel panel-${panel}`} aria-label={`Character ${panel}`}>
               <header><div><span>Combat paused · character changes apply immediately</span><h2>{characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></header>
               <CharacterPanelTabs active={panel} onChange={setPanel} />
@@ -556,7 +556,7 @@ export function GameShell() {
   }
 
   return (
-    <PhaserWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onStation={handleStation}>
+    <PhaserWorld mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onFlaskLoad={loadFlask} onStation={handleStation}>
       <header className="hideout-hud">
         <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
         <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId].name}</small></div></div>
@@ -572,7 +572,7 @@ export function GameShell() {
       {profile.openedMap && <div className="portal-notice"><span>Portal open</span><strong>{profile.openedMap.baseName}</strong><small>Click the portal to enter</small></div>}
 
       {panel && (
-        <div className="world-panel-backdrop">
+        <div className={`world-panel-backdrop ${isCharacterPanel(panel) ? "character-interface-backdrop" : ""}`}>
           <section className={`world-panel panel-${panel} ${isCharacterPanel(panel) ? "character-panel" : ""}`}>
             <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : panel === "merchant" ? "Maps and supplies" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Rook's Shop" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
             {isCharacterPanel(panel) && <CharacterPanelTabs active={panel} onChange={setPanel} />}
