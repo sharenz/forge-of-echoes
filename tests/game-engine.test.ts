@@ -560,6 +560,9 @@ test("character animation directions and release frames are config-driven", () =
   assert.equal(CHARACTER_ANIMATIONS.amazon.clips.south.run.frameCount, 4);
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.east.run.frameCount, 8);
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.west.run.frameCount, 8);
+  assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.south.idle.frameCount, 1);
+  assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.north.idle.frameCount, 1);
+  assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.east.idle.frameCount, 1);
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.south.run.frameCount, 8);
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.south.attack.releaseFrame, 4);
   assert.equal(CHARACTER_ANIMATIONS.sorceress.clips.south.run.sheet, "locomotion");

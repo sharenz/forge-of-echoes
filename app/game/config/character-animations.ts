@@ -68,7 +68,9 @@ function sorceressClipsForDirection(direction: keyof typeof sorceressRows): Reco
   const sideRunFrameCount = 8;
   const defaultFrameCount = direction === "east" ? 7 : 8;
   return {
-    idle: { sheet: "locomotion", row: rows.idle, startColumn: 0, frameCount: defaultFrameCount, frameRate: 7, repeat: -1 },
+    // The generated idle row contains leg-step variants, so a single grounded
+    // pose is intentionally held until a dedicated breathing-only clip exists.
+    idle: { sheet: "locomotion", row: rows.idle, startColumn: 0, frameCount: 1, frameRate: 1, repeat: -1 },
     run: { sheet: "locomotion", row: rows.run, startColumn: 0, frameCount: sideRunFrameCount, frameRate: 13, repeat: -1 },
     attack: { sheet: "actions", row: rows.attack, startColumn: 0, frameCount: defaultFrameCount, frameRate: 14, repeat: 0, releaseFrame: 4 },
     cast: { sheet: "actions", row: rows.cast, startColumn: 0, frameCount: defaultFrameCount, frameRate: 12, repeat: 0, releaseFrame: 4 },
