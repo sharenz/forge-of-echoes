@@ -12,3 +12,10 @@ export const LOOT_RULES = {
     rare: 1.25,
   },
 } as const;
+
+export const EQUIPMENT_DROP_COLORS = {
+  normal: "#f2eee6",
+  magic: "#749cff",
+  rare: "#ffe06a",
+  unique: "#dc7b3f",
+} as const;

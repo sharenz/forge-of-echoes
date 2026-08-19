@@ -267,6 +267,7 @@ Game content is data, not simulation logic. Definitions are separated by domain 
 Do not solve loot spam with an increasingly complicated filter. Prevent the spam.
 
 - Common monsters mostly drop materials and currency shards.
+- Equipment is rolled when it appears in the world, not when collected. Its ground label names the equipment type (such as Gloves or Belt), while rarity is communicated consistently by color: white normal, blue magic, yellow rare.
 - Elite monsters have a good chance to drop a relevant base.
 - Wave bosses can drop magic items, rare items, uniques, and special crafting components.
 - Crafted map modifiers let the player target base types, affix tags, unique families, or crafting materials before entry.

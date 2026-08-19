@@ -19,7 +19,8 @@ import type { SkillDefinition } from "../game/config/schema";
 import type { CharacterClassId, DamageType, FlaskBelt, MonsterRarity, SkillLevels } from "../game/domain";
 import { monsterPackModifierNames, resolveMonsterStats, rollMonsterPack } from "../game/encounters";
 import { advanceFlaskRecovery } from "../game/flasks";
-import { dropChances, rollEquipmentRarity, rollFlaskDrop } from "../game/loot";
+import { equipmentDropPresentation, dropChances, rollEquipmentRarity, rollFlaskDrop } from "../game/loot";
+import { generateEquipment } from "../game/items";
 import { monsterExperienceReward } from "../game/progression";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
 import { CharacterAnimator } from "./CharacterAnimator";
@@ -1315,7 +1316,8 @@ class CraftyScene extends Phaser.Scene {
     const roll = Math.random();
     let drop: MapDrop | null = null;
     if (roll < chances.equipment) {
-      drop = { kind: "equipment", rarity: rollEquipmentRarity(enemy.itemRarity) };
+      const rarity = rollEquipmentRarity(enemy.itemRarity);
+      drop = { kind: "equipment", item: generateEquipment(Math.max(2, this.options.arenaBalance?.tier ?? 1) * 5, rarity) };
     } else if (roll < chances.equipment + chances.material) {
       const materialRoll = Math.random();
       drop = materialRoll < 0.08
@@ -1331,17 +1333,18 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private spawnGroundDrop(x: number, y: number, drop: MapDrop): void {
-    const texture = drop.kind === "equipment" ? `drop-equipment-${drop.rarity}` : drop.kind === "currency" ? `drop-${drop.currency}` : `drop-${drop.flask}`;
+    const equipmentPresentation = drop.kind === "equipment" ? equipmentDropPresentation(drop.item) : null;
+    const texture = drop.kind === "equipment" ? `drop-equipment-${drop.item.rarity}` : drop.kind === "currency" ? `drop-${drop.currency}` : `drop-${drop.flask}`;
     const sprite = this.dropPool?.get(x, y, texture) as Phaser.GameObjects.Image | null;
     if (!sprite) return;
     sprite.setTexture(texture).setActive(true).setVisible(true).setPosition(x, y).setScale(1.8).setDepth(Math.round(y / 10) + 30);
     const labelText = drop.kind === "equipment"
-      ? `${drop.rarity.toUpperCase()} ITEM`
+      ? equipmentPresentation!.label
       : drop.kind === "currency"
         ? `${drop.amount} ${drop.currency === "mapDust" ? "MAP DUST" : drop.currency.toUpperCase()}`
         : drop.flask === "weak-health-flask" ? "WEAK HEALTH FLASK" : "WEAK MANA FLASK";
     const color = drop.kind === "equipment"
-      ? drop.rarity === "rare" ? "#ffda68" : drop.rarity === "magic" ? "#9bb8ff" : "#ded5c9"
+      ? equipmentPresentation!.color
       : drop.kind === "currency"
         ? drop.currency === "essence" ? "#c6a5ff" : drop.currency === "mapDust" ? "#92e4df" : "#e2ac70"
         : drop.flask === "weak-health-flask" ? "#ff8b78" : "#84c4ff";

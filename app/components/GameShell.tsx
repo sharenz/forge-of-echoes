@@ -9,7 +9,7 @@ import { chooseEquipmentSlot, equipmentSlotAccepts, findEquippedSlot } from "../
 import { isCurrencyItem, isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency, createCurrencyStack } from "../game/inventory";
 import { consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, unloadFlaskFromBelt } from "../game/flasks";
 import { containerItems, findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../game/item-container";
-import { addFireAffix, generateEquipment, rerollAffixValues } from "../game/items";
+import { addFireAffix, rerollAffixValues } from "../game/items";
 import { addMapModifier, rerollMap } from "../game/maps";
 import { purchaseFlask, purchaseMap } from "../game/merchant";
 import { applyRunResult, createCharacter, loadProfile, saveProfile } from "../game/profile";
@@ -336,7 +336,7 @@ export function GameShell() {
     const current = profileRef.current;
     if (!current?.openedMap) return false;
     const item = drop.kind === "equipment"
-      ? generateEquipment(Math.max(2, current.openedMap.tier) * 5, drop.rarity)
+      ? drop.item
       : drop.kind === "currency"
         ? createCurrencyStack(drop.currency, drop.amount)
         : createFlaskStack(drop.flask, drop.amount);

@@ -181,6 +181,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(lootEngine, /rollEquipmentRarity/);
   assert.match(lootConfig, /equipmentRarityWeights/);
   assert.match(world, /rollGroundDrop/);
+  assert.match(world, /equipmentDropPresentation\(drop\.item\)/);
+  assert.match(world, /item: generateEquipment/);
+  assert.doesNotMatch(world, /rarity\.toUpperCase\(\).*ITEM/);
   assert.match(world, /updateGroundDrops/);
   assert.match(shell, /onLootPickup/);
   assert.match(shell, /quickStashItem/);

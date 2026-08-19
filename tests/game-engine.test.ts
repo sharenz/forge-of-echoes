@@ -29,7 +29,7 @@ import { purchaseFlask, purchaseMap } from "../app/game/merchant";
 import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, isArenaCleared, rollHitDamage, shouldSpawnNextWave } from "../app/game/combat";
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
-import { dropChances, rollEquipmentRarity, rollFlaskDrop } from "../app/game/loot";
+import { dropChances, equipmentDropPresentation, rollEquipmentRarity, rollFlaskDrop } from "../app/game/loot";
 import { activeStashTab, addStashTab, createStash, insertItemsIntoStash, renameStashTab, selectStashTab, stashItems } from "../app/game/stash";
 import { allocateAttributePoint, allocateSkillPoint, grantCharacterExperience, monsterExperienceReward } from "../app/game/progression";
 import { resolveSkillDefinition } from "../app/game/skills";
@@ -577,6 +577,12 @@ test("item quantity changes drop frequency while item rarity changes only rarity
   assert.equal(dropChances(200).material, dropChances(100).material * 2);
   assert.equal(rollEquipmentRarity(100, () => 0.02), "magic");
   assert.equal(rollEquipmentRarity(400, () => 0.02), "rare");
+});
+
+test("ground equipment labels show item type and use canonical rarity colors", () => {
+  assert.deepEqual(equipmentDropPresentation({ slot: "gloves", rarity: "normal" }), { label: "GLOVES", color: "#f2eee6" });
+  assert.deepEqual(equipmentDropPresentation({ slot: "belt", rarity: "magic" }), { label: "BELT", color: "#749cff" });
+  assert.deepEqual(equipmentDropPresentation({ slot: "helmet", rarity: "rare" }), { label: "HELMET", color: "#ffe06a" });
 });
 
 test("runtime hit damage scales linearly with resolved attack damage", () => {
