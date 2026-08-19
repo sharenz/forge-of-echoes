@@ -222,8 +222,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(itemVisuals, /CURRENCY_DEFINITIONS\[item\.baseId\]\.icon/);
   assert.match(globalStyles, /\.poe-grid-item > \.item-icon/);
   assert.match(globalStyles, /\.world-command-deck \{/);
-  assert.match(globalStyles, /\.world-bottom-hud::before/);
-  assert.match(globalStyles, /bottom-command-frame-v1\.png/);
+  assert.match(globalStyles, /bottom-command-frame-v2\.png/);
   assert.match(globalStyles, /\.poe-grid-wrap\.container-backpack \.poe-grid/);
   assert.match(globalStyles, /aspect-ratio: var\(--grid-columns\) \/ var\(--grid-rows\)/);
   assert.doesNotMatch(inventoryGrid, /packItems/);

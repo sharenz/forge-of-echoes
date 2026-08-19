@@ -92,7 +92,11 @@ export interface MonsterDefinition {
   evadeChance: number;
   experience: { base: number; perWave: number; perTier: number };
   visual: {
+    /** Public asset URLs are data so an archetype can be reskinned without touching the runtime. */
+    sprite: string;
+    corpse: string;
     scale: number;
+    originY: number;
     body: number;
     accent: number;
   };

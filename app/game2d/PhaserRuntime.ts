@@ -109,6 +109,11 @@ interface VfxParticleState {
   rotationSpeed: number;
 }
 
+interface CorpseState {
+  sprite: Phaser.GameObjects.Image;
+  age: number;
+}
+
 interface ReturnPortalState {
   x: number;
   y: number;
@@ -155,10 +160,12 @@ class CraftyScene extends Phaser.Scene {
   private projectiles: ProjectileState[] = [];
   private enemyProjectiles: EnemyProjectileState[] = [];
   private groundDrops: GroundDropState[] = [];
+  private corpses: CorpseState[] = [];
   private enemyPool: Phaser.GameObjects.Group | null = null;
   private projectilePool: Phaser.GameObjects.Group | null = null;
   private enemyProjectilePool: Phaser.GameObjects.Group | null = null;
   private dropPool: Phaser.GameObjects.Group | null = null;
+  private corpsePool: Phaser.GameObjects.Group | null = null;
   private enemyHealthBars: Phaser.GameObjects.Graphics | null = null;
   private healthLabelPool: Phaser.GameObjects.Text[] = [];
   private damageNumberPool: Phaser.GameObjects.Text[] = [];
@@ -216,6 +223,12 @@ class CraftyScene extends Phaser.Scene {
     this.load.image("ember-sigil", "/ember-sigil.png");
     this.load.image("class-roster", "/class-roster-v2.png");
     this.load.image("player-sorceress-rendered", "/player-sorceress-v4.png");
+    if (this.options.mode === "arena") {
+      for (const definition of Object.values(MONSTER_ARCHETYPES)) {
+        this.load.image(`monster-${definition.id}`, definition.visual.sprite);
+        this.load.image(`corpse-${definition.id}`, definition.visual.corpse);
+      }
+    }
     if (this.options.mode !== "class-select") {
       const definition = CHARACTER_ANIMATIONS[this.options.classId];
       for (const [sheetId, sheet] of Object.entries(definition.sheets)) {
@@ -247,6 +260,7 @@ class CraftyScene extends Phaser.Scene {
       this.projectilePool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: PROJECTILE_POOL_SIZE, runChildUpdate: false });
       this.enemyProjectilePool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: ENEMY_PROJECTILE_POOL_SIZE, runChildUpdate: false });
       this.dropPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: 300, runChildUpdate: false });
+      this.corpsePool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: ARENA_RULES.corpses.maximumVisible, runChildUpdate: false });
       this.vfxPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: VFX_PARTICLE_POOL_SIZE, runChildUpdate: false });
       this.enemyHealthBars = this.add.graphics().setDepth(470);
       this.cameras.main.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
@@ -498,6 +512,7 @@ class CraftyScene extends Phaser.Scene {
       this.applyEnemyContactDamage(delta);
       this.updateProjectiles(delta);
       this.updateVfxParticles(delta);
+      this.updateCorpses(delta);
       this.renderEnemyHealth();
       this.updateGroundDrops(delta);
       this.advanceWaveIfReady();
@@ -512,7 +527,6 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private createTextures(): void {
-    Object.values(MONSTER_ARCHETYPES).forEach((definition) => this.createEnemyTexture(definition));
     const projectile = this.make.graphics({ x: 0, y: 0 });
     projectile.fillStyle(0x8f241e, 0.45).fillCircle(7, 7, 7);
     projectile.fillStyle(0xff5428, 0.9).fillCircle(7, 7, 5);
@@ -564,20 +578,6 @@ class CraftyScene extends Phaser.Scene {
     graphics.fillStyle(innerColor).fillRect(6, 4, 4, 7);
     graphics.fillStyle(0xffffff, 0.8).fillRect(7, 3, 2, 2);
     graphics.generateTexture(key, 16, 17).destroy();
-  }
-
-  private createEnemyTexture(definition: (typeof MONSTER_ARCHETYPES)[MonsterArchetypeId]): void {
-    const graphics = this.make.graphics({ x: 0, y: 0 });
-    graphics.fillStyle(0x171015).fillRect(3, 7, 18, 15);
-    graphics.fillStyle(definition.visual.body).fillRect(5, 5, 14, 14);
-    graphics.fillStyle(definition.visual.accent).fillRect(7, 3, 4, 4).fillRect(14, 3, 4, 4);
-    graphics.fillStyle(0xffdc78).fillRect(8, 10, 2, 2).fillRect(15, 10, 2, 2);
-    if (definition.behavior === "ranged") graphics.fillStyle(definition.visual.accent).fillRect(20, 9, 4, 4).fillRect(22, 10, 2, 2);
-    if (definition.behavior === "jumper") graphics.fillStyle(0x7ae0dc).fillRect(2, 18, 7, 4).fillRect(16, 18, 7, 4);
-    if (definition.id === "ironhide-brute") graphics.fillStyle(0xc2a070).fillRect(2, 6, 4, 14).fillRect(18, 6, 4, 14);
-    if (definition.id === "ember-skitter") graphics.fillStyle(0xffbd56).fillRect(1, 19, 7, 3).fillRect(16, 19, 7, 3);
-    graphics.fillStyle(0x1b1116).fillRect(4, 20, 5, 3).fillRect(16, 20, 5, 3);
-    graphics.generateTexture(`enemy-${definition.id}`, 24, 24).destroy();
   }
 
   private buildClassShowcase(): void {
@@ -946,12 +946,12 @@ class CraftyScene extends Phaser.Scene {
           : pack.rarity === "rare" && pack.rareLeaderIndex === member ? "rare" : "normal";
         const modifierIds = rarity === "normal" ? [] : pack.modifierIds;
         const stats = resolveMonsterStats(archetypeId, waveStats, rarity, modifierIds);
-        const texture = `enemy-${archetypeId}`;
+        const texture = `monster-${archetypeId}`;
         const sprite = this.enemyPool?.get(x, y, texture) as Phaser.GameObjects.Image | null;
         if (!sprite) break;
         const rarityScale = rarity === "rare" ? 1.3 : rarity === "magic" ? 1.08 : 1;
         const baseScale = archetype.visual.scale * rarityScale;
-        sprite.setTexture(texture).clearTint();
+        sprite.setTexture(texture).setOrigin(0.5, archetype.visual.originY).clearTint();
         if (rarity === "magic") sprite.setTint(MONSTER_PACK_RULES.magicTint);
         if (rarity === "rare") sprite.setTint(MONSTER_PACK_RULES.rareTint);
         sprite.setActive(true).setVisible(true).setPosition(x, y).setScale(baseScale).setDepth(Math.round(y / 10) + 10);
@@ -993,6 +993,7 @@ class CraftyScene extends Phaser.Scene {
     if (!this.player) return;
     for (const enemy of this.enemies) {
       const archetype = MONSTER_ARCHETYPES[enemy.archetypeId];
+      enemy.phase += delta * (enemy.aggro ? 5.2 : 0.8);
       enemy.attackCooldown = Math.max(0, enemy.attackCooldown - delta);
       enemy.jumpCooldown = Math.max(0, enemy.jumpCooldown - delta);
       const dx = this.player.x - enemy.x;
@@ -1037,13 +1038,19 @@ class CraftyScene extends Phaser.Scene {
         enemy.x += (dx / distance) * enemy.speed * delta;
         enemy.y += (dy / distance) * enemy.speed * delta;
       } else {
-        enemy.phase += delta * 0.8;
         const idleX = enemy.homeX + Math.cos(enemy.phase) * 14;
         const idleY = enemy.homeY + Math.sin(enemy.phase * 0.8) * 10;
         enemy.x += (idleX - enemy.x) * delta * 1.8;
         enemy.y += (idleY - enemy.y) * delta * 1.8;
       }
-      enemy.sprite.setPosition(Math.round(enemy.x), Math.round(enemy.y)).setFlipX(dx < 0).setDepth(Math.round(enemy.y / 10) + 10);
+      const grounded = enemy.jumpRemaining <= 0;
+      const locomotionBob = enemy.aggro && grounded ? Math.sin(enemy.phase) * 1.25 : 0;
+      const locomotionTilt = enemy.aggro && grounded ? Math.sin(enemy.phase * 0.5) * 0.012 : 0;
+      enemy.sprite
+        .setPosition(enemy.x, enemy.y + locomotionBob)
+        .setRotation(locomotionTilt)
+        .setFlipX(dx < 0)
+        .setDepth(Math.round(enemy.y / 10) + 10);
     }
   }
 
@@ -1051,6 +1058,8 @@ class CraftyScene extends Phaser.Scene {
     const sprite = this.enemyProjectilePool?.get(enemy.x, enemy.y, "enemy-projectile") as Phaser.GameObjects.Image | null;
     if (!sprite) return;
     sprite.setTexture("enemy-projectile").setActive(true).setVisible(true).setPosition(enemy.x, enemy.y).setScale(enemy.rarity === "rare" ? 1.55 : 1.25).setDepth(82).setBlendMode(Phaser.BlendModes.ADD);
+    const accent = MONSTER_ARCHETYPES[enemy.archetypeId].visual.accent;
+    this.emitRadialVfx(enemy.x, enemy.y - 12, enemy.rarity === "rare" ? 6 : 3, accent, 44, 0.2);
     this.enemyProjectiles.push({
       sprite,
       x: enemy.x,
@@ -1109,8 +1118,8 @@ class CraftyScene extends Phaser.Scene {
     graphics.clear();
     const view = this.cameras.main.worldView;
     for (const enemy of this.enemies) {
-      const visible = enemy.x >= view.left - HEALTH_BAR_WIDTH && enemy.x <= view.right + HEALTH_BAR_WIDTH
-        && enemy.y >= view.top - 55 && enemy.y <= view.bottom + 25;
+      const visible = enemy.x >= view.left - 100 && enemy.x <= view.right + 100
+        && enemy.y >= view.top - 100 && enemy.y <= view.bottom + 40;
       if (!visible) {
         if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
         enemy.healthLabel = null;
@@ -1119,7 +1128,8 @@ class CraftyScene extends Phaser.Scene {
       if (!enemy.healthLabel) enemy.healthLabel = this.acquireHealthLabel();
       enemy.healthLabel.setVisible(true);
       const left = Math.round(enemy.x - HEALTH_BAR_WIDTH / 2);
-      const top = Math.round(enemy.y - 34);
+      const archetype = MONSTER_ARCHETYPES[enemy.archetypeId];
+      const top = Math.round(enemy.y - 128 * enemy.baseScale * archetype.visual.originY - 8);
       const ratio = Phaser.Math.Clamp(enemy.life / enemy.maxLife, 0, 1);
       graphics.fillStyle(0x08090b, 0.9).fillRect(left - 1, top - 1, HEALTH_BAR_WIDTH + 2, HEALTH_BAR_HEIGHT + 2);
       graphics.fillStyle(0x39211f, 1).fillRect(left, top, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT);
@@ -1299,6 +1309,8 @@ class CraftyScene extends Phaser.Scene {
     const index = this.enemies.indexOf(enemy);
     if (index < 0) return;
     this.enemies.splice(index, 1);
+    this.spawnCorpse(enemy);
+    this.emitMonsterDeathVfx(enemy);
     this.enemyPool?.killAndHide(enemy.sprite);
     if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
     this.slain += 1;
@@ -1309,6 +1321,72 @@ class CraftyScene extends Phaser.Scene {
       enemy.rarity,
     ));
     this.rollGroundDrop(enemy);
+  }
+
+  private spawnCorpse(enemy: EnemyState): void {
+    if (!this.corpsePool) return;
+    if (this.corpses.length >= ARENA_RULES.corpses.maximumVisible) this.releaseCorpse(0);
+    const archetype = MONSTER_ARCHETYPES[enemy.archetypeId];
+    const texture = `corpse-${enemy.archetypeId}`;
+    const sprite = this.corpsePool.get(enemy.x, enemy.y, texture) as Phaser.GameObjects.Image | null;
+    if (!sprite) return;
+    sprite
+      .setTexture(texture)
+      .setOrigin(0.5, archetype.visual.originY)
+      .setActive(true)
+      .setVisible(true)
+      .setPosition(enemy.x + Phaser.Math.FloatBetween(-2, 2), enemy.y + Phaser.Math.FloatBetween(-2, 2))
+      .setScale(enemy.baseScale)
+      .setRotation(Phaser.Math.FloatBetween(-0.035, 0.035))
+      .setFlipX(enemy.sprite.flipX)
+      .setAlpha(0.96)
+      .setDepth(Math.round(enemy.y / 10) + 4)
+      .clearTint();
+    if (enemy.rarity === "magic") sprite.setTint(0xc1cdf1);
+    if (enemy.rarity === "rare") sprite.setTint(0xf2d396);
+    this.corpses.push({ sprite, age: 0 });
+  }
+
+  private emitMonsterDeathVfx(enemy: EnemyState): void {
+    const accent = MONSTER_ARCHETYPES[enemy.archetypeId].visual.accent;
+    const count = enemy.rarity === "rare" ? 16 : enemy.rarity === "magic" ? 11 : 7;
+    this.emitRadialVfx(enemy.x, enemy.y - 10, count, accent, enemy.rarity === "rare" ? 105 : 72, 0.34);
+    for (let index = 0; index < Math.ceil(count / 3); index += 1) {
+      this.emitVfxParticle(
+        enemy.x + Phaser.Math.Between(-12, 12),
+        enemy.y + Phaser.Math.Between(-2, 8),
+        MONSTER_ARCHETYPES[enemy.archetypeId].visual.body,
+        Phaser.Math.Between(-24, 24),
+        Phaser.Math.Between(-22, -6),
+        0.45,
+        0.85,
+        1.45,
+        "vfx-dust",
+      );
+    }
+  }
+
+  private updateCorpses(delta: number): void {
+    for (let index = this.corpses.length - 1; index >= 0; index -= 1) {
+      const corpse = this.corpses[index];
+      corpse.age += delta;
+      const fadeStart = ARENA_RULES.corpses.lifetimeSeconds - ARENA_RULES.corpses.fadeSeconds;
+      if (corpse.age > fadeStart) {
+        corpse.sprite.setAlpha(0.96 * Phaser.Math.Clamp(
+          (ARENA_RULES.corpses.lifetimeSeconds - corpse.age) / ARENA_RULES.corpses.fadeSeconds,
+          0,
+          1,
+        ));
+      }
+      if (corpse.age >= ARENA_RULES.corpses.lifetimeSeconds) this.releaseCorpse(index);
+    }
+  }
+
+  private releaseCorpse(index: number): void {
+    const corpse = this.corpses[index];
+    if (!corpse) return;
+    this.corpses.splice(index, 1);
+    this.corpsePool?.killAndHide(corpse.sprite);
   }
 
   private rollGroundDrop(enemy: EnemyState): void {
@@ -1389,6 +1467,8 @@ class CraftyScene extends Phaser.Scene {
       if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
     }
     this.enemies = [];
+    for (const corpse of this.corpses) this.corpsePool?.killAndHide(corpse.sprite);
+    this.corpses = [];
     this.enemyHealthBars?.clear();
     this.releaseEnemyProjectiles();
   }

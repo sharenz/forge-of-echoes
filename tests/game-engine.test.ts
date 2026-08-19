@@ -566,6 +566,12 @@ test("packs randomly mix configured combat roles and enforce magic/rare pack rul
   assert.equal(Object.keys(MONSTER_ARCHETYPES).length, 5);
   assert.equal(MONSTER_ARCHETYPES["cinder-spitter"].behavior, "ranged");
   assert.equal(MONSTER_ARCHETYPES["rift-stalker"].behavior, "jumper");
+  for (const monster of Object.values(MONSTER_ARCHETYPES)) {
+    assert.match(monster.visual.sprite, new RegExp(`^/monsters/${monster.id}\\.png$`));
+    assert.match(monster.visual.corpse, new RegExp(`^/monsters/${monster.id}-corpse\\.png$`));
+    assert.ok(monster.visual.scale > 0);
+    assert.ok(monster.visual.originY > 0 && monster.visual.originY <= 1);
+  }
 
   const magicPack = rollMonsterPack(8, 3, 2, 100, () => 0.05);
   assert.equal(magicPack.rarity, "magic");

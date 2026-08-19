@@ -14,6 +14,11 @@ export const ARENA_RULES = {
     spawnOffset: 130,
     triggerRadius: 58,
   },
+  corpses: {
+    maximumVisible: 180,
+    lifetimeSeconds: 42,
+    fadeSeconds: 10,
+  },
   tierModifiers: [
     { stat: "monsterLife", mode: "increased", base: 0, perTier: 8 },
     { stat: "monsterDamage", mode: "increased", base: 0, perTier: 7 },
