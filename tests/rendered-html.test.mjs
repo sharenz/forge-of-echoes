@@ -106,6 +106,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /shouldSpawnNextWave/);
   assert.match(world, /spawnReturnPortal/);
   assert.match(world, /activateReturnPortal/);
+  assert.match(world, /renderPlayerResources/);
+  assert.match(world, /this\.options\.onPlayerDeath\(\)/);
+  assert.doesNotMatch(world, /this\.lives/);
   assert.doesNotMatch(world, /groundDrops\.length > 0/);
   assert.match(world, /waveElapsedSeconds/);
   assert.match(world, /rollHitDamage/);

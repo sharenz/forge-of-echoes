@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
@@ -25,6 +25,7 @@ interface PhaserWorldProps {
   onLootPickup?: (drop: MapDrop) => boolean;
   onExperienceGain?: (amount: number) => void;
   onArenaComplete?: (summary: ArenaSummary) => void;
+  onPlayerDeath?: () => void;
   children?: React.ReactNode;
 }
 
@@ -79,7 +80,7 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
   );
 }
 
-export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, onStation, onLootPickup, onExperienceGain, onArenaComplete, children }: PhaserWorldProps) {
+export function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, characterStats, characterProgress, characterStatBreakdown, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, children }: PhaserWorldProps) {
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
   const novaLevel = characterProgress?.skillLevels.nova ?? 1;
   const dashLevel = characterProgress?.skillLevels.dash ?? 1;
@@ -88,6 +89,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
   const stationCallbackRef = useRef(onStation);
   const lootCallbackRef = useRef(onLootPickup);
   const completionCallbackRef = useRef(onArenaComplete);
+  const deathCallbackRef = useRef(onPlayerDeath);
   const experienceCallbackRef = useRef(onExperienceGain);
   const skillLevelsRef = useRef({ nova: novaLevel, dash: dashLevel });
   const pausedRef = useRef(paused);
@@ -100,8 +102,9 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
     stationCallbackRef.current = onStation;
     lootCallbackRef.current = onLootPickup;
     completionCallbackRef.current = onArenaComplete;
+    deathCallbackRef.current = onPlayerDeath;
     experienceCallbackRef.current = onExperienceGain;
-  }, [onArenaComplete, onExperienceGain, onLootPickup, onStation]);
+  }, [onArenaComplete, onExperienceGain, onLootPickup, onPlayerDeath, onStation]);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -141,6 +144,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
         onLootPickup: (drop) => lootCallbackRef.current?.(drop) ?? false,
         onExperienceGain: (amount) => experienceCallbackRef.current?.(amount),
         onArenaComplete: (summary) => completionCallbackRef.current?.(summary),
+        onPlayerDeath: () => deathCallbackRef.current?.(),
       });
       runtimeRef.current = runtime;
       runtime.initialize();
@@ -180,20 +184,30 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
           <div className="world-wave"><span>Wave</span><strong>{hud.wave}<em>/{arenaBalance?.waves ?? ARENA_RULES.totalWaves}</em></strong><small>{hud.enemies} remain{hud.nextWaveIn !== null ? ` · next in ${Math.ceil(hud.nextWaveIn)}s` : " · final wave"}</small></div>
           <div className="world-loot"><span>{hud.lootCollected} collected</span><strong>{hud.groundDrops}</strong><small>drops on ground</small></div>
           <div className="world-vitals">
-            <div><span>Life</span><i><b style={{ width: `${(hud.life / hud.maxLife) * 100}%` }} /></i><strong>{Math.ceil(hud.life)}</strong></div>
-            <div><span>Focus</span><i><b style={{ width: `${(hud.focus / hud.maxFocus) * 100}%` }} /></i><strong>{Math.floor(hud.focus)}</strong></div>
+            <div className="resource-tank life-tank">
+              <div className="globe-reservoir" style={{ "--resource-level": `${Math.max(0, Math.min(100, (hud.life / hud.maxLife) * 100))}%` } as CSSProperties}>
+                <i className="globe-liquid" />
+                <strong><span>Life</span>{Math.ceil(hud.life)}<small>/{Math.ceil(hud.maxLife)}</small></strong>
+              </div>
+            </div>
+            <div className="resource-tank mana-tank">
+              <div className="globe-reservoir" style={{ "--resource-level": `${Math.max(0, Math.min(100, (hud.focus / hud.maxFocus) * 100))}%` } as CSSProperties}>
+                <i className="globe-liquid" />
+                <strong><span>Mana</span>{Math.floor(hud.focus)}<small>/{Math.floor(hud.maxFocus)}</small></strong>
+              </div>
+            </div>
           </div>
           <div className="world-skills">
             <span className="basic-skill"><kbd>{BASIC_ATTACK.key}</kbd><span><strong>{BASIC_ATTACK.name}</strong><small>{damageSummary(BASIC_ATTACK.damage)}</small></span></span>
             <button type="button" className="active-skill" disabled={!novaReady} onClick={() => runtimeRef.current?.useSkill("nova")}>
               <i className="skill-recharge" style={{ width: `${novaProgress}%` }} />
               <kbd>{ACTIVE_SKILLS.nova.key}</kbd>
-              <span><strong>{resolvedNova.name} · Lv {resolvedNova.level}</strong><small>{hud.novaCooldown > 0.05 ? `${hud.novaCooldown.toFixed(1)}s recharge` : hud.focus < resolvedNova.focusCost ? `Needs ${resolvedNova.focusCost} Focus` : `Ready · ${damageSummary(resolvedNova.damage!)} · ${resolvedNova.projectileCount} bolts · ${resolvedNova.piercing} pierce`}</small></span>
+              <span><strong>{resolvedNova.name} · Lv {resolvedNova.level}</strong><small>{hud.novaCooldown > 0.05 ? `${hud.novaCooldown.toFixed(1)}s recharge` : hud.focus < resolvedNova.focusCost ? `Needs ${resolvedNova.focusCost} Mana` : `Ready · ${damageSummary(resolvedNova.damage!)} · ${resolvedNova.projectileCount} bolts · ${resolvedNova.piercing} pierce`}</small></span>
             </button>
             <button type="button" className="active-skill rift-skill" disabled={!riftReady} onClick={() => runtimeRef.current?.useSkill("dash")}>
               <i className="skill-recharge" style={{ width: `${riftProgress}%` }} />
               <kbd>{ACTIVE_SKILLS.dash.key}</kbd>
-              <span><strong>{resolvedDash.name} · Lv {resolvedDash.level}</strong><small>{hud.riftCharges}/{hud.riftMaxCharges} charges{hud.riftCharges < hud.riftMaxCharges ? ` · +1 in ${hud.riftRecharge.toFixed(1)}s` : ` · ${resolvedDash.focusCost} Focus`}</small></span>
+              <span><strong>{resolvedDash.name} · Lv {resolvedDash.level}</strong><small>{hud.riftCharges}/{hud.riftMaxCharges} charges{hud.riftCharges < hud.riftMaxCharges ? ` · +1 in ${hud.riftRecharge.toFixed(1)}s` : ` · ${resolvedDash.focusCost} Mana`}</small></span>
               <span className="skill-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} Rift Step charges`}>
                 {Array.from({ length: hud.riftMaxCharges }, (_, index) => <i className={index < hud.riftCharges ? "ready" : ""} key={index} />)}
               </span>

@@ -142,6 +142,9 @@ class CraftyScene extends Phaser.Scene {
   private playerAnimator: CharacterAnimator | null = null;
   private playerShadow: Phaser.GameObjects.Image | null = null;
   private playerAura: Phaser.GameObjects.Image | null = null;
+  private playerResourceBars: Phaser.GameObjects.Graphics | null = null;
+  private playerLifeLabel: Phaser.GameObjects.Text | null = null;
+  private playerManaLabel: Phaser.GameObjects.Text | null = null;
   private cameraTarget: Phaser.GameObjects.Zone | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key> | null = null;
   private enemies: EnemyState[] = [];
@@ -168,7 +171,6 @@ class CraftyScene extends Phaser.Scene {
   private resolvedDash: ResolvedSkillDefinition;
   private life: number;
   private focus: number;
-  private lives = 3;
   private wave = 1;
   private waveElapsedSeconds = 0;
   private slain = 0;
@@ -178,6 +180,7 @@ class CraftyScene extends Phaser.Scene {
   private arenaComplete = false;
   private returnPortal: ReturnPortalState | null = null;
   private returnPortalUsed = false;
+  private arenaFailed = false;
   private footstepElapsed = 0;
   private previousPlayerX = 0;
   private previousPlayerY = 0;
@@ -363,7 +366,7 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private fixedUpdate(delta: number): void {
-    if (!this.player) return;
+    if (!this.player || this.arenaFailed) return;
     this.elapsedSeconds += delta;
     this.waveElapsedSeconds += delta;
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
@@ -537,6 +540,19 @@ class CraftyScene extends Phaser.Scene {
     const textureKey = characterDefaultSpriteSheetKey(this.options.classId);
     this.playerVisual = this.add.sprite(x, y + characterVisualOffsetY(this.options.classId), textureKey, 0).setDepth(10);
     this.playerAnimator = new CharacterAnimator(this, this.playerVisual, this.options.classId);
+    if (this.options.mode === "arena") {
+      this.playerResourceBars = this.add.graphics().setDepth(500);
+      const resourceLabelStyle: Phaser.Types.GameObjects.Text.TextStyle = {
+        fontFamily: "monospace",
+        fontSize: "9px",
+        fontStyle: "bold",
+        color: "#fff4df",
+        stroke: "#090607",
+        strokeThickness: 2,
+      };
+      this.playerLifeLabel = this.add.text(x, y, "", resourceLabelStyle).setOrigin(0.5).setDepth(501);
+      this.playerManaLabel = this.add.text(x, y, "", resourceLabelStyle).setOrigin(0.5).setDepth(501);
+    }
     this.tweens.add({ targets: this.playerAura, alpha: 0.38, scaleX: 1.4, scaleY: 1.28, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.InOut" });
   }
 
@@ -549,6 +565,37 @@ class CraftyScene extends Phaser.Scene {
     this.playerShadow?.setPosition(x, y + 25).setDepth(playerDepth - 2);
     this.playerAura?.setPosition(x, y + 25).setDepth(playerDepth - 2);
     this.cameraTarget?.setPosition(x, y);
+    this.renderPlayerResources(x, y, playerDepth + 80);
+  }
+
+  private renderPlayerResources(x: number, y: number, depth: number): void {
+    const graphics = this.playerResourceBars;
+    if (!graphics || !this.playerLifeLabel || !this.playerManaLabel) return;
+    const maxLife = this.options.arenaBalance?.maxLife ?? 100;
+    const maxMana = this.options.arenaBalance?.maxFocus ?? 100;
+    const lifeRatio = Phaser.Math.Clamp(this.life / maxLife, 0, 1);
+    const manaRatio = Phaser.Math.Clamp(this.focus / maxMana, 0, 1);
+    const width = 82;
+    const height = 8;
+    const left = x - width / 2;
+    const top = y - 119;
+
+    graphics.clear().setDepth(depth);
+    graphics.fillStyle(0x080609, 0.92).fillRect(left - 2, top - 2, width + 4, height + 4);
+    graphics.lineStyle(1, 0x6f4a3a, 1).strokeRect(left - 1, top - 1, width + 2, height + 2);
+    graphics.fillStyle(0x421315, 1).fillRect(left, top, width, height);
+    graphics.fillStyle(0xc9473f, 1).fillRect(left, top, width * lifeRatio, height);
+    graphics.fillStyle(0x080609, 0.92).fillRect(left - 2, top + 10, width + 4, height + 4);
+    graphics.lineStyle(1, 0x3e5477, 1).strokeRect(left - 1, top + 11, width + 2, height + 2);
+    graphics.fillStyle(0x152446, 1).fillRect(left, top + 12, width, height);
+    graphics.fillStyle(0x397dcc, 1).fillRect(left, top + 12, width * manaRatio, height);
+
+    const lifeText = `${Math.ceil(Math.max(0, this.life))}/${Math.ceil(maxLife)}`;
+    const manaText = `${Math.floor(Math.max(0, this.focus))}/${Math.floor(maxMana)}`;
+    if (this.playerLifeLabel.text !== lifeText) this.playerLifeLabel.setText(lifeText);
+    if (this.playerManaLabel.text !== manaText) this.playerManaLabel.setText(manaText);
+    this.playerLifeLabel.setPosition(x, top + height / 2).setDepth(depth + 1);
+    this.playerManaLabel.setPosition(x, top + 12 + height / 2).setDepth(depth + 1);
   }
 
   private beginSkillAction(
@@ -1020,21 +1067,19 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private damagePlayer(rawDamage: number): void {
-    if (!this.player) return;
+    if (!this.player || this.arenaFailed) return;
     const evadeMultiplier = 1 - (this.options.arenaBalance?.evadeChance ?? 0) / 100;
     const armor = this.options.arenaBalance?.armor ?? 0;
     const armorMultiplier = 100 / (100 + armor);
     this.life -= rawDamage * evadeMultiplier * armorMultiplier;
     if (this.life <= 0) {
-      this.lives -= 1;
-      this.life = this.options.arenaBalance?.maxLife ?? 100;
-      this.player.setPosition(MAP_SIZE / 2, MAP_SIZE / 2);
+      this.life = 0;
+      this.arenaFailed = true;
+      this.playerVelocityX = 0;
+      this.playerVelocityY = 0;
       this.releaseEnemyProjectiles();
-      if (this.lives <= 0) {
-        this.lives = 3;
-        this.releaseAllEnemies();
-        this.startWave(1);
-      }
+      this.options.onHud(this.getHud());
+      this.options.onPlayerDeath();
     }
   }
 

@@ -134,7 +134,7 @@ export function GameShell() {
   if (screen === "arena" && profile.openedMap && arenaBalance) {
     const characterPanelOpen = isCharacterPanel(panel);
     return (
-      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} onLootPickup={collectMapDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena}>
+      <PhaserWorld mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} onLootPickup={collectMapDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena} onPlayerDeath={failArena}>
         <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(characterPanelOpen ? null : "inventory")}>Character <kbd>I</kbd></button>
         <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
         {characterPanelOpen && (
@@ -319,6 +319,20 @@ export function GameShell() {
     setPanel(null);
     setScreen("hideout");
     setNotice(`Map abandoned. ${recovered.collected} collected drops were kept.`);
+  }
+
+  function failArena() {
+    const current = profileRef.current ?? profile;
+    if (!current) return;
+    const recovered = runLootRef.current;
+    const next = { ...current, openedMap: null };
+    profileRef.current = next;
+    setProfile(next);
+    setSelectedItemId(recovered.freshItemIds[0] ?? current.inventory.entries[0]?.item.id ?? null);
+    resetRunLoot();
+    setPanel(null);
+    setScreen("hideout");
+    setNotice(`You died. The map was lost; ${recovered.collected} collected drops were kept.`);
   }
 
   function craftItem(action: "scrap" | "essence") {

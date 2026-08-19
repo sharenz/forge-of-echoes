@@ -37,4 +37,5 @@ export interface WorldRuntimeOptions {
   onLootPickup: (drop: MapDrop) => boolean;
   onExperienceGain: (amount: number) => void;
   onArenaComplete: (summary: ArenaSummary) => void;
+  onPlayerDeath: () => void;
 }
