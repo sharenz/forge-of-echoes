@@ -103,6 +103,8 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
   const runtimeClassId = mode === "class-select" ? "amazon" : classId;
   const novaLevel = characterProgress?.skillLevels.nova ?? 1;
   const dashLevel = characterProgress?.skillLevels.dash ?? 1;
+  const wardLevel = characterProgress?.skillLevels.ward ?? 1;
+  const flameWaveLevel = characterProgress?.skillLevels.flameWave ?? 1;
   const parentRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<PhaserRuntime | null>(null);
   const stationCallbackRef = useRef(onStation);
@@ -112,7 +114,7 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
   const experienceCallbackRef = useRef(onExperienceGain);
   const flaskUseCallbackRef = useRef(onFlaskUse);
   const flaskBeltRef = useRef(flaskBelt);
-  const skillLevelsRef = useRef({ nova: novaLevel, dash: dashLevel });
+  const skillLevelsRef = useRef({ nova: novaLevel, dash: dashLevel, ward: wardLevel, flameWave: flameWaveLevel });
   const pausedRef = useRef(paused);
   const arenaBalanceRef = useRef(arenaBalance);
   const [hud, setHud] = useState<WorldHudState | null>(null);
@@ -145,10 +147,10 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
   }, [arenaBalance]);
 
   useEffect(() => {
-    const skillLevels = { nova: novaLevel, dash: dashLevel };
+    const skillLevels = { nova: novaLevel, dash: dashLevel, ward: wardLevel, flameWave: flameWaveLevel };
     skillLevelsRef.current = skillLevels;
     runtimeRef.current?.updateSkillLevels(skillLevels);
-  }, [novaLevel, dashLevel]);
+  }, [novaLevel, dashLevel, wardLevel, flameWaveLevel]);
 
   useEffect(() => {
     const parent = parentRef.current;
@@ -197,8 +199,8 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
 
   const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel);
   const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel);
-  const resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, 1);
-  const resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, 1);
+  const resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, wardLevel);
+  const resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, flameWaveLevel);
   const novaReady = Boolean(hud && hud.novaCooldown <= 0.05 && hud.focus >= resolvedNova.focusCost);
   const riftReady = Boolean(hud && hud.riftCharges > 0 && hud.focus >= resolvedDash.focusCost);
   const wardReady = Boolean(hud && hud.wardCooldown <= 0.05 && hud.focus >= resolvedWard.focusCost);
@@ -289,12 +291,12 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
                     <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.dash.key}</kbd>
                     {hud && <span className="slot-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} charges`}>{hud.riftCharges}</span>}
                   </button>
-                  <button type="button" className={`action-slot ward-slot ${hud && hud.wardRemaining > 0 ? "is-active" : ""}`} disabled={mode !== "arena" || !wardReady} data-tooltip={`${resolvedWard.name} · ${resolvedWard.damageReduction}% less damage for ${resolvedWard.duration}s`} onClick={() => runtimeRef.current?.useSkill("ward")}>
+                  <button type="button" className={`action-slot ward-slot ${hud && hud.wardRemaining > 0 ? "is-active" : ""}`} disabled={mode !== "arena" || !wardReady} data-tooltip={`${resolvedWard.name} · Level ${resolvedWard.level} · ${Math.round(resolvedWard.damageReduction)}% less damage for ${resolvedWard.duration.toFixed(1)}s`} onClick={() => runtimeRef.current?.useSkill("ward")}>
                     <span className="skill-cooldown" style={{ height: `${wardProgress}%` }} />
                     <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.ward.key}</kbd>
                     {hud && hud.wardCooldown > 0.05 && <strong>{hud.wardCooldown.toFixed(1)}</strong>}
                   </button>
-                  <button type="button" className="action-slot flame-wave-slot" disabled={mode !== "arena" || !flameWaveReady} data-tooltip={`${resolvedFlameWave.name} · ${resolvedFlameWave.projectileCount} piercing projectiles`} onClick={() => runtimeRef.current?.useSkill("flameWave")}>
+                  <button type="button" className="action-slot flame-wave-slot" disabled={mode !== "arena" || !flameWaveReady} data-tooltip={`${resolvedFlameWave.name} · Level ${resolvedFlameWave.level} · ${resolvedFlameWave.projectileCount} piercing projectiles`} onClick={() => runtimeRef.current?.useSkill("flameWave")}>
                     <span className="skill-cooldown" style={{ height: `${flameWaveProgress}%` }} />
                     <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.flameWave.key}</kbd>
                     {hud && hud.flameWaveCooldown > 0.05 && <strong>{hud.flameWaveCooldown.toFixed(1)}</strong>}

@@ -213,8 +213,8 @@ class CraftyScene extends Phaser.Scene {
     this.resolvedBasic = resolveSkillDefinition(BASIC_ATTACK, 1);
     this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, options.skillLevels.nova);
     this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, options.skillLevels.dash);
-    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, 1);
-    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, 1);
+    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, options.skillLevels.ward);
+    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, options.skillLevels.flameWave);
     this.riftCharges = this.resolvedDash.maxCharges;
     this.life = options.arenaBalance?.maxLife ?? 100;
     this.focus = options.arenaBalance?.maxFocus ?? 100;
@@ -450,6 +450,8 @@ class CraftyScene extends Phaser.Scene {
     const previousMaxCharges = this.resolvedDash.maxCharges;
     this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova);
     this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash);
+    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward);
+    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave);
     this.riftCharges = Phaser.Math.Clamp(
       this.riftCharges + Math.max(0, this.resolvedDash.maxCharges - previousMaxCharges),
       0,

@@ -8,6 +8,8 @@ export interface ResolvedSkillDefinition extends SkillDefinition {
   maxCharges: number;
   recharge: number;
   cooldown: number;
+  duration: number;
+  damageReduction: number;
 }
 
 export function resolveSkillDefinition(definition: SkillDefinition, requestedLevel: number): ResolvedSkillDefinition {
@@ -26,10 +28,20 @@ export function resolveSkillDefinition(definition: SkillDefinition, requestedLev
     damage,
     level,
     maxLevel,
-    projectileCount: Math.max(0, Math.round((definition.projectileCount ?? 0) + (definition.progression?.projectilesPerLevel ?? 0) * levelsAfterFirst)),
+    projectileCount: Math.max(0, Math.round(
+      (definition.projectileCount ?? 0)
+      + (definition.progression?.projectilesPerLevel ?? 0) * levelsAfterFirst
+      + Math.floor(level / (definition.progression?.projectilesEveryLevels ?? Number.POSITIVE_INFINITY)),
+    )),
     piercing: Math.max(0, (definition.piercing ?? 0) + Math.floor(level / (definition.progression?.piercingEveryLevels ?? Number.POSITIVE_INFINITY))),
     maxCharges: Math.max(0, (definition.maxCharges ?? 0) + Math.floor(level / (definition.progression?.chargeEveryLevels ?? Number.POSITIVE_INFINITY))),
-    recharge: Math.max(0.1, (definition.recharge ?? 0) + (definition.progression?.rechargePerLevel ?? 0) * levelsAfterFirst),
-    cooldown: Math.max(0, definition.cooldown ?? 0),
+    recharge: definition.recharge === undefined
+      ? 0
+      : Math.max(0.1, definition.recharge + (definition.progression?.rechargePerLevel ?? 0) * levelsAfterFirst),
+    cooldown: definition.cooldown === undefined
+      ? 0
+      : Math.max(0.1, definition.cooldown + (definition.progression?.cooldownPerLevel ?? 0) * levelsAfterFirst),
+    duration: Math.max(0, (definition.duration ?? 0) + (definition.progression?.durationPerLevel ?? 0) * levelsAfterFirst),
+    damageReduction: Math.min(80, Math.max(0, (definition.damageReduction ?? 0) + (definition.progression?.damageReductionPerLevel ?? 0) * levelsAfterFirst)),
   };
 }

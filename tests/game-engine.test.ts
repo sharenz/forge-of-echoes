@@ -41,7 +41,7 @@ const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({
 const characterProgress = (level = 1): PlayerProfile["character"] => ({
   name: "Test", archetype: "Test", classId: "amazon", created: true, level, xp: 0,
   allocatedAttributes: { strength: 0, dexterity: 0, intelligence: 0 },
-  unspentAttributePoints: 0, skillLevels: { nova: 1, dash: 1 }, unspentSkillPoints: 0,
+  unspentAttributePoints: 0, skillLevels: { nova: 1, dash: 1, ward: 1, flameWave: 1 }, unspentSkillPoints: 0,
   mapsCompleted: 0, highestWave: 0,
 });
 
@@ -333,7 +333,7 @@ test("v7 saves gain explicit unspent progression points without losing character
     assert.equal(migrated.character.xp, 17);
     assert.equal(migrated.character.unspentAttributePoints, 25);
     assert.equal(migrated.character.unspentSkillPoints, 2);
-    assert.deepEqual(migrated.character.skillLevels, { nova: 1, dash: 1 });
+    assert.deepEqual(migrated.character.skillLevels, { nova: 1, dash: 1, ward: 1, flameWave: 1 });
   } finally {
     Reflect.deleteProperty(globalThis, "window");
   }
@@ -359,6 +359,7 @@ test("existing v9 four-slot belts gain the fifth slot without losing flasks", ()
   const current = createInitialProfile();
   const fourSlotSave = {
     ...current,
+    character: { ...current.character, skillLevels: { nova: 4, dash: 2 } },
     flaskBelt: [createFlaskStack("weak-health-flask", 4), null, null, null],
   };
   Object.defineProperty(globalThis, "window", {
@@ -370,6 +371,7 @@ test("existing v9 four-slot belts gain the fifth slot without losing flasks", ()
     assert.equal(migrated.flaskBelt.length, 5);
     assert.equal(migrated.flaskBelt[0]?.stackSize, 4);
     assert.deepEqual(migrated.flaskBelt.slice(1), [null, null, null, null]);
+    assert.deepEqual(migrated.character.skillLevels, { nova: 4, dash: 2, ward: 1, flameWave: 1 });
   } finally {
     Reflect.deleteProperty(globalThis, "window");
   }
@@ -402,6 +404,7 @@ test("active skills resolve their level, damage, cooldown, and hotkey configurat
   assert.equal(nova20.projectileCount, 37);
   assert.equal(nova20.piercing, 4);
   assert.equal(nova20.damage?.effectiveness, 2.49);
+  assert.equal(nova20.recharge, 0);
 
   const dash1 = resolveSkillDefinition(ACTIVE_SKILLS.dash, 1);
   const dash20 = resolveSkillDefinition(ACTIVE_SKILLS.dash, 20);
@@ -410,21 +413,35 @@ test("active skills resolve their level, damage, cooldown, and hotkey configurat
   assert.equal(dash20.recharge, 1.48);
 
   const ward = resolveSkillDefinition(ACTIVE_SKILLS.ward, 1);
+  const ward20 = resolveSkillDefinition(ACTIVE_SKILLS.ward, 20);
   assert.equal(ward.key, "R");
   assert.equal(ward.duration, 4);
   assert.equal(ward.damageReduction, 45);
+  assert.equal(ward20.cooldown, 6.15);
+  assert.equal(ward20.duration, 5.52);
+  assert.ok(Math.abs(ward20.damageReduction - 56.4) < 0.0001);
 
   const flameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, 1);
+  const flameWave20 = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, 20);
   assert.equal(flameWave.key, "F");
   assert.equal(flameWave.projectileCount, 7);
   assert.equal(flameWave.piercing, 1);
   assert.equal(flameWave.cooldown, 5.5);
   assert.equal(flameWave.damage?.effectiveness, 1.65);
+  assert.equal(flameWave20.projectileCount, 11);
+  assert.equal(flameWave20.piercing, 5);
+  assert.equal(flameWave20.damage?.effectiveness, 2.6);
+
+  assert.deepEqual(Object.keys(characterProgress().skillLevels).sort(), Object.keys(ACTIVE_SKILLS).sort());
 
   let profile = { ...createInitialProfile(), character: { ...characterProgress(), unspentSkillPoints: 30 } };
   for (let index = 0; index < 30; index += 1) profile = allocateSkillPoint(profile, "nova");
   assert.equal(profile.character.skillLevels.nova, 20);
   assert.equal(profile.character.unspentSkillPoints, 11);
+
+  profile = { ...profile, character: { ...profile.character, unspentSkillPoints: 1 } };
+  profile = allocateSkillPoint(profile, "ward");
+  assert.equal(profile.character.skillLevels.ward, 2);
 });
 
 test("monster XP scales with archetype, wave, map tier, and rarity", () => {

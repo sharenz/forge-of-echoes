@@ -134,13 +134,23 @@ export interface SkillDefinition {
   projectileScale?: number;
   projectileCount?: number;
   piercing?: number;
+  tree: {
+    branch: "core" | "destruction" | "survival" | "mobility";
+    role: string;
+    description: string;
+    accent: string;
+  };
   progression?: {
     maxLevel: number;
     damageEffectivenessPerLevel?: number;
     projectilesPerLevel?: number;
+    projectilesEveryLevels?: number;
     piercingEveryLevels?: number;
+    cooldownPerLevel?: number;
     rechargePerLevel?: number;
     chargeEveryLevels?: number;
+    durationPerLevel?: number;
+    damageReductionPerLevel?: number;
   };
   presentation: {
     animation: SkillAnimationId;

@@ -128,17 +128,16 @@ This keeps the interface consistent while allowing distinct resource engines.
 
 A character equips:
 
-- one basic or generator skill;
-- three active skills;
-- one mobility skill;
-- one ultimate or high-cooldown skill;
-- up to three persistent techniques.
+- one innate basic or generator skill;
+- four active skills, including dedicated mobility and defensive options.
 
-This is enough expression for buildcraft without requiring a browser player to manage twelve combat keys.
+This keeps the five-slot action bar readable while leaving room for later skill replacement and buildcraft.
 
 ### Skill modification
 
-Active skills have 20 ranks. Rank effects are data-driven and resolved once for both combat and UI so displayed values cannot drift from runtime behavior. For the MVP, Ember Nova gains damage effectiveness and one projectile every rank plus one pierce at ranks 5, 10, 15, and 20. Rift Step recovers a charge faster every rank and gains a maximum charge at those same five-rank milestones.
+Every combat action must appear in the skill interface. The basic Ember Lance is the innate root; allocatable skills are grouped into Destruction, Survival, and Mobility disciplines. The interface enumerates the complete active-skill config rather than maintaining a second hand-written skill list.
+
+Active skills have 20 ranks. Rank effects are data-driven and resolved once for both combat and UI so displayed values cannot drift from runtime behavior. Ember Nova gains damage effectiveness and projectiles plus pierce milestones. Flame Wave gains damage plus projectile and pierce milestones. Rift Step recovers charges faster and gains maximum charges. Cinder Ward gains duration, damage reduction, and faster cooldown recovery.
 
 Each active skill has a small branching skill tree. A branch should change behavior, not merely add 5% damage.
 

@@ -248,7 +248,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(attributesPanel, /derived-stat-grid/);
   assert.match(skillTreePanel, /skill-node-track/);
   assert.match(skillTreePanel, /\[5, 10, 15, 20\]/);
-  assert.match(skillTreePanel, /nextLevelSummary/);
+  assert.match(skillTreePanel, /skillChangeSummary/);
+  assert.match(skillTreePanel, /Object\.entries\(ACTIVE_SKILLS\)/);
+  assert.match(skillTreePanel, /BASIC_ATTACK/);
+  assert.match(skillTreePanel, /SKILL_TREE_BRANCHES\.map/);
+  assert.match(skillTreePanel, /progress\.skillLevels\[id\]/);
+  assert.match(globalStyles, /\.skill-discipline-grid/);
   assert.match(characterPanelTabs, /"inventory"/);
   assert.match(characterPanelTabs, /"attributes"/);
   assert.match(characterPanelTabs, /"skills"/);

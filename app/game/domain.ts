@@ -37,7 +37,7 @@ export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos";
 export type SkillAnimationId = "attack" | "cast" | "dash";
 export type SkillVfxId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward" | "flame-wave";
 export type SkillAudioId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward" | "flame-wave";
-export type ActiveSkillId = "nova" | "dash";
+export type ActiveSkillId = "nova" | "dash" | "ward" | "flameWave";
 export type SkillLevels = Record<ActiveSkillId, number>;
 
 /**
