@@ -293,7 +293,7 @@ test("monster kills grant XP, levels award points, and allocated attributes affe
   assert.ok(calculateCharacterStats(allocated).breakdown.strength.contributions.some((entry) => entry.source === "character:allocated-strength"));
 });
 
-test("Nova and Rift Step resolve all twenty configured skill levels", () => {
+test("Nova and Rift Step resolve all twenty levels and Cinder Ward stays config-driven", () => {
   const nova1 = resolveSkillDefinition(ACTIVE_SKILLS.nova, 1);
   const nova5 = resolveSkillDefinition(ACTIVE_SKILLS.nova, 5);
   const nova20 = resolveSkillDefinition(ACTIVE_SKILLS.nova, 20);
@@ -310,6 +310,11 @@ test("Nova and Rift Step resolve all twenty configured skill levels", () => {
   assert.equal(dash1.maxCharges, 3);
   assert.equal(dash20.maxCharges, 7);
   assert.equal(dash20.recharge, 1.48);
+
+  const ward = resolveSkillDefinition(ACTIVE_SKILLS.ward, 1);
+  assert.equal(ward.key, "R");
+  assert.equal(ward.duration, 4);
+  assert.equal(ward.damageReduction, 45);
 
   let profile = { ...createInitialProfile(), character: { ...characterProgress(), unspentSkillPoints: 30 } };
   for (let index = 0; index < 30; index += 1) profile = allocateSkillPoint(profile, "nova");

@@ -33,8 +33,8 @@ export type ModifierMode = "flat" | "increased" | "more";
 export type MonsterRarity = "normal" | "magic" | "rare";
 export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos";
 export type SkillAnimationId = "attack" | "cast" | "dash";
-export type SkillVfxId = "ember-lance" | "ember-nova" | "rift-step";
-export type SkillAudioId = "ember-lance" | "ember-nova" | "rift-step";
+export type SkillVfxId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward";
+export type SkillAudioId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward";
 export type ActiveSkillId = "nova" | "dash";
 export type SkillLevels = Record<ActiveSkillId, number>;
 

@@ -621,24 +621,6 @@ body:has(.pixel-shell) { overflow: hidden; }
 .hideout-xp > span { display: block; height: 100%; background: #dc7235; box-shadow: 0 0 10px #e45b23; }
 .hideout-xp small { position: absolute; right: 8px; top: 7px; color: #817464; font-size: 7px; }
 
-.hideout-prompt {
-  position: absolute;
-  z-index: 3;
-  left: 50%;
-  bottom: 21px;
-  padding: 9px 14px;
-  border: 1px solid #3e3328;
-  background: rgba(8,7,6,.82);
-  color: #998b7b;
-  font-size: 8px;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-.hideout-prompt span { color: #f3ac65; }
-.hideout-prompt i { display: inline-block; width: 3px; height: 3px; margin: 0 8px; border-radius: 50%; background: #61462f; vertical-align: middle; }
-
 .portal-notice {
   position: absolute;
   z-index: 3;
@@ -982,22 +964,40 @@ body:has(.pixel-shell) { overflow: hidden; }
 .globe-reservoir strong { position: absolute; z-index: 5; left: 50%; top: 50%; display: flex; align-items: baseline; color: #fff4e5; font: clamp(13px, 2.25vw, 22px) Georgia, serif; text-shadow: 0 2px 5px #000, 0 0 8px #000; transform: translate(-50%, -42%); }
 .globe-reservoir strong span { position: absolute; left: 50%; bottom: calc(100% + 5px); color: #ead3b9; font: 10px Arial, sans-serif; letter-spacing: .18em; text-transform: uppercase; transform: translateX(-50%); }
 .globe-reservoir strong small { margin-left: 2px; color: #d2bfa9; font: 11px Arial, sans-serif; }
-.world-skills { position: absolute; z-index: 3; left: 50%; bottom: calc((100vh - var(--game-view-size)) / 2 + 84px); display: flex; gap: 8px; transform: translateX(-50%); }
-.world-skills > span,
-.world-skills button { position: relative; min-width: 165px; height: 62px; padding: 8px 13px; overflow: hidden; border: 1px solid #5c4432; background: rgba(15,11,9,.94); color: #c8b7a2; display: flex; align-items: center; gap: 10px; cursor: default; box-shadow: 0 10px 28px #0009; }
-.world-skills button { min-width: 205px; cursor: pointer; text-align: left; transition: border-color .16s ease, background .16s ease, opacity .16s ease; }
-.world-skills button:hover:not(:disabled) { border-color: var(--ember); background: #2b190f; }
-.world-skills button:disabled { opacity: .72; cursor: default; }
-.world-skills kbd { position: relative; z-index: 2; width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid #8a5738; background: #17100c; color: #f0a35d; font: 12px Arial; box-shadow: inset 0 0 12px #8b3f1e33; }
-.world-skills .basic-skill > span,
-.world-skills .active-skill > span:not(.skill-charges) { position: relative; z-index: 2; display: flex; min-width: 0; flex-direction: column; gap: 4px; }
-.world-skills strong { color: #ead7bf; font: 13px Georgia, serif; white-space: nowrap; }
-.world-skills small { color: #9c8b78; font-size: 10px; white-space: nowrap; }
-.skill-recharge { position: absolute; z-index: 1; left: 0; bottom: 0; height: 4px; background: linear-gradient(90deg, #6f271b, #d25835); box-shadow: 0 0 10px #d25835; transition: width .12s linear; }
-.rift-skill .skill-recharge { background: linear-gradient(90deg, #3c2b68, #9b68d5); box-shadow: 0 0 10px #8c5cca; }
-.skill-charges { position: absolute; z-index: 3; top: 7px; right: 8px; display: flex; flex-direction: row !important; gap: 3px !important; }
-.skill-charges i { width: 7px; height: 7px; border: 1px solid #695746; background: #211913; transform: rotate(45deg); }
-.skill-charges i.ready { border-color: #d99a56; background: #f0a35d; box-shadow: 0 0 7px #dc7337; }
+.world-action-bar { position: absolute; z-index: 8; left: 50%; bottom: 8.5%; display: flex; align-items: flex-end; gap: clamp(4px, .7vw, 8px); padding: 7px 9px 9px; border: 1px solid #68482f; border-radius: 9px 9px 4px 4px; background: linear-gradient(180deg, rgba(37,25,17,.96), rgba(11,8,7,.97)); box-shadow: 0 14px 28px #000d, inset 0 1px #d4a26d2e, inset 0 0 18px #000; pointer-events: auto; transform: translateX(-50%); }
+.world-action-bar::before,
+.world-action-bar::after { content: ""; position: absolute; top: 50%; width: 19px; height: 31px; border: solid #6f4b30; background: linear-gradient(135deg, #271910, #0a0706); transform: translateY(-50%) rotate(45deg); box-shadow: inset 0 0 8px #000; }
+.world-action-bar::before { right: calc(100% - 5px); border-width: 0 0 1px 1px; }
+.world-action-bar::after { left: calc(100% - 5px); border-width: 1px 1px 0 0; }
+.action-slot { --slot-color: #db7035; position: relative; width: clamp(56px, 7.4vw, 76px); aspect-ratio: 1; padding: 5px; overflow: visible; border: 1px solid #7a5337; border-radius: 5px; background: #0d0908; color: #f9dec0; cursor: pointer; box-shadow: inset 0 0 0 2px #24160f, inset 0 0 20px #000, 0 3px 7px #000b; transition: transform .12s ease, border-color .12s ease, filter .12s ease; }
+.action-slot::before { content: ""; position: absolute; z-index: 4; inset: 3px; border: 1px solid #d1a26e38; border-radius: 2px; pointer-events: none; }
+.action-slot:hover:not(:disabled) { z-index: 9; border-color: #d99b62; filter: brightness(1.18); transform: translateY(-3px); }
+.action-slot:active:not(:disabled) { transform: translateY(-1px) scale(.97); }
+.action-slot:disabled { cursor: default; filter: saturate(.48) brightness(.73); }
+.action-slot[data-tooltip]::after { content: attr(data-tooltip); position: absolute; z-index: 12; left: 50%; bottom: calc(100% + 12px); width: max-content; max-width: 240px; padding: 7px 10px; border: 1px solid #765034; border-radius: 3px; background: rgba(13,9,7,.97); color: #e8d2b9; font: 12px Georgia, serif; white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-50%, 5px); transition: opacity .12s ease, transform .12s ease; }
+.action-slot:hover::after { opacity: 1; transform: translate(-50%, 0); }
+.skill-icon { position: absolute; z-index: 1; inset: 6px; overflow: hidden; border-radius: 3px; background: radial-gradient(circle at 42% 35%, color-mix(in srgb, var(--slot-color) 76%, white), var(--slot-color) 35%, #17100d 76%); box-shadow: inset 0 0 15px #000b, 0 0 10px color-mix(in srgb, var(--slot-color) 45%, transparent); }
+.skill-icon::before { content: ""; position: absolute; inset: 4px; border: 1px solid #ffe4bb24; border-radius: 50%; transform: rotate(20deg); }
+.skill-icon i { position: absolute; left: 50%; top: 50%; display: block; transform: translate(-50%, -50%); }
+.lance-slot { --slot-color: #e85c25; }
+.lance-slot .skill-icon i { width: 73%; height: 9px; border: 2px solid #ffe0a3; border-radius: 100% 0; background: #ff7b2e; box-shadow: 0 0 8px #ff9f45; transform: translate(-50%, -50%) rotate(-37deg); }
+.lance-slot .skill-icon i::after { content: ""; position: absolute; right: -4px; top: -5px; border-left: 9px solid #fff1bd; border-top: 7px solid transparent; border-bottom: 7px solid transparent; }
+.nova-slot { --slot-color: #d83a1e; }
+.nova-slot .skill-icon { background: radial-gradient(circle, #ffd278 0 7%, #f15f28 8% 17%, transparent 18%), conic-gradient(from 15deg, #ffb45a, #791e1b, #ffb45a, #791e1b, #ffb45a); }
+.nova-slot .skill-icon i { width: 52%; aspect-ratio: 1; border: 3px solid #ffe2a1; border-radius: 50%; box-shadow: 0 0 9px #ffad4e, inset 0 0 7px #ff5527; }
+.rift-slot { --slot-color: #835bd0; }
+.rift-slot .skill-icon i { width: 23%; height: 72%; border: solid #e4c9ff; border-width: 0 3px; box-shadow: 0 0 8px #b383ff; transform: translate(-50%, -50%) skew(-18deg); }
+.rift-slot .skill-icon i::before,
+.rift-slot .skill-icon i::after { content: ""; position: absolute; left: -10px; width: 20px; height: 3px; background: #e4c9ff; box-shadow: 0 0 7px #a46af1; transform: rotate(-28deg); }
+.rift-slot .skill-icon i::before { top: 13px; }
+.rift-slot .skill-icon i::after { bottom: 13px; transform: rotate(31deg); }
+.ward-slot { --slot-color: #d9923f; }
+.ward-slot .skill-icon i { width: 48%; height: 61%; border: 3px solid #ffe1a0; border-radius: 50% 50% 45% 45% / 35% 35% 70% 70%; background: linear-gradient(135deg, #fff3be70, #b44d2066); box-shadow: 0 0 9px #ffb24d, inset 0 0 8px #fff3b955; }
+.ward-slot.is-active { border-color: #ffd584; box-shadow: inset 0 0 0 2px #52321b, 0 0 18px #ffb3498c; animation: ward-slot-active .9s ease-in-out infinite alternate; }
+.action-slot kbd { position: absolute; z-index: 6; left: -3px; bottom: -4px; min-width: 23px; height: 20px; padding: 0 4px; display: grid; place-items: center; border: 1px solid #9d704c; border-radius: 3px; background: #120d0a; color: #ffd19d; font: 700 10px Arial, sans-serif; letter-spacing: -.02em; box-shadow: 0 2px 5px #000; }
+.action-slot > strong { position: absolute; z-index: 7; inset: 0; display: grid; place-items: center; color: #fff3da; font: 700 15px Arial, sans-serif; text-shadow: 0 2px 4px #000, 0 0 5px #000; }
+.skill-cooldown { position: absolute; z-index: 5; left: 5px; right: 5px; top: 5px; border-radius: 2px; background: rgba(4,3,4,.76); backdrop-filter: grayscale(1); pointer-events: none; transition: height .1s linear; }
+.slot-charges { position: absolute; z-index: 7; right: -4px; top: -5px; width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid #b78bda; border-radius: 50%; background: #211335; color: #f1dfff; font: 700 11px Arial, sans-serif; box-shadow: 0 2px 5px #000, 0 0 8px #9c63e366; }
 .world-fps { position: absolute; z-index: 3; right: 188px; bottom: 42px; color: #766a5d; font-size: 7px; letter-spacing: .08em; pointer-events: none; }
 .world-experience { position: absolute; z-index: 4; left: 15.5%; right: 15.5%; bottom: .7%; height: clamp(38px, 7.3%, 70px); pointer-events: none; filter: drop-shadow(0 7px 9px #000b); }
 .world-experience::after { content: ""; position: absolute; z-index: 4; inset: 0; background: url("/ui/experience-frame-v1.png") center / 100% 100% no-repeat; image-rendering: pixelated; }
@@ -1058,7 +1058,6 @@ body:has(.pixel-shell) { overflow: hidden; }
 .hideout-character small,
 .hideout-hud nav button,
 .hideout-xp small,
-.hideout-prompt,
 .portal-notice span,
 .portal-notice small,
 .world-panel > header span,
@@ -1097,7 +1096,6 @@ body:has(.pixel-shell) { overflow: hidden; }
 .hideout-character small,
 .hideout-hud nav button,
 .hideout-xp small,
-.hideout-prompt,
 .portal-notice span,
 .portal-notice small,
 .world-panel > header span,
@@ -1154,12 +1152,6 @@ body:has(.pixel-shell) { overflow: hidden; }
 .run-material small { font-size: 12px; }
 .run-pickup-ledger > header strong,
 .run-material strong { font-size: 17px; }
-.world-skills > span,
-.world-skills button { height: 68px; }
-.world-skills button { min-width: 220px; }
-.world-skills kbd { width: 40px; height: 40px; font-size: 14px; }
-.world-skills strong { font-size: 15px; }
-.world-skills small { font-size: 12px; }
 .world-character-stats { width: 228px; }
 .world-character-stats > header span { font-size: 11px; }
 .world-character-stats > header strong { font-size: 18px; }
@@ -1180,8 +1172,7 @@ body:has(.pixel-shell) { overflow: hidden; }
 @keyframes globe-breathe { 50% { filter: brightness(1.08) saturate(1.08); } }
 @keyframes globe-surface { 50% { transform: translateX(3%) scaleY(.72); } }
 @keyframes experience-shimmer { from { transform: translateX(-45%); } to { transform: translateX(115%); } }
-
-.mode-hideout .hideout-prompt { bottom: calc((100vh - var(--game-view-size)) / 2 + 82px); }
+@keyframes ward-slot-active { to { filter: brightness(1.2); } }
 
 @media (max-width: 1200px) {
   .inventory-window { grid-template-columns: minmax(340px, 390px) minmax(430px, 1fr); }
@@ -1204,7 +1195,6 @@ body:has(.pixel-shell) { overflow: hidden; }
   .skill-branch-grid::before, .skill-tree-interface::before { display: none; }
   .skill-tree-root { margin-bottom: 17px; }
   .creation-title { top: 11vh; }
-  .world-skills > span { display: none; }
 }
 
 @media (max-width: 650px) {
@@ -1220,7 +1210,6 @@ body:has(.pixel-shell) { overflow: hidden; }
   .hideout-hud .brand-lockup small { display: none; }
   .hideout-hud nav button { padding: 0 8px; }
   .hideout-hud nav button:nth-child(2), .hideout-hud nav button:nth-child(3) { display: none; }
-  .hideout-prompt { display: none; }
   .portal-notice { top: 78px; right: 10px; }
   .world-panel-backdrop { padding: 76px 8px 8px; }
   .world-panel { width: 100%; max-height: calc(100vh - 84px); }
@@ -1262,12 +1251,9 @@ body:has(.pixel-shell) { overflow: hidden; }
   .globe-reservoir strong { font-size: 16px; }
   .globe-reservoir strong span { font-size: 8px; }
   .globe-reservoir strong small { font-size: 8px; }
-  .world-skills { bottom: calc((100vh - var(--game-view-size)) / 2 + 58px); }
-  .world-skills { width: calc(100vw - 20px); justify-content: center; }
-  .world-skills button { min-width: 0; max-width: 205px; flex: 1 1 0; padding: 7px 8px; gap: 7px; }
-  .world-skills kbd { width: 32px; height: 32px; }
-  .world-skills strong { font-size: 13px; }
-  .world-skills small { font-size: 11px; }
+  .world-action-bar { bottom: 8%; padding: 5px 7px 7px; gap: 4px; }
+  .action-slot { width: clamp(50px, 14vw, 62px); }
+  .action-slot[data-tooltip]::after { display: none; }
   .world-fps { display: none; }
   .world-experience { left: 14%; right: 14%; bottom: .5%; height: clamp(38px, 8%, 52px); }
   .world-character-stats { right: 10px; top: 63px; bottom: auto; width: 188px; }

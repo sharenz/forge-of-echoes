@@ -187,7 +187,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /arena-inventory-toggle/);
   assert.match(shell, /paused=\{characterPanelOpen\}/);
   assert.match(phaserWorld, /updateArenaBalance/);
-  assert.match(phaserWorld, /riftRecharge\.toFixed\(1\)/);
+  assert.match(phaserWorld, /world-action-bar/);
+  assert.match(phaserWorld, /wardCooldown\.toFixed\(1\)/);
+  assert.match(phaserWorld, /useSkill\("ward"\)/);
+  assert.doesNotMatch(shell, /hideout-prompt/);
   assert.match(skillConfig, /maxCharges: 3/);
   assert.match(world, /riftCharges \+= 1/);
   assert.match(inventoryPanel, /dropIntoSlot/);
@@ -280,7 +283,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(monsterConfig, /ember-skitter/);
   assert.match(skillConfig, /type: "fire", effectiveness: 1\.35/);
   assert.match(skillConfig, /presentation: \{ animation: "attack", vfx: "ember-lance", audio: "ember-lance" \}/);
-  assert.match(phaserWorld, /damageSummary\(BASIC_ATTACK\.damage\)/);
+  assert.match(skillConfig, /name: "Cinder Ward", key: "R"/);
+  assert.match(skillConfig, /damageReduction: 45/);
   assert.match(world, /1 \/ Math\.max\(0\.01, this\.options\.arenaBalance\?\.attackSpeed/);
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);

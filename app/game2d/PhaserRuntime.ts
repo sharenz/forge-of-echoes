@@ -142,6 +142,7 @@ class CraftyScene extends Phaser.Scene {
   private playerAnimator: CharacterAnimator | null = null;
   private playerShadow: Phaser.GameObjects.Image | null = null;
   private playerAura: Phaser.GameObjects.Image | null = null;
+  private playerWard: Phaser.GameObjects.Image | null = null;
   private playerResourceBars: Phaser.GameObjects.Graphics | null = null;
   private playerLifeLabel: Phaser.GameObjects.Text | null = null;
   private playerManaLabel: Phaser.GameObjects.Text | null = null;
@@ -166,9 +167,12 @@ class CraftyScene extends Phaser.Scene {
   private novaCooldown = 0;
   private riftCharges = 0;
   private riftRecharge = 0;
+  private wardCooldown = 0;
+  private wardRemaining = 0;
   private resolvedBasic: ResolvedSkillDefinition;
   private resolvedNova: ResolvedSkillDefinition;
   private resolvedDash: ResolvedSkillDefinition;
+  private resolvedWard: ResolvedSkillDefinition;
   private life: number;
   private focus: number;
   private wave = 1;
@@ -193,6 +197,7 @@ class CraftyScene extends Phaser.Scene {
     this.resolvedBasic = resolveSkillDefinition(BASIC_ATTACK, 1);
     this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, options.skillLevels.nova);
     this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, options.skillLevels.dash);
+    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, 1);
     this.riftCharges = this.resolvedDash.maxCharges;
     this.life = options.arenaBalance?.maxLife ?? 100;
     this.focus = options.arenaBalance?.maxFocus ?? 100;
@@ -255,6 +260,7 @@ class CraftyScene extends Phaser.Scene {
       attack: Phaser.Input.Keyboard.KeyCodes.SPACE,
       nova: Phaser.Input.Keyboard.KeyCodes.Q,
       dash: Phaser.Input.Keyboard.KeyCodes.E,
+      ward: Phaser.Input.Keyboard.KeyCodes.R,
     }) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
       if (this.options.mode === "arena" && !this.options.paused) this.tryBasicAttack();
@@ -272,6 +278,7 @@ class CraftyScene extends Phaser.Scene {
     }
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.nova)) this.useSkill("nova");
     if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.dash)) this.useSkill("dash");
+    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.ward)) this.useSkill("ward");
     this.accumulator += Math.min(delta, MAX_FRAME_DELTA);
     while (this.accumulator >= FIXED_STEP) {
       this.previousPlayerX = this.player.x;
@@ -282,8 +289,12 @@ class CraftyScene extends Phaser.Scene {
     this.renderPlayer(this.accumulator / FIXED_STEP);
   }
 
-  useSkill(skill: "nova" | "dash"): void {
+  useSkill(skill: "basic" | "nova" | "dash" | "ward"): void {
     if (this.options.mode !== "arena" || !this.player || this.options.paused) return;
+    if (skill === "basic") {
+      this.tryBasicAttack();
+      return;
+    }
     if (skill === "nova" && this.novaCooldown <= 0 && this.focus >= this.resolvedNova.focusCost) {
       const pointer = this.input.activePointer;
       const direction = resolveCharacterDirection(pointer.worldX - this.player.x, pointer.worldY - this.player.y, this.playerAnimator?.currentDirection);
@@ -317,6 +328,16 @@ class CraftyScene extends Phaser.Scene {
       this.riftCharges -= 1;
       if (this.riftRecharge <= 0) this.riftRecharge = this.resolvedDash.recharge;
     }
+    if (skill === "ward" && this.wardCooldown <= 0 && this.focus >= this.resolvedWard.focusCost) {
+      const pointer = this.input.activePointer;
+      const direction = resolveCharacterDirection(pointer.worldX - this.player.x, pointer.worldY - this.player.y, this.playerAnimator?.currentDirection);
+      const started = this.beginSkillAction(this.resolvedWard, direction, () => {
+        this.wardRemaining = this.resolvedWard.duration ?? 0;
+      });
+      if (!started) return;
+      this.focus -= this.resolvedWard.focusCost;
+      this.wardCooldown = this.resolvedWard.cooldown;
+    }
   }
 
   getHud(): WorldHudState {
@@ -338,6 +359,8 @@ class CraftyScene extends Phaser.Scene {
       riftCharges: this.riftCharges,
       riftMaxCharges: this.resolvedDash.maxCharges,
       riftRecharge: this.riftRecharge,
+      wardCooldown: this.wardCooldown,
+      wardRemaining: this.wardRemaining,
       arenaComplete: this.arenaComplete,
     };
   }
@@ -371,6 +394,8 @@ class CraftyScene extends Phaser.Scene {
     this.waveElapsedSeconds += delta;
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
     this.novaCooldown = Math.max(0, this.novaCooldown - delta);
+    this.wardCooldown = Math.max(0, this.wardCooldown - delta);
+    this.wardRemaining = Math.max(0, this.wardRemaining - delta);
     if (this.riftCharges < this.resolvedDash.maxCharges) {
       this.riftRecharge = Math.max(0, this.riftRecharge - delta);
       if (this.riftRecharge <= 0) {
@@ -533,6 +558,7 @@ class CraftyScene extends Phaser.Scene {
     const y = this.options.mode === "arena" ? MAP_SIZE / 2 : 700;
     this.playerShadow = this.add.image(x, y + 25, "shadow").setScale(2.1, 1.45).setDepth(8);
     this.playerAura = this.add.image(x, y + 25, "player-aura").setScale(1.45).setTint(CLASS_COLORS[this.options.classId].magic).setAlpha(0.18).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
+    this.playerWard = this.add.image(x, y + 3, "player-aura").setScale(2.75, 4.4).setTint(0xffb45f).setAlpha(0).setVisible(false).setDepth(11).setBlendMode(Phaser.BlendModes.ADD);
     this.player = this.add.sprite(x, y, "shadow").setVisible(false).setDepth(10);
     this.previousPlayerX = x;
     this.previousPlayerY = y;
@@ -564,6 +590,11 @@ class CraftyScene extends Phaser.Scene {
     this.playerAnimator?.setWorldTransform(x, y, playerDepth);
     this.playerShadow?.setPosition(x, y + 25).setDepth(playerDepth - 2);
     this.playerAura?.setPosition(x, y + 25).setDepth(playerDepth - 2);
+    this.playerWard?.setPosition(x, y + 2)
+      .setDepth(playerDepth + 1)
+      .setVisible(this.wardRemaining > 0)
+      .setAlpha(this.wardRemaining > 0 ? 0.38 + Math.sin(this.elapsedSeconds * 8) * 0.12 : 0)
+      .setScale(2.75 + Math.sin(this.elapsedSeconds * 5) * 0.08, 4.4 + Math.sin(this.elapsedSeconds * 5) * 0.12);
     this.cameraTarget?.setPosition(x, y);
     this.renderPlayerResources(x, y, playerDepth + 80);
   }
@@ -696,6 +727,16 @@ class CraftyScene extends Phaser.Scene {
           index % 3 === 0 ? "vfx-ember" : "vfx-spark",
         );
       }
+    } else if (skill.presentation.vfx === "cinder-ward") {
+      const sigil = this.add.image(this.player.x, this.player.y + 12, "ember-sigil")
+        .setScale(0.1)
+        .setAlpha(0.88)
+        .setTint(0xffbd72)
+        .setDepth(Math.round(this.player.y / 10) + 7)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: sigil, scale: 0.42, alpha: 0, angle: -28, duration: 520, ease: "Cubic.easeOut", onComplete: () => sigil.destroy() });
+      this.emitRadialVfx(this.player.x, this.player.y - 4, 16, 0xffb45f, 92, 0.48);
+      this.emitRadialVfx(this.player.x, this.player.y - 4, 8, 0xffe5a5, 52, 0.6);
     }
   }
 
@@ -1071,7 +1112,8 @@ class CraftyScene extends Phaser.Scene {
     const evadeMultiplier = 1 - (this.options.arenaBalance?.evadeChance ?? 0) / 100;
     const armor = this.options.arenaBalance?.armor ?? 0;
     const armorMultiplier = 100 / (100 + armor);
-    this.life -= rawDamage * evadeMultiplier * armorMultiplier;
+    const wardMultiplier = this.wardRemaining > 0 ? 1 - (this.resolvedWard.damageReduction ?? 0) / 100 : 1;
+    this.life -= rawDamage * evadeMultiplier * armorMultiplier * wardMultiplier;
     if (this.life <= 0) {
       this.life = 0;
       this.arenaFailed = true;
@@ -1408,7 +1450,7 @@ export class PhaserRuntime {
     });
   }
 
-  useSkill(skill: "nova" | "dash"): void {
+  useSkill(skill: "basic" | "nova" | "dash" | "ward"): void {
     this.scene?.useSkill(skill);
   }
 

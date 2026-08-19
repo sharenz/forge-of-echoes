@@ -20,6 +20,8 @@ export interface WorldHudState {
   riftCharges: number;
   riftMaxCharges: number;
   riftRecharge: number;
+  wardCooldown: number;
+  wardRemaining: number;
   arenaComplete: boolean;
 }
 

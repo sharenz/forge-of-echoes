@@ -40,4 +40,12 @@ export const SKILL_AUDIO: Record<SkillAudioId, SkillAudioDefinition> = {
       { wave: "triangle", frequency: 520, endFrequency: 980, delay: 0.02, duration: 0.1, gain: 0.26 },
     ],
   },
+  "cinder-ward": {
+    volume: 0.2,
+    tones: [
+      { wave: "sine", frequency: 190, endFrequency: 440, delay: 0, duration: 0.28, gain: 0.48 },
+      { wave: "triangle", frequency: 520, endFrequency: 320, delay: 0.04, duration: 0.32, gain: 0.3 },
+      { wave: "sine", frequency: 920, endFrequency: 680, delay: 0.08, duration: 0.2, gain: 0.18 },
+    ],
+  },
 };

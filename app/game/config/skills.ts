@@ -3,7 +3,7 @@ import type { SkillDefinition } from "./schema";
 export const BASIC_ATTACK = {
   id: "ember-lance",
   name: "Ember Lance",
-  key: "Mouse",
+  key: "Space",
   focusCost: 0,
   damage: { type: "fire", effectiveness: 1, range: { minMultiplier: 0.8, maxMultiplier: 1.2 } },
   projectileScale: 1,
@@ -26,5 +26,11 @@ export const ACTIVE_SKILLS = {
     id: "dash", name: "Rift Step", key: "E", focusCost: 15, maxCharges: 3, recharge: 3,
     progression: { maxLevel: 20, rechargePerLevel: -0.08, chargeEveryLevels: 5 },
     presentation: { animation: "dash", vfx: "rift-step", audio: "rift-step" },
+  },
+  ward: {
+    id: "ward", name: "Cinder Ward", key: "R", focusCost: 25, cooldown: 9,
+    duration: 4,
+    damageReduction: 45,
+    presentation: { animation: "cast", vfx: "cinder-ward", audio: "cinder-ward" },
   },
 } as const satisfies Record<string, SkillDefinition>;

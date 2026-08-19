@@ -3,9 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
-import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
 import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "../game/config/progression";
-import type { SkillDefinition } from "../game/config/schema";
 import type { CharacterClassId, CharacterProgress, CharacterStats, StatKey, StatModifier } from "../game/domain";
 import { resolveSkillDefinition } from "../game/skills";
 import type { CharacterStatCalculation, StatResolution } from "../game/stats";
@@ -45,12 +43,6 @@ function contributionAmount(modifier: StatModifier): string {
   const value = compactNumber(modifier.value);
   if (modifier.mode === "flat") return `${modifier.value >= 0 ? "+" : ""}${value}`;
   return `${modifier.value >= 0 ? "+" : ""}${value}% ${modifier.mode}`;
-}
-
-function damageSummary(damage: NonNullable<SkillDefinition["damage"]>): string {
-  const minimum = Math.round(damage.effectiveness * damage.range.minMultiplier * 100);
-  const maximum = Math.round(damage.effectiveness * damage.range.maxMultiplier * 100);
-  return `${minimum}–${maximum}% ${DAMAGE_TYPE_DEFINITIONS[damage.type].label} damage`;
 }
 
 interface ResourceGlobeProps {
@@ -188,10 +180,13 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
 
   const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel);
   const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel);
+  const resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, 1);
   const novaReady = Boolean(hud && hud.novaCooldown <= 0.05 && hud.focus >= resolvedNova.focusCost);
   const riftReady = Boolean(hud && hud.riftCharges > 0 && hud.focus >= resolvedDash.focusCost);
+  const wardReady = Boolean(hud && hud.wardCooldown <= 0.05 && hud.focus >= resolvedWard.focusCost);
   const novaProgress = hud ? Math.min(100, (hud.novaCooldown / resolvedNova.cooldown) * 100) : 0;
   const riftProgress = hud ? Math.min(100, (hud.riftRecharge / resolvedDash.recharge) * 100) : 0;
+  const wardProgress = hud ? Math.min(100, (hud.wardCooldown / resolvedWard.cooldown) * 100) : 0;
   const xpRequired = characterProgress ? XP_BY_LEVEL(characterProgress.level) : 1;
   const xpPercent = characterProgress?.level === MAX_CHARACTER_LEVEL ? 100 : Math.min(100, ((characterProgress?.xp ?? 0) / xpRequired) * 100);
   const displayedLife = mode === "arena" && hud ? hud.life : characterStats?.maxLife ?? 0;
@@ -208,22 +203,6 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
         <>
           <div className="world-wave"><span>Wave</span><strong>{hud.wave}<em>/{arenaBalance?.waves ?? ARENA_RULES.totalWaves}</em></strong><small>{hud.enemies} remain{hud.nextWaveIn !== null ? ` · next in ${Math.ceil(hud.nextWaveIn)}s` : " · final wave"}</small></div>
           <div className="world-loot"><span>{hud.lootCollected} collected</span><strong>{hud.groundDrops}</strong><small>drops on ground</small></div>
-          <div className="world-skills">
-            <span className="basic-skill"><kbd>{BASIC_ATTACK.key}</kbd><span><strong>{BASIC_ATTACK.name}</strong><small>{damageSummary(BASIC_ATTACK.damage)}</small></span></span>
-            <button type="button" className="active-skill" disabled={!novaReady} onClick={() => runtimeRef.current?.useSkill("nova")}>
-              <i className="skill-recharge" style={{ width: `${novaProgress}%` }} />
-              <kbd>{ACTIVE_SKILLS.nova.key}</kbd>
-              <span><strong>{resolvedNova.name} · Lv {resolvedNova.level}</strong><small>{hud.novaCooldown > 0.05 ? `${hud.novaCooldown.toFixed(1)}s recharge` : hud.focus < resolvedNova.focusCost ? `Needs ${resolvedNova.focusCost} Mana` : `Ready · ${damageSummary(resolvedNova.damage!)} · ${resolvedNova.projectileCount} bolts · ${resolvedNova.piercing} pierce`}</small></span>
-            </button>
-            <button type="button" className="active-skill rift-skill" disabled={!riftReady} onClick={() => runtimeRef.current?.useSkill("dash")}>
-              <i className="skill-recharge" style={{ width: `${riftProgress}%` }} />
-              <kbd>{ACTIVE_SKILLS.dash.key}</kbd>
-              <span><strong>{resolvedDash.name} · Lv {resolvedDash.level}</strong><small>{hud.riftCharges}/{hud.riftMaxCharges} charges{hud.riftCharges < hud.riftMaxCharges ? ` · +1 in ${hud.riftRecharge.toFixed(1)}s` : ` · ${resolvedDash.focusCost} Mana`}</small></span>
-              <span className="skill-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} Rift Step charges`}>
-                {Array.from({ length: hud.riftMaxCharges }, (_, index) => <i className={index < hud.riftCharges ? "ready" : ""} key={index} />)}
-              </span>
-            </button>
-          </div>
           {hud.arenaComplete && (
             <div className="arena-complete-banner" role="status" aria-live="polite">
               <span>Map Cleared</span>
@@ -238,6 +217,26 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
           <div className="world-vitals">
             <ResourceGlobe kind="life" label="Life" current={displayedLife} maximum={displayedMaxLife} />
             <ResourceGlobe kind="mana" label="Mana" current={displayedMana} maximum={displayedMaxMana} />
+          </div>
+          <div className="world-action-bar" aria-label="Sorceress skills">
+            <button type="button" className="action-slot lance-slot" disabled={mode !== "arena"} data-tooltip={`${BASIC_ATTACK.name} · Basic fire attack`} onClick={() => runtimeRef.current?.useSkill("basic")}>
+              <span className="skill-icon"><i /></span><kbd>{BASIC_ATTACK.key}</kbd>
+            </button>
+            <button type="button" className="action-slot nova-slot" disabled={mode !== "arena" || !novaReady} data-tooltip={`${resolvedNova.name} · Level ${resolvedNova.level}`} onClick={() => runtimeRef.current?.useSkill("nova")}>
+              <span className="skill-cooldown" style={{ height: `${novaProgress}%` }} />
+              <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.nova.key}</kbd>
+              {hud && hud.novaCooldown > 0.05 && <strong>{hud.novaCooldown.toFixed(1)}</strong>}
+            </button>
+            <button type="button" className="action-slot rift-slot" disabled={mode !== "arena" || !riftReady} data-tooltip={`${resolvedDash.name} · Level ${resolvedDash.level}`} onClick={() => runtimeRef.current?.useSkill("dash")}>
+              <span className="skill-cooldown" style={{ height: `${riftProgress}%` }} />
+              <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.dash.key}</kbd>
+              {hud && <span className="slot-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} charges`}>{hud.riftCharges}</span>}
+            </button>
+            <button type="button" className={`action-slot ward-slot ${hud && hud.wardRemaining > 0 ? "is-active" : ""}`} disabled={mode !== "arena" || !wardReady} data-tooltip={`${resolvedWard.name} · ${resolvedWard.damageReduction}% less damage for ${resolvedWard.duration}s`} onClick={() => runtimeRef.current?.useSkill("ward")}>
+              <span className="skill-cooldown" style={{ height: `${wardProgress}%` }} />
+              <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.ward.key}</kbd>
+              {hud && hud.wardCooldown > 0.05 && <strong>{hud.wardCooldown.toFixed(1)}</strong>}
+            </button>
           </div>
           <div className="world-experience" aria-label={`Level ${characterProgress.level} experience`}>
             <span><strong>Level {characterProgress.level}</strong><small>{characterProgress.level === MAX_CHARACTER_LEVEL ? "Maximum level" : `${characterProgress.xp} / ${xpRequired} XP`}</small></span>

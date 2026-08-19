@@ -519,7 +519,6 @@ export function GameShell() {
         <div className="hideout-xp"><span style={{ width: `${xpPercent}%` }} /><small>{profile.character.xp}/{xpRequired} XP</small></div>
       </header>
 
-      <div className="hideout-prompt"><span>WASD</span> screen-aligned movement <i /> fixed camera <i /> select a labeled world station</div>
       {profile.openedMap && <div className="portal-notice"><span>Portal open</span><strong>{profile.openedMap.baseName}</strong><small>Click the portal to enter</small></div>}
 
       {panel && (

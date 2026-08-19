@@ -118,6 +118,8 @@ export interface SkillDefinition {
   cooldown?: number;
   maxCharges?: number;
   recharge?: number;
+  duration?: number;
+  damageReduction?: number;
   damage?: {
     type: DamageType;
     /** Multiplier applied directly to the character sheet's average attack damage. */
