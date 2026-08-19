@@ -231,67 +231,74 @@ export function PhaserWorld({ mode, classId, portalActive = false, paused = fals
       )}
       {mode !== "class-select" && characterProgress && characterStats && (
         <div className="world-hud-safe-area" aria-label="Character resources">
-          <div className="world-vitals">
+          <div className="world-bottom-hud">
             <ResourceGlobe kind="life" label="Life" current={displayedLife} maximum={displayedMaxLife} />
-            <ResourceGlobe kind="mana" label="Mana" current={displayedMana} maximum={displayedMaxMana} />
-          </div>
-          <div className="world-action-bar" aria-label="Sorceress skills">
-            <button type="button" className="action-slot lance-slot" disabled={mode !== "arena"} data-tooltip={`${BASIC_ATTACK.name} · Basic fire attack`} onClick={() => runtimeRef.current?.useSkill("basic")}>
-              <span className="skill-icon"><i /></span><kbd>{BASIC_ATTACK.key}</kbd>
-            </button>
-            <button type="button" className="action-slot nova-slot" disabled={mode !== "arena" || !novaReady} data-tooltip={`${resolvedNova.name} · Level ${resolvedNova.level}`} onClick={() => runtimeRef.current?.useSkill("nova")}>
-              <span className="skill-cooldown" style={{ height: `${novaProgress}%` }} />
-              <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.nova.key}</kbd>
-              {hud && hud.novaCooldown > 0.05 && <strong>{hud.novaCooldown.toFixed(1)}</strong>}
-            </button>
-            <button type="button" className="action-slot rift-slot" disabled={mode !== "arena" || !riftReady} data-tooltip={`${resolvedDash.name} · Level ${resolvedDash.level}`} onClick={() => runtimeRef.current?.useSkill("dash")}>
-              <span className="skill-cooldown" style={{ height: `${riftProgress}%` }} />
-              <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.dash.key}</kbd>
-              {hud && <span className="slot-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} charges`}>{hud.riftCharges}</span>}
-            </button>
-            <button type="button" className={`action-slot ward-slot ${hud && hud.wardRemaining > 0 ? "is-active" : ""}`} disabled={mode !== "arena" || !wardReady} data-tooltip={`${resolvedWard.name} · ${resolvedWard.damageReduction}% less damage for ${resolvedWard.duration}s`} onClick={() => runtimeRef.current?.useSkill("ward")}>
-              <span className="skill-cooldown" style={{ height: `${wardProgress}%` }} />
-              <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.ward.key}</kbd>
-              {hud && hud.wardCooldown > 0.05 && <strong>{hud.wardCooldown.toFixed(1)}</strong>}
-            </button>
-          </div>
-          <div className="world-flask-belt" aria-label="Flask belt">
-            {flaskBelt.map((flask, index) => {
-              const definition = flask ? FLASK_DEFINITIONS[flask.baseId] : null;
-              const resourceFull = definition?.resource === "life"
-                ? !hud || hud.life >= hud.maxLife
-                : !hud || hud.focus >= hud.maxFocus;
-              return (
-                <div
-                  className={`world-flask-slot-target ${flaskDropSlot === index ? "drop-ready" : ""}`}
-                  onDragOver={(event) => { if (onFlaskLoad) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setFlaskDropSlot(index); } }}
-                  onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFlaskDropSlot(null); }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    const itemId = event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain");
-                    if (itemId) onFlaskLoad?.(itemId, index);
-                    setFlaskDropSlot(null);
-                  }}
-                  key={index}
-                >
-                  <button
-                    type="button"
-                    className={`flask-hotkey ${definition ? `flask-${definition.resource}` : "empty"}`}
-                    disabled={mode !== "arena" || !flask || resourceFull}
-                    data-tooltip={definition ? `${definition.name} · Restores ${definition.recovery} ${definition.resource}` : "Empty flask slot · drag a flask here"}
-                    onClick={() => runtimeRef.current?.useFlask(index)}
-                  >
-                    {definition && <span className="flask-icon" style={{ "--flask-icon": `url(${definition.icon})` } as CSSProperties} />}
-                    <kbd>{index + 1}</kbd>
-                    {flask && <strong>{flask.stackSize}</strong>}
+            <div className="world-command-deck">
+              <div className="world-command-row">
+                <div className="world-flask-belt" aria-label="Flask belt">
+                  <span className="hud-section-label">Flasks</span>
+                  {flaskBelt.map((flask, index) => {
+                    const definition = flask ? FLASK_DEFINITIONS[flask.baseId] : null;
+                    const resourceFull = definition?.resource === "life"
+                      ? !hud || hud.life >= hud.maxLife
+                      : !hud || hud.focus >= hud.maxFocus;
+                    return (
+                      <div
+                        className={`world-flask-slot-target ${flaskDropSlot === index ? "drop-ready" : ""}`}
+                        onDragOver={(event) => { if (onFlaskLoad) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setFlaskDropSlot(index); } }}
+                        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFlaskDropSlot(null); }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          const itemId = event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain");
+                          if (itemId) onFlaskLoad?.(itemId, index);
+                          setFlaskDropSlot(null);
+                        }}
+                        key={index}
+                      >
+                        <button
+                          type="button"
+                          className={`flask-hotkey ${definition ? `flask-${definition.resource}` : "empty"}`}
+                          disabled={mode !== "arena" || !flask || resourceFull}
+                          data-tooltip={definition ? `${definition.name} · Restores ${definition.recovery} ${definition.resource}` : "Empty flask slot · drag a flask here"}
+                          onClick={() => runtimeRef.current?.useFlask(index)}
+                        >
+                          {definition && <span className="flask-icon" style={{ "--flask-icon": `url(${definition.icon})` } as CSSProperties} />}
+                          <kbd>{index + 1}</kbd>
+                          {flask && <strong>{flask.stackSize}</strong>}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <i className="command-deck-divider" aria-hidden="true" />
+                <div className="world-action-bar" aria-label="Sorceress skills">
+                  <span className="hud-section-label">Skills</span>
+                  <button type="button" className="action-slot lance-slot" disabled={mode !== "arena"} data-tooltip={`${BASIC_ATTACK.name} · Basic fire attack`} onClick={() => runtimeRef.current?.useSkill("basic")}>
+                    <span className="skill-icon"><i /></span><kbd>{BASIC_ATTACK.key}</kbd>
+                  </button>
+                  <button type="button" className="action-slot nova-slot" disabled={mode !== "arena" || !novaReady} data-tooltip={`${resolvedNova.name} · Level ${resolvedNova.level}`} onClick={() => runtimeRef.current?.useSkill("nova")}>
+                    <span className="skill-cooldown" style={{ height: `${novaProgress}%` }} />
+                    <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.nova.key}</kbd>
+                    {hud && hud.novaCooldown > 0.05 && <strong>{hud.novaCooldown.toFixed(1)}</strong>}
+                  </button>
+                  <button type="button" className="action-slot rift-slot" disabled={mode !== "arena" || !riftReady} data-tooltip={`${resolvedDash.name} · Level ${resolvedDash.level}`} onClick={() => runtimeRef.current?.useSkill("dash")}>
+                    <span className="skill-cooldown" style={{ height: `${riftProgress}%` }} />
+                    <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.dash.key}</kbd>
+                    {hud && <span className="slot-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} charges`}>{hud.riftCharges}</span>}
+                  </button>
+                  <button type="button" className={`action-slot ward-slot ${hud && hud.wardRemaining > 0 ? "is-active" : ""}`} disabled={mode !== "arena" || !wardReady} data-tooltip={`${resolvedWard.name} · ${resolvedWard.damageReduction}% less damage for ${resolvedWard.duration}s`} onClick={() => runtimeRef.current?.useSkill("ward")}>
+                    <span className="skill-cooldown" style={{ height: `${wardProgress}%` }} />
+                    <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.ward.key}</kbd>
+                    {hud && hud.wardCooldown > 0.05 && <strong>{hud.wardCooldown.toFixed(1)}</strong>}
                   </button>
                 </div>
-              );
-            })}
-          </div>
-          <div className="world-experience" aria-label={`Level ${characterProgress.level} experience`}>
-            <span><strong>Level {characterProgress.level}</strong><small>{characterProgress.level === MAX_CHARACTER_LEVEL ? "Maximum level" : `${characterProgress.xp} / ${xpRequired} XP`}</small></span>
-            <i><b style={{ width: `${xpPercent}%` }} /></i>
+              </div>
+              <div className="world-experience" aria-label={`Level ${characterProgress.level} experience`}>
+                <span><strong>Level {characterProgress.level}</strong><small>{characterProgress.level === MAX_CHARACTER_LEVEL ? "Maximum level" : `${characterProgress.xp} / ${xpRequired} XP`}</small></span>
+                <i><b style={{ width: `${xpPercent}%` }} /></i>
+              </div>
+            </div>
+            <ResourceGlobe kind="mana" label="Mana" current={displayedMana} maximum={displayedMaxMana} />
           </div>
         </div>
       )}

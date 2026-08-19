@@ -196,6 +196,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /paused=\{characterPanelOpen\}/);
   assert.match(phaserWorld, /updateArenaBalance/);
   assert.match(phaserWorld, /world-action-bar/);
+  assert.match(phaserWorld, /world-bottom-hud/);
+  assert.match(phaserWorld, /world-command-deck/);
+  assert.match(phaserWorld, /hud-section-label/);
   assert.match(phaserWorld, /world-flask-slot-target/);
   assert.match(phaserWorld, /onFlaskLoad\?\.\(itemId, index\)/);
   assert.match(phaserWorld, /wardCooldown\.toFixed\(1\)/);
@@ -218,6 +221,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(itemTooltip, /tooltip-item-icon/);
   assert.match(itemVisuals, /CURRENCY_DEFINITIONS\[item\.baseId\]\.icon/);
   assert.match(globalStyles, /\.poe-grid-item > \.item-icon/);
+  assert.match(globalStyles, /\.world-command-deck::before/);
+  assert.match(globalStyles, /\.world-bottom-hud::before/);
   assert.match(globalStyles, /\.poe-grid-wrap\.container-backpack \.poe-grid/);
   assert.match(globalStyles, /aspect-ratio: var\(--grid-columns\) \/ var\(--grid-rows\)/);
   assert.doesNotMatch(inventoryGrid, /packItems/);
