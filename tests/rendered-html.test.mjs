@@ -204,6 +204,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(phaserWorld, /world-action-bar/);
   assert.match(phaserWorld, /world-bottom-hud/);
   assert.match(phaserWorld, /world-command-deck/);
+  assert.match(globalStyles, /--command-deck-lower-offset: 18\.4%/);
+  assert.match(globalStyles, /transform: translateY\(var\(--command-deck-lower-offset\)\)/);
   assert.match(phaserWorld, /hud-section-label/);
   assert.match(phaserWorld, /world-flask-slot-target/);
   assert.match(phaserWorld, /onFlaskLoad\?\.\(itemId, index\)/);
