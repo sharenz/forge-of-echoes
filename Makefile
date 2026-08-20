@@ -7,7 +7,7 @@ export DEPLOY_IP
 export APP_DOMAIN
 export GAME_DOMAIN
 
-.PHONY: setup-prod deploy prod-status
+.PHONY: setup-prod deploy prod-status prod-logs
 
 setup-prod:
 	./scripts/setup-production.sh
@@ -17,3 +17,6 @@ deploy:
 
 prod-status:
 	ssh "$${DEPLOY_HOST:-crafty-prod}" 'sudo -n -u crafty -H sh -lc '\''cd /srv/crafty/current; RELEASE_ID=$$(cat .release-id); export RELEASE_ID; docker compose --project-name crafty-prod --env-file /srv/crafty/shared/.env --file deploy/docker-compose.prod.yml ps'\'''
+
+prod-logs:
+	ssh -t "$${DEPLOY_HOST:-crafty-prod}" 'sudo -n -u crafty -H sh -lc '\''cd /srv/crafty/current; RELEASE_ID=$$(cat .release-id); export RELEASE_ID; docker compose --project-name crafty-prod --env-file /srv/crafty/shared/.env --file deploy/docker-compose.prod.yml logs --follow --tail=200'\'''

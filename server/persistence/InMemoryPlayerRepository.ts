@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createAuthoritativeProfile } from "../domain/profile";
+import type { MerchantId } from "../../app/game/config/merchants";
 import { AccountNotFoundError, CharacterNameTakenError, CharacterNotFoundError, ProfileRevisionConflict } from "./errors";
 import type { AccountIdentity, AuthoritativeProfile, CharacterRosterEntry, CharacterSummary, CreatePlayerInput, PlayerIdentity, PlayerRepository } from "./PlayerRepository";
 
@@ -8,16 +9,18 @@ export class InMemoryPlayerRepository implements PlayerRepository {
   private readonly charactersByAccount = new Map<string, string[]>();
   private readonly byCharacterId = new Map<string, PlayerIdentity>();
   private readonly profiles = new Map<string, AuthoritativeProfile>();
+  private readonly merchantEntitlementsByAccount = new Map<string, Set<MerchantId>>();
 
   async initialize(): Promise<void> {}
 
   async createOrLoadAccount(rawHandle: string): Promise<AccountIdentity> {
     const handle = rawHandle.trim().toLowerCase();
     const existing = this.accountsByHandle.get(handle);
-    if (existing) return existing;
-    const account = { accountId: randomUUID(), handle };
+    if (existing) return { ...existing, merchantEntitlements: this.accountMerchantEntitlements(existing.accountId) };
+    const account: AccountIdentity = { accountId: randomUUID(), handle, merchantEntitlements: [] };
     this.accountsByHandle.set(handle, account);
     this.charactersByAccount.set(account.accountId, []);
+    this.merchantEntitlementsByAccount.set(account.accountId, new Set());
     return account;
   }
 
@@ -58,6 +61,21 @@ export class InMemoryPlayerRepository implements PlayerRepository {
     return identity && profile ? { ...identity, level: profile.profile.character.level } : null;
   }
 
+  async listMerchantEntitlementsForCharacter(characterId: string): Promise<MerchantId[]> {
+    const character = this.byCharacterId.get(characterId);
+    return character ? this.accountMerchantEntitlements(character.accountId) : [];
+  }
+
+  grantMerchantEntitlement(accountId: string, merchantId: MerchantId): void {
+    const entitlements = this.merchantEntitlementsByAccount.get(accountId);
+    if (!entitlements) throw new AccountNotFoundError(accountId);
+    entitlements.add(merchantId);
+  }
+
+  private accountMerchantEntitlements(accountId: string): MerchantId[] {
+    return [...(this.merchantEntitlementsByAccount.get(accountId) ?? [])].sort();
+  }
+
   async loadProfile(characterId: string): Promise<AuthoritativeProfile | null> {
     const saved = this.profiles.get(characterId);
     return saved ? structuredClone(saved) : null;
@@ -77,5 +95,6 @@ export class InMemoryPlayerRepository implements PlayerRepository {
     this.charactersByAccount.clear();
     this.byCharacterId.clear();
     this.profiles.clear();
+    this.merchantEntitlementsByAccount.clear();
   }
 }

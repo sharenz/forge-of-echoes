@@ -15,6 +15,7 @@ import { DAMAGE_TYPE_DEFINITIONS } from "../game/config/damage";
 import { CURRENCY_DEFINITIONS } from "../game/config/currencies";
 import { FLASK_DEFINITIONS, type FlaskDefinition } from "../game/config/flasks";
 import { MONSTER_PACK_RULES } from "../game/config/monster-packs";
+import { MERCHANTS } from "../game/config/merchants";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
 import { MAP_COMPLETION_REWARDS } from "../game/config/rewards";
 import type { SkillDefinition } from "../game/config/schema";
@@ -240,11 +241,12 @@ class CraftyScene extends Phaser.Scene {
   constructor(options: WorldRuntimeOptions) {
     super("crafty-world");
     this.options = options;
+    const cooldownMultiplier = options.arenaBalance?.skillCooldown ?? 1;
     this.resolvedBasic = resolveSkillDefinition(BASIC_ATTACK, 1);
-    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, options.skillLevels.nova);
-    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, options.skillLevels.dash);
-    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, options.skillLevels.ward);
-    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, options.skillLevels.flameWave);
+    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, options.skillLevels.nova, cooldownMultiplier);
+    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, options.skillLevels.dash, cooldownMultiplier);
+    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, options.skillLevels.ward, cooldownMultiplier);
+    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, options.skillLevels.flameWave, cooldownMultiplier);
     this.riftCharges = this.resolvedDash.maxCharges;
     this.life = options.arenaBalance?.maxLife ?? 100;
     this.focus = options.arenaBalance?.maxFocus ?? 100;
@@ -362,10 +364,7 @@ class CraftyScene extends Phaser.Scene {
       this.accumulator = 0;
       return;
     }
-    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.nova)) this.useSkill("nova");
-    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.dash)) this.useSkill("dash");
-    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.ward)) this.useSkill("ward");
-    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flameWave)) this.useSkill("flameWave");
+    this.consumeHeldSkillKeys();
     if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask1)) this.useFlask(0);
     if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask2)) this.useFlask(1);
     if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask3)) this.useFlask(2);
@@ -379,6 +378,21 @@ class CraftyScene extends Phaser.Scene {
       this.accumulator -= FIXED_STEP;
     }
     this.renderPlayer(this.accumulator / FIXED_STEP);
+  }
+
+  /**
+   * Active skills intentionally use held state instead of edge-triggered
+   * JustDown input. An unavailable skill is retried every frame and therefore
+   * fires on the first frame where its cooldown, resources, charges, and
+   * animation lock all permit it. The authoritative server still validates
+   * every resulting command.
+   */
+  private consumeHeldSkillKeys(): void {
+    if (this.options.controlsBlocked || !this.keys || this.arenaComplete) return;
+    if (this.keys.nova.isDown) this.useSkill("nova");
+    if (this.keys.dash.isDown) this.useSkill("dash");
+    if (this.keys.ward.isDown) this.useSkill("ward");
+    if (this.keys.flameWave.isDown) this.useSkill("flameWave");
   }
 
   useSkill(skill: "basic" | "nova" | "dash" | "ward" | "flameWave"): void {
@@ -493,15 +507,16 @@ class CraftyScene extends Phaser.Scene {
     this.life = Phaser.Math.Clamp(this.life * (balance.maxLife / previousMaxLife), 1, balance.maxLife);
     this.focus = Phaser.Math.Clamp(this.focus * (balance.maxFocus / previousMaxFocus), 0, balance.maxFocus);
     this.options.arenaBalance = balance;
-    this.options.onHud(this.getHud());
+    this.updateSkillLevels(this.options.skillLevels);
   }
 
   updateSkillLevels(skillLevels: SkillLevels): void {
     const previousMaxCharges = this.resolvedDash.maxCharges;
-    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova);
-    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash);
-    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward);
-    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave);
+    const cooldownMultiplier = this.options.arenaBalance?.skillCooldown ?? 1;
+    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova, cooldownMultiplier);
+    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash, cooldownMultiplier);
+    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward, cooldownMultiplier);
+    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave, cooldownMultiplier);
     this.riftCharges = Phaser.Math.Clamp(
       this.riftCharges + Math.max(0, this.resolvedDash.maxCharges - previousMaxCharges),
       0,
@@ -1433,10 +1448,20 @@ class CraftyScene extends Phaser.Scene {
     this.addStation("stash", 116, 352, 135, 115, "STASH");
     this.addStation("bench", 817, 372, 150, 135, "CRAFT");
     this.addStation("map-device", 480, 177, 155, 145, "MAP DEVICE");
-    const merchant = this.add.image(248, 620, "player-sorceress-rendered").setOrigin(0.5, 1).setDisplaySize(59, 96).setTint(0xd9ad76).setDepth(12);
-    this.tweens.add({ targets: merchant, y: merchant.y - 2, duration: 1350, yoyo: true, repeat: -1, ease: "Sine.InOut" });
-    this.tweens.add({ targets: merchant, y: merchant.y - 3, duration: 1250, yoyo: true, repeat: -1, ease: "Sine.InOut" });
-    this.addStation("merchant", 248, 592, 125, 105, "MERCHANT");
+    for (const merchantId of this.options.merchantIds) {
+      const definition = MERCHANTS[merchantId];
+      const merchant = this.add.image(definition.station.x, definition.station.y + 28, "player-sorceress-rendered")
+        .setOrigin(0.5, 1).setDisplaySize(59, 96).setTint(definition.station.tint).setDepth(12);
+      this.tweens.add({ targets: merchant, y: merchant.y - 3, duration: 1250, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+      this.addStation(
+        `merchant:${merchantId}`,
+        definition.station.x,
+        definition.station.y,
+        definition.station.width,
+        definition.station.height,
+        definition.station.label,
+      );
+    }
     this.buildHideoutPortals();
   }
 

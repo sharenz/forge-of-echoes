@@ -32,6 +32,14 @@ test("PostgreSQL persists account identity and enforces item owner/location cons
     assert.equal(await repository.findAccountCharacter(account.accountId, incomplete.rows[0].id), null, "incomplete profiles are never exposed as playable characters");
     assert.equal(await repository.findCharacter(incomplete.rows[0].id), null);
     assert.deepEqual(await repository.findAccountCharacter(account.accountId, rosterAlt.characterId), rosterAlt);
+    assert.deepEqual(account.merchantEntitlements, []);
+    await pool.query(
+      "INSERT INTO account_merchant_entitlements (account_id, merchant_id) VALUES ($1, 'debug-artificer')",
+      [account.accountId],
+    );
+    assert.deepEqual((await repository.createOrLoadAccount(handle)).merchantEntitlements, ["debug-artificer"]);
+    assert.deepEqual(await repository.listMerchantEntitlementsForCharacter(first.characterId), ["debug-artificer"]);
+    assert.deepEqual(await repository.listMerchantEntitlementsForCharacter(rosterAlt.characterId), ["debug-artificer"]);
     const otherAccount = await repository.createOrLoadAccount(sameNameHandle);
     await assert.rejects(
       () => repository.createCharacter(otherAccount.accountId, { characterName: first.characterName.toLowerCase(), classId: "amazon" }),
@@ -52,12 +60,18 @@ test("PostgreSQL persists account identity and enforces item owner/location cons
     assert.equal(moved.revision, initialProfile.revision + 1);
     const persistedMove = await repository.loadProfile(first.characterId);
     assert.ok(persistedMove?.profile.inventory.entries.some((entry) => entry.item.id === weapon.id));
-    const bought = await commands.execute(first.characterId, moved.revision, { type: "buy_map", offerId: "free-ashen-t1" });
+    const bought = await commands.execute(first.characterId, moved.revision, { type: "buy_merchant_offer", merchantId: "cartographer-rook", offerId: "free-ashen-t1" });
     const purchasedMap = bought.profile.inventory.entries.at(-1)?.item;
     assert.equal(purchasedMap?.kind, "map");
     assert.match(purchasedMap!.id, /^[0-9a-f-]{36}$/i);
     const persistedPurchase = await repository.loadProfile(first.characterId);
     assert.ok(persistedPurchase?.profile.inventory.entries.some((entry) => entry.item.id === purchasedMap!.id));
+    const debugPurchase = await commands.execute(first.characterId, bought.revision, {
+      type: "buy_merchant_offer", merchantId: "debug-artificer", offerId: "impossible-velocity-boots",
+    });
+    const debugBoots = debugPurchase.profile.inventory.entries.find((entry) => entry.item.kind === "equipment" && entry.item.displayName === "Impossible Velocity Boots")?.item;
+    assert.ok(debugBoots?.kind === "equipment");
+    assert.equal(debugBoots.affixes[0].rolls[0].value, 1_000);
 
     const second = await createTestPlayer(repository, { handle: `${handle}_2`, characterName: `Ally-${suffix}`, classId: "amazon" });
     const itemId = randomUUID();

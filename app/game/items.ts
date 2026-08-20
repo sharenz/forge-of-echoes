@@ -1,5 +1,6 @@
 import { AFFIX_DEFINITIONS } from "./config/affixes";
 import { ITEM_BASES, ITEM_BASES_BY_ID, STARTER_BASES } from "./config/item-bases";
+import type { EquipmentMerchantOffer } from "./config/merchants";
 import type { AffixDefinition, AffixTierDefinition, ItemBaseDefinition, ScaledModifierDefinition } from "./config/schema";
 import type { Affix, AffixTag, CharacterClassId, EquipmentItem, EquipmentSlot, Rarity, StatModifier } from "./domain";
 import { createId } from "./random";
@@ -103,6 +104,40 @@ export function generateStarterWeapon(classId: CharacterClassId): EquipmentItem 
   return createEquipmentFromBase(ITEM_BASES_BY_ID[STARTER_BASES[classId]], 1, "magic");
 }
 
+export function createFixedMerchantEquipment(offer: EquipmentMerchantOffer, itemId = createId("item")): EquipmentItem {
+  const base = ITEM_BASES_BY_ID[offer.baseId];
+  return {
+    kind: "equipment",
+    id: itemId,
+    baseId: base.id,
+    baseName: base.name,
+    displayName: offer.displayName,
+    slot: base.slot,
+    rarity: offer.rarity,
+    itemLevel: offer.itemLevel,
+    stability: 0,
+    maxStability: 0,
+    implicit: base.implicit,
+    baseStats: base.baseStats.map((modifier) => scaleBaseModifier(modifier, offer.itemLevel, `base:${base.id}`)),
+    implicitModifiers: base.implicitModifiers.map((modifier) => scaleBaseModifier(modifier, offer.itemLevel, `implicit:${base.id}`)),
+    affixes: offer.affixes.map((definition) => ({
+      id: `${itemId}:${definition.id}`,
+      definitionId: definition.id,
+      name: definition.name,
+      tag: definition.tag,
+      tier: definition.tier,
+      requiredItemLevel: 1,
+      group: definition.group,
+      rolls: definition.rolls.map((roll) => ({
+        ...roll,
+        min: roll.value,
+        max: roll.value,
+        source: `merchant:${definition.id}`,
+      })),
+    })),
+  };
+}
+
 export function addFireAffix(item: EquipmentItem): EquipmentItem {
   if (item.stability < 2 || item.affixes.length >= 4) return item;
   const affix = createAffixForItem(item, "fire");
@@ -136,6 +171,7 @@ export function removeRandomAffix(item: EquipmentItem, random: RandomSource = Ma
 }
 
 export function itemDisplayName(item: EquipmentItem): string {
+  if (item.displayName) return item.displayName;
   if (item.rarity === "normal" || item.affixes.length === 0) return item.baseName;
   if (item.rarity === "magic") return `${item.affixes[0]?.name ?? "Tempered"} ${item.baseName}`;
   const rareNames = ["Ash Mark", "Dread Song", "Cinder Bite", "Iron Oath"];

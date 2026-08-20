@@ -23,6 +23,8 @@ const DERIVED_STATS: readonly { id: DerivedStatKey; label: string; suffix?: stri
   { id: "maxFocus", label: "Maximum Focus" },
   { id: "attackDamage", label: "Attack Damage", decimals: 1 },
   { id: "attackSpeed", label: "Attacks / second", decimals: 2 },
+  { id: "focusRegen", label: "Focus recovery / second", decimals: 1 },
+  { id: "skillCooldown", label: "Skill cooldown duration", suffix: "×", decimals: 2 },
   { id: "armor", label: "Armor" },
   { id: "evadeChance", label: "Evade chance", suffix: "%", decimals: 1 },
   { id: "moveSpeed", label: "Movement speed" },

@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { CharacterEquipmentSlot, EquipmentItem, PlayerProfile } from "../../app/game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts, findEquippedSlot } from "../../app/game/equipment";
 import { applyBackpackCurrency } from "../../app/game/crafting";
+import { merchantIsAvailable, type MerchantId } from "../../app/game/config/merchants";
 import { loadFlaskIntoBelt, unloadFlaskFromBelt } from "../../app/game/flasks";
 import { findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../../app/game/item-container";
-import { purchaseFlask, purchaseMap } from "../../app/game/merchant";
+import { purchaseMerchantOffer } from "../../app/game/merchant";
 import { allocateAttributePoint, allocateSkillPoint } from "../../app/game/progression";
 import { activeStashTab, addStashTab, findStashEntry, renameStashTab, selectStashTab, updateStashContainer } from "../../app/game/stash";
 import type { ProfileCommand } from "../../multiplayer/protocol";
@@ -24,7 +25,10 @@ export class ProfileCommandService {
     const current = await this.players.loadProfile(characterId);
     if (!current) throw new ProfileCommandError("not_found", "Character profile was not found");
     if (current.revision !== expectedRevision) throw new ProfileCommandError("revision_conflict", "Profile changed on another client");
-    const next = this.apply(current.profile, command);
+    const merchantEntitlements = command.type === "buy_merchant_offer"
+      ? await this.players.listMerchantEntitlementsForCharacter(characterId)
+      : [];
+    const next = this.apply(current.profile, command, merchantEntitlements);
     if (next === current.profile) throw new ProfileCommandError("invalid_command", "Command is not valid for the current profile state");
     try {
       return await this.players.saveProfile(characterId, expectedRevision, next);
@@ -36,7 +40,7 @@ export class ProfileCommandService {
     }
   }
 
-  private apply(profile: PlayerProfile, command: ProfileCommand): PlayerProfile {
+  private apply(profile: PlayerProfile, command: ProfileCommand, merchantEntitlements: readonly MerchantId[]): PlayerProfile {
     switch (command.type) {
       case "move_item": return this.move(profile, command);
       case "equip_item": return this.equip(profile, command.itemId, command.slot);
@@ -50,8 +54,7 @@ export class ProfileCommandService {
       case "slot_map": return this.slotMap(profile, command.itemId);
       case "remove_map": return this.removeMap(profile);
       case "apply_currency": return this.applyCurrency(profile, command.currencyItemId, command.targetItemId);
-      case "buy_map": return this.buyMap(profile, command.offerId, command.position);
-      case "buy_flask": return this.buyFlask(profile, command.offerId, command.position);
+      case "buy_merchant_offer": return this.buyMerchantOffer(profile, command.merchantId, command.offerId, merchantEntitlements, command.position);
     }
   }
 
@@ -153,23 +156,20 @@ export class ProfileCommandService {
     return inventory ? { ...profile, inventory } : profile;
   }
 
-  private buyMap(profile: PlayerProfile, offerId: string, position?: { x: number; y: number }): PlayerProfile {
-    const purchase = purchaseMap(profile, offerId, position);
+  private buyMerchantOffer(
+    profile: PlayerProfile,
+    merchantId: MerchantId,
+    offerId: string,
+    merchantEntitlements: readonly MerchantId[],
+    position?: { x: number; y: number },
+  ): PlayerProfile {
+    if (!merchantIsAvailable(merchantId, merchantEntitlements)) return profile;
+    const purchase = purchaseMerchantOffer(profile, merchantId, offerId, position);
     if (!purchase) return profile;
     const securedId = randomUUID();
     return {
       ...purchase.profile,
-      inventory: mapContainerItems(purchase.profile.inventory, (item) => item.id === purchase.map.id ? { ...item, id: securedId } : item),
-    };
-  }
-
-  private buyFlask(profile: PlayerProfile, offerId: string, position?: { x: number; y: number }): PlayerProfile {
-    const purchase = purchaseFlask(profile, offerId, position);
-    if (!purchase) return profile;
-    const securedId = randomUUID();
-    return {
-      ...purchase.profile,
-      inventory: mapContainerItems(purchase.profile.inventory, (item) => item.id === purchase.flask.id ? { ...item, id: securedId } : item),
+      inventory: mapContainerItems(purchase.profile.inventory, (item) => item.id === purchase.item.id ? { ...item, id: securedId } : item),
     };
   }
 }

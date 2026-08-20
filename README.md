@@ -63,6 +63,8 @@ The broader systems and long-term progression targets are documented in [GAME_DE
 
 Local development stays entirely local. Production runs the frontend, authoritative Node/Colyseus server, and PostgreSQL as an isolated Docker Compose stack on one VM. See [DEPLOYMENT.md](./DEPLOYMENT.md) for setup and deployment.
 
+Realm administration uses the interactive `crafty-cli dev` / `crafty-cli prod` console. Run `npm link` once to install the repository command, then use its arrow-key menus to list accounts or manage account-scoped debug access.
+
 ## Local multiplayer loop
 
 1. Enter an account handle, select a PostgreSQL-backed character from the roster, then open **Party** and create a party.

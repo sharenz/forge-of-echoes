@@ -38,3 +38,22 @@ make deploy
 ```
 
 The deploy script uploads the current working tree into an immutable release directory, builds versioned images on the VM, starts the release, waits for container health checks, and restores the previous release if activation fails. CI deployment is deliberately postponed.
+
+## Super-admin CLI
+
+Install the repository's operator command once from the project directory:
+
+```bash
+npm link
+```
+
+Then open the interactive console against either realm:
+
+```bash
+crafty-cli dev
+crafty-cli prod
+```
+
+The console uses arrow-key menus to list accounts and enable or disable the debug merchant for an account. Development commands connect to the local Compose PostgreSQL service. Production commands use `DEPLOY_HOST` from the environment or `.env.deploy`, connect over SSH, and execute inside the private production PostgreSQL container as the locked `crafty` runtime user.
+
+Merchant access is an account entitlement, so it affects every existing and future character. Players must log out and back in after a change. The CLI only grants the stable merchant ID; every purchase remains validated by the authoritative game server against merchant config.

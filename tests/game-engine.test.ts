@@ -6,7 +6,7 @@ import { SKILL_AUDIO } from "../app/game/config/audio";
 import { CHARACTER_ANIMATIONS, characterDirectionVector, resolveCharacterDirection, resolveLocomotionDirection } from "../app/game/config/character-animations";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
 import { FLASK_BELT_SLOT_COUNT, FLASK_DEFINITIONS } from "../app/game/config/flasks";
-import { MAP_MERCHANT } from "../app/game/config/merchants";
+import { DEBUG_MERCHANT_ID, MAP_MERCHANT, availableMerchantIds } from "../app/game/config/merchants";
 import { MAP_BASES, MAP_MODIFIERS, MAP_TIER_RULES } from "../app/game/config/maps";
 import { CHARACTER_EQUIPMENT_SLOTS } from "../app/game/config/equipment-slots";
 import { ITEM_BASES } from "../app/game/config/item-bases";
@@ -28,7 +28,7 @@ import {
 } from "../app/game/items";
 import { calculateCharacterStats, formatModifier, formatModifierWithRollRange, resolveStat } from "../app/game/stats";
 import { createInitialProfile } from "../app/game/profile";
-import { purchaseFlask, purchaseMap } from "../app/game/merchant";
+import { purchaseMerchantOffer } from "../app/game/merchant";
 import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, isArenaCleared, monsterLevelForMapTier, rollHitDamage, shouldActivateFinalWaveRage, shouldSpawnNextWave } from "../app/game/combat";
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
@@ -417,7 +417,8 @@ test("dropping removes the exact item from backpack, stash, or equipment without
 });
 
 test("the merchant always offers a free entry map and prices every harder map in Scrap", () => {
-  const [entry, ...harderMaps] = MAP_MERCHANT.offers;
+  const [entry, ...harderMaps] = MAP_MERCHANT.offers.filter((offer) => offer.kind === "map");
+  assert.ok(entry?.kind === "map");
   assert.equal(entry.tier, 1);
   assert.equal(entry.price.amount, 0);
   for (const offer of harderMaps) {
@@ -426,20 +427,22 @@ test("the merchant always offers a free entry map and prices every harder map in
   }
 });
 
-test("map purchases create inventory items and consume real Scrap stacks", () => {
+test("merchant map purchases create inventory items and consume real Scrap stacks", () => {
   const profile = createInitialProfile();
   const initialMaps = containerItems(profile.inventory).filter(isMapItem).length;
-  const freePurchase = purchaseMap(profile, "free-ashen-t1");
+  const freePurchase = purchaseMerchantOffer(profile, "cartographer-rook", "free-ashen-t1");
   assert.ok(freePurchase);
-  assert.equal(freePurchase.map.tier, 1);
+  assert.ok(freePurchase.item.kind === "map");
+  assert.equal(freePurchase.item.tier, 1);
   assert.equal(containerItems(freePurchase.profile.inventory).filter(isMapItem).length, initialMaps + 1);
   assert.equal(countCurrency(containerItems(freePurchase.profile.inventory), "scrap"), 12);
 
-  const paidPurchase = purchaseMap(freePurchase.profile, "iron-trial-t2");
+  const paidPurchase = purchaseMerchantOffer(freePurchase.profile, "cartographer-rook", "iron-trial-t2");
   assert.ok(paidPurchase);
-  assert.equal(paidPurchase.map.tier, 2);
+  assert.ok(paidPurchase.item.kind === "map");
+  assert.equal(paidPurchase.item.tier, 2);
   assert.equal(countCurrency(containerItems(paidPurchase.profile.inventory), "scrap"), 6);
-  assert.equal(purchaseMap(paidPurchase.profile, "ashen-descent-t4"), null);
+  assert.equal(purchaseMerchantOffer(paidPurchase.profile, "cartographer-rook", "ashen-descent-t4"), null);
 });
 
 test("flasks stack to twenty in inventory and five in each belt slot", () => {
@@ -543,13 +546,46 @@ test("picked-up flasks never auto-fill an empty belt slot", () => {
 
 test("merchant sells both weak flask types and monsters roll configured flask drops", () => {
   const profile = createInitialProfile();
-  const health = purchaseFlask(profile, "weak-health-supply");
+  const health = purchaseMerchantOffer(profile, "cartographer-rook", "weak-health-supply");
   assert.ok(health);
   assert.equal(countCurrency(containerItems(health.profile.inventory), "scrap"), 11);
   assert.equal(containerItems(health.profile.inventory).filter(isFlaskItem)[0].baseId, "weak-health-flask");
   assert.equal(rollFlaskDrop(() => 0), "weak-health-flask");
   assert.equal(rollFlaskDrop(() => 0.999), "weak-mana-flask");
   assert.ok(dropChances(100).flask > 0);
+});
+
+test("debug merchant is entitlement-only and its catalog is fixed configuration", () => {
+  assert.deepEqual(availableMerchantIds([]), ["cartographer-rook"]);
+  assert.deepEqual(availableMerchantIds([DEBUG_MERCHANT_ID]), ["cartographer-rook", DEBUG_MERCHANT_ID]);
+  const ring = purchaseMerchantOffer(createInitialProfile(), DEBUG_MERCHANT_ID, "impossible-haste-ring");
+  assert.ok(ring?.item.kind === "equipment");
+  assert.equal(ring.item.slot, "ring");
+  assert.deepEqual(ring.item.affixes.flatMap((affix) => affix.rolls.map((roll) => [roll.stat, roll.mode, roll.value])), [
+    ["attackSpeed", "increased", 10_000],
+  ]);
+
+  const amulet = purchaseMerchantOffer(createInitialProfile(), DEBUG_MERCHANT_ID, "impossible-celerity-amulet");
+  assert.ok(amulet?.item.kind === "equipment");
+  assert.equal(formatModifier(amulet.item.affixes[0].rolls[0]), "10000% reduced skill cooldown");
+  const equippedProfile = {
+    ...amulet.profile,
+    equipped: { ...amulet.profile.equipped, amulet: amulet.item },
+  };
+  const cooldownMultiplier = calculateCharacterStats(equippedProfile).stats.skillCooldown;
+  assert.equal(cooldownMultiplier, 0.01);
+  assert.equal(resolveSkillDefinition(ACTIVE_SKILLS.nova, 1, cooldownMultiplier).cooldown, 0.1);
+  assert.equal(resolveSkillDefinition(ACTIVE_SKILLS.dash, 1, cooldownMultiplier).recharge, 0.1);
+
+  const belt = purchaseMerchantOffer(createInitialProfile(), DEBUG_MERCHANT_ID, "impossible-font-belt");
+  assert.ok(belt?.item.kind === "equipment");
+  assert.equal(formatModifier(belt.item.affixes[0].rolls[0]), "10000% increased Focus recovery rate");
+  const fontProfile = {
+    ...belt.profile,
+    equipped: { ...belt.profile.equipped, belt: belt.item },
+  };
+  assert.equal(calculateCharacterStats(fontProfile).stats.focusRegen, 808);
+  assert.equal(buildArenaBalance(fontProfile).focusRegen, 808);
 });
 
 test("grid moves preserve explicit coordinates and reject collisions", () => {

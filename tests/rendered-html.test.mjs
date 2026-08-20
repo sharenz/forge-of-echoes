@@ -37,7 +37,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/components/GameCursor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/GameNotification.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/components/MapMerchant.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/MerchantPanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/MapWorkshop.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/PhaserWorld.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/InventoryPanel.tsx", import.meta.url), "utf8"),
@@ -110,16 +110,16 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(audioConfig, /\/music\/hunted-wilds\.mp3/);
   assert.match(audioConfig, /\/music\/surrounded-by-fangs\.mp3/);
   assert.match(shell, /<GameNotification/);
-  assert.match(shell, /<MapMerchant/);
-  assert.match(mapMerchant, /Merchant trade window/);
+  assert.match(shell, /<MerchantPanel/);
+  assert.match(mapMerchant, /merchant\.name} trade window/);
   assert.match(mapMerchant, /Shop inventory/);
   assert.match(mapMerchant, /Your Backpack/);
   assert.match(mapMerchant, /quickAction\.fromClick/);
   assert.match(mapMerchant, /container=\{profile\.inventory\}/);
   assert.match(mapMerchant, /startOfferDrag/);
-  assert.match(mapMerchant, /buy\(offer, \{ x, y \}\)/);
+  assert.match(mapMerchant, /buy\(stockItem, \{ x, y \}\)/);
   assert.match(mapMerchant, /dropEffect=\{draggedOffer \? "copy" : "move"\}/);
-  assert.match(mapMerchant, /<ItemTooltip item=\{offer\.previewItem\}/);
+  assert.match(mapMerchant, /<ItemTooltip item=\{stockItem\.previewItem\}/);
   assert.doesNotMatch(mapMerchant, /merchant-offer-detail/);
   assert.match(mapWorkshop, /mapModifierDescription/);
   assert.match(merchantConfig, /amount: 0/);
@@ -132,6 +132,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /Create Character/);
   assert.match(shell, /Back to characters/);
   assert.match(world, /class PhaserRuntime/);
+  assert.match(world, /consumeHeldSkillKeys\(\)/);
+  assert.match(world, /this\.keys\.flameWave\.isDown/);
+  assert.doesNotMatch(world, /JustDown\(this\.keys\.(?:nova|dash|ward|flameWave)\)/);
   assert.match(world, /pixelArt: true/);
   assert.doesNotMatch(world, /spatialBuckets/);
   assert.match(world, /MAP_SIZE = VIEW_SIZE \* 4/);

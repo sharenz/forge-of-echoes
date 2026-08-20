@@ -351,6 +351,8 @@ The hideout map device has exactly one map slot. Maps are crafted in the backpac
 
 A hideout map merchant guarantees access to the endgame loop. The basic tier-1 map is always free, preventing a player from becoming map-locked. Higher-tier merchant maps cost Scrap from the player's real currency stacks; offers, tiers, bases, and prices are data-driven merchant config.
 
+Merchant stations, availability rules, and stock all use the same merchant definitions. Restricted testing merchants are unlocked by an account-level server entitlement, inherited by every character on that account, and re-authorized on every purchase. Their items are authored as fixed equipment offers in config, while item IDs and ownership are still created exclusively by the authoritative server.
+
 The map item defines:
 
 - arena and environmental theme;

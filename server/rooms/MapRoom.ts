@@ -20,7 +20,7 @@ import {
   type SessionClaims,
 } from "../../multiplayer/protocol";
 import { encodeWorldEvents } from "../../multiplayer/wire/events";
-import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, isArenaCleared, rollHitDamage, shouldActivateFinalWaveRage, shouldSpawnNextWave, type ArenaBalance } from "../../app/game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, isArenaCleared, resolveArenaFocusRegen, rollHitDamage, shouldActivateFinalWaveRage, shouldSpawnNextWave, type ArenaBalance } from "../../app/game/combat";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../../app/game/config/monsters";
 import { MAP_COMPLETION_REWARDS } from "../../app/game/config/rewards";
 import type { DamageType, InventoryItem } from "../../app/game/domain";
@@ -186,10 +186,10 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     const stats = calculateCharacterStats(authoritative.profile).stats;
     const skillLevels = authoritative.profile.character.skillLevels;
     const skills = {
-      nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova),
-      dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash),
-      ward: resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward),
-      flameWave: resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave),
+      nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova, stats.skillCooldown),
+      dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash, stats.skillCooldown),
+      ward: resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward, stats.skillCooldown),
+      flameWave: resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave, stats.skillCooldown),
     };
     const spawn = this.playerSpawn(this.state.players.size);
     const worldPlayer = this.world.addPlayer({
@@ -223,7 +223,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       dashCharges: skills.dash.maxCharges,
       nextDashRechargeAt: 0,
       attackDamage: stats.attackDamage,
-      focusRegen: this.arenaBalance.focusRegen,
+      focusRegen: resolveArenaFocusRegen(stats.focusRegen, this.arenaBalance.arenaModifiers).value,
       basicAttackCooldownMilliseconds: 1_000 / Math.max(0.1, stats.attackSpeed),
       skills,
       recoveries: [],
@@ -805,13 +805,13 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     player.evadeChance = stats.evadeChance / 100;
     player.moveSpeed = stats.moveSpeed / 45 * 34;
     runtime.attackDamage = stats.attackDamage;
-    runtime.focusRegen = this.arenaBalance.focusRegen;
+    runtime.focusRegen = resolveArenaFocusRegen(stats.focusRegen, this.arenaBalance.arenaModifiers).value;
     runtime.basicAttackCooldownMilliseconds = 1_000 / Math.max(0.1, stats.attackSpeed);
     runtime.skills = {
-      nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, current.profile.character.skillLevels.nova),
-      dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, current.profile.character.skillLevels.dash),
-      ward: resolveSkillDefinition(ACTIVE_SKILLS.ward, current.profile.character.skillLevels.ward),
-      flameWave: resolveSkillDefinition(ACTIVE_SKILLS.flameWave, current.profile.character.skillLevels.flameWave),
+      nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, current.profile.character.skillLevels.nova, stats.skillCooldown),
+      dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, current.profile.character.skillLevels.dash, stats.skillCooldown),
+      ward: resolveSkillDefinition(ACTIVE_SKILLS.ward, current.profile.character.skillLevels.ward, stats.skillCooldown),
+      flameWave: resolveSkillDefinition(ACTIVE_SKILLS.flameWave, current.profile.character.skillLevels.flameWave, stats.skillCooldown),
     };
     runtime.dashCharges = Math.min(runtime.dashCharges, runtime.skills.dash.maxCharges);
     client.send(SERVER_MESSAGES.profileUpdated, current);

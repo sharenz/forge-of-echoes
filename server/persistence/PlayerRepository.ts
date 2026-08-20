@@ -1,4 +1,5 @@
 import type { CharacterClassId, PlayerProfile } from "../../app/game/domain";
+import type { MerchantId } from "../../app/game/config/merchants";
 
 export interface PlayerIdentity {
   accountId: string;
@@ -18,6 +19,7 @@ export interface CharacterRosterEntry extends PlayerIdentity {
 export interface AccountIdentity {
   accountId: string;
   handle: string;
+  merchantEntitlements: MerchantId[];
 }
 
 export interface AuthoritativeProfile {
@@ -38,6 +40,7 @@ export interface PlayerRepository {
   createCharacter(accountId: string, input: Omit<CreatePlayerInput, "handle">): Promise<PlayerIdentity>;
   findAccountCharacter(accountId: string, characterId: string): Promise<PlayerIdentity | null>;
   findCharacter(characterId: string): Promise<CharacterSummary | null>;
+  listMerchantEntitlementsForCharacter(characterId: string): Promise<MerchantId[]>;
   loadProfile(characterId: string): Promise<AuthoritativeProfile | null>;
   saveProfile(characterId: string, expectedRevision: number, profile: PlayerProfile): Promise<AuthoritativeProfile>;
   close(): Promise<void>;

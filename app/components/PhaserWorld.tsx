@@ -5,6 +5,7 @@ import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import { FLASK_DEFINITIONS } from "../game/config/flasks";
 import { MAP_MODIFIERS } from "../game/config/maps";
+import type { MerchantId } from "../game/config/merchants";
 import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "../game/config/progression";
 import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, MapItem, StatKey, StatModifier } from "../game/domain";
 import { mapModifierDescription, mapModifierRewardDescription } from "../game/maps";
@@ -18,6 +19,7 @@ interface PhaserWorldProps {
   mode: WorldMode;
   classId: CharacterClassId;
   portalIndexes?: readonly number[];
+  merchantIds?: readonly MerchantId[];
   paused?: boolean;
   controlsBlocked?: boolean;
   arenaBalance?: ArenaBalance;
@@ -48,9 +50,10 @@ function compactNumber(value: number): string {
 }
 
 function contributionAmount(modifier: StatModifier): string {
-  const value = compactNumber(modifier.value);
-  if (modifier.mode === "flat") return `${modifier.value >= 0 ? "+" : ""}${value}`;
-  return `${modifier.value >= 0 ? "+" : ""}${value}% ${modifier.mode}`;
+  const value = compactNumber(Math.abs(modifier.value));
+  if (modifier.mode === "flat") return `${modifier.value >= 0 ? "+" : "-"}${value}`;
+  if (modifier.mode === "increased") return `${value}% ${modifier.value >= 0 ? "increased" : "reduced"}`;
+  return `${value}% ${modifier.value >= 0 ? "more" : "less"}`;
 }
 
 interface ResourceGlobeProps {
@@ -92,8 +95,8 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
           </div>
           <footer>
             <span>{compactNumber(resolution.flat)} flat</span>
-            <span>{compactNumber(resolution.increased)}% increased</span>
-            {resolution.more.length > 0 && <span>{resolution.more.map((value) => `${compactNumber(value)}% more`).join(" × ")}</span>}
+            <span>{compactNumber(Math.abs(resolution.increased))}% {resolution.increased >= 0 ? "increased" : "reduced"}</span>
+            {resolution.more.length > 0 && <span>{resolution.more.map((value) => `${compactNumber(Math.abs(value))}% ${value >= 0 ? "more" : "less"}`).join(" × ")}</span>}
           </footer>
         </div>
       )}
@@ -103,7 +106,7 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
 
 const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null, null];
 
-export function PhaserWorld({ mode, classId, portalIndexes = [], paused = false, controlsBlocked = false, arenaBalance, activeMap, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onReturnToHideout, onFlaskLoad, onItemDropToGround, onFinalRageChange, multiplayer, children }: PhaserWorldProps) {
+export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [], paused = false, controlsBlocked = false, arenaBalance, activeMap, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onReturnToHideout, onFlaskLoad, onItemDropToGround, onFinalRageChange, multiplayer, children }: PhaserWorldProps) {
   const runtimeClassId = classId;
   const novaLevel = characterProgress?.skillLevels.nova ?? 1;
   const dashLevel = characterProgress?.skillLevels.dash ?? 1;
@@ -115,6 +118,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], paused = false,
   const returnToHideoutCallbackRef = useRef(onReturnToHideout);
   const flaskBeltRef = useRef(flaskBelt);
   const portalIndexesRef = useRef([...portalIndexes]);
+  const merchantIdsKey = merchantIds.join("|");
   const skillLevelsRef = useRef({ nova: novaLevel, dash: dashLevel, ward: wardLevel, flameWave: flameWaveLevel });
   const pausedRef = useRef(paused);
   const controlsBlockedRef = useRef(controlsBlocked);
@@ -181,6 +185,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], paused = false,
         mode,
         classId: runtimeClassId,
         portalIndexes: portalIndexesRef.current,
+        merchantIds: merchantIdsKey ? merchantIdsKey.split("|") as MerchantId[] : [],
         paused: pausedRef.current,
         controlsBlocked: controlsBlockedRef.current,
         skillLevels: skillLevelsRef.current,
@@ -208,12 +213,13 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], paused = false,
       runtimeRef.current = null;
       parent.replaceChildren();
     };
-  }, [mode, multiplayer, runtimeClassId]);
+  }, [merchantIdsKey, mode, multiplayer, runtimeClassId]);
 
-  const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel);
-  const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel);
-  const resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, wardLevel);
-  const resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, flameWaveLevel);
+  const cooldownMultiplier = characterStats?.skillCooldown ?? 1;
+  const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel, cooldownMultiplier);
+  const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel, cooldownMultiplier);
+  const resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, wardLevel, cooldownMultiplier);
+  const resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, flameWaveLevel, cooldownMultiplier);
   const novaReady = Boolean(hud && hud.novaCooldown <= 0.05 && hud.focus >= resolvedNova.focusCost);
   const riftReady = Boolean(hud && hud.riftCharges > 0 && hud.focus >= resolvedDash.focusCost);
   const wardReady = Boolean(hud && hud.wardCooldown <= 0.05 && hud.focus >= resolvedWard.focusCost);
@@ -390,6 +396,8 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], paused = false,
               <CharacterStatRow stat="maxFocus" label="Focus" hint="Mana" value={`${mode === "arena" && hud ? `${Math.floor(hud.focus)} / ` : ""}${Math.round(characterStats.maxFocus)}`} resolution={characterStatBreakdown?.maxFocus} />
               <CharacterStatRow stat="attackDamage" label="Damage" value={characterStats.attackDamage.toFixed(1)} resolution={characterStatBreakdown?.attackDamage} />
               <CharacterStatRow stat="attackSpeed" label="Attack speed" value={`${characterStats.attackSpeed.toFixed(2)}/s`} resolution={characterStatBreakdown?.attackSpeed} />
+              <CharacterStatRow stat="focusRegen" label="Focus regen" hint="Mana per second" value={`${characterStats.focusRegen.toFixed(1)}/s`} resolution={characterStatBreakdown?.focusRegen} />
+              <CharacterStatRow stat="skillCooldown" label="Skill cooldown" value={`${(characterStats.skillCooldown * 100).toFixed(0)}%`} resolution={characterStatBreakdown?.skillCooldown} />
               <CharacterStatRow stat="armor" label="Armor" value={`${Math.round(characterStats.armor)}`} resolution={characterStatBreakdown?.armor} />
               <CharacterStatRow stat="evadeChance" label="Evade" value={`${characterStats.evadeChance.toFixed(1)}%`} resolution={characterStatBreakdown?.evadeChance} />
               <CharacterStatRow stat="moveSpeed" label="Move speed" value={`${Math.round(characterStats.moveSpeed)}`} resolution={characterStatBreakdown?.moveSpeed} />

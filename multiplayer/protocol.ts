@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CharacterClassId, DamageType, MonsterRarity, PlayerProfile } from "../app/game/domain";
 import type { MonsterArchetypeId } from "../app/game/config/monsters";
+import { MERCHANTS, type MerchantId } from "../app/game/config/merchants";
 
 export const MULTIPLAYER_LIMITS = {
   playersPerRoom: 4,
@@ -224,6 +225,7 @@ export const selectCharacterRequestSchema = z.object({
 }).strict();
 
 const itemIdSchema = z.string().uuid();
+const merchantIdSchema = z.enum(Object.keys(MERCHANTS) as [MerchantId, ...MerchantId[]]);
 const characterEquipmentSlotSchema = z.enum([
   "helmet", "mainHand", "offHand", "amulet", "ringLeft", "ringRight", "chest", "gloves", "boots", "belt",
 ]);
@@ -249,12 +251,8 @@ export const profileCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("remove_map") }).strict(),
   z.object({ type: z.literal("apply_currency"), currencyItemId: itemIdSchema, targetItemId: itemIdSchema }).strict(),
   z.object({
-    type: z.literal("buy_map"),
-    offerId: z.string().trim().min(1).max(64),
-    position: z.object({ x: z.number().int().min(0).max(11), y: z.number().int().min(0).max(4) }).strict().optional(),
-  }).strict(),
-  z.object({
-    type: z.literal("buy_flask"),
+    type: z.literal("buy_merchant_offer"),
+    merchantId: merchantIdSchema,
     offerId: z.string().trim().min(1).max(64),
     position: z.object({ x: z.number().int().min(0).max(11), y: z.number().int().min(0).max(4) }).strict().optional(),
   }).strict(),

@@ -16,6 +16,8 @@ export type DerivedStatKey =
   | "moveSpeed"
   | "attackDamage"
   | "attackSpeed"
+  | "focusRegen"
+  | "skillCooldown"
   | "armor"
   | "evadeChance";
 export type StatKey = AttributeKey | DerivedStatKey;
@@ -75,6 +77,8 @@ export interface EquipmentItem {
   id: string;
   baseId: string;
   baseName: string;
+  /** Optional authored name for unique or fixed equipment. */
+  displayName?: string;
   slot: EquipmentSlot;
   rarity: Rarity;
   itemLevel: number;
@@ -192,6 +196,10 @@ export interface CharacterStats {
   moveSpeed: number;
   attackDamage: number;
   attackSpeed: number;
+  /** Focus (mana) recovered per second before map modifiers. */
+  focusRegen: number;
+  /** Multiplier applied to active-skill cooldown and charge-recovery durations. */
+  skillCooldown: number;
   armor: number;
   evadeChance: number;
 }

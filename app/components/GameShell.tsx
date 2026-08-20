@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTER_CLASSES } from "../game/config/classes";
 import { XP_BY_LEVEL } from "../game/config/progression";
+import { MERCHANTS, availableMerchantIds, isMerchantId, type MerchantId } from "../game/config/merchants";
 import { buildArenaBalance } from "../game/combat";
 import type { ActiveSkillId, AttributeKey, CharacterClassId, CharacterEquipmentSlot, ItemContainerId } from "../game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts } from "../game/equipment";
@@ -15,7 +16,7 @@ import { AttributesPanel } from "./AttributesPanel";
 import { GameNotification } from "./GameNotification";
 import { InventoryPanel } from "./InventoryPanel";
 import { MapWorkshop } from "./MapWorkshop";
-import { MapMerchant } from "./MapMerchant";
+import { MerchantPanel } from "./MerchantPanel";
 import { HideoutSoundtrack, MapSoundtrack, MenuSoundtrack } from "./MenuSoundtrack";
 import { PhaserWorld } from "./PhaserWorld";
 import { SkillTreePanel } from "./SkillTreePanel";
@@ -67,6 +68,11 @@ export function GameShell() {
   const [notice, setNotice] = useState<string | null>(null);
   const [mapFinalRageActive, setMapFinalRageActive] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(true);
+  const [activeMerchantId, setActiveMerchantId] = useState<MerchantId>("cartographer-rook");
+  const merchantIds = useMemo(
+    () => availableMerchantIds(multiplayer.account?.account.merchantEntitlements ?? []),
+    [multiplayer.account?.account.merchantEntitlements],
+  );
   const authoritative = multiplayer.authoritativeProfile;
   const profile = authoritative?.profile ?? null;
   const statCalculation = useMemo(() => profile ? calculateCharacterStats(profile) : null, [profile]);
@@ -248,7 +254,13 @@ export function GameShell() {
     if (station === "stash") setPanel("stash");
     if (station === "bench") setPanel("inventory");
     if (station === "map-device") setPanel("maps");
-    if (station === "merchant") setPanel("merchant");
+    if (station.startsWith("merchant:")) {
+      const merchantId = station.slice("merchant:".length);
+      if (isMerchantId(merchantId) && merchantIds.includes(merchantId)) {
+        setActiveMerchantId(merchantId);
+        setPanel("merchant");
+      }
+    }
     if (station === "portal") {
       setPanel(null);
       if (portalIndex !== undefined) void multiplayer.enterMap(portalIndex);
@@ -342,7 +354,7 @@ export function GameShell() {
   return (
     <>
       <HideoutSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
-      <PhaserWorld mode="hideout" classId={profile.character.classId!} portalIndexes={availablePortalIndexes} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation.breakdown} flaskBelt={profile.flaskBelt} onFlaskLoad={onlineLoadFlask} onStation={handleStation} multiplayer={multiplayer.adapter}>
+      <PhaserWorld mode="hideout" classId={profile.character.classId!} portalIndexes={availablePortalIndexes} merchantIds={merchantIds} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation.breakdown} flaskBelt={profile.flaskBelt} onFlaskLoad={onlineLoadFlask} onStation={handleStation} multiplayer={multiplayer.adapter}>
       <header className="hideout-hud">
         <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
         <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId!.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Server · Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId!].name}</small></div></div>
@@ -362,9 +374,9 @@ export function GameShell() {
       {panel && (
         <div className={`world-panel-backdrop ${isCharacterPanel(panel) ? "character-interface-backdrop" : ""}`}>
           <section className={`world-panel panel-${panel} ${isCharacterPanel(panel) ? "character-panel" : ""}`}>
-            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "maps" ? "Map device" : panel === "merchant" ? "Maps and supplies" : panel === "multiplayer" ? "Authoritative online realm" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Rook's Shop" : panel === "multiplayer" ? "Multiplayer" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
+            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "maps" ? "Map device" : panel === "merchant" ? MERCHANTS[activeMerchantId].title : panel === "multiplayer" ? "Authoritative online realm" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? `${MERCHANTS[activeMerchantId].name}'s Shop` : panel === "multiplayer" ? "Multiplayer" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
             {panel === "maps" && <MapWorkshop profile={profile} slottedMap={profile.mapDevice} activeMap={activeMap} portalsRemaining={availablePortalIndexes.length} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onMoveItem={onlineMoveItem} onSlot={(itemId) => void multiplayer.executeProfileCommand({ type: "slot_map", itemId })} onRemove={() => void multiplayer.executeProfileCommand({ type: "remove_map" })} onOpen={onlineOpenMap} />}
-            {panel === "merchant" && <MapMerchant profile={profile} scrap={currencies.scrap} selectedItemId={effectiveSelectedItemId} onSelectItem={setSelectedItemId} onMoveItem={onlineMoveItem} onBuyMap={(offerId, position) => void multiplayer.executeProfileCommand({ type: "buy_map", offerId, position })} onBuyFlask={(offerId, position) => void multiplayer.executeProfileCommand({ type: "buy_flask", offerId, position })} />}
+            {panel === "merchant" && <MerchantPanel merchantId={activeMerchantId} profile={profile} currencies={currencies} selectedItemId={effectiveSelectedItemId} onSelectItem={setSelectedItemId} onMoveItem={onlineMoveItem} onBuy={(merchantId, offerId, position) => void multiplayer.executeProfileCommand({ type: "buy_merchant_offer", merchantId, offerId, position })} />}
             {panel === "multiplayer" && <MultiplayerPanel controller={multiplayer} onOpenMapDevice={() => setPanel("maps")} onPartyEntered={() => setPanel(null)} />}
             {(panel === "inventory" || panel === "stash") && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onApplyCurrency={onlineApplyCurrency} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
             {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation.breakdown} onAllocate={onlineAllocateAttribute} />}

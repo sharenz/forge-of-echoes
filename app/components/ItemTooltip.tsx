@@ -30,6 +30,8 @@ const STAT_PRESENTATION: Record<keyof CharacterStats, { label: string; decimals:
   maxFocus: { label: "Maximum Focus", decimals: 0 },
   attackDamage: { label: "Attack Damage", decimals: 1 },
   attackSpeed: { label: "Attack Speed", decimals: 2, suffix: "/s" },
+  focusRegen: { label: "Focus Recovery", decimals: 1, suffix: "/s" },
+  skillCooldown: { label: "Skill Cooldown", decimals: 2, suffix: "×" },
   armor: { label: "Armor", decimals: 0 },
   evadeChance: { label: "Evade Chance", decimals: 1, suffix: "%" },
   moveSpeed: { label: "Movement Speed", decimals: 0 },

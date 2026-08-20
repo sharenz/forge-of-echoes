@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { Pool, type PoolClient } from "pg";
+import { isMerchantId, type MerchantId } from "../../app/game/config/merchants";
 import type { ActiveSkillId, CharacterClassId, CharacterEquipmentSlot, InventoryItem, PlayerProfile, StashTab } from "../../app/game/domain";
 import { createAuthoritativeProfile } from "../domain/profile";
 import { AccountNotFoundError, CharacterNameTakenError, CharacterNotFoundError, ItemLockedError, ProfileRevisionConflict } from "./errors";
@@ -122,7 +123,11 @@ export class PostgresPlayerRepository implements PlayerRepository {
        RETURNING id, handle`,
       [rawHandle.trim().toLowerCase()],
     );
-    return { accountId: result.rows[0].id, handle: result.rows[0].handle };
+    return {
+      accountId: result.rows[0].id,
+      handle: result.rows[0].handle,
+      merchantEntitlements: await this.listMerchantEntitlementsForAccount(result.rows[0].id),
+    };
   }
 
   async listCharacters(accountId: string): Promise<CharacterRosterEntry[]> {
@@ -179,6 +184,26 @@ export class PostgresPlayerRepository implements PlayerRepository {
       [characterId],
     );
     return result.rows[0] ? rosterEntry(result.rows[0]) : null;
+  }
+
+  async listMerchantEntitlementsForCharacter(characterId: string): Promise<MerchantId[]> {
+    const result = await this.pool.query<{ merchant_id: string }>(
+      `SELECT entitlements.merchant_id
+       FROM account_merchant_entitlements AS entitlements
+       INNER JOIN characters ON characters.account_id = entitlements.account_id
+       WHERE characters.id = $1
+       ORDER BY entitlements.merchant_id`,
+      [characterId],
+    );
+    return result.rows.map((row) => row.merchant_id).filter(isMerchantId);
+  }
+
+  private async listMerchantEntitlementsForAccount(accountId: string): Promise<MerchantId[]> {
+    const result = await this.pool.query<{ merchant_id: string }>(
+      "SELECT merchant_id FROM account_merchant_entitlements WHERE account_id = $1 ORDER BY merchant_id",
+      [accountId],
+    );
+    return result.rows.map((row) => row.merchant_id).filter(isMerchantId);
   }
 
   async loadProfile(characterId: string): Promise<AuthoritativeProfile | null> {

@@ -1,9 +1,10 @@
 import type { ArenaBalance } from "../game/combat";
 import type { CharacterClassId, FlaskBelt, InventoryItem, SkillLevels } from "../game/domain";
+import type { MerchantId } from "../game/config/merchants";
 import type { CombatEvent } from "../../multiplayer/protocol";
 
 export type WorldMode = "login" | "character-create" | "loading" | "hideout" | "arena";
-export type WorldStation = "stash" | "bench" | "map-device" | "merchant" | "portal";
+export type WorldStation = "stash" | "bench" | "map-device" | "portal" | `merchant:${MerchantId}`;
 
 export interface NetworkPlayerView {
   characterId: string;
@@ -101,6 +102,7 @@ export interface WorldRuntimeOptions {
   mode: WorldMode;
   classId: CharacterClassId;
   portalIndexes: number[];
+  merchantIds: MerchantId[];
   paused: boolean;
   controlsBlocked?: boolean;
   skillLevels: SkillLevels;

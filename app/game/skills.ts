@@ -12,7 +12,7 @@ export interface ResolvedSkillDefinition extends SkillDefinition {
   damageReduction: number;
 }
 
-export function resolveSkillDefinition(definition: SkillDefinition, requestedLevel: number): ResolvedSkillDefinition {
+export function resolveSkillDefinition(definition: SkillDefinition, requestedLevel: number, cooldownMultiplier = 1): ResolvedSkillDefinition {
   const maxLevel = definition.progression?.maxLevel ?? 1;
   const level = Math.min(maxLevel, Math.max(1, Math.floor(requestedLevel)));
   const levelsAfterFirst = level - 1;
@@ -37,10 +37,10 @@ export function resolveSkillDefinition(definition: SkillDefinition, requestedLev
     maxCharges: Math.max(0, (definition.maxCharges ?? 0) + Math.floor(level / (definition.progression?.chargeEveryLevels ?? Number.POSITIVE_INFINITY))),
     recharge: definition.recharge === undefined
       ? 0
-      : Math.max(0.1, definition.recharge + (definition.progression?.rechargePerLevel ?? 0) * levelsAfterFirst),
+      : Math.max(0.1, (definition.recharge + (definition.progression?.rechargePerLevel ?? 0) * levelsAfterFirst) * cooldownMultiplier),
     cooldown: definition.cooldown === undefined
       ? 0
-      : Math.max(0.1, definition.cooldown + (definition.progression?.cooldownPerLevel ?? 0) * levelsAfterFirst),
+      : Math.max(0.1, (definition.cooldown + (definition.progression?.cooldownPerLevel ?? 0) * levelsAfterFirst) * cooldownMultiplier),
     duration: Math.max(0, (definition.duration ?? 0) + (definition.progression?.durationPerLevel ?? 0) * levelsAfterFirst),
     damageReduction: Math.min(80, Math.max(0, (definition.damageReduction ?? 0) + (definition.progression?.damageReductionPerLevel ?? 0) * levelsAfterFirst)),
   };

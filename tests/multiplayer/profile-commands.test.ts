@@ -55,7 +55,8 @@ test("profile protocol rejects client-authored item data and unsupported command
   assert.equal(profileCommandSchema.safeParse({ type: "grant_item", baseId: "god-sword" }).success, false);
   assert.equal(profileCommandSchema.safeParse({ type: "craft_map", action: "dust" }).success, false);
   assert.equal(profileCommandSchema.safeParse({ type: "craft_equipment", action: "essence", itemId: "00000000-0000-4000-8000-000000000000" }).success, false);
-  assert.equal(profileCommandSchema.safeParse({ type: "buy_map", offerId: "free-ashen-t1", position: { x: 0, y: 5 } }).success, false);
+  assert.equal(profileCommandSchema.safeParse({ type: "buy_merchant_offer", merchantId: "cartographer-rook", offerId: "free-ashen-t1", position: { x: 0, y: 5 } }).success, false);
+  assert.equal(profileCommandSchema.safeParse({ type: "buy_merchant_offer", merchantId: "client-invented", offerId: "god-item" }).success, false);
   assert.equal(profileCommandSchema.safeParse({
     type: "apply_currency",
     currencyItemId: "00000000-0000-4000-8000-000000000000",
@@ -75,13 +76,13 @@ test("online merchant and backpack crafting create only server-owned UUID items"
     const initialMapCount = initial.profile.inventory.entries.filter((entry) => entry.item.kind === "map").length;
     const purchasePosition = findFirstFit(initial.profile.inventory, createMap(1, "ashen-crucible"));
     assert.ok(purchasePosition);
-    const boughtMap = await service.execute(identity.characterId, initial.revision, { type: "buy_map", offerId: "free-ashen-t1", position: purchasePosition });
+    const boughtMap = await service.execute(identity.characterId, initial.revision, { type: "buy_merchant_offer", merchantId: "cartographer-rook", offerId: "free-ashen-t1", position: purchasePosition });
     const maps = boughtMap.profile.inventory.entries.filter((entry) => entry.item.kind === "map");
     assert.equal(maps.length, initialMapCount + 1);
     assert.match(maps.at(-1)!.item.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     assert.deepEqual({ x: maps.at(-1)!.x, y: maps.at(-1)!.y }, purchasePosition);
 
-    const boughtFlask = await service.execute(identity.characterId, boughtMap.revision, { type: "buy_flask", offerId: "weak-health-supply" });
+    const boughtFlask = await service.execute(identity.characterId, boughtMap.revision, { type: "buy_merchant_offer", merchantId: "cartographer-rook", offerId: "weak-health-supply" });
     const flask = boughtFlask.profile.inventory.entries.find((entry) => entry.item.kind === "flask")?.item;
     assert.ok(flask);
     assert.match(flask.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
@@ -100,6 +101,36 @@ test("online merchant and backpack crafting create only server-owned UUID items"
     assert.equal(craftedMap.modifiers.length, 2);
     assert.equal(dustAfter?.kind === "currency" ? dustAfter.stackSize : 0, dustBefore - 1);
     assert.equal(crafted.profile.mapDevice, null);
+  } finally {
+    await repository.close();
+  }
+});
+
+test("debug merchant purchases require a server-side account entitlement shared by every character", async () => {
+  const repository = new InMemoryPlayerRepository();
+  await repository.initialize();
+  try {
+    const first = await createTestPlayer(repository, { handle: "debug-account", characterName: "First", classId: "sorceress" });
+    const second = await repository.createCharacter(first.accountId, { characterName: "Second", classId: "sorceress" });
+    const service = new ProfileCommandService(repository);
+    const initial = await repository.loadProfile(first.characterId);
+    assert.ok(initial);
+    await assert.rejects(
+      () => service.execute(first.characterId, initial.revision, { type: "buy_merchant_offer", merchantId: "debug-artificer", offerId: "impossible-haste-ring" }),
+      (error) => error instanceof ProfileCommandError && error.code === "invalid_command",
+    );
+
+    repository.grantMerchantEntitlement(first.accountId, "debug-artificer");
+    for (const characterId of [first.characterId, second.characterId]) {
+      const before = await repository.loadProfile(characterId);
+      assert.ok(before);
+      const bought = await service.execute(characterId, before.revision, {
+        type: "buy_merchant_offer", merchantId: "debug-artificer", offerId: "impossible-haste-ring",
+      });
+      const ring = bought.profile.inventory.entries.find((entry) => entry.item.kind === "equipment" && entry.item.displayName === "Impossible Haste Ring")?.item;
+      assert.ok(ring?.kind === "equipment");
+      assert.equal(ring.affixes[0].rolls[0].value, 10_000);
+    }
   } finally {
     await repository.close();
   }

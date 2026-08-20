@@ -46,6 +46,7 @@ export interface ArenaBalance {
   moveSpeed: number;
   attackDamage: number;
   attackSpeed: number;
+  skillCooldown: number;
   armor: number;
   evadeChance: number;
   focusRegen: number;
@@ -228,9 +229,7 @@ export function buildArenaBalance(profile: PlayerProfile, map?: MapItem): ArenaB
     "Map quality",
   );
   const arenaModifiers = [...tierModifiers, ...mapModifiers, qualityModifier];
-  const focusRegenBreakdown = resolveArenaStat("focusRegen", [
-    flatArenaModifier("focusRegen", ARENA_RULES.baseFocusRegen, "arena:base-focus-regen", "Base Focus recovery rate"),
-  ], arenaModifiers);
+  const focusRegenBreakdown = resolveArenaFocusRegen(stats.focusRegen, arenaModifiers);
 
   return {
     waves: ARENA_RULES.totalWaves,
@@ -241,6 +240,7 @@ export function buildArenaBalance(profile: PlayerProfile, map?: MapItem): ArenaB
     moveSpeed: stats.moveSpeed / 45,
     attackDamage: stats.attackDamage,
     attackSpeed: stats.attackSpeed,
+    skillCooldown: stats.skillCooldown,
     armor: stats.armor,
     evadeChance: stats.evadeChance,
     focusRegen: focusRegenBreakdown.value,
@@ -248,4 +248,13 @@ export function buildArenaBalance(profile: PlayerProfile, map?: MapItem): ArenaB
     arenaModifiers,
     waveStats: Array.from({ length: ARENA_RULES.totalWaves }, (_, index) => buildWaveBalance(index + 1, tier, arenaModifiers)),
   };
+}
+
+export function resolveArenaFocusRegen(
+  characterFocusRegen: number,
+  arenaModifiers: readonly StatModifier<ArenaStatKey>[],
+): StatResolution<ArenaStatKey> {
+  return resolveArenaStat("focusRegen", [
+    flatArenaModifier("focusRegen", characterFocusRegen, "character:resolved-focus-regen", "Character Focus recovery rate"),
+  ], arenaModifiers);
 }
