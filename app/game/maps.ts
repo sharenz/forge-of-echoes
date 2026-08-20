@@ -38,6 +38,12 @@ export function addMapModifier(map: MapItem, kind: "threat" | "reward"): MapItem
   return { ...map, modifiers, rarity: rarityForCount(modifiers.length) };
 }
 
+export function canAddMapModifier(map: MapItem, kind: "threat" | "reward"): boolean {
+  return !map.corrupted
+    && map.modifiers.length < MAP_RARITY_LIMITS.rare
+    && (Object.keys(MAP_MODIFIERS) as MapModifierId[]).some((id) => MAP_MODIFIERS[id].kind === kind && !map.modifiers.includes(id));
+}
+
 export function rerollMap(map: MapItem): MapItem {
   if (map.corrupted) return map;
   const targetCount = map.modifiers.length === 0 ? 2 : map.modifiers.length;

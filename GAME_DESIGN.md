@@ -236,7 +236,7 @@ Design rules:
 - Avoid affixes whose only function is to make every item worse.
 - Powerful affixes may carry opportunity costs or belong to exclusive groups.
 - Top tiers should be rare, but lower tiers must remain useful while leveling.
-- The crafting UI must always show possible outcomes and exact odds when knowable.
+- Crafting happens directly in the backpack: right-click a currency stack to hold it, then left-click a compatible item to apply it. Tooltips must explain possible outcomes and exact odds when knowable.
 
 ### Numerical engine contract
 
@@ -347,7 +347,7 @@ Knowledge unlocks options, not raw power, so veteran players gain breadth withou
 
 Every endgame map exists as a physical, craftable item in the player's inventory. A map item is consumed when its arena is opened.
 
-The hideout map device has exactly one map slot. A player moves one map from the backpack into that slot, crafts the slotted item if desired, then presses **Open Map**. Opening consumes only that slotted map and creates the portal. Closing the device or removing the map returns it unchanged to the backpack.
+The hideout map device has exactly one map slot. Maps are crafted in the backpack with the same currency-on-item interaction as equipment, then moved into the device and opened. Opening consumes only that slotted map and creates the portal. Closing the device or removing the map returns it unchanged to the backpack.
 
 A hideout map merchant guarantees access to the endgame loop. The basic tier-1 map is always free, preventing a player from becoming map-locked. Higher-tier merchant maps cost Scrap from the player's real currency stacks; offers, tiers, bases, and prices are data-driven merchant config.
 
@@ -386,7 +386,7 @@ Map tier controls monster level, affix tier access, possible bosses, and the ite
 
 ### Crafting maps
 
-Map crafting follows the same readable philosophy as equipment crafting, but uses a small set of dedicated cartography materials so players do not have to choose between improving their character and accessing content.
+Map crafting uses the same right-click-currency, left-click-item interaction as equipment crafting, but has dedicated cartography materials so players do not have to choose between improving their character and accessing content.
 
 - **Map Dust:** changes rarity or rerolls map affixes.
 - **Threat Glyph:** adds a modifier from a visible danger family such as density, elites, hazards, or bosses.

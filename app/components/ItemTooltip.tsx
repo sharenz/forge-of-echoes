@@ -39,6 +39,10 @@ function statNumber(value: number, decimals: number): string {
   return value.toFixed(decimals).replace(/\.0+$/, "");
 }
 
+function affixTagLabel(tag: string): string {
+  return `${tag.charAt(0).toUpperCase()}${tag.slice(1)}`;
+}
+
 function statValue(delta: EquipmentStatDelta, key: "current" | "candidate"): string {
   const presentation = STAT_PRESENTATION[delta.stat];
   const decimals = Math.max(presentation.decimals, Math.abs(delta.delta) < 1 ? 2 : Number.isInteger(delta.delta) ? 0 : 1);
@@ -91,8 +95,11 @@ function EquipmentTooltipCard({ item, showRollRanges, heading, comparison, hint 
         {item.affixes.length > 0
           ? item.affixes.map((affix) => (
             <div key={affix.id}>
-              <i>T{affix.tier}</i>
-              <b>{affix.rolls.map((roll) => formatModifierWithRollRange(roll, showRollRanges)).join(" · ")}</b>
+              <i>T{affix.tier}{showRollRanges ? ":" : ""}</i>
+              <b>
+                {affix.rolls.map((roll) => formatModifierWithRollRange(roll, showRollRanges)).join(" · ")}
+                {showRollRanges && <span className="tooltip-affix-classification"> [Affix - {affixTagLabel(affix.tag)}]</span>}
+              </b>
             </div>
           ))
           : <small>No explicit modifiers</small>}
@@ -144,6 +151,7 @@ export function ItemTooltip({ item, profile, x, y, hint }: ItemTooltipProps) {
         <strong>{definition.name}</strong>
         <em>{item.stackSize} / {definition.maxStackSize} per stack</em>
         <div className="tooltip-implicit">{definition.description}</div>
+        {hint && <small>{hint}</small>}
       </aside>,
       document.body,
     );
@@ -179,6 +187,7 @@ export function ItemTooltip({ item, profile, x, y, hint }: ItemTooltipProps) {
             : <small>No explicit modifiers</small>}
         </div>
         <footer><span>Danger {mapDanger(item)} · +{mapStats.monsterCount}% monsters</span><strong>+{mapStats.itemQuantity}% quantity · +{mapStats.itemRarity}% rarity</strong></footer>
+        {hint && <small>{hint}</small>}
       </aside>,
       document.body,
     );

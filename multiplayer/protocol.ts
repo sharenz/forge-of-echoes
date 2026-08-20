@@ -247,10 +247,17 @@ export const profileCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create_stash_tab") }).strict(),
   z.object({ type: z.literal("slot_map"), itemId: itemIdSchema }).strict(),
   z.object({ type: z.literal("remove_map") }).strict(),
-  z.object({ type: z.literal("craft_equipment"), itemId: itemIdSchema, action: z.enum(["scrap", "essence"]) }).strict(),
-  z.object({ type: z.literal("craft_map"), action: z.enum(["dust", "threat", "reward"]) }).strict(),
-  z.object({ type: z.literal("buy_map"), offerId: z.string().trim().min(1).max(64) }).strict(),
-  z.object({ type: z.literal("buy_flask"), offerId: z.string().trim().min(1).max(64) }).strict(),
+  z.object({ type: z.literal("apply_currency"), currencyItemId: itemIdSchema, targetItemId: itemIdSchema }).strict(),
+  z.object({
+    type: z.literal("buy_map"),
+    offerId: z.string().trim().min(1).max(64),
+    position: z.object({ x: z.number().int().min(0).max(11), y: z.number().int().min(0).max(4) }).strict().optional(),
+  }).strict(),
+  z.object({
+    type: z.literal("buy_flask"),
+    offerId: z.string().trim().min(1).max(64),
+    position: z.object({ x: z.number().int().min(0).max(11), y: z.number().int().min(0).max(4) }).strict().optional(),
+  }).strict(),
 ]);
 
 export type ProfileCommand = z.infer<typeof profileCommandSchema>;

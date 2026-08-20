@@ -19,6 +19,7 @@ import { canPlaceItem, consumeContainerCurrency, containerItems, createItemConta
 import { compareEquipmentToCurrent } from "../app/game/item-comparison";
 import { storePickedUpItem, takeProfileItem } from "../app/game/item-drop";
 import {
+  canCreateAffixForItem,
   createAffixForItem,
   eligibleAffixTiers,
   generateStarterWeapon,
@@ -37,6 +38,7 @@ import { allocateAttributePoint, allocateSkillPoint, grantCharacterExperience, g
 import { resolveSkillDefinition } from "../app/game/skills";
 import { MAP_COMPLETION_REWARDS } from "../app/game/config/rewards";
 import { createMapCompletionRewards } from "../app/game/rewards";
+import { applyBackpackCurrency, canApplyCraftingCurrency, craftingTargetError } from "../app/game/crafting";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -239,6 +241,35 @@ test("currency stacks obey their configured maximum and overflow into a new stac
   assert.equal(CURRENCY_DEFINITIONS.scrap.maxStackSize, 40);
   assert.deepEqual(scrapStacks.map((item) => item.stackSize), [40, 2]);
   assert.equal(countCurrency(containerItems(stacked.container), "scrap"), 42);
+});
+
+test("crafting applies the selected currency stack directly to a compatible backpack item", () => {
+  const equipment = generateStarterWeapon("sorceress");
+  const scrap = createCurrencyStack("scrap", 2);
+  const inventory = createItemContainer("backpack", [scrap, equipment]);
+  const crafted = applyBackpackCurrency(inventory, scrap.id, equipment.id);
+  assert.ok(crafted);
+
+  const remainingScrap = crafted.entries.find((entry) => entry.item.id === scrap.id)?.item;
+  const craftedEquipment = crafted.entries.find((entry) => entry.item.id === equipment.id)?.item;
+  assert.equal(remainingScrap?.kind === "currency" ? remainingScrap.stackSize : 0, 1);
+  assert.ok(craftedEquipment?.kind === "equipment");
+  assert.equal(craftedEquipment.stability, equipment.stability - 1);
+  assert.equal(canApplyCraftingCurrency("mapDust", equipment), false);
+  assert.equal(applyBackpackCurrency(inventory, scrap.id, scrap.id), null);
+});
+
+test("ember essence rejects an item when its only eligible fire affix group is already present", () => {
+  const fireAffix = createAffixForItem({ slot: "ring", itemLevel: 10, affixes: [] }, "fire", () => 0);
+  assert.ok(fireAffix);
+  const ring = {
+    kind: "equipment", id: "scorching-ring", baseId: "ember-ring", baseName: "Ember Ring", slot: "ring", rarity: "magic", itemLevel: 10,
+    stability: 3, maxStability: 8, implicit: "+8 maximum Focus", baseStats: [], implicitModifiers: [], affixes: [fireAffix],
+  } satisfies EquipmentItem;
+
+  assert.equal(canCreateAffixForItem(ring, "fire"), false);
+  assert.equal(canApplyCraftingCurrency("essence", ring), false);
+  assert.equal(craftingTargetError("essence", ring), "No eligible Fire affix remains for this item.");
 });
 
 test("currency consumption removes quantities across actual inventory stacks", () => {

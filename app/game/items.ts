@@ -60,9 +60,17 @@ function affixPool(slot: EquipmentSlot, excludedGroups: ReadonlySet<string>, tag
   return AFFIX_DEFINITIONS.filter((definition) => (definition.slots as readonly EquipmentSlot[]).includes(slot) && !excludedGroups.has(definition.group) && (!tag || definition.tag === tag));
 }
 
-export function createAffixForItem(item: Pick<EquipmentItem, "slot" | "itemLevel" | "affixes">, tag?: AffixTag, random: RandomSource = Math.random): Affix | null {
-  const pool = affixPool(item.slot, new Set(item.affixes.map((affix) => affix.group)), tag)
+function eligibleAffixPoolForItem(item: Pick<EquipmentItem, "slot" | "itemLevel" | "affixes">, tag?: AffixTag): readonly AffixDefinition[] {
+  return affixPool(item.slot, new Set(item.affixes.map((affix) => affix.group)), tag)
     .filter((definition) => eligibleAffixTiers(definition, item.itemLevel).length > 0);
+}
+
+export function canCreateAffixForItem(item: Pick<EquipmentItem, "slot" | "itemLevel" | "affixes">, tag?: AffixTag): boolean {
+  return eligibleAffixPoolForItem(item, tag).length > 0;
+}
+
+export function createAffixForItem(item: Pick<EquipmentItem, "slot" | "itemLevel" | "affixes">, tag?: AffixTag, random: RandomSource = Math.random): Affix | null {
+  const pool = eligibleAffixPoolForItem(item, tag);
   if (pool.length === 0) return null;
   return rollAffix(pool[Math.floor(random() * pool.length)], item.itemLevel, random);
 }
@@ -112,6 +120,19 @@ export function rerollAffixValues(item: EquipmentItem, random: RandomSource = Ma
       return { ...affix, rolls };
     }),
   };
+}
+
+export function restoreStability(item: EquipmentItem): EquipmentItem {
+  if (item.stability >= item.maxStability) return item;
+  return { ...item, stability: item.stability + 1 };
+}
+
+export function removeRandomAffix(item: EquipmentItem, random: RandomSource = Math.random): EquipmentItem {
+  if (item.rarity === "unique" || item.affixes.length === 0) return item;
+  const removedIndex = Math.floor(random() * item.affixes.length);
+  const affixes = item.affixes.filter((_, index) => index !== removedIndex);
+  const rarity: Rarity = affixes.length === 0 ? "normal" : affixes.length <= 2 ? "magic" : "rare";
+  return { ...item, rarity, affixes };
 }
 
 export function itemDisplayName(item: EquipmentItem): string {

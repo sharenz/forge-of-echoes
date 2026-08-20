@@ -17,18 +17,18 @@ export interface FlaskPurchase {
   paid: number;
 }
 
-export function purchaseFlask(profile: PlayerProfile, offerId: string): FlaskPurchase | null {
+export function purchaseFlask(profile: PlayerProfile, offerId: string, position?: { x: number; y: number }): FlaskPurchase | null {
   const offer = MAP_MERCHANT.flaskOffers.find((candidate) => candidate.id === offerId);
   if (!offer) return null;
   const paidProfile = consumeProfileCurrency(profile, offer.price.currency, offer.price.amount);
   if (!paidProfile) return null;
   const flask = createFlaskStack(offer.flaskId, offer.amount);
-  const inserted = insertItem(paidProfile.inventory, flask);
+  const inserted = insertItem(paidProfile.inventory, flask, position);
   if (inserted.unplaced.length > 0) return null;
   return { profile: { ...paidProfile, inventory: inserted.container }, flask, paid: offer.price.amount };
 }
 
-export function purchaseMap(profile: PlayerProfile, offerId: string): MapPurchase | null {
+export function purchaseMap(profile: PlayerProfile, offerId: string, position?: { x: number; y: number }): MapPurchase | null {
   const offer = MAP_MERCHANT.offers.find((candidate) => candidate.id === offerId);
   if (!offer) return null;
   const paidProfile = offer.price.amount > 0
@@ -36,7 +36,7 @@ export function purchaseMap(profile: PlayerProfile, offerId: string): MapPurchas
     : profile;
   if (!paidProfile) return null;
   const map = createMap(offer.tier, offer.mapBaseId);
-  const inserted = insertItem(paidProfile.inventory, map);
+  const inserted = insertItem(paidProfile.inventory, map, position);
   if (inserted.unplaced.length > 0) return null;
   return {
     profile: { ...paidProfile, inventory: inserted.container },

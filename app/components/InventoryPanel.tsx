@@ -1,16 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { CURRENCY_DEFINITIONS } from "../game/config/currencies";
 import { CHARACTER_EQUIPMENT_SLOTS } from "../game/config/equipment-slots";
 import { STASH_RULES } from "../game/config/stash";
-import type { CharacterEquipmentSlot, EquipmentItem, InventoryItem, ItemContainerId, PlayerProfile } from "../game/domain";
+import type { CharacterEquipmentSlot, CurrencyItem, EquipmentItem, InventoryItem, ItemContainerId, PlayerProfile } from "../game/domain";
 import { equipmentSlotAccepts } from "../game/equipment";
 import { containerItems } from "../game/item-container";
-import { isEquipmentItem, isFlaskItem } from "../game/inventory";
+import { isCurrencyItem, isEquipmentItem, isFlaskItem } from "../game/inventory";
 import { firstCompatibleFlaskSlot } from "../game/flasks";
 import { activeStashTab, stashItems as allStashItems } from "../game/stash";
 import { InventoryGrid, type GridOffset } from "./InventoryGrid";
 import { ItemCard } from "./ItemCard";
+import { ItemIcon } from "./ItemIcon";
 
 interface InventoryPanelProps {
   profile: PlayerProfile;
@@ -22,14 +25,48 @@ interface InventoryPanelProps {
   onMoveItem: (id: string, target: ItemContainerId, x: number, y: number) => void;
   onQuickStash: (id: string) => void;
   onQuickUnstash: (id: string) => void;
+  onApplyCurrency: (currencyItemId: string, targetItemId: string) => void;
   onSelectStashTab: (tabId: string) => void;
   onRenameStashTab: (tabId: string, name: string) => void;
   onCreateStashTab: () => void;
   onLoadFlask: (id: string, slotIndex: number) => void;
 }
 
-export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem, onQuickStash, onQuickUnstash, onSelectStashTab, onRenameStashTab, onCreateStashTab, onLoadFlask }: InventoryPanelProps) {
+interface CraftingSelection {
+  itemId: string;
+  x: number;
+  y: number;
+}
+
+function CraftingCursor({ currency, initialPosition }: { currency: CurrencyItem; initialPosition: Pick<CraftingSelection, "x" | "y"> }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      if (ref.current) ref.current.style.transform = `translate3d(${event.clientX + 15}px, ${event.clientY + 15}px, 0)`;
+    };
+    window.addEventListener("pointermove", move, { passive: true });
+    return () => window.removeEventListener("pointermove", move);
+  }, []);
+
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      ref={ref}
+      className="inventory-crafting-cursor"
+      style={{ transform: `translate3d(${initialPosition.x + 15}px, ${initialPosition.y + 15}px, 0)` }}
+      aria-hidden="true"
+    >
+      <ItemIcon item={currency} />
+      <strong>{currency.stackSize}</strong>
+    </div>,
+    document.body,
+  );
+}
+
+export function InventoryPanel({ profile, selectedItemId, showStash = false, freshItemIds = [], onSelect, onEquipItem, onMoveItem, onQuickStash, onQuickUnstash, onApplyCurrency, onSelectStashTab, onRenameStashTab, onCreateStashTab, onLoadFlask }: InventoryPanelProps) {
   const [dragState, setDragState] = useState<{ itemId: string; offset: GridOffset } | null>(null);
+  const [activeCurrencySelection, setActiveCurrencySelection] = useState<CraftingSelection | null>(null);
   const draggedItemId = dragState?.itemId ?? null;
   const freshItems = new Set(freshItemIds);
   const backpackItems = containerItems(profile.inventory);
@@ -38,6 +75,22 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
   const equippedItems = Object.values(profile.equipped).filter(Boolean) as EquipmentItem[];
   const allItems: InventoryItem[] = [...equippedItems, ...profile.flaskBelt.filter(Boolean), ...backpackItems, ...stashItems] as InventoryItem[];
   const draggedItem = allItems.find((item) => item.id === draggedItemId) ?? null;
+  const activeCurrencyCandidate = backpackItems.find((item) => item.id === activeCurrencySelection?.itemId);
+  const activeCurrency: CurrencyItem | null = activeCurrencyCandidate && isCurrencyItem(activeCurrencyCandidate)
+    ? activeCurrencyCandidate
+    : null;
+
+  useEffect(() => {
+    if (!activeCurrency) return;
+    const cancelCrafting = (event: KeyboardEvent) => {
+      if (event.code !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setActiveCurrencySelection(null);
+    };
+    window.addEventListener("keydown", cancelCrafting, { capture: true });
+    return () => window.removeEventListener("keydown", cancelCrafting, { capture: true });
+  }, [activeCurrency]);
 
   const beginDrag = (id: string, offset: GridOffset = { x: 0, y: 0 }) => {
     setDragState({ itemId: id, offset });
@@ -67,9 +120,14 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
     if (item && isEquipmentItem(item)) onEquipItem(item.id);
     else if (item && isFlaskItem(item)) loadFirstFlaskSlot(item.id);
   };
+  const applyCurrency = (targetItemId: string) => {
+    if (!activeCurrency) return;
+    onApplyCurrency(activeCurrency.id, targetItemId);
+  };
 
   return (
-    <div className={`inventory-window ${showStash ? "stash-inventory-window" : "character-inventory-window"}`}>
+    <div className={`inventory-window ${showStash ? "stash-inventory-window" : "character-inventory-window"} ${activeCurrency ? "crafting-active" : ""}`}>
+      {activeCurrency && activeCurrencySelection && <CraftingCursor currency={activeCurrency} initialPosition={activeCurrencySelection} />}
       <div className={`equipment-paperdoll paperdoll-${profile.character.classId}`}>
         <div className="paperdoll-heading"><span className="eyebrow">Equipped</span><small>{profile.character.classId} paper doll · drag to equip</small></div>
         <div className="paperdoll-character" aria-hidden="true"><i /></div>
@@ -92,6 +150,13 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
         })}
       </div>
       <div className="inventory-containers">
+        <div className={`inventory-crafting-help ${activeCurrency ? "active" : ""}`} aria-live="polite">
+          {activeCurrency ? (
+            <><ItemIcon item={activeCurrency} /><span><strong>{CURRENCY_DEFINITIONS[activeCurrency.baseId].name} selected</strong><small>Left-click a highlighted backpack item to apply · right-click elsewhere to cancel</small></span></>
+          ) : (
+            <><i aria-hidden="true">◇</i><span><strong>Inventory crafting</strong><small>Right-click a crafting material, then left-click a compatible item</small></span></>
+          )}
+        </div>
         {showStash && (
           <section className="stash-tab-section" aria-label="Stash tabs">
             <div className="stash-tab-bar" role="tablist" aria-label="Stash tabs">
@@ -128,7 +193,7 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
             <InventoryGrid container={currentStashTab.container} profile={profile} selectedId={selectedItemId} onSelect={onSelect} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} onQuickMove={onQuickUnstash} quickMoveHint="Ctrl/⌘-click to move to backpack" />
           </section>
         )}
-        <InventoryGrid container={profile.inventory} profile={profile} selectedId={selectedItemId} onSelect={onSelect} highlightedIds={freshItems} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} onQuickMove={quickUseBackpackItem} quickMoveHint={showStash ? "Ctrl/⌘-click to move to stash" : "Ctrl/⌘-click to equip or load"} />
+        <InventoryGrid container={profile.inventory} profile={profile} selectedId={selectedItemId} onSelect={onSelect} highlightedIds={freshItems} draggedItem={draggedItem} draggedOffset={dragState?.offset} onDragItem={beginDrag} onDragEnd={endDrag} onDropItem={onMoveItem} onQuickMove={quickUseBackpackItem} quickMoveHint={showStash ? "Ctrl/⌘-click to move to stash" : "Ctrl/⌘-click to equip or load"} activeCurrency={activeCurrency} onActivateCurrency={(itemId, position) => setActiveCurrencySelection({ itemId, ...position })} onCancelCurrency={() => setActiveCurrencySelection(null)} onApplyCurrency={applyCurrency} />
       </div>
     </div>
   );

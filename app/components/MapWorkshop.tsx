@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { MAP_MODIFIERS } from "../game/config/maps";
-import type { CurrencyAmounts, InventoryItem, ItemContainerId, MapItem, PlayerProfile } from "../game/domain";
+import type { InventoryItem, ItemContainerId, MapItem, PlayerProfile } from "../game/domain";
 import { containerItems, findContainerEntry } from "../game/item-container";
 import { isMapItem } from "../game/inventory";
 import { mapDanger, mapModifierDescription, mapModifierRewardDescription, mapStatSummary } from "../game/maps";
@@ -14,23 +14,15 @@ interface MapWorkshopProps {
   slottedMap: MapItem | null;
   activeMap: MapItem | null;
   portalsRemaining: number;
-  currencies: CurrencyAmounts;
   selectedItemId: string | null;
   onSelect: (id: string) => void;
   onMoveItem: (id: string, targetId: ItemContainerId, x: number, y: number) => void;
   onSlot: (id: string) => void;
   onRemove: () => void;
-  onCraft: (action: "dust" | "threat" | "reward") => void;
   onOpen: () => void;
 }
 
-const ACTIONS = [
-  { id: "dust" as const, name: "Map Dust", description: "Reroll all modifiers", currency: "mapDust" as const },
-  { id: "threat" as const, name: "Threat Glyph", description: "Add a danger modifier", currency: "threatGlyph" as const },
-  { id: "reward" as const, name: "Reward Ink", description: "Add a reward modifier", currency: "rewardInk" as const },
-];
-
-export function MapWorkshop({ profile, slottedMap, activeMap, portalsRemaining, currencies, selectedItemId, onSelect, onMoveItem, onSlot, onRemove, onCraft, onOpen }: MapWorkshopProps) {
+export function MapWorkshop({ profile, slottedMap, activeMap, portalsRemaining, selectedItemId, onSelect, onMoveItem, onSlot, onRemove, onOpen }: MapWorkshopProps) {
   const [dragState, setDragState] = useState<{ itemId: string; offset: GridOffset } | null>(null);
   const backpackItems = containerItems(profile.inventory);
   const maps = backpackItems.filter(isMapItem);
@@ -112,16 +104,6 @@ export function MapWorkshop({ profile, slottedMap, activeMap, portalsRemaining, 
           <small>{slottedMap ? activeMap ? "Consume map · replace old portals with 6 new portals" : "Consume map · create 6 one-use portals" : "Insert a map first"}</small>
         </button>
 
-        <div className="map-device-crafting">
-          <header><span>Craft slotted map</span><small>Currency from inventory or stash</small></header>
-          <div>
-            {ACTIONS.map((action) => (
-              <button type="button" key={action.id} onClick={() => onCraft(action.id)} disabled={!slottedMap || currencies[action.currency] <= 0 || slottedMap.corrupted}>
-                <i>{action.name.charAt(0)}</i><span><strong>{action.name}</strong><small>{action.description}</small></span><em>{currencies[action.currency]}</em>
-              </button>
-            ))}
-          </div>
-        </div>
       </section>
 
       <section className="map-device-backpack" aria-label="Backpack inventory">

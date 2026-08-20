@@ -8,13 +8,12 @@ import type { ActiveSkillId, AttributeKey, CharacterClassId, CharacterEquipmentS
 import { chooseEquipmentSlot, equipmentSlotAccepts } from "../game/equipment";
 import { isEquipmentItem, isMapItem, profileCurrencyAmounts } from "../game/inventory";
 import { containerItems, findContainerEntry, findFirstFit } from "../game/item-container";
-import { activeStashTab, findStashEntry, stashItems } from "../game/stash";
+import { activeStashTab, findStashEntry } from "../game/stash";
 import { calculateCharacterStats } from "../game/stats";
 import type { WorldStation } from "../game2d/types";
 import { AttributesPanel } from "./AttributesPanel";
 import { GameNotification } from "./GameNotification";
 import { InventoryPanel } from "./InventoryPanel";
-import { ItemWorkbench } from "./ItemWorkbench";
 import { MapWorkshop } from "./MapWorkshop";
 import { MapMerchant } from "./MapMerchant";
 import { HideoutSoundtrack, MapSoundtrack, MenuSoundtrack } from "./MenuSoundtrack";
@@ -25,7 +24,7 @@ import { useMultiplayerHideout } from "../multiplayer/useMultiplayerHideout";
 import { ENABLED_CHARACTER_CLASS_IDS } from "../../multiplayer/protocol";
 
 type CharacterPanelView = "inventory" | "attributes" | "skills";
-type HideoutPanel = CharacterPanelView | "stash" | "bench" | "maps" | "merchant" | "multiplayer" | null;
+type HideoutPanel = CharacterPanelView | "stash" | "maps" | "merchant" | "multiplayer" | null;
 type AccountView = "roster" | "create-character";
 
 function isCharacterPanel(panel: HideoutPanel): panel is CharacterPanelView {
@@ -203,13 +202,6 @@ export function GameShell() {
     ?? Object.values(profile.equipped)[0]?.id
     ?? null;
   const inventoryMaps = backpackItems.filter(isMapItem);
-  const allEquipment = [
-    ...Object.values(profile.equipped).filter(Boolean),
-    ...backpackItems.filter(isEquipmentItem),
-    ...stashItems(profile.stash).filter(isEquipmentItem),
-  ];
-  const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id)) as Set<string>;
-
   if (multiplayer.mapAdapter && arenaBalance && activeMap) {
     const characterPanelOpen = isCharacterPanel(panel);
     return (
@@ -237,7 +229,7 @@ export function GameShell() {
             <div className="world-panel-backdrop arena-panel-backdrop character-interface-backdrop">
               <section className={`world-panel character-panel panel-${panel}`} aria-label={`Character ${panel}`}>
                 <header><div><span>Combat continues online · controls blocked · changes apply immediately</span><h2>{characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></header>
-                {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
+                {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onApplyCurrency={onlineApplyCurrency} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
                 {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation.breakdown} onAllocate={onlineAllocateAttribute} />}
                 {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={onlineAllocateSkill} />}
               </section>
@@ -254,7 +246,7 @@ export function GameShell() {
 
   function handleStation(station: WorldStation, portalIndex?: number) {
     if (station === "stash") setPanel("stash");
-    if (station === "bench") setPanel("bench");
+    if (station === "bench") setPanel("inventory");
     if (station === "map-device") setPanel("maps");
     if (station === "merchant") setPanel("merchant");
     if (station === "portal") {
@@ -305,6 +297,11 @@ export function GameShell() {
     }
     setSelectedItemId(itemId);
     void multiplayer.executeProfileCommand({ type: "move_item", itemId, destination: "backpack", ...position });
+  }
+
+  function onlineApplyCurrency(currencyItemId: string, targetItemId: string) {
+    setSelectedItemId(targetItemId);
+    void multiplayer.executeProfileCommand({ type: "apply_currency", currencyItemId, targetItemId });
   }
 
   function onlineSelectStash(tabId: string) {
@@ -365,12 +362,11 @@ export function GameShell() {
       {panel && (
         <div className={`world-panel-backdrop ${isCharacterPanel(panel) ? "character-interface-backdrop" : ""}`}>
           <section className={`world-panel panel-${panel} ${isCharacterPanel(panel) ? "character-panel" : ""}`}>
-            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : panel === "merchant" ? "Maps and supplies" : panel === "multiplayer" ? "Authoritative online realm" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Rook's Shop" : panel === "multiplayer" ? "Multiplayer" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
-            {panel === "maps" && <MapWorkshop profile={profile} slottedMap={profile.mapDevice} activeMap={activeMap} portalsRemaining={availablePortalIndexes.length} currencies={currencies} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onMoveItem={onlineMoveItem} onSlot={(itemId) => void multiplayer.executeProfileCommand({ type: "slot_map", itemId })} onRemove={() => void multiplayer.executeProfileCommand({ type: "remove_map" })} onCraft={(action) => void multiplayer.executeProfileCommand({ type: "craft_map", action })} onOpen={onlineOpenMap} />}
-            {panel === "merchant" && <MapMerchant scrap={currencies.scrap} onBuy={(offerId) => void multiplayer.executeProfileCommand({ type: "buy_map", offerId })} onBuyFlask={(offerId) => void multiplayer.executeProfileCommand({ type: "buy_flask", offerId })} />}
+            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "maps" ? "Map device" : panel === "merchant" ? "Maps and supplies" : panel === "multiplayer" ? "Authoritative online realm" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Rook's Shop" : panel === "multiplayer" ? "Multiplayer" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
+            {panel === "maps" && <MapWorkshop profile={profile} slottedMap={profile.mapDevice} activeMap={activeMap} portalsRemaining={availablePortalIndexes.length} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onMoveItem={onlineMoveItem} onSlot={(itemId) => void multiplayer.executeProfileCommand({ type: "slot_map", itemId })} onRemove={() => void multiplayer.executeProfileCommand({ type: "remove_map" })} onOpen={onlineOpenMap} />}
+            {panel === "merchant" && <MapMerchant profile={profile} scrap={currencies.scrap} selectedItemId={effectiveSelectedItemId} onSelectItem={setSelectedItemId} onMoveItem={onlineMoveItem} onBuyMap={(offerId, position) => void multiplayer.executeProfileCommand({ type: "buy_map", offerId, position })} onBuyFlask={(offerId, position) => void multiplayer.executeProfileCommand({ type: "buy_flask", offerId, position })} />}
             {panel === "multiplayer" && <MultiplayerPanel controller={multiplayer} onOpenMapDevice={() => setPanel("maps")} onPartyEntered={() => setPanel(null)} />}
-            {panel === "bench" && <ItemWorkbench items={allEquipment} equippedIds={equippedIds} currencies={currencies} selectedId={effectiveSelectedItemId} onSelect={setSelectedItemId} onCraft={(action) => effectiveSelectedItemId && void multiplayer.executeProfileCommand({ type: "craft_equipment", itemId: effectiveSelectedItemId, action })} onEquip={() => effectiveSelectedItemId && onlineEquipItem(effectiveSelectedItemId)} />}
-            {(panel === "inventory" || panel === "stash") && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
+            {(panel === "inventory" || panel === "stash") && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onApplyCurrency={onlineApplyCurrency} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
             {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation.breakdown} onAllocate={onlineAllocateAttribute} />}
             {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={onlineAllocateSkill} />}
           </section>

@@ -1,14 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { CharacterEquipmentSlot, EquipmentItem, PlayerProfile } from "../../app/game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts, findEquippedSlot } from "../../app/game/equipment";
+import { applyBackpackCurrency } from "../../app/game/crafting";
 import { loadFlaskIntoBelt, unloadFlaskFromBelt } from "../../app/game/flasks";
 import { findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../../app/game/item-container";
-import { consumeProfileCurrency, isEquipmentItem } from "../../app/game/inventory";
-import { addFireAffix, rerollAffixValues } from "../../app/game/items";
-import { addMapModifier, rerollMap } from "../../app/game/maps";
 import { purchaseFlask, purchaseMap } from "../../app/game/merchant";
 import { allocateAttributePoint, allocateSkillPoint } from "../../app/game/progression";
-import { activeStashTab, addStashTab, findStashEntry, mapStashItems, renameStashTab, selectStashTab, updateStashContainer } from "../../app/game/stash";
+import { activeStashTab, addStashTab, findStashEntry, renameStashTab, selectStashTab, updateStashContainer } from "../../app/game/stash";
 import type { ProfileCommand } from "../../multiplayer/protocol";
 import { ProfileRevisionConflict } from "../persistence/errors";
 import type { AuthoritativeProfile, PlayerRepository } from "../persistence/PlayerRepository";
@@ -51,10 +49,9 @@ export class ProfileCommandService {
       case "create_stash_tab": return this.withStash(profile, addStashTab(profile.stash));
       case "slot_map": return this.slotMap(profile, command.itemId);
       case "remove_map": return this.removeMap(profile);
-      case "craft_equipment": return this.craftEquipment(profile, command.itemId, command.action);
-      case "craft_map": return this.craftMap(profile, command.action);
-      case "buy_map": return this.buyMap(profile, command.offerId);
-      case "buy_flask": return this.buyFlask(profile, command.offerId);
+      case "apply_currency": return this.applyCurrency(profile, command.currencyItemId, command.targetItemId);
+      case "buy_map": return this.buyMap(profile, command.offerId, command.position);
+      case "buy_flask": return this.buyFlask(profile, command.offerId, command.position);
     }
   }
 
@@ -151,33 +148,13 @@ export class ProfileCommandService {
     };
   }
 
-  private craftEquipment(profile: PlayerProfile, itemId: string, action: "scrap" | "essence"): PlayerProfile {
-    const currency = action === "scrap" ? "scrap" : "essence";
-    const transform = action === "scrap" ? rerollAffixValues : addFireAffix;
-    let changed = false;
-    const update = (item: EquipmentItem): EquipmentItem => {
-      if (item.id !== itemId) return item;
-      const next = transform(item);
-      changed = next !== item;
-      return next;
-    };
-    const inventory = mapContainerItems(profile.inventory, (item) => isEquipmentItem(item) ? update(item) : item);
-    const stash = mapStashItems(profile.stash, (item) => isEquipmentItem(item) ? update(item) : item);
-    const equipped = Object.fromEntries(Object.entries(profile.equipped).map(([slot, item]) => [slot, item ? update(item) : item])) as PlayerProfile["equipped"];
-    if (!changed) return profile;
-    return consumeProfileCurrency({ ...profile, inventory, stash, equipped }, currency, 1) ?? profile;
+  private applyCurrency(profile: PlayerProfile, currencyItemId: string, targetItemId: string): PlayerProfile {
+    const inventory = applyBackpackCurrency(profile.inventory, currencyItemId, targetItemId);
+    return inventory ? { ...profile, inventory } : profile;
   }
 
-  private craftMap(profile: PlayerProfile, action: "dust" | "threat" | "reward"): PlayerProfile {
-    if (!profile.mapDevice) return profile;
-    const currency = action === "dust" ? "mapDust" : action === "threat" ? "threatGlyph" : "rewardInk";
-    const transformed = action === "dust" ? rerollMap(profile.mapDevice) : addMapModifier(profile.mapDevice, action);
-    if (transformed === profile.mapDevice) return profile;
-    return consumeProfileCurrency({ ...profile, mapDevice: transformed }, currency, 1) ?? profile;
-  }
-
-  private buyMap(profile: PlayerProfile, offerId: string): PlayerProfile {
-    const purchase = purchaseMap(profile, offerId);
+  private buyMap(profile: PlayerProfile, offerId: string, position?: { x: number; y: number }): PlayerProfile {
+    const purchase = purchaseMap(profile, offerId, position);
     if (!purchase) return profile;
     const securedId = randomUUID();
     return {
@@ -186,8 +163,8 @@ export class ProfileCommandService {
     };
   }
 
-  private buyFlask(profile: PlayerProfile, offerId: string): PlayerProfile {
-    const purchase = purchaseFlask(profile, offerId);
+  private buyFlask(profile: PlayerProfile, offerId: string, position?: { x: number; y: number }): PlayerProfile {
+    const purchase = purchaseFlask(profile, offerId, position);
     if (!purchase) return profile;
     const securedId = randomUUID();
     return {

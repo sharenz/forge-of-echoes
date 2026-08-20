@@ -3,6 +3,7 @@ import test from "node:test";
 import { createTestPlayer } from "../createTestPlayer";
 import { profileCommandSchema } from "../../multiplayer/protocol";
 import { findFirstFit } from "../../app/game/item-container";
+import { createMap } from "../../app/game/maps";
 import { InMemoryPlayerRepository } from "../../server/persistence/InMemoryPlayerRepository";
 import { ProfileCommandError, ProfileCommandService } from "../../server/services/ProfileCommandService";
 
@@ -52,9 +53,18 @@ test("profile protocol rejects client-authored item data and unsupported command
     item: { kind: "equipment", attackDamage: 999_999 },
   }).success, false);
   assert.equal(profileCommandSchema.safeParse({ type: "grant_item", baseId: "god-sword" }).success, false);
+  assert.equal(profileCommandSchema.safeParse({ type: "craft_map", action: "dust" }).success, false);
+  assert.equal(profileCommandSchema.safeParse({ type: "craft_equipment", action: "essence", itemId: "00000000-0000-4000-8000-000000000000" }).success, false);
+  assert.equal(profileCommandSchema.safeParse({ type: "buy_map", offerId: "free-ashen-t1", position: { x: 0, y: 5 } }).success, false);
+  assert.equal(profileCommandSchema.safeParse({
+    type: "apply_currency",
+    currencyItemId: "00000000-0000-4000-8000-000000000000",
+    targetItemId: "00000000-0000-4000-8000-000000000001",
+    currencyId: "mapDust",
+  }).success, false);
 });
 
-test("online merchant and map crafting create only server-owned UUID items", async () => {
+test("online merchant and backpack crafting create only server-owned UUID items", async () => {
   const repository = new InMemoryPlayerRepository();
   await repository.initialize();
   try {
@@ -63,10 +73,13 @@ test("online merchant and map crafting create only server-owned UUID items", asy
     assert.ok(initial);
     const service = new ProfileCommandService(repository);
     const initialMapCount = initial.profile.inventory.entries.filter((entry) => entry.item.kind === "map").length;
-    const boughtMap = await service.execute(identity.characterId, initial.revision, { type: "buy_map", offerId: "free-ashen-t1" });
+    const purchasePosition = findFirstFit(initial.profile.inventory, createMap(1, "ashen-crucible"));
+    assert.ok(purchasePosition);
+    const boughtMap = await service.execute(identity.characterId, initial.revision, { type: "buy_map", offerId: "free-ashen-t1", position: purchasePosition });
     const maps = boughtMap.profile.inventory.entries.filter((entry) => entry.item.kind === "map");
     assert.equal(maps.length, initialMapCount + 1);
     assert.match(maps.at(-1)!.item.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    assert.deepEqual({ x: maps.at(-1)!.x, y: maps.at(-1)!.y }, purchasePosition);
 
     const boughtFlask = await service.execute(identity.characterId, boughtMap.revision, { type: "buy_flask", offerId: "weak-health-supply" });
     const flask = boughtFlask.profile.inventory.entries.find((entry) => entry.item.kind === "flask")?.item;
@@ -75,10 +88,18 @@ test("online merchant and map crafting create only server-owned UUID items", asy
 
     const mapEntry = boughtFlask.profile.inventory.entries.find((entry) => entry.item.kind === "map");
     assert.ok(mapEntry && mapEntry.item.kind === "map");
-    const map = mapEntry.item;
-    const slotted = await service.execute(identity.characterId, boughtFlask.revision, { type: "slot_map", itemId: map.id });
-    const crafted = await service.execute(identity.characterId, slotted.revision, { type: "craft_map", action: "dust" });
-    assert.equal(crafted.profile.mapDevice?.modifiers.length, 2);
+    const dustEntry = boughtFlask.profile.inventory.entries.find((entry) => entry.item.kind === "currency" && entry.item.baseId === "mapDust");
+    assert.ok(dustEntry && dustEntry.item.kind === "currency");
+    const dustBefore = dustEntry.item.stackSize;
+    const crafted = await service.execute(identity.characterId, boughtFlask.revision, {
+      type: "apply_currency", currencyItemId: dustEntry.item.id, targetItemId: mapEntry.item.id,
+    });
+    const craftedMap = crafted.profile.inventory.entries.find((entry) => entry.item.id === mapEntry.item.id)?.item;
+    const dustAfter = crafted.profile.inventory.entries.find((entry) => entry.item.id === dustEntry.item.id)?.item;
+    assert.ok(craftedMap?.kind === "map");
+    assert.equal(craftedMap.modifiers.length, 2);
+    assert.equal(dustAfter?.kind === "currency" ? dustAfter.stackSize : 0, dustBefore - 1);
+    assert.equal(crafted.profile.mapDevice, null);
   } finally {
     await repository.close();
   }

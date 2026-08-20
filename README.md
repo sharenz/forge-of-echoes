@@ -38,7 +38,7 @@ npm run test:multiplayer:db
 
 - `app/game/` contains serializable domain models, item generation, crafting, maps, and combat balance.
 - `app/game2d/` is a presentation and input adapter. It interpolates server snapshots, plays animation/VFX/audio, and sends player intent; it does not simulate combat, loot, progression, or waves.
-- `app/components/` adapts React state to the renderer and supplies the HUD, inventory, stash, workbench, and map-device interfaces.
+- `app/components/` adapts React state to the renderer and supplies the HUD, inventory, stash, inventory-crafting, and map-device interfaces.
 - `multiplayer/` contains shared, runtime-validated client/server protocol contracts.
 - `server/rooms/` contains authoritative 20 Hz hideout and map simulations capped at four players.
 - `server/db/migrations/` owns ordered, transactional PostgreSQL migrations; item ownership is enforced by composite foreign keys.
@@ -52,7 +52,7 @@ The hideout uses a fixed 960×960 logical canvas. Maps are 3840×3840—exactly 
 
 1. Enter an account handle, select a saved Sorceress from its server roster, or create a uniquely named Sorceress. Amazon and Barbarian are disabled until their gameplay is ready.
 2. Move through the fixed-camera hideout with screen-aligned WASD.
-3. Use the stash, crafting bench, and map device as world stations.
+3. Use the stash and map device as world stations; the crafting bench opens the same inventory-crafting workflow.
 4. Craft a map item, consume it to open a portal, and enter the arena.
 5. Explore the map and defeat six increasingly dense, distributed pack waves; the combat bar exposes live cooldowns, Focus costs, and Rift Step's recharging charges.
 6. Run over equipment and materials to collect them. Hover inventory items for complete affix tooltips, then drag them into matching equipment slots; the live character sheet updates health, damage, Focus, speed, armor, and evade immediately. There are no temporary run powers.
