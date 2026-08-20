@@ -33,7 +33,7 @@ function number(value: number, decimals = 0): string {
 }
 
 export function AttributesPanel({ progress, stats, breakdown, onAllocate }: AttributesPanelProps) {
-  const classDefinition = CHARACTER_CLASSES[progress.classId ?? "amazon"];
+  const classDefinition = CHARACTER_CLASSES[progress.classId];
   const xpRequired = XP_BY_LEVEL(progress.level);
   const xpPercent = progress.level === MAX_CHARACTER_LEVEL ? 100 : Math.min(100, progress.xp / xpRequired * 100);
 

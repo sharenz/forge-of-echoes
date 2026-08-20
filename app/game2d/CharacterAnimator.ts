@@ -16,6 +16,8 @@ interface PendingAction {
   released: boolean;
   onRelease: () => void;
   onComplete?: () => void;
+  releaseFallback?: Phaser.Time.TimerEvent;
+  completionFallback?: Phaser.Time.TimerEvent;
 }
 
 export class CharacterAnimator {
@@ -65,10 +67,20 @@ export class CharacterAnimator {
     const sourceDirection = direction === "west" ? "west" : direction;
     const key = characterAnimationKey(this.classId, sourceDirection, state);
     const releaseTextureFrame = clip.row * sheet.columns + clip.startColumn + (clip.releaseFrame ?? clip.frameCount - 1);
-    this.pendingAction = { key, releaseTextureFrame, released: false, onRelease, onComplete };
+    const pending: PendingAction = { key, releaseTextureFrame, released: false, onRelease, onComplete };
+    this.pendingAction = pending;
     this.applyDirectionFlip();
     this.sprite.anims.timeScale = Math.max(0.1, playbackRate);
     this.sprite.play(key, true);
+    const releaseFrame = clip.releaseFrame ?? clip.frameCount - 1;
+    const releaseDelayMilliseconds = ((releaseFrame + 1) / clip.frameRate / Math.max(0.1, playbackRate)) * 1_000;
+    pending.releaseFallback = this.scene.time.delayedCall(releaseDelayMilliseconds, () => {
+      if (this.pendingAction === pending) this.releasePendingAction(pending);
+    });
+    const completionDelayMilliseconds = (clip.frameCount / clip.frameRate / Math.max(0.1, playbackRate)) * 1_000 + 50;
+    pending.completionFallback = this.scene.time.delayedCall(completionDelayMilliseconds, () => {
+      if (this.pendingAction === pending) this.finishPendingAction(pending);
+    });
     return true;
   }
 
@@ -77,6 +89,9 @@ export class CharacterAnimator {
   }
 
   destroy(): void {
+    this.pendingAction?.releaseFallback?.remove(false);
+    this.pendingAction?.completionFallback?.remove(false);
+    this.pendingAction = null;
     this.sprite.off(Phaser.Animations.Events.ANIMATION_UPDATE, this.handleAnimationUpdate, this);
     this.sprite.off(Phaser.Animations.Events.ANIMATION_COMPLETE, this.handleAnimationComplete, this);
   }
@@ -124,18 +139,30 @@ export class CharacterAnimator {
   private handleAnimationUpdate(_animation: Phaser.Animations.Animation, frame: Phaser.Animations.AnimationFrame): void {
     const pending = this.pendingAction;
     if (!pending || pending.released || Number(frame.textureFrame) !== pending.releaseTextureFrame) return;
-    pending.released = true;
-    pending.onRelease();
+    this.releasePendingAction(pending);
   }
 
   private handleAnimationComplete(animation: Phaser.Animations.Animation): void {
     const pending = this.pendingAction;
     if (!pending || animation.key !== pending.key) return;
-    if (!pending.released) pending.onRelease();
+    this.finishPendingAction(pending);
+  }
+
+  private finishPendingAction(pending: PendingAction): void {
+    if (this.pendingAction !== pending) return;
+    this.releasePendingAction(pending);
+    pending.releaseFallback?.remove(false);
+    pending.completionFallback?.remove(false);
     const onComplete = pending.onComplete;
     this.pendingAction = null;
     this.sprite.anims.timeScale = 1;
     this.playLocomotion(true);
     onComplete?.();
+  }
+
+  private releasePendingAction(pending: PendingAction): void {
+    if (pending.released) return;
+    pending.released = true;
+    pending.onRelease();
   }
 }

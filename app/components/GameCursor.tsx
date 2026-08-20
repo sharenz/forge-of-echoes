@@ -9,6 +9,12 @@ export function GameCursor() {
   const pointRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
+    const preventBrowserContextMenu = (event: MouseEvent) => event.preventDefault();
+    document.addEventListener("contextmenu", preventBrowserContextMenu);
+    return () => document.removeEventListener("contextmenu", preventBrowserContextMenu);
+  }, []);
+
+  useEffect(() => {
     const finePointer = window.matchMedia("(pointer: fine)");
     if (!finePointer.matches) return;
 

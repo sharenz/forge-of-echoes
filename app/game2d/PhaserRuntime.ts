@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { ACTIVE_SKILLS, BASIC_ATTACK, isArenaCleared, rollHitDamage, shouldActivateFinalWaveRage, shouldSpawnNextWave, type ArenaSummary, type MapDrop, type RolledHitDamage } from "../game/combat";
+import { ACTIVE_SKILLS, BASIC_ATTACK, type RolledHitDamage } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import {
   CHARACTER_ANIMATIONS,
@@ -18,23 +18,20 @@ import { MONSTER_PACK_RULES } from "../game/config/monster-packs";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
 import { MAP_COMPLETION_REWARDS } from "../game/config/rewards";
 import type { SkillDefinition } from "../game/config/schema";
-import type { CharacterClassId, DamageType, FlaskBelt, InventoryItem, MonsterRarity, SkillLevels } from "../game/domain";
-import { monsterPackModifierNames, resolveMonsterStats, rollMonsterPack } from "../game/encounters";
-import { advanceFlaskRecovery } from "../game/flasks";
+import type { CharacterClassId, FlaskBelt, InventoryItem, MonsterRarity, SkillLevels } from "../game/domain";
 import { isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "../game/inventory";
-import { equipmentDropPresentation, dropChances, rollEquipmentRarity, rollFlaskDrop } from "../game/loot";
-import { generateEquipment } from "../game/items";
-import { monsterExperienceReward } from "../game/progression";
-import { createMapCompletionRewards } from "../game/rewards";
+import { equipmentDropPresentation } from "../game/loot";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
 import { CharacterAnimator } from "./CharacterAnimator";
-import { SkillAudio } from "./SkillAudio";
+import { GameAudio } from "./audio/GameAudio";
+import { MonsterAudioMixer } from "./audio/MonsterAudioMixer";
 import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
+import type { CombatEvent } from "../../multiplayer/protocol";
+import { MULTIPLAYER_COMBAT } from "../../multiplayer/combat";
+import { MonsterFlags } from "../../multiplayer/wire/monster-flags";
 
 const VIEW_SIZE = 960;
 const MAP_SIZE = VIEW_SIZE * 4;
-const SPATIAL_CELL_SIZE = 64;
-const SPATIAL_COLUMNS = Math.ceil(MAP_SIZE / SPATIAL_CELL_SIZE) + 2;
 const FIXED_STEP = 1000 / 60;
 const MAX_FRAME_DELTA = 50;
 const PROJECTILE_POOL_SIZE = 160;
@@ -43,63 +40,52 @@ const DAMAGE_NUMBER_POOL_SIZE = 160;
 const VFX_PARTICLE_POOL_SIZE = 240;
 const HEALTH_BAR_WIDTH = 42;
 const HEALTH_BAR_HEIGHT = 5;
-const MOVEMENT_ACCELERATION = 18;
-const MOVEMENT_DECELERATION = 24;
+const BASIC_ATTACK_INPUT_BUFFER_SECONDS = 0.22;
+const NETWORK_ARCHETYPE_IDS = ["ashling", "cinder-spitter", "rift-stalker", "ironhide-brute", "ember-skitter"] as const;
 
 interface EnemyState {
+  networkId?: number;
+  networkSeenFrame?: number;
   sprite: Phaser.GameObjects.Image;
   x: number;
   y: number;
+  renderX?: number;
+  renderY?: number;
   life: number;
   maxLife: number;
   archetypeId: MonsterArchetypeId;
   rarity: MonsterRarity;
-  modifierNames: string[];
-  speed: number;
-  contactDamage: number;
-  armor: number;
-  evadeChance: number;
-  itemQuantity: number;
-  itemRarity: number;
   baseScale: number;
-  attackCooldown: number;
-  jumpCooldown: number;
-  jumpRemaining: number;
-  jumpStartX: number;
-  jumpStartY: number;
-  jumpTargetX: number;
-  jumpTargetY: number;
-  homeX: number;
-  homeY: number;
   phase: number;
-  aggro: boolean;
+  animationTime: number;
+  moving: boolean;
   healthLabel: Phaser.GameObjects.Text | null;
 }
 
-interface ProjectileState {
-  sprite: Phaser.GameObjects.Image;
-  vx: number;
-  vy: number;
-  damage: number;
-  damageType: DamageType;
-  remaining: number;
-  trailElapsed: number;
-  remainingPierces: number;
-  hitEnemies: Set<EnemyState>;
-}
-
-interface EnemyProjectileState extends ProjectileState {
+interface MonsterDeathPresentation {
+  archetypeId: MonsterArchetypeId;
+  rarity: MonsterRarity;
   x: number;
   y: number;
+  baseScale: number;
+  flipX: boolean;
+}
+
+interface NetworkEnemyProjectile {
+  sprite: Phaser.GameObjects.Image;
+  monsterId: number;
+  archetypeId: MonsterArchetypeId;
+  rarity: MonsterRarity;
 }
 
 interface GroundDropState {
+  networkId: string;
+  networkPickupRetryAt?: number;
   sprite: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   x: number;
   y: number;
   phase: number;
-  drop: MapDrop;
 }
 
 interface VfxParticleState {
@@ -123,7 +109,6 @@ interface ReturnPortalState {
   y: number;
   elapsed: number;
   particleElapsed: number;
-  summary: ArenaSummary;
   glow: Phaser.GameObjects.Ellipse;
   outerRing: Phaser.GameObjects.Ellipse;
   innerRing: Phaser.GameObjects.Ellipse;
@@ -142,7 +127,28 @@ interface CompletionChestState {
   sprite: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   prompt: Phaser.GameObjects.Text;
-  interaction: Phaser.GameObjects.Zone;
+}
+
+interface RemotePlayerVisual {
+  classId: CharacterClassId;
+  x: number;
+  y: number;
+  sprite: Phaser.GameObjects.Sprite;
+  shadow: Phaser.GameObjects.Image;
+  label: Phaser.GameObjects.Text;
+  animator: CharacterAnimator;
+}
+
+type MonsterActionEvent = Extract<CombatEvent, { kind: "monster-action" }>;
+
+interface NetworkMonsterActionVisual extends MonsterActionEvent {
+  elapsedMilliseconds: number;
+}
+
+interface BasicAttackIntent {
+  worldX: number;
+  worldY: number;
+  expiresAt: number;
 }
 
 const CLASS_COLORS: Record<CharacterClassId, { magic: number }> = {
@@ -151,16 +157,10 @@ const CLASS_COLORS: Record<CharacterClassId, { magic: number }> = {
   sorceress: { magic: 0xb77cff },
 };
 
-const PACK_REGIONS = [
-  [0.14, 0.15], [0.49, 0.13], [0.82, 0.16],
-  [0.22, 0.34], [0.48, 0.36], [0.77, 0.36],
-  [0.12, 0.54], [0.36, 0.56], [0.68, 0.55], [0.87, 0.58],
-  [0.18, 0.79], [0.47, 0.81], [0.79, 0.8],
-] as const;
-
 class CraftyScene extends Phaser.Scene {
   private readonly options: WorldRuntimeOptions;
-  private readonly audio = new SkillAudio();
+  private readonly audio = new GameAudio();
+  private readonly monsterAudio = new MonsterAudioMixer(this.audio);
   private player: Phaser.GameObjects.Sprite | null = null;
   private playerVisual: Phaser.GameObjects.Sprite | null = null;
   private playerAnimator: CharacterAnimator | null = null;
@@ -173,13 +173,14 @@ class CraftyScene extends Phaser.Scene {
   private cameraTarget: Phaser.GameObjects.Zone | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key> | null = null;
   private enemies: EnemyState[] = [];
-  private projectiles: ProjectileState[] = [];
-  private enemyProjectiles: EnemyProjectileState[] = [];
   private groundDrops: GroundDropState[] = [];
   private corpses: CorpseState[] = [];
   private enemyPool: Phaser.GameObjects.Group | null = null;
   private projectilePool: Phaser.GameObjects.Group | null = null;
+  private readonly networkProjectiles = new Map<number, Phaser.GameObjects.Image>();
   private enemyProjectilePool: Phaser.GameObjects.Group | null = null;
+  private readonly networkEnemyProjectiles = new Map<number, NetworkEnemyProjectile>();
+  private readonly processedMonsterDeaths = new Set<number>();
   private dropPool: Phaser.GameObjects.Group | null = null;
   private corpsePool: Phaser.GameObjects.Group | null = null;
   private enemyHealthBars: Phaser.GameObjects.Graphics | null = null;
@@ -187,19 +188,15 @@ class CraftyScene extends Phaser.Scene {
   private damageNumberPool: Phaser.GameObjects.Text[] = [];
   private vfxPool: Phaser.GameObjects.Group | null = null;
   private vfxParticles: VfxParticleState[] = [];
-  private spatialBuckets = new Map<number, EnemyState[]>();
   private accumulator = 0;
   private attackCooldown = 0;
+  private basicAttackIntent: BasicAttackIntent | null = null;
   private novaCooldown = 0;
   private riftCharges = 0;
   private riftRecharge = 0;
   private wardCooldown = 0;
   private wardRemaining = 0;
   private flameWaveCooldown = 0;
-  private lifeRecoveryRemaining = 0;
-  private manaRecoveryRemaining = 0;
-  private lifeRecoveryRate = 0;
-  private manaRecoveryRate = 0;
   private resolvedBasic: ResolvedSkillDefinition;
   private resolvedNova: ResolvedSkillDefinition;
   private resolvedDash: ResolvedSkillDefinition;
@@ -207,23 +204,38 @@ class CraftyScene extends Phaser.Scene {
   private resolvedFlameWave: ResolvedSkillDefinition;
   private life: number;
   private focus: number;
-  private wave = 1;
-  private waveElapsedSeconds = 0;
-  private slain = 0;
-  private lootCollected = 0;
   private elapsedSeconds = 0;
   private hudElapsed = 0;
   private arenaComplete = false;
-  private finalWaveRageActive = false;
   private returnPortal: ReturnPortalState | null = null;
   private returnPortalUsed = false;
   private completionChest: CompletionChestState | null = null;
-  private arenaFailed = false;
-  private footstepElapsed = 0;
+  private returnToHideoutRequested = false;
   private previousPlayerX = 0;
   private previousPlayerY = 0;
   private playerVelocityX = 0;
   private playerVelocityY = 0;
+  private readonly remotePlayers = new Map<string, RemotePlayerVisual>();
+  private readonly networkMonsterActions = new Map<number, NetworkMonsterActionVisual>();
+  private readonly networkEnemies = new Map<number, EnemyState>();
+  private networkMonsterFrame = 0;
+  private networkMonsterDelta = 0;
+  private readonly consumeNetworkMonsterSample = (
+    id: number,
+    archetype: number,
+    rarity: number,
+    maxLife: number,
+    x: number,
+    y: number,
+    lifePercent: number,
+    flags: number,
+  ): void => {
+    this.syncNetworkMonster(id, archetype, rarity, maxLife, x, y, lifePercent, flags, this.networkMonsterDelta);
+  };
+  private networkInputElapsed = 0;
+  private lastNetworkInputX = Number.NaN;
+  private lastNetworkInputY = Number.NaN;
+  private hideoutPortalObjects: Phaser.GameObjects.GameObject[] = [];
 
   constructor(options: WorldRuntimeOptions) {
     super("crafty-world");
@@ -242,22 +254,30 @@ class CraftyScene extends Phaser.Scene {
     this.load.image("pixel-forge", "/pixel-forge-hideout.webp");
     this.load.image("ashen-wilderness", "/pixel-ashen-wilderness.webp");
     this.load.image("ember-sigil", "/ember-sigil.png");
-    this.load.image("class-roster", "/class-roster-v2.png");
     this.load.image("player-sorceress-rendered", "/player-sorceress-v4.png");
     if (this.options.mode === "arena") {
       for (const definition of Object.values(MONSTER_ARCHETYPES)) {
-        this.load.image(`monster-${definition.id}`, definition.visual.sprite);
+        const sheet = definition.visual.sheet;
+        if (sheet) {
+          this.load.spritesheet(`monster-${definition.id}`, sheet.url, { frameWidth: sheet.frameWidth, frameHeight: sheet.frameHeight });
+        } else {
+          this.load.image(`monster-${definition.id}`, definition.visual.sprite);
+        }
         this.load.image(`corpse-${definition.id}`, definition.visual.corpse);
       }
+      this.monsterAudio.preload();
     }
-    if (this.options.mode !== "class-select") {
-      const definition = CHARACTER_ANIMATIONS[this.options.classId];
-      for (const [sheetId, sheet] of Object.entries(definition.sheets)) {
-        if (!sheet) continue;
-        this.load.spritesheet(characterSpriteSheetKey(this.options.classId, sheetId as CharacterSpriteSheetId), sheet.url, {
-          frameWidth: sheet.frameWidth,
-          frameHeight: sheet.frameHeight,
-        });
+    if (this.options.mode !== "loading" && this.options.mode !== "login" && this.options.mode !== "character-create") {
+      const classes = Object.keys(CHARACTER_ANIMATIONS) as CharacterClassId[];
+      for (const classId of classes) {
+        const definition = CHARACTER_ANIMATIONS[classId];
+        for (const [sheetId, sheet] of Object.entries(definition.sheets)) {
+          if (!sheet) continue;
+          this.load.spritesheet(characterSpriteSheetKey(classId, sheetId as CharacterSpriteSheetId), sheet.url, {
+            frameWidth: sheet.frameWidth,
+            frameHeight: sheet.frameHeight,
+          });
+        }
       }
     }
   }
@@ -267,11 +287,27 @@ class CraftyScene extends Phaser.Scene {
     const worldSize = this.options.mode === "arena" ? MAP_SIZE : VIEW_SIZE;
     const backgroundKey = this.options.mode === "arena" ? "ashen-wilderness" : "pixel-forge";
     const background = this.add.image(worldSize / 2, worldSize / 2, backgroundKey).setDisplaySize(worldSize, worldSize);
-    if (this.options.mode === "class-select") {
-      background.setTint(0x746d67);
-      this.add.rectangle(VIEW_SIZE / 2, VIEW_SIZE / 2, VIEW_SIZE, VIEW_SIZE, 0x07090b, 0.5);
-      this.buildClassShowcase();
+    if (this.options.mode === "login") {
+      background.setTint(0x9d765f);
+      this.add.rectangle(VIEW_SIZE / 2, VIEW_SIZE / 2, VIEW_SIZE, VIEW_SIZE, 0x080605, 0.64);
+      this.buildLoginBackdrop();
       return;
+    }
+    if (this.options.mode === "character-create") {
+      background.setTint(0x8d7068);
+      this.add.rectangle(VIEW_SIZE / 2, VIEW_SIZE / 2, VIEW_SIZE, VIEW_SIZE, 0x090608, 0.62);
+      this.buildCharacterCreationShowcase();
+      return;
+    }
+    if (this.options.mode === "loading") {
+      background.setTint(0x8d7068);
+      this.add.rectangle(VIEW_SIZE / 2, VIEW_SIZE / 2, VIEW_SIZE, VIEW_SIZE, 0x07090b, 0.62);
+      this.buildLoginBackdrop();
+      return;
+    }
+
+    if (!this.options.multiplayer) {
+      throw new Error(`${this.options.mode} requires a server-backed multiplayer adapter`);
     }
 
     this.createPlayer();
@@ -287,7 +323,6 @@ class CraftyScene extends Phaser.Scene {
       this.cameras.main.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
       this.cameras.main.startFollow(this.cameraTarget!, true, 0.16, 0.16);
       this.cameras.main.roundPixels = false;
-      this.startWave(1);
     }
 
     this.keys = this.input.keyboard?.addKeys({
@@ -311,10 +346,13 @@ class CraftyScene extends Phaser.Scene {
       flask5: Phaser.Input.Keyboard.KeyCodes.FIVE,
     }) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
-      if (this.options.mode === "arena" && !this.options.paused && !this.arenaComplete) this.tryBasicAttack();
+      if (this.options.mode === "arena" && !this.options.paused && !this.options.controlsBlocked && !this.arenaComplete) this.queueBasicAttack(true);
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.playerAnimator?.destroy();
+      for (const remote of this.remotePlayers.values()) remote.animator.destroy();
+      this.remotePlayers.clear();
+      this.networkMonsterActions.clear();
       this.audio.dispose();
     });
   }
@@ -324,15 +362,15 @@ class CraftyScene extends Phaser.Scene {
       this.accumulator = 0;
       return;
     }
-    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.nova)) this.useSkill("nova");
-    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.dash)) this.useSkill("dash");
-    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.ward)) this.useSkill("ward");
-    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flameWave)) this.useSkill("flameWave");
-    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask1)) this.useFlask(0);
-    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask2)) this.useFlask(1);
-    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask3)) this.useFlask(2);
-    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask4)) this.useFlask(3);
-    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask5)) this.useFlask(4);
+    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.nova)) this.useSkill("nova");
+    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.dash)) this.useSkill("dash");
+    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.ward)) this.useSkill("ward");
+    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flameWave)) this.useSkill("flameWave");
+    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask1)) this.useFlask(0);
+    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask2)) this.useFlask(1);
+    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask3)) this.useFlask(2);
+    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask4)) this.useFlask(3);
+    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask5)) this.useFlask(4);
     this.accumulator += Math.min(delta, MAX_FRAME_DELTA);
     while (this.accumulator >= FIXED_STEP) {
       this.previousPlayerX = this.player.x;
@@ -344,19 +382,17 @@ class CraftyScene extends Phaser.Scene {
   }
 
   useSkill(skill: "basic" | "nova" | "dash" | "ward" | "flameWave"): void {
-    if (this.options.mode !== "arena" || !this.player || this.options.paused) return;
+    if (this.options.mode !== "arena" || !this.player || this.options.paused || this.options.controlsBlocked) return;
     if (skill === "basic") {
-      this.tryBasicAttack();
+      this.queueBasicAttack(true);
       return;
     }
     if (skill === "nova" && this.novaCooldown <= 0 && this.focus >= this.resolvedNova.focusCost) {
       const pointer = this.input.activePointer;
       const direction = resolveCharacterDirection(pointer.worldX - this.player.x, pointer.worldY - this.player.y, this.playerAnimator?.currentDirection);
       const started = this.beginSkillAction(this.resolvedNova, direction, () => {
-        for (let index = 0; index < this.resolvedNova.projectileCount; index += 1) {
-          const angle = (Math.PI * 2 * index) / this.resolvedNova.projectileCount;
-          this.spawnProjectile(Math.cos(angle), Math.sin(angle), this.resolvedNova);
-        }
+        const angle = Math.atan2(pointer.worldY - this.player!.y, pointer.worldX - this.player!.x);
+        this.options.multiplayer?.sendAttack?.("nova", { x: Math.cos(angle), y: Math.sin(angle) });
       });
       if (!started) return;
       this.focus -= this.resolvedNova.focusCost;
@@ -371,11 +407,7 @@ class CraftyScene extends Phaser.Scene {
       const startY = this.player.y;
       const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
       const started = this.beginSkillAction(this.resolvedDash, direction, () => {
-        if (!this.player) return;
-        this.player.x += (dx / length) * 105;
-        this.player.y += (dy / length) * 105;
-        this.clampPlayer();
-        this.playerAnimator?.setWorldTransform(this.player.x, this.player.y, Math.round(this.player.y / 10) + 11);
+        this.options.multiplayer?.sendAttack?.("dash", { x: dx / length, y: dy / length });
       }, startX, startY);
       if (!started) return;
       this.focus -= this.resolvedDash.focusCost;
@@ -387,6 +419,7 @@ class CraftyScene extends Phaser.Scene {
       const direction = resolveCharacterDirection(pointer.worldX - this.player.x, pointer.worldY - this.player.y, this.playerAnimator?.currentDirection);
       const started = this.beginSkillAction(this.resolvedWard, direction, () => {
         this.wardRemaining = this.resolvedWard.duration ?? 0;
+        this.options.multiplayer?.sendAttack?.("ward");
       });
       if (!started) return;
       this.focus -= this.resolvedWard.focusCost;
@@ -396,16 +429,10 @@ class CraftyScene extends Phaser.Scene {
       const pointer = this.input.activePointer;
       const dx = pointer.worldX - this.player.x;
       const dy = pointer.worldY - this.player.y;
-      const centerAngle = Math.atan2(dy, dx);
+      const length = Math.hypot(dx, dy) || 1;
       const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
       const started = this.beginSkillAction(this.resolvedFlameWave, direction, () => {
-        const projectileCount = this.resolvedFlameWave.projectileCount;
-        const spreadRadians = 0.78;
-        for (let index = 0; index < projectileCount; index += 1) {
-          const offset = projectileCount === 1 ? 0 : (index / (projectileCount - 1) - 0.5) * spreadRadians;
-          const angle = centerAngle + offset;
-          this.spawnProjectile(Math.cos(angle), Math.sin(angle), this.resolvedFlameWave);
-        }
+        this.options.multiplayer?.sendAttack?.("flameWave", { x: dx / length, y: dy / length });
       });
       if (!started) return;
       this.focus -= this.resolvedFlameWave.focusCost;
@@ -413,21 +440,8 @@ class CraftyScene extends Phaser.Scene {
     }
   }
 
-  dropInventoryItem(item: InventoryItem): boolean {
-    if (!this.player || this.options.mode === "class-select") return false;
-    const worldSize = this.options.mode === "arena" ? MAP_SIZE : VIEW_SIZE;
-    const direction = characterDirectionVector(this.playerAnimator?.currentDirection ?? "south");
-    let x = Phaser.Math.Clamp(this.player.x + direction.x * 64, 24, worldSize - 24);
-    let y = Phaser.Math.Clamp(this.player.y + direction.y * 64, 24, worldSize - 24);
-    if (Math.hypot(this.player.x - x, this.player.y - y) < 48) {
-      x = Phaser.Math.Clamp(this.player.x - direction.x * 64, 24, worldSize - 24);
-      y = Phaser.Math.Clamp(this.player.y - direction.y * 64, 24, worldSize - 24);
-    }
-    return this.spawnGroundDrop(x, y, { kind: "inventory", item });
-  }
-
   useFlask(slotIndex: number): void {
-    if (this.options.mode !== "arena" || !this.player || this.options.paused) return;
+    if (this.options.mode !== "arena" || !this.player || this.options.paused || this.options.controlsBlocked) return;
     const flask = this.options.flaskBelt[slotIndex];
     if (!flask || flask.stackSize <= 0) return;
     const configured = FLASK_DEFINITIONS[flask.baseId];
@@ -435,33 +449,33 @@ class CraftyScene extends Phaser.Scene {
     const maxMana = this.options.arenaBalance?.maxFocus ?? 100;
     if (configured.resource === "life" && this.life >= maxLife) return;
     if (configured.resource === "mana" && this.focus >= maxMana) return;
-    const consumed = this.options.onFlaskUse(slotIndex);
-    if (!consumed) return;
-    this.queueFlaskRecovery(consumed);
-    this.playFlaskVfx(consumed);
-    this.options.onHud(this.getHud());
+    this.options.multiplayer?.sendUseFlask?.(slotIndex);
+    this.playFlaskVfx(configured);
   }
 
   getHud(): WorldHudState {
-    const finalWave = this.options.arenaBalance?.waves ?? ARENA_RULES.totalWaves;
+    const networkMap = this.options.multiplayer?.getMap?.();
+    const networkPlayer = this.options.multiplayer
+      ?.getPlayers().find((player) => player.characterId === this.options.multiplayer?.localCharacterId);
+    const finalWave = networkMap?.totalWaves ?? this.options.arenaBalance?.waves ?? ARENA_RULES.totalWaves;
     return {
       fps: Math.round(this.game.loop.actualFps || 0),
       mode: this.options.mode,
-      wave: this.wave,
-      enemies: this.enemies.length,
-      nextWaveIn: this.wave < finalWave
-        ? Math.max(0, ARENA_RULES.waveSpawnIntervalSeconds - this.waveElapsedSeconds)
+      wave: networkMap?.wave ?? 1,
+      enemies: networkMap?.monstersAlive ?? 0,
+      nextWaveIn: (networkMap?.wave ?? finalWave) < finalWave
+        ? Math.max(0, ARENA_RULES.waveSpawnIntervalSeconds - (networkMap?.waveElapsedMilliseconds ?? 0) / 1000)
         : null,
-      finalRageIn: this.wave === finalWave && !this.finalWaveRageActive && !this.arenaComplete
-        ? Math.max(0, ARENA_RULES.finalWaveRageDelaySeconds - this.waveElapsedSeconds)
+      finalRageIn: networkMap?.wave === finalWave && !networkMap.finalRageActive && !networkMap.completed
+        ? Math.max(0, ARENA_RULES.finalWaveRageDelaySeconds - networkMap.waveElapsedMilliseconds / 1000)
         : null,
-      finalRageActive: this.finalWaveRageActive,
-      life: Math.max(0, this.life),
-      maxLife: this.options.arenaBalance?.maxLife ?? 100,
-      focus: this.focus,
-      maxFocus: this.options.arenaBalance?.maxFocus ?? 100,
+      finalRageActive: networkMap?.finalRageActive ?? false,
+      life: Math.max(0, networkPlayer?.life ?? this.life),
+      maxLife: networkPlayer?.maxLife ?? this.options.arenaBalance?.maxLife ?? 100,
+      focus: networkPlayer?.focus ?? this.focus,
+      maxFocus: networkPlayer?.maxFocus ?? this.options.arenaBalance?.maxFocus ?? 100,
+      pendingExperience: Math.max(0, (networkPlayer?.experience ?? 0) - (networkPlayer?.persistedExperience ?? 0)),
       groundDrops: this.groundDrops.length,
-      lootCollected: this.lootCollected,
       novaCooldown: this.novaCooldown,
       riftCharges: this.riftCharges,
       riftMaxCharges: this.resolvedDash.maxCharges,
@@ -469,7 +483,7 @@ class CraftyScene extends Phaser.Scene {
       wardCooldown: this.wardCooldown,
       wardRemaining: this.wardRemaining,
       flameWaveCooldown: this.flameWaveCooldown,
-      arenaComplete: this.arenaComplete,
+      arenaComplete: networkMap?.completed ?? false,
     };
   }
 
@@ -503,15 +517,13 @@ class CraftyScene extends Phaser.Scene {
   }
 
   private fixedUpdate(delta: number): void {
-    if (!this.player || this.arenaFailed) return;
+    if (!this.player) return;
     this.elapsedSeconds += delta;
-    this.waveElapsedSeconds += delta;
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
     this.novaCooldown = Math.max(0, this.novaCooldown - delta);
     this.wardCooldown = Math.max(0, this.wardCooldown - delta);
     this.flameWaveCooldown = Math.max(0, this.flameWaveCooldown - delta);
     this.wardRemaining = Math.max(0, this.wardRemaining - delta);
-    this.updateFlaskRecovery(delta);
     if (this.riftCharges < this.resolvedDash.maxCharges) {
       this.riftRecharge = Math.max(0, this.riftRecharge - delta);
       if (this.riftRecharge <= 0) {
@@ -519,71 +531,40 @@ class CraftyScene extends Phaser.Scene {
         this.riftRecharge = this.riftCharges < this.resolvedDash.maxCharges ? this.resolvedDash.recharge : 0;
       }
     }
-    this.focus = Math.min(this.options.arenaBalance?.maxFocus ?? 100, this.focus + delta * (this.options.arenaBalance?.focusRegen ?? ARENA_RULES.baseFocusRegen));
-
     let xInput = 0;
     let yInput = 0;
-    if (this.keys) {
+    if (this.keys && !this.options.controlsBlocked) {
       xInput = Number(this.keys.right.isDown || this.keys.rightAlt.isDown) - Number(this.keys.left.isDown || this.keys.leftAlt.isDown);
       yInput = Number(this.keys.down.isDown || this.keys.downAlt.isDown) - Number(this.keys.up.isDown || this.keys.upAlt.isDown);
     }
     const inputLength = Math.hypot(xInput, yInput) || 1;
     const speed = (this.options.arenaBalance?.moveSpeed ?? 5.6) * 34;
     const hasInput = Boolean(xInput || yInput);
-    const targetVelocityX = hasInput ? (xInput / inputLength) * speed : 0;
-    const targetVelocityY = hasInput ? (yInput / inputLength) * speed : 0;
-    const response = hasInput ? MOVEMENT_ACCELERATION : MOVEMENT_DECELERATION;
-    const velocityBlend = 1 - Math.exp(-response * delta);
-    this.playerVelocityX = Phaser.Math.Linear(this.playerVelocityX, targetVelocityX, velocityBlend);
-    this.playerVelocityY = Phaser.Math.Linear(this.playerVelocityY, targetVelocityY, velocityBlend);
-    if (!hasInput && Math.hypot(this.playerVelocityX, this.playerVelocityY) < 0.5) {
-      this.playerVelocityX = 0;
-      this.playerVelocityY = 0;
-    }
+    this.updateNetworkPlayers(delta, hasInput ? xInput / inputLength : 0, hasInput ? yInput / inputLength : 0);
 
     const movementSpeed = Math.hypot(this.playerVelocityX, this.playerVelocityY);
     const isMoving = movementSpeed > 2;
-    if (isMoving) {
-      this.player.x += this.playerVelocityX * delta;
-      this.player.y += this.playerVelocityY * delta;
-      this.clampPlayer();
-      this.footstepElapsed += delta;
-      const speedRatio = Phaser.Math.Clamp(movementSpeed / speed, 0, 1);
-      if (speedRatio > 0.35 && this.footstepElapsed >= Phaser.Math.Linear(0.2, 0.14, speedRatio)) {
-        this.footstepElapsed = 0;
-        this.emitVfxParticle(
-          this.player.x - (this.playerVelocityX / movementSpeed) * 4,
-          this.player.y + 22,
-          0xb69a73,
-          Phaser.Math.Between(-18, 18),
-          Phaser.Math.Between(-16, -5),
-          0.3,
-          0.75,
-          1.25,
-          "vfx-dust",
-        );
-      }
-    } else {
-      this.footstepElapsed = 0.12;
-    }
     const directionX = isMoving ? this.playerVelocityX / movementSpeed : xInput / inputLength;
     const directionY = isMoving ? this.playerVelocityY / movementSpeed : yInput / inputLength;
     this.playerAnimator?.setLocomotion(directionX, directionY, isMoving, speed > 0 ? movementSpeed / speed : 0);
 
     if (this.options.mode === "arena") {
-      if (this.keys?.attack.isDown || this.input.activePointer.isDown) this.tryBasicAttack();
-      this.updateFinalWaveRage();
-      this.updateEnemies(delta);
-      this.updateEnemyProjectiles(delta);
-      this.rebuildSpatialBuckets();
-      this.applyEnemyContactDamage(delta);
-      this.updateProjectiles(delta);
+      this.monsterAudio.setListener(this.player.x, this.player.y);
+      if (this.options.controlsBlocked) {
+        this.basicAttackIntent = null;
+      } else {
+        if (this.keys?.attack.isDown || this.input.activePointer.isDown) this.queueBasicAttack(false);
+        this.consumeBasicAttackIntent();
+      }
+      this.syncNetworkMonsters(delta);
+      this.syncNetworkCombatEvents();
+      this.syncNetworkDrops();
+      this.updateCompletionChest(delta);
+      this.updateReturnPortal(delta);
+      this.updateEnemyAnimations(delta);
       this.updateVfxParticles(delta);
       this.updateCorpses(delta);
       this.renderEnemyHealth();
-      this.advanceWaveIfReady();
-      this.updateCompletionChest(delta);
-      this.updateReturnPortal(delta);
     }
     this.updateGroundDrops(delta);
 
@@ -679,14 +660,72 @@ class CraftyScene extends Phaser.Scene {
     graphics.generateTexture(key, 16, 17).destroy();
   }
 
-  private buildClassShowcase(): void {
-    const roster = this.add.image(480, 548, "class-roster").setOrigin(0.5, 1).setDisplaySize(590, 590).setDepth(12).setAlpha(0.95);
-    this.tweens.add({ targets: roster, y: roster.y - 4, duration: 1450, yoyo: true, repeat: -1, ease: "Sine.InOut" });
-    (["amazon", "barbarian", "sorceress"] as CharacterClassId[]).forEach((classId, index) => {
-      const x = 285 + index * 195;
-      this.add.ellipse(x, 535, 158, 38, 0x0b0c0f, 0.78);
-      const glow = this.add.image(x, 528, "player-aura").setScale(2.1).setTint(CLASS_COLORS[classId].magic).setAlpha(0.24).setDepth(10);
-      this.tweens.add({ targets: glow, alpha: 0.48, scaleX: 2.35, scaleY: 2.25, duration: 900 + index * 120, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+  private buildLoginBackdrop(): void {
+    const rings = this.add.graphics().setDepth(8);
+    rings.lineStyle(2, 0xb85d2d, 0.18).strokeCircle(480, 452, 176);
+    rings.lineStyle(1, 0xe6984f, 0.14).strokeCircle(480, 452, 214);
+    rings.lineStyle(1, 0x8f4628, 0.13).strokeCircle(480, 452, 260);
+    const outerSigil = this.add.image(480, 452, "ember-sigil")
+      .setDisplaySize(330, 330)
+      .setAlpha(0.18)
+      .setTint(0xdb7137)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(9);
+    const innerSigil = this.add.image(480, 452, "ember-sigil")
+      .setDisplaySize(208, 208)
+      .setAlpha(0.24)
+      .setTint(0xffb25e)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(10);
+    this.tweens.add({ targets: outerSigil, angle: 360, duration: 48_000, repeat: -1, ease: "Linear" });
+    this.tweens.add({ targets: innerSigil, angle: -360, alpha: 0.38, duration: 31_000, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+
+    const emberPositions = [
+      [178, 182], [254, 706], [344, 264], [408, 755], [552, 190], [621, 688], [732, 276], [801, 624],
+    ] as const;
+    emberPositions.forEach(([x, y], index) => {
+      const ember = this.add.rectangle(x, y, index % 3 === 0 ? 4 : 3, index % 2 === 0 ? 4 : 6, index % 2 === 0 ? 0xffa24f : 0xbd4c25, 0.42).setDepth(11);
+      this.tweens.add({
+        targets: ember,
+        y: y - 34 - (index % 3) * 12,
+        x: x + (index % 2 === 0 ? 8 : -8),
+        alpha: 0.08,
+        duration: 1_900 + index * 170,
+        delay: index * 120,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.InOut",
+      });
+    });
+  }
+
+  private buildCharacterCreationShowcase(): void {
+    const x = 666;
+    const y = 530;
+    const glow = this.add.image(x, y - 42, "player-aura")
+      .setDisplaySize(430, 560)
+      .setTint(CLASS_COLORS.sorceress.magic)
+      .setAlpha(0.2)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(8);
+    const sigil = this.add.image(x, y - 15, "ember-sigil")
+      .setDisplaySize(410, 410)
+      .setTint(0xa968e8)
+      .setAlpha(0.16)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(9);
+    const shadow = this.add.ellipse(x, y + 190, 260, 54, 0x050305, 0.86).setDepth(10);
+    const sorceress = this.add.image(x, y, "player-sorceress-rendered")
+      .setDisplaySize(294, 408)
+      .setDepth(12);
+    this.tweens.add({ targets: sigil, angle: 360, duration: 42_000, repeat: -1, ease: "Linear" });
+    this.tweens.add({ targets: glow, alpha: 0.34, scaleX: 1.04, scaleY: 1.025, duration: 1_800, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+    this.tweens.add({ targets: [sorceress, shadow], y: "-=5", duration: 1_700, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+
+    const embers = [[550, 360], [590, 670], [704, 294], [754, 626], [818, 422]] as const;
+    embers.forEach(([emberX, emberY], index) => {
+      const ember = this.add.rectangle(emberX, emberY, 3, index % 2 ? 6 : 4, index % 2 ? 0xa866e8 : 0xff8a45, 0.5).setDepth(13);
+      this.tweens.add({ targets: ember, y: emberY - 55, x: emberX + (index % 2 ? -9 : 9), alpha: 0.06, duration: 1_500 + index * 210, yoyo: true, repeat: -1, ease: "Sine.InOut" });
     });
   }
 
@@ -717,6 +756,433 @@ class CraftyScene extends Phaser.Scene {
       this.playerManaLabel = this.add.text(x, y, "", resourceLabelStyle).setOrigin(0.5).setDepth(501);
     }
     this.tweens.add({ targets: this.playerAura, alpha: 0.38, scaleX: 1.4, scaleY: 1.28, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+  }
+
+  private updateNetworkPlayers(delta: number, inputX: number, inputY: number): void {
+    const multiplayer = this.options.multiplayer;
+    if (!multiplayer || !this.player) return;
+    this.networkInputElapsed += delta;
+    const inputChanged = inputX !== this.lastNetworkInputX || inputY !== this.lastNetworkInputY;
+    if (inputChanged || this.networkInputElapsed >= 0.08) {
+      multiplayer.sendMovement(inputX, inputY);
+      this.lastNetworkInputX = inputX;
+      this.lastNetworkInputY = inputY;
+      this.networkInputElapsed = 0;
+    }
+    const players = multiplayer.getPlayers();
+    const local = players.find((player) => player.characterId === multiplayer.localCharacterId);
+    if (local) {
+      const previousX = this.player.x;
+      const previousY = this.player.y;
+      const blend = 1 - Math.exp(-18 * delta);
+      this.player.x = Phaser.Math.Linear(this.player.x, local.x, blend);
+      this.player.y = Phaser.Math.Linear(this.player.y, local.y, blend);
+      this.playerVelocityX = (this.player.x - previousX) / Math.max(delta, 0.001);
+      this.playerVelocityY = (this.player.y - previousY) / Math.max(delta, 0.001);
+      if (local.life !== undefined) this.life = local.life;
+      if (local.focus !== undefined) this.focus = local.focus;
+      if ((local.life ?? 1) <= 0 && !this.returnToHideoutRequested) {
+        this.returnToHideoutRequested = true;
+        this.options.onReturnToHideout();
+      }
+    } else {
+      this.playerVelocityX = 0;
+      this.playerVelocityY = 0;
+    }
+
+    const present = new Set<string>();
+    for (const networkPlayer of players) {
+      if (networkPlayer.characterId === multiplayer.localCharacterId || !networkPlayer.connected) continue;
+      present.add(networkPlayer.characterId);
+      let remote = this.remotePlayers.get(networkPlayer.characterId);
+      if (!remote || remote.classId !== networkPlayer.classId) {
+        if (remote) this.destroyRemotePlayer(remote);
+        const sprite = this.add.sprite(networkPlayer.x, networkPlayer.y, characterDefaultSpriteSheetKey(networkPlayer.classId), 0).setDepth(10);
+        remote = {
+          classId: networkPlayer.classId,
+          x: networkPlayer.x,
+          y: networkPlayer.y,
+          sprite,
+          shadow: this.add.image(networkPlayer.x, networkPlayer.y + 25, "shadow").setScale(2.1, 1.45).setDepth(8),
+          label: this.add.text(networkPlayer.x, networkPlayer.y - 112, networkPlayer.name, {
+            fontFamily: "monospace", fontSize: "11px", color: "#f6d29a", backgroundColor: "#090806cc",
+            padding: { x: 5, y: 2 },
+          }).setOrigin(0.5).setDepth(600),
+          animator: new CharacterAnimator(this, sprite, networkPlayer.classId),
+        };
+        this.remotePlayers.set(networkPlayer.characterId, remote);
+      }
+      const previousX = remote.x;
+      const previousY = remote.y;
+      const blend = 1 - Math.exp(-14 * delta);
+      remote.x = Phaser.Math.Linear(remote.x, networkPlayer.x, blend);
+      remote.y = Phaser.Math.Linear(remote.y, networkPlayer.y, blend);
+      const velocityX = (remote.x - previousX) / Math.max(delta, 0.001);
+      const velocityY = (remote.y - previousY) / Math.max(delta, 0.001);
+      const speed = Math.hypot(velocityX, velocityY);
+      const moving = speed > 2;
+      const directionX = moving ? velocityX / speed : networkPlayer.facingX;
+      const directionY = moving ? velocityY / speed : networkPlayer.facingY;
+      const depth = Math.round(remote.y / 10) + 11;
+      remote.animator.setLocomotion(directionX, directionY, moving, Phaser.Math.Clamp(speed / 190, 0, 1));
+      remote.animator.setWorldTransform(remote.x, remote.y, depth);
+      remote.shadow.setPosition(remote.x, remote.y + 25).setDepth(depth - 2);
+      remote.label.setPosition(remote.x, remote.y - 112).setDepth(depth + 90);
+    }
+    for (const [characterId, remote] of this.remotePlayers) {
+      if (present.has(characterId)) continue;
+      this.destroyRemotePlayer(remote);
+      this.remotePlayers.delete(characterId);
+    }
+  }
+
+  private syncNetworkMonsters(delta: number): void {
+    const state = this.options.multiplayer?.getMap?.();
+    if (!state) return;
+    if (state.completed && !this.arenaComplete) {
+      this.arenaComplete = true;
+      this.spawnNetworkCompletionObjects(state.completionX, state.completionY);
+    }
+    this.networkMonsterFrame += 1;
+    this.networkMonsterDelta = delta;
+    const sampler = this.options.multiplayer?.getMonsterSampler?.();
+    sampler?.forEachSample(performance.now(), this.consumeNetworkMonsterSample);
+    for (const [id, enemy] of this.networkEnemies) {
+      if (enemy.networkSeenFrame === this.networkMonsterFrame) continue;
+      this.releaseNetworkEnemy(enemy);
+      this.networkEnemies.delete(id);
+    }
+  }
+
+  private syncNetworkMonster(id: number, archetype: number, rarityCode: number, maxLife: number, x: number, y: number, lifePercent: number, flags: number, delta: number): void {
+      const existing = this.networkEnemies.get(id);
+      if (lifePercent <= 0) {
+        if (existing) this.releaseNetworkEnemy(existing);
+        return;
+      }
+      const archetypeId = NETWORK_ARCHETYPE_IDS[archetype];
+      if (!archetypeId || !(archetypeId in MONSTER_ARCHETYPES)) return;
+      const rarity: MonsterRarity = rarityCode === 2 ? "rare" : rarityCode === 1 ? "magic" : "normal";
+      let enemy = existing;
+      if (!enemy) {
+        const sprite = this.enemyPool?.get(x, y, `monster-${archetypeId}`) as Phaser.GameObjects.Image | null;
+        if (!sprite) return;
+        const baseScale = this.enemyBaseScale(archetypeId, rarity);
+        sprite.setTexture(`monster-${archetypeId}`).setOrigin(0.5, this.enemyOriginY(archetypeId)).clearTint();
+        if (rarity === "magic") sprite.setTint(MONSTER_PACK_RULES.magicTint);
+        if (rarity === "rare") sprite.setTint(MONSTER_PACK_RULES.rareTint);
+        sprite.setActive(true).setVisible(true).setPosition(x, y).setScale(baseScale);
+        enemy = {
+          networkId: id,
+          networkSeenFrame: this.networkMonsterFrame,
+          sprite,
+          x,
+          y,
+          renderX: x,
+          renderY: y,
+          life: maxLife * lifePercent,
+          maxLife,
+          archetypeId,
+          rarity,
+          baseScale,
+          phase: Math.random() * Math.PI * 2,
+          animationTime: Math.random() * 10,
+          moving: false,
+          healthLabel: null,
+        };
+        this.enemies.push(enemy);
+        this.networkEnemies.set(id, enemy);
+      }
+      enemy.networkSeenFrame = this.networkMonsterFrame;
+      enemy.phase += delta * 5;
+      const blend = 1 - Math.exp(-14 * delta);
+      enemy.moving = Boolean(flags & MonsterFlags.Moved);
+      enemy.x = x;
+      enemy.y = y;
+      enemy.life = maxLife * lifePercent;
+      enemy.maxLife = maxLife;
+      const action = this.networkMonsterActions.get(id);
+      let lift = 0;
+      let rotation = 0;
+      if (action?.action === "jump") {
+        action.elapsedMilliseconds = Math.min(action.durationMilliseconds, action.elapsedMilliseconds + delta * 1000);
+        const progress = action.durationMilliseconds > 0 ? action.elapsedMilliseconds / action.durationMilliseconds : 1;
+        const easedProgress = 1 - (1 - progress) ** 3;
+        enemy.renderX = Phaser.Math.Linear(action.fromX, action.toX, easedProgress);
+        enemy.renderY = Phaser.Math.Linear(action.fromY, action.toY, easedProgress);
+        lift = Math.sin(progress * Math.PI) * 72;
+        rotation = Math.sin(progress * Math.PI) * Math.sign(action.toX - action.fromX) * 0.09;
+        enemy.sprite.setScale(enemy.baseScale * (1 + Math.sin(progress * Math.PI) * 0.32));
+        if (progress >= 1) {
+          this.networkMonsterActions.delete(id);
+          enemy.sprite.setScale(enemy.baseScale);
+          this.emitRadialVfx(action.toX, action.toY, 8, MONSTER_ARCHETYPES[enemy.archetypeId].visual.accent, 58, 0.26);
+        }
+      } else {
+        enemy.renderX = Phaser.Math.Linear(enemy.renderX ?? enemy.x, x, blend);
+        enemy.renderY = Phaser.Math.Linear(enemy.renderY ?? enemy.y, y, blend);
+      }
+      const local = this.player;
+      const flip = local ? local.x < enemy.x : false;
+      enemy.sprite
+        .setPosition(enemy.renderX, enemy.renderY - lift + Math.sin(enemy.phase) * 1.1)
+        .setRotation(rotation)
+        .setFlipX(flip)
+        .setDepth(Math.round((enemy.renderY ?? enemy.y) / 10) + 10);
+  }
+
+  private releaseNetworkEnemy(enemy: EnemyState): void {
+    const index = this.enemies.indexOf(enemy);
+    if (index < 0) return;
+    this.enemies.splice(index, 1);
+    if (enemy.networkId !== undefined) {
+      this.networkMonsterActions.delete(enemy.networkId);
+      this.networkEnemies.delete(enemy.networkId);
+      this.monsterAudio.forgetMonster(enemy.networkId);
+    }
+    this.enemyPool?.killAndHide(enemy.sprite);
+    if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
+  }
+
+  private onNetworkMonsterDeath(event: Extract<CombatEvent, { kind: "monster-death" }>): void {
+    if (this.processedMonsterDeaths.has(event.monsterId)) return;
+    this.processedMonsterDeaths.add(event.monsterId);
+    const enemy = this.networkEnemies.get(event.monsterId);
+    const presentation: MonsterDeathPresentation = {
+      archetypeId: event.archetypeId,
+      rarity: event.rarity,
+      x: enemy?.renderX ?? event.x,
+      y: enemy?.renderY ?? event.y,
+      baseScale: enemy?.baseScale ?? this.enemyBaseScale(event.archetypeId, event.rarity),
+      flipX: enemy?.sprite.flipX ?? Boolean(this.player && this.player.x < event.x),
+    };
+    if (enemy) this.releaseNetworkEnemy(enemy);
+    this.spawnCorpse(presentation);
+    this.emitMonsterDeathVfx(presentation);
+    this.monsterAudio.death(
+      event.monsterId,
+      event.archetypeId,
+      event.rarity,
+      presentation.x,
+      presentation.y,
+      this.time.now,
+    );
+  }
+
+  private syncNetworkCombatEvents(): void {
+    const multiplayer = this.options.multiplayer;
+    if (!multiplayer?.drainCombatEvents) return;
+    for (const event of multiplayer.drainCombatEvents()) {
+      if (event.kind === "monster-aggro") {
+        this.monsterAudio.aggro(event.monsterId, event.archetypeId, event.x, event.y, this.time.now);
+        continue;
+      }
+      if (event.kind === "monster-death") {
+        this.onNetworkMonsterDeath(event);
+        continue;
+      }
+      if (event.kind === "monster-action") {
+        this.playNetworkMonsterAction(event);
+        continue;
+      }
+      if (event.kind === "projectile-spawn") {
+        this.launchReplicatedProjectile(event);
+        continue;
+      }
+      if (event.kind === "projectile-hit") {
+        this.emitRadialVfx(event.x, event.y, 5, 0xff9a4b, 42, 0.18);
+        continue;
+      }
+      if (event.kind === "projectile-expire") {
+        this.expireReplicatedProjectile(event.projectileId, event.x, event.y);
+        continue;
+      }
+      if (event.kind === "monster-projectile-terminal") {
+        this.expireNetworkEnemyProjectile(event.projectileId, event.x, event.y, event.hit);
+        continue;
+      }
+      if (event.kind === "damage") {
+        const target = this.networkEnemies.get(event.targetId);
+        if (target && !event.evaded) {
+          this.monsterAudio.hit(
+            event.targetId,
+            target.archetypeId,
+            target.rarity,
+            event.targetX,
+            event.targetY,
+            this.time.now,
+          );
+        }
+        if (event.actorCharacterId !== multiplayer.localCharacterId) continue;
+        this.showDamageNumber(
+          target?.sprite.x ?? event.targetX,
+          target?.sprite.y ?? event.targetY,
+          event.evaded ? "EVADE" : { amount: event.amount, type: event.damageType },
+        );
+        this.emitRadialVfx(event.targetX, event.targetY, event.evaded ? 3 : 6, event.evaded ? 0xaeb4bd : 0xff9a4b, 54, 0.22);
+        continue;
+      }
+      if (event.actorCharacterId === multiplayer.localCharacterId) continue;
+      this.playRemoteSkillAnimation(event);
+    }
+  }
+
+  private playNetworkMonsterAction(event: MonsterActionEvent): void {
+    const enemy = this.networkEnemies.get(event.monsterId);
+    if (enemy) {
+      this.monsterAudio.action(
+        event.monsterId,
+        enemy.archetypeId,
+        enemy.rarity,
+        event.action,
+        event.fromX,
+        event.fromY,
+        this.time.now,
+      );
+    }
+    if (event.action === "jump") {
+      this.networkMonsterActions.set(event.monsterId, { ...event, elapsedMilliseconds: 0 });
+      return;
+    }
+    if (!enemy) return;
+    const accent = MONSTER_ARCHETYPES[enemy.archetypeId].visual.accent;
+    this.tweens.killTweensOf(enemy.sprite);
+    if (event.action === "ranged") {
+      enemy.sprite.setScale(enemy.baseScale * 0.82, enemy.baseScale * 1.14);
+      this.emitRadialVfx(enemy.sprite.x, enemy.sprite.y - 14, enemy.rarity === "rare" ? 9 : 5, accent, 52, 0.24);
+      this.launchNetworkEnemyProjectile(enemy, event);
+    } else {
+      enemy.sprite.setScale(enemy.baseScale * 1.16, enemy.baseScale * 0.88);
+      this.emitRadialVfx(event.toX, event.toY, 4, accent, 34, 0.16);
+    }
+    this.tweens.add({
+      targets: enemy.sprite,
+      scaleX: enemy.baseScale,
+      scaleY: enemy.baseScale,
+      duration: event.durationMilliseconds,
+      ease: "Back.easeOut",
+    });
+  }
+
+  private launchNetworkEnemyProjectile(enemy: EnemyState, event: MonsterActionEvent): void {
+    if (event.projectileId === undefined) return;
+    this.expireNetworkEnemyProjectile(event.projectileId, event.fromX, event.fromY, false, false);
+    const sprite = this.enemyProjectilePool?.get(event.fromX, event.fromY - 10, "enemy-projectile") as Phaser.GameObjects.Image | null;
+    if (!sprite) return;
+    const duration = Math.max(320, event.durationMilliseconds);
+    const dx = event.toX - event.fromX;
+    const dy = event.toY - event.fromY;
+    const length = Math.hypot(dx, dy) || 1;
+    const range = event.projectileRange ?? length;
+    const targetX = event.fromX + dx / length * range;
+    const targetY = event.fromY + dy / length * range;
+    sprite.setTexture("enemy-projectile")
+      .setActive(true)
+      .setVisible(true)
+      .setPosition(event.fromX, event.fromY - 10)
+      .setScale(enemy.rarity === "rare" ? 1.65 : enemy.rarity === "magic" ? 1.45 : 1.25)
+      .setDepth(82)
+      .setAlpha(1)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const projectile: NetworkEnemyProjectile = {
+      sprite,
+      monsterId: event.monsterId,
+      archetypeId: enemy.archetypeId,
+      rarity: enemy.rarity,
+    };
+    this.networkEnemyProjectiles.set(event.projectileId, projectile);
+    this.tweens.add({
+      targets: sprite,
+      x: targetX,
+      y: targetY - 8,
+      rotation: sprite.rotation + Math.PI * 3,
+      duration,
+      ease: "Linear",
+      onComplete: () => {
+        if (this.networkEnemyProjectiles.get(event.projectileId!) !== projectile) return;
+        this.networkEnemyProjectiles.delete(event.projectileId!);
+        this.enemyProjectilePool?.killAndHide(sprite);
+      },
+    });
+  }
+
+  private expireNetworkEnemyProjectile(projectileId: number, x: number, y: number, hit: boolean, emitAudio = true): void {
+    const projectile = this.networkEnemyProjectiles.get(projectileId);
+    if (!projectile) return;
+    this.networkEnemyProjectiles.delete(projectileId);
+    const { sprite } = projectile;
+    this.tweens.killTweensOf(sprite);
+    sprite.setPosition(x, y).setAlpha(1);
+    if (hit) {
+      this.emitRadialVfx(x, y, 7, 0xd985e8, 46, 0.2);
+      if (emitAudio) {
+        this.monsterAudio.projectileImpact(
+          projectile.monsterId,
+          projectile.archetypeId,
+          projectile.rarity,
+          x,
+          y,
+          this.time.now,
+        );
+      }
+    }
+    this.enemyProjectilePool?.killAndHide(sprite);
+  }
+
+  private playRemoteSkillAnimation(event: Extract<CombatEvent, { kind: "skill" }>): void {
+    const remote = this.remotePlayers.get(event.actorCharacterId);
+    if (!remote) return;
+    const skill = event.skill === "basic" ? this.resolvedBasic
+      : event.skill === "nova" ? this.resolvedNova
+        : event.skill === "dash" ? this.resolvedDash
+          : event.skill === "ward" ? this.resolvedWard
+            : this.resolvedFlameWave;
+    const direction = resolveCharacterDirection(event.direction.x, event.direction.y, remote.animator.currentDirection);
+    const playbackRate = skill.presentation.animation === "attack" ? 1.2 : skill.presentation.animation === "dash" ? 1.35 : 1;
+    remote.animator.playAction(skill.presentation.animation, direction, playbackRate, () => undefined);
+  }
+
+  private launchReplicatedProjectile(event: Extract<CombatEvent, { kind: "projectile-spawn" }>): void {
+    this.expireReplicatedProjectile(event.projectileId, event.originX, event.originY, false);
+    const skill = event.skill === "nova" ? this.resolvedNova
+      : event.skill === "flameWave" ? this.resolvedFlameWave : this.resolvedBasic;
+    const distance = event.skill === "nova" ? MULTIPLAYER_COMBAT.projectile.novaRange
+      : event.skill === "flameWave" ? MULTIPLAYER_COMBAT.projectile.flameWaveRange
+        : MULTIPLAYER_COMBAT.projectile.basicRange;
+    const sprite = this.projectilePool?.get(event.originX, event.originY, "projectile") as Phaser.GameObjects.Image | null;
+    if (!sprite) return;
+    sprite.setTexture("projectile").setActive(true).setVisible(true)
+      .setPosition(event.originX, event.originY)
+      .setAlpha(1)
+      .setRotation(Math.atan2(event.direction.y, event.direction.x))
+      .setScale((skill.projectileScale ?? 1) * 1.35)
+      .setDepth(80)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.networkProjectiles.set(event.projectileId, sprite);
+    this.tweens.add({
+      targets: sprite,
+      x: event.originX + event.direction.x * distance,
+      y: event.originY + event.direction.y * distance,
+      duration: Math.max(180, distance / Math.max(1, event.speed) * 1_000),
+      ease: "Linear",
+    });
+  }
+
+  private expireReplicatedProjectile(projectileId: number, x: number, y: number, emitEffect = true): void {
+    const sprite = this.networkProjectiles.get(projectileId);
+    if (!sprite) return;
+    this.networkProjectiles.delete(projectileId);
+    this.tweens.killTweensOf(sprite);
+    sprite.setPosition(x, y).setAlpha(1);
+    if (emitEffect) this.emitRadialVfx(x, y, 3, 0xffb25e, 30, 0.14);
+    this.projectilePool?.killAndHide(sprite);
+  }
+
+  private destroyRemotePlayer(remote: RemotePlayerVisual): void {
+    remote.animator.destroy();
+    remote.sprite.destroy();
+    remote.shadow.destroy();
+    remote.label.destroy();
   }
 
   private renderPlayer(interpolation: number): void {
@@ -766,28 +1232,6 @@ class CraftyScene extends Phaser.Scene {
     this.playerManaLabel.setPosition(x, top + 12 + height / 2).setDepth(depth + 1);
   }
 
-  private queueFlaskRecovery(definition: FlaskDefinition): void {
-    const rate = definition.recovery / definition.durationSeconds;
-    if (definition.resource === "life") {
-      this.lifeRecoveryRemaining += definition.recovery;
-      this.lifeRecoveryRate = Math.max(this.lifeRecoveryRate, rate);
-    } else {
-      this.manaRecoveryRemaining += definition.recovery;
-      this.manaRecoveryRate = Math.max(this.manaRecoveryRate, rate);
-    }
-  }
-
-  private updateFlaskRecovery(delta: number): void {
-    const maxLife = this.options.arenaBalance?.maxLife ?? 100;
-    const maxMana = this.options.arenaBalance?.maxFocus ?? 100;
-    const life = advanceFlaskRecovery(this.life, maxLife, this.lifeRecoveryRemaining, this.lifeRecoveryRate, delta);
-    const mana = advanceFlaskRecovery(this.focus, maxMana, this.manaRecoveryRemaining, this.manaRecoveryRate, delta);
-    this.life = life.value;
-    this.lifeRecoveryRemaining = life.remaining;
-    this.focus = mana.value;
-    this.manaRecoveryRemaining = mana.remaining;
-  }
-
   private playFlaskVfx(definition: FlaskDefinition): void {
     if (!this.player) return;
     const isLife = definition.resource === "life";
@@ -812,7 +1256,7 @@ class CraftyScene extends Phaser.Scene {
       : skill.presentation.animation === "dash" ? 1.35 : 1;
     return this.playerAnimator.playAction(skill.presentation.animation, direction, playbackRate, () => {
       onRelease();
-      this.audio.play(skill.presentation.audio);
+      this.audio.playSkill(skill.presentation.audio);
       this.playSkillReleaseVfx(skill, direction, startX, startY);
     });
   }
@@ -988,14 +1432,52 @@ class CraftyScene extends Phaser.Scene {
   private buildHideoutStations(): void {
     this.addStation("stash", 116, 352, 135, 115, "STASH");
     this.addStation("bench", 817, 372, 150, 135, "CRAFT");
-    this.addStation(this.options.portalActive ? "portal" : "map-device", 480, 177, 155, 145, this.options.portalActive ? "ENTER MAP" : "MAP DEVICE");
+    this.addStation("map-device", 480, 177, 155, 145, "MAP DEVICE");
     const merchant = this.add.image(248, 620, "player-sorceress-rendered").setOrigin(0.5, 1).setDisplaySize(59, 96).setTint(0xd9ad76).setDepth(12);
     this.tweens.add({ targets: merchant, y: merchant.y - 2, duration: 1350, yoyo: true, repeat: -1, ease: "Sine.InOut" });
     this.tweens.add({ targets: merchant, y: merchant.y - 3, duration: 1250, yoyo: true, repeat: -1, ease: "Sine.InOut" });
     this.addStation("merchant", 248, 592, 125, 105, "MERCHANT");
-    if (this.options.portalActive) {
-      const aura = this.add.ellipse(480, 202, 105, 34, 0xff6a2e, 0.24).setBlendMode(Phaser.BlendModes.ADD);
-      this.tweens.add({ targets: aura, alpha: 0.55, scaleX: 1.18, scaleY: 1.18, duration: 760, yoyo: true, repeat: -1 });
+    this.buildHideoutPortals();
+  }
+
+  updatePortalIndexes(portalIndexes: readonly number[]): void {
+    this.options.portalIndexes = [...portalIndexes];
+    if (this.options.mode === "hideout" && this.sys.isActive()) this.buildHideoutPortals();
+  }
+
+  private buildHideoutPortals(): void {
+    for (const object of this.hideoutPortalObjects) {
+      this.tweens.killTweensOf(object);
+      object.destroy();
+    }
+    this.hideoutPortalObjects = [];
+    const positions = [
+      { x: 382, y: 150 }, { x: 431, y: 112 }, { x: 529, y: 112 },
+      { x: 578, y: 150 }, { x: 548, y: 228 }, { x: 412, y: 228 },
+    ];
+    for (const portalIndex of this.options.portalIndexes) {
+      const position = positions[portalIndex];
+      if (!position) continue;
+      const aura = this.add.ellipse(position.x, position.y, 47, 70, 0x7b3fe4, 0.16)
+        .setDepth(17).setBlendMode(Phaser.BlendModes.ADD);
+      const outer = this.add.ellipse(position.x, position.y, 34, 62, 0x35155f, 0.7)
+        .setStrokeStyle(3, 0xd4a2ff, 0.88).setDepth(18).setBlendMode(Phaser.BlendModes.ADD);
+      const inner = this.add.ellipse(position.x, position.y, 20, 48, 0x9d52ff, 0.42)
+        .setStrokeStyle(1, 0xffd5ff, 0.9).setDepth(19).setBlendMode(Phaser.BlendModes.ADD);
+      const rune = this.add.text(position.x, position.y, `${portalIndex + 1}`, {
+        fontFamily: "Georgia, serif", fontSize: "12px", color: "#f4d8ff",
+      }).setOrigin(0.5).setDepth(20).setShadow(0, 0, "#d65cff", 8);
+      const label = this.add.text(position.x, position.y + 42, `PORTAL ${portalIndex + 1}`, {
+        fontFamily: "monospace", fontSize: "9px", color: "#d9a8ff", backgroundColor: "#100a18dd", padding: { x: 4, y: 2 },
+      }).setOrigin(0.5).setDepth(21);
+      const zone = this.add.zone(position.x, position.y, 48, 76).setDepth(22).setInteractive({ cursor: "pointer" });
+      zone.on(Phaser.Input.Events.POINTER_DOWN, () => {
+        if (!this.options.paused) this.options.onStation("portal", portalIndex);
+      });
+      this.tweens.add({ targets: aura, alpha: 0.42, scaleX: 1.2, scaleY: 1.12, duration: 760 + portalIndex * 55, yoyo: true, repeat: -1 });
+      this.tweens.add({ targets: [outer, inner], angle: portalIndex % 2 === 0 ? 5 : -5, duration: 1_100 + portalIndex * 70, yoyo: true, repeat: -1, ease: "Sine.InOut" });
+      this.tweens.add({ targets: rune, alpha: 0.55, duration: 620 + portalIndex * 45, yoyo: true, repeat: -1 });
+      this.hideoutPortalObjects.push(aura, outer, inner, rune, label, zone);
     }
   }
 
@@ -1015,218 +1497,43 @@ class CraftyScene extends Phaser.Scene {
     this.tweens.add({ targets: text, alpha: 1, duration: 900, yoyo: true, repeat: -1 });
   }
 
-  private clampPlayer(): void {
-    if (!this.player) return;
-    if (this.options.mode === "arena") {
-      const clampedX = Phaser.Math.Clamp(this.player.x, 90, MAP_SIZE - 90);
-      const clampedY = Phaser.Math.Clamp(this.player.y, 90, MAP_SIZE - 90);
-      if (clampedX !== this.player.x) this.playerVelocityX = 0;
-      if (clampedY !== this.player.y) this.playerVelocityY = 0;
-      this.player.x = clampedX;
-      this.player.y = clampedY;
-      return;
-    }
-    const clampedX = Phaser.Math.Clamp(this.player.x, 175, 785);
-    const clampedY = Phaser.Math.Clamp(this.player.y, 310, 805);
-    if (clampedX !== this.player.x) this.playerVelocityX = 0;
-    if (clampedY !== this.player.y) this.playerVelocityY = 0;
-    this.player.x = clampedX;
-    this.player.y = clampedY;
+  private enemyBaseScale(archetypeId: MonsterArchetypeId, rarity: MonsterRarity): number {
+    const archetype = MONSTER_ARCHETYPES[archetypeId];
+    const rarityScale = rarity === "rare" ? 1.3 : rarity === "magic" ? 1.08 : 1;
+    return (archetype.visual.sheet?.scale ?? archetype.visual.scale) * rarityScale;
   }
 
-  private startWave(wave: number): void {
-    this.wave = wave;
-    this.waveElapsedSeconds = 0;
-    this.finalWaveRageActive = false;
-    const balance = this.options.arenaBalance;
-    if (!balance) throw new Error("Arena balance is required before spawning a wave");
-    const waveStats = balance.waveStats[wave - 1];
-    if (!waveStats) throw new Error(`Missing resolved arena stats for wave ${wave}`);
-    const count = waveStats.monsterCount;
-    const groupCount = Math.min(PACK_REGIONS.length, 4 + Math.ceil(wave / 2));
-    const playerX = this.player?.x ?? MAP_SIZE / 2;
-    const playerY = this.player?.y ?? MAP_SIZE / 2;
-    const nearestRegion = [...PACK_REGIONS].sort((left, right) => (
-      Math.hypot(left[0] * MAP_SIZE - playerX, left[1] * MAP_SIZE - playerY)
-      - Math.hypot(right[0] * MAP_SIZE - playerX, right[1] * MAP_SIZE - playerY)
-    ))[0];
-    const otherRegions = Phaser.Utils.Array.Shuffle(PACK_REGIONS.filter((region) => region !== nearestRegion));
-    const regions = [nearestRegion, ...otherRegions].slice(0, groupCount);
-    let remaining = count;
-    regions.forEach(([normalizedX, normalizedY], groupIndex) => {
-      const members = Math.ceil(remaining / (regions.length - groupIndex));
-      remaining -= members;
-      const pack = rollMonsterPack(members, wave, balance.tier, waveStats.monsterRarity);
-      const centerX = normalizedX * MAP_SIZE;
-      const centerY = normalizedY * MAP_SIZE;
-      for (let member = 0; member < members; member += 1) {
-        const angle = (member / members) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.2, 0.2);
-        const radius = Phaser.Math.Between(24, 105);
-        const x = centerX + Math.cos(angle) * radius;
-        const y = centerY + Math.sin(angle) * radius;
-        const archetypeId = pack.archetypeIds[member];
-        const archetype = MONSTER_ARCHETYPES[archetypeId];
-        const rarity: MonsterRarity = pack.rarity === "magic"
-          ? "magic"
-          : pack.rarity === "rare" && pack.rareLeaderIndex === member ? "rare" : "normal";
-        const modifierIds = rarity === "normal" ? [] : pack.modifierIds;
-        const stats = resolveMonsterStats(archetypeId, waveStats, rarity, modifierIds);
-        const texture = `monster-${archetypeId}`;
-        const sprite = this.enemyPool?.get(x, y, texture) as Phaser.GameObjects.Image | null;
-        if (!sprite) break;
-        const rarityScale = rarity === "rare" ? 1.3 : rarity === "magic" ? 1.08 : 1;
-        const baseScale = archetype.visual.scale * rarityScale;
-        sprite.setTexture(texture).setOrigin(0.5, archetype.visual.originY).clearTint();
-        if (rarity === "magic") sprite.setTint(MONSTER_PACK_RULES.magicTint);
-        if (rarity === "rare") sprite.setTint(MONSTER_PACK_RULES.rareTint);
-        sprite.setActive(true).setVisible(true).setPosition(x, y).setScale(baseScale).setDepth(Math.round(y / 10) + 10);
-        this.enemies.push({
-          sprite,
-          x,
-          y,
-          archetypeId,
-          rarity,
-          modifierNames: monsterPackModifierNames(modifierIds),
-          homeX: x,
-          homeY: y,
-          phase: Phaser.Math.FloatBetween(0, Math.PI * 2),
-          aggro: false,
-          life: stats.maxLife,
-          maxLife: stats.maxLife,
-          speed: Phaser.Math.FloatBetween(stats.moveSpeed.min, stats.moveSpeed.max),
-          contactDamage: stats.damage,
-          armor: stats.armor,
-          evadeChance: stats.evadeChance,
-          itemQuantity: stats.itemQuantity,
-          itemRarity: stats.itemRarity,
-          baseScale,
-          attackCooldown: Math.random() * (archetype.ranged?.cooldown ?? 1),
-          jumpCooldown: Math.random() * (archetype.jump?.cooldown ?? 1),
-          jumpRemaining: 0,
-          jumpStartX: x,
-          jumpStartY: y,
-          jumpTargetX: x,
-          jumpTargetY: y,
-          healthLabel: null,
-        });
-      }
-    });
-    this.rebuildSpatialBuckets();
+  private enemyOriginY(archetypeId: MonsterArchetypeId): number {
+    const archetype = MONSTER_ARCHETYPES[archetypeId];
+    return archetype.visual.sheet?.originY ?? archetype.visual.originY;
   }
 
-  private updateEnemies(delta: number): void {
-    if (!this.player) return;
+  /** Steps replicated sheet-based enemies through their configured frames. */
+  private updateEnemyAnimations(delta: number): void {
     for (const enemy of this.enemies) {
-      const archetype = MONSTER_ARCHETYPES[enemy.archetypeId];
-      enemy.phase += delta * (enemy.aggro ? 5.2 : 0.8);
-      enemy.attackCooldown = Math.max(0, enemy.attackCooldown - delta);
-      enemy.jumpCooldown = Math.max(0, enemy.jumpCooldown - delta);
-      const dx = this.player.x - enemy.x;
-      const dy = this.player.y - enemy.y;
-      const distance = Math.hypot(dx, dy) || 1;
-      if (this.finalWaveRageActive) enemy.aggro = true;
-      if (distance < archetype.aggroRange) enemy.aggro = true;
-      if (enemy.jumpRemaining > 0 && archetype.jump) {
-        enemy.jumpRemaining = Math.max(0, enemy.jumpRemaining - delta);
-        const progress = 1 - enemy.jumpRemaining / archetype.jump.duration;
-        enemy.x = Phaser.Math.Linear(enemy.jumpStartX, enemy.jumpTargetX, progress);
-        enemy.y = Phaser.Math.Linear(enemy.jumpStartY, enemy.jumpTargetY, progress);
-        enemy.sprite.setScale(enemy.baseScale * (1 + Math.sin(progress * Math.PI) * 0.42));
-        if (enemy.jumpRemaining <= 0) {
-          enemy.sprite.setScale(enemy.baseScale);
-          if (Math.hypot(this.player.x - enemy.x, this.player.y - enemy.y) < 52) {
-            this.damagePlayer(enemy.contactDamage * archetype.jump.damageEffectiveness);
-          }
-        }
-      } else if (enemy.aggro && archetype.behavior === "ranged" && archetype.ranged) {
-        const rangeOffset = distance - archetype.ranged.preferredRange;
-        if (Math.abs(rangeOffset) > 42) {
-          const direction = rangeOffset > 0 ? 1 : -1;
-          enemy.x += (dx / distance) * enemy.speed * delta * direction;
-          enemy.y += (dy / distance) * enemy.speed * delta * direction;
-        } else {
-          enemy.x += (-dy / distance) * enemy.speed * delta * 0.32;
-          enemy.y += (dx / distance) * enemy.speed * delta * 0.32;
-        }
-        if (enemy.attackCooldown <= 0) {
-          this.spawnEnemyProjectile(enemy, dx / distance, dy / distance, archetype.ranged.projectileSpeed, archetype.ranged.damageEffectiveness);
-          enemy.attackCooldown = archetype.ranged.cooldown * Phaser.Math.FloatBetween(0.85, 1.15);
-        }
-      } else if (enemy.aggro && archetype.behavior === "jumper" && archetype.jump && enemy.jumpCooldown <= 0 && distance < archetype.jump.distance * 2.4) {
-        const travel = Math.min(archetype.jump.distance, Math.max(55, distance - 22));
-        enemy.jumpStartX = enemy.x;
-        enemy.jumpStartY = enemy.y;
-        enemy.jumpTargetX = Phaser.Math.Clamp(enemy.x + (dx / distance) * travel, 60, MAP_SIZE - 60);
-        enemy.jumpTargetY = Phaser.Math.Clamp(enemy.y + (dy / distance) * travel, 60, MAP_SIZE - 60);
-        enemy.jumpRemaining = archetype.jump.duration;
-        enemy.jumpCooldown = archetype.jump.cooldown * Phaser.Math.FloatBetween(0.85, 1.15);
-      } else if (enemy.aggro) {
-        enemy.x += (dx / distance) * enemy.speed * delta;
-        enemy.y += (dy / distance) * enemy.speed * delta;
-      } else {
-        const idleX = enemy.homeX + Math.cos(enemy.phase) * 14;
-        const idleY = enemy.homeY + Math.sin(enemy.phase * 0.8) * 10;
-        enemy.x += (idleX - enemy.x) * delta * 1.8;
-        enemy.y += (idleY - enemy.y) * delta * 1.8;
+      const sheet = MONSTER_ARCHETYPES[enemy.archetypeId].visual.sheet;
+      if (!sheet) continue;
+      if (!enemy.moving && (enemy.networkId === undefined || !this.networkMonsterActions.has(enemy.networkId))) {
+        enemy.sprite.setFrame(0);
+        continue;
       }
-      const grounded = enemy.jumpRemaining <= 0;
-      const locomotionBob = enemy.aggro && grounded ? Math.sin(enemy.phase) * 1.25 : 0;
-      const locomotionTilt = enemy.aggro && grounded ? Math.sin(enemy.phase * 0.5) * 0.012 : 0;
-      enemy.sprite
-        .setPosition(enemy.x, enemy.y + locomotionBob)
-        .setRotation(locomotionTilt)
-        .setFlipX(dx < 0)
-        .setDepth(Math.round(enemy.y / 10) + 10);
-    }
-  }
-
-  private updateFinalWaveRage(): void {
-    if (this.arenaComplete || this.enemies.length === 0) return;
-    const finalWave = this.options.arenaBalance?.waves ?? ARENA_RULES.totalWaves;
-    if (!shouldActivateFinalWaveRage(this.wave, finalWave, this.waveElapsedSeconds, this.finalWaveRageActive)) return;
-    this.finalWaveRageActive = true;
-    for (const enemy of this.enemies) enemy.aggro = true;
-    this.cameras.main.flash(320, 142, 25, 14, false);
-    if (this.player) this.emitRadialVfx(this.player.x, this.player.y, 18, 0xe4472f, 130, 0.5);
-    this.options.onHud(this.getHud());
-  }
-
-  private spawnEnemyProjectile(enemy: EnemyState, directionX: number, directionY: number, speed: number, damageEffectiveness: number): void {
-    const sprite = this.enemyProjectilePool?.get(enemy.x, enemy.y, "enemy-projectile") as Phaser.GameObjects.Image | null;
-    if (!sprite) return;
-    sprite.setTexture("enemy-projectile").setActive(true).setVisible(true).setPosition(enemy.x, enemy.y).setScale(enemy.rarity === "rare" ? 1.55 : 1.25).setDepth(82).setBlendMode(Phaser.BlendModes.ADD);
-    const accent = MONSTER_ARCHETYPES[enemy.archetypeId].visual.accent;
-    this.emitRadialVfx(enemy.x, enemy.y - 12, enemy.rarity === "rare" ? 6 : 3, accent, 44, 0.2);
-    this.enemyProjectiles.push({
-      sprite,
-      x: enemy.x,
-      y: enemy.y,
-      vx: directionX * speed,
-      vy: directionY * speed,
-      damage: enemy.contactDamage * damageEffectiveness,
-      damageType: "fire",
-      remaining: 2.8,
-      trailElapsed: 0,
-      remainingPierces: 0,
-      hitEnemies: new Set(),
-    });
-  }
-
-  private updateEnemyProjectiles(delta: number): void {
-    if (!this.player) return;
-    for (let index = this.enemyProjectiles.length - 1; index >= 0; index -= 1) {
-      const projectile = this.enemyProjectiles[index];
-      projectile.x += projectile.vx * delta;
-      projectile.y += projectile.vy * delta;
-      projectile.remaining -= delta;
-      projectile.sprite.setPosition(projectile.x, projectile.y).setRotation(projectile.sprite.rotation + delta * 5);
-      if (Math.hypot(this.player.x - projectile.x, this.player.y - projectile.y) < 22) {
-        this.damagePlayer(projectile.damage);
-        projectile.remaining = 0;
-      }
-      if (projectile.remaining <= 0) {
-        this.enemyProjectiles.splice(index, 1);
-        this.enemyProjectilePool?.killAndHide(projectile.sprite);
+      const previousAbsoluteFrame = Math.floor(enemy.animationTime * (sheet.aggroFrameRate ?? sheet.frameRate));
+      enemy.animationTime += delta;
+      const frameRate = sheet.aggroFrameRate ?? sheet.frameRate;
+      const currentAbsoluteFrame = Math.floor(enemy.animationTime * frameRate);
+      enemy.sprite.setFrame(currentAbsoluteFrame % sheet.frameCount);
+      if (!enemy.moving || enemy.networkId === undefined || currentAbsoluteFrame <= previousAbsoluteFrame) continue;
+      const crossedFrames = Math.min(sheet.frameCount, currentAbsoluteFrame - previousAbsoluteFrame);
+      for (let offset = 1; offset <= crossedFrames; offset += 1) {
+        this.monsterAudio.movementFrame(
+          enemy.networkId,
+          enemy.archetypeId,
+          enemy.rarity,
+          enemy.renderX ?? enemy.x,
+          enemy.renderY ?? enemy.y,
+          (previousAbsoluteFrame + offset) % sheet.frameCount,
+          this.time.now,
+        );
       }
     }
   }
@@ -1255,8 +1562,10 @@ class CraftyScene extends Phaser.Scene {
     graphics.clear();
     const view = this.cameras.main.worldView;
     for (const enemy of this.enemies) {
-      const visible = enemy.x >= view.left - 100 && enemy.x <= view.right + 100
-        && enemy.y >= view.top - 100 && enemy.y <= view.bottom + 40;
+      const displayX = enemy.networkId ? enemy.sprite.x : enemy.x;
+      const displayY = enemy.networkId ? enemy.sprite.y : enemy.y;
+      const visible = displayX >= view.left - 100 && displayX <= view.right + 100
+        && displayY >= view.top - 100 && displayY <= view.bottom + 40;
       if (!visible) {
         if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
         enemy.healthLabel = null;
@@ -1264,19 +1573,18 @@ class CraftyScene extends Phaser.Scene {
       }
       if (!enemy.healthLabel) enemy.healthLabel = this.acquireHealthLabel();
       enemy.healthLabel.setVisible(true);
-      const left = Math.round(enemy.x - HEALTH_BAR_WIDTH / 2);
+      const left = Math.round(displayX - HEALTH_BAR_WIDTH / 2);
       const archetype = MONSTER_ARCHETYPES[enemy.archetypeId];
-      const top = Math.round(enemy.y - 128 * enemy.baseScale * archetype.visual.originY - 8);
+      const top = Math.round(displayY - 128 * enemy.baseScale * archetype.visual.originY - 8);
       const ratio = Phaser.Math.Clamp(enemy.life / enemy.maxLife, 0, 1);
       graphics.fillStyle(0x08090b, 0.9).fillRect(left - 1, top - 1, HEALTH_BAR_WIDTH + 2, HEALTH_BAR_HEIGHT + 2);
       graphics.fillStyle(0x39211f, 1).fillRect(left, top, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT);
       const lifeColor = enemy.rarity === "rare" ? 0xe0a637 : enemy.rarity === "magic" ? 0x668ee2 : ratio > 0.5 ? 0xc95745 : ratio > 0.25 ? 0xdc8a3d : 0xe4b34b;
       graphics.fillStyle(lifeColor, 1).fillRect(left, top, Math.max(0, HEALTH_BAR_WIDTH * ratio), HEALTH_BAR_HEIGHT);
       const rarityLabel = enemy.rarity === "normal" ? "" : `${enemy.rarity.toUpperCase()} `;
-      const modifierLabel = enemy.modifierNames.length > 0 ? `${enemy.modifierNames.join("/")} ` : "";
-      const healthText = `${rarityLabel}${modifierLabel}${Math.ceil(Math.max(0, enemy.life))}/${Math.ceil(enemy.maxLife)}`;
+      const healthText = `${rarityLabel}${Math.ceil(Math.max(0, enemy.life))}/${Math.ceil(enemy.maxLife)}`;
       if (enemy.healthLabel.text !== healthText) enemy.healthLabel.setText(healthText);
-      enemy.healthLabel.setPosition(Math.round(enemy.x), top - 8);
+      enemy.healthLabel.setPosition(Math.round(displayX), top - 8);
     }
   }
 
@@ -1316,183 +1624,74 @@ class CraftyScene extends Phaser.Scene {
     });
   }
 
-  private applyEnemyContactDamage(delta: number): void {
-    if (!this.player) return;
-    for (const enemy of this.nearbyEnemies(this.player.x, this.player.y)) {
-      if (Math.hypot(this.player.x - enemy.x, this.player.y - enemy.y) < 30) {
-        this.damagePlayer(delta * enemy.contactDamage);
-      }
-    }
-  }
-
-  private damagePlayer(rawDamage: number): void {
-    if (!this.player || this.arenaFailed) return;
-    const evadeMultiplier = 1 - (this.options.arenaBalance?.evadeChance ?? 0) / 100;
-    const armor = this.options.arenaBalance?.armor ?? 0;
-    const armorMultiplier = 100 / (100 + armor);
-    const wardMultiplier = this.wardRemaining > 0 ? 1 - (this.resolvedWard.damageReduction ?? 0) / 100 : 1;
-    this.life -= rawDamage * evadeMultiplier * armorMultiplier * wardMultiplier;
-    if (this.life <= 0) {
-      this.life = 0;
-      this.arenaFailed = true;
-      this.playerVelocityX = 0;
-      this.playerVelocityY = 0;
-      this.releaseEnemyProjectiles();
-      this.options.onHud(this.getHud());
-      this.options.onPlayerDeath();
-    }
-  }
-
-  private rebuildSpatialBuckets(): void {
-    this.spatialBuckets.clear();
-    for (const enemy of this.enemies) {
-      const key = this.bucketKey(enemy.x, enemy.y);
-      const bucket = this.spatialBuckets.get(key);
-      if (bucket) bucket.push(enemy);
-      else this.spatialBuckets.set(key, [enemy]);
-    }
-  }
-
-  private bucketKey(x: number, y: number): number {
-    return Math.floor(x / SPATIAL_CELL_SIZE) + Math.floor(y / SPATIAL_CELL_SIZE) * SPATIAL_COLUMNS;
-  }
-
-  private nearbyEnemies(x: number, y: number): EnemyState[] {
-    const result: EnemyState[] = [];
-    const cellX = Math.floor(x / SPATIAL_CELL_SIZE);
-    const cellY = Math.floor(y / SPATIAL_CELL_SIZE);
-    for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
-      for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-        const bucket = this.spatialBuckets.get(cellX + offsetX + (cellY + offsetY) * SPATIAL_COLUMNS);
-        if (bucket) result.push(...bucket);
-      }
-    }
-    return result;
-  }
-
-  private tryBasicAttack(): void {
-    if (this.attackCooldown > 0 || !this.player) return;
+  private queueBasicAttack(consumeImmediately: boolean): void {
     const pointer = this.input.activePointer;
-    const dx = pointer.worldX - this.player.x;
-    const dy = pointer.worldY - this.player.y;
+    this.basicAttackIntent = {
+      worldX: pointer.worldX,
+      worldY: pointer.worldY,
+      expiresAt: this.elapsedSeconds + BASIC_ATTACK_INPUT_BUFFER_SECONDS,
+    };
+    if (consumeImmediately) this.consumeBasicAttackIntent();
+  }
+
+  private consumeBasicAttackIntent(): void {
+    const intent = this.basicAttackIntent;
+    if (!intent) return;
+    if (intent.expiresAt < this.elapsedSeconds || this.options.controlsBlocked || this.arenaComplete) {
+      this.basicAttackIntent = null;
+      return;
+    }
+    if (this.tryBasicAttack(intent.worldX, intent.worldY)) this.basicAttackIntent = null;
+  }
+
+  private tryBasicAttack(worldX: number, worldY: number): boolean {
+    if (this.attackCooldown > 0 || !this.player) return false;
+    const dx = worldX - this.player.x;
+    const dy = worldY - this.player.y;
     const length = Math.hypot(dx, dy) || 1;
     const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
+    const aim = Math.hypot(dx, dy) > 0.1 ? { x: dx / length, y: dy / length } : characterDirectionVector(direction);
     const started = this.beginSkillAction(this.resolvedBasic, direction, () => {
-      this.spawnProjectile(dx / length, dy / length, this.resolvedBasic);
+      this.options.multiplayer?.sendAttack?.("basic", aim);
     });
-    if (!started) return;
+    if (!started) return false;
     this.attackCooldown = 1 / Math.max(0.01, this.options.arenaBalance?.attackSpeed ?? 1);
+    return true;
   }
 
-  private spawnProjectile(directionX: number, directionY: number, skill: ResolvedSkillDefinition): void {
-    if (!this.player || !skill.damage) return;
-    const sprite = this.projectilePool?.get(this.player.x, this.player.y, "projectile") as Phaser.GameObjects.Image | null;
-    if (!sprite) return;
-    sprite.setActive(true).setVisible(true).setScale((skill.projectileScale ?? 1) * 1.35).setDepth(80).setBlendMode(Phaser.BlendModes.ADD);
-    const rolledDamage = rollHitDamage(this.options.arenaBalance?.attackDamage ?? 15, skill.damage);
-    this.projectiles.push({
-      sprite,
-      vx: directionX * 520,
-      vy: directionY * 520,
-      damage: rolledDamage.amount,
-      damageType: rolledDamage.type,
-      remaining: 1.35,
-      trailElapsed: 0,
-      remainingPierces: skill.piercing,
-      hitEnemies: new Set(),
-    });
-  }
-
-  private updateProjectiles(delta: number): void {
-    for (let index = this.projectiles.length - 1; index >= 0; index -= 1) {
-      const projectile = this.projectiles[index];
-      projectile.sprite.x += projectile.vx * delta;
-      projectile.sprite.y += projectile.vy * delta;
-      projectile.remaining -= delta;
-      projectile.trailElapsed += delta;
-      if (projectile.trailElapsed >= 0.045) {
-        projectile.trailElapsed = 0;
-        this.emitVfxParticle(
-          projectile.sprite.x,
-          projectile.sprite.y,
-          0xff7138,
-          -projectile.vx * 0.025 + Phaser.Math.Between(-12, 12),
-          -projectile.vy * 0.025 + Phaser.Math.Between(-12, 12),
-          0.18,
-          0.55,
-          0.03,
-        );
-      }
-      const hit = this.nearbyEnemies(projectile.sprite.x, projectile.sprite.y).find((enemy) => !projectile.hitEnemies.has(enemy) && Math.hypot(projectile.sprite.x - enemy.x, projectile.sprite.y - enemy.y) < 25);
-      if (hit) {
-        projectile.hitEnemies.add(hit);
-        const evaded = Math.random() < hit.evadeChance / 100;
-        const damage = evaded ? 0 : projectile.damage * (100 / (100 + hit.armor));
-        if (!evaded) hit.life -= damage;
-        this.showDamageNumber(hit.x, hit.y, evaded ? "EVADE" : { amount: damage, type: projectile.damageType });
-        this.emitRadialVfx(hit.x, hit.y, evaded ? 3 : 6, evaded ? 0x9aa3ad : 0xff9a4b, evaded ? 45 : 82, 0.2);
-        if (projectile.remainingPierces > 0) projectile.remainingPierces -= 1;
-        else projectile.remaining = 0;
-        if (hit.life <= 0) this.releaseEnemy(hit);
-      }
-      if (projectile.remaining <= 0) {
-        this.projectiles.splice(index, 1);
-        this.projectilePool?.killAndHide(projectile.sprite);
-      }
-    }
-  }
-
-  private releaseEnemy(enemy: EnemyState): void {
-    const index = this.enemies.indexOf(enemy);
-    if (index < 0) return;
-    this.enemies.splice(index, 1);
-    this.spawnCorpse(enemy);
-    this.emitMonsterDeathVfx(enemy);
-    this.enemyPool?.killAndHide(enemy.sprite);
-    if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
-    this.slain += 1;
-    this.options.onExperienceGain(monsterExperienceReward(
-      enemy.archetypeId,
-      this.wave,
-      this.options.arenaBalance?.tier ?? 1,
-      enemy.rarity,
-    ));
-    this.rollGroundDrop(enemy);
-  }
-
-  private spawnCorpse(enemy: EnemyState): void {
+  private spawnCorpse(death: MonsterDeathPresentation): void {
     if (!this.corpsePool) return;
     if (this.corpses.length >= ARENA_RULES.corpses.maximumVisible) this.releaseCorpse(0);
-    const archetype = MONSTER_ARCHETYPES[enemy.archetypeId];
-    const texture = `corpse-${enemy.archetypeId}`;
-    const sprite = this.corpsePool.get(enemy.x, enemy.y, texture) as Phaser.GameObjects.Image | null;
+    const archetype = MONSTER_ARCHETYPES[death.archetypeId];
+    const texture = `corpse-${death.archetypeId}`;
+    const sprite = this.corpsePool.get(death.x, death.y, texture) as Phaser.GameObjects.Image | null;
     if (!sprite) return;
     sprite
       .setTexture(texture)
       .setOrigin(0.5, archetype.visual.originY)
       .setActive(true)
       .setVisible(true)
-      .setPosition(enemy.x + Phaser.Math.FloatBetween(-2, 2), enemy.y + Phaser.Math.FloatBetween(-2, 2))
-      .setScale(enemy.baseScale)
+      .setPosition(death.x + Phaser.Math.FloatBetween(-2, 2), death.y + Phaser.Math.FloatBetween(-2, 2))
+      .setScale(death.baseScale)
       .setRotation(Phaser.Math.FloatBetween(-0.035, 0.035))
-      .setFlipX(enemy.sprite.flipX)
+      .setFlipX(death.flipX)
       .setAlpha(0.96)
-      .setDepth(Math.round(enemy.y / 10) + 4)
+      .setDepth(Math.round(death.y / 10) + 4)
       .clearTint();
-    if (enemy.rarity === "magic") sprite.setTint(0xc1cdf1);
-    if (enemy.rarity === "rare") sprite.setTint(0xf2d396);
+    if (death.rarity === "magic") sprite.setTint(0xc1cdf1);
+    if (death.rarity === "rare") sprite.setTint(0xf2d396);
     this.corpses.push({ sprite, age: 0 });
   }
 
-  private emitMonsterDeathVfx(enemy: EnemyState): void {
-    const accent = MONSTER_ARCHETYPES[enemy.archetypeId].visual.accent;
-    const count = enemy.rarity === "rare" ? 16 : enemy.rarity === "magic" ? 11 : 7;
-    this.emitRadialVfx(enemy.x, enemy.y - 10, count, accent, enemy.rarity === "rare" ? 105 : 72, 0.34);
+  private emitMonsterDeathVfx(death: MonsterDeathPresentation): void {
+    const archetype = MONSTER_ARCHETYPES[death.archetypeId];
+    const count = death.rarity === "rare" ? 16 : death.rarity === "magic" ? 11 : 7;
+    this.emitRadialVfx(death.x, death.y - 10, count, archetype.visual.accent, death.rarity === "rare" ? 105 : 72, 0.34);
     for (let index = 0; index < Math.ceil(count / 3); index += 1) {
       this.emitVfxParticle(
-        enemy.x + Phaser.Math.Between(-12, 12),
-        enemy.y + Phaser.Math.Between(-2, 8),
-        MONSTER_ARCHETYPES[enemy.archetypeId].visual.body,
+        death.x + Phaser.Math.Between(-12, 12),
+        death.y + Phaser.Math.Between(-2, 8),
+        archetype.visual.body,
         Phaser.Math.Between(-24, 24),
         Phaser.Math.Between(-22, -6),
         0.45,
@@ -1526,62 +1725,28 @@ class CraftyScene extends Phaser.Scene {
     this.corpsePool?.killAndHide(corpse.sprite);
   }
 
-  private rollGroundDrop(enemy: EnemyState): void {
-    const chances = dropChances(enemy.itemQuantity);
-    const roll = Math.random();
-    let drop: MapDrop | null = null;
-    if (roll < chances.equipment) {
-      const rarity = rollEquipmentRarity(enemy.itemRarity);
-      drop = { kind: "equipment", item: generateEquipment(this.options.arenaBalance?.monsterLevel ?? ARENA_RULES.monsterLevel.minimum, rarity) };
-    } else if (roll < chances.equipment + chances.material) {
-      const materialRoll = Math.random();
-      drop = materialRoll < 0.08
-        ? { kind: "currency", currency: "mapDust", amount: 1 }
-        : materialRoll < 0.28
-          ? { kind: "currency", currency: "essence", amount: 1 }
-          : { kind: "currency", currency: "scrap", amount: Phaser.Math.Between(1, 2) };
-    } else if (roll < chances.equipment + chances.material + chances.flask) {
-      drop = { kind: "flask", flask: rollFlaskDrop(), amount: 1 };
-    }
-    if (!drop) return;
-    this.spawnGroundDrop(enemy.x, enemy.y, drop);
-  }
-
-  private spawnGroundDrop(x: number, y: number, drop: MapDrop): boolean {
+  private spawnGroundDrop(x: number, y: number, item: InventoryItem, networkId: string): boolean {
     let texture = "drop-currency";
     let labelText = "ITEM";
     let color = "#ded5c9";
-    if (drop.kind === "equipment") {
-      const presentation = equipmentDropPresentation(drop.item);
-      texture = `drop-equipment-${drop.item.rarity}`;
+    if (isEquipmentItem(item)) {
+      const presentation = equipmentDropPresentation(item);
+      texture = `drop-equipment-${item.rarity}`;
       labelText = presentation.label;
       color = presentation.color;
-    } else if (drop.kind === "currency") {
-      texture = `drop-${drop.currency}`;
-      labelText = `${drop.amount} ${drop.currency === "mapDust" ? "MAP DUST" : drop.currency.toUpperCase()}`;
-      color = drop.currency === "essence" ? "#c6a5ff" : drop.currency === "mapDust" ? "#92e4df" : "#e2ac70";
-    } else if (drop.kind === "flask") {
-      texture = `drop-${drop.flask}`;
-      labelText = FLASK_DEFINITIONS[drop.flask].name.toUpperCase();
-      color = FLASK_DEFINITIONS[drop.flask].resource === "life" ? "#ff8b78" : "#84c4ff";
-    } else if (isEquipmentItem(drop.item)) {
-      const presentation = equipmentDropPresentation(drop.item);
-      texture = `drop-equipment-${drop.item.rarity}`;
-      labelText = presentation.label;
-      color = presentation.color;
-    } else if (isMapItem(drop.item)) {
+    } else if (isMapItem(item)) {
       texture = "drop-map";
-      labelText = `${drop.item.baseName.toUpperCase()} · T${drop.item.tier}`;
-      color = drop.item.rarity === "rare" ? "#ffd867" : drop.item.rarity === "magic" ? "#96b4ff" : "#ded5c9";
-    } else if (isCurrencyItem(drop.item)) {
-      const exactTexture = `drop-${drop.item.baseId}`;
+      labelText = `${item.baseName.toUpperCase()} · T${item.tier}`;
+      color = item.rarity === "rare" ? "#ffd867" : item.rarity === "magic" ? "#96b4ff" : "#ded5c9";
+    } else if (isCurrencyItem(item)) {
+      const exactTexture = `drop-${item.baseId}`;
       texture = this.textures.exists(exactTexture) ? exactTexture : "drop-currency";
-      labelText = `${drop.item.stackSize} ${CURRENCY_DEFINITIONS[drop.item.baseId].name.toUpperCase()}`;
-      color = drop.item.baseId === "essence" ? "#c6a5ff" : drop.item.baseId === "mapDust" ? "#92e4df" : "#e2ac70";
-    } else if (isFlaskItem(drop.item)) {
-      texture = `drop-${drop.item.baseId}`;
-      labelText = `${drop.item.stackSize} ${FLASK_DEFINITIONS[drop.item.baseId].name.toUpperCase()}`;
-      color = FLASK_DEFINITIONS[drop.item.baseId].resource === "life" ? "#ff8b78" : "#84c4ff";
+      labelText = `${item.stackSize} ${CURRENCY_DEFINITIONS[item.baseId].name.toUpperCase()}`;
+      color = item.baseId === "essence" ? "#c6a5ff" : item.baseId === "mapDust" ? "#92e4df" : "#e2ac70";
+    } else if (isFlaskItem(item)) {
+      texture = `drop-${item.baseId}`;
+      labelText = `${item.stackSize} ${FLASK_DEFINITIONS[item.baseId].name.toUpperCase()}`;
+      color = FLASK_DEFINITIONS[item.baseId].resource === "life" ? "#ff8b78" : "#84c4ff";
     }
     const sprite = this.dropPool?.get(x, y, texture) as Phaser.GameObjects.Image | null;
     if (!sprite) return false;
@@ -1593,80 +1758,60 @@ class CraftyScene extends Phaser.Scene {
       backgroundColor: "#08090bcc",
       padding: { x: 4, y: 2 },
     }).setOrigin(0.5).setDepth(Math.round(y / 10) + 31);
-    this.groundDrops.push({ sprite, label, x, y, phase: Phaser.Math.FloatBetween(0, Math.PI * 2), drop });
+    this.groundDrops.push({ sprite, label, x, y, phase: Phaser.Math.FloatBetween(0, Math.PI * 2), networkId });
     return true;
+  }
+
+  private syncNetworkDrops(): void {
+    const state = this.options.multiplayer?.getMap?.();
+    if (!state) return;
+    const present = new Set(state.drops.map((drop) => drop.id));
+    for (const networkDrop of state.drops) {
+      const existing = this.groundDrops.find((drop) => drop.networkId === networkDrop.id);
+      if (existing) {
+        existing.x = networkDrop.x;
+        existing.y = networkDrop.y;
+        continue;
+      }
+      this.spawnGroundDrop(networkDrop.x, networkDrop.y, networkDrop.item, networkDrop.id);
+    }
+    for (let index = this.groundDrops.length - 1; index >= 0; index -= 1) {
+      const drop = this.groundDrops[index];
+      if (!drop.networkId || present.has(drop.networkId)) continue;
+      this.groundDrops.splice(index, 1);
+      this.dropPool?.killAndHide(drop.sprite);
+      drop.label.destroy();
+    }
   }
 
   private updateGroundDrops(delta: number): void {
     if (!this.player) return;
-    for (let index = this.groundDrops.length - 1; index >= 0; index -= 1) {
-      const groundDrop = this.groundDrops[index];
+    for (const groundDrop of this.groundDrops) {
       groundDrop.phase += delta * 3;
       const bob = Math.sin(groundDrop.phase) * 3;
       groundDrop.sprite.setPosition(groundDrop.x, groundDrop.y + bob);
       groundDrop.label.setPosition(groundDrop.x, groundDrop.y - 22 + bob);
       if (Math.hypot(this.player.x - groundDrop.x, this.player.y - groundDrop.y) >= 38) continue;
-      if (!this.options.onLootPickup(groundDrop.drop)) continue;
-      if (groundDrop.drop.kind !== "inventory") this.lootCollected += 1;
-      this.groundDrops.splice(index, 1);
-      this.dropPool?.killAndHide(groundDrop.sprite);
-      groundDrop.label.destroy();
-      const pickupText = this.add.text(groundDrop.x, groundDrop.y - 28, "COLLECTED", {
-        fontFamily: "monospace",
-        fontSize: "14px",
-        color: "#fff1c8",
-        stroke: "#08090b",
-        strokeThickness: 3,
-      }).setOrigin(0.5).setDepth(500);
-      this.tweens.add({ targets: pickupText, y: pickupText.y - 24, alpha: 0, duration: 650, onComplete: () => pickupText.destroy() });
+      if (this.elapsedSeconds < (groundDrop.networkPickupRetryAt ?? 0)) continue;
+      groundDrop.networkPickupRetryAt = this.elapsedSeconds + 0.8;
+      this.options.multiplayer?.sendPickup?.(groundDrop.networkId);
     }
   }
 
-  private releaseAllEnemies(): void {
-    for (const enemy of this.enemies) {
-      this.enemyPool?.killAndHide(enemy.sprite);
-      if (enemy.healthLabel) this.releaseHealthLabel(enemy.healthLabel);
-    }
-    this.enemies = [];
-    for (const corpse of this.corpses) this.corpsePool?.killAndHide(corpse.sprite);
-    this.corpses = [];
-    this.enemyHealthBars?.clear();
-    this.releaseEnemyProjectiles();
-  }
-
-  private releaseEnemyProjectiles(): void {
-    for (const projectile of this.enemyProjectiles) this.enemyProjectilePool?.killAndHide(projectile.sprite);
-    this.enemyProjectiles = [];
-  }
-
-  private advanceWaveIfReady(): void {
-    if (this.arenaComplete) return;
-    const finalWave = this.options.arenaBalance?.waves ?? ARENA_RULES.totalWaves;
-    if (shouldSpawnNextWave(this.wave, finalWave, this.enemies.length, this.waveElapsedSeconds)) {
-      this.startWave(this.wave + 1);
-      return;
-    }
-    if (!isArenaCleared(this.wave, finalWave, this.enemies.length)) return;
-    this.arenaComplete = true;
-    this.spawnCompletionChest();
-    this.spawnReturnPortal({ wave: this.wave, enemiesSlain: this.slain, elapsedSeconds: Math.round(this.elapsedSeconds) });
-    this.options.onHud(this.getHud());
-  }
-
-  private spawnCompletionChest(): void {
+  private spawnCompletionChest(sharedPosition?: { x: number; y: number }): void {
     if (!this.player || this.completionChest) return;
     const rules = MAP_COMPLETION_REWARDS.chest;
     const yDirection = this.player.y + rules.spawnDistance <= MAP_SIZE - 100 ? 1 : -1;
-    const x = Phaser.Math.Clamp(this.player.x, 100, MAP_SIZE - 100);
-    const y = Phaser.Math.Clamp(this.player.y + yDirection * rules.spawnDistance, 100, MAP_SIZE - 100);
+    const x = Phaser.Math.Clamp(sharedPosition?.x ?? this.player.x, 100, MAP_SIZE - 100);
+    const y = Phaser.Math.Clamp(sharedPosition?.y ?? this.player.y + yDirection * rules.spawnDistance, 100, MAP_SIZE - 100);
     const depth = Math.round(y / 10) + 70;
     const glow = this.add.ellipse(x, y + 1, 112, 54, 0xf2b84b, 0.2)
       .setDepth(depth - 1)
       .setBlendMode(Phaser.BlendModes.ADD);
-    const sprite = this.add.image(x, y, "reward-chest-closed")
+    const sprite = this.add.image(x, y - 2, "reward-chest-open")
       .setScale(1.55)
       .setDepth(depth);
-    const label = this.add.text(x, y - 55, "VICTORY CACHE", {
+    const label = this.add.text(x, y - 55, "VICTORY CACHE OPENED", {
       fontFamily: "monospace",
       fontSize: "17px",
       fontStyle: "bold",
@@ -1674,22 +1819,21 @@ class CraftyScene extends Phaser.Scene {
       stroke: "#09060d",
       strokeThickness: 5,
     }).setOrigin(0.5).setDepth(depth + 2);
-    const prompt = this.add.text(x, y - 34, "CLICK TO OPEN", {
+    const prompt = this.add.text(x, y - 34, "PERSONAL REWARDS RELEASED", {
       fontFamily: "monospace",
       fontSize: "12px",
       color: "#fff0bd",
       backgroundColor: "#120c05dd",
       padding: { x: 7, y: 4 },
     }).setOrigin(0.5).setDepth(depth + 2);
-    const interaction = this.add.zone(x, y, rules.interactionWidth, rules.interactionHeight)
-      .setDepth(depth + 3)
-      .setInteractive({ cursor: "pointer" });
-    interaction.on(Phaser.Input.Events.POINTER_DOWN, () => {
-      if (this.options.paused) return;
-      this.openCompletionChest();
-    });
-    this.completionChest = { x, y, elapsed: 0, opened: false, glow, sprite, label, prompt, interaction };
+    this.completionChest = { x, y, elapsed: 0, opened: true, glow, sprite, label, prompt };
     this.emitRadialVfx(x, y - 4, 20, 0xffce62, 92, 0.55);
+  }
+
+  private spawnNetworkCompletionObjects(x: number, y: number): void {
+    this.spawnCompletionChest({ x, y });
+    this.spawnReturnPortal();
+    this.options.onHud(this.getHud());
   }
 
   private updateCompletionChest(delta: number): void {
@@ -1698,39 +1842,10 @@ class CraftyScene extends Phaser.Scene {
     chest.elapsed += delta;
     const pulse = Math.sin(chest.elapsed * (chest.opened ? 2.1 : 3.2));
     chest.glow.setScale(1 + pulse * 0.08).setAlpha((chest.opened ? 0.12 : 0.22) + pulse * 0.05);
-    if (!chest.opened) {
-      chest.sprite.setY(chest.y + pulse * 1.5);
-      chest.prompt.setAlpha(0.74 + Math.max(0, pulse) * 0.26);
-    }
+    chest.prompt.setAlpha(0.8 + Math.max(0, pulse) * 0.12);
   }
 
-  private openCompletionChest(): void {
-    const chest = this.completionChest;
-    if (!chest || chest.opened || this.options.paused) return;
-    chest.opened = true;
-    chest.sprite.setTexture("reward-chest-open").setY(chest.y - 2);
-    chest.interaction.disableInteractive();
-    chest.label.setText("CACHE OPENED").setColor("#fff0bd");
-    chest.prompt.setText("COLLECT YOUR REWARDS").setAlpha(0.92);
-    const itemLevel = this.options.arenaBalance?.monsterLevel ?? ARENA_RULES.monsterLevel.minimum;
-    const finalWave = this.options.arenaBalance?.waveStats.at(-1);
-    const rewards = createMapCompletionRewards(itemLevel, finalWave?.itemRarity ?? 100);
-    const radius = MAP_COMPLETION_REWARDS.chest.lootScatterRadius;
-    rewards.forEach((reward, index) => {
-      const angle = -Math.PI / 2 + (Math.PI * 2 * index) / rewards.length;
-      const distance = radius * (index % 2 === 0 ? 1 : 0.72);
-      this.spawnGroundDrop(
-        Phaser.Math.Clamp(chest.x + Math.cos(angle) * distance, 60, MAP_SIZE - 60),
-        Phaser.Math.Clamp(chest.y + Math.sin(angle) * distance, 60, MAP_SIZE - 60),
-        reward,
-      );
-    });
-    this.emitRadialVfx(chest.x, chest.y - 8, 42, 0xffd66f, 155, 0.8);
-    this.cameras.main.shake(180, 0.0035);
-    if (this.returnPortal) this.returnPortal.prompt.setText("ENTER TO RETURN TO HIDEOUT");
-  }
-
-  private spawnReturnPortal(summary: ArenaSummary): void {
+  private spawnReturnPortal(): void {
     if (!this.player || this.returnPortal) return;
     const offset = ARENA_RULES.returnPortal.spawnOffset;
     const x = this.player.x + offset <= MAP_SIZE - 100 ? this.player.x + offset : this.player.x - offset;
@@ -1761,7 +1876,7 @@ class CraftyScene extends Phaser.Scene {
       stroke: "#09060d",
       strokeThickness: 5,
     }).setOrigin(0.5).setDepth(depth + 5);
-    const prompt = this.add.text(x, y + 59, this.completionChest?.opened ? "ENTER TO RETURN TO HIDEOUT" : "OPEN VICTORY CACHE FIRST", {
+    const prompt = this.add.text(x, y + 59, "ENTER TO RETURN TO HIDEOUT", {
       fontFamily: "monospace",
       fontSize: "12px",
       color: "#c6a5ee",
@@ -1775,7 +1890,7 @@ class CraftyScene extends Phaser.Scene {
       if (this.options.paused) return;
       this.activateReturnPortal();
     });
-    this.returnPortal = { x, y, elapsed: 0, particleElapsed: 0, summary, glow, outerRing, innerRing, sigil, label, prompt, interaction };
+    this.returnPortal = { x, y, elapsed: 0, particleElapsed: 0, glow, outerRing, innerRing, sigil, label, prompt, interaction };
     this.emitRadialVfx(x, y - 28, 24, 0xb77cff, 118, 0.65);
   }
 
@@ -1813,14 +1928,9 @@ class CraftyScene extends Phaser.Scene {
 
   private activateReturnPortal(): void {
     if (this.options.paused || !this.returnPortal || this.returnPortalUsed) return;
-    if (this.completionChest && !this.completionChest.opened) {
-      this.completionChest.prompt.setAlpha(1);
-      this.returnPortal.prompt.setText("OPEN VICTORY CACHE FIRST");
-      return;
-    }
     this.returnPortalUsed = true;
     this.returnPortal.interaction.disableInteractive();
-    this.options.onArenaComplete(this.returnPortal.summary);
+    this.options.onReturnToHideout();
   }
 }
 
@@ -1857,9 +1967,6 @@ export class PhaserRuntime {
     this.scene?.useSkill(skill);
   }
 
-  dropInventoryItem(item: InventoryItem): boolean {
-    return this.scene?.dropInventoryItem(item) ?? false;
-  }
 
   useFlask(slotIndex: number): void {
     this.scene?.useFlask(slotIndex);
@@ -1869,12 +1976,20 @@ export class PhaserRuntime {
     this.scene?.updateFlaskBelt(flaskBelt);
   }
 
+  updatePortalIndexes(portalIndexes: readonly number[]): void {
+    this.scene?.updatePortalIndexes(portalIndexes);
+  }
+
   updateSkillLevels(skillLevels: SkillLevels): void {
     this.scene?.updateSkillLevels(skillLevels);
   }
 
   setPaused(paused: boolean): void {
     this.options.paused = paused;
+  }
+
+  setControlsBlocked(blocked: boolean): void {
+    this.options.controlsBlocked = blocked;
   }
 
   updateArenaBalance(balance: NonNullable<WorldRuntimeOptions["arenaBalance"]>): void {

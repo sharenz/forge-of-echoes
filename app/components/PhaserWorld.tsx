@@ -1,41 +1,38 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type CSSProperties } from "react";
-import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
-import { FLASK_DEFINITIONS, type FlaskDefinition } from "../game/config/flasks";
+import { FLASK_DEFINITIONS } from "../game/config/flasks";
 import { MAP_MODIFIERS } from "../game/config/maps";
 import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "../game/config/progression";
-import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, InventoryItem, MapItem, StatKey, StatModifier } from "../game/domain";
+import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, MapItem, StatKey, StatModifier } from "../game/domain";
 import { mapModifierDescription, mapModifierRewardDescription } from "../game/maps";
+import { grantCharacterProgressExperience } from "../game/progression";
 import { resolveSkillDefinition } from "../game/skills";
 import type { CharacterStatCalculation, StatResolution } from "../game/stats";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
-import type { WorldHudState, WorldMode, WorldStation } from "../game2d/types";
+import type { MultiplayerWorldAdapter, WorldHudState, WorldMode, WorldStation } from "../game2d/types";
 
 interface PhaserWorldProps {
   mode: WorldMode;
   classId: CharacterClassId;
-  portalActive?: boolean;
+  portalIndexes?: readonly number[];
   paused?: boolean;
+  controlsBlocked?: boolean;
   arenaBalance?: ArenaBalance;
   activeMap?: MapItem;
   characterStats?: CharacterStats;
   characterProgress?: CharacterProgress;
   characterStatBreakdown?: CharacterStatCalculation["breakdown"];
   flaskBelt?: FlaskBelt;
-  onStation?: (station: WorldStation) => void;
-  onLootPickup?: (drop: MapDrop) => boolean;
-  onExperienceGain?: (amount: number) => void;
-  onArenaComplete?: (summary: ArenaSummary) => void;
-  onPlayerDeath?: () => void;
-  onFlaskUse?: (slotIndex: number) => FlaskDefinition | null;
+  onStation?: (station: WorldStation, portalIndex?: number) => void;
+  onReturnToHideout?: () => void;
   onFlaskLoad?: (itemId: string, slotIndex: number) => void;
+  onItemDropToGround?: (itemId: string) => void;
+  onFinalRageChange?: (active: boolean) => void;
+  multiplayer?: MultiplayerWorldAdapter;
   children?: React.ReactNode;
-}
-
-export interface PhaserWorldHandle {
-  dropItem: (item: InventoryItem) => boolean;
 }
 
 interface CharacterStatRowProps {
@@ -106,8 +103,8 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
 
 const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null, null];
 
-export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(function PhaserWorld({ mode, classId, portalActive = false, paused = false, arenaBalance, activeMap, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onLootPickup, onExperienceGain, onArenaComplete, onPlayerDeath, onFlaskUse, onFlaskLoad, children }, ref) {
-  const runtimeClassId = mode === "class-select" ? "amazon" : classId;
+export function PhaserWorld({ mode, classId, portalIndexes = [], paused = false, controlsBlocked = false, arenaBalance, activeMap, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onReturnToHideout, onFlaskLoad, onItemDropToGround, onFinalRageChange, multiplayer, children }: PhaserWorldProps) {
+  const runtimeClassId = classId;
   const novaLevel = characterProgress?.skillLevels.nova ?? 1;
   const dashLevel = characterProgress?.skillLevels.dash ?? 1;
   const wardLevel = characterProgress?.skillLevels.ward ?? 1;
@@ -115,32 +112,23 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
   const parentRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<PhaserRuntime | null>(null);
   const stationCallbackRef = useRef(onStation);
-  const lootCallbackRef = useRef(onLootPickup);
-  const completionCallbackRef = useRef(onArenaComplete);
-  const deathCallbackRef = useRef(onPlayerDeath);
-  const experienceCallbackRef = useRef(onExperienceGain);
-  const flaskUseCallbackRef = useRef(onFlaskUse);
+  const returnToHideoutCallbackRef = useRef(onReturnToHideout);
   const flaskBeltRef = useRef(flaskBelt);
+  const portalIndexesRef = useRef([...portalIndexes]);
   const skillLevelsRef = useRef({ nova: novaLevel, dash: dashLevel, ward: wardLevel, flameWave: flameWaveLevel });
   const pausedRef = useRef(paused);
+  const controlsBlockedRef = useRef(controlsBlocked);
   const arenaBalanceRef = useRef(arenaBalance);
   const [hud, setHud] = useState<WorldHudState | null>(null);
   const [flaskDropSlot, setFlaskDropSlot] = useState<number | null>(null);
+  const [groundDropReady, setGroundDropReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [rendererError, setRendererError] = useState(false);
 
-  useImperativeHandle(ref, () => ({
-    dropItem: (item) => runtimeRef.current?.dropInventoryItem(item) ?? false,
-  }), []);
-
   useEffect(() => {
     stationCallbackRef.current = onStation;
-    lootCallbackRef.current = onLootPickup;
-    completionCallbackRef.current = onArenaComplete;
-    deathCallbackRef.current = onPlayerDeath;
-    experienceCallbackRef.current = onExperienceGain;
-    flaskUseCallbackRef.current = onFlaskUse;
-  }, [onArenaComplete, onExperienceGain, onFlaskUse, onLootPickup, onPlayerDeath, onStation]);
+    returnToHideoutCallbackRef.current = onReturnToHideout;
+  }, [onReturnToHideout, onStation]);
 
   useEffect(() => {
     flaskBeltRef.current = flaskBelt;
@@ -148,14 +136,30 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
   }, [flaskBelt]);
 
   useEffect(() => {
+    portalIndexesRef.current = [...portalIndexes];
+    runtimeRef.current?.updatePortalIndexes(portalIndexesRef.current);
+  }, [portalIndexes]);
+
+  useEffect(() => {
     pausedRef.current = paused;
     runtimeRef.current?.setPaused(paused);
   }, [paused]);
 
   useEffect(() => {
+    controlsBlockedRef.current = controlsBlocked;
+    runtimeRef.current?.setControlsBlocked(controlsBlocked);
+  }, [controlsBlocked]);
+
+  useEffect(() => {
     arenaBalanceRef.current = arenaBalance;
     if (arenaBalance) runtimeRef.current?.updateArenaBalance(arenaBalance);
   }, [arenaBalance]);
+
+  useEffect(() => {
+    onFinalRageChange?.(Boolean(hud?.finalRageActive));
+  }, [hud?.finalRageActive, onFinalRageChange]);
+
+  useEffect(() => () => onFinalRageChange?.(false), [onFinalRageChange]);
 
   useEffect(() => {
     const skillLevels = { nova: novaLevel, dash: dashLevel, ward: wardLevel, flameWave: flameWaveLevel };
@@ -176,18 +180,16 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
         parent,
         mode,
         classId: runtimeClassId,
-        portalActive,
+        portalIndexes: portalIndexesRef.current,
         paused: pausedRef.current,
+        controlsBlocked: controlsBlockedRef.current,
         skillLevels: skillLevelsRef.current,
         flaskBelt: flaskBeltRef.current,
         arenaBalance: arenaBalanceRef.current,
-        onStation: (station) => stationCallbackRef.current?.(station),
+        onStation: (station, portalIndex) => stationCallbackRef.current?.(station, portalIndex),
         onHud: setHud,
-        onLootPickup: (drop) => lootCallbackRef.current?.(drop) ?? false,
-        onExperienceGain: (amount) => experienceCallbackRef.current?.(amount),
-        onArenaComplete: (summary) => completionCallbackRef.current?.(summary),
-        onPlayerDeath: () => deathCallbackRef.current?.(),
-        onFlaskUse: (slotIndex) => flaskUseCallbackRef.current?.(slotIndex) ?? null,
+        onReturnToHideout: () => returnToHideoutCallbackRef.current?.(),
+        multiplayer,
       });
       runtimeRef.current = runtime;
       runtime.initialize();
@@ -206,7 +208,7 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
       runtimeRef.current = null;
       parent.replaceChildren();
     };
-  }, [mode, portalActive, runtimeClassId]);
+  }, [mode, multiplayer, runtimeClassId]);
 
   const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel);
   const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel);
@@ -220,8 +222,11 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
   const riftProgress = hud ? Math.min(100, (hud.riftRecharge / resolvedDash.recharge) * 100) : 0;
   const wardProgress = hud ? Math.min(100, (hud.wardCooldown / resolvedWard.cooldown) * 100) : 0;
   const flameWaveProgress = hud ? Math.min(100, (hud.flameWaveCooldown / resolvedFlameWave.cooldown) * 100) : 0;
-  const xpRequired = characterProgress ? XP_BY_LEVEL(characterProgress.level) : 1;
-  const xpPercent = characterProgress?.level === MAX_CHARACTER_LEVEL ? 100 : Math.min(100, ((characterProgress?.xp ?? 0) / xpRequired) * 100);
+  const displayedProgress = characterProgress
+    ? grantCharacterProgressExperience(characterProgress, hud?.pendingExperience ?? 0).character
+    : undefined;
+  const xpRequired = displayedProgress ? XP_BY_LEVEL(displayedProgress.level) : 1;
+  const xpPercent = displayedProgress?.level === MAX_CHARACTER_LEVEL ? 100 : Math.min(100, ((displayedProgress?.xp ?? 0) / xpRequired) * 100);
   const displayedLife = mode === "arena" && hud ? hud.life : characterStats?.maxLife ?? 0;
   const displayedMaxLife = mode === "arena" && hud ? hud.maxLife : characterStats?.maxLife ?? 0;
   const displayedMana = mode === "arena" && hud ? hud.focus : characterStats?.maxFocus ?? 0;
@@ -232,8 +237,34 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
     : 100;
 
   return (
-    <main className={`pixel-shell mode-${mode} ${paused ? "world-input-paused" : ""}`}>
+    <main
+      className={`pixel-shell mode-${mode} ${paused ? "world-input-paused" : ""} ${groundDropReady ? "world-ground-drop-ready" : ""}`}
+      onDragOver={(event) => {
+        if (!onItemDropToGround || event.defaultPrevented) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest(".world-panel")) return;
+        const itemDrag = Array.from(event.dataTransfer.types).some((type) => type === "application/x-crafty-item" || type === "text/plain");
+        if (!itemDrag) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setGroundDropReady(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setGroundDropReady(false);
+      }}
+      onDragEnd={() => setGroundDropReady(false)}
+      onDrop={(event) => {
+        if (!onItemDropToGround || event.defaultPrevented) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest(".world-panel")) return;
+        event.preventDefault();
+        const itemId = event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain");
+        if (itemId) onItemDropToGround(itemId);
+        setGroundDropReady(false);
+      }}
+    >
       <div ref={parentRef} className="phaser-stage" aria-label={`${mode} pixel-art game world`} />
+      {groundDropReady && <div className="world-ground-drop-hint" role="status"><span>↓</span><strong>Release to drop beside your character</strong></div>}
       {loading && <div className="world-loader"><span /><strong>Opening the wild forge</strong><small>Preparing the pixel world</small></div>}
       {rendererError && <div className="world-loader world-error"><strong>The game renderer could not start</strong><small>Enable WebGL or Canvas support, then reload.</small></div>}
       {mode === "arena" && hud && (
@@ -250,7 +281,7 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
                   : " · final wave"}</small>
             {hud.finalRageIn !== null && <i className="final-rage-meter" aria-hidden="true"><b style={{ width: `${finalRageProgress}%` }} /></i>}
           </div>
-          <div className="world-loot"><span>{hud.lootCollected} collected</span><strong>{hud.groundDrops}</strong><small>drops on ground</small></div>
+          <div className="world-loot"><strong>{hud.groundDrops}</strong><small>drops on ground</small></div>
           {hud.arenaComplete && (
             <div className="arena-complete-banner" role="status" aria-live="polite">
               <span>Map Cleared</span>
@@ -260,7 +291,7 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
           )}
         </>
       )}
-      {mode !== "class-select" && characterProgress && characterStats && (
+      {mode !== "loading" && characterProgress && characterStats && (
         <div className="world-hud-safe-area" aria-label="Character resources">
           <div className="world-bottom-hud">
             <div className="world-command-deck">
@@ -331,11 +362,11 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
               </div>
               <div
                 className="world-experience"
-                aria-label={`Level ${characterProgress.level} experience`}
+                aria-label={`Level ${displayedProgress?.level ?? characterProgress.level} experience`}
                 aria-valuemin={0}
                 aria-valuemax={characterProgress.level === MAX_CHARACTER_LEVEL ? 100 : xpRequired}
-                aria-valuenow={characterProgress.level === MAX_CHARACTER_LEVEL ? 100 : characterProgress.xp}
-                data-tooltip={characterProgress.level === MAX_CHARACTER_LEVEL ? `Level ${characterProgress.level} · Maximum level` : `Level ${characterProgress.level} · ${characterProgress.xp} / ${xpRequired} XP`}
+                aria-valuenow={displayedProgress?.level === MAX_CHARACTER_LEVEL ? 100 : displayedProgress?.xp ?? characterProgress.xp}
+                data-tooltip={displayedProgress?.level === MAX_CHARACTER_LEVEL ? `Level ${displayedProgress.level} · Maximum level` : `Level ${displayedProgress?.level ?? characterProgress.level} · ${displayedProgress?.xp ?? characterProgress.xp} / ${xpRequired} XP`}
                 role="progressbar"
                 tabIndex={0}
               >
@@ -347,7 +378,7 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
         </div>
       )}
       {hud && <div className="world-fps">{hud.fps} FPS · WebGL sprites</div>}
-      {mode !== "class-select" && characterStats && (
+      {mode !== "loading" && characterStats && (
         <div className="world-stat-stack">
           <aside className="world-character-stats" aria-label="Character statistics">
             <header><span>Character · select a stat for sources</span><strong>Combat Stats</strong></header>
@@ -399,4 +430,4 @@ export const PhaserWorld = forwardRef<PhaserWorldHandle, PhaserWorldProps>(funct
       {children}
     </main>
   );
-});
+}

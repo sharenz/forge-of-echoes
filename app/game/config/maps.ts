@@ -21,4 +21,11 @@ export const MAP_MODIFIERS: MapModifierConfig = {
 
 export const MAP_RARITY_LIMITS = { normal: 0, magic: 2, rare: 4, unique: 4 } as const;
 
+export const MAP_TIER_RULES = {
+  minimum: 1,
+  maximum: 20,
+  /** Each tier below the current map is this much less likely than the tier above it. */
+  monsterDropLowerTierWeightMultiplier: 0.62,
+} as const;
+
 export const MAP_MODIFIER_IDS = Object.keys(MAP_MODIFIERS) as MapModifierId[];

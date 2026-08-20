@@ -1,0 +1,8 @@
+{$APP_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy web:3000
+}
+
+{$GAME_DOMAIN} {
+  reverse_proxy game-server:2567
+}

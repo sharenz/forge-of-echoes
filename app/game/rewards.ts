@@ -1,8 +1,9 @@
-import type { MapDrop } from "./combat";
+import { MAP_TIER_RULES } from "./config/maps";
 import { MAP_COMPLETION_REWARDS } from "./config/rewards";
 import type { Rarity } from "./domain";
 import { generateEquipmentWithRandom } from "./items";
-import { rollEquipmentRarity } from "./loot";
+import { rollEquipmentRarity, type GeneratedDrop } from "./loot";
+import { createMap } from "./maps";
 
 type EquipmentRarity = Extract<Rarity, "normal" | "magic" | "rare">;
 
@@ -24,9 +25,10 @@ function randomInteger(minimum: number, maximum: number, random: () => number): 
 export function createMapCompletionRewards(
   itemLevel: number,
   itemRarity: number,
+  completedMapTier: number,
   random: () => number = Math.random,
-): MapDrop[] {
-  const rewards: MapDrop[] = [];
+): GeneratedDrop[] {
+  const rewards: GeneratedDrop[] = [];
   for (let index = 0; index < MAP_COMPLETION_REWARDS.equipmentCount; index += 1) {
     const rolledRarity = rollEquipmentRarity(itemRarity, random);
     const rarity = index === 0
@@ -41,5 +43,10 @@ export function createMapCompletionRewards(
       amount: randomInteger(material.minimum, material.maximum, random),
     });
   }
+  const progressionTier = Math.min(
+    MAP_TIER_RULES.maximum,
+    Math.max(MAP_TIER_RULES.minimum, Math.floor(completedMapTier) + MAP_COMPLETION_REWARDS.progressionMapTierOffset),
+  );
+  rewards.push({ kind: "inventory", item: createMap(progressionTier, undefined, random) });
   return rewards;
 }

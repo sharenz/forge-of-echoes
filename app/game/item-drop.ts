@@ -1,12 +1,25 @@
 import type { CharacterEquipmentSlot, InventoryItem, PlayerProfile } from "./domain";
 import { findEquippedSlot } from "./equipment";
-import { removeItem } from "./item-container";
+import { storePickedUpFlask } from "./flasks";
+import { insertItem, removeItem } from "./item-container";
 import { removeStashItem } from "./stash";
 
 export interface TakenProfileItem {
   item: InventoryItem;
   profile: PlayerProfile;
   source: "backpack" | "stash" | "equipment";
+}
+
+/**
+ * Applies an authoritative world pickup to a persisted profile. Flasks first
+ * refill matching configured belt slots (including depleted zero stacks),
+ * while all other items go directly to the backpack.
+ */
+export function storePickedUpItem(profile: PlayerProfile, item: InventoryItem): PlayerProfile | null {
+  if (item.kind === "flask") return storePickedUpFlask(profile, item)?.profile ?? null;
+  const inserted = insertItem(profile.inventory, item);
+  if (inserted.unplaced.length > 0) return null;
+  return { ...profile, inventory: inserted.container };
 }
 
 /**

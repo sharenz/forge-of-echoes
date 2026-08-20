@@ -38,10 +38,6 @@ const PACK_MODIFIERS_BY_ID = Object.fromEntries(
   [...MAGIC_PACK_MODIFIERS, ...RARE_MONSTER_MODIFIERS].map((definition) => [definition.id, definition]),
 ) as Record<string, MonsterPackModifierDefinition>;
 
-export function monsterPackModifierNames(ids: readonly string[]): string[] {
-  return ids.flatMap((id) => PACK_MODIFIERS_BY_ID[id]?.name ?? []);
-}
-
 function weightedChoice<T>(values: readonly T[], weight: (value: T) => number, random: EncounterRandomSource): T {
   if (values.length === 0) throw new Error("Cannot choose from an empty encounter pool");
   const total = values.reduce((sum, value) => sum + Math.max(0, weight(value)), 0);

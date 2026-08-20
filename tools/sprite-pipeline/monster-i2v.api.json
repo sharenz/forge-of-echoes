@@ -1,0 +1,221 @@
+{
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "monster_idle.png",
+      "upload": "image"
+    },
+    "_meta": {
+      "title": "Load Image (monster on flat green)"
+    }
+  },
+  "3": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "upscale_method": "lanczos",
+      "width": 768,
+      "height": 768,
+      "crop": "disabled",
+      "image": [
+        "2",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Scale to 768x768 (H3 canvas)"
+    }
+  },
+  "4": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "UNETLoader"
+    }
+  },
+  "5": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "CLIPLoader"
+    }
+  },
+  "6": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    },
+    "_meta": {
+      "title": "VAE (video)"
+    }
+  },
+  "7": {
+    "class_type": "MiniMaxH3ImageToVideo",
+    "inputs": {
+      "prompt": "Game sprite animation of the creature from <Picture 1>. The creature is centered on a perfectly flat, uniform, solid bright green (#00FF00) chroma-key background.\nSubtle idle loop: the creature stands in place, slow breathing, slight weight shift from foot to foot, small head movement, gentle sway of any cloth, tail, fur or flames. It does not move from its position.\nThe creature keeps its exact size, proportions, colors and design throughout. Locked static camera, no zoom, no pan, no cuts, no lighting change, no shadows on the ground, the green background stays flat and uniform at all times. The motion ends exactly on the starting pose.\nAudio: silence.",
+      "width": 768,
+      "height": 768,
+      "length": 39,
+      "clip": [
+        "5",
+        0
+      ],
+      "vae": [
+        "6",
+        0
+      ],
+      "first_frame": [
+        "3",
+        0
+      ],
+      "last_frame": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "MiniMax H3 I2V — first_frame == last_frame (loop)"
+    }
+  },
+  "8": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 1
+    },
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "9": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "conditioning": [
+        "7",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "BasicGuider"
+    }
+  },
+  "10": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "res_multistep"
+    },
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "11": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "scheduler": "simple",
+      "steps": 20,
+      "denoise": 1,
+      "model": [
+        "4",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "BasicScheduler"
+    }
+  },
+  "12": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "8",
+        0
+      ],
+      "guider": [
+        "9",
+        0
+      ],
+      "sampler": [
+        "10",
+        0
+      ],
+      "sigmas": [
+        "11",
+        0
+      ],
+      "latent_image": [
+        "7",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  },
+  "13": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "12",
+        0
+      ],
+      "vae": [
+        "6",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "VAE Decode (all frames)"
+    }
+  },
+  "14": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "sprites/monster_idle/frame",
+      "images": [
+        "13",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Save every frame as PNG  ←  change prefix per action"
+    }
+  },
+  "15": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "fps": 24,
+      "bit_depth": 8,
+      "images": [
+        "13",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CreateVideo"
+    }
+  },
+  "16": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "filename_prefix": "sprites/preview/monster_idle",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "15",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "MP4 preview of the raw clip"
+    }
+  }
+}

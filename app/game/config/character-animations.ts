@@ -29,14 +29,14 @@ export interface CharacterAnimationDefinition {
   clips: Record<CharacterDirection, Record<CharacterAnimationState, CharacterAnimationClipDefinition>>;
 }
 
-const legacyDirectionalRows = {
+const sharedDirectionalRows = {
   south: { locomotion: 0, actions: 1 },
   north: { locomotion: 2, actions: 3 },
   east: { locomotion: 4, actions: 5 },
 } as const;
 
-function legacyClipsForDirection(direction: keyof typeof legacyDirectionalRows): Record<CharacterAnimationState, CharacterAnimationClipDefinition> {
-  const rows = legacyDirectionalRows[direction];
+function sharedClipsForDirection(direction: keyof typeof sharedDirectionalRows): Record<CharacterAnimationState, CharacterAnimationClipDefinition> {
+  const rows = sharedDirectionalRows[direction];
   return {
     idle: { sheet: "main", row: rows.locomotion, startColumn: 0, frameCount: 4, frameRate: 5, repeat: -1 },
     run: { sheet: "main", row: rows.locomotion, startColumn: 4, frameCount: 4, frameRate: 11, repeat: -1 },
@@ -46,12 +46,12 @@ function legacyClipsForDirection(direction: keyof typeof legacyDirectionalRows):
   };
 }
 
-function legacyClips(): CharacterAnimationDefinition["clips"] {
+function sharedClips(): CharacterAnimationDefinition["clips"] {
   return {
-    south: legacyClipsForDirection("south"),
-    north: legacyClipsForDirection("north"),
-    east: legacyClipsForDirection("east"),
-    west: legacyClipsForDirection("east"),
+    south: sharedClipsForDirection("south"),
+    north: sharedClipsForDirection("north"),
+    east: sharedClipsForDirection("east"),
+    west: sharedClipsForDirection("east"),
   };
 }
 
@@ -87,7 +87,7 @@ function sorceressClips(): CharacterAnimationDefinition["clips"] {
   };
 }
 
-const legacySheet = (url: string): CharacterSpriteSheetDefinition => ({
+const sharedSheet = (url: string): CharacterSpriteSheetDefinition => ({
   url,
   columns: 8,
   frameWidth: 181,
@@ -96,18 +96,18 @@ const legacySheet = (url: string): CharacterSpriteSheetDefinition => ({
 
 export const CHARACTER_ANIMATIONS: Record<CharacterClassId, CharacterAnimationDefinition> = {
   amazon: {
-    sheets: { main: legacySheet("/player-amazon-sheet-v1.png") },
+    sheets: { main: sharedSheet("/player-amazon-sheet-v1.png") },
     defaultSheet: "main",
     renderScale: 0.82,
     footPadding: 0,
-    clips: legacyClips(),
+    clips: sharedClips(),
   },
   barbarian: {
-    sheets: { main: legacySheet("/player-barbarian-sheet-v1.png") },
+    sheets: { main: sharedSheet("/player-barbarian-sheet-v1.png") },
     defaultSheet: "main",
     renderScale: 0.82,
     footPadding: 0,
-    clips: legacyClips(),
+    clips: sharedClips(),
   },
   sorceress: {
     sheets: {

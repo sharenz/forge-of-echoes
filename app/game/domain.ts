@@ -68,9 +68,6 @@ export interface Affix {
   requiredItemLevel: number;
   group: string;
   rolls: AffixRoll[];
-  /** Compatibility summary for compact UI. Calculation uses rolls. */
-  value: number;
-  unit: "flat" | "percent";
 }
 
 export interface EquipmentItem {
@@ -165,9 +162,7 @@ export interface StashState {
 
 export interface CharacterProgress {
   name: string;
-  archetype: string;
-  classId: CharacterClassId | null;
-  created: boolean;
+  classId: CharacterClassId;
   level: number;
   xp: number;
   allocatedAttributes: Record<AttributeKey, number>;
@@ -186,7 +181,6 @@ export interface PlayerProfile {
   equipped: Partial<Record<CharacterEquipmentSlot, EquipmentItem>>;
   flaskBelt: FlaskBelt;
   mapDevice: MapItem | null;
-  openedMap: MapItem | null;
 }
 
 export interface CharacterStats {
@@ -200,17 +194,4 @@ export interface CharacterStats {
   attackSpeed: number;
   armor: number;
   evadeChance: number;
-}
-
-export interface RunLoot {
-  items: InventoryItem[];
-  xp: number;
-}
-
-export interface RunResult {
-  completed: boolean;
-  wave: number;
-  enemiesSlain: number;
-  elapsedSeconds: number;
-  loot: RunLoot;
 }

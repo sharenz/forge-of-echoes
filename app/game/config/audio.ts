@@ -16,6 +16,36 @@ export interface SkillAudioDefinition {
   tones: readonly AudioToneDefinition[];
 }
 
+export interface SoundtrackDefinition {
+  title: string;
+  src: string;
+  volume: number;
+}
+
+export const MENU_SOUNDTRACK: SoundtrackDefinition = {
+  title: "Amber Hollow",
+  src: "/music/amber-hollow.mp3",
+  volume: 0.32,
+};
+
+export const HIDEOUT_SOUNDTRACK: SoundtrackDefinition = {
+  title: "Amber Hollow Watch",
+  src: "/music/amber-hollow-watch.mp3",
+  volume: 0.28,
+};
+
+export const MAP_SOUNDTRACK: SoundtrackDefinition = {
+  title: "Hunted Wilds",
+  src: "/music/hunted-wilds.mp3",
+  volume: 0.26,
+};
+
+export const FINAL_RAGE_SOUNDTRACK: SoundtrackDefinition = {
+  title: "Surrounded by Fangs",
+  src: "/music/surrounded-by-fangs.mp3",
+  volume: 0.3,
+};
+
 /** Small procedural cues avoid network latency and can later be replaced per skill without changing combat. */
 export const SKILL_AUDIO: Record<SkillAudioId, SkillAudioDefinition> = {
   "ember-lance": {

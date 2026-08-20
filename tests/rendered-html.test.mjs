@@ -21,14 +21,16 @@ test("server-renders the Crafty application shell and production metadata", asyn
 
   const html = await response.text();
   assert.match(html, /<title>Crafty — The Crucible<\/title>/i);
-  assert.match(html, /Lighting the forge/);
+  assert.match(html, /Enter the Crucible/);
+  assert.match(html, /Authoritative online realm/);
+  assert.match(html, /characters and progression live authoritatively in PostgreSQL/i);
   assert.match(html, /craft maps and rare equipment/i);
   assert.match(html, /property="og:image" content="https:\/\/crafty\.example\/og\.png"/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
 test("keeps the game systems modular and ships its social artwork", async () => {
-  const [page, layout, globalStyles, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, attributesPanel, skillTreePanel, characterPanelTabs, inventoryGrid, itemIcon, itemTooltip, world, characterAnimator, skillAudio, domain, itemContainer, itemVisuals, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, characterAnimationConfig, mapConfig, monsterPackConfig, lootConfig, content, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, flaskEngine, flaskConfig, gameDesign] = await Promise.all([
+  const [page, layout, globalStyles, cursor, shell, notification, mapMerchant, mapWorkshop, phaserWorld, inventoryPanel, attributesPanel, skillTreePanel, inventoryGrid, itemIcon, itemTooltip, world, characterAnimator, gameAudio, monsterAudio, domain, itemContainer, itemVisuals, stashEngine, equipment, combat, mapsEngine, encounters, lootEngine, containerConfig, stashConfig, damageConfig, audioConfig, equipmentSlotConfig, arenaConfig, characterAnimationConfig, mapConfig, monsterPackConfig, lootConfig, profile, stats, statRuleConfig, itemConfig, affixConfig, monsterConfig, skillConfig, merchantConfig, flaskConfig, gameDesign] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -41,13 +43,13 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/components/InventoryPanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/AttributesPanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/SkillTreePanel.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/components/CharacterPanelTabs.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/InventoryGrid.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ItemIcon.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/ItemTooltip.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/PhaserRuntime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game2d/CharacterAnimator.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/game2d/SkillAudio.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game2d/audio/GameAudio.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game2d/audio/MonsterAudioMixer.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/domain.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/item-container.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/item-visuals.ts", import.meta.url), "utf8"),
@@ -67,7 +69,6 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game/config/maps.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/monster-packs.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/loot.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/game/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/stats.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/stat-rules.ts", import.meta.url), "utf8"),
@@ -76,21 +77,37 @@ test("keeps the game systems modular and ships its social artwork", async () => 
     readFile(new URL("../app/game/config/monsters.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/skills.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/merchants.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/game/flasks.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/config/flasks.ts", import.meta.url), "utf8"),
     readFile(new URL("../GAME_DESIGN.md", import.meta.url), "utf8"),
   ]);
   const itemComparison = await readFile(new URL("../app/game/item-comparison.ts", import.meta.url), "utf8");
   const itemDrop = await readFile(new URL("../app/game/item-drop.ts", import.meta.url), "utf8");
+  const quickAction = await readFile(new URL("../app/components/useQuickAction.ts", import.meta.url), "utf8");
+  const menuSoundtrack = await readFile(new URL("../app/components/MenuSoundtrack.tsx", import.meta.url), "utf8");
   const completionRewardConfig = await readFile(new URL("../app/game/config/rewards.ts", import.meta.url), "utf8");
   const completionRewards = await readFile(new URL("../app/game/rewards.ts", import.meta.url), "utf8");
+  const authoritativeMapRoom = await readFile(new URL("../server/rooms/MapRoom.ts", import.meta.url), "utf8");
 
   assert.match(page, /<GameShell \/>/);
   assert.match(layout, /<GameCursor \/>/);
   assert.match(cursor, /data-mode="default"/);
   assert.match(cursor, /addEventListener\("dragover"/);
+  assert.match(cursor, /addEventListener\("contextmenu", preventBrowserContextMenu\)/);
   assert.doesNotMatch(cursor, /requestAnimationFrame/);
   assert.match(shell, /<PhaserWorld/);
+  assert.match(shell, /<MenuSoundtrack enabled=\{musicEnabled\} onEnabledChange=\{setMusicEnabled\} \/>/);
+  assert.match(shell, /<HideoutSoundtrack enabled=\{musicEnabled\} onEnabledChange=\{setMusicEnabled\} \/>/);
+  assert.match(shell, /<MapSoundtrack finalRageActive=\{mapFinalRageActive\} enabled=\{musicEnabled\} onEnabledChange=\{setMusicEnabled\} \/>/);
+  assert.match(shell, /onFinalRageChange=\{setMapFinalRageActive\}/);
+  assert.match(menuSoundtrack, /finalRageActive \? FINAL_RAGE_SOUNDTRACK : MAP_SOUNDTRACK/);
+  assert.match(menuSoundtrack, /<audio ref=\{audioRef\}[^>]+loop/);
+  assert.match(menuSoundtrack, /pointerdown/);
+  assert.match(menuSoundtrack, /menu-soundtrack-control/);
+  assert.match(menuSoundtrack, /onEnabledChange\(false\)/);
+  assert.match(audioConfig, /\/music\/amber-hollow\.mp3/);
+  assert.match(audioConfig, /\/music\/amber-hollow-watch\.mp3/);
+  assert.match(audioConfig, /\/music\/hunted-wilds\.mp3/);
+  assert.match(audioConfig, /\/music\/surrounded-by-fangs\.mp3/);
   assert.match(shell, /<GameNotification/);
   assert.match(shell, /<MapMerchant/);
   assert.match(mapMerchant, /Maps &amp; supplies/);
@@ -100,24 +117,29 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /MERCHANT/);
   assert.match(notification, /aria-live="polite"/);
   assert.doesNotMatch(shell, /className="toast"/);
-  assert.match(shell, /mode="class-select"/);
+  assert.match(shell, /mode="loading"/);
+  assert.match(shell, /mode="character-create"/);
+  assert.match(shell, /Your Characters/);
+  assert.match(shell, /Create Character/);
+  assert.match(shell, /Back to characters/);
   assert.match(world, /class PhaserRuntime/);
   assert.match(world, /pixelArt: true/);
-  assert.match(world, /spatialBuckets/);
+  assert.doesNotMatch(world, /spatialBuckets/);
   assert.match(world, /MAP_SIZE = VIEW_SIZE \* 4/);
   assert.doesNotMatch(world, /setDeadzone\(/);
   assert.match(world, /startFollow\(this\.cameraTarget!, true, 0\.16, 0\.16\)/);
   assert.match(world, /renderPlayer\(this\.accumulator \/ FIXED_STEP\)/);
-  assert.match(world, /MOVEMENT_ACCELERATION/);
-  assert.match(world, /PACK_REGIONS/);
-  assert.match(world, /shouldSpawnNextWave/);
+  assert.doesNotMatch(world, /MOVEMENT_ACCELERATION|PACK_REGIONS|shouldSpawnNextWave/);
+  assert.match(world, /requires a server-backed multiplayer adapter/);
+  assert.match(world, /syncNetworkMonsters/);
+  assert.match(world, /syncNetworkCombatEvents/);
   assert.match(world, /spawnReturnPortal/);
   assert.match(world, /activateReturnPortal/);
   assert.match(world, /spawnCompletionChest/);
-  assert.match(world, /openCompletionChest/);
+  assert.doesNotMatch(world, /openCompletionChest/);
   assert.match(world, /reward-chest-closed/);
-  assert.match(world, /OPEN VICTORY CACHE FIRST/);
-  assert.match(world, /createMapCompletionRewards/);
+  assert.doesNotMatch(world, /OPEN VICTORY CACHE FIRST|createMapCompletionRewards/);
+  assert.match(authoritativeMapRoom, /createMapCompletionRewards/);
   assert.match(completionRewardConfig, /equipmentCount: 2/);
   assert.match(completionRewardConfig, /minimumGuaranteedEquipmentRarity: "magic"/);
   assert.match(completionRewardConfig, /currency: "scrap"/);
@@ -126,7 +148,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(completionRewards, /atLeastRarity/);
   assert.match(completionRewards, /generateEquipmentWithRandom/);
   assert.match(world, /renderPlayerResources/);
-  assert.match(world, /this\.options\.onPlayerDeath\(\)/);
+  assert.match(world, /this\.options\.onReturnToHideout\(\)/);
   assert.doesNotMatch(world, /this\.lives/);
   assert.match(phaserWorld, /world-hud-safe-area/);
   assert.match(phaserWorld, /world-map-stats/);
@@ -137,21 +159,18 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(globalStyles, /\.map-active-modifiers/);
   assert.match(phaserWorld, /ResourceGlobe kind="life"/);
   assert.doesNotMatch(world, /groundDrops\.length > 0/);
-  assert.match(world, /waveElapsedSeconds/);
-  assert.match(world, /updateFinalWaveRage/);
-  assert.match(world, /enemy\.aggro = true/);
+  assert.doesNotMatch(world, /waveElapsedSeconds|updateFinalWaveRage|enemy\.aggro = true/);
+  assert.match(world, /networkMap\.waveElapsedMilliseconds/);
   assert.match(phaserWorld, /rage in \$\{Math\.ceil\(hud\.finalRageIn\)\}s/);
   assert.match(globalStyles, /\.world-wave\.is-enraged/);
-  assert.match(world, /rollHitDamage/);
+  assert.doesNotMatch(world, /rollHitDamage/);
+  assert.match(authoritativeMapRoom, /rollHitDamage/);
   assert.doesNotMatch(world, /0\.85 \+ .*attackDamage/);
   assert.doesNotMatch(world, /enemyHealthMultiplier|enemySpeedMultiplier|ARENA_MONSTER\.baseLife \+ wave/);
-  assert.match(world, /resolveMonsterStats/);
-  assert.match(world, /rollMonsterPack/);
-  assert.match(world, /spawnEnemyProjectile/);
-  assert.match(world, /updateEnemyProjectiles/);
-  assert.match(world, /archetype\.behavior === "jumper"/);
-  assert.match(world, /hit\.evadeChance/);
-  assert.match(world, /hit\.armor/);
+  assert.doesNotMatch(world, /resolveMonsterStats|rollMonsterPack|spawnEnemyProjectile|updateEnemyProjectiles|hit\.evadeChance|hit\.armor/);
+  assert.match(authoritativeMapRoom, /resolveMonsterStats/);
+  assert.match(authoritativeMapRoom, /rollMonsterPack/);
+  assert.match(world, /launchNetworkEnemyProjectile/);
   assert.match(world, /renderEnemyHealth/);
   assert.match(world, /healthLabelPool/);
   assert.match(world, /showDamageNumber/);
@@ -168,7 +187,6 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.doesNotMatch(world, /createPlayerFrame|createPlayerAnimations/);
   assert.match(world, /vfx-slash/);
   assert.match(world, /vfx-dust/);
-  assert.match(world, /class-roster/);
   assert.match(characterAnimator, /ANIMATION_UPDATE/);
   assert.match(characterAnimator, /releaseTextureFrame/);
   assert.match(characterAnimator, /currentLoopKey/);
@@ -180,7 +198,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /updateVfxParticles/);
   assert.match(world, /ember-sigil/);
   assert.match(world, /beginSkillAction/);
-  assert.match(skillAudio, /class SkillAudio/);
+  assert.match(gameAudio, /class GameAudio/);
+  assert.match(gameAudio, /voiceGroup/);
+  assert.match(monsterAudio, /class MonsterAudioMixer/);
+  assert.match(monsterAudio, /movementFrame/);
   assert.match(audioConfig, /"ember-nova"/);
   assert.match(arenaConfig, /waveSpawnIntervalSeconds: 30/);
   assert.match(arenaConfig, /tierModifiers/);
@@ -206,24 +227,23 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(lootEngine, /dropChances/);
   assert.match(lootEngine, /rollEquipmentRarity/);
   assert.match(lootConfig, /equipmentRarityWeights/);
-  assert.match(world, /rollGroundDrop/);
-  assert.match(world, /equipmentDropPresentation\(drop\.item\)/);
-  assert.match(world, /item: generateEquipment/);
+  assert.doesNotMatch(world, /rollGroundDrop|item: generateEquipment/);
+  assert.match(world, /equipmentDropPresentation\(item\)/);
   assert.doesNotMatch(world, /rarity\.toUpperCase\(\).*ITEM/);
   assert.match(world, /updateGroundDrops/);
-  assert.match(world, /dropInventoryItem/);
-  assert.match(combat, /kind: "inventory"/);
-  assert.match(shell, /onLootPickup/);
-  assert.match(shell, /takeProfileItem/);
-  assert.match(shell, /worldRef\.current\?\.dropItem/);
-  assert.match(shell, /quickStashItem/);
+  assert.doesNotMatch(world, /dropInventoryItem/);
+  assert.match(lootEngine, /kind: "inventory"/);
+  assert.doesNotMatch(shell, /onLootPickup/);
+  assert.doesNotMatch(shell, /takeProfileItem|worldRef|dropItemToGround/);
+  assert.match(shell, /onlineQuickStash/);
   assert.match(shell, /activeStashTab/);
-  assert.match(shell, /const inserted = insertItem\(current\.inventory, item\)/);
-  assert.match(world, /if \(!this\.options\.onLootPickup\(groundDrop\.drop\)\) continue/);
+  assert.match(shell, /executeProfileCommand/);
+  assert.match(world, /sendPickup\?\.\(groundDrop\.networkId\)/);
   assert.match(shell, /arena-inventory-toggle/);
   assert.match(shell, /character-interface-backdrop/);
-  assert.match(shell, /onFlaskLoad=\{loadFlask\}/);
-  assert.match(shell, /paused=\{characterPanelOpen\}/);
+  assert.match(shell, /onFlaskLoad=\{onlineLoadFlask\}/);
+  assert.match(shell, /paused=\{Boolean\(panel\)\}/);
+  assert.match(shell, /controlsBlocked=\{characterPanelOpen\}/);
   assert.match(phaserWorld, /updateArenaBalance/);
   assert.match(phaserWorld, /world-action-bar/);
   assert.match(phaserWorld, /world-bottom-hud/);
@@ -245,17 +265,24 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(inventoryPanel, /paperdoll-\$\{profile\.character\.classId/);
   assert.match(globalStyles, /player-sorceress-v4\.png/);
   assert.match(globalStyles, /\.equipment-slot \.item-card > :not\(\.item-card-icon\)/);
-  assert.match(inventoryPanel, /Drop to ground/);
-  assert.match(inventoryPanel, /onDropToGround/);
-  assert.match(globalStyles, /\.inventory-ground-drop/);
-  assert.match(phaserWorld, /useImperativeHandle/);
+  assert.doesNotMatch(inventoryPanel, /Drop to ground|onDropToGround|inventory-flask-belt|inventory-overview/);
+  assert.match(phaserWorld, /onItemDropToGround/);
+  assert.match(phaserWorld, /world-ground-drop-hint/);
+  assert.doesNotMatch(phaserWorld, /useImperativeHandle/);
   assert.match(itemDrop, /source: "backpack" \| "stash" \| "equipment"/);
   assert.match(inventoryPanel, /onMoveItem/);
   assert.match(inventoryPanel, /role="tablist"/);
   assert.match(inventoryPanel, /Rename active stash tab/);
-  assert.match(inventoryPanel, /onQuickMove=\{showStash/);
+  assert.match(inventoryPanel, /onQuickMove=\{onQuickUnstash\}/);
+  assert.match(inventoryPanel, /onQuickMove=\{quickUseBackpackItem\}/);
   assert.match(inventoryGrid, /canPlaceItem/);
-  assert.match(inventoryGrid, /event\.ctrlKey && onQuickMove/);
+  assert.match(inventoryGrid, /onContextMenu=/);
+  assert.match(inventoryGrid, /quickAction\.fromContextMenu/);
+  assert.doesNotMatch(inventoryGrid, /onDoubleClick/);
+  assert.match(quickAction, /event\.ctrlKey && !event\.metaKey/);
+  assert.match(quickAction, /DUPLICATE_GESTURE_WINDOW_MS/);
+  assert.match(mapWorkshop, /onQuickMove=/);
+  assert.match(mapMerchant, /quickAction\.fromClick/);
   assert.match(inventoryGrid, /draggedOffset \?\? readOffset/);
   assert.match(inventoryGrid, /grid-drop-preview/);
   assert.match(inventoryGrid, /container-\$\{container\.id\}/);
@@ -294,9 +321,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(skillTreePanel, /SKILL_TREE_BRANCHES\.map/);
   assert.match(skillTreePanel, /progress\.skillLevels\[id\]/);
   assert.match(globalStyles, /\.skill-discipline-grid/);
-  assert.match(characterPanelTabs, /"inventory"/);
-  assert.match(characterPanelTabs, /"attributes"/);
-  assert.match(characterPanelTabs, /"skills"/);
+  assert.doesNotMatch(shell, /CharacterPanelTabs/);
   assert.match(shell, /panel === "attributes"/);
   assert.match(shell, /panel === "skills"/);
   assert.match(globalStyles, /\.attributes-interface/);
@@ -314,7 +339,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(inventoryGrid, /profile=\{profile\}/);
   assert.match(globalStyles, /\.tooltip-stat-comparison/);
   assert.match(itemTooltip, /mapModifierDescription/);
-  assert.match(inventoryPanel, /Collected this map/);
+  assert.doesNotMatch(inventoryPanel, /Collected this map/);
+  assert.match(inventoryPanel, /highlightedIds=\{freshItems\}/);
   assert.match(shell, /mapDevice/);
   assert.match(domain, /type InventoryItem/);
   assert.match(phaserWorld, /world-character-stats/);
@@ -326,19 +352,18 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.doesNotMatch(stats, /82 \+ level|1 \+ dexterity \* 0\.0025/);
   assert.match(statRuleConfig, /DERIVED_STAT_RULES/);
   assert.match(statRuleConfig, /perAttribute/);
-  assert.match(world, /evadeMultiplier/);
-  assert.match(world, /armorMultiplier/);
-  assert.doesNotMatch(content, /BARGAINS|Bargain/);
+  assert.doesNotMatch(world, /evadeMultiplier|armorMultiplier/);
   assert.doesNotMatch(domain, /Bargain/);
   assert.match(domain, /interface MapItem/);
   assert.match(domain, /interface StashState/);
   assert.match(domain, /version: 9/);
   assert.match(domain, /interface EquipmentItem/);
-  assert.match(profile, /grantCharacterExperience/);
-  assert.match(profile, /localStorage/);
-  assert.match(profile, /crafty\.profile\.v9/);
-  assert.match(profile, /V8_STORAGE_KEY/);
-  assert.match(profile, /migrateV7Profile/);
+  assert.doesNotMatch(profile, /applyRunResult|grantCharacterExperience/);
+  assert.match(authoritativeMapRoom, /grantCharacterExperience/);
+  assert.doesNotMatch(profile, /localStorage|sessionStorage|crafty\.profile/);
+  assert.doesNotMatch(shell, /saveProfile|crafty\.profile/);
+  assert.match(shell, /multiplayer\.createCharacter/);
+  assert.match(shell, /authoritativeProfile/);
   assert.match(stats, /sum\(increased\)|mode === "increased"/);
   assert.match(stats, /moreMultiplier/);
   assert.match(itemConfig, /perItemLevel/);
@@ -367,18 +392,21 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(flaskConfig, /maxBeltStack: 5/);
   assert.match(flaskConfig, /recovery: 20/);
   assert.match(flaskConfig, /recovery: 25/);
-  assert.match(flaskEngine, /advanceFlaskRecovery/);
+  assert.match(authoritativeMapRoom, /runtime\.recoveries\.push/);
   assert.match(world, /KeyCodes\.ONE/);
   assert.match(world, /KeyCodes\.FIVE/);
   assert.match(phaserWorld, /world-flask-belt/);
-  assert.match(inventoryPanel, /inventory-flask-belt/);
+  assert.doesNotMatch(inventoryPanel, /inventory-flask-belt/);
   assert.match(world, /1 \/ Math\.max\(0\.01, this\.options\.arenaBalance\?\.attackSpeed/);
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);
   assert.match(gameDesign, /The four map axes/);
   await access(new URL("../public/og.png", import.meta.url));
+  await access(new URL("../public/music/amber-hollow.mp3", import.meta.url));
+  await access(new URL("../public/music/amber-hollow-watch.mp3", import.meta.url));
+  await access(new URL("../public/music/hunted-wilds.mp3", import.meta.url));
+  await access(new URL("../public/music/surrounded-by-fangs.mp3", import.meta.url));
   await access(new URL("../public/ember-sigil.png", import.meta.url));
-  await access(new URL("../public/class-roster-v2.png", import.meta.url));
   await access(new URL("../public/player-amazon-v4.png", import.meta.url));
   await access(new URL("../public/player-barbarian-v4.png", import.meta.url));
   await access(new URL("../public/item-icons/weak-health-flask.png", import.meta.url));
@@ -389,8 +417,29 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   await access(new URL("../public/player-sorceress-locomotion-v3.png", import.meta.url));
   await access(new URL("../public/player-sorceress-actions-v3.png", import.meta.url));
   await access(new URL("../public/ui/resource-globe-frame-v1.png", import.meta.url));
-  await access(new URL("../public/ui/experience-frame-v1.png", import.meta.url));
-  await access(new URL("../public/ui/bottom-command-frame-v1.png", import.meta.url));
   const itemIcons = (await readdir(new URL("../public/item-icons", import.meta.url))).filter((name) => name.endsWith(".png"));
   assert.equal(itemIcons.length, 22);
+});
+
+test("stores only the remembered player name in browser storage", async () => {
+  const [shell, client, profile, multiplayerHook, apiRouter] = await Promise.all([
+    readFile(new URL("../app/components/GameShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/multiplayer/MultiplayerClient.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/multiplayer/useMultiplayerHideout.ts", import.meta.url), "utf8"),
+    readFile(new URL("../server/http/createApiRouter.ts", import.meta.url), "utf8"),
+  ]);
+  for (const source of [client, profile]) assert.doesNotMatch(source, /localStorage|sessionStorage|crafty\.profile/);
+  assert.match(shell, /localStorage/);
+  assert.match(shell, /crafty\.playerName/);
+  assert.doesNotMatch(shell, /sessionStorage|crafty\.profile/);
+  assert.match(shell, /authoritativeProfile/);
+  assert.match(shell, /connectAccount/);
+  assert.match(client, /\/api\/accounts\/session/);
+  assert.match(client, /\/api\/profile/);
+  assert.match(client, /\/api\/parties\/solo/);
+  assert.match(multiplayerHook, /existingParty \?\?= await client\.createSoloParty\(selected\)/);
+  assert.match(multiplayerHook, /connectToPartyHideout\(selected, existingParty\)/);
+  assert.doesNotMatch(apiRouter, /\/dev\/accounts|\/dev\/session/);
+  assert.match(apiRouter, /\/parties\/solo/);
 });

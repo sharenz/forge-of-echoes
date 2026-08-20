@@ -3,10 +3,6 @@ export function createId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${random}`;
 }
 
-export function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
 export function choose<T>(values: readonly T[]): T {
   if (values.length === 0) throw new Error("Cannot choose from an empty collection");
   return values[Math.floor(Math.random() * values.length)];
@@ -20,4 +16,3 @@ export function shuffle<T>(values: readonly T[]): T[] {
   }
   return result;
 }
-

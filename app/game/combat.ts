@@ -3,15 +3,9 @@ import { MAP_MODIFIERS } from "./config/maps";
 import { MONSTER_ARCHETYPES } from "./config/monsters";
 import type { ScaledModifierDefinition, SkillDefinition } from "./config/schema";
 import { ACTIVE_SKILLS, BASIC_ATTACK } from "./config/skills";
-import type { ArenaStatKey, CurrencyId, EquipmentItem, FlaskId, InventoryItem, PlayerProfile, StatModifier } from "./domain";
+import type { ArenaStatKey, MapItem, PlayerProfile, StatModifier } from "./domain";
 import { deriveStats } from "./profile";
 import { resolveStat, type StatResolution } from "./stats";
-
-export type MapDrop =
-  | { kind: "equipment"; item: EquipmentItem }
-  | { kind: "currency"; currency: Extract<CurrencyId, "scrap" | "essence" | "mapDust">; amount: number }
-  | { kind: "flask"; flask: FlaskId; amount: number }
-  | { kind: "inventory"; item: InventoryItem };
 
 export { ACTIVE_SKILLS, BASIC_ATTACK };
 
@@ -65,12 +59,6 @@ export function monsterLevelForMapTier(tier: number): number {
     ARENA_RULES.monsterLevel.maximum,
     Math.max(ARENA_RULES.monsterLevel.minimum, Math.floor(tier) * ARENA_RULES.monsterLevel.levelsPerMapTier),
   );
-}
-
-export interface ArenaSummary {
-  wave: number;
-  enemiesSlain: number;
-  elapsedSeconds: number;
 }
 
 export function shouldSpawnNextWave(currentWave: number, totalWaves: number, remainingEnemies: number, waveElapsedSeconds: number): boolean {
@@ -220,9 +208,8 @@ function buildWaveBalance(wave: number, tier: number, arenaModifiers: readonly S
   };
 }
 
-export function buildArenaBalance(profile: PlayerProfile): ArenaBalance {
+export function buildArenaBalance(profile: PlayerProfile, map?: MapItem): ArenaBalance {
   const stats = deriveStats(profile);
-  const map = profile.openedMap;
   const tier = map?.tier ?? 1;
   const mapModifiers = (map?.modifiers ?? []).flatMap((id) => {
     const definition = MAP_MODIFIERS[id];

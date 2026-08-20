@@ -3,28 +3,12 @@ import type { FlaskBelt, FlaskId, FlaskItem, PlayerProfile } from "./domain";
 import { findContainerEntry, insertItem, removeItem } from "./item-container";
 import { createId } from "./random";
 
-export function createEmptyFlaskBelt(): FlaskBelt {
-  return [null, null, null, null, null];
-}
-
 export function createFlaskStack(baseId: FlaskId, stackSize: number, preferredId?: string): FlaskItem {
   const maximum = FLASK_DEFINITIONS[baseId].maxInventoryStack;
   if (!Number.isInteger(stackSize) || stackSize < 1 || stackSize > maximum) {
     throw new Error(`Invalid ${baseId} stack size ${stackSize}; expected 1-${maximum}`);
   }
   return { kind: "flask", id: preferredId ?? createId("flask"), baseId, stackSize };
-}
-
-export function normalizeFlaskBelt(raw: readonly (FlaskItem | null | undefined)[] | undefined): FlaskBelt {
-  const belt = createEmptyFlaskBelt();
-  for (let index = 0; index < FLASK_BELT_SLOT_COUNT; index += 1) {
-    const item = raw?.[index];
-    if (!item || item.kind !== "flask" || !FLASK_DEFINITIONS[item.baseId]) continue;
-    const maximum = FLASK_DEFINITIONS[item.baseId].maxBeltStack;
-    const stackSize = Math.min(maximum, Math.max(0, Math.floor(item.stackSize ?? 1)));
-    belt[index] = { ...item, stackSize };
-  }
-  return belt;
 }
 
 export function loadFlaskIntoBelt(profile: PlayerProfile, itemId: string, slotIndex: number): PlayerProfile | null {
@@ -131,16 +115,4 @@ export function storePickedUpFlask(profile: PlayerProfile, flask: FlaskItem): St
     beltAdded: flask.stackSize - remaining,
     inventoryAdded: remaining,
   };
-}
-
-export interface RecoveryTick {
-  value: number;
-  remaining: number;
-}
-
-export function advanceFlaskRecovery(current: number, maximum: number, remaining: number, rate: number, delta: number): RecoveryTick {
-  if (remaining <= 0 || current >= maximum || rate <= 0 || delta <= 0) return { value: Math.min(current, maximum), remaining: current >= maximum ? 0 : Math.max(0, remaining) };
-  const recovered = Math.min(remaining, rate * delta, maximum - current);
-  const value = current + recovered;
-  return { value, remaining: value >= maximum ? 0 : remaining - recovered };
 }

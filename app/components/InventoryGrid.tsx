@@ -10,6 +10,7 @@ import { isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "../game
 import { itemDisplayName } from "../game/items";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
+import { useQuickAction } from "./useQuickAction";
 
 interface InventoryGridProps {
   container: ItemContainer;
@@ -22,9 +23,8 @@ interface InventoryGridProps {
   onDragItem?: (id: string, offset: GridOffset) => void;
   onDragEnd?: () => void;
   onDropItem?: (id: string, containerId: ItemContainer["id"], x: number, y: number) => void;
-  onEquipItem?: (id: string) => void;
-  onActivateItem?: (id: string) => void;
   onQuickMove?: (id: string) => void;
+  quickMoveHint?: string;
 }
 
 interface DropPreview {
@@ -63,10 +63,17 @@ function readOffset(event: DragEvent): { x: number; y: number } {
   }
 }
 
-export function InventoryGrid({ container, profile, selectedId, onSelect, highlightedIds, draggedItem, draggedOffset, onDragItem, onDragEnd, onDropItem, onEquipItem, onActivateItem, onQuickMove }: InventoryGridProps) {
+export function InventoryGrid({ container, profile, selectedId, onSelect, highlightedIds, draggedItem, draggedOffset, onDragItem, onDragEnd, onDropItem, onQuickMove, quickMoveHint }: InventoryGridProps) {
   const definition = ITEM_CONTAINER_DEFINITIONS[container.id];
   const [tooltip, setTooltip] = useState<{ item: InventoryItem; x: number; y: number } | null>(null);
   const [preview, setPreview] = useState<DropPreview | null>(null);
+  const quickAction = useQuickAction();
+
+  const quickMove = (itemId: string) => {
+    if (!onQuickMove) return;
+    setTooltip(null);
+    onQuickMove(itemId);
+  };
 
   const targetFromEvent = (event: DragEvent): DropPreview | null => {
     if (!draggedItem) return null;
@@ -128,13 +135,11 @@ export function InventoryGrid({ container, profile, selectedId, onSelect, highli
               className={`poe-grid-item ${visualClass} item-kind-${item.kind} ${selectedId === item.id ? "selected" : ""} ${highlighted ? "new-drop" : ""}`}
               style={{ gridColumn: `${x + 1} / span ${size.width}`, gridRow: `${y + 1} / span ${size.height}` }}
               onClick={(event) => {
-                if (event.ctrlKey && onQuickMove) onQuickMove(item.id);
-                else onSelect(item.id);
+                if (onQuickMove && quickAction.fromClick(event, item.id, () => quickMove(item.id))) return;
+                onSelect(item.id);
               }}
-              onDoubleClick={(event) => {
-                if (event.ctrlKey) return;
-                if (isEquipmentItem(item)) onEquipItem?.(item.id);
-                else if (isFlaskItem(item)) onActivateItem?.(item.id);
+              onContextMenu={(event) => {
+                if (onQuickMove) quickAction.fromContextMenu(event, item.id, () => quickMove(item.id));
               }}
               draggable={Boolean(onDragItem)}
               onDragStart={(event) => {
@@ -164,7 +169,7 @@ export function InventoryGrid({ container, profile, selectedId, onSelect, highli
           );
         })}
       </div>
-      {tooltip && <ItemTooltip item={tooltip.item} profile={profile} x={tooltip.x} y={tooltip.y} hint={onQuickMove ? "Ctrl-click to stash · drag to place" : isEquipmentItem(tooltip.item) ? "Drag to move · double-click to equip" : isFlaskItem(tooltip.item) ? "Drag to a belt slot · double-click to load" : "Drag to place"} />}
+      {tooltip && <ItemTooltip item={tooltip.item} profile={profile} x={tooltip.x} y={tooltip.y} hint={onQuickMove ? `${quickMoveHint ?? "Ctrl/⌘-click for quick action"} · drag to place` : isEquipmentItem(tooltip.item) ? "Drag to move or equip" : isFlaskItem(tooltip.item) ? "Drag to move or load into belt" : "Drag to place"} />}
     </div>
   );
 }

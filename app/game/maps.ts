@@ -1,17 +1,19 @@
-import { MAP_BASES, MAP_BASES_BY_ID, MAP_MODIFIERS, MAP_RARITY_LIMITS, type MapBaseId } from "./config/maps";
+import { MAP_BASES, MAP_BASES_BY_ID, MAP_MODIFIERS, MAP_RARITY_LIMITS, MAP_TIER_RULES, type MapBaseId } from "./config/maps";
 import { ARENA_RULES } from "./config/arena";
 import type { ArenaStatKey, MapItem, MapModifierId, Rarity, StatModifier } from "./domain";
 import { choose, createId, shuffle } from "./random";
 import { formatModifier, resolveStat } from "./stats";
 
-export function createMap(tier = 1, baseId?: MapBaseId): MapItem {
-  const base = baseId ? MAP_BASES_BY_ID[baseId] : choose(MAP_BASES);
+export function createMap(tier = 1, baseId?: MapBaseId, random: () => number = Math.random): MapItem {
+  const base = baseId
+    ? MAP_BASES_BY_ID[baseId]
+    : MAP_BASES[Math.floor(Math.min(0.999999, Math.max(0, random())) * MAP_BASES.length)];
   return {
     kind: "map",
     id: createId("map"),
     baseId: base.id,
     baseName: base.name,
-    tier,
+    tier: Math.min(MAP_TIER_RULES.maximum, Math.max(MAP_TIER_RULES.minimum, Math.floor(tier))),
     rarity: "normal",
     quality: 0,
     corrupted: false,

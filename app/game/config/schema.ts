@@ -73,6 +73,42 @@ export interface CharacterClassDefinition {
   accent: string;
 }
 
+export interface MonsterAudioSampleDefinition {
+  url: string;
+  /** Optional slice of a longer source recording, in seconds. */
+  offset?: number;
+  duration?: number;
+}
+
+export interface MonsterAudioCueDefinition {
+  samples: readonly MonsterAudioSampleDefinition[];
+  volume: number;
+  radius: number;
+  maxVoices: number;
+  /** Minimum spacing between this cue across the whole archetype. */
+  groupCooldownMilliseconds?: number;
+  /** Minimum spacing between repeat cues from the same monster. */
+  emitterCooldownMilliseconds?: number;
+  /** Random playback-rate deviation, e.g. 0.05 produces 0.95–1.05. */
+  pitchVariation?: number;
+}
+
+export interface MonsterMovementAudioCueDefinition extends MonsterAudioCueDefinition {
+  /** Sprite-sheet frames that make contact with the ground. */
+  frameEvents: readonly number[];
+}
+
+export interface MonsterAudioDefinition {
+  movement?: MonsterMovementAudioCueDefinition;
+  aggro?: MonsterAudioCueDefinition;
+  melee?: MonsterAudioCueDefinition;
+  ranged?: MonsterAudioCueDefinition;
+  jump?: MonsterAudioCueDefinition;
+  hit?: MonsterAudioCueDefinition;
+  death?: MonsterAudioCueDefinition;
+  projectileImpact?: MonsterAudioCueDefinition;
+}
+
 export interface MonsterDefinition {
   id: string;
   name: string;
@@ -99,10 +135,27 @@ export interface MonsterDefinition {
     originY: number;
     body: number;
     accent: number;
+    /** Optional animated sprite sheet (one row of frames); replaces `sprite` in the arena when present. */
+    sheet?: {
+      url: string;
+      frameWidth: number;
+      frameHeight: number;
+      frameCount: number;
+      frameRate: number;
+      /** Faster playback while chasing the player (defaults to frameRate). */
+      aggroFrameRate?: number;
+      /** Sheet cells are cropped differently than the static sprite, so they carry their own transform. */
+      scale: number;
+      originY: number;
+    };
   };
+  /** Optional cues are deliberately silent when no authored sample exists. */
+  sfx: MonsterAudioDefinition;
   ranged?: {
     preferredRange: number;
     projectileSpeed: number;
+    projectileRange: number;
+    projectileRadius: number;
     cooldown: number;
     damageEffectiveness: number;
   };

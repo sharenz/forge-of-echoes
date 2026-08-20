@@ -1,37 +1,32 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CHARACTER_CLASSES, XP_BY_LEVEL } from "../game/content";
-import type { FlaskDefinition } from "../game/config/flasks";
-import { buildArenaBalance, type ArenaSummary, type MapDrop } from "../game/combat";
-import type { ActiveSkillId, AttributeKey, CharacterClassId, CharacterEquipmentSlot, CurrencyId, EquipmentItem, ItemContainerId, PlayerProfile, RunResult } from "../game/domain";
-import { chooseEquipmentSlot, equipmentSlotAccepts, findEquippedSlot } from "../game/equipment";
-import { isCurrencyItem, isEquipmentItem, isMapItem, profileCurrencyAmounts, consumeProfileCurrency, createCurrencyStack } from "../game/inventory";
-import { consumeFlaskFromBelt, createFlaskStack, loadFlaskIntoBelt, storePickedUpFlask, unloadFlaskFromBelt } from "../game/flasks";
-import { containerItems, findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../game/item-container";
-import { addFireAffix, rerollAffixValues } from "../game/items";
-import { takeProfileItem } from "../game/item-drop";
-import { addMapModifier, rerollMap } from "../game/maps";
-import { purchaseFlask, purchaseMap } from "../game/merchant";
-import { applyRunResult, createCharacter, loadProfile, saveProfile } from "../game/profile";
-import { allocateAttributePoint, allocateSkillPoint, grantCharacterExperience } from "../game/progression";
-import { activeStashTab, addStashTab, findStashEntry, mapStashItems, removeStashItem, renameStashTab, selectStashTab, stashItems as allStashItems, updateStashContainer } from "../game/stash";
+import { CHARACTER_CLASSES } from "../game/config/classes";
+import { XP_BY_LEVEL } from "../game/config/progression";
+import { buildArenaBalance } from "../game/combat";
+import type { ActiveSkillId, AttributeKey, CharacterClassId, CharacterEquipmentSlot, ItemContainerId } from "../game/domain";
+import { chooseEquipmentSlot, equipmentSlotAccepts } from "../game/equipment";
+import { isEquipmentItem, isMapItem, profileCurrencyAmounts } from "../game/inventory";
+import { containerItems, findContainerEntry, findFirstFit } from "../game/item-container";
+import { activeStashTab, findStashEntry, stashItems } from "../game/stash";
 import { calculateCharacterStats } from "../game/stats";
 import type { WorldStation } from "../game2d/types";
 import { AttributesPanel } from "./AttributesPanel";
-import { CharacterPanelTabs, type CharacterPanelView } from "./CharacterPanelTabs";
 import { GameNotification } from "./GameNotification";
 import { InventoryPanel } from "./InventoryPanel";
 import { ItemWorkbench } from "./ItemWorkbench";
 import { MapWorkshop } from "./MapWorkshop";
 import { MapMerchant } from "./MapMerchant";
-import { PhaserWorld, type PhaserWorldHandle } from "./PhaserWorld";
+import { HideoutSoundtrack, MapSoundtrack, MenuSoundtrack } from "./MenuSoundtrack";
+import { PhaserWorld } from "./PhaserWorld";
 import { SkillTreePanel } from "./SkillTreePanel";
+import { MultiplayerPanel } from "./MultiplayerPanel";
+import { useMultiplayerHideout } from "../multiplayer/useMultiplayerHideout";
+import { ENABLED_CHARACTER_CLASS_IDS } from "../../multiplayer/protocol";
 
-type HideoutPanel = CharacterPanelView | "stash" | "bench" | "maps" | "merchant" | null;
-type GameScreen = "hideout" | "arena";
-interface RunLootLedger { collected: number; freshItemIds: string[] }
-const emptyRunLoot = (): RunLootLedger => ({ collected: 0, freshItemIds: [] });
+type CharacterPanelView = "inventory" | "attributes" | "skills";
+type HideoutPanel = CharacterPanelView | "stash" | "bench" | "maps" | "merchant" | "multiplayer" | null;
+type AccountView = "roster" | "create-character";
 
 function isCharacterPanel(panel: HideoutPanel): panel is CharacterPanelView {
   return panel === "inventory" || panel === "attributes" || panel === "skills";
@@ -43,36 +38,50 @@ function characterPanelTitle(panel: CharacterPanelView): string {
   return "Inventory";
 }
 
+const ENABLED_CHARACTER_CLASSES: ReadonlySet<CharacterClassId> = new Set(ENABLED_CHARACTER_CLASS_IDS);
+const PLAYER_NAME_STORAGE_KEY = "crafty.playerName";
+
+function loadRememberedPlayerName(): string {
+  try {
+    return window.localStorage.getItem(PLAYER_NAME_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberPlayerName(playerName: string): void {
+  try {
+    window.localStorage.setItem(PLAYER_NAME_STORAGE_KEY, playerName);
+  } catch {
+    // Private browsing or strict storage policies may deny persistence. Login
+    // still works; only the convenience prefill is lost.
+  }
+}
+
 export function GameShell() {
-  const [profile, setProfile] = useState<PlayerProfile | null>(null);
-  const [selectedClass, setSelectedClass] = useState<CharacterClassId>("amazon");
+  const multiplayer = useMultiplayerHideout();
   const [characterName, setCharacterName] = useState("");
+  const [accountView, setAccountView] = useState<AccountView>("roster");
+  const playerNameInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<HideoutPanel>(null);
-  const [screen, setScreen] = useState<GameScreen>("hideout");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [runFreshItemIds, setRunFreshItemIds] = useState<string[]>([]);
-  const runLootRef = useRef<RunLootLedger>(emptyRunLoot());
-  const profileRef = useRef<PlayerProfile | null>(null);
-  const worldRef = useRef<PhaserWorldHandle>(null);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      const loaded = loadProfile();
-      profileRef.current = loaded;
-      setProfile(loaded);
-      const firstItem = loaded.inventory.entries[0]?.item ?? activeStashTab(loaded.stash).container.entries[0]?.item ?? Object.values(loaded.equipped)[0];
-      setSelectedItemId(firstItem?.id ?? null);
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, []);
-
-  useEffect(() => {
-    if (profile) {
-      profileRef.current = profile;
-      saveProfile(profile);
-    }
-  }, [profile]);
+  const [mapFinalRageActive, setMapFinalRageActive] = useState(false);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const authoritative = multiplayer.authoritativeProfile;
+  const profile = authoritative?.profile ?? null;
+  const statCalculation = useMemo(() => profile ? calculateCharacterStats(profile) : null, [profile]);
+  const stats = statCalculation?.stats ?? null;
+  const currencies = useMemo(() => profile ? profileCurrencyAmounts(profile) : null, [profile]);
+  const activeMap = multiplayer.activeMap?.map ?? null;
+  const availablePortalIndexes = useMemo(
+    () => multiplayer.activeMap?.portals.filter((portal) => !portal.used).map((portal) => portal.index) ?? [],
+    [multiplayer.activeMap],
+  );
+  const arenaBalance = useMemo(
+    () => profile && activeMap ? buildArenaBalance(profile, activeMap) : undefined,
+    [activeMap, profile],
+  );
 
   useEffect(() => {
     if (!notice) return;
@@ -81,572 +90,294 @@ export function GameShell() {
   }, [notice]);
 
   useEffect(() => {
+    const input = playerNameInputRef.current;
+    if (input && !input.value) input.value = loadRememberedPlayerName();
+  }, [multiplayer.account]);
+
+  useEffect(() => {
     const toggleInventory = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       if (event.code === "Escape") {
         setPanel(null);
         return;
       }
-      if (event.code !== "KeyI" || event.repeat || !profile?.character.created) return;
+      if (event.code !== "KeyI" || event.repeat || !profile) return;
       setPanel((current) => current === "inventory" ? null : "inventory");
     };
     window.addEventListener("keydown", toggleInventory);
     return () => window.removeEventListener("keydown", toggleInventory);
-  }, [profile?.character.created, screen]);
+  }, [profile]);
 
-  const statCalculation = useMemo(() => profile ? calculateCharacterStats(profile) : null, [profile]);
-  const stats = statCalculation?.stats ?? null;
-  const arenaBalance = useMemo(() => profile?.openedMap ? buildArenaBalance(profile) : undefined, [profile]);
-  const currencies = useMemo(() => profile ? profileCurrencyAmounts(profile) : null, [profile]);
-
-  if (!profile || !stats || !currencies) {
-    return <main className="loading-forge"><span className="forge-loader" /><strong>Lighting the forge</strong></main>;
-  }
-
-  if (!profile.character.created || !profile.character.classId) {
-    const selected = CHARACTER_CLASSES[selectedClass];
+  if (!multiplayer.account) {
     return (
-      <PhaserWorld mode="class-select" classId={selectedClass}>
-        <div className="creation-header"><span className="brand-rune">C</span><div><strong>CRAFTY</strong><small>Choose who enters the Crucible</small></div></div>
-        <section className="character-creation">
-          <div className="creation-title"><span>Begin your first life</span><h1>Choose your class</h1><p>Each class changes your starting attributes and weapon. Your passive tree remains open.</p></div>
-          <div className="class-choice-row">
-            {(Object.keys(CHARACTER_CLASSES) as CharacterClassId[]).map((classId) => {
-              const definition = CHARACTER_CLASSES[classId];
-              return (
-                <button type="button" className={selectedClass === classId ? "selected" : ""} onClick={() => setSelectedClass(classId)} key={classId}>
-                  <span>{definition.title}</span><strong>{definition.name}</strong><small>{definition.fantasy}</small><em>Starts with {definition.weapon}</em>
-                </button>
-              );
-            })}
-          </div>
-          <form className="creation-confirm" onSubmit={(event) => { event.preventDefault(); startCharacter(); }}>
-            <label><span>Character name</span><input value={characterName} onChange={(event) => setCharacterName(event.target.value)} placeholder={selected.name} maxLength={24} /></label>
-            <button type="submit"><span>Enter the Hideout</span><small>Begin as {selected.name}</small></button>
-          </form>
-        </section>
-      </PhaserWorld>
+      <>
+        <MenuSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
+        <PhaserWorld mode="login" classId="sorceress">
+          <div className="creation-header"><span className="brand-rune">C</span><div><strong>CRAFTY</strong><small>Authoritative online realm</small></div></div>
+          <section className="login-screen">
+            <div className="login-card">
+              <div className="login-card-rune" aria-hidden="true">◇</div>
+              <div className="login-heading"><span>Realm account</span><h1>Enter the Crucible</h1><p>Your characters and progression live authoritatively in PostgreSQL. For now, your player name is all you need.</p></div>
+              <form className="login-form" onSubmit={(event) => {
+                event.preventDefault();
+                const playerName = playerNameInputRef.current?.value.trim() ?? "";
+                rememberPlayerName(playerName);
+                void multiplayer.connectAccount(playerName);
+              }}>
+                <label><span>Player name</span><input ref={playerNameInputRef} required placeholder="player-one" minLength={2} maxLength={24} pattern="[A-Za-z0-9_-]+" autoComplete="username" /></label>
+                <button type="submit" disabled={multiplayer.busy}><span>{multiplayer.busy ? "Entering…" : "Continue"}</span><small>Open character roster</small></button>
+              </form>
+              <footer><span>◆</span><p><strong>Remembered on this browser</strong><small>Only your player name is stored locally. Characters, items, and stats remain server-authoritative.</small></p></footer>
+            </div>
+            {multiplayer.error && <div className="multiplayer-error roster-error" role="alert">{multiplayer.error}</div>}
+          </section>
+        </PhaserWorld>
+      </>
     );
   }
 
+  if (!multiplayer.session) {
+    if (accountView === "create-character") {
+      const sorceress = CHARACTER_CLASSES.sorceress;
+      return (
+        <>
+          <MenuSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
+          <PhaserWorld mode="character-create" classId="sorceress">
+            <div className="creation-header"><span className="brand-rune">C</span><div><strong>CRAFTY</strong><small>Authoritative online realm</small></div></div>
+            <section className="dedicated-character-create">
+              <button type="button" className="back-to-roster" onClick={() => { multiplayer.clearError(); setCharacterName(""); setAccountView("roster"); }}>‹ Back to characters</button>
+              <div className="character-create-card">
+                <span className="create-kicker">Create character</span>
+                <h1>Forge a Sorceress</h1>
+                <p>{sorceress.fantasy} Your journey begins at level 1 with an {sorceress.weapon}.</p>
+                <div className="create-class-seal"><i>S</i><span><strong>Sorceress</strong><small>{sorceress.title}</small></span><em>Enabled</em></div>
+                <form onSubmit={(event) => {
+                  event.preventDefault();
+                  void multiplayer.createCharacter(characterName.trim(), "sorceress");
+                }}>
+                  <label><span>Unique character name</span><input required value={characterName} onChange={(event) => setCharacterName(event.target.value)} placeholder="Name your Sorceress" minLength={2} maxLength={24} pattern="[A-Za-z][A-Za-z0-9_-]*" autoComplete="off" /></label>
+                  <button type="submit" disabled={multiplayer.busy || characterName.trim().length < 2}><span>{multiplayer.busy ? "Forging…" : "Create Sorceress"}</span><small>Enter the hideout</small></button>
+                </form>
+                <small className="name-rules">2–24 characters · begin with a letter · letters, numbers, hyphens, and underscores</small>
+              </div>
+              {multiplayer.error && <div className="multiplayer-error roster-error" role="alert">{multiplayer.error}</div>}
+            </section>
+          </PhaserWorld>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <MenuSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
+        <PhaserWorld mode="login" classId="sorceress">
+          <div className="creation-header"><span className="brand-rune">C</span><div><strong>CRAFTY</strong><small>Authoritative online realm</small></div></div>
+          <section className="character-roster-screen">
+            <header className="roster-heading"><div><span>{multiplayer.account.account.handle}</span><h1>Your Characters</h1><p>Select a character to enter the hideout.</p></div><div className="roster-heading-actions"><button type="button" className="create-character-action" onClick={() => { multiplayer.clearError(); setCharacterName(""); setAccountView("create-character"); }}>＋ Create Character</button><button type="button" onClick={() => { multiplayer.clearError(); setAccountView("roster"); void multiplayer.leaveAccount(); }}>Logout</button></div></header>
+            <section className="character-roster-list roster-focus" aria-label="Your characters">
+              <div className="roster-section-title"><span>Character roster</span><strong>{multiplayer.characters.length}</strong></div>
+              <div className="roster-cards">
+                {multiplayer.characters.map((character) => {
+                  const definition = CHARACTER_CLASSES[character.classId];
+                  const enabled = ENABLED_CHARACTER_CLASSES.has(character.classId);
+                  return <button type="button" key={character.characterId} disabled={multiplayer.busy || !enabled} onClick={() => { setCharacterName(""); void multiplayer.selectCharacter(character.characterId); }}><i className={`class-crest ${character.classId}`}>{definition.name.charAt(0)}</i><span><strong>{character.characterName}</strong><small>{definition.name} · Level {character.level}{enabled ? "" : " · Coming later"}</small></span><em>{enabled ? "Enter ›" : "Unavailable"}</em></button>;
+                })}
+                {multiplayer.characters.length === 0 && <div className="empty-roster"><span>◇</span><strong>No characters yet</strong><small>Create your first Sorceress to enter the Crucible.</small><button type="button" onClick={() => setAccountView("create-character")}>Create Character</button></div>}
+              </div>
+            </section>
+            {multiplayer.error && <div className="multiplayer-error roster-error" role="alert">{multiplayer.error}</div>}
+          </section>
+        </PhaserWorld>
+      </>
+    );
+  }
+
+  if (!profile || !stats || !statCalculation || !currencies) {
+    return <PhaserWorld mode="loading" classId={multiplayer.session.player.classId}><div className="world-loader"><span /><strong>Loading {multiplayer.session.player.characterName}</strong><small>Fetching authoritative profile</small></div></PhaserWorld>;
+  }
+
   const backpackItems = containerItems(profile.inventory);
-  const stashItems = allStashItems(profile.stash);
-  const allItems = [...Object.values(profile.equipped).filter(Boolean), ...backpackItems.filter(isEquipmentItem), ...stashItems.filter(isEquipmentItem)] as EquipmentItem[];
+  const effectiveSelectedItemId = selectedItemId
+    ?? profile.inventory.entries[0]?.item.id
+    ?? activeStashTab(profile.stash).container.entries[0]?.item.id
+    ?? Object.values(profile.equipped)[0]?.id
+    ?? null;
   const inventoryMaps = backpackItems.filter(isMapItem);
+  const allEquipment = [
+    ...Object.values(profile.equipped).filter(Boolean),
+    ...backpackItems.filter(isEquipmentItem),
+    ...stashItems(profile.stash).filter(isEquipmentItem),
+  ];
   const equippedIds = new Set(Object.values(profile.equipped).filter(Boolean).map((item) => item?.id)) as Set<string>;
 
-  if (screen === "arena" && profile.openedMap && arenaBalance) {
+  if (multiplayer.mapAdapter && arenaBalance && activeMap) {
     const characterPanelOpen = isCharacterPanel(panel);
     return (
-      <PhaserWorld ref={worldRef} mode="arena" classId={profile.character.classId} portalActive paused={characterPanelOpen} arenaBalance={arenaBalance} activeMap={profile.openedMap} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onFlaskLoad={loadFlask} onLootPickup={collectGroundDrop} onExperienceGain={gainExperience} onArenaComplete={completeArena} onPlayerDeath={failArena}>
-        <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(characterPanelOpen ? null : "inventory")}>Character <kbd>I</kbd></button>
-        <button type="button" className="return-hideout" onClick={leaveArena}>Return to hideout</button>
-        {characterPanelOpen && (
-          <div className="world-panel-backdrop arena-panel-backdrop character-interface-backdrop">
-            <section className={`world-panel character-panel panel-${panel}`} aria-label={`Character ${panel}`}>
-              <header><div><span>Combat paused · character changes apply immediately</span><h2>{characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></header>
-              <CharacterPanelTabs active={panel} onChange={setPanel} />
-              {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={selectedItemId} freshItemIds={runFreshItemIds} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} onLoadFlask={loadFlask} onUnloadFlask={unloadFlask} onDropToGround={dropItemToGround} />}
-              {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation!.breakdown} onAllocate={allocateAttribute} />}
-              {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={allocateSkill} />}
-            </section>
-          </div>
-        )}
-        {notice && <GameNotification key={notice} message={notice} />}
-      </PhaserWorld>
+      <>
+        <MapSoundtrack finalRageActive={mapFinalRageActive} enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
+        <PhaserWorld
+          mode="arena"
+          classId={profile.character.classId!}
+          controlsBlocked={characterPanelOpen}
+          arenaBalance={arenaBalance}
+          activeMap={activeMap}
+          characterStats={stats}
+          characterProgress={profile.character}
+          characterStatBreakdown={statCalculation.breakdown}
+          flaskBelt={profile.flaskBelt}
+          onFlaskLoad={onlineLoadFlask}
+          onReturnToHideout={() => { void multiplayer.leaveMap(); }}
+          multiplayer={multiplayer.mapAdapter}
+          onItemDropToGround={characterPanelOpen ? onlineDropItemToGround : undefined}
+          onFinalRageChange={setMapFinalRageActive}
+        >
+          <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(characterPanelOpen ? null : "inventory")}>Character <kbd>I</kbd></button>
+          <button type="button" className="return-hideout" onClick={() => void multiplayer.leaveMap()}>Return to hideout</button>
+          {characterPanelOpen && (
+            <div className="world-panel-backdrop arena-panel-backdrop character-interface-backdrop">
+              <section className={`world-panel character-panel panel-${panel}`} aria-label={`Character ${panel}`}>
+                <header><div><span>Combat continues online · controls blocked · changes apply immediately</span><h2>{characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></header>
+                {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
+                {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation.breakdown} onAllocate={onlineAllocateAttribute} />}
+                {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={onlineAllocateSkill} />}
+              </section>
+            </div>
+          )}
+          {notice && <GameNotification key={notice} message={notice} />}
+        </PhaserWorld>
+      </>
     );
   }
 
   const xpRequired = XP_BY_LEVEL(profile.character.level);
   const xpPercent = profile.character.level === 99 ? 100 : (profile.character.xp / xpRequired) * 100;
 
-  function startCharacter() {
-    if (!profile) return;
-    const next = createCharacter(profile, characterName, selectedClass);
-    setProfile(next);
-    setSelectedItemId(next.equipped.mainHand?.id ?? null);
-  }
-
-  function handleStation(station: WorldStation) {
+  function handleStation(station: WorldStation, portalIndex?: number) {
     if (station === "stash") setPanel("stash");
     if (station === "bench") setPanel("bench");
     if (station === "map-device") setPanel("maps");
     if (station === "merchant") setPanel("merchant");
     if (station === "portal") {
-      resetRunLoot();
       setPanel(null);
-      setScreen("arena");
+      if (portalIndex !== undefined) void multiplayer.enterMap(portalIndex);
     }
   }
 
-  function craftMap(action: "dust" | "threat" | "reward") {
-    if (!profile?.mapDevice) return;
-    const costs = { dust: "mapDust", threat: "threatGlyph", reward: "rewardInk" } as const;
-    const currency = costs[action];
-    const transformed = action === "dust" ? rerollMap(profile.mapDevice) : addMapModifier(profile.mapDevice, action);
-    if (transformed === profile.mapDevice) return;
-    const paid = consumeProfileCurrency(profile, currency, 1);
-    if (!paid) return;
-    setProfile({ ...paid, mapDevice: transformed });
-  }
-
-  function openPortal() {
-    if (!profile?.mapDevice || profile.openedMap) return;
-    const map = profile.mapDevice;
-    setProfile({ ...profile, mapDevice: null, openedMap: map });
-    setPanel(null);
-    setNotice(`${map.baseName} portal opened.`);
-  }
-
-  function slotMap(mapId: string) {
-    if (!profile) return;
-    const removed = removeItem(profile.inventory, mapId);
-    if (!removed || !isMapItem(removed.entry.item)) return;
-    let inventory = removed.container;
-    if (profile.mapDevice) {
-      const returned = insertItem(inventory, profile.mapDevice, { x: removed.entry.x, y: removed.entry.y });
-      if (returned.unplaced.length > 0) {
-        setNotice("The previous map needs a free backpack cell first.");
-        return;
-      }
-      inventory = returned.container;
-    }
-    setProfile({ ...profile, inventory, mapDevice: removed.entry.item });
-    setSelectedItemId(removed.entry.item.id);
-  }
-
-  function removeMapFromDevice() {
-    if (!profile?.mapDevice) return;
-    const inserted = insertItem(profile.inventory, profile.mapDevice);
-    if (inserted.unplaced.length > 0) {
-      setNotice("Your backpack has no free cell for this map.");
-      return;
-    }
-    setProfile({ ...profile, inventory: inserted.container, mapDevice: null });
-  }
-
-  function buyMap(offerId: string) {
-    if (!profile) return;
-    const purchase = purchaseMap(profile, offerId);
-    if (!purchase) {
-      setNotice("Not enough Scrap, or no free backpack cell for that map.");
-      return;
-    }
-    setProfile(purchase.profile);
-    setSelectedItemId(purchase.map.id);
-    setNotice(purchase.paid === 0 ? `${purchase.map.baseName} added to your backpack for free.` : `${purchase.map.baseName} purchased for ${purchase.paid} Scrap.`);
-  }
-
-  function buyFlask(offerId: string) {
-    if (!profile) return;
-    const purchase = purchaseFlask(profile, offerId);
-    if (!purchase) {
-      setNotice("Not enough Scrap, or no free backpack cell for that flask.");
-      return;
-    }
-    profileRef.current = purchase.profile;
-    setProfile(purchase.profile);
-    setNotice(`${purchase.flask.baseId === "weak-health-flask" ? "Weak Health Flask" : "Weak Mana Flask"} purchased for ${purchase.paid} Scrap.`);
-  }
-
-  function useBeltFlask(slotIndex: number): FlaskDefinition | null {
-    const current = profileRef.current;
-    if (!current) return null;
-    const consumed = consumeFlaskFromBelt(current, slotIndex);
-    if (!consumed) return null;
-    profileRef.current = consumed.profile;
-    setProfile(consumed.profile);
-    return consumed.definition;
-  }
-
-  function loadFlask(itemId: string, slotIndex: number) {
-    const current = profileRef.current;
-    if (!current) return;
-    const next = loadFlaskIntoBelt(current, itemId, slotIndex);
-    if (!next) {
-      setNotice("That flask slot is full or contains another flask type.");
-      return;
-    }
-    profileRef.current = next;
-    setProfile(next);
-  }
-
-  function unloadFlask(slotIndex: number) {
-    const current = profileRef.current;
-    if (!current) return;
-    const next = unloadFlaskFromBelt(current, slotIndex);
-    if (!next) {
-      setNotice("Your backpack has no free space for that flask stack.");
-      return;
-    }
-    profileRef.current = next;
-    setProfile(next);
-  }
-
-  function completeArena(summary: ArenaSummary) {
-    if (!profile) return;
-    const current = profileRef.current ?? profile;
-    const recovered = runLootRef.current;
-    const result: RunResult = {
-      completed: true,
-      ...summary,
-      loot: {
-        xp: 0,
-        items: [],
-      },
-    };
-    const next = applyRunResult(current, result);
-    profileRef.current = next;
-    setProfile(next);
-    setSelectedItemId(next.inventory.entries[0]?.item.id ?? null);
-    resetRunLoot();
-    setPanel(null);
-    setScreen("hideout");
-    setNotice(`Map complete. ${recovered.collected} ground drops collected.`);
-  }
-
-  function gainExperience(amount: number) {
-    const current = profileRef.current;
-    if (!current || amount <= 0) return;
-    const result = grantCharacterExperience(current, amount);
-    profileRef.current = result.profile;
-    setProfile(result.profile);
-    if (result.levelsGained > 0) {
-      setNotice(`Level ${result.profile.character.level}! +${result.levelsGained * 5} attribute points · +${result.levelsGained} skill point${result.levelsGained === 1 ? "" : "s"}.`);
-    }
-  }
-
-  function allocateAttribute(attribute: AttributeKey) {
-    const current = profileRef.current ?? profile;
-    if (!current) return;
-    const next = allocateAttributePoint(current, attribute);
-    if (next === current) return;
-    profileRef.current = next;
-    setProfile(next);
-  }
-
-  function allocateSkill(skill: ActiveSkillId) {
-    const current = profileRef.current ?? profile;
-    if (!current) return;
-    const next = allocateSkillPoint(current, skill);
-    if (next === current) return;
-    profileRef.current = next;
-    setProfile(next);
-  }
-
-  function collectGroundDrop(drop: MapDrop): boolean {
-    const current = profileRef.current;
-    if (!current) return false;
-    if (drop.kind === "inventory") {
-      const inserted = insertItem(current.inventory, drop.item);
-      if (inserted.unplaced.length > 0) {
-        setNotice("Backpack full — make room before collecting this item.");
-        return false;
-      }
-      const next = { ...current, inventory: inserted.container };
-      profileRef.current = next;
-      setProfile(next);
-      setSelectedItemId(drop.item.id);
-      return true;
-    }
-    if (!current.openedMap) return false;
-    if (drop.kind === "flask") {
-      const flask = createFlaskStack(drop.flask, drop.amount);
-      const stored = storePickedUpFlask(current, flask);
-      if (!stored) {
-        setNotice("Backpack full — make room before collecting this drop.");
-        return false;
-      }
-      profileRef.current = stored.profile;
-      setProfile(stored.profile);
-      runLootRef.current = {
-        collected: runLootRef.current.collected + 1,
-        freshItemIds: stored.inventoryAdded > 0
-          ? [...runLootRef.current.freshItemIds, flask.id]
-          : runLootRef.current.freshItemIds,
-      };
-      setRunFreshItemIds([...runLootRef.current.freshItemIds]);
-      return true;
-    }
-    const item = drop.kind === "equipment"
-      ? drop.item
-      : createCurrencyStack(drop.currency, drop.amount);
-    const inserted = insertItem(current.inventory, item);
-    if (inserted.unplaced.length > 0) {
-      setNotice("Backpack full — make room before collecting this drop.");
-      return false;
-    }
-    const next = { ...current, inventory: inserted.container };
-    profileRef.current = next;
-    setProfile(next);
-    runLootRef.current = {
-      collected: runLootRef.current.collected + 1,
-      freshItemIds: [...runLootRef.current.freshItemIds, item.id],
-    };
-    setRunFreshItemIds([...runLootRef.current.freshItemIds]);
-    if (drop.kind === "equipment") setSelectedItemId(item.id);
-    return true;
-  }
-
-  function dropItemToGround(itemId: string) {
-    const current = profileRef.current;
-    if (!current) return;
-    const taken = takeProfileItem(current, itemId);
-    if (!taken) {
-      setNotice("That item is no longer available.");
-      return;
-    }
-    if (!worldRef.current?.dropItem(taken.item)) {
-      setNotice("There is no safe place to drop that item here.");
-      return;
-    }
-    profileRef.current = taken.profile;
-    setProfile(taken.profile);
-    setSelectedItemId(null);
-    runLootRef.current = {
-      ...runLootRef.current,
-      freshItemIds: runLootRef.current.freshItemIds.filter((id) => id !== itemId),
-    };
-    setRunFreshItemIds([...runLootRef.current.freshItemIds]);
-    const label = taken.item.kind === "equipment" || taken.item.kind === "map"
-      ? taken.item.baseName
-      : taken.item.kind === "flask"
-        ? "Flask stack"
-        : "Currency stack";
-    setNotice(`${label} dropped beside you.`);
-  }
-
-  function leaveArena() {
-    if (!profile) return;
-    const current = profileRef.current ?? profile;
-    const recovered = runLootRef.current;
-    const next = { ...current, openedMap: null };
-    profileRef.current = next;
-    setProfile(next);
-    setSelectedItemId(recovered.freshItemIds[0] ?? current.inventory.entries[0]?.item.id ?? null);
-    resetRunLoot();
-    setPanel(null);
-    setScreen("hideout");
-    setNotice(`Map abandoned. ${recovered.collected} collected drops were kept.`);
-  }
-
-  function failArena() {
-    const current = profileRef.current ?? profile;
-    if (!current) return;
-    const recovered = runLootRef.current;
-    const next = { ...current, openedMap: null };
-    profileRef.current = next;
-    setProfile(next);
-    setSelectedItemId(recovered.freshItemIds[0] ?? current.inventory.entries[0]?.item.id ?? null);
-    resetRunLoot();
-    setPanel(null);
-    setScreen("hideout");
-    setNotice(`You died. The map was lost; ${recovered.collected} collected drops were kept.`);
-  }
-
-  function craftItem(action: "scrap" | "essence") {
-    if (!profile || !selectedItemId) return;
-    const currency: CurrencyId = action === "scrap" ? "scrap" : "essence";
-    if (!currencies || currencies[currency] <= 0) return;
-    const transform = action === "scrap" ? rerollAffixValues : addFireAffix;
-    let changed = false;
-    const update = (item: EquipmentItem) => {
-      if (item.id !== selectedItemId) return item;
-      const next = transform(item);
-      changed = next !== item;
-      return next;
-    };
-    const inventory = mapContainerItems(profile.inventory, (item) => isEquipmentItem(item) ? update(item) : item);
-    const stash = mapStashItems(profile.stash, (item) => isEquipmentItem(item) ? update(item) : item);
-    const equipped = Object.fromEntries(Object.entries(profile.equipped).map(([slot, item]) => [slot, item ? update(item) : item])) as PlayerProfile["equipped"];
-    if (!changed) return;
-    const paid = consumeProfileCurrency({ ...profile, inventory, stash, equipped }, currency, 1);
-    if (paid) setProfile(paid);
-  }
-
-  function resetRunLoot() {
-    runLootRef.current = emptyRunLoot();
-    setRunFreshItemIds([]);
-  }
-
-  function equipSelected() {
-    if (selectedItemId) equipItem(selectedItemId);
-  }
-
-  function equipItem(itemId: string, requestedSlot?: CharacterEquipmentSlot) {
-    if (!profile) return;
-    const item = allItems.find((candidate) => candidate.id === itemId);
-    if (!item) return;
-    const currentSlot = findEquippedSlot(profile.equipped, item.id);
-    if (currentSlot) {
-      if (!requestedSlot || requestedSlot === currentSlot || !equipmentSlotAccepts(requestedSlot, item)) return;
-      const targetItem = profile.equipped[requestedSlot];
-      setProfile({
-        ...profile,
-        equipped: { ...profile.equipped, [currentSlot]: targetItem, [requestedSlot]: item },
-      });
-      setSelectedItemId(item.id);
-      return;
-    }
-    const targetSlot = requestedSlot && equipmentSlotAccepts(requestedSlot, item)
+  function onlineEquipItem(itemId: string, requestedSlot?: CharacterEquipmentSlot) {
+    const item = findContainerEntry(profile!.inventory, itemId)?.item ?? findStashEntry(profile!.stash, itemId)?.entry.item;
+    if (!item || !isEquipmentItem(item)) return;
+    const slot = requestedSlot && equipmentSlotAccepts(requestedSlot, item)
       ? requestedSlot
-      : chooseEquipmentSlot(item, profile.equipped);
-    const previouslyEquipped = profile.equipped[targetSlot];
-    const inventoryEntry = findContainerEntry(profile.inventory, item.id);
-    const stashEntry = findStashEntry(profile.stash, item.id);
-    if (!inventoryEntry && !stashEntry) return;
-    if (inventoryEntry) {
-      const removed = removeItem(profile.inventory, item.id);
-      if (!removed) return;
-      let inventory = removed.container;
-      if (previouslyEquipped) {
-        const swapped = insertItem(inventory, previouslyEquipped, { x: inventoryEntry.x, y: inventoryEntry.y });
-        if (swapped.unplaced.length > 0) {
-          setNotice(`No fitting backpack space for ${previouslyEquipped.baseName}.`);
-          return;
-        }
-        inventory = swapped.container;
-      }
-      setProfile({ ...profile, inventory, equipped: { ...profile.equipped, [targetSlot]: item } });
-    } else if (stashEntry) {
-      const removed = removeStashItem(profile.stash, item.id);
-      if (!removed) return;
-      let container = removed.stash.tabs.find((tab) => tab.id === removed.tabId)?.container;
-      if (!container) return;
-      if (previouslyEquipped) {
-        const swapped = insertItem(container, previouslyEquipped, { x: stashEntry.entry.x, y: stashEntry.entry.y });
-        if (swapped.unplaced.length > 0) {
-          setNotice(`No fitting stash space for ${previouslyEquipped.baseName}.`);
-          return;
-        }
-        container = swapped.container;
-      }
-      setProfile({ ...profile, stash: updateStashContainer(removed.stash, removed.tabId, container), equipped: { ...profile.equipped, [targetSlot]: item } });
-    }
-    setSelectedItemId(item.id);
-    setNotice(`${item.baseName} equipped.`);
-  }
-
-  function moveInventoryItem(itemId: string, targetId: ItemContainerId, x: number, y: number) {
-    if (!profile) return;
-    const activeTab = activeStashTab(profile.stash);
-    const equippedItem = Object.values(profile.equipped).find((candidate) => candidate?.id === itemId);
-    if (equippedItem) {
-      const equippedSlot = findEquippedSlot(profile.equipped, equippedItem.id);
-      if (!equippedSlot) return;
-      const target = targetId === "backpack" ? profile.inventory : activeTab.container;
-      const inserted = insertItem(target, equippedItem, { x, y });
-      if (inserted.unplaced.length > 0) {
-        setNotice(`${equippedItem.baseName} does not fit there.`);
-        return;
-      }
-      setProfile(targetId === "backpack"
-        ? { ...profile, inventory: inserted.container, equipped: { ...profile.equipped, [equippedSlot]: undefined } }
-        : { ...profile, stash: updateStashContainer(profile.stash, activeTab.id, inserted.container), equipped: { ...profile.equipped, [equippedSlot]: undefined } });
-      setSelectedItemId(equippedItem.id);
-      return;
-    }
-
-    const inventoryEntry = findContainerEntry(profile.inventory, itemId);
-    const stashEntry = findStashEntry(profile.stash, itemId);
-    if (!inventoryEntry && !stashEntry) return;
-    if (inventoryEntry && targetId === "backpack") {
-      const moved = moveItem(profile.inventory, itemId, x, y);
-      if (!moved) {
-        setNotice("That item does not fit there.");
-        return;
-      }
-      setProfile({ ...profile, inventory: moved });
-    } else if (stashEntry && targetId === "stash" && stashEntry.tab.id === activeTab.id) {
-      const moved = moveItem(activeTab.container, itemId, x, y);
-      if (!moved) {
-        setNotice("That item does not fit there.");
-        return;
-      }
-      setProfile({ ...profile, stash: updateStashContainer(profile.stash, activeTab.id, moved) });
-    } else if (inventoryEntry && targetId === "stash") {
-      const moved = transferItem(profile.inventory, activeTab.container, itemId, x, y);
-      if (!moved) {
-        setNotice("That space is occupied or too small.");
-        return;
-      }
-      setProfile({ ...profile, inventory: moved.source, stash: updateStashContainer(profile.stash, activeTab.id, moved.target) });
-    } else if (stashEntry && targetId === "backpack") {
-      const moved = transferItem(stashEntry.tab.container, profile.inventory, itemId, x, y);
-      if (!moved) {
-        setNotice("That space is occupied or too small.");
-        return;
-      }
-      setProfile({ ...profile, inventory: moved.target, stash: updateStashContainer(profile.stash, stashEntry.tab.id, moved.source) });
-    }
+      : chooseEquipmentSlot(item, profile!.equipped);
     setSelectedItemId(itemId);
+    void multiplayer.executeProfileCommand({ type: "equip_item", itemId, slot });
   }
 
-  function quickStashItem(itemId: string) {
-    if (!profile) return;
-    const removed = removeItem(profile.inventory, itemId);
-    if (!removed) return;
-    const tab = activeStashTab(profile.stash);
-    const inserted = insertItem(tab.container, removed.entry.item);
-    if (inserted.unplaced.length > 0) {
+  function onlineMoveItem(itemId: string, targetId: ItemContainerId, x: number, y: number) {
+    setSelectedItemId(itemId);
+    void multiplayer.executeProfileCommand({
+      type: "move_item",
+      itemId,
+      destination: targetId,
+      stashTabId: targetId === "stash" ? activeStashTab(profile!.stash).id : undefined,
+      x,
+      y,
+    });
+  }
+
+  function onlineQuickStash(itemId: string) {
+    const item = findContainerEntry(profile!.inventory, itemId)?.item;
+    const tab = activeStashTab(profile!.stash);
+    const position = item ? findFirstFit(tab.container, item) : null;
+    if (!item || !position) {
       setNotice(`${tab.name} has no fitting space.`);
       return;
     }
-    setProfile({ ...profile, inventory: removed.container, stash: updateStashContainer(profile.stash, tab.id, inserted.container) });
-    const selectedId = inserted.container.entries.find((entry) => entry.item.id === itemId)?.item.id
-      ?? (isCurrencyItem(removed.entry.item)
-        ? inserted.container.entries.find((entry) => isCurrencyItem(entry.item) && entry.item.baseId === removed.entry.item.baseId)?.item.id
-        : null)
-      ?? null;
-    setSelectedItemId(selectedId);
-    setNotice(`${removed.entry.item.kind === "equipment" ? removed.entry.item.baseName : "Item"} moved to ${tab.name}.`);
+    void multiplayer.executeProfileCommand({ type: "move_item", itemId, destination: "stash", stashTabId: tab.id, ...position });
   }
 
-  function selectStash(tabId: string) {
-    setProfile((current) => current ? { ...current, stash: selectStashTab(current.stash, tabId) } : current);
+  function onlineQuickUnstash(itemId: string) {
+    const item = findStashEntry(profile!.stash, itemId)?.entry.item;
+    const position = item ? findFirstFit(profile!.inventory, item) : null;
+    if (!item || !position) {
+      setNotice("Your backpack has no fitting space.");
+      return;
+    }
+    setSelectedItemId(itemId);
+    void multiplayer.executeProfileCommand({ type: "move_item", itemId, destination: "backpack", ...position });
   }
 
-  function renameStash(tabId: string, name: string) {
-    setProfile((current) => current ? { ...current, stash: renameStashTab(current.stash, tabId, name) } : current);
+  function onlineSelectStash(tabId: string) {
+    void multiplayer.executeProfileCommand({ type: "select_stash_tab", tabId });
   }
 
-  function createStashTab() {
-    setProfile((current) => current ? { ...current, stash: addStashTab(current.stash) } : current);
+  function onlineRenameStash(tabId: string, name: string) {
+    void multiplayer.executeProfileCommand({ type: "rename_stash_tab", tabId, name });
+  }
+
+  function onlineCreateStash() {
+    void multiplayer.executeProfileCommand({ type: "create_stash_tab" });
+  }
+
+  function onlineLoadFlask(itemId: string, slotIndex: number) {
+    void multiplayer.executeProfileCommand({ type: "load_flask", itemId, slot: slotIndex });
+  }
+
+  function onlineAllocateAttribute(attribute: AttributeKey) {
+    void multiplayer.executeProfileCommand({ type: "allocate_attribute", attribute });
+  }
+
+  function onlineAllocateSkill(skill: ActiveSkillId) {
+    void multiplayer.executeProfileCommand({ type: "allocate_skill", skill });
+  }
+
+  function onlineDropItemToGround(itemId: string) {
+    multiplayer.dropItem(itemId);
+    setSelectedItemId(null);
+    setNotice("Item dropped beside you on the authoritative map.");
+  }
+
+  function onlineOpenMap() {
+    setPanel(null);
+    void multiplayer.openMap();
   }
 
   return (
-    <PhaserWorld ref={worldRef} mode="hideout" classId={profile.character.classId} portalActive={Boolean(profile.openedMap)} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation?.breakdown} flaskBelt={profile.flaskBelt} onFlaskUse={useBeltFlask} onFlaskLoad={loadFlask} onLootPickup={collectGroundDrop} onStation={handleStation}>
+    <>
+      <HideoutSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
+      <PhaserWorld mode="hideout" classId={profile.character.classId!} portalIndexes={availablePortalIndexes} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation.breakdown} flaskBelt={profile.flaskBelt} onFlaskLoad={onlineLoadFlask} onStation={handleStation} multiplayer={multiplayer.adapter}>
       <header className="hideout-hud">
         <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
-        <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId].name}</small></div></div>
+        <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId!.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Server · Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId!].name}</small></div></div>
         <nav>
           <button type="button" onClick={() => setPanel("inventory")}>Inventory <kbd>I</kbd></button>
           <button type="button" onClick={() => setPanel("attributes")}>Attributes <strong>{profile.character.unspentAttributePoints}</strong></button>
           <button type="button" onClick={() => setPanel("skills")}>Skills <strong>{profile.character.unspentSkillPoints}</strong></button>
           <button type="button" onClick={() => setPanel("maps")}>Maps <strong>{inventoryMaps.length + (profile.mapDevice ? 1 : 0)}</strong></button>
+          <button type="button" className={multiplayer.adapter ? "online" : ""} onClick={() => setPanel("multiplayer")}>Party <strong>{multiplayer.party?.visibility === "public" ? multiplayer.party.memberCharacterIds.length : 0}/4</strong></button>
+          <button type="button" onClick={() => { setCharacterName(""); setAccountView("roster"); void multiplayer.leaveCharacter(); }}>Characters</button>
         </nav>
         <div className="hideout-xp"><span style={{ width: `${xpPercent}%` }} /><small>{profile.character.xp}/{xpRequired} XP</small></div>
       </header>
 
-      {profile.openedMap && <div className="portal-notice"><span>Portal open</span><strong>{profile.openedMap.baseName}</strong><small>Click the portal to enter</small></div>}
+      {activeMap && <div className="portal-notice"><span>{multiplayer.party?.visibility === "solo" ? "Solo map" : "Party map"}</span><strong>{activeMap.baseName}</strong><small>{availablePortalIndexes.length}/6 portals remain · each is one-use</small></div>}
 
       {panel && (
         <div className={`world-panel-backdrop ${isCharacterPanel(panel) ? "character-interface-backdrop" : ""}`}>
           <section className={`world-panel panel-${panel} ${isCharacterPanel(panel) ? "character-panel" : ""}`}>
-            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : panel === "merchant" ? "Maps and supplies" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Rook's Shop" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
-            {isCharacterPanel(panel) && <CharacterPanelTabs active={panel} onChange={setPanel} />}
-            {panel === "maps" && <MapWorkshop maps={inventoryMaps} slottedMap={profile.mapDevice} currencies={currencies} portalActive={Boolean(profile.openedMap)} onSlot={slotMap} onRemove={removeMapFromDevice} onCraft={craftMap} onOpen={openPortal} />}
-            {panel === "merchant" && <MapMerchant scrap={currencies.scrap} onBuy={buyMap} onBuyFlask={buyFlask} />}
-            {panel === "bench" && <ItemWorkbench items={allItems} equippedIds={equippedIds} currencies={currencies} selectedId={selectedItemId} onSelect={setSelectedItemId} onCraft={craftItem} onEquip={equipSelected} />}
-            {(panel === "inventory" || panel === "stash") && (
-              <InventoryPanel profile={profile} selectedItemId={selectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={equipItem} onMoveItem={moveInventoryItem} onQuickStash={quickStashItem} onSelectStashTab={selectStash} onRenameStashTab={renameStash} onCreateStashTab={createStashTab} onLoadFlask={loadFlask} onUnloadFlask={unloadFlask} onDropToGround={dropItemToGround} />
-            )}
-            {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation!.breakdown} onAllocate={allocateAttribute} />}
-            {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={allocateSkill} />}
+            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "bench" ? "Crafting station" : panel === "maps" ? "Map device" : panel === "merchant" ? "Maps and supplies" : panel === "multiplayer" ? "Authoritative online realm" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "bench" ? "The Workbench" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? "Rook's Shop" : panel === "multiplayer" ? "Multiplayer" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
+            {panel === "maps" && <MapWorkshop profile={profile} slottedMap={profile.mapDevice} activeMap={activeMap} portalsRemaining={availablePortalIndexes.length} currencies={currencies} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onMoveItem={onlineMoveItem} onSlot={(itemId) => void multiplayer.executeProfileCommand({ type: "slot_map", itemId })} onRemove={() => void multiplayer.executeProfileCommand({ type: "remove_map" })} onCraft={(action) => void multiplayer.executeProfileCommand({ type: "craft_map", action })} onOpen={onlineOpenMap} />}
+            {panel === "merchant" && <MapMerchant scrap={currencies.scrap} onBuy={(offerId) => void multiplayer.executeProfileCommand({ type: "buy_map", offerId })} onBuyFlask={(offerId) => void multiplayer.executeProfileCommand({ type: "buy_flask", offerId })} />}
+            {panel === "multiplayer" && <MultiplayerPanel controller={multiplayer} onOpenMapDevice={() => setPanel("maps")} onPartyEntered={() => setPanel(null)} />}
+            {panel === "bench" && <ItemWorkbench items={allEquipment} equippedIds={equippedIds} currencies={currencies} selectedId={effectiveSelectedItemId} onSelect={setSelectedItemId} onCraft={(action) => effectiveSelectedItemId && void multiplayer.executeProfileCommand({ type: "craft_equipment", itemId: effectiveSelectedItemId, action })} onEquip={() => effectiveSelectedItemId && onlineEquipItem(effectiveSelectedItemId)} />}
+            {(panel === "inventory" || panel === "stash") && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
+            {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation.breakdown} onAllocate={onlineAllocateAttribute} />}
+            {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={onlineAllocateSkill} />}
           </section>
         </div>
       )}
       {notice && <GameNotification key={notice} message={notice} />}
-    </PhaserWorld>
+      </PhaserWorld>
+    </>
   );
 }

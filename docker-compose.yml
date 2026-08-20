@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: crafty
+      POSTGRES_USER: crafty
+      POSTGRES_PASSWORD: crafty
+    ports:
+      - "127.0.0.1:5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crafty -d crafty"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - crafty_postgres:/var/lib/postgresql/data
+
+volumes:
+  crafty_postgres:

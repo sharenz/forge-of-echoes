@@ -61,7 +61,7 @@ function modifiersFor(stat: StatKey, modifiers: readonly StatModifier[]): StatMo
 }
 
 function classAttributeModifiers(
-  classId: NonNullable<PlayerProfile["character"]["classId"]>,
+  classId: PlayerProfile["character"]["classId"],
   level: number,
 ): StatModifier[] {
   const definition = CHARACTER_CLASSES[classId];
@@ -97,7 +97,7 @@ function materializeRule(
   rule: StatContributionRule,
   level: number,
   attributes: Record<AttributeKey, number>,
-  classId: NonNullable<PlayerProfile["character"]["classId"]>,
+  classId: PlayerProfile["character"]["classId"],
 ): StatModifier | null {
   if (rule.classes && !rule.classes.includes(classId)) return null;
   const units = rule.kind === "constant"
@@ -125,7 +125,7 @@ function weaponAttackSpeedModifier(mainHand: EquipmentItem | undefined): StatMod
 }
 
 export function calculateCharacterStats(profile: PlayerProfile): CharacterStatCalculation {
-  const classId = profile.character.classId ?? "amazon";
+  const classId = profile.character.classId;
   const classDefinition = CHARACTER_CLASSES[classId];
   const level = profile.character.level;
   const equipped = Object.values(profile.equipped).filter(Boolean) as EquipmentItem[];

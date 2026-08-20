@@ -83,25 +83,6 @@ export function createItemContainer(id: ItemContainerId, items: readonly Invento
   return insertItems({ id, entries: [] }, items).container;
 }
 
-export function normalizeItemContainer(id: ItemContainerId, entries: readonly PlacedInventoryItem[]): ItemContainer {
-  let container: ItemContainer = { id, entries: [] };
-  for (const entry of entries) {
-    if (isStackableItem(entry.item)) {
-      const positioned = insertItem(container, entry.item, { x: entry.x, y: entry.y });
-      const inserted = positioned.unplaced.length > 0 ? insertItems(positioned.container, positioned.unplaced) : positioned;
-      container = inserted.container;
-      continue;
-    }
-    if (canPlaceItem(container, entry.item, entry.x, entry.y)) {
-      container = { ...container, entries: [...container.entries, { ...entry }] };
-      continue;
-    }
-    const inserted = insertItem(container, entry.item);
-    container = inserted.container;
-  }
-  return container;
-}
-
 export function insertItem(container: ItemContainer, item: InventoryItem, preferred?: { x: number; y: number }): InsertResult {
   if (!isStackableItem(item)) {
     const position = preferred && canPlaceItem(container, item, preferred.x, preferred.y) ? preferred : preferred ? null : findFirstFit(container, item);

@@ -1,8 +1,8 @@
-import { AFFIX_DEFINITIONS, AFFIX_DEFINITIONS_BY_ID } from "./config/affixes";
-import { ITEM_BASES, ITEM_BASES_BY_ID, STARTER_BASES, type ItemBaseId } from "./config/item-bases";
+import { AFFIX_DEFINITIONS } from "./config/affixes";
+import { ITEM_BASES, ITEM_BASES_BY_ID, STARTER_BASES } from "./config/item-bases";
 import type { AffixDefinition, AffixTierDefinition, ItemBaseDefinition, ScaledModifierDefinition } from "./config/schema";
 import type { Affix, AffixTag, CharacterClassId, EquipmentItem, EquipmentSlot, Rarity, StatModifier } from "./domain";
-import { choose, createId } from "./random";
+import { createId } from "./random";
 
 export type RandomSource = () => number;
 
@@ -44,7 +44,6 @@ function rollAffix(definition: AffixDefinition, itemLevel: number, random: Rando
     value: randomInteger(roll.min, roll.max, random),
     source: `affix:${definition.id}:t${selectedTier.tier}`,
   }));
-  const primary = rolls[0];
   return {
     id: createId("affix"),
     definitionId: definition.id,
@@ -54,8 +53,6 @@ function rollAffix(definition: AffixDefinition, itemLevel: number, random: Rando
     requiredItemLevel: selectedTier.requiredItemLevel,
     group: definition.group,
     rolls,
-    value: primary.value,
-    unit: primary.mode === "flat" ? "flat" : "percent",
   };
 }
 
@@ -89,10 +86,6 @@ function createEquipmentFromBase(base: ItemBaseDefinition, itemLevel: number, fo
   return draft;
 }
 
-export function generateEquipment(itemLevel: number, forcedRarity?: Rarity): EquipmentItem {
-  return createEquipmentFromBase(choose(ITEM_BASES), itemLevel, forcedRarity);
-}
-
 export function generateEquipmentWithRandom(itemLevel: number, forcedRarity: Rarity | undefined, random: RandomSource): EquipmentItem {
   const base = ITEM_BASES[Math.floor(random() * ITEM_BASES.length)];
   return createEquipmentFromBase(base, itemLevel, forcedRarity, random);
@@ -116,29 +109,9 @@ export function rerollAffixValues(item: EquipmentItem, random: RandomSource = Ma
     stability: item.stability - 1,
     affixes: item.affixes.map((affix) => {
       const rolls = affix.rolls.map((roll) => ({ ...roll, value: randomInteger(roll.min, roll.max, random) }));
-      return { ...affix, rolls, value: rolls[0].value, unit: rolls[0].mode === "flat" ? "flat" : "percent" };
+      return { ...affix, rolls };
     }),
   };
-}
-
-export function normalizeEquipmentItem(item: EquipmentItem): EquipmentItem {
-  const base = ITEM_BASES_BY_ID[item.baseId as ItemBaseId] ?? ITEM_BASES.find((candidate) => candidate.name === item.baseName) ?? ITEM_BASES[0];
-  const baseStats = item.baseStats ?? base.baseStats.map((modifier) => scaleBaseModifier(modifier, item.itemLevel, `base:${base.id}`));
-  const implicitModifiers = item.implicitModifiers ?? base.implicitModifiers.map((modifier) => scaleBaseModifier(modifier, item.itemLevel, `implicit:${base.id}`));
-  const affixes = item.affixes.map((legacy) => {
-    if (legacy.rolls?.length) return legacy;
-    const fallbackStat = legacy.tag === "life" ? "maxLife" : legacy.tag === "defense" ? "armor" : legacy.tag === "speed" ? "moveSpeed" : "attackDamage";
-    const fallbackMode = legacy.unit === "percent" ? "increased" : "flat";
-    const configured = AFFIX_DEFINITIONS_BY_ID[legacy.definitionId];
-    return {
-      ...legacy,
-      definitionId: legacy.definitionId ?? `legacy-${legacy.tag}`,
-      requiredItemLevel: legacy.requiredItemLevel ?? 1,
-      group: legacy.group ?? configured?.group ?? `legacy-${legacy.tag}-${legacy.id}`,
-      rolls: [{ stat: fallbackStat, mode: fallbackMode, value: legacy.value, min: legacy.value, max: legacy.value, source: `legacy:${legacy.id}` }],
-    } as Affix;
-  });
-  return { ...item, kind: "equipment", baseId: base.id, baseName: base.name, slot: base.slot, baseStats, implicitModifiers, affixes };
 }
 
 export function itemDisplayName(item: EquipmentItem): string {

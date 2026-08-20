@@ -23,6 +23,43 @@ const MONSTER_ARCHETYPE_DEFINITIONS = {
       originY: 0.78,
       body: 0x8e3d42,
       accent: 0xd36b4e,
+      sheet: {
+        url: "/monsters/ashling-sheet.png",
+        frameWidth: 256,
+        frameHeight: 256,
+        frameCount: 8,
+        frameRate: 5,
+        aggroFrameRate: 7,
+        scale: 0.28,
+        originY: 0.92,
+      },
+    },
+    sfx: {
+      movement: {
+        // The source contains several authored steps. Slice them into short,
+        // animation-driven variations rather than overlapping the ten-second file.
+        samples: [
+          { url: "/sfx/ashling-idle.m4a", offset: 0.08, duration: 0.5 },
+          { url: "/sfx/ashling-idle.m4a", offset: 0.92, duration: 0.5 },
+          { url: "/sfx/ashling-idle.m4a", offset: 1.78, duration: 0.5 },
+          { url: "/sfx/ashling-idle.m4a", offset: 2.66, duration: 0.5 },
+        ],
+        frameEvents: [1, 5],
+        volume: 0.34,
+        radius: 520,
+        maxVoices: 4,
+        groupCooldownMilliseconds: 70,
+        emitterCooldownMilliseconds: 240,
+        pitchVariation: 0.045,
+      },
+      aggro: {
+        samples: [{ url: "/sfx/ashling-aggro.m4a" }],
+        volume: 0.72,
+        radius: 760,
+        maxVoices: 2,
+        groupCooldownMilliseconds: 180,
+        pitchVariation: 0.035,
+      },
     },
   },
   "cinder-spitter": {
@@ -49,7 +86,15 @@ const MONSTER_ARCHETYPE_DEFINITIONS = {
       body: 0x5f3b72,
       accent: 0xd985e8,
     },
-    ranged: { preferredRange: 270, projectileSpeed: 245, cooldown: 1.75, damageEffectiveness: 2.25 },
+    ranged: {
+      preferredRange: 270,
+      projectileSpeed: 245,
+      projectileRange: 560,
+      projectileRadius: 8,
+      cooldown: 1.75,
+      damageEffectiveness: 2.25,
+    },
+    sfx: {},
   },
   "rift-stalker": {
     id: "rift-stalker",
@@ -76,6 +121,7 @@ const MONSTER_ARCHETYPE_DEFINITIONS = {
       accent: 0x58d0cf,
     },
     jump: { cooldown: 2.8, distance: 175, duration: 0.36, damageEffectiveness: 1.5 },
+    sfx: {},
   },
   "ironhide-brute": {
     id: "ironhide-brute",
@@ -101,6 +147,7 @@ const MONSTER_ARCHETYPE_DEFINITIONS = {
       body: 0x4b4b49,
       accent: 0xb18b5d,
     },
+    sfx: {},
   },
   "ember-skitter": {
     id: "ember-skitter",
@@ -125,6 +172,7 @@ const MONSTER_ARCHETYPE_DEFINITIONS = {
       body: 0x9a4b27,
       accent: 0xffa33c,
     },
+    sfx: {},
   },
 } as const satisfies Record<string, MonsterDefinition>;
 

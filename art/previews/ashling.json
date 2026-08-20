@@ -1,0 +1,15 @@
+{
+  "url": "/monsters/ashling-sheet.png",
+  "columns": 8,
+  "frameWidth": 256,
+  "frameHeight": 256,
+  "clips": {
+    "idle": {
+      "row": 0,
+      "startColumn": 0,
+      "frameCount": 8,
+      "frameRate": 10,
+      "repeat": -1
+    }
+  }
+}
