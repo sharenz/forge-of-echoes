@@ -79,7 +79,7 @@ function dragOffset(event: DragEvent, item: InventoryItem): GridOffset {
 
 function readOffset(event: DragEvent): { x: number; y: number } {
   try {
-    const parsed = JSON.parse(event.dataTransfer.getData("application/x-crafty-offset")) as { x?: number; y?: number };
+    const parsed = JSON.parse(event.dataTransfer.getData("application/x-forge-of-echoes-offset")) as { x?: number; y?: number };
     return { x: Number.isInteger(parsed.x) ? parsed.x ?? 0 : 0, y: Number.isInteger(parsed.y) ? parsed.y ?? 0 : 0 };
   } catch {
     return { x: 0, y: 0 };
@@ -139,7 +139,7 @@ export function InventoryGrid({ container, profile, selectedId, onSelect, highli
         onDrop={(event) => {
           event.preventDefault();
           const target = targetFromEvent(event);
-          const itemId = event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain") || draggedItem?.id;
+          const itemId = event.dataTransfer.getData("application/x-forge-of-echoes-item") || event.dataTransfer.getData("text/plain") || draggedItem?.id;
           if (target?.valid && itemId) onDropItem?.(itemId, container.id, target.x, target.y);
           setPreview(null);
           onDragEnd?.();
@@ -192,8 +192,8 @@ export function InventoryGrid({ container, profile, selectedId, onSelect, highli
               onDragStart={(event) => {
                 const offset = dragOffset(event, item);
                 event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("application/x-crafty-item", item.id);
-                event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify(offset));
+                event.dataTransfer.setData("application/x-forge-of-echoes-item", item.id);
+                event.dataTransfer.setData("application/x-forge-of-echoes-offset", JSON.stringify(offset));
                 event.dataTransfer.setData("text/plain", item.id);
                 setTooltip(null);
                 onDragItem?.(item.id, offset);

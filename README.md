@@ -1,29 +1,107 @@
-# Crafty — The Crucible
+<p align="center">
+  <img src="./public/og-forge-of-echoes.png" alt="Forge of Echoes — dark fantasy pixel-art action RPG" width="100%" />
+</p>
 
-Crafty is a browser-native pixel-art action RPG built around deep item and map crafting. The vertical slice begins with character creation, moves into a persistent fixed-camera hideout, and opens crafted map items into large exploration zones with six monster-pack waves.
+<h1 align="center">Forge of Echoes</h1>
 
-## Stack
+<p align="center">
+  <strong>Forge your build. Break the waves. Claim what survives.</strong>
+</p>
 
-- React 19 and TypeScript
-- Phaser 4 with WebGL sprite batching and Canvas fallback
-- React served locally through vinext/Vite
-- Colyseus authoritative multiplayer server (Node.js + TypeScript)
-- PostgreSQL persistence in a local Docker container
-- PostgreSQL-backed account rosters and globally unique character names; browser storage remembers only the non-sensitive player name
-- Sorceress is the only currently enabled player class; Amazon and Barbarian remain visible as future classes
+<p align="center">
+  A browser-native, multiplayer pixel-art action RPG built around deep itemization,<br />
+  dangerous map items, dense monster waves, and hands-on crafting.
+</p>
 
-## Local development
+<p align="center">
+  <a href="https://discord.gg/avMe75Xaf"><img src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Join the Forge of Echoes Discord" /></a>
+  <img src="https://img.shields.io/badge/status-active%20development-d97732" alt="Status: active development" />
+  <img src="https://img.shields.io/badge/multiplayer-1–4%20players-6b4ce6" alt="Multiplayer: one to four players" />
+</p>
 
-Requires Node.js 22.13 or newer and Docker Desktop. `npm run dev` starts the isolated PostgreSQL service, the game server on `127.0.0.1:2567`, and the web client together.
+> [!NOTE]
+> Forge of Echoes is in active development. The Sorceress is currently the playable class; more classes, skills, monsters, items, and crafting options will follow as the core game matures.
+
+## Enter the Forge
+
+Forge of Echoes combines the build depth of classic loot-driven ARPGs with a focused wave-based endgame. Every character, item, map, monster, drop, and combat result is managed by an authoritative multiplayer server—even when playing solo.
+
+Your hideout is the heart of the game. Prepare your equipment, organize your stash, trade with other players, craft map items, and open six portals into increasingly dangerous expeditions. Inside, explore a large scrolling battlefield, fight distributed monster packs through six escalating waves, collect shared free-for-all loot, and survive the final rage.
+
+## Current highlights
+
+| | Feature |
+|---|---|
+| ⚔️ | Fast pixel-art combat with directional animation, projectiles, damage numbers, positional audio, corpses, and dense monster packs |
+| 🔥 | A playable Sorceress with configurable skill slots, skill levels, casting, cooldowns, charges, projectiles, and piercing |
+| 💎 | Normal, magic, and rare equipment with item levels, base stats, affix tiers, roll ranges, implicits, and rarity-colored loot |
+| 🔨 | Inventory crafting inspired by currency-based ARPG systems: activate a material, then apply it directly to an eligible item |
+| 🗺️ | Maps are real items that can be bought, found, crafted, consumed, and opened through a six-portal map device |
+| 👹 | Melee, ranged, jumping, fast, tanky, magic, and rare monsters assembled into randomized packs and escalating waves |
+| 🧙 | Character levels 1–99, experience, attributes, derived combat stats, equipment comparison, and persistent skill progression |
+| 🎒 | Grid-based backpack and multi-tab stash with item footprints, drag-and-drop placement, quick transfers, equipment slots, and flask belt |
+| 🤝 | One-to-four-player parties, shared hideouts, co-op maps, transactional trading, and first-come-first-served loot |
+| 🛡️ | Server-authoritative combat, progression, inventory, map state, drops, and trades—clients send intent, never trusted outcomes |
+
+## The current game loop
+
+1. Enter your account name and select or create a uniquely named Sorceress.
+2. Prepare your character in the hideout using the inventory, stash, merchant, and skill interfaces.
+3. Buy or find a map, craft it in your backpack, and place it into the map device.
+4. Open six one-use portals and enter alone or with a party of up to four players.
+5. Hunt geographically distributed packs through six increasingly dangerous waves.
+6. Collect equipment, maps, flasks, and crafting materials directly from the ground.
+7. Defeat the final rage, open the reward chest, return to the hideout, and improve your build.
+
+There are no temporary between-wave power-ups. Progress comes from your character level, attributes, skills, equipment, and crafting decisions.
+
+## Controls
+
+| Input | Action |
+|---|---|
+| `W` `A` `S` `D` | Move |
+| Left click | Aim and use the primary attack |
+| `Space` `Q` `E` `R` `F` | Use configured skills |
+| `1`–`5` | Use flask-belt slots |
+| `I` | Open or close the inventory |
+| `Alt` / `Option` | Show affix ranges and equipped-item comparisons |
+| `Ctrl` / `⌘` + click | Contextual quick transfer, equip, load, or buy |
+| Right click | Activate a crafting material |
+
+Skill slots are configurable. The displayed hotkeys always reflect the current loadout.
+
+## Run it locally
+
+### Requirements
+
+- Node.js 22.13 or newer
+- Docker Desktop with Docker Compose
+- npm
+
+### Start the complete development stack
 
 ```bash
+git clone https://github.com/sharenz/crafty-combat.git
+cd crafty-combat
 npm install
 npm run dev
 ```
 
-Copy `.env.example` to `.env` only when you need to override the safe local defaults. Crafty's PostgreSQL binds to `127.0.0.1:5434` to avoid colliding with a conventional local PostgreSQL instance.
+Open [http://localhost:3001](http://localhost:3001). The development command starts:
 
-Quality gates:
+- PostgreSQL in Docker on `127.0.0.1:5434`
+- the authoritative game server on `127.0.0.1:2567`
+- the web client on `127.0.0.1:3001`
+
+Local development is entirely self-contained. Copy `.env.example` to `.env` only when you need to override the safe defaults.
+
+```bash
+npm run db:down       # Stop the local PostgreSQL container
+npm run dev:web       # Start only the web client
+npm run dev:server    # Start only the game server
+```
+
+## Quality gates
 
 ```bash
 npm run typecheck
@@ -32,51 +110,70 @@ npm test
 npm run test:multiplayer:db
 ```
 
-`npm run test:multiplayer` boots real WebSocket rooms and connects four concurrent clients through the complete party-to-map path. The database integration suite expects `npm run db:up` to have been run and verifies persistence, ownership constraints, item locking, trade discovery, and atomic swaps. Use `npm run db:down` to stop the local database.
+The test suite covers the game engine, authoritative profile commands, real WebSocket rooms, four-player party and map flows, forged-command rejection, free-for-all loot, item ownership, trading, persistence, simulation performance, production builds, and server-rendered metadata.
 
-## Architecture
+## Architecture at a glance
 
-- `app/game/` contains serializable domain models, item generation, crafting, maps, and combat balance.
-- `app/game2d/` is a presentation and input adapter. It interpolates server snapshots, plays animation/VFX/audio, and sends player intent; it does not simulate combat, loot, progression, or waves.
-- `app/components/` adapts React state to the renderer and supplies the HUD, inventory, stash, inventory-crafting, and map-device interfaces.
-- `multiplayer/` contains shared, runtime-validated client/server protocol contracts.
-- `server/rooms/` contains authoritative 20 Hz hideout and map simulations capped at four players.
-- `server/coordination/` contains asynchronous party and expedition ports plus their PostgreSQL adapters; process memory is never authoritative for membership, portals, or room claims.
-- `server/db/migrations/` owns ordered, transactional PostgreSQL migrations; item ownership is enforced by composite foreign keys.
-- `tests/multiplayer/` runs real four-client Colyseus room tests, including fifth-player rejection, forged command rejection, authoritative skills/flasks, free-for-all loot, item dropping, map completion, and rewards.
+```text
+Browser / React UI / Phaser renderer
+                │
+                │ validated player intent
+                ▼
+      Colyseus authoritative rooms
+                │
+       game services + simulation
+                │
+                ▼
+     PostgreSQL persistence and coordination
+```
 
-The browser is never authoritative. It sends small intent commands—move, use a skill, equip an existing item, offer an owned item—and the Node server validates identity, ownership, revision, range, cooldown, resource cost, and room membership. Solo play uses a private one-member server party and the same `HideoutRoom` / `MapRoom` path as co-op; there is no offline gameplay fork. Items use immutable UUIDs and relational owner/location constraints. Trades lock their offered items and complete only after both players accept the same revision; the final ownership and backpack-placement swap is one PostgreSQL transaction.
+- `app/game/` — serializable domain models, stats, items, crafting, maps, loot, and balance configuration
+- `app/game2d/` — Phaser presentation, interpolation, input, animation, VFX, and audio
+- `app/components/` — React shell, HUD, inventory, stash, merchants, map device, and character interfaces
+- `multiplayer/` — runtime-validated protocol contracts and compact wire formats shared by client and server
+- `server/rooms/` — authoritative hideout and map rooms running the 20 Hz simulation
+- `server/coordination/` — PostgreSQL-backed parties, expeditions, portals, leases, and room claims
+- `server/db/migrations/` — ordered transactional schema migrations and relational ownership constraints
+- `tests/` — engine, multiplayer, persistence, performance, rendering, and end-to-end coverage
 
-The hideout uses a fixed 960×960 logical canvas. Maps are 3840×3840—exactly 4×4 viewports—and use a non-rotating follow camera with a large dead zone so the screen remains still until scrolling is necessary. Enemies spawn as geographically distributed packs, idle in their territory, and engage when approached. Slain monsters create server-owned free-for-all ground drops; the first eligible player to touch one persists it through the authoritative profile service. Pressing `I` opens an in-map inventory where carried and newly collected equipment can be equipped immediately. Enemies, projectiles, and drops are GPU-batched while collision queries use a spatial hash. Phaser is dynamically loaded after the server-rendered shell.
+The browser never creates items or decides damage, drops, cooldowns, ownership, experience, or progression. Solo and co-op use the same server rooms and commands, preventing a separate offline ruleset from drifting away from multiplayer.
 
-## Current playable loop
+Read the deeper technical documents:
 
-1. Enter an account handle, select a saved Sorceress from its server roster, or create a uniquely named Sorceress. Amazon and Barbarian are disabled until their gameplay is ready.
-2. Move through the fixed-camera hideout with screen-aligned WASD.
-3. Use the stash and map device as world stations; the crafting bench opens the same inventory-crafting workflow.
-4. Craft a map item, consume it to open a portal, and enter the arena.
-5. Explore the map and defeat six increasingly dense, distributed pack waves; the combat bar exposes live cooldowns, Focus costs, and Rift Step's recharging charges.
-6. Run over equipment and materials to collect them. Hover inventory items for complete affix tooltips, then drag them into matching equipment slots; the live character sheet updates health, damage, Focus, speed, armor, and evade immediately. There are no temporary run powers.
+- [Architecture](./ARCHITECTURE.md)
+- [Game design foundation](./GAME_DESIGN.md)
+- [Server scaling](./SERVER_SCALING.md)
+- [Production deployment](./DEPLOYMENT.md)
 
-The server authority and scale-out contracts are documented in [ARCHITECTURE.md](./ARCHITECTURE.md),
-and broader systems and long-term progression targets are documented in [GAME_DESIGN.md](./GAME_DESIGN.md).
+## Production and administration
 
-## Production deployment
+Production runs the web client, authoritative Node/Colyseus server, and PostgreSQL as an isolated Docker Compose stack on one VM. Deployment remains intentionally simple:
 
-Local development stays entirely local. Production runs the frontend, authoritative Node/Colyseus server, and PostgreSQL as an isolated Docker Compose stack on one VM. See [DEPLOYMENT.md](./DEPLOYMENT.md) for setup and deployment.
+```bash
+make deploy
+```
 
-Realm administration uses the interactive `crafty-cli dev` / `crafty-cli prod` console. Run `npm link` once to install the repository command, then use its arrow-key menus to list accounts or manage account-scoped debug access.
+Realm administration is available through the interactive terminal console:
 
-## Local multiplayer loop
+```bash
+npm link
+crafty-cli dev
+crafty-cli prod
+```
 
-1. Enter an account handle, select a PostgreSQL-backed character from the roster, then open **Party** and create a party.
-2. Other players see it in the public Party Finder and can join until all four seats are occupied.
-3. Creating or joining a party enters its shared hideout automatically. The leader can open a server-owned map item for every member to join.
-4. Use **Trade** beside a party member, select backpack/stash items, lock the exact offer, and accept. Any edit clears both acceptances.
-5. Fight, use flasks, race for shared free-for-all loot, change equipment, and drop/re-pick items in the shared map. Death and the completion portal return the player to the shared hideout.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) before provisioning or deploying a server.
 
-Party membership and expedition state are durable in PostgreSQL. Presence and room ownership
-are renewable leases: hideout/map transitions and quick refreshes retain membership, a newer
-authenticated socket replaces a stale one, and any server process can reap expired leases
-after the grace period. A Node restart therefore cannot forget portal consumption or leave an
-unrecoverable process-local party behind.
+## Community
+
+Forge of Echoes is being built in the open, one system at a time. Join the community to share feedback, report bugs, discuss builds, or follow development:
+
+### [Join the Forge of Echoes Discord →](https://discord.gg/avMe75Xaf)
+
+When reporting a bug, please include what you were doing, whether you were playing solo or in a party, and any relevant browser or server logs. Focused reproduction steps are extremely valuable for an authoritative multiplayer game.
+
+---
+
+<p align="center">
+  <strong>The forge remembers every choice.</strong><br />
+  What will your echoes become?
+</p>

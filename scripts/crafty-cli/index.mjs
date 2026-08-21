@@ -10,7 +10,7 @@ const DEBUG_MERCHANT_NAME = "Veyra · Debug Artificer";
 function usage() {
   return `Usage: crafty-cli <dev|prod>
 
-Interactive Crafty super-admin console.
+Interactive Forge of Echoes super-admin console.
 
   crafty-cli dev    Manage the local Docker PostgreSQL realm
   crafty-cli prod   Manage production through the configured SSH host
@@ -20,7 +20,7 @@ Interactive Crafty super-admin console.
 function banner(database) {
   const production = database.environment === "prod";
   const environment = production ? style.red("PRODUCTION") : style.green("DEVELOPMENT");
-  process.stdout.write(`${style.magenta("◆")} ${style.bold("CRAFTY SUPER ADMIN")}  ${environment}\n`);
+  process.stdout.write(`${style.magenta("◆")} ${style.bold("FORGE OF ECHOES · SUPER ADMIN")}  ${environment}\n`);
   process.stdout.write(`${style.dim(database.describeTarget())}\n\n`);
   if (production) process.stdout.write(`${style.red("⚠ Changes affect live player accounts.")}\n\n`);
 }

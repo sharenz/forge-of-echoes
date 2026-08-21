@@ -71,7 +71,7 @@ export const MERCHANTS = {
   "cartographer-rook": {
     id: "cartographer-rook",
     name: "Rook",
-    title: "Wayfinder of the Crucible",
+    title: "Wayfinder of Echoes",
     greeting: "No exile should be trapped in the hideout—or enter a map without supplies.",
     availability: { kind: "always" },
     station: { x: 248, y: 592, width: 125, height: 105, label: "MERCHANT", tint: 0xd9ad76 },

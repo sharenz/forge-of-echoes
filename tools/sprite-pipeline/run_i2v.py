@@ -63,7 +63,7 @@ class Comfy:
         return json.loads(body)
 
     def upload_image(self, image: Path) -> str:
-        boundary = "----crafty" + uuid.uuid4().hex
+        boundary = "----forge-of-echoes-" + uuid.uuid4().hex
         mime = mimetypes.guess_type(image.name)[0] or "application/octet-stream"
         parts = [
             f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{image.name}\"\r\n"

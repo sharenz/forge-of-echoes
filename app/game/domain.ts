@@ -42,6 +42,14 @@ export type SkillVfxId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-wa
 export type SkillAudioId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward" | "flame-wave";
 export type ActiveSkillId = "nova" | "dash" | "ward" | "flameWave";
 export type SkillLevels = Record<ActiveSkillId, number>;
+export type SkillBarSkillId = "basic" | ActiveSkillId;
+export type SkillLoadout = [
+  SkillBarSkillId | null,
+  SkillBarSkillId | null,
+  SkillBarSkillId | null,
+  SkillBarSkillId | null,
+  SkillBarSkillId | null,
+];
 
 /**
  * Every numerical effect in the game resolves through this representation.
@@ -173,13 +181,14 @@ export interface CharacterProgress {
   allocatedAttributes: Record<AttributeKey, number>;
   unspentAttributePoints: number;
   skillLevels: SkillLevels;
+  skillLoadout: SkillLoadout;
   unspentSkillPoints: number;
   mapsCompleted: number;
   highestWave: number;
 }
 
 export interface PlayerProfile {
-  version: 9;
+  version: 10;
   character: CharacterProgress;
   inventory: ItemContainer;
   stash: StashState;

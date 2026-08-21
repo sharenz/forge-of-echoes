@@ -97,7 +97,7 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
     onSelect(id);
   };
   const endDrag = () => setDragState(null);
-  const readDroppedItem = (event: React.DragEvent) => event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain") || draggedItemId;
+  const readDroppedItem = (event: React.DragEvent) => event.dataTransfer.getData("application/x-forge-of-echoes-item") || event.dataTransfer.getData("text/plain") || draggedItemId;
   const dropIntoSlot = (event: React.DragEvent, slot: CharacterEquipmentSlot) => {
     event.preventDefault();
     const itemId = readDroppedItem(event);
@@ -143,7 +143,7 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
             >
               <small>{slot.label}</small>
               {equipped
-                ? <ItemCard compact draggable item={equipped} profile={profile} onClick={() => onSelect(equipped.id)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-crafty-item", equipped.id); event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify({ x: 0, y: 0 })); beginDrag(equipped.id); }} onDragEnd={endDrag} selected={selectedItemId === equipped.id} />
+                ? <ItemCard compact draggable item={equipped} profile={profile} onClick={() => onSelect(equipped.id)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-forge-of-echoes-item", equipped.id); event.dataTransfer.setData("application/x-forge-of-echoes-offset", JSON.stringify({ x: 0, y: 0 })); beginDrag(equipped.id); }} onDragEnd={endDrag} selected={selectedItemId === equipped.id} />
                 : <span>Empty</span>}
             </div>
           );

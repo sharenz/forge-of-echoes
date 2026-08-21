@@ -20,7 +20,7 @@ import { MERCHANTS } from "../game/config/merchants";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
 import { MAP_COMPLETION_REWARDS } from "../game/config/rewards";
 import type { SkillDefinition } from "../game/config/schema";
-import type { CharacterClassId, FlaskBelt, InventoryItem, MonsterRarity, SkillLevels } from "../game/domain";
+import type { CharacterClassId, FlaskBelt, InventoryItem, MonsterRarity, SkillBarSkillId, SkillLevels, SkillLoadout } from "../game/domain";
 import { isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "../game/inventory";
 import { equipmentDropPresentation } from "../game/loot";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
@@ -162,7 +162,7 @@ const CLASS_COLORS: Record<CharacterClassId, { magic: number }> = {
   sorceress: { magic: 0xb77cff },
 };
 
-class CraftyScene extends Phaser.Scene {
+class ForgeOfEchoesScene extends Phaser.Scene {
   private readonly options: WorldRuntimeOptions;
   private readonly audio = new GameAudio();
   private readonly monsterAudio = new MonsterAudioMixer(this.audio);
@@ -244,7 +244,7 @@ class CraftyScene extends Phaser.Scene {
   private hideoutPortalObjects: Phaser.GameObjects.GameObject[] = [];
 
   constructor(options: WorldRuntimeOptions) {
-    super("crafty-world");
+    super("forge-of-echoes-world");
     this.options = options;
     const cooldownMultiplier = options.arenaBalance?.skillCooldown ?? 1;
     const castSpeedMultiplier = options.arenaBalance?.castSpeed ?? 1;
@@ -342,11 +342,11 @@ class CraftyScene extends Phaser.Scene {
       leftAlt: Phaser.Input.Keyboard.KeyCodes.LEFT,
       downAlt: Phaser.Input.Keyboard.KeyCodes.DOWN,
       rightAlt: Phaser.Input.Keyboard.KeyCodes.RIGHT,
-      attack: Phaser.Input.Keyboard.KeyCodes.SPACE,
-      nova: Phaser.Input.Keyboard.KeyCodes.Q,
-      dash: Phaser.Input.Keyboard.KeyCodes.E,
-      ward: Phaser.Input.Keyboard.KeyCodes.R,
-      flameWave: Phaser.Input.Keyboard.KeyCodes.F,
+      skillSlot0: Phaser.Input.Keyboard.KeyCodes.SPACE,
+      skillSlot1: Phaser.Input.Keyboard.KeyCodes.Q,
+      skillSlot2: Phaser.Input.Keyboard.KeyCodes.E,
+      skillSlot3: Phaser.Input.Keyboard.KeyCodes.R,
+      skillSlot4: Phaser.Input.Keyboard.KeyCodes.F,
       flask1: Phaser.Input.Keyboard.KeyCodes.ONE,
       flask2: Phaser.Input.Keyboard.KeyCodes.TWO,
       flask3: Phaser.Input.Keyboard.KeyCodes.THREE,
@@ -399,13 +399,12 @@ class CraftyScene extends Phaser.Scene {
    */
   private consumeHeldSkillKeys(): void {
     if (this.options.controlsBlocked || !this.keys || this.arenaComplete) return;
-    if (this.keys.nova.isDown) this.useSkill("nova");
-    if (this.keys.dash.isDown) this.useSkill("dash");
-    if (this.keys.ward.isDown) this.useSkill("ward");
-    if (this.keys.flameWave.isDown) this.useSkill("flameWave");
+    this.options.skillLoadout.forEach((skill, index) => {
+      if (skill && this.keys?.[`skillSlot${index}`]?.isDown) this.useSkill(skill);
+    });
   }
 
-  useSkill(skill: "basic" | "nova" | "dash" | "ward" | "flameWave"): void {
+  useSkill(skill: SkillBarSkillId): void {
     if (this.options.mode !== "arena" || !this.player || this.options.paused || this.options.controlsBlocked) return;
     if (skill === "basic") {
       this.queueBasicAttack(true);
@@ -538,6 +537,10 @@ class CraftyScene extends Phaser.Scene {
     this.options.onHud(this.getHud());
   }
 
+  updateSkillLoadout(skillLoadout: SkillLoadout): void {
+    this.options.skillLoadout = [...skillLoadout];
+  }
+
   updateFlaskBelt(flaskBelt: FlaskBelt): void {
     this.options.flaskBelt = flaskBelt;
   }
@@ -579,7 +582,7 @@ class CraftyScene extends Phaser.Scene {
       if (this.options.controlsBlocked) {
         this.basicAttackIntent = null;
       } else {
-        if (this.keys?.attack.isDown || this.worldPointerHeld) this.queueBasicAttack(false);
+        if (this.worldPointerHeld) this.queueBasicAttack(false);
         this.consumeBasicAttackIntent();
       }
       this.syncNetworkMonsters(delta);
@@ -2043,14 +2046,14 @@ class CraftyScene extends Phaser.Scene {
 export class PhaserRuntime {
   private readonly options: WorldRuntimeOptions;
   private game: Phaser.Game | null = null;
-  private scene: CraftyScene | null = null;
+  private scene: ForgeOfEchoesScene | null = null;
 
   constructor(options: WorldRuntimeOptions) {
     this.options = options;
   }
 
   initialize(): void {
-    const scene = new CraftyScene(this.options);
+    const scene = new ForgeOfEchoesScene(this.options);
     this.scene = scene;
     this.game = new Phaser.Game({
       type: Phaser.AUTO,
@@ -2069,7 +2072,7 @@ export class PhaserRuntime {
     });
   }
 
-  useSkill(skill: "basic" | "nova" | "dash" | "ward" | "flameWave"): void {
+  useSkill(skill: SkillBarSkillId): void {
     this.scene?.useSkill(skill);
   }
 
@@ -2088,6 +2091,11 @@ export class PhaserRuntime {
 
   updateSkillLevels(skillLevels: SkillLevels): void {
     this.scene?.updateSkillLevels(skillLevels);
+  }
+
+  updateSkillLoadout(skillLoadout: SkillLoadout): void {
+    this.options.skillLoadout = [...skillLoadout];
+    this.scene?.updateSkillLoadout(skillLoadout);
   }
 
   setPaused(paused: boolean): void {

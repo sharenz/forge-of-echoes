@@ -99,7 +99,7 @@ export function createApiRouter(services: ServerServices): express.Router {
   const maps = new MapService(services.players, services.parties, services.expeditions, services.authSecret);
 
   router.get("/health", (_request, response) => {
-    response.json({ ok: true, service: "crafty-game-server", maximumPlayersPerRoom: MULTIPLAYER_LIMITS.playersPerRoom });
+    response.json({ ok: true, service: "forge-of-echoes-game-server", maximumPlayersPerRoom: MULTIPLAYER_LIMITS.playersPerRoom });
   });
 
   router.post("/accounts/session", async (request, response) => {

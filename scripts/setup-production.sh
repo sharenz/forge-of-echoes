@@ -5,15 +5,15 @@ project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 deploy_host=${DEPLOY_HOST:-crafty-prod}
 deploy_ip=${DEPLOY_IP:-178.104.24.28}
 ip_slug=${deploy_ip//./-}
-app_domain=${APP_DOMAIN:-crafty.${ip_slug}.sslip.io}
-game_domain=${GAME_DOMAIN:-game.crafty.${ip_slug}.sslip.io}
+app_domain=${APP_DOMAIN:-forge-of-echoes.${ip_slug}.sslip.io}
+game_domain=${GAME_DOMAIN:-game.forge-of-echoes.${ip_slug}.sslip.io}
 
 if [[ ! ${deploy_host} =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "Invalid DEPLOY_HOST" >&2
   exit 1
 fi
 
-echo "Preparing ${deploy_host} for Crafty"
+echo "Preparing ${deploy_host} for Forge of Echoes"
 echo "Application domain: ${app_domain}"
 echo "Game-server domain: ${game_domain}"
 

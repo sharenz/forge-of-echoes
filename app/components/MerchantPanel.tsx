@@ -70,8 +70,8 @@ export function MerchantPanel({ merchantId, profile, currencies, selectedItemId,
       return;
     }
     event.dataTransfer.effectAllowed = "copy";
-    event.dataTransfer.setData("application/x-crafty-item", stockItem.previewItem.id);
-    event.dataTransfer.setData("application/x-crafty-offset", JSON.stringify({ x: 0, y: 0 }));
+    event.dataTransfer.setData("application/x-forge-of-echoes-item", stockItem.previewItem.id);
+    event.dataTransfer.setData("application/x-forge-of-echoes-offset", JSON.stringify({ x: 0, y: 0 }));
     event.dataTransfer.setData("text/plain", stockItem.previewItem.id);
     setHoveredOffer(null);
     setSelectedOfferKey(stockItem.key);

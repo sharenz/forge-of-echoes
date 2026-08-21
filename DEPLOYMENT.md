@@ -1,6 +1,6 @@
 # Deployment
 
-Crafty deliberately uses different local and production infrastructure.
+Forge of Echoes deliberately uses different local and production infrastructure.
 
 ## Local development
 

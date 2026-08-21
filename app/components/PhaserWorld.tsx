@@ -7,10 +7,11 @@ import { FLASK_DEFINITIONS } from "../game/config/flasks";
 import { MAP_MODIFIERS } from "../game/config/maps";
 import type { MerchantId } from "../game/config/merchants";
 import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "../game/config/progression";
-import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, MapItem, StatKey, StatModifier } from "../game/domain";
+import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, MapItem, SkillBarSkillId, SkillLoadout, StatKey, StatModifier } from "../game/domain";
 import { mapModifierDescription, mapModifierRewardDescription } from "../game/maps";
 import { grantCharacterProgressExperience } from "../game/progression";
-import { resolveSkillDefinition } from "../game/skills";
+import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
+import { DEFAULT_SKILL_LOADOUT, SKILL_BAR_SLOTS } from "../game/skill-loadout";
 import type { CharacterStatCalculation, StatResolution } from "../game/stats";
 import type { PhaserRuntime } from "../game2d/PhaserRuntime";
 import type { MultiplayerWorldAdapter, WorldHudState, WorldMode, WorldStation } from "../game2d/types";
@@ -63,6 +64,41 @@ interface ResourceGlobeProps {
   maximum: number;
 }
 
+type ResolvedSkillBar = Record<SkillBarSkillId, ResolvedSkillDefinition>;
+
+function skillActionView(
+  skill: SkillBarSkillId,
+  definitions: ResolvedSkillBar,
+  hud: WorldHudState | null,
+  readiness: { novaReady: boolean; riftReady: boolean; wardReady: boolean; flameWaveReady: boolean },
+  progress: { novaProgress: number; riftProgress: number; wardProgress: number; flameWaveProgress: number },
+) {
+  const definition = definitions[skill];
+  if (skill === "basic") return {
+    className: "lance-slot", ready: true, progress: 0, cooldown: 0, active: false,
+    tooltip: `${definition.name} · Basic fire attack`,
+  };
+  if (skill === "nova") return {
+    className: "nova-slot", ready: readiness.novaReady, progress: progress.novaProgress,
+    cooldown: hud?.novaCooldown ?? 0, active: false,
+    tooltip: `${definition.name} · Level ${definition.level} · ${definition.castTime.toFixed(2)}s cast`,
+  };
+  if (skill === "dash") return {
+    className: "rift-slot", ready: readiness.riftReady, progress: progress.riftProgress,
+    cooldown: 0, active: false, tooltip: `${definition.name} · Level ${definition.level}`,
+  };
+  if (skill === "ward") return {
+    className: "ward-slot", ready: readiness.wardReady, progress: progress.wardProgress,
+    cooldown: hud?.wardCooldown ?? 0, active: Boolean(hud && hud.wardRemaining > 0),
+    tooltip: `${definition.name} · Level ${definition.level} · ${definition.castTime.toFixed(2)}s cast · ${Math.round(definition.damageReduction)}% less damage for ${definition.duration.toFixed(1)}s`,
+  };
+  return {
+    className: "flame-wave-slot", ready: readiness.flameWaveReady, progress: progress.flameWaveProgress,
+    cooldown: hud?.flameWaveCooldown ?? 0, active: false,
+    tooltip: `${definition.name} · Level ${definition.level} · ${definition.castTime.toFixed(2)}s cast · ${definition.projectileCount} piercing projectiles`,
+  };
+}
+
 function ResourceGlobe({ kind, label, current, maximum }: ResourceGlobeProps) {
   const percentage = maximum > 0 ? Math.max(0, Math.min(100, (current / maximum) * 100)) : 0;
   const displayedCurrent = kind === "life" ? Math.ceil(current) : Math.floor(current);
@@ -112,6 +148,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
   const dashLevel = characterProgress?.skillLevels.dash ?? 1;
   const wardLevel = characterProgress?.skillLevels.ward ?? 1;
   const flameWaveLevel = characterProgress?.skillLevels.flameWave ?? 1;
+  const skillLoadout = characterProgress?.skillLoadout ?? DEFAULT_SKILL_LOADOUT;
   const parentRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<PhaserRuntime | null>(null);
   const stationCallbackRef = useRef(onStation);
@@ -120,6 +157,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
   const portalIndexesRef = useRef([...portalIndexes]);
   const merchantIdsKey = merchantIds.join("|");
   const skillLevelsRef = useRef({ nova: novaLevel, dash: dashLevel, ward: wardLevel, flameWave: flameWaveLevel });
+  const skillLoadoutRef = useRef<SkillLoadout>([...skillLoadout]);
   const pausedRef = useRef(paused);
   const controlsBlockedRef = useRef(controlsBlocked);
   const arenaBalanceRef = useRef(arenaBalance);
@@ -172,6 +210,11 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
   }, [novaLevel, dashLevel, wardLevel, flameWaveLevel]);
 
   useEffect(() => {
+    skillLoadoutRef.current = [...(characterProgress?.skillLoadout ?? DEFAULT_SKILL_LOADOUT)];
+    runtimeRef.current?.updateSkillLoadout(skillLoadoutRef.current);
+  }, [characterProgress?.skillLoadout]);
+
+  useEffect(() => {
     const parent = parentRef.current;
     if (!parent) return;
     let active = true;
@@ -189,6 +232,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
         paused: pausedRef.current,
         controlsBlocked: controlsBlockedRef.current,
         skillLevels: skillLevelsRef.current,
+        skillLoadout: skillLoadoutRef.current,
         flaskBelt: flaskBeltRef.current,
         arenaBalance: arenaBalanceRef.current,
         onStation: (station, portalIndex) => stationCallbackRef.current?.(station, portalIndex),
@@ -218,6 +262,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
   const cooldownMultiplier = characterStats?.skillCooldown ?? 1;
   const castSpeedMultiplier = characterStats?.castSpeed ?? 1;
   const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel, cooldownMultiplier, castSpeedMultiplier);
+  const resolvedBasic = resolveSkillDefinition(BASIC_ATTACK, 1);
   const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel, cooldownMultiplier, castSpeedMultiplier);
   const resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, wardLevel, cooldownMultiplier, castSpeedMultiplier);
   const resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, flameWaveLevel, cooldownMultiplier, castSpeedMultiplier);
@@ -256,7 +301,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
         if (!onItemDropToGround || event.defaultPrevented) return;
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest(".world-panel")) return;
-        const itemDrag = Array.from(event.dataTransfer.types).some((type) => type === "application/x-crafty-item" || type === "text/plain");
+        const itemDrag = Array.from(event.dataTransfer.types).some((type) => type === "application/x-forge-of-echoes-item" || type === "text/plain");
         if (!itemDrag) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
@@ -271,7 +316,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest(".world-panel")) return;
         event.preventDefault();
-        const itemId = event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain");
+        const itemId = event.dataTransfer.getData("application/x-forge-of-echoes-item") || event.dataTransfer.getData("text/plain");
         if (itemId) onItemDropToGround(itemId);
         setGroundDropReady(false);
       }}
@@ -324,7 +369,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
                         onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFlaskDropSlot(null); }}
                         onDrop={(event) => {
                           event.preventDefault();
-                          const itemId = event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain");
+                          const itemId = event.dataTransfer.getData("application/x-forge-of-echoes-item") || event.dataTransfer.getData("text/plain");
                           if (itemId) onFlaskLoad?.(itemId, index);
                           setFlaskDropSlot(null);
                         }}
@@ -348,29 +393,25 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
                 <i className="command-deck-divider" aria-hidden="true" />
                 <div className="world-action-bar" aria-label="Sorceress skills">
                   <span className="hud-section-label">Skills</span>
-                  <button type="button" className="action-slot lance-slot" disabled={mode !== "arena"} data-tooltip={`${BASIC_ATTACK.name} · Basic fire attack`} onClick={() => runtimeRef.current?.useSkill("basic")}>
-                    <span className="skill-icon"><i /></span><kbd>{BASIC_ATTACK.key}</kbd>
-                  </button>
-                  <button type="button" className="action-slot nova-slot" disabled={mode !== "arena" || !novaReady} data-tooltip={`${resolvedNova.name} · Level ${resolvedNova.level} · ${resolvedNova.castTime.toFixed(2)}s cast`} onClick={() => runtimeRef.current?.useSkill("nova")}>
-                    <span className="skill-cooldown" style={{ height: `${novaProgress}%` }} />
-                    <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.nova.key}</kbd>
-                    {hud && hud.novaCooldown > 0.05 && <strong>{hud.novaCooldown.toFixed(1)}</strong>}
-                  </button>
-                  <button type="button" className="action-slot rift-slot" disabled={mode !== "arena" || !riftReady} data-tooltip={`${resolvedDash.name} · Level ${resolvedDash.level}`} onClick={() => runtimeRef.current?.useSkill("dash")}>
-                    <span className="skill-cooldown" style={{ height: `${riftProgress}%` }} />
-                    <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.dash.key}</kbd>
-                    {hud && <span className="slot-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} charges`}>{hud.riftCharges}</span>}
-                  </button>
-                  <button type="button" className={`action-slot ward-slot ${hud && hud.wardRemaining > 0 ? "is-active" : ""}`} disabled={mode !== "arena" || !wardReady} data-tooltip={`${resolvedWard.name} · Level ${resolvedWard.level} · ${resolvedWard.castTime.toFixed(2)}s cast · ${Math.round(resolvedWard.damageReduction)}% less damage for ${resolvedWard.duration.toFixed(1)}s`} onClick={() => runtimeRef.current?.useSkill("ward")}>
-                    <span className="skill-cooldown" style={{ height: `${wardProgress}%` }} />
-                    <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.ward.key}</kbd>
-                    {hud && hud.wardCooldown > 0.05 && <strong>{hud.wardCooldown.toFixed(1)}</strong>}
-                  </button>
-                  <button type="button" className="action-slot flame-wave-slot" disabled={mode !== "arena" || !flameWaveReady} data-tooltip={`${resolvedFlameWave.name} · Level ${resolvedFlameWave.level} · ${resolvedFlameWave.castTime.toFixed(2)}s cast · ${resolvedFlameWave.projectileCount} piercing projectiles`} onClick={() => runtimeRef.current?.useSkill("flameWave")}>
-                    <span className="skill-cooldown" style={{ height: `${flameWaveProgress}%` }} />
-                    <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.flameWave.key}</kbd>
-                    {hud && hud.flameWaveCooldown > 0.05 && <strong>{hud.flameWaveCooldown.toFixed(1)}</strong>}
-                  </button>
+                  {SKILL_BAR_SLOTS.map((slot) => {
+                    const skill = skillLoadout[slot.index];
+                    if (!skill) return (
+                      <button type="button" className="action-slot empty-skill-slot" disabled data-tooltip={`Empty skill slot · ${slot.key}`} key={slot.index}>
+                        <span className="skill-icon"><i /></span><kbd>{slot.key}</kbd>
+                      </button>
+                    );
+                    const view = skillActionView(skill, {
+                      basic: resolvedBasic, nova: resolvedNova, dash: resolvedDash, ward: resolvedWard, flameWave: resolvedFlameWave,
+                    }, hud, { novaReady, riftReady, wardReady, flameWaveReady }, { novaProgress, riftProgress, wardProgress, flameWaveProgress });
+                    return (
+                      <button type="button" className={`action-slot ${view.className} ${view.active ? "is-active" : ""}`} disabled={mode !== "arena" || !view.ready} data-tooltip={view.tooltip} onClick={() => runtimeRef.current?.useSkill(skill)} key={slot.index}>
+                        {view.progress > 0 && <span className="skill-cooldown" style={{ height: `${view.progress}%` }} />}
+                        <span className="skill-icon"><i /></span><kbd>{slot.key}</kbd>
+                        {view.cooldown > 0.05 && <strong>{view.cooldown.toFixed(1)}</strong>}
+                        {skill === "dash" && hud && <span className="slot-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} charges`}>{hud.riftCharges}</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div

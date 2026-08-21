@@ -1,6 +1,7 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { ACTIVE_SKILLS, BASIC_ATTACK, SKILL_TREE_BRANCHES } from "../game/config/skills";
-import type { ActiveSkillId, CharacterProgress } from "../game/domain";
+import type { ActiveSkillId, CharacterProgress, SkillBarSkillId } from "../game/domain";
+import { SKILL_BAR_SLOTS } from "../game/skill-loadout";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
 
 interface SkillTreePanelProps {
@@ -8,6 +9,7 @@ interface SkillTreePanelProps {
   castSpeed: number;
   cooldownMultiplier: number;
   onAllocate: (skill: ActiveSkillId) => void;
+  onSetSlot: (slot: number, skill: SkillBarSkillId | null) => void;
 }
 
 interface SkillNodeProps {
@@ -20,6 +22,19 @@ interface SkillNodeProps {
 }
 
 const ACTIVE_SKILL_ENTRIES = Object.entries(ACTIVE_SKILLS) as [ActiveSkillId, (typeof ACTIVE_SKILLS)[ActiveSkillId]][];
+const SKILL_OPTIONS: readonly [SkillBarSkillId, typeof BASIC_ATTACK | (typeof ACTIVE_SKILLS)[ActiveSkillId]][] = [
+  ["basic", BASIC_ATTACK],
+  ...ACTIVE_SKILL_ENTRIES,
+];
+
+function skillSlotClass(skill: SkillBarSkillId | null): string {
+  if (skill === "basic") return "lance-slot";
+  if (skill === "nova") return "nova-slot";
+  if (skill === "dash") return "rift-slot";
+  if (skill === "ward") return "ward-slot";
+  if (skill === "flameWave") return "flame-wave-slot";
+  return "empty-skill-slot";
+}
 
 function formatNumber(value: number, decimals = 1): string {
   return value.toFixed(decimals).replace(/\.0+$/, "");
@@ -117,9 +132,10 @@ function SkillNode({ id, current, castSpeed, cooldownMultiplier, points, onAlloc
   );
 }
 
-export function SkillTreePanel({ progress, castSpeed, cooldownMultiplier, onAllocate }: SkillTreePanelProps) {
+export function SkillTreePanel({ progress, castSpeed, cooldownMultiplier, onAllocate, onSetSlot }: SkillTreePanelProps) {
   const investedPoints = Object.values(progress.skillLevels).reduce((total, level) => total + Math.max(0, level - 1), 0);
   const basic = resolveSkillDefinition(BASIC_ATTACK, 1);
+  const [selectedSlot, setSelectedSlot] = useState(0);
 
   return (
     <div className="skill-tree-interface">
@@ -133,6 +149,38 @@ export function SkillTreePanel({ progress, castSpeed, cooldownMultiplier, onAllo
           <div><strong>{ACTIVE_SKILL_ENTRIES.length + 1}</strong><span>Skills</span><small>Complete loadout</small></div>
           <div><strong>{investedPoints}</strong><span>Invested</span><small>Permanent levels</small></div>
           <div className="skill-point-orb"><strong>{progress.unspentSkillPoints}</strong><span>Available</span><small>Skill points</small></div>
+        </div>
+      </section>
+
+      <section className="skill-loadout-editor" aria-label="Skill bar loadout">
+        <header>
+          <div><span>Combat bindings</span><h3>Skill Bar</h3><p>Select a socket, then choose any learned skill. Changes are saved on this character.</p></div>
+          <strong>5 SLOTS</strong>
+        </header>
+        <div className="skill-loadout-slots">
+          {SKILL_BAR_SLOTS.map((slot) => {
+            const skill = progress.skillLoadout[slot.index];
+            const definition = skill ? (skill === "basic" ? BASIC_ATTACK : ACTIVE_SKILLS[skill]) : null;
+            return (
+              <button type="button" className={`skill-loadout-slot ${skillSlotClass(skill)} ${selectedSlot === slot.index ? "selected" : ""}`} onClick={() => setSelectedSlot(slot.index)} key={slot.index}>
+                <kbd>{slot.key}</kbd>
+                <span className="skill-icon"><i /></span>
+                <small>Slot {slot.index + 1}</small>
+                <strong>{definition?.name ?? "Empty"}</strong>
+              </button>
+            );
+          })}
+        </div>
+        <div className="skill-loadout-picker">
+          <span>Assign to <strong>{SKILL_BAR_SLOTS[selectedSlot].key}</strong></span>
+          <div>
+            {SKILL_OPTIONS.map(([skill, definition]) => (
+              <button type="button" className={`${skillSlotClass(skill)} ${progress.skillLoadout[selectedSlot] === skill ? "assigned" : ""}`} onClick={() => onSetSlot(selectedSlot, skill)} key={skill}>
+                <span className="skill-icon"><i /></span><strong>{definition.name}</strong><small>{skill === "basic" ? "Innate" : `Level ${progress.skillLevels[skill]}`}</small>
+              </button>
+            ))}
+            <button type="button" className="clear-loadout-choice" onClick={() => onSetSlot(selectedSlot, null)}><strong>Empty slot</strong><small>Remove binding</small></button>
+          </div>
         </div>
       </section>
 

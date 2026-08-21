@@ -53,6 +53,8 @@ test("profile protocol rejects client-authored item data and unsupported command
     item: { kind: "equipment", attackDamage: 999_999 },
   }).success, false);
   assert.equal(profileCommandSchema.safeParse({ type: "grant_item", baseId: "god-sword" }).success, false);
+  assert.equal(profileCommandSchema.safeParse({ type: "set_skill_slot", slot: 5, skill: "nova" }).success, false);
+  assert.equal(profileCommandSchema.safeParse({ type: "set_skill_slot", slot: 1, skill: "client-invented" }).success, false);
   assert.equal(profileCommandSchema.safeParse({ type: "craft_map", action: "dust" }).success, false);
   assert.equal(profileCommandSchema.safeParse({ type: "craft_equipment", action: "essence", itemId: "00000000-0000-4000-8000-000000000000" }).success, false);
   assert.equal(profileCommandSchema.safeParse({ type: "buy_merchant_offer", merchantId: "cartographer-rook", offerId: "free-ashen-t1", position: { x: 0, y: 5 } }).success, false);
@@ -63,6 +65,32 @@ test("profile protocol rejects client-authored item data and unsupported command
     targetItemId: "00000000-0000-4000-8000-000000000001",
     currencyId: "mapDust",
   }).success, false);
+});
+
+test("skill bar assignments and empty slots persist authoritatively", async () => {
+  const repository = new InMemoryPlayerRepository();
+  await repository.initialize();
+  try {
+    const identity = await createTestPlayer(repository, { handle: "loadout-test", characterName: "Loadout", classId: "sorceress" });
+    const initial = await repository.loadProfile(identity.characterId);
+    assert.ok(initial);
+    assert.deepEqual(initial.profile.character.skillLoadout, ["basic", "nova", "dash", "ward", "flameWave"]);
+    const service = new ProfileCommandService(repository);
+
+    const cleared = await service.execute(identity.characterId, initial.revision, { type: "set_skill_slot", slot: 2, skill: null });
+    assert.deepEqual(cleared.profile.character.skillLoadout, ["basic", "nova", null, "ward", "flameWave"]);
+
+    const assigned = await service.execute(identity.characterId, cleared.revision, { type: "set_skill_slot", slot: 2, skill: "nova" });
+    assert.deepEqual(assigned.profile.character.skillLoadout, ["basic", "nova", "nova", "ward", "flameWave"]);
+    assert.deepEqual((await repository.loadProfile(identity.characterId))?.profile.character.skillLoadout, assigned.profile.character.skillLoadout);
+
+    await assert.rejects(
+      () => service.execute(identity.characterId, assigned.revision, { type: "set_skill_slot", slot: 2, skill: "nova" }),
+      (error) => error instanceof ProfileCommandError && error.code === "invalid_command",
+    );
+  } finally {
+    await repository.close();
+  }
 });
 
 test("online merchant and backpack crafting create only server-owned UUID items", async () => {

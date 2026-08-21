@@ -7,6 +7,7 @@ import { loadFlaskIntoBelt, unloadFlaskFromBelt } from "../../app/game/flasks";
 import { findContainerEntry, insertItem, mapContainerItems, moveItem, removeItem, transferItem } from "../../app/game/item-container";
 import { purchaseMerchantOffer } from "../../app/game/merchant";
 import { allocateAttributePoint, allocateSkillPoint } from "../../app/game/progression";
+import { setSkillLoadoutSlot } from "../../app/game/skill-loadout";
 import { activeStashTab, addStashTab, findStashEntry, renameStashTab, selectStashTab, updateStashContainer } from "../../app/game/stash";
 import type { ProfileCommand } from "../../multiplayer/protocol";
 import { ProfileRevisionConflict } from "../persistence/errors";
@@ -46,6 +47,7 @@ export class ProfileCommandService {
       case "equip_item": return this.equip(profile, command.itemId, command.slot);
       case "allocate_attribute": return allocateAttributePoint(profile, command.attribute);
       case "allocate_skill": return allocateSkillPoint(profile, command.skill);
+      case "set_skill_slot": return setSkillLoadoutSlot(profile, command.slot, command.skill);
       case "load_flask": return loadFlaskIntoBelt(profile, command.itemId, command.slot) ?? profile;
       case "unload_flask": return unloadFlaskFromBelt(profile, command.slot) ?? profile;
       case "select_stash_tab": return this.withStash(profile, selectStashTab(profile.stash, command.tabId));

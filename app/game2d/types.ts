@@ -1,5 +1,5 @@
 import type { ArenaBalance } from "../game/combat";
-import type { CharacterClassId, FlaskBelt, InventoryItem, SkillLevels } from "../game/domain";
+import type { CharacterClassId, FlaskBelt, InventoryItem, SkillBarSkillId, SkillLevels, SkillLoadout } from "../game/domain";
 import type { MerchantId } from "../game/config/merchants";
 import type { CombatEvent } from "../../multiplayer/protocol";
 
@@ -69,7 +69,7 @@ export interface MultiplayerWorldAdapter {
   getMap?: () => NetworkMapView | null;
   getMonsterSampler?: () => NetworkMonsterSampler;
   drainCombatEvents?: () => CombatEvent[];
-  sendAttack?: (skill: "basic" | "nova" | "dash" | "ward" | "flameWave", direction?: { x: number; y: number }) => void;
+  sendAttack?: (skill: SkillBarSkillId, direction?: { x: number; y: number }) => void;
   sendPickup?: (dropId: string) => void;
   sendUseFlask?: (slotIndex: number) => void;
   sendDropItem?: (itemId: string) => void;
@@ -108,6 +108,7 @@ export interface WorldRuntimeOptions {
   paused: boolean;
   controlsBlocked?: boolean;
   skillLevels: SkillLevels;
+  skillLoadout: SkillLoadout;
   flaskBelt: FlaskBelt;
   arenaBalance?: ArenaBalance;
   onStation: (station: WorldStation, portalIndex?: number) => void;

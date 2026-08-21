@@ -2,7 +2,7 @@ import type { MapModifierId } from "../domain";
 import type { MapBaseDefinition, MapModifierConfig } from "./schema";
 
 export const MAP_BASES = [
-  { id: "ashen-crucible", name: "Ashen Crucible", icon: "/item-icons/ashen-crucible.png", implicit: "Fire Essences are 20% more common" },
+  { id: "ashen-crucible", name: "Ashen Forge", icon: "/item-icons/ashen-crucible.png", implicit: "Fire Essences are 20% more common" },
   { id: "iron-coliseum", name: "Iron Coliseum", icon: "/item-icons/iron-coliseum.png", implicit: "Equipment drops with +1 maximum Stability" },
 ] as const satisfies readonly MapBaseDefinition[];
 

@@ -5,7 +5,7 @@ import { CHARACTER_CLASSES } from "../game/config/classes";
 import { XP_BY_LEVEL } from "../game/config/progression";
 import { MERCHANTS, availableMerchantIds, isMerchantId, type MerchantId } from "../game/config/merchants";
 import { buildArenaBalance } from "../game/combat";
-import type { ActiveSkillId, AttributeKey, CharacterClassId, CharacterEquipmentSlot, ItemContainerId } from "../game/domain";
+import type { ActiveSkillId, AttributeKey, CharacterClassId, CharacterEquipmentSlot, ItemContainerId, SkillBarSkillId } from "../game/domain";
 import { chooseEquipmentSlot, equipmentSlotAccepts } from "../game/equipment";
 import { isEquipmentItem, isMapItem, profileCurrencyAmounts } from "../game/inventory";
 import { containerItems, findContainerEntry, findFirstFit } from "../game/item-container";
@@ -39,7 +39,7 @@ function characterPanelTitle(panel: CharacterPanelView): string {
 }
 
 const ENABLED_CHARACTER_CLASSES: ReadonlySet<CharacterClassId> = new Set(ENABLED_CHARACTER_CLASS_IDS);
-const PLAYER_NAME_STORAGE_KEY = "crafty.playerName";
+const PLAYER_NAME_STORAGE_KEY = "forgeOfEchoes.playerName";
 
 function loadRememberedPlayerName(): string {
   try {
@@ -125,11 +125,11 @@ export function GameShell() {
       <>
         <MenuSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
         <PhaserWorld mode="login" classId="sorceress">
-          <div className="creation-header"><span className="brand-rune">C</span><div><strong>CRAFTY</strong><small>Authoritative online realm</small></div></div>
+          <div className="creation-header"><span className="brand-rune">F</span><div><strong>FORGE OF ECHOES</strong><small>The Ashen Realm</small></div></div>
           <section className="login-screen">
             <div className="login-card">
               <div className="login-card-rune" aria-hidden="true">◇</div>
-              <div className="login-heading"><span>Realm account</span><h1>Enter the Crucible</h1><p>Your characters and progression live authoritatively in PostgreSQL. For now, your player name is all you need.</p></div>
+              <div className="login-heading"><span>The forge remembers</span><h1>Forge of Echoes</h1><p>Name yourself, then choose the hero who will brave the rifts.</p></div>
               <form className="login-form" onSubmit={(event) => {
                 event.preventDefault();
                 const playerName = playerNameInputRef.current?.value.trim() ?? "";
@@ -137,9 +137,8 @@ export function GameShell() {
                 void multiplayer.connectAccount(playerName);
               }}>
                 <label><span>Player name</span><input ref={playerNameInputRef} required placeholder="player-one" minLength={2} maxLength={24} pattern="[A-Za-z0-9_\-]+" autoComplete="username" /></label>
-                <button type="submit" disabled={multiplayer.busy}><span>{multiplayer.busy ? "Entering…" : "Continue"}</span><small>Open character roster</small></button>
+                <button type="submit" disabled={multiplayer.busy}><span>{multiplayer.busy ? "Entering…" : "Continue"}</span><small>Choose your character</small></button>
               </form>
-              <footer><span>◆</span><p><strong>Remembered on this browser</strong><small>Only your player name is stored locally. Characters, items, and stats remain server-authoritative.</small></p></footer>
             </div>
             {multiplayer.error && <div className="multiplayer-error roster-error" role="alert">{multiplayer.error}</div>}
           </section>
@@ -155,7 +154,7 @@ export function GameShell() {
         <>
           <MenuSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
           <PhaserWorld mode="character-create" classId="sorceress">
-            <div className="creation-header"><span className="brand-rune">C</span><div><strong>CRAFTY</strong><small>Authoritative online realm</small></div></div>
+            <div className="creation-header"><span className="brand-rune">F</span><div><strong>FORGE OF ECHOES</strong><small>The Ashen Realm</small></div></div>
             <section className="dedicated-character-create">
               <button type="button" className="back-to-roster" onClick={() => { multiplayer.clearError(); setCharacterName(""); setAccountView("roster"); }}>‹ Back to characters</button>
               <div className="character-create-card">
@@ -183,7 +182,7 @@ export function GameShell() {
       <>
         <MenuSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
         <PhaserWorld mode="login" classId="sorceress">
-          <div className="creation-header"><span className="brand-rune">C</span><div><strong>CRAFTY</strong><small>Authoritative online realm</small></div></div>
+          <div className="creation-header"><span className="brand-rune">F</span><div><strong>FORGE OF ECHOES</strong><small>The Ashen Realm</small></div></div>
           <section className="character-roster-screen">
             <header className="roster-heading"><div><span>{multiplayer.account.account.handle}</span><h1>Your Characters</h1><p>Select a character to enter the hideout.</p></div><div className="roster-heading-actions"><button type="button" className="create-character-action" onClick={() => { multiplayer.clearError(); setCharacterName(""); setAccountView("create-character"); }}>＋ Create Character</button><button type="button" onClick={() => { multiplayer.clearError(); setAccountView("roster"); void multiplayer.leaveAccount(); }}>Logout</button></div></header>
             <section className="character-roster-list roster-focus" aria-label="Your characters">
@@ -194,7 +193,7 @@ export function GameShell() {
                   const enabled = ENABLED_CHARACTER_CLASSES.has(character.classId);
                   return <button type="button" key={character.characterId} disabled={multiplayer.busy || !enabled} onClick={() => { setCharacterName(""); void multiplayer.selectCharacter(character.characterId); }}><i className={`class-crest ${character.classId}`}>{definition.name.charAt(0)}</i><span><strong>{character.characterName}</strong><small>{definition.name} · Level {character.level}{enabled ? "" : " · Coming later"}</small></span><em>{enabled ? "Enter ›" : "Unavailable"}</em></button>;
                 })}
-                {multiplayer.characters.length === 0 && <div className="empty-roster"><span>◇</span><strong>No characters yet</strong><small>Create your first Sorceress to enter the Crucible.</small><button type="button" onClick={() => setAccountView("create-character")}>Create Character</button></div>}
+                {multiplayer.characters.length === 0 && <div className="empty-roster"><span>◇</span><strong>No characters yet</strong><small>Create your first Sorceress and enter the Forge.</small><button type="button" onClick={() => setAccountView("create-character")}>Create Character</button></div>}
               </div>
             </section>
             {multiplayer.error && <div className="multiplayer-error roster-error" role="alert">{multiplayer.error}</div>}
@@ -245,7 +244,7 @@ export function GameShell() {
                 <header><div><span>Combat continues online · controls blocked · changes apply immediately</span><h2>{characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></header>
                 {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onApplyCurrency={onlineApplyCurrency} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
                 {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation.breakdown} onAllocate={onlineAllocateAttribute} />}
-                {panel === "skills" && <SkillTreePanel progress={profile.character} castSpeed={stats.castSpeed} cooldownMultiplier={stats.skillCooldown} onAllocate={onlineAllocateSkill} />}
+                {panel === "skills" && <SkillTreePanel progress={profile.character} castSpeed={stats.castSpeed} cooldownMultiplier={stats.skillCooldown} onAllocate={onlineAllocateSkill} onSetSlot={onlineSetSkillSlot} />}
               </section>
             </div>
           )}
@@ -348,6 +347,10 @@ export function GameShell() {
     void multiplayer.executeProfileCommand({ type: "allocate_skill", skill });
   }
 
+  function onlineSetSkillSlot(slot: number, skill: SkillBarSkillId | null) {
+    void multiplayer.executeProfileCommand({ type: "set_skill_slot", slot, skill });
+  }
+
   function onlineDropItemToGround(itemId: string) {
     multiplayer.dropItem(itemId);
     setSelectedItemId(null);
@@ -364,8 +367,8 @@ export function GameShell() {
       <HideoutSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
       <PhaserWorld mode="hideout" classId={profile.character.classId!} portalIndexes={availablePortalIndexes} merchantIds={merchantIds} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation.breakdown} flaskBelt={profile.flaskBelt} onFlaskLoad={onlineLoadFlask} onStation={handleStation} multiplayer={multiplayer.adapter}>
       <header className="hideout-hud">
-        <div className="brand-lockup"><span className="brand-mark">C</span><div><strong>CRAFTY</strong><small>THE FORGE HIDEOUT</small></div></div>
-        <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId!.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Server · Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId!].name}</small></div></div>
+        <div className="brand-lockup"><span className="brand-mark">F</span><div><strong>FORGE OF ECHOES</strong><small>THE FORGE HIDEOUT</small></div></div>
+        <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId!.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId!].name}</small></div></div>
         <nav>
           <button type="button" onClick={() => setPanel("inventory")}>Inventory <kbd>I</kbd></button>
           <button type="button" onClick={() => setPanel("attributes")}>Attributes <strong>{profile.character.unspentAttributePoints}</strong></button>
@@ -388,7 +391,7 @@ export function GameShell() {
             {panel === "multiplayer" && <MultiplayerPanel controller={multiplayer} onOpenMapDevice={() => setPanel("maps")} onPartyEntered={() => setPanel(null)} />}
             {(panel === "inventory" || panel === "stash") && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onApplyCurrency={onlineApplyCurrency} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
             {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation.breakdown} onAllocate={onlineAllocateAttribute} />}
-            {panel === "skills" && <SkillTreePanel progress={profile.character} castSpeed={stats.castSpeed} cooldownMultiplier={stats.skillCooldown} onAllocate={onlineAllocateSkill} />}
+            {panel === "skills" && <SkillTreePanel progress={profile.character} castSpeed={stats.castSpeed} cooldownMultiplier={stats.skillCooldown} onAllocate={onlineAllocateSkill} onSetSlot={onlineSetSkillSlot} />}
           </section>
         </div>
       )}

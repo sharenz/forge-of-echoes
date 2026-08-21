@@ -24,7 +24,8 @@ import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, isArenaCleared, resolve
 import { resolveAttackTimeSeconds } from "../../app/game/action-timing";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../../app/game/config/monsters";
 import { MAP_COMPLETION_REWARDS } from "../../app/game/config/rewards";
-import type { DamageType, InventoryItem } from "../../app/game/domain";
+import type { DamageType, InventoryItem, SkillLoadout } from "../../app/game/domain";
+import { isSkillEquipped } from "../../app/game/skill-loadout";
 import { resolveMonsterStats, rollMonsterPack } from "../../app/game/encounters";
 import { consumeFlaskFromBelt, createFlaskStack } from "../../app/game/flasks";
 import { storePickedUpItem, takeProfileItem } from "../../app/game/item-drop";
@@ -72,6 +73,7 @@ interface PlayerRuntime {
   attackDamage: number;
   focusRegen: number;
   basicAttackCooldownMilliseconds: number;
+  skillLoadout: SkillLoadout;
   skills: {
     nova: ResolvedSkillDefinition;
     dash: ResolvedSkillDefinition;
@@ -244,6 +246,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       attackDamage: stats.attackDamage,
       focusRegen: resolveArenaFocusRegen(stats.focusRegen, this.arenaBalance.arenaModifiers).value,
       basicAttackCooldownMilliseconds: resolveAttackTimeSeconds(stats.attackSpeed) * 1_000,
+      skillLoadout: authoritative.profile.character.skillLoadout,
       skills,
       recoveries: [],
     });
@@ -317,6 +320,9 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     const now = this.state.elapsedMilliseconds;
     const worldPlayer = this.world.players.get(runtime.worldPlayerIndex);
     if (!worldPlayer) return;
+    if (!isSkillEquipped(runtime.skillLoadout, command.skill)) {
+      return this.reject(client, CLIENT_MESSAGES.attack, "unauthorized");
+    }
     if (command.skill === "basic") {
       const nextDeadline = advanceCooldownDeadline(
         now,
@@ -839,6 +845,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     runtime.attackDamage = stats.attackDamage;
     runtime.focusRegen = resolveArenaFocusRegen(stats.focusRegen, this.arenaBalance.arenaModifiers).value;
     runtime.basicAttackCooldownMilliseconds = resolveAttackTimeSeconds(stats.attackSpeed) * 1_000;
+    runtime.skillLoadout = current.profile.character.skillLoadout;
     runtime.skills = {
       nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, current.profile.character.skillLevels.nova, stats.skillCooldown, stats.castSpeed),
       dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, current.profile.character.skillLevels.dash, stats.skillCooldown, stats.castSpeed),

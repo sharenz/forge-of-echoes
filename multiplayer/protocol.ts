@@ -246,6 +246,11 @@ export const profileCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("equip_item"), itemId: itemIdSchema, slot: characterEquipmentSlotSchema }).strict(),
   z.object({ type: z.literal("allocate_attribute"), attribute: z.enum(["strength", "dexterity", "intelligence"]) }).strict(),
   z.object({ type: z.literal("allocate_skill"), skill: z.enum(["nova", "dash", "ward", "flameWave"]) }).strict(),
+  z.object({
+    type: z.literal("set_skill_slot"),
+    slot: z.number().int().min(0).max(4),
+    skill: z.enum(["basic", "nova", "dash", "ward", "flameWave"]).nullable(),
+  }).strict(),
   z.object({ type: z.literal("load_flask"), itemId: itemIdSchema, slot: z.number().int().min(0).max(4) }).strict(),
   z.object({ type: z.literal("unload_flask"), slot: z.number().int().min(0).max(4) }).strict(),
   z.object({ type: z.literal("select_stash_tab"), tabId: z.string().trim().min(1).max(64) }).strict(),

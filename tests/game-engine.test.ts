@@ -43,6 +43,7 @@ import { MULTIPLAYER_COMBAT } from "../multiplayer/combat";
 import { createMapCompletionRewards } from "../app/game/rewards";
 import { applyBackpackCurrency, canApplyCraftingCurrency, craftingTargetError } from "../app/game/crafting";
 import { isWorldPointerOrigin } from "../app/game2d/input-boundary";
+import { isSkillEquipped, normalizeSkillLoadout, setSkillLoadoutSlot } from "../app/game/skill-loadout";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -53,6 +54,7 @@ const characterProgress = (level = 1): PlayerProfile["character"] => ({
   name: "Test", classId: "amazon", level, xp: 0,
   allocatedAttributes: { strength: 0, dexterity: 0, intelligence: 0 },
   unspentAttributePoints: 0, skillLevels: { nova: 1, dash: 1, ward: 1, flameWave: 1 }, unspentSkillPoints: 0,
+  skillLoadout: ["basic", "nova", "dash", "ward", "flameWave"],
   mapsCompleted: 0, highestWave: 0,
 });
 const profileWithEmptyFlaskBelt = (): PlayerProfile => ({
@@ -67,6 +69,18 @@ test("world attacks accept only empty-canvas pointer origins", () => {
   assert.equal(isWorldPointerOrigin(interfaceButton, canvas, 0), false);
   assert.equal(isWorldPointerOrigin(canvas, canvas, 1), false);
   assert.equal(isWorldPointerOrigin(null, canvas, 0), false);
+});
+
+test("skill loadouts normalize persisted data and can clear or assign any slot", () => {
+  const profile = createInitialProfile();
+  const cleared = setSkillLoadoutSlot(profile, 4, null);
+  assert.equal(cleared.character.skillLoadout[4], null);
+  const reassigned = setSkillLoadoutSlot(cleared, 4, "nova");
+  assert.equal(reassigned.character.skillLoadout[4], "nova");
+  assert.equal(isSkillEquipped(reassigned.character.skillLoadout, "flameWave"), false);
+  assert.equal(isSkillEquipped(reassigned.character.skillLoadout, "basic"), true);
+  assert.deepEqual(normalizeSkillLoadout(["basic", "nova", "invalid", null, "ward"]), ["basic", "nova", null, null, "ward"]);
+  assert.deepEqual(normalizeSkillLoadout(null), ["basic", "nova", "dash", "ward", "flameWave"]);
 });
 
 test("map completion rewards guarantee two equipment items, one magic-or-better, and crafting materials", () => {
@@ -149,7 +163,7 @@ test("character calculations combine item base, implicit, and explicit modifiers
     }],
   } satisfies EquipmentItem;
   const profile = {
-    version: 9,
+    version: 10,
     character: characterProgress(10),
     inventory: createItemContainer("backpack"), stash: createStash(), equipped: { mainHand: weapon }, flaskBelt: [null, null, null, null, null], mapDevice: null,
   } satisfies PlayerProfile;
@@ -171,7 +185,7 @@ test("weapon-local APS is the base scaled by sourced increased attack speed", ()
     stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [], affixes: [],
   });
   const baseProfile = {
-    version: 9,
+    version: 10,
     character: characterProgress(),
     inventory: createItemContainer("backpack"), stash: createStash(), equipped: {}, flaskBelt: [null, null, null, null, null], mapDevice: null,
   } satisfies PlayerProfile;
@@ -271,7 +285,7 @@ test("equipment comparison resolves replacement deltas through the character sta
     implicitModifiers: [{ stat: "attackDamage", mode: "flat", value: 4, source: "implicit:new" }], affixes: [],
   } satisfies EquipmentItem;
   const profile = {
-    version: 9,
+    version: 10,
     character: characterProgress(10),
     inventory: createItemContainer("backpack"), stash: createStash(), equipped: { mainHand: equippedWeapon }, flaskBelt: [null, null, null, null, null], mapDevice: null,
   } satisfies PlayerProfile;
@@ -367,7 +381,7 @@ test("currency consumption removes quantities across actual inventory stacks", (
 test("new profiles contain map and currency items in the backpack", () => {
   const profile = createInitialProfile();
   const backpackItems = containerItems(profile.inventory);
-  assert.equal(profile.version, 9);
+  assert.equal(profile.version, 10);
   assert.deepEqual(profile.stash.tabs.map((tab) => tab.name), ["General", "Gear", "Maps", "Materials"]);
   assert.equal(profile.mapDevice, null);
   assert.equal(backpackItems.filter(isMapItem).length, 3);

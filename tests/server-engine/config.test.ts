@@ -25,10 +25,10 @@ test("production config supports container PORT and explicit public origins", ()
     PORT: "8080",
     DATABASE_URL: "postgresql://postgres:secret@example.supabase.co:5432/postgres?sslmode=require",
     CRAFTY_AUTH_SECRET: "a-secure-production-secret-with-32-characters",
-    ALLOWED_ORIGINS: "https://crafty.example, https://preview.crafty.example/",
+    ALLOWED_ORIGINS: "https://forge-of-echoes.example, https://preview.forge-of-echoes.example/",
   });
 
   assert.equal(config.host, "0.0.0.0");
   assert.equal(config.port, 8080);
-  assert.deepEqual(config.allowedOrigins, ["https://crafty.example", "https://preview.crafty.example"]);
+  assert.deepEqual(config.allowedOrigins, ["https://forge-of-echoes.example", "https://preview.forge-of-echoes.example"]);
 });

@@ -1,8 +1,8 @@
-# Crafty — Game Design Foundation
+# Forge of Echoes — Game Design Foundation
 
 ## High concept
 
-**Crafty is a browser-based action RPG where players fight escalating monster waves, extract valuable item bases and materials, and deliberately craft the gear that defines their build.**
+**Forge of Echoes is a browser-based action RPG where players fight escalating monster waves, extract valuable item bases and materials, and deliberately craft the gear that defines their build.**
 
 The depth should approach classic loot-heavy ARPGs, but the game should be readable in short sessions and should not require players to sift through hundreds of meaningless drops.
 
@@ -391,7 +391,7 @@ A map base should be more than a background image. Its implicit changes the run'
 
 Examples:
 
-- **Ashen Crucible:** fire and construct enemies; fire Essences are more common.
+- **Ashen Forge:** fire and construct enemies; fire Essences are more common.
 - **Drowned Archive:** narrow lanes and rising hazards; jewelry bases gain bonus drop weight.
 - **Grave Orchard:** corpses periodically awaken; minion and void affixes are easier to find.
 - **Iron Coliseum:** smaller arena and aggressive spawns; armor bases drop with additional Stability.

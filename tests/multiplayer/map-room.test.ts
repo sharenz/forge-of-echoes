@@ -159,6 +159,23 @@ test("four players fight the same authoritative monsters and damage cannot be fo
     }));
     const world = (authoritativeRoom as unknown as { world: World }).world;
 
+    const loadoutProfile = await repository.loadProfile(identities[0].characterId);
+    assert.ok(loadoutProfile);
+    await new ProfileCommandService(repository).execute(identities[0].characterId, loadoutProfile.revision, {
+      type: "set_skill_slot", slot: 3, skill: null,
+    });
+    let refreshedLoadout = false;
+    let unequippedSkillRejected = false;
+    clients[0].onMessage(SERVER_MESSAGES.profileUpdated, () => { refreshedLoadout = true; });
+    clients[0].onMessage(SERVER_MESSAGES.rejected, (message: RejectedCommandMessage) => {
+      if (message.command === CLIENT_MESSAGES.attack && message.reason === "unauthorized") unequippedSkillRejected = true;
+    });
+    clients[0].send(CLIENT_MESSAGES.refreshProfile, {});
+    await waitFor(() => refreshedLoadout);
+    clients[0].send(CLIENT_MESSAGES.attack, { sequence: 1, skill: "ward" });
+    await waitFor(() => unequippedSkillRejected);
+    assert.equal(authoritativeRoom.state.players.get(identities[0].characterId)!.lastProcessedAttack, 0, "unequipped skills never enter the simulation");
+
     const flaskPlayer = authoritativeRoom.state.players.get(identities[0].characterId)!;
     const flaskWorldPlayer = world.players.get(flaskPlayer.worldIndex)!;
     flaskWorldPlayer.life -= 30;

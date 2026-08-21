@@ -3,7 +3,8 @@ import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { Pool, type PoolClient } from "pg";
 import { isMerchantId, type MerchantId } from "../../app/game/config/merchants";
-import type { ActiveSkillId, CharacterClassId, CharacterEquipmentSlot, InventoryItem, PlayerProfile, StashTab } from "../../app/game/domain";
+import type { ActiveSkillId, CharacterClassId, CharacterEquipmentSlot, InventoryItem, PlayerProfile, SkillLoadout, StashTab } from "../../app/game/domain";
+import { normalizeSkillLoadout } from "../../app/game/skill-loadout";
 import { createAuthoritativeProfile } from "../domain/profile";
 import { AccountNotFoundError, CharacterNameTakenError, CharacterNotFoundError, ItemLockedError, ProfileRevisionConflict } from "./errors";
 import type { AccountIdentity, AuthoritativeProfile, CharacterRosterEntry, CharacterSummary, CreatePlayerInput, PlayerIdentity, PlayerRepository } from "./PlayerRepository";
@@ -32,6 +33,7 @@ interface CharacterProfileRow extends PlayerRow {
   allocated_intelligence: number;
   unspent_attribute_points: number;
   skill_levels: Record<ActiveSkillId, number>;
+  skill_loadout: SkillLoadout;
   unspent_skill_points: number;
   maps_completed: number;
   highest_wave: number;
@@ -274,7 +276,7 @@ export class PostgresPlayerRepository implements PlayerRepository {
     const result = await client.query<CharacterProfileRow>(
       `SELECT account_id, id AS character_id, name AS character_name, class_id,
               level, experience, allocated_strength, allocated_dexterity, allocated_intelligence,
-              unspent_attribute_points, skill_levels, unspent_skill_points,
+              unspent_attribute_points, skill_levels, skill_loadout, unspent_skill_points,
               maps_completed, highest_wave, active_stash_tab_id, profile_version, profile_initialized
        FROM characters WHERE id = $1${lock ? " FOR UPDATE" : ""}`,
       [characterId],
@@ -324,7 +326,7 @@ export class PostgresPlayerRepository implements PlayerRepository {
       ? character.active_stash_tab_id
       : tabs[0]?.id ?? "stash-tab-1";
     const profile: PlayerProfile = {
-      version: 9,
+      version: 10,
       character: {
         name: character.character_name,
         classId: character.class_id,
@@ -337,6 +339,7 @@ export class PostgresPlayerRepository implements PlayerRepository {
         },
         unspentAttributePoints: character.unspent_attribute_points,
         skillLevels: character.skill_levels,
+        skillLoadout: normalizeSkillLoadout(character.skill_loadout),
         unspentSkillPoints: character.unspent_skill_points,
         mapsCompleted: character.maps_completed,
         highestWave: character.highest_wave,
@@ -494,13 +497,13 @@ export class PostgresPlayerRepository implements PlayerRepository {
       `UPDATE characters SET
          level = $2, experience = $3, allocated_strength = $4, allocated_dexterity = $5,
          allocated_intelligence = $6, unspent_attribute_points = $7, skill_levels = $8,
-         unspent_skill_points = $9, maps_completed = $10, highest_wave = $11,
-         active_stash_tab_id = $12, profile_version = $13, profile_initialized = true, updated_at = now()
-       WHERE id = $1${expectedRevision === undefined ? "" : " AND profile_initialized = true AND profile_version = $14"}
+         skill_loadout = $9, unspent_skill_points = $10, maps_completed = $11, highest_wave = $12,
+         active_stash_tab_id = $13, profile_version = $14, profile_initialized = true, updated_at = now()
+       WHERE id = $1${expectedRevision === undefined ? "" : " AND profile_initialized = true AND profile_version = $15"}
        RETURNING id`,
       [characterId, progress.level, progress.xp, progress.allocatedAttributes.strength,
         progress.allocatedAttributes.dexterity, progress.allocatedAttributes.intelligence,
-        progress.unspentAttributePoints, progress.skillLevels, progress.unspentSkillPoints,
+        progress.unspentAttributePoints, progress.skillLevels, JSON.stringify(progress.skillLoadout), progress.unspentSkillPoints,
         progress.mapsCompleted, progress.highestWave, profile.stash.activeTabId, revision,
         ...(expectedRevision === undefined ? [] : [expectedRevision])],
     );

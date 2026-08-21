@@ -8,24 +8,25 @@ async function render() {
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
-    new Request("https://crafty.example/", { headers: { accept: "text/html", host: "crafty.example" } }),
+    new Request("https://forge-of-echoes.example/", { headers: { accept: "text/html", host: "forge-of-echoes.example" } }),
     { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
     { waitUntil() {}, passThroughOnException() {} },
   );
 }
 
-test("server-renders the Crafty application shell and production metadata", async () => {
+test("server-renders the Forge of Echoes application shell and production metadata", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Crafty — The Crucible<\/title>/i);
-  assert.match(html, /Enter the Crucible/);
-  assert.match(html, /Authoritative online realm/);
-  assert.match(html, /characters and progression live authoritatively in PostgreSQL/i);
+  assert.match(html, /<title>Forge of Echoes<\/title>/i);
+  assert.match(html, /Forge of Echoes/);
+  assert.match(html, /The Ashen Realm/);
+  assert.match(html, /choose the hero who will brave the rifts/i);
+  assert.doesNotMatch(html, /PostgreSQL|server-authoritative|stored locally/i);
   assert.match(html, /craft maps and rare equipment/i);
-  assert.match(html, /property="og:image" content="https:\/\/crafty\.example\/og\.png"/);
+  assert.match(html, /property="og:image" content="https:\/\/forge-of-echoes\.example\/og-forge-of-echoes\.png"/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -133,7 +134,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /Back to characters/);
   assert.match(world, /class PhaserRuntime/);
   assert.match(world, /consumeHeldSkillKeys\(\)/);
-  assert.match(world, /this\.keys\.flameWave\.isDown/);
+  assert.match(world, /this\.options\.skillLoadout\.forEach/);
+  assert.match(world, /this\.keys\?\.\[`skillSlot\$\{index\}`\]\?\.isDown/);
   assert.doesNotMatch(world, /JustDown\(this\.keys\.(?:nova|dash|ward|flameWave)\)/);
   assert.match(world, /pixelArt: true/);
   assert.doesNotMatch(world, /spatialBuckets/);
@@ -265,10 +267,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(phaserWorld, /hud-section-label/);
   assert.match(phaserWorld, /world-flask-slot-target/);
   assert.match(phaserWorld, /onFlaskLoad\?\.\(itemId, index\)/);
-  assert.match(phaserWorld, /wardCooldown\.toFixed\(1\)/);
-  assert.match(phaserWorld, /useSkill\("ward"\)/);
-  assert.match(phaserWorld, /flameWaveCooldown\.toFixed\(1\)/);
-  assert.match(phaserWorld, /useSkill\("flameWave"\)/);
+  assert.match(phaserWorld, /cooldown: hud\?\.wardCooldown/);
+  assert.match(phaserWorld, /cooldown: hud\?\.flameWaveCooldown/);
+  assert.match(phaserWorld, /view\.cooldown\.toFixed\(1\)/);
+  assert.match(phaserWorld, /useSkill\(skill\)/);
   assert.doesNotMatch(shell, /hideout-prompt/);
   assert.match(skillConfig, /maxCharges: 3/);
   assert.match(world, /riftCharges \+= 1/);
@@ -386,12 +388,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.doesNotMatch(domain, /Bargain/);
   assert.match(domain, /interface MapItem/);
   assert.match(domain, /interface StashState/);
-  assert.match(domain, /version: 9/);
+  assert.match(domain, /version: 10/);
   assert.match(domain, /interface EquipmentItem/);
   assert.doesNotMatch(profile, /applyRunResult|grantCharacterExperience/);
   assert.match(authoritativeMapRoom, /grantCharacterExperience/);
-  assert.doesNotMatch(profile, /localStorage|sessionStorage|crafty\.profile/);
-  assert.doesNotMatch(shell, /saveProfile|crafty\.profile/);
+  assert.doesNotMatch(profile, /localStorage|sessionStorage/);
+  assert.doesNotMatch(shell, /saveProfile/);
   assert.match(shell, /multiplayer\.createCharacter/);
   assert.match(shell, /authoritativeProfile/);
   assert.match(stats, /sum\(increased\)|mode === "increased"/);
@@ -436,7 +438,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);
   assert.match(gameDesign, /The four map axes/);
-  await access(new URL("../public/og.png", import.meta.url));
+  await access(new URL("../public/og-forge-of-echoes.png", import.meta.url));
   await access(new URL("../public/music/amber-hollow.mp3", import.meta.url));
   await access(new URL("../public/music/amber-hollow-watch.mp3", import.meta.url));
   await access(new URL("../public/music/hunted-wilds.mp3", import.meta.url));
@@ -464,10 +466,10 @@ test("stores only the remembered player name in browser storage", async () => {
     readFile(new URL("../app/multiplayer/useMultiplayerHideout.ts", import.meta.url), "utf8"),
     readFile(new URL("../server/http/createApiRouter.ts", import.meta.url), "utf8"),
   ]);
-  for (const source of [client, profile]) assert.doesNotMatch(source, /localStorage|sessionStorage|crafty\.profile/);
+  for (const source of [client, profile]) assert.doesNotMatch(source, /localStorage|sessionStorage/);
   assert.match(shell, /localStorage/);
-  assert.match(shell, /crafty\.playerName/);
-  assert.doesNotMatch(shell, /sessionStorage|crafty\.profile/);
+  assert.match(shell, /forgeOfEchoes\.playerName/);
+  assert.doesNotMatch(shell, /sessionStorage/);
   assert.match(shell, /authoritativeProfile/);
   assert.match(shell, /connectAccount/);
   assert.match(client, /\/api\/accounts\/session/);

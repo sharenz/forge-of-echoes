@@ -1,4 +1,4 @@
-# Crafty server architecture
+# Forge of Echoes server architecture
 
 ## Authority boundary
 

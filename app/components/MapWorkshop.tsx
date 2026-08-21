@@ -31,7 +31,7 @@ export function MapWorkshop({ profile, slottedMap, activeMap, portalsRemaining, 
     : null;
   const displayedMap = slottedMap ?? activeMap;
   const mapStats = displayedMap ? mapStatSummary(displayedMap) : null;
-  const readItemId = (event: React.DragEvent) => event.dataTransfer.getData("application/x-crafty-item") || event.dataTransfer.getData("text/plain") || dragState?.itemId || "";
+  const readItemId = (event: React.DragEvent) => event.dataTransfer.getData("application/x-forge-of-echoes-item") || event.dataTransfer.getData("text/plain") || dragState?.itemId || "";
   const slotDroppedMap = (event: React.DragEvent) => {
     event.preventDefault();
     const itemId = readItemId(event);

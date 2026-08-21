@@ -90,6 +90,6 @@ sudo -u crafty -H docker info >/dev/null
 touch /srv/crafty/.setup-complete
 chown crafty:crafty /srv/crafty/.setup-complete
 
-echo "Crafty VM setup complete"
+echo "Forge of Echoes VM setup complete"
 echo "Application: https://${app_domain}"
 echo "Game server: https://${game_domain}/healthz"
