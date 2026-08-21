@@ -2,9 +2,9 @@ import { randomInt, randomUUID } from "node:crypto";
 import type { MapItem } from "../../app/game/domain";
 import type { MapTicketClaims } from "../../multiplayer/protocol";
 import { signMapTicket } from "../auth/map-ticket";
-import { ProfileRevisionConflict } from "../persistence/errors";
 import type { AuthoritativeProfile, PlayerRepository } from "../persistence/PlayerRepository";
-import type { PartyService } from "./PartyService";
+import { ExpeditionError, type ExpeditionCoordinator } from "../coordination/ExpeditionCoordinator";
+import type { PartyCoordinator } from "../coordination/PartyCoordinator";
 
 export class MapOpenError extends Error {
   constructor(public readonly code: "not_found" | "not_leader" | "no_map" | "revision_conflict") {
@@ -22,25 +22,19 @@ export interface OpenedAuthoritativeMap {
 export class MapService {
   constructor(
     private readonly players: PlayerRepository,
-    private readonly parties: PartyService,
+    private readonly parties: PartyCoordinator,
+    private readonly expeditions: ExpeditionCoordinator,
     private readonly authSecret: string,
   ) {}
 
   async open(characterId: string, expectedRevision: number): Promise<OpenedAuthoritativeMap> {
-    const party = this.parties.getForMember(characterId) ?? this.parties.createSolo(characterId);
+    const party = await this.parties.getForMember(characterId) ?? await this.parties.createSolo(characterId);
     if (party.leaderCharacterId !== characterId) throw new MapOpenError("not_leader");
     const current = await this.players.loadProfile(characterId);
     if (!current) throw new MapOpenError("not_found");
     if (current.revision !== expectedRevision) throw new MapOpenError("revision_conflict");
     const map = current.profile.mapDevice;
     if (!map) throw new MapOpenError("no_map");
-    let authoritativeProfile: AuthoritativeProfile;
-    try {
-      authoritativeProfile = await this.players.saveProfile(characterId, expectedRevision, { ...current.profile, mapDevice: null });
-    } catch (error) {
-      if (error instanceof ProfileRevisionConflict) throw new MapOpenError("revision_conflict");
-      throw error;
-    }
     const ticketClaims: MapTicketClaims = {
       ticketId: randomUUID(),
       mapItemId: map.id,
@@ -51,12 +45,27 @@ export class MapService {
       expiresAt: Date.now() + 10 * 60_000,
     };
     const mapTicket = signMapTicket(ticketClaims, this.authSecret);
-    this.parties.activateMap(characterId, { ticketId: ticketClaims.ticketId, mapTicket, map, expiresAt: ticketClaims.expiresAt });
-    return {
-      map,
-      ticketClaims,
-      mapTicket,
-      authoritativeProfile,
-    };
+    try {
+      const opened = await this.expeditions.open({
+        leaderCharacterId: characterId,
+        partyId: party.id,
+        partyRevision: party.revision,
+        expectedProfileRevision: expectedRevision,
+        map,
+        ticketClaims,
+        mapTicket,
+      });
+      return { map: opened.map, ticketClaims: opened.ticketClaims, mapTicket: opened.mapTicket, authoritativeProfile: opened.authoritativeProfile };
+    } catch (error) {
+      if (error instanceof ExpeditionError) {
+        if (error.code === "not_leader") throw new MapOpenError("not_leader");
+        if (error.code === "no_map") throw new MapOpenError("no_map");
+        if (error.code === "profile_revision_conflict" || error.code === "party_revision_conflict") {
+          throw new MapOpenError("revision_conflict");
+        }
+        if (error.code === "not_found") throw new MapOpenError("not_found");
+      }
+      throw error;
+    }
   }
 }

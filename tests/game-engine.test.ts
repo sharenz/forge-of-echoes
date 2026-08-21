@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { MINIMUM_ACTION_TIME_SECONDS, resolveAnimationPlaybackRate, resolveAttackTimeSeconds } from "../app/game/action-timing";
 import { AFFIX_DEFINITIONS_BY_ID } from "../app/game/config/affixes";
 import { ARENA_RULES } from "../app/game/config/arena";
 import { SKILL_AUDIO } from "../app/game/config/audio";
@@ -37,8 +38,11 @@ import { activeStashTab, addStashTab, createStash, insertItemsIntoStash, renameS
 import { allocateAttributePoint, allocateSkillPoint, grantCharacterExperience, grantCharacterProgressExperience, monsterExperienceReward } from "../app/game/progression";
 import { resolveSkillDefinition } from "../app/game/skills";
 import { MAP_COMPLETION_REWARDS } from "../app/game/config/rewards";
+import { MULTIPLAYER_LIMITS } from "../multiplayer/protocol";
+import { MULTIPLAYER_COMBAT } from "../multiplayer/combat";
 import { createMapCompletionRewards } from "../app/game/rewards";
 import { applyBackpackCurrency, canApplyCraftingCurrency, craftingTargetError } from "../app/game/crafting";
+import { isWorldPointerOrigin } from "../app/game2d/input-boundary";
 
 const source = "test";
 const modifier = (mode: StatModifier["mode"], value: number): StatModifier => ({ stat: "maxLife", mode, value, source });
@@ -54,6 +58,15 @@ const characterProgress = (level = 1): PlayerProfile["character"] => ({
 const profileWithEmptyFlaskBelt = (): PlayerProfile => ({
   ...createInitialProfile(),
   flaskBelt: [null, null, null, null, null],
+});
+
+test("world attacks accept only empty-canvas pointer origins", () => {
+  const canvas = new EventTarget();
+  const interfaceButton = new EventTarget();
+  assert.equal(isWorldPointerOrigin(canvas, canvas, 0), true);
+  assert.equal(isWorldPointerOrigin(interfaceButton, canvas, 0), false);
+  assert.equal(isWorldPointerOrigin(canvas, canvas, 1), false);
+  assert.equal(isWorldPointerOrigin(null, canvas, 0), false);
 });
 
 test("map completion rewards guarantee two equipment items, one magic-or-better, and crafting materials", () => {
@@ -173,6 +186,77 @@ test("weapon-local APS is the base scaled by sourced increased attack speed", ()
   assert.ok(spear.stats.attackSpeed > cleaver.stats.attackSpeed);
   assert.ok(spear.breakdown.attackSpeed.contributions.some((entry) => entry.source === "weapon:hunter-spear:attacks-per-second"));
   assert.ok(spear.breakdown.attackSpeed.contributions.some((entry) => entry.source === "attribute:dexterity:attack-speed"));
+});
+
+test("cast speed resolves from Intelligence and item modifiers into cast time and animation rate", () => {
+  const initial = createInitialProfile("Sorceress", "sorceress");
+  const profile = { ...initial, equipped: {} };
+  const base = calculateCharacterStats(profile);
+  assert.equal(base.breakdown.castSpeed.flat, 1);
+  assert.equal(base.breakdown.castSpeed.increased, 9);
+  assert.equal(base.stats.castSpeed, 1.09);
+  assert.ok(base.breakdown.castSpeed.contributions.some((entry) => entry.source === "attribute:intelligence:cast-speed"));
+
+  const amulet = {
+    kind: "equipment", id: "cast-amulet", baseId: "cinder-pendant", baseName: "Cinder Pendant", slot: "amulet", rarity: "magic", itemLevel: 1,
+    stability: 8, maxStability: 8, implicit: "", baseStats: [], implicitModifiers: [],
+    affixes: [{
+      id: "cast-affix", definitionId: "of-incantation", name: "of Incantation", tag: "speed", tier: 1,
+      requiredItemLevel: 1, group: "cast-speed",
+      rolls: [{ stat: "castSpeed", mode: "increased", value: 100, min: 100, max: 100, source: "affix:cast-speed" }],
+    }],
+  } satisfies EquipmentItem;
+  const equipped = calculateCharacterStats({ ...profile, equipped: { ...profile.equipped, amulet } });
+  assert.equal(equipped.stats.castSpeed, 2.09);
+
+  const nova = resolveSkillDefinition(ACTIVE_SKILLS.nova, 1, 1, equipped.stats.castSpeed);
+  assert.ok(Math.abs(nova.castTime - 0.75 / 2.09) < 0.0001);
+  const playbackRate = resolveAnimationPlaybackRate(8, 12, { durationSeconds: nova.castTime });
+  assert.ok(playbackRate > 1.8, "the cast animation accelerates to finish in the resolved cast time");
+  assert.equal(buildArenaBalance({ ...profile, equipped: { ...profile.equipped, amulet } }).castSpeed, 2.09);
+  assert.equal(AFFIX_DEFINITIONS_BY_ID["of-incantation"].group, "cast-speed");
+});
+
+test("attack animation timing uses the same duration as attacks per second", () => {
+  const attackTime = resolveAttackTimeSeconds(2.5);
+  assert.equal(attackTime, 0.4);
+  assert.equal(resolveAnimationPlaybackRate(8, 14, { durationSeconds: attackTime }), (8 / 14) / 0.4);
+  assert.equal(resolveAttackTimeSeconds(10_000), MINIMUM_ACTION_TIME_SECONDS, "client attacks cannot outpace an authoritative simulation tick");
+});
+
+test("transport rate limit accommodates simultaneous movement and held actions", () => {
+  const movementMessagesPerSecond = 1 / 0.08;
+  const heldActionsPerSecond = 2 / MINIMUM_ACTION_TIME_SECONDS;
+  const expectedPeakInputRate = movementMessagesPerSecond + heldActionsPerSecond;
+
+  assert.ok(expectedPeakInputRate > 30, "the old transport ceiling rejected valid gameplay");
+  assert.ok(
+    MULTIPLAYER_LIMITS.maximumClientMessagesPerSecond >= expectedPeakInputRate * 2,
+    "transport ceiling retains headroom for command bursts without becoming unbounded",
+  );
+  assert.ok(MULTIPLAYER_LIMITS.maximumClientMessagesPerSecond <= 200);
+});
+
+test("authoritative projectile budget covers maximum configured skill cadence", () => {
+  const nova = resolveSkillDefinition(ACTIVE_SKILLS.nova, 20, 0, 10_000);
+  const flameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, 20, 0, 10_000);
+  const activeBurstProjectiles = (range: number, cooldown: number, projectileCount: number) => (
+    Math.ceil((range / MULTIPLAYER_COMBAT.projectile.speed) / cooldown) * projectileCount
+  );
+  const activeBasicProjectiles = Math.ceil(
+    (MULTIPLAYER_COMBAT.projectile.basicRange / MULTIPLAYER_COMBAT.projectile.speed)
+      / MINIMUM_ACTION_TIME_SECONDS,
+  );
+  const maximumConfiguredActiveProjectiles = activeBasicProjectiles
+    + activeBurstProjectiles(MULTIPLAYER_COMBAT.projectile.novaRange, nova.cooldown, nova.projectileCount)
+    + activeBurstProjectiles(MULTIPLAYER_COMBAT.projectile.flameWaveRange, flameWave.cooldown, flameWave.projectileCount);
+
+  assert.ok(maximumConfiguredActiveProjectiles > 64, "the previous limit rejected valid Nova casts");
+  assert.ok(MULTIPLAYER_COMBAT.projectile.maximumActivePerPlayer >= maximumConfiguredActiveProjectiles);
+  assert.ok(
+    MULTIPLAYER_COMBAT.projectile.maximumRenderedPerClient < MULTIPLAYER_COMBAT.projectile.maximumActivePerPlayer,
+    "visual sampling stays bounded independently from authoritative simulation",
+  );
 });
 
 test("equipment comparison resolves replacement deltas through the character stat engine", () => {
@@ -324,6 +408,8 @@ test("active skills resolve their level, damage, cooldown, and hotkey configurat
   assert.equal(nova20.piercing, 4);
   assert.equal(nova20.damage?.effectiveness, 2.49);
   assert.equal(nova20.recharge, 0);
+  assert.equal(nova1.castTime, 0.75);
+  assert.equal(resolveSkillDefinition(ACTIVE_SKILLS.nova, 1, 1, 2).castTime, 0.375);
 
   const dash1 = resolveSkillDefinition(ACTIVE_SKILLS.dash, 1);
   const dash20 = resolveSkillDefinition(ACTIVE_SKILLS.dash, 20);
@@ -564,6 +650,18 @@ test("debug merchant is entitlement-only and its catalog is fixed configuration"
   assert.deepEqual(ring.item.affixes.flatMap((affix) => affix.rolls.map((roll) => [roll.stat, roll.mode, roll.value])), [
     ["attackSpeed", "increased", 10_000],
   ]);
+
+  const castRing = purchaseMerchantOffer(createInitialProfile(), DEBUG_MERCHANT_ID, "impossible-incantation-ring");
+  assert.ok(castRing?.item.kind === "equipment");
+  assert.equal(castRing.item.slot, "ring");
+  assert.equal(formatModifier(castRing.item.affixes[0].rolls[0]), "10000% increased cast speed");
+  const castProfile = {
+    ...castRing.profile,
+    equipped: { ...castRing.profile.equipped, ring1: castRing.item },
+  };
+  const castSpeedMultiplier = calculateCharacterStats(castProfile).stats.castSpeed;
+  assert.ok(castSpeedMultiplier > 100);
+  assert.equal(resolveSkillDefinition(ACTIVE_SKILLS.nova, 1, 1, castSpeedMultiplier).castTime, 0.05);
 
   const amulet = purchaseMerchantOffer(createInitialProfile(), DEBUG_MERCHANT_ID, "impossible-celerity-amulet");
   assert.ok(amulet?.item.kind === "equipment");

@@ -23,12 +23,12 @@ export class HideoutRoom extends PartyRoom<HideoutState> {
   state = new HideoutState();
   private readonly inputs = new Map<string, PlayerInput>();
 
-  onCreate(rawOptions: unknown): void {
+  async onCreate(rawOptions: unknown): Promise<void> {
     const options = joinHideoutOptionsSchema.safeParse(rawOptions);
     if (!options.success) throw new Error("A party is required to create a hideout room");
     const services = getServerServices();
     const session = verifySessionToken(options.data.token, services.authSecret);
-    const party = session ? services.parties.get(options.data.partyId) : null;
+    const party = session ? await services.parties.get(options.data.partyId) : null;
     if (!session || !party || !party.memberCharacterIds.includes(session.characterId)) throw new Error("Only a party member can create its hideout room");
     this.initializePartyRoom(services, party.id);
     this.state.partyId = party.id;
@@ -47,16 +47,16 @@ export class HideoutRoom extends PartyRoom<HideoutState> {
     this.setSimulationInterval((deltaMilliseconds) => this.simulate(deltaMilliseconds / 1000), 1000 / MULTIPLAYER_LIMITS.simulationHz);
   }
 
-  onAuth(_client: Client, rawOptions: unknown): SessionClaims | false {
+  async onAuth(_client: Client, rawOptions: unknown): Promise<SessionClaims | false> {
     const options = joinHideoutOptionsSchema.safeParse(rawOptions);
     if (!options.success) return false;
     const services = getServerServices();
     const session = verifySessionToken(options.data.token, services.authSecret);
-    if (!session || options.data.partyId !== this.partyId || !services.parties.isMember(this.partyId, session.characterId)) return false;
+    if (!session || options.data.partyId !== this.partyId || !await services.parties.isMember(this.partyId, session.characterId)) return false;
     return session;
   }
 
-  onJoin(client: Client, _options: unknown, claims: SessionClaims): void {
+  async onJoin(client: Client, _options: unknown, claims: SessionClaims): Promise<void> {
     let player = this.state.players.get(claims.characterId);
     if (!player) {
       player = new NetworkPlayer();
@@ -70,7 +70,7 @@ export class HideoutRoom extends PartyRoom<HideoutState> {
     }
     player.connected = true;
     this.inputs.set(claims.characterId, { x: 0, y: 0, sequence: 0 });
-    this.registerPartyClient(client, claims);
+    await this.registerPartyClient(client, claims);
   }
 
   async onLeave(client: Client, code: number): Promise<void> {

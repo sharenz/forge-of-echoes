@@ -36,6 +36,8 @@ export type StatContributionRule =
 
 /** Used only when no weapon is equipped or an obsolete save references an unknown base. */
 export const UNARMED_ATTACKS_PER_SECOND = 1.2;
+/** Prevents reduced cast speed from creating zero or negative action times. */
+export const MINIMUM_CAST_SPEED_MULTIPLIER = 0.1;
 /** Prevents zero/negative cooldowns from destabilizing input and simulation loops. */
 export const MINIMUM_SKILL_COOLDOWN_MULTIPLIER = 0.01;
 
@@ -62,6 +64,9 @@ export const DERIVED_STAT_RULES = [
   { kind: "perAttribute", stat: "attackDamage", mode: "flat", attribute: "intelligence", valuePerUnit: 0.08, source: "attribute:intelligence:attack-damage", label: "+0.08 attack damage per Intelligence" },
 
   { kind: "perAttribute", stat: "attackSpeed", mode: "increased", attribute: "dexterity", valuePerUnit: 0.25, source: "attribute:dexterity:attack-speed", label: "0.25% increased attack speed per Dexterity" },
+
+  { kind: "constant", stat: "castSpeed", mode: "flat", value: 1, source: "character:base-cast-speed", label: "Base cast speed" },
+  { kind: "perAttribute", stat: "castSpeed", mode: "increased", attribute: "intelligence", valuePerUnit: 0.25, source: "attribute:intelligence:cast-speed", label: "0.25% increased cast speed per Intelligence" },
 
   { kind: "constant", stat: "focusRegen", mode: "flat", value: 8, source: "character:base-focus-regen", label: "Base Focus recovery rate" },
 

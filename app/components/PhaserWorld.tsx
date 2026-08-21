@@ -216,10 +216,11 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
   }, [merchantIdsKey, mode, multiplayer, runtimeClassId]);
 
   const cooldownMultiplier = characterStats?.skillCooldown ?? 1;
-  const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel, cooldownMultiplier);
-  const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel, cooldownMultiplier);
-  const resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, wardLevel, cooldownMultiplier);
-  const resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, flameWaveLevel, cooldownMultiplier);
+  const castSpeedMultiplier = characterStats?.castSpeed ?? 1;
+  const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel, cooldownMultiplier, castSpeedMultiplier);
+  const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel, cooldownMultiplier, castSpeedMultiplier);
+  const resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, wardLevel, cooldownMultiplier, castSpeedMultiplier);
+  const resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, flameWaveLevel, cooldownMultiplier, castSpeedMultiplier);
   const novaReady = Boolean(hud && hud.novaCooldown <= 0.05 && hud.focus >= resolvedNova.focusCost);
   const riftReady = Boolean(hud && hud.riftCharges > 0 && hud.focus >= resolvedDash.focusCost);
   const wardReady = Boolean(hud && hud.wardCooldown <= 0.05 && hud.focus >= resolvedWard.focusCost);
@@ -245,6 +246,12 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
   return (
     <main
       className={`pixel-shell mode-${mode} ${paused ? "world-input-paused" : ""} ${groundDropReady ? "world-ground-drop-ready" : ""}`}
+      onPointerDownCapture={(event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest("button, input, textarea, select, [role='button'], .world-panel")) {
+          runtimeRef.current?.cancelCombatInput();
+        }
+      }}
       onDragOver={(event) => {
         if (!onItemDropToGround || event.defaultPrevented) return;
         const target = event.target instanceof Element ? event.target : null;
@@ -344,7 +351,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
                   <button type="button" className="action-slot lance-slot" disabled={mode !== "arena"} data-tooltip={`${BASIC_ATTACK.name} · Basic fire attack`} onClick={() => runtimeRef.current?.useSkill("basic")}>
                     <span className="skill-icon"><i /></span><kbd>{BASIC_ATTACK.key}</kbd>
                   </button>
-                  <button type="button" className="action-slot nova-slot" disabled={mode !== "arena" || !novaReady} data-tooltip={`${resolvedNova.name} · Level ${resolvedNova.level}`} onClick={() => runtimeRef.current?.useSkill("nova")}>
+                  <button type="button" className="action-slot nova-slot" disabled={mode !== "arena" || !novaReady} data-tooltip={`${resolvedNova.name} · Level ${resolvedNova.level} · ${resolvedNova.castTime.toFixed(2)}s cast`} onClick={() => runtimeRef.current?.useSkill("nova")}>
                     <span className="skill-cooldown" style={{ height: `${novaProgress}%` }} />
                     <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.nova.key}</kbd>
                     {hud && hud.novaCooldown > 0.05 && <strong>{hud.novaCooldown.toFixed(1)}</strong>}
@@ -354,12 +361,12 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
                     <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.dash.key}</kbd>
                     {hud && <span className="slot-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} charges`}>{hud.riftCharges}</span>}
                   </button>
-                  <button type="button" className={`action-slot ward-slot ${hud && hud.wardRemaining > 0 ? "is-active" : ""}`} disabled={mode !== "arena" || !wardReady} data-tooltip={`${resolvedWard.name} · Level ${resolvedWard.level} · ${Math.round(resolvedWard.damageReduction)}% less damage for ${resolvedWard.duration.toFixed(1)}s`} onClick={() => runtimeRef.current?.useSkill("ward")}>
+                  <button type="button" className={`action-slot ward-slot ${hud && hud.wardRemaining > 0 ? "is-active" : ""}`} disabled={mode !== "arena" || !wardReady} data-tooltip={`${resolvedWard.name} · Level ${resolvedWard.level} · ${resolvedWard.castTime.toFixed(2)}s cast · ${Math.round(resolvedWard.damageReduction)}% less damage for ${resolvedWard.duration.toFixed(1)}s`} onClick={() => runtimeRef.current?.useSkill("ward")}>
                     <span className="skill-cooldown" style={{ height: `${wardProgress}%` }} />
                     <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.ward.key}</kbd>
                     {hud && hud.wardCooldown > 0.05 && <strong>{hud.wardCooldown.toFixed(1)}</strong>}
                   </button>
-                  <button type="button" className="action-slot flame-wave-slot" disabled={mode !== "arena" || !flameWaveReady} data-tooltip={`${resolvedFlameWave.name} · Level ${resolvedFlameWave.level} · ${resolvedFlameWave.projectileCount} piercing projectiles`} onClick={() => runtimeRef.current?.useSkill("flameWave")}>
+                  <button type="button" className="action-slot flame-wave-slot" disabled={mode !== "arena" || !flameWaveReady} data-tooltip={`${resolvedFlameWave.name} · Level ${resolvedFlameWave.level} · ${resolvedFlameWave.castTime.toFixed(2)}s cast · ${resolvedFlameWave.projectileCount} piercing projectiles`} onClick={() => runtimeRef.current?.useSkill("flameWave")}>
                     <span className="skill-cooldown" style={{ height: `${flameWaveProgress}%` }} />
                     <span className="skill-icon"><i /></span><kbd>{ACTIVE_SKILLS.flameWave.key}</kbd>
                     {hud && hud.flameWaveCooldown > 0.05 && <strong>{hud.flameWaveCooldown.toFixed(1)}</strong>}
@@ -396,6 +403,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
               <CharacterStatRow stat="maxFocus" label="Focus" hint="Mana" value={`${mode === "arena" && hud ? `${Math.floor(hud.focus)} / ` : ""}${Math.round(characterStats.maxFocus)}`} resolution={characterStatBreakdown?.maxFocus} />
               <CharacterStatRow stat="attackDamage" label="Damage" value={characterStats.attackDamage.toFixed(1)} resolution={characterStatBreakdown?.attackDamage} />
               <CharacterStatRow stat="attackSpeed" label="Attack speed" value={`${characterStats.attackSpeed.toFixed(2)}/s`} resolution={characterStatBreakdown?.attackSpeed} />
+              <CharacterStatRow stat="castSpeed" label="Cast speed" value={`${(characterStats.castSpeed * 100).toFixed(0)}%`} resolution={characterStatBreakdown?.castSpeed} />
               <CharacterStatRow stat="focusRegen" label="Focus regen" hint="Mana per second" value={`${characterStats.focusRegen.toFixed(1)}/s`} resolution={characterStatBreakdown?.focusRegen} />
               <CharacterStatRow stat="skillCooldown" label="Skill cooldown" value={`${(characterStats.skillCooldown * 100).toFixed(0)}%`} resolution={characterStatBreakdown?.skillCooldown} />
               <CharacterStatRow stat="armor" label="Armor" value={`${Math.round(characterStats.armor)}`} resolution={characterStatBreakdown?.armor} />

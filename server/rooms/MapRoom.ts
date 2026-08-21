@@ -21,6 +21,7 @@ import {
 } from "../../multiplayer/protocol";
 import { encodeWorldEvents } from "../../multiplayer/wire/events";
 import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, isArenaCleared, resolveArenaFocusRegen, rollHitDamage, shouldActivateFinalWaveRage, shouldSpawnNextWave, type ArenaBalance } from "../../app/game/combat";
+import { resolveAttackTimeSeconds } from "../../app/game/action-timing";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../../app/game/config/monsters";
 import { MAP_COMPLETION_REWARDS } from "../../app/game/config/rewards";
 import type { DamageType, InventoryItem } from "../../app/game/domain";
@@ -62,6 +63,7 @@ interface PlayerRuntime {
   worldPlayerIndex: number;
   movementSequence: number;
   nextBasicAttackAt: number;
+  nextCastAt: number;
   nextNovaAt: number;
   nextWardAt: number;
   nextFlameWaveAt: number;
@@ -107,12 +109,12 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     this.services = getServerServices();
     const ticket = verifyMapTicket(options.data.mapTicket, this.services.authSecret);
     if (!ticket) throw new Error("The map ticket is invalid or expired");
-    if (!this.services.mapAdmissions.claim(ticket.ticketId, ticket.expiresAt)) throw new Error("The map ticket has already created an instance");
+    if (!await this.services.expeditions.claimRoom(ticket.ticketId, this.roomId)) throw new Error("The map ticket has already created an instance");
     this.ticket = ticket;
     this.state.ticketId = ticket.ticketId;
     this.state.ownerCharacterId = ticket.ownerCharacterId;
     this.state.tier = ticket.tier;
-    const party = this.services.parties.getForMember(ticket.ownerCharacterId);
+    const party = await this.services.parties.getForMember(ticket.ownerCharacterId);
     const leaderProfile = await this.services.players.loadProfile(ticket.ownerCharacterId);
     const activeMap = party?.activeMap?.ticketId === ticket.ticketId ? party.activeMap.map : null;
     if (!party || !leaderProfile || !activeMap) throw new Error("The authoritative map profile is unavailable");
@@ -123,6 +125,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       width: MULTIPLAYER_COMBAT.world.width,
       height: MULTIPLAYER_COMBAT.world.height,
       fixedStepMilliseconds: 1_000 / MULTIPLAYER_LIMITS.simulationHz,
+      maximumProjectilesPerPlayer: MULTIPLAYER_COMBAT.projectile.maximumActivePerPlayer,
     }, {
       rng: new SeededRng(ticket.seed),
       onSlowTick: (duration, tickNumber) => console.warn(`[map-room:${this.roomId}] slow world tick ${tickNumber}: ${duration.toFixed(2)}ms`),
@@ -130,7 +133,6 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     // Content rolls intentionally use a second deterministic stream so adding
     // loot or encounter rolls cannot perturb combat simulation outcomes.
     this.contentRng = new SeededRng(ticket.seed ^ 0x9e37_79b9);
-    this.services.parties.attachMapRoom(ticket.ownerCharacterId, ticket.ticketId, this.roomId);
     this.spawnWave();
     this.onMessage(CLIENT_MESSAGES.movement, (client, raw) => this.parseMovement(client, raw));
     this.onMessage(CLIENT_MESSAGES.attack, (client, raw) => this.parseAttack(client, raw));
@@ -141,6 +143,9 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     this.onMessage(CLIENT_MESSAGES.prepareMapExit, (client, raw) => this.runAsyncCommand(client, CLIENT_MESSAGES.prepareMapExit, () => this.prepareMapExit(client, raw)));
     this.onMessage(CLIENT_MESSAGES.requestWorldSync, (client) => this.requestWorldSync(client));
     this.setSimulationInterval((delta) => this.simulate(delta), 1_000 / MULTIPLAYER_LIMITS.simulationHz);
+    this.clock.setInterval(() => {
+      void this.renewRoomLease();
+    }, 10_000);
     this.scheduleEmptyRoomExpiry(60_000);
   }
 
@@ -150,20 +155,31 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       console.error(`[map-room:${this.roomId}] dispose persistence failed\n${formatError(error)}`);
     })));
     await this.profileWrites.settled();
-    this.services.parties.clearMap(this.ticket.ownerCharacterId, this.ticket.ticketId);
+    // Expedition membership, portal use, and room ownership are durable. A
+    // dispose/restart must leave them recoverable after this room lease expires.
   }
 
-  onAuth(_client: Client, rawOptions: unknown): SessionClaims | false {
+  private async renewRoomLease(): Promise<void> {
+    try {
+      if (await this.services.expeditions.renewRoom(this.ticket.ticketId, this.roomId)) return;
+      console.error(`[map-room:${this.roomId}] lost expedition lease; stopping stale simulation`);
+      await this.disconnect(1012);
+    } catch (error) {
+      console.error(`[map-room:${this.roomId}] expedition lease renewal failed\n${formatError(error)}`);
+    }
+  }
+
+  async onAuth(_client: Client, rawOptions: unknown): Promise<SessionClaims | false> {
     const options = joinMapOptionsSchema.safeParse(rawOptions);
     if (!options.success) return false;
     const session = verifySessionToken(options.data.token, this.services.authSecret);
     const ticket = verifyMapTicket(options.data.mapTicket, this.services.authSecret);
     if (!session || !ticket || ticket.ticketId !== this.ticket.ticketId) return false;
     if (!ticket.allowedCharacterIds.includes(session.characterId)
-      || !this.services.parties.isMember(this.partyId, session.characterId)) return false;
+      || !await this.services.parties.isMember(this.partyId, session.characterId)) return false;
     // Replacing a stale socket / refreshing the page is not a new portal entry.
     if (this.state.players.has(session.characterId)) return session;
-    return this.services.parties.consumeMapPortal(session.characterId, ticket.ticketId, options.data.portalIndex) ? session : false;
+    return await this.services.expeditions.consumePortal(session.characterId, ticket.ticketId, options.data.portalIndex) ? session : false;
   }
 
   async onJoin(client: Client, _options: unknown, claims: SessionClaims): Promise<void> {
@@ -177,7 +193,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       const worldPlayer = this.world.players.get(existingPlayer.worldIndex);
       if (worldPlayer) worldPlayer.connected = true;
       this.replicators.set(claims.characterId, new MonsterReplicator(this.world));
-      this.registerPartyClient(client, claims);
+      await this.registerPartyClient(client, claims);
       this.sendAllDropPayloads(client);
       return;
     }
@@ -186,10 +202,10 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     const stats = calculateCharacterStats(authoritative.profile).stats;
     const skillLevels = authoritative.profile.character.skillLevels;
     const skills = {
-      nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova, stats.skillCooldown),
-      dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash, stats.skillCooldown),
-      ward: resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward, stats.skillCooldown),
-      flameWave: resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave, stats.skillCooldown),
+      nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova, stats.skillCooldown, stats.castSpeed),
+      dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash, stats.skillCooldown, stats.castSpeed),
+      ward: resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward, stats.skillCooldown, stats.castSpeed),
+      flameWave: resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave, stats.skillCooldown, stats.castSpeed),
     };
     const spawn = this.playerSpawn(this.state.players.size);
     const worldPlayer = this.world.addPlayer({
@@ -211,12 +227,15 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     player.y = spawn.y;
     player.life = player.maxLife = stats.maxLife;
     player.focus = player.maxFocus = stats.maxFocus;
+    player.attackSpeed = stats.attackSpeed;
+    player.castSpeed = stats.castSpeed;
     player.worldIndex = worldPlayer.index;
     this.state.players.set(claims.characterId, player);
     this.runtime.set(claims.characterId, {
       worldPlayerIndex: worldPlayer.index,
       movementSequence: 0,
       nextBasicAttackAt: 0,
+      nextCastAt: 0,
       nextNovaAt: 0,
       nextWardAt: 0,
       nextFlameWaveAt: 0,
@@ -224,14 +243,14 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       nextDashRechargeAt: 0,
       attackDamage: stats.attackDamage,
       focusRegen: resolveArenaFocusRegen(stats.focusRegen, this.arenaBalance.arenaModifiers).value,
-      basicAttackCooldownMilliseconds: 1_000 / Math.max(0.1, stats.attackSpeed),
+      basicAttackCooldownMilliseconds: resolveAttackTimeSeconds(stats.attackSpeed) * 1_000,
       skills,
       recoveries: [],
     });
     this.replicators.set(claims.characterId, new MonsterReplicator(this.world));
     this.persistedExperience.set(claims.characterId, 0);
     player.persistedExperience = 0;
-    this.registerPartyClient(client, claims);
+    await this.registerPartyClient(client, claims);
     this.sendAllDropPayloads(client);
   }
 
@@ -319,7 +338,15 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     const nextAt = command.skill === "nova" ? runtime.nextNovaAt
       : command.skill === "ward" ? runtime.nextWardAt
         : command.skill === "flameWave" ? runtime.nextFlameWaveAt : 0;
-    if (now < nextAt || worldPlayer.focus < skill.focusCost || (command.skill === "dash" && runtime.dashCharges <= 0)) {
+    const nextCastDeadline = skill.presentation.animation === "cast"
+      ? advanceCooldownDeadline(
+          now,
+          runtime.nextCastAt,
+          skill.castTime * 1_000,
+          1_000 / MULTIPLAYER_LIMITS.simulationHz,
+        )
+      : 0;
+    if (nextCastDeadline === null || now < nextAt || worldPlayer.focus < skill.focusCost || (command.skill === "dash" && runtime.dashCharges <= 0)) {
       return this.reject(client, CLIENT_MESSAGES.attack, "rate_limited");
     }
     const direction = command.direction ? normalizedDirection(command.direction) : null;
@@ -335,6 +362,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       player.lastProcessedAttack = command.sequence;
       worldPlayer.focus -= skill.focusCost;
       runtime.nextNovaAt = now + skill.cooldown * 1_000;
+      runtime.nextCastAt = nextCastDeadline;
       return;
     }
     if (command.skill === "dash") {
@@ -352,6 +380,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       player.lastProcessedAttack = command.sequence;
       worldPlayer.focus -= skill.focusCost;
       runtime.nextWardAt = now + skill.cooldown * 1_000;
+      runtime.nextCastAt = nextCastDeadline;
       this.world.enqueueInput({
         kind: "ward", playerIndex: runtime.worldPlayerIndex, sequence: command.sequence,
         durationSeconds: skill.duration, damageReduction: skill.damageReduction / 100, skillId: SKILL_CODE.ward,
@@ -369,6 +398,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     player.lastProcessedAttack = command.sequence;
     worldPlayer.focus -= skill.focusCost;
     runtime.nextFlameWaveAt = now + skill.cooldown * 1_000;
+    runtime.nextCastAt = nextCastDeadline;
   }
 
   private enqueueProjectileBurst(
@@ -804,14 +834,16 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     player.armor = stats.armor;
     player.evadeChance = stats.evadeChance / 100;
     player.moveSpeed = stats.moveSpeed / 45 * 34;
+    networkPlayer.attackSpeed = stats.attackSpeed;
+    networkPlayer.castSpeed = stats.castSpeed;
     runtime.attackDamage = stats.attackDamage;
     runtime.focusRegen = resolveArenaFocusRegen(stats.focusRegen, this.arenaBalance.arenaModifiers).value;
-    runtime.basicAttackCooldownMilliseconds = 1_000 / Math.max(0.1, stats.attackSpeed);
+    runtime.basicAttackCooldownMilliseconds = resolveAttackTimeSeconds(stats.attackSpeed) * 1_000;
     runtime.skills = {
-      nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, current.profile.character.skillLevels.nova, stats.skillCooldown),
-      dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, current.profile.character.skillLevels.dash, stats.skillCooldown),
-      ward: resolveSkillDefinition(ACTIVE_SKILLS.ward, current.profile.character.skillLevels.ward, stats.skillCooldown),
-      flameWave: resolveSkillDefinition(ACTIVE_SKILLS.flameWave, current.profile.character.skillLevels.flameWave, stats.skillCooldown),
+      nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, current.profile.character.skillLevels.nova, stats.skillCooldown, stats.castSpeed),
+      dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, current.profile.character.skillLevels.dash, stats.skillCooldown, stats.castSpeed),
+      ward: resolveSkillDefinition(ACTIVE_SKILLS.ward, current.profile.character.skillLevels.ward, stats.skillCooldown, stats.castSpeed),
+      flameWave: resolveSkillDefinition(ACTIVE_SKILLS.flameWave, current.profile.character.skillLevels.flameWave, stats.skillCooldown, stats.castSpeed),
     };
     runtime.dashCharges = Math.min(runtime.dashCharges, runtime.skills.dash.maxCharges);
     client.send(SERVER_MESSAGES.profileUpdated, current);

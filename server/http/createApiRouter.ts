@@ -24,7 +24,7 @@ import type { PlayerIdentity } from "../persistence/PlayerRepository";
 import { TradeError } from "../persistence/TradeRepository";
 import type { ServerServices } from "../services";
 import { MapOpenError, MapService } from "../services/MapService";
-import { PartyError, type PublicPartyListing } from "../services/PartyService";
+import { PartyError, type PublicPartyListing } from "../coordination/PartyCoordinator";
 import { ProfileCommandError, ProfileCommandService } from "../services/ProfileCommandService";
 
 class HttpError extends Error {
@@ -96,7 +96,7 @@ export function createApiRouter(services: ServerServices): express.Router {
   const playerSession = requireSession(services);
   const accountSession = requireAccount(services);
   const profileCommands = new ProfileCommandService(services.players);
-  const maps = new MapService(services.players, services.parties, services.authSecret);
+  const maps = new MapService(services.players, services.parties, services.expeditions, services.authSecret);
 
   router.get("/health", (_request, response) => {
     response.json({ ok: true, service: "crafty-game-server", maximumPlayersPerRoom: MULTIPLAYER_LIMITS.playersPerRoom });
@@ -149,18 +149,18 @@ export function createApiRouter(services: ServerServices): express.Router {
     response.json(await profileCommands.execute(session(request).characterId, input.revision, input.command));
   });
 
-  router.post("/parties", playerSession, (request, response) => {
-    response.status(201).json(services.parties.create(session(request).characterId));
+  router.post("/parties", playerSession, async (request, response) => {
+    response.status(201).json(await services.parties.create(session(request).characterId));
   });
 
-  router.post("/parties/solo", playerSession, (request, response) => {
-    response.status(201).json(services.parties.createSolo(session(request).characterId));
+  router.post("/parties/solo", playerSession, async (request, response) => {
+    response.status(201).json(await services.parties.createSolo(session(request).characterId));
   });
 
   router.get("/parties", playerSession, async (request, response) => {
     const activeSession = session(request);
     const listings: PublicPartyListing[] = [];
-    for (const party of services.parties.listPublic()) {
+    for (const party of await services.parties.listPublic()) {
       if (party.memberCharacterIds.includes(activeSession.characterId)) continue;
       const leader = await services.players.findCharacter(party.leaderCharacterId);
       if (!leader) continue;
@@ -182,19 +182,19 @@ export function createApiRouter(services: ServerServices): express.Router {
     response.json(listings);
   });
 
-  router.get("/parties/current", playerSession, (request, response) => {
-    const party = services.parties.getForMember(session(request).characterId);
+  router.get("/parties/current", playerSession, async (request, response) => {
+    const party = await services.parties.getForMember(session(request).characterId);
     if (!party) throw new HttpError(404, "party_not_found");
     response.json(party);
   });
 
-  router.post("/parties/join", playerSession, (request, response) => {
+  router.post("/parties/join", playerSession, async (request, response) => {
     const input = parseBody(joinPartyRequestSchema, request.body);
-    response.json(services.parties.join(session(request).characterId, input.partyId));
+    response.json(await services.parties.join(session(request).characterId, input.partyId));
   });
 
-  router.post("/parties/leave", playerSession, (request, response) => {
-    response.json({ party: services.parties.leave(session(request).characterId) });
+  router.post("/parties/leave", playerSession, async (request, response) => {
+    response.json({ party: await services.parties.leave(session(request).characterId) });
   });
 
   router.post("/maps/open", playerSession, async (request, response) => {

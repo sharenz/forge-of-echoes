@@ -19,12 +19,19 @@ export abstract class PartyRoom<TState extends object> extends Room<{ state: TSt
     this.maxClients = MULTIPLAYER_LIMITS.playersPerRoom + 1;
     this.maxMessagesPerSecond = MULTIPLAYER_LIMITS.maximumClientMessagesPerSecond;
     this.patchRate = 1_000 / MULTIPLAYER_LIMITS.statePatchHz;
+    this.clock.setInterval(() => {
+      void Promise.all([...this.activeClients.entries()].map(([characterId, client]) => (
+        this.services.parties.renewConnection(this.partyId, characterId, client.sessionId)
+      ))).catch((error) => {
+        console.error(`[${this.constructor.name}:${this.roomId}] presence lease renewal failed\n${formatError(error)}`);
+      });
+    }, Math.max(1_000, Math.floor(MULTIPLAYER_LIMITS.partyPresenceGraceMilliseconds / 3)));
   }
 
-  protected registerPartyClient(client: Client, claims: SessionClaims): Client | null {
+  protected async registerPartyClient(client: Client, claims: SessionClaims): Promise<Client | null> {
     const previous = this.activeClients.get(claims.characterId) ?? null;
     this.activeClients.set(claims.characterId, client);
-    this.services.parties.memberConnected(this.partyId, claims.characterId);
+    await this.services.parties.connect(this.partyId, claims.characterId, client.sessionId);
     if (previous && previous !== client) {
       const timer = setTimeout(() => previous.leave(4000, "Connection replaced by a newer session"), 0);
       timer.unref();
@@ -39,14 +46,14 @@ export abstract class PartyRoom<TState extends object> extends Room<{ state: TSt
     claims: SessionClaims,
     setConnected: (connected: boolean) => void,
   ): Promise<boolean> {
-    this.services.parties.memberDisconnected(this.partyId, claims.characterId);
+    await this.services.parties.disconnect(this.partyId, claims.characterId, client.sessionId);
     if (this.activeClients.get(claims.characterId) !== client) return false;
     setConnected(false);
     if (code !== 4000) {
       try {
         await this.allowReconnection(client, MULTIPLAYER_LIMITS.reconnectSeconds);
         if (this.activeClients.get(claims.characterId) !== client) return false;
-        this.services.parties.memberConnected(this.partyId, claims.characterId);
+        await this.services.parties.connect(this.partyId, claims.characterId, client.sessionId);
         setConnected(true);
         return false;
       } catch {

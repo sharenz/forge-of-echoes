@@ -12,6 +12,8 @@ export class NetworkMapPlayer extends Schema {
   maxLife = 100;
   focus = 100;
   maxFocus = 100;
+  attackSpeed = 1;
+  castSpeed = 1;
   kills = 0;
   experience = 0;
   persistedExperience = 0;
@@ -24,7 +26,7 @@ export class NetworkMapPlayer extends Schema {
 defineTypes(NetworkMapPlayer, {
   characterId: "string", name: "string", classId: "string",
   x: "number", y: "number", facingX: "number", facingY: "number",
-  life: "number", maxLife: "number", focus: "number", maxFocus: "number",
+  life: "number", maxLife: "number", focus: "number", maxFocus: "number", attackSpeed: "number", castSpeed: "number",
   kills: "number", experience: "number", persistedExperience: "number",
   lastProcessedMovement: "number", lastProcessedAttack: "number", connected: "boolean", worldIndex: "number",
 });

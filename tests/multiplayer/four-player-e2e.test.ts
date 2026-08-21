@@ -7,9 +7,9 @@ import { createGameServer } from "../../server/createGameServer";
 import { InMemoryPlayerRepository } from "../../server/persistence/InMemoryPlayerRepository";
 import type { AuthoritativeProfile, PlayerIdentity } from "../../server/persistence/PlayerRepository";
 import { configureServerServices } from "../../server/services";
-import { MapAdmissionService } from "../../server/services/MapAdmissionService";
 import type { OpenedAuthoritativeMap } from "../../server/services/MapService";
-import { PartyService, type PartySnapshot } from "../../server/services/PartyService";
+import type { PartySnapshot } from "../../server/coordination/PartyCoordinator";
+import { InMemoryCoordination } from "../../server/coordination/InMemoryCoordination";
 import type { MapRoomState } from "../../server/state/MapState";
 
 const httpEndpoint = "http://127.0.0.1:2568";
@@ -59,11 +59,12 @@ async function waitFor(predicate: () => boolean, timeoutMilliseconds = 2_000): P
 test("four clients complete the authenticated party-to-map admission path", async () => {
   const repository = new InMemoryPlayerRepository();
   await repository.initialize();
+  const coordination = new InMemoryCoordination(repository);
   configureServerServices({
     authSecret: "four-player-e2e-secret",
     players: repository,
-    parties: new PartyService(),
-    mapAdmissions: new MapAdmissionService(),
+    parties: coordination,
+    expeditions: coordination,
   });
   let server: ColyseusTestServer | null = null;
   const rooms: Room<unknown, MapRoomState>[] = [];

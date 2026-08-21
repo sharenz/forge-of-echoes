@@ -29,6 +29,8 @@ interface PendingSample {
   playback: SamplePlayback;
 }
 
+const MAX_PROCEDURAL_TONE_VOICES = 24;
+
 /**
  * Owns the browser AudioContext, decoded sample cache and master SFX bus.
  * Higher-level systems decide *what* should play; this class only renders it.
@@ -39,6 +41,7 @@ export class GameAudio implements SampleAudioPlayer {
   private readonly sampleBuffers = new Map<string, Promise<AudioBuffer | null>>();
   private readonly pendingSamples: PendingSample[] = [];
   private readonly activeVoices = new Map<string, number>();
+  private activeProceduralToneVoices = 0;
   private removeUnlockListeners: (() => void) | null = null;
 
   playSkill(id: SkillAudioId): void {
@@ -49,6 +52,7 @@ export class GameAudio implements SampleAudioPlayer {
     const start = context.currentTime;
 
     for (const tone of definition.tones) {
+      if (this.activeProceduralToneVoices >= MAX_PROCEDURAL_TONE_VOICES) break;
       const oscillator = context.createOscillator();
       const envelope = context.createGain();
       const toneStart = start + tone.delay;
@@ -60,8 +64,22 @@ export class GameAudio implements SampleAudioPlayer {
       envelope.gain.exponentialRampToValueAtTime(Math.max(0.0001, tone.gain * definition.volume), toneStart + Math.min(0.018, tone.duration * 0.25));
       envelope.gain.exponentialRampToValueAtTime(0.0001, toneEnd);
       oscillator.connect(envelope).connect(this.master);
-      oscillator.start(toneStart);
-      oscillator.stop(toneEnd + 0.02);
+      this.activeProceduralToneVoices += 1;
+      oscillator.onended = () => {
+        oscillator.disconnect();
+        envelope.disconnect();
+        this.activeProceduralToneVoices = Math.max(0, this.activeProceduralToneVoices - 1);
+      };
+      try {
+        oscillator.start(toneStart);
+        oscillator.stop(toneEnd + 0.02);
+      } catch (error) {
+        oscillator.onended = null;
+        oscillator.disconnect();
+        envelope.disconnect();
+        this.activeProceduralToneVoices = Math.max(0, this.activeProceduralToneVoices - 1);
+        console.error(`[audio] Failed to play procedural skill cue: ${id}`, error);
+      }
     }
   }
 
@@ -166,6 +184,7 @@ export class GameAudio implements SampleAudioPlayer {
     this.sampleBuffers.clear();
     this.pendingSamples.length = 0;
     this.activeVoices.clear();
+    this.activeProceduralToneVoices = 0;
     if (context && context.state !== "closed") void context.close();
   }
 

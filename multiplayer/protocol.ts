@@ -2,13 +2,17 @@ import { z } from "zod";
 import type { CharacterClassId, DamageType, MonsterRarity, PlayerProfile } from "../app/game/domain";
 import type { MonsterArchetypeId } from "../app/game/config/monsters";
 import { MERCHANTS, type MerchantId } from "../app/game/config/merchants";
+import { AUTHORITATIVE_SIMULATION_HZ } from "./simulation";
 
 export const MULTIPLAYER_LIMITS = {
   playersPerRoom: 4,
   portalsPerMap: 6,
-  simulationHz: 20,
+  simulationHz: AUTHORITATIVE_SIMULATION_HZ,
   statePatchHz: 20,
-  maximumClientMessagesPerSecond: 30,
+  // A player may legitimately send movement (12.5/s) plus two held actions
+  // (20/s each at the minimum cast time). Keep a bounded transport ceiling,
+  // but leave enough room for input bursts, flask use, and pickup commands.
+  maximumClientMessagesPerSecond: 120,
   reconnectSeconds: 12,
   partyPresenceGraceMilliseconds: 15_000,
   world: { width: 960, height: 960, margin: 32 },

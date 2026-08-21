@@ -21,7 +21,7 @@ export const BASIC_ATTACK = {
 
 export const ACTIVE_SKILLS = {
   nova: {
-    id: "nova", name: "Ember Nova", key: "Q", focusCost: 30, cooldown: 4,
+    id: "nova", name: "Ember Nova", key: "Q", focusCost: 30, castTime: 0.75, cooldown: 4,
     damage: { type: "fire", effectiveness: 1.35, range: { minMultiplier: 0.8, maxMultiplier: 1.2 } },
     projectileScale: 1.35,
     projectileCount: 18,
@@ -37,7 +37,7 @@ export const ACTIVE_SKILLS = {
     presentation: { animation: "dash", vfx: "rift-step", audio: "rift-step" },
   },
   ward: {
-    id: "ward", name: "Cinder Ward", key: "R", focusCost: 25, cooldown: 9,
+    id: "ward", name: "Cinder Ward", key: "R", focusCost: 25, castTime: 0.65, cooldown: 9,
     duration: 4,
     damageReduction: 45,
     tree: { branch: "survival", role: "Defensive guard", description: "Wrap yourself in cinders that blunt incoming damage during lethal engagements.", accent: "#58a7a0" },
@@ -45,7 +45,7 @@ export const ACTIVE_SKILLS = {
     presentation: { animation: "cast", vfx: "cinder-ward", audio: "cinder-ward" },
   },
   flameWave: {
-    id: "flame-wave", name: "Flame Wave", key: "F", focusCost: 22, cooldown: 5.5,
+    id: "flame-wave", name: "Flame Wave", key: "F", focusCost: 22, castTime: 0.7, cooldown: 5.5,
     damage: { type: "fire", effectiveness: 1.65, range: { minMultiplier: 0.8, maxMultiplier: 1.2 } },
     projectileScale: 1.18,
     projectileCount: 7,

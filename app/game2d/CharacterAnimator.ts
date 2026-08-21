@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { resolveAnimationPlaybackRate } from "../game/action-timing";
 import {
   CHARACTER_ANIMATIONS,
   characterAnimationKey,
@@ -19,6 +20,16 @@ interface PendingAction {
   releaseFallback?: Phaser.Time.TimerEvent;
   completionFallback?: Phaser.Time.TimerEvent;
 }
+
+function reportActionCallbackFailure(phase: "release" | "complete", error: unknown): void {
+  // A presentation callback runs inside Phaser's requestAnimationFrame. Letting
+  // an exception escape stops Phaser from scheduling its next frame entirely.
+  console.error(`[combat] Character action ${phase} callback failed`, error);
+}
+
+export type CharacterActionTiming =
+  | { durationSeconds: number; playbackRate?: never }
+  | { playbackRate: number; durationSeconds?: never };
 
 export class CharacterAnimator {
   private direction: CharacterDirection = "south";
@@ -43,6 +54,10 @@ export class CharacterAnimator {
     return this.direction;
   }
 
+  get activeActionKey(): string | null {
+    return this.pendingAction?.key ?? null;
+  }
+
   setLocomotion(x: number, y: number, moving: boolean, speedRatio = 1): void {
     this.moving = moving;
     this.locomotionPlaybackRate = moving ? Phaser.Math.Clamp(0.82 + speedRatio * 0.22, 0.82, 1.04) : 1;
@@ -53,7 +68,7 @@ export class CharacterAnimator {
   playAction(
     state: Extract<CharacterAnimationState, "attack" | "cast" | "dash">,
     direction: CharacterDirection,
-    playbackRate: number,
+    timing: CharacterActionTiming,
     onRelease: () => void,
     onComplete?: () => void,
   ): boolean {
@@ -68,6 +83,7 @@ export class CharacterAnimator {
     const key = characterAnimationKey(this.classId, sourceDirection, state);
     const releaseTextureFrame = clip.row * sheet.columns + clip.startColumn + (clip.releaseFrame ?? clip.frameCount - 1);
     const pending: PendingAction = { key, releaseTextureFrame, released: false, onRelease, onComplete };
+    const playbackRate = resolveAnimationPlaybackRate(clip.frameCount, clip.frameRate, timing);
     this.pendingAction = pending;
     this.applyDirectionFlip();
     this.sprite.anims.timeScale = Math.max(0.1, playbackRate);
@@ -89,11 +105,19 @@ export class CharacterAnimator {
   }
 
   destroy(): void {
-    this.pendingAction?.releaseFallback?.remove(false);
-    this.pendingAction?.completionFallback?.remove(false);
-    this.pendingAction = null;
+    this.cancelAction();
     this.sprite.off(Phaser.Animations.Events.ANIMATION_UPDATE, this.handleAnimationUpdate, this);
     this.sprite.off(Phaser.Animations.Events.ANIMATION_COMPLETE, this.handleAnimationComplete, this);
+  }
+
+  cancelAction(): void {
+    const pending = this.pendingAction;
+    if (!pending) return;
+    pending.releaseFallback?.remove(false);
+    pending.completionFallback?.remove(false);
+    this.pendingAction = null;
+    this.sprite.anims.timeScale = 1;
+    this.playLocomotion(true);
   }
 
   private registerAnimations(): void {
@@ -157,12 +181,22 @@ export class CharacterAnimator {
     this.pendingAction = null;
     this.sprite.anims.timeScale = 1;
     this.playLocomotion(true);
-    onComplete?.();
+    if (onComplete) {
+      try {
+        onComplete();
+      } catch (error) {
+        reportActionCallbackFailure("complete", error);
+      }
+    }
   }
 
   private releasePendingAction(pending: PendingAction): void {
     if (pending.released) return;
     pending.released = true;
-    pending.onRelease();
+    try {
+      pending.onRelease();
+    } catch (error) {
+      reportActionCallbackFailure("release", error);
+    }
   }
 }

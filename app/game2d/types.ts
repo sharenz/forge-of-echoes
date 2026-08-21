@@ -19,6 +19,8 @@ export interface NetworkPlayerView {
   maxLife?: number;
   focus?: number;
   maxFocus?: number;
+  attackSpeed?: number;
+  castSpeed?: number;
   /** Total XP earned in this map instance. */
   experience?: number;
   /** Portion of map XP already included in the authoritative profile. */

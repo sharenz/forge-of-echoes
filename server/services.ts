@@ -1,16 +1,17 @@
 import { loadServerConfig, type ServerConfig } from "./config";
 import { PostgresPlayerRepository } from "./persistence/PostgresPlayerRepository";
 import type { PlayerRepository } from "./persistence/PlayerRepository";
-import { PartyService } from "./services/PartyService";
-import { MapAdmissionService } from "./services/MapAdmissionService";
 import { PostgresTradeRepository } from "./persistence/PostgresTradeRepository";
 import type { TradeRepository } from "./persistence/TradeRepository";
+import type { PartyCoordinator } from "./coordination/PartyCoordinator";
+import type { ExpeditionCoordinator } from "./coordination/ExpeditionCoordinator";
+import { PostgresCoordination } from "./coordination/PostgresCoordination";
 
 export interface ServerServices {
   authSecret: string;
   players: PlayerRepository;
-  parties: PartyService;
-  mapAdmissions: MapAdmissionService;
+  parties: PartyCoordinator;
+  expeditions: ExpeditionCoordinator;
   trades?: TradeRepository;
 }
 
@@ -28,11 +29,12 @@ export function configureServerServices(services: ServerServices): void {
 export async function createServerServices(config: ServerConfig = loadServerConfig()): Promise<ServerServices> {
   const players = new PostgresPlayerRepository(config.databaseUrl);
   await players.initialize();
+  const coordination = new PostgresCoordination(config.databaseUrl, players);
   return {
     authSecret: config.authSecret,
     players,
-    parties: new PartyService(),
-    mapAdmissions: new MapAdmissionService(),
+    parties: coordination,
+    expeditions: coordination,
     trades: new PostgresTradeRepository(config.databaseUrl),
   };
 }

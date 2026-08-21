@@ -10,8 +10,7 @@ import { HideoutRoom } from "../../server/rooms/HideoutRoom";
 import { configureServerServices } from "../../server/services";
 import { InMemoryPlayerRepository } from "../../server/persistence/InMemoryPlayerRepository";
 import type { HideoutState } from "../../server/state/HideoutState";
-import { PartyService } from "../../server/services/PartyService";
-import { MapAdmissionService } from "../../server/services/MapAdmissionService";
+import { InMemoryCoordination } from "../../server/coordination/InMemoryCoordination";
 
 const secret = "four-player-hideout-test-secret";
 
@@ -44,15 +43,15 @@ async function waitFor(predicate: () => boolean, timeoutMilliseconds = 2_000): P
 test("four authenticated clients share one authoritative hideout and a fifth seat is rejected", async () => {
   const repository = new InMemoryPlayerRepository();
   await repository.initialize();
-  const parties = new PartyService();
-  configureServerServices({ authSecret: secret, players: repository, parties, mapAdmissions: new MapAdmissionService() });
+  const parties = new InMemoryCoordination(repository);
+  configureServerServices({ authSecret: secret, players: repository, parties, expeditions: parties });
   let server: ColyseusTestServer | null = null;
   const clients: ClientRoom<HideoutRoom, HideoutState>[] = [];
   try {
     server = await boot(createGameServer());
     const sessions = Array.from({ length: MULTIPLAYER_LIMITS.playersPerRoom }, (_, index) => session(index));
-    const party = parties.create(sessions[0].characterId);
-    sessions.slice(1).forEach(({ characterId }) => parties.join(characterId, party.id));
+    const party = await parties.create(sessions[0].characterId);
+    for (const { characterId } of sessions.slice(1)) await parties.join(characterId, party.id);
     await assert.rejects(
       () => server!.createRoom<HideoutRoom>("hideout", { token: session(99).token, partyId: party.id }),
       /Only a party member/,
@@ -97,13 +96,13 @@ test("four authenticated clients share one authoritative hideout and a fifth sea
 test("a refreshed character replaces its stale hideout socket without duplicating party presence", async () => {
   const repository = new InMemoryPlayerRepository();
   await repository.initialize();
-  const parties = new PartyService();
-  configureServerServices({ authSecret: secret, players: repository, parties, mapAdmissions: new MapAdmissionService() });
+  const parties = new InMemoryCoordination(repository);
+  configureServerServices({ authSecret: secret, players: repository, parties, expeditions: parties });
   let server: ColyseusTestServer | null = null;
   try {
     server = await boot(createGameServer());
     const playerSession = session(0);
-    const party = parties.create(playerSession.characterId);
+    const party = await parties.create(playerSession.characterId);
     const room = await server.createRoom<HideoutRoom>("hideout", { token: playerSession.token, partyId: party.id });
     const original = await server.connectTo(room, { token: playerSession.token, partyId: party.id });
     original.onMessage("*", () => undefined);

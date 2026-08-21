@@ -2,7 +2,7 @@ import { Client, type Room } from "@colyseus/sdk";
 import type { CharacterClassId } from "../game/domain";
 import type { ProfileCommand } from "../../multiplayer/protocol";
 import type { AccountIdentity, AuthoritativeProfile, CharacterRosterEntry, PlayerIdentity } from "../../server/persistence/PlayerRepository";
-import type { PartySnapshot, PublicPartyListing } from "../../server/services/PartyService";
+import type { PartySnapshot, PublicPartyListing } from "../../server/coordination/PartyCoordinator";
 import type { HideoutState } from "../../server/state/HideoutState";
 import type { MapRoomState } from "../../server/state/MapState";
 import type { OpenedAuthoritativeMap } from "../../server/services/MapService";

@@ -41,6 +41,7 @@ npm run test:multiplayer:db
 - `app/components/` adapts React state to the renderer and supplies the HUD, inventory, stash, inventory-crafting, and map-device interfaces.
 - `multiplayer/` contains shared, runtime-validated client/server protocol contracts.
 - `server/rooms/` contains authoritative 20 Hz hideout and map simulations capped at four players.
+- `server/coordination/` contains asynchronous party and expedition ports plus their PostgreSQL adapters; process memory is never authoritative for membership, portals, or room claims.
 - `server/db/migrations/` owns ordered, transactional PostgreSQL migrations; item ownership is enforced by composite foreign keys.
 - `tests/multiplayer/` runs real four-client Colyseus room tests, including fifth-player rejection, forged command rejection, authoritative skills/flasks, free-for-all loot, item dropping, map completion, and rewards.
 
@@ -57,7 +58,8 @@ The hideout uses a fixed 960×960 logical canvas. Maps are 3840×3840—exactly 
 5. Explore the map and defeat six increasingly dense, distributed pack waves; the combat bar exposes live cooldowns, Focus costs, and Rift Step's recharging charges.
 6. Run over equipment and materials to collect them. Hover inventory items for complete affix tooltips, then drag them into matching equipment slots; the live character sheet updates health, damage, Focus, speed, armor, and evade immediately. There are no temporary run powers.
 
-The broader systems and long-term progression targets are documented in [GAME_DESIGN.md](./GAME_DESIGN.md).
+The server authority and scale-out contracts are documented in [ARCHITECTURE.md](./ARCHITECTURE.md),
+and broader systems and long-term progression targets are documented in [GAME_DESIGN.md](./GAME_DESIGN.md).
 
 ## Production deployment
 
@@ -73,4 +75,8 @@ Realm administration uses the interactive `crafty-cli dev` / `crafty-cli prod` c
 4. Use **Trade** beside a party member, select backpack/stash items, lock the exact offer, and accept. Any edit clears both acceptances.
 5. Fight, use flasks, race for shared free-for-all loot, change equipment, and drop/re-pick items in the shared map. Death and the completion portal return the player to the shared hideout.
 
-Party membership is ephemeral and presence-leased: hideout/map transitions and quick refreshes retain membership, a newer authenticated socket replaces a stale one, and disconnected members are evicted after a 15-second grace period so abandoned seats and parties cannot remain in discovery.
+Party membership and expedition state are durable in PostgreSQL. Presence and room ownership
+are renewable leases: hideout/map transitions and quick refreshes retain membership, a newer
+authenticated socket replaces a stale one, and any server process can reap expired leases
+after the grace period. A Node restart therefore cannot forget portal consumption or leave an
+unrecoverable process-local party behind.

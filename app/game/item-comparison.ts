@@ -27,6 +27,7 @@ const COMPARABLE_STATS = Object.freeze([
   "maxFocus",
   "attackDamage",
   "attackSpeed",
+  "castSpeed",
   "focusRegen",
   "skillCooldown",
   "armor",

@@ -92,26 +92,30 @@ export class PostgresPlayerRepository implements PlayerRepository {
 
   async initialize(): Promise<void> {
     const migrationsDirectory = fileURLToPath(new URL("../db/migrations/", import.meta.url));
-    await this.pool.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
-      filename text PRIMARY KEY,
-      applied_at timestamptz NOT NULL DEFAULT now()
-    )`);
-    const migrations = (await readdir(migrationsDirectory)).filter((file) => /^\d+.*\.sql$/.test(file)).sort();
-    for (const filename of migrations) {
-      const alreadyApplied = await this.pool.query("SELECT 1 FROM schema_migrations WHERE filename = $1", [filename]);
-      if (alreadyApplied.rowCount) continue;
-      const client = await this.pool.connect();
-      try {
+    const client = await this.pool.connect();
+    try {
+      await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename text PRIMARY KEY,
+        applied_at timestamptz NOT NULL DEFAULT now()
+      )`);
+      await client.query("SELECT pg_advisory_lock(hashtext('crafty_schema_migrations'))");
+      const migrations = (await readdir(migrationsDirectory)).filter((file) => /^\d+.*\.sql$/.test(file)).sort();
+      for (const filename of migrations) {
+        const alreadyApplied = await client.query("SELECT 1 FROM schema_migrations WHERE filename = $1", [filename]);
+        if (alreadyApplied.rowCount) continue;
         await client.query("BEGIN");
-        await client.query(await readFile(`${migrationsDirectory}/${filename}`, "utf8"));
-        await client.query("INSERT INTO schema_migrations (filename) VALUES ($1)", [filename]);
-        await client.query("COMMIT");
-      } catch (error) {
-        await client.query("ROLLBACK");
-        throw error;
-      } finally {
-        client.release();
+        try {
+          await client.query(await readFile(`${migrationsDirectory}/${filename}`, "utf8"));
+          await client.query("INSERT INTO schema_migrations (filename) VALUES ($1)", [filename]);
+          await client.query("COMMIT");
+        } catch (error) {
+          await client.query("ROLLBACK");
+          throw error;
+        }
       }
+    } finally {
+      await client.query("SELECT pg_advisory_unlock(hashtext('crafty_schema_migrations'))").catch(() => undefined);
+      client.release();
     }
   }
 

@@ -6,15 +6,15 @@ import { findFirstFit } from "../../app/game/item-container";
 import { createGameServer } from "../../server/createGameServer";
 import { InMemoryPlayerRepository } from "../../server/persistence/InMemoryPlayerRepository";
 import { configureServerServices } from "../../server/services";
-import { PartyService } from "../../server/services/PartyService";
-import { MapAdmissionService } from "../../server/services/MapAdmissionService";
+import { InMemoryCoordination } from "../../server/coordination/InMemoryCoordination";
 
 const endpoint = "http://127.0.0.1:2568";
 
 test("profile HTTP API authenticates and accepts commands without accepting state replacement", async () => {
   const repository = new InMemoryPlayerRepository();
   await repository.initialize();
-  const services = { authSecret: "profile-api-test-secret", players: repository, parties: new PartyService(), mapAdmissions: new MapAdmissionService() };
+  const coordination = new InMemoryCoordination(repository);
+  const services = { authSecret: "profile-api-test-secret", players: repository, parties: coordination, expeditions: coordination };
   configureServerServices(services);
   let server: ColyseusTestServer | null = null;
   try {

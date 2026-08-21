@@ -46,6 +46,7 @@ export interface ArenaBalance {
   moveSpeed: number;
   attackDamage: number;
   attackSpeed: number;
+  castSpeed: number;
   skillCooldown: number;
   armor: number;
   evadeChance: number;
@@ -240,6 +241,7 @@ export function buildArenaBalance(profile: PlayerProfile, map?: MapItem): ArenaB
     moveSpeed: stats.moveSpeed / 45,
     attackDamage: stats.attackDamage,
     attackSpeed: stats.attackSpeed,
+    castSpeed: stats.castSpeed,
     skillCooldown: stats.skillCooldown,
     armor: stats.armor,
     evadeChance: stats.evadeChance,

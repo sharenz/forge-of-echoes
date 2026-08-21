@@ -1,6 +1,6 @@
 import { CHARACTER_CLASSES } from "./config/classes";
 import { ITEM_BASES_BY_ID, type ItemBaseId } from "./config/item-bases";
-import { DERIVED_STAT_RULES, MINIMUM_SKILL_COOLDOWN_MULTIPLIER, UNARMED_ATTACKS_PER_SECOND, type StatContributionRule } from "./config/stat-rules";
+import { DERIVED_STAT_RULES, MINIMUM_CAST_SPEED_MULTIPLIER, MINIMUM_SKILL_COOLDOWN_MULTIPLIER, UNARMED_ATTACKS_PER_SECOND, type StatContributionRule } from "./config/stat-rules";
 import type {
   AffixRoll,
   AttributeKey,
@@ -30,7 +30,7 @@ export interface CharacterStatCalculation {
 const ATTRIBUTE_KEYS: readonly AttributeKey[] = ["strength", "dexterity", "intelligence"];
 const STAT_KEYS: readonly StatKey[] = [
   ...ATTRIBUTE_KEYS, "maxLife", "maxFocus", "moveSpeed", "attackDamage",
-  "attackSpeed", "focusRegen", "skillCooldown", "armor", "evadeChance",
+  "attackSpeed", "castSpeed", "focusRegen", "skillCooldown", "armor", "evadeChance",
 ];
 
 export function resolveStat<TStat extends ModifierStatKey>(base: number, modifiers: readonly StatModifier<TStat>[]): StatResolution<TStat> {
@@ -165,6 +165,10 @@ export function calculateCharacterStats(profile: PlayerProfile): CharacterStatCa
   ])) as Record<StatKey, StatResolution>;
   const breakdown: Record<StatKey, StatResolution> = {
     ...unresolvedBreakdown,
+    castSpeed: {
+      ...unresolvedBreakdown.castSpeed,
+      value: Math.max(MINIMUM_CAST_SPEED_MULTIPLIER, unresolvedBreakdown.castSpeed.value),
+    },
     skillCooldown: {
       ...unresolvedBreakdown.skillCooldown,
       value: Math.max(MINIMUM_SKILL_COOLDOWN_MULTIPLIER, unresolvedBreakdown.skillCooldown.value),
@@ -179,6 +183,7 @@ export function calculateCharacterStats(profile: PlayerProfile): CharacterStatCa
     moveSpeed: breakdown.moveSpeed.value,
     attackDamage: breakdown.attackDamage.value,
     attackSpeed: breakdown.attackSpeed.value,
+    castSpeed: breakdown.castSpeed.value,
     focusRegen: breakdown.focusRegen.value,
     skillCooldown: breakdown.skillCooldown.value,
     armor: breakdown.armor.value,
@@ -192,7 +197,7 @@ export function formatModifier(modifier: Pick<StatModifier<ModifierStatKey>, "st
   const labels: Record<ModifierStatKey, string> = {
     strength: "Strength", dexterity: "Dexterity", intelligence: "Intelligence",
     maxLife: "maximum Life", maxFocus: "maximum Focus", moveSpeed: "movement speed",
-    attackDamage: "attack damage", attackSpeed: "attack speed", focusRegen: "Focus recovery rate", skillCooldown: "skill cooldown", armor: "armor", evadeChance: "evade chance",
+    attackDamage: "attack damage", attackSpeed: "attack speed", castSpeed: "cast speed", focusRegen: "Focus recovery rate", skillCooldown: "skill cooldown", armor: "armor", evadeChance: "evade chance",
     itemQuantity: "item quantity", itemRarity: "item rarity",
     monsterCount: "monster count", monsterRarity: "monster rarity", monsterLife: "monster maximum Life",
     monsterMoveSpeed: "monster movement speed", monsterDamage: "monster damage", monsterArmor: "monster armor",

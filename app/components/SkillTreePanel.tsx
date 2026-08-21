@@ -5,12 +5,16 @@ import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/sk
 
 interface SkillTreePanelProps {
   progress: CharacterProgress;
+  castSpeed: number;
+  cooldownMultiplier: number;
   onAllocate: (skill: ActiveSkillId) => void;
 }
 
 interface SkillNodeProps {
   id: ActiveSkillId;
   current: ResolvedSkillDefinition;
+  castSpeed: number;
+  cooldownMultiplier: number;
   points: number;
   onAllocate: (skill: ActiveSkillId) => void;
 }
@@ -30,6 +34,7 @@ function skillMetrics(skill: ResolvedSkillDefinition): readonly [string, string]
   if (skill.recharge > 0) metrics.push(["Recharge", `${formatNumber(skill.recharge, 2)}s`]);
   if (skill.damageReduction > 0) metrics.push(["Guard", `${formatNumber(skill.damageReduction)}%`]);
   if (skill.duration > 0) metrics.push(["Duration", `${formatNumber(skill.duration)}s`]);
+  if (skill.castTime > 0) metrics.push(["Cast time", `${formatNumber(skill.castTime, 2)}s`]);
   if (skill.cooldown > 0) metrics.push(["Cooldown", `${formatNumber(skill.cooldown, 2)}s`]);
   metrics.push(["Focus", String(skill.focusCost)]);
   return metrics.slice(0, 4);
@@ -49,16 +54,16 @@ function skillChangeSummary(current: ResolvedSkillDefinition, next: ResolvedSkil
   return changes.length > 0 ? changes.join(" · ") : "Improves this discipline";
 }
 
-function milestoneSummary(id: ActiveSkillId, level: number): string {
+function milestoneSummary(id: ActiveSkillId, level: number, cooldownMultiplier = 1, castSpeed = 1): string {
   const definition = ACTIVE_SKILLS[id];
   return skillChangeSummary(
-    resolveSkillDefinition(definition, level - 1),
-    resolveSkillDefinition(definition, level),
+    resolveSkillDefinition(definition, level - 1, cooldownMultiplier, castSpeed),
+    resolveSkillDefinition(definition, level, cooldownMultiplier, castSpeed),
   );
 }
 
-function SkillNode({ id, current, points, onAllocate }: SkillNodeProps) {
-  const next = resolveSkillDefinition(ACTIVE_SKILLS[id], current.level + 1);
+function SkillNode({ id, current, castSpeed, cooldownMultiplier, points, onAllocate }: SkillNodeProps) {
+  const next = resolveSkillDefinition(ACTIVE_SKILLS[id], current.level + 1, cooldownMultiplier, castSpeed);
   const canAllocate = points > 0 && current.level < current.maxLevel;
   const progress = current.level / current.maxLevel * 100;
 
@@ -86,7 +91,7 @@ function SkillNode({ id, current, points, onAllocate }: SkillNodeProps) {
             const active = level <= current.level;
             const nextNode = level === current.level + 1;
             const milestone = level % 5 === 0;
-            return <i className={`${active ? "active" : ""} ${nextNode ? "next" : ""} ${milestone ? "milestone" : ""}`} title={`Level ${level}${milestone ? `: ${milestoneSummary(id, level)}` : ""}`} key={level}><b>{milestone ? level : ""}</b></i>;
+            return <i className={`${active ? "active" : ""} ${nextNode ? "next" : ""} ${milestone ? "milestone" : ""}`} title={`Level ${level}${milestone ? `: ${milestoneSummary(id, level, cooldownMultiplier, castSpeed)}` : ""}`} key={level}><b>{milestone ? level : ""}</b></i>;
           })}
         </div>
       </div>
@@ -99,7 +104,7 @@ function SkillNode({ id, current, points, onAllocate }: SkillNodeProps) {
       <div className="skill-milestones">
         {[5, 10, 15, 20].map((level) => (
           <span className={current.level >= level ? "earned" : ""} key={level}>
-            <b>{level}</b><small>{milestoneSummary(id, level)}</small>
+            <b>{level}</b><small>{milestoneSummary(id, level, cooldownMultiplier, castSpeed)}</small>
           </span>
         ))}
       </div>
@@ -112,7 +117,7 @@ function SkillNode({ id, current, points, onAllocate }: SkillNodeProps) {
   );
 }
 
-export function SkillTreePanel({ progress, onAllocate }: SkillTreePanelProps) {
+export function SkillTreePanel({ progress, castSpeed, cooldownMultiplier, onAllocate }: SkillTreePanelProps) {
   const investedPoints = Object.values(progress.skillLevels).reduce((total, level) => total + Math.max(0, level - 1), 0);
   const basic = resolveSkillDefinition(BASIC_ATTACK, 1);
 
@@ -151,7 +156,9 @@ export function SkillTreePanel({ progress, onAllocate }: SkillTreePanelProps) {
                 {skills.map(([id, definition]) => (
                   <SkillNode
                     id={id}
-                    current={resolveSkillDefinition(definition, progress.skillLevels[id])}
+                    current={resolveSkillDefinition(definition, progress.skillLevels[id], cooldownMultiplier, castSpeed)}
+                    castSpeed={castSpeed}
+                    cooldownMultiplier={cooldownMultiplier}
                     points={progress.unspentSkillPoints}
                     onAllocate={onAllocate}
                     key={id}

@@ -172,6 +172,8 @@ export interface SkillDefinition {
   name: string;
   key: string;
   focusCost: number;
+  /** Base time in seconds required by cast animations. Cast speed resolves it at runtime. */
+  castTime?: number;
   cooldown?: number;
   maxCharges?: number;
   recharge?: number;

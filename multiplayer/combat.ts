@@ -10,6 +10,13 @@ export const MULTIPLAYER_COMBAT = {
     basicRange: 700,
     novaRange: 340,
     flameWaveRange: 360,
+    // Supports the maximum configured level-20 Nova cadence plus simultaneous
+    // basic and Flame Wave attacks. This remains bounded well below the global
+    // 4,096-projectile room capacity.
+    maximumActivePerPlayer: 512,
+    // Rendering is deliberately lower than simulation capacity. When full,
+    // the client recycles the oldest visual so every new cast remains visible.
+    maximumRenderedPerClient: 160,
   },
   monster: {
     contactRange: 34,

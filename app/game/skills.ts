@@ -1,4 +1,5 @@
 import type { SkillDefinition } from "./config/schema";
+import { resolveCastTimeSeconds } from "./action-timing";
 
 export interface ResolvedSkillDefinition extends SkillDefinition {
   level: number;
@@ -7,12 +8,18 @@ export interface ResolvedSkillDefinition extends SkillDefinition {
   piercing: number;
   maxCharges: number;
   recharge: number;
+  castTime: number;
   cooldown: number;
   duration: number;
   damageReduction: number;
 }
 
-export function resolveSkillDefinition(definition: SkillDefinition, requestedLevel: number, cooldownMultiplier = 1): ResolvedSkillDefinition {
+export function resolveSkillDefinition(
+  definition: SkillDefinition,
+  requestedLevel: number,
+  cooldownMultiplier = 1,
+  castSpeedMultiplier = 1,
+): ResolvedSkillDefinition {
   const maxLevel = definition.progression?.maxLevel ?? 1;
   const level = Math.min(maxLevel, Math.max(1, Math.floor(requestedLevel)));
   const levelsAfterFirst = level - 1;
@@ -38,6 +45,9 @@ export function resolveSkillDefinition(definition: SkillDefinition, requestedLev
     recharge: definition.recharge === undefined
       ? 0
       : Math.max(0.1, (definition.recharge + (definition.progression?.rechargePerLevel ?? 0) * levelsAfterFirst) * cooldownMultiplier),
+    castTime: definition.castTime === undefined
+      ? 0
+      : resolveCastTimeSeconds(definition.castTime, castSpeedMultiplier),
     cooldown: definition.cooldown === undefined
       ? 0
       : Math.max(0.1, (definition.cooldown + (definition.progression?.cooldownPerLevel ?? 0) * levelsAfterFirst) * cooldownMultiplier),

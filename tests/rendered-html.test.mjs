@@ -255,7 +255,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /character-interface-backdrop/);
   assert.match(shell, /onFlaskLoad=\{onlineLoadFlask\}/);
   assert.match(shell, /paused=\{Boolean\(panel\)\}/);
-  assert.match(shell, /controlsBlocked=\{characterPanelOpen\}/);
+  assert.match(shell, /controlsBlocked=\{characterPanelOpen \|\| mapExitPending\}/);
   assert.match(phaserWorld, /updateArenaBalance/);
   assert.match(phaserWorld, /world-action-bar/);
   assert.match(phaserWorld, /world-bottom-hud/);
@@ -427,7 +427,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /KeyCodes\.FIVE/);
   assert.match(phaserWorld, /world-flask-belt/);
   assert.doesNotMatch(inventoryPanel, /inventory-flask-belt/);
-  assert.match(world, /1 \/ Math\.max\(0\.01, this\.options\.arenaBalance\?\.attackSpeed/);
+  assert.match(world, /resolveAttackTimeSeconds\(this\.options\.arenaBalance\?\.attackSpeed/);
+  assert.match(world, /resolveCastTimeSeconds\(baseCastTime, networkPlayer\?\.castSpeed/);
+  assert.match(world, /isWorldPointerOrigin\(pointer\.event\?\.target/);
+  assert.doesNotMatch(world, /this\.input\.activePointer\.isDown/);
+  assert.match(world, /MAX_DAMAGE_PRESENTATIONS_PER_BATCH/);
+  assert.doesNotMatch(world, /Phaser loop stalled; restarting its animation-frame chain/);
   assert.match(gameDesign, /hard cap of level 99/i);
   assert.match(gameDesign, /No temporary run power/);
   assert.match(gameDesign, /The four map axes/);

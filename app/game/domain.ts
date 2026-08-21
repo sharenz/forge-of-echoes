@@ -16,6 +16,7 @@ export type DerivedStatKey =
   | "moveSpeed"
   | "attackDamage"
   | "attackSpeed"
+  | "castSpeed"
   | "focusRegen"
   | "skillCooldown"
   | "armor"
@@ -196,6 +197,8 @@ export interface CharacterStats {
   moveSpeed: number;
   attackDamage: number;
   attackSpeed: number;
+  /** Multiplier applied to the base cast time of cast-tagged skills. */
+  castSpeed: number;
   /** Focus (mana) recovered per second before map modifiers. */
   focusRegen: number;
   /** Multiplier applied to active-skill cooldown and charge-recovery durations. */

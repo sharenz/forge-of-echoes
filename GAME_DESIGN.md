@@ -150,6 +150,18 @@ Example: **Ember Lance**
 
 Skills expose explicit tags such as `attack`, `spell`, `projectile`, `fire`, `area`, and `duration`. Items and passives refer to these tags consistently.
 
+### Action timing
+
+Attack time, cast time, cooldown, and effect duration are independent mechanics:
+
+- weapon attacks use the equipped weapon's attacks-per-second value modified by attack speed;
+- spells declare a base cast time which is divided by the character's resolved cast-speed multiplier;
+- the complete attack or cast animation is retimed to the resolved action duration, while its authored release frame determines when the effect occurs;
+- cooldown modifiers affect cooldowns and charge recovery, never attack or cast animation speed;
+- duration modifiers affect persistent effects, never the action time or cooldown.
+
+Intelligence grants increased cast speed in the same sourced-modifier system through which Dexterity grants attack speed. Cast speed is server-resolved and replicated for consistent multiplayer presentation. Cast actions have a 50 ms safety floor matching the authoritative simulation cadence.
+
 ### Character passive tree
 
 Use a medium-sized shared constellation rather than an enormous web at first.

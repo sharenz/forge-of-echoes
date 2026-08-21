@@ -4,8 +4,8 @@ import { boot, type ColyseusTestServer } from "@colyseus/testing";
 import { createGameServer } from "../../server/createGameServer";
 import { InMemoryPlayerRepository } from "../../server/persistence/InMemoryPlayerRepository";
 import { configureServerServices } from "../../server/services";
-import { PartyService, type PartySnapshot, type PublicPartyListing } from "../../server/services/PartyService";
-import { MapAdmissionService } from "../../server/services/MapAdmissionService";
+import type { PartySnapshot, PublicPartyListing } from "../../server/coordination/PartyCoordinator";
+import { InMemoryCoordination } from "../../server/coordination/InMemoryCoordination";
 
 const endpoint = "http://127.0.0.1:2568";
 
@@ -36,7 +36,8 @@ function authenticated(token: string, method = "GET", body?: unknown): RequestIn
 test("four clients form a party through HTTP while the fifth is rejected", async () => {
   const repository = new InMemoryPlayerRepository();
   await repository.initialize();
-  configureServerServices({ authSecret: "party-api-test-secret", players: repository, parties: new PartyService(), mapAdmissions: new MapAdmissionService() });
+  const coordination = new InMemoryCoordination(repository);
+  configureServerServices({ authSecret: "party-api-test-secret", players: repository, parties: coordination, expeditions: coordination });
   let server: ColyseusTestServer | null = null;
   try {
     server = await boot(createGameServer());

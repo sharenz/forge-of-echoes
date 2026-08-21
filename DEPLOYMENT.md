@@ -19,9 +19,12 @@ Production is a single hardened VM running four Docker Compose services:
 - Caddy owns public ports 80/443 and automatic TLS.
 - vinext serves the browser client.
 - Node/Colyseus owns authoritative multiplayer rooms and HTTP APIs.
-- PostgreSQL persists accounts, characters, items, and trades on a named volume.
+- PostgreSQL persists accounts, characters, items, trades, parties, presence leases,
+  expeditions, portals, and room ownership on a named volume.
 
-The application and game server use separate hostnames. PostgreSQL and both application containers are reachable only through the private Compose network.
+The application and game server use separate hostnames. PostgreSQL and both application containers are reachable only through the private Compose network. Live 20 Hz room simulation
+remains in Node memory, while all state required to recover or route a room is durable; see
+[ARCHITECTURE.md](./ARCHITECTURE.md).
 
 The first server initialization is intentionally manual:
 

@@ -32,6 +32,8 @@ configureServerServices(services);
 server = createGameServer(services, { allowedOrigins: config.allowedOrigins });
 server.onShutdown(async () => {
   await services.trades?.close();
+  await services.expeditions.close();
+  await services.parties.close();
   await services.players.close();
 });
 await server.listen(config.port, config.host);

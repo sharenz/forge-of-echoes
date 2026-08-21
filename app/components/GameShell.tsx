@@ -67,6 +67,7 @@ export function GameShell() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [mapFinalRageActive, setMapFinalRageActive] = useState(false);
+  const [mapExitPending, setMapExitPending] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [activeMerchantId, setActiveMerchantId] = useState<MerchantId>("cartographer-rook");
   const merchantIds = useMemo(
@@ -87,6 +88,12 @@ export function GameShell() {
     () => profile && activeMap ? buildArenaBalance(profile, activeMap) : undefined,
     [activeMap, profile],
   );
+
+  const requestMapExit = () => {
+    if (mapExitPending) return;
+    setMapExitPending(true);
+    void multiplayer.leaveMap().finally(() => setMapExitPending(false));
+  };
 
   useEffect(() => {
     if (!notice) return;
@@ -129,7 +136,7 @@ export function GameShell() {
                 rememberPlayerName(playerName);
                 void multiplayer.connectAccount(playerName);
               }}>
-                <label><span>Player name</span><input ref={playerNameInputRef} required placeholder="player-one" minLength={2} maxLength={24} pattern="[A-Za-z0-9_-]+" autoComplete="username" /></label>
+                <label><span>Player name</span><input ref={playerNameInputRef} required placeholder="player-one" minLength={2} maxLength={24} pattern="[A-Za-z0-9_\-]+" autoComplete="username" /></label>
                 <button type="submit" disabled={multiplayer.busy}><span>{multiplayer.busy ? "Entering…" : "Continue"}</span><small>Open character roster</small></button>
               </form>
               <footer><span>◆</span><p><strong>Remembered on this browser</strong><small>Only your player name is stored locally. Characters, items, and stats remain server-authoritative.</small></p></footer>
@@ -160,7 +167,7 @@ export function GameShell() {
                   event.preventDefault();
                   void multiplayer.createCharacter(characterName.trim(), "sorceress");
                 }}>
-                  <label><span>Unique character name</span><input required value={characterName} onChange={(event) => setCharacterName(event.target.value)} placeholder="Name your Sorceress" minLength={2} maxLength={24} pattern="[A-Za-z][A-Za-z0-9_-]*" autoComplete="off" /></label>
+                  <label><span>Unique character name</span><input required value={characterName} onChange={(event) => setCharacterName(event.target.value)} placeholder="Name your Sorceress" minLength={2} maxLength={24} pattern="[A-Za-z][A-Za-z0-9_\-]*" autoComplete="off" /></label>
                   <button type="submit" disabled={multiplayer.busy || characterName.trim().length < 2}><span>{multiplayer.busy ? "Forging…" : "Create Sorceress"}</span><small>Enter the hideout</small></button>
                 </form>
                 <small className="name-rules">2–24 characters · begin with a letter · letters, numbers, hyphens, and underscores</small>
@@ -197,7 +204,8 @@ export function GameShell() {
     );
   }
 
-  if (!profile || !stats || !statCalculation || !currencies) {
+  const authoritativeWorldReady = multiplayer.mapAdapter !== undefined || multiplayer.adapter !== undefined;
+  if (!profile || !stats || !statCalculation || !currencies || !authoritativeWorldReady) {
     return <PhaserWorld mode="loading" classId={multiplayer.session.player.classId}><div className="world-loader"><span /><strong>Loading {multiplayer.session.player.characterName}</strong><small>Fetching authoritative profile</small></div></PhaserWorld>;
   }
 
@@ -216,7 +224,7 @@ export function GameShell() {
         <PhaserWorld
           mode="arena"
           classId={profile.character.classId!}
-          controlsBlocked={characterPanelOpen}
+          controlsBlocked={characterPanelOpen || mapExitPending}
           arenaBalance={arenaBalance}
           activeMap={activeMap}
           characterStats={stats}
@@ -224,20 +232,20 @@ export function GameShell() {
           characterStatBreakdown={statCalculation.breakdown}
           flaskBelt={profile.flaskBelt}
           onFlaskLoad={onlineLoadFlask}
-          onReturnToHideout={() => { void multiplayer.leaveMap(); }}
+          onReturnToHideout={requestMapExit}
           multiplayer={multiplayer.mapAdapter}
           onItemDropToGround={characterPanelOpen ? onlineDropItemToGround : undefined}
           onFinalRageChange={setMapFinalRageActive}
         >
           <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(characterPanelOpen ? null : "inventory")}>Character <kbd>I</kbd></button>
-          <button type="button" className="return-hideout" onClick={() => void multiplayer.leaveMap()}>Return to hideout</button>
+          <button type="button" className="return-hideout" disabled={mapExitPending} onClick={requestMapExit}>{mapExitPending ? "Returning…" : "Return to hideout"}</button>
           {characterPanelOpen && (
             <div className="world-panel-backdrop arena-panel-backdrop character-interface-backdrop">
               <section className={`world-panel character-panel panel-${panel}`} aria-label={`Character ${panel}`}>
                 <header><div><span>Combat continues online · controls blocked · changes apply immediately</span><h2>{characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></header>
                 {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onApplyCurrency={onlineApplyCurrency} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
                 {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation.breakdown} onAllocate={onlineAllocateAttribute} />}
-                {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={onlineAllocateSkill} />}
+                {panel === "skills" && <SkillTreePanel progress={profile.character} castSpeed={stats.castSpeed} cooldownMultiplier={stats.skillCooldown} onAllocate={onlineAllocateSkill} />}
               </section>
             </div>
           )}
@@ -380,7 +388,7 @@ export function GameShell() {
             {panel === "multiplayer" && <MultiplayerPanel controller={multiplayer} onOpenMapDevice={() => setPanel("maps")} onPartyEntered={() => setPanel(null)} />}
             {(panel === "inventory" || panel === "stash") && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} showStash={panel === "stash"} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onApplyCurrency={onlineApplyCurrency} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
             {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation.breakdown} onAllocate={onlineAllocateAttribute} />}
-            {panel === "skills" && <SkillTreePanel progress={profile.character} onAllocate={onlineAllocateSkill} />}
+            {panel === "skills" && <SkillTreePanel progress={profile.character} castSpeed={stats.castSpeed} cooldownMultiplier={stats.skillCooldown} onAllocate={onlineAllocateSkill} />}
           </section>
         </div>
       )}

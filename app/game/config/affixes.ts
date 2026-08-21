@@ -64,6 +64,17 @@ export const AFFIX_DEFINITIONS = [
     ],
   },
   {
+    id: "of-incantation", name: "of Incantation", tag: "speed", group: "cast-speed", slots: ["mainHand", "offHand", "amulet", "ring", "gloves"],
+    tiers: [
+      tier(6, 1, 1000, 3, 5, { stat: "castSpeed", mode: "increased" }),
+      tier(5, 16, 700, 6, 8, { stat: "castSpeed", mode: "increased" }),
+      tier(4, 32, 450, 9, 12, { stat: "castSpeed", mode: "increased" }),
+      tier(3, 50, 250, 13, 16, { stat: "castSpeed", mode: "increased" }),
+      tier(2, 70, 110, 17, 21, { stat: "castSpeed", mode: "increased" }),
+      tier(1, 88, 35, 22, 27, { stat: "castSpeed", mode: "increased" }),
+    ],
+  },
+  {
     id: "plated", name: "Plated", tag: "defense", group: "flat-armor", slots: ["helmet", "offHand", "chest", "gloves", "boots", "belt"],
     tiers: [
       tier(6, 1, 1000, 7, 13, { stat: "armor", mode: "flat" }),

@@ -1,6 +1,6 @@
 # Server scale-out decision
 
-Status: **remain single-process for the local-development milestone**.
+Status: **single live-simulation process today, durable multi-process-safe coordination now**.
 
 The refactored headless world currently simulates the steady-state acceptance workload (2,000
 monsters, 1,000 live projectiles continuously topped up, four players) at 0.69 ms average,
@@ -21,9 +21,11 @@ load:
 - room memory or GC pauses preventing the 20 Hz simulation deadline.
 
 At that point, prefer Colyseus multi-process room placement over one `worker_thread` per
-room. Configure `RedisPresence` and `RedisDriver`, then move `PartyService` and
-`MapAdmissionService` coordination out of process memory before allowing traffic to more
-than one process. Character/item authority remains in PostgreSQL.
+room. Party, presence, expedition, portal, and room-claim authority is already behind async
+coordinator ports and persisted in PostgreSQL, so adding workers does not require a gameplay
+or API refactor. Configure distributed Colyseus discovery/routing and a worker registry;
+introduce Redis only when its measured fan-out or presence benefits justify another
+operational dependency. Character/item authority remains in PostgreSQL.
 
 ## Transport evaluation
 
@@ -36,5 +38,6 @@ CPU by at least 20% without changing authentication, error mapping, shutdown, or
 semantics.
 
 This is a measured deferral, not an architectural dependency: the World, binary wire codecs,
-injected services, and room adapter are already separated so a later transport/process change
-does not alter gameplay code.
+injected async coordinator ports, durable leases, and room adapter are separated so a later
+transport/process change does not alter gameplay code. See [ARCHITECTURE.md](./ARCHITECTURE.md)
+for authority, transactions, crash recovery, and adapter contracts.

@@ -13,7 +13,7 @@ import {
   type ProfileCommand,
   type RejectedCommandMessage,
 } from "../../multiplayer/protocol";
-import type { PartySnapshot, PublicPartyListing } from "../../server/services/PartyService";
+import type { PartySnapshot, PublicPartyListing } from "../../server/coordination/PartyCoordinator";
 import type { HideoutState } from "../../server/state/HideoutState";
 import type { MapRoomState } from "../../server/state/MapState";
 import type { AuthoritativeProfile, CharacterRosterEntry } from "../../server/persistence/PlayerRepository";
@@ -82,6 +82,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
   const [room, setRoom] = useState<Room<unknown, HideoutState> | null>(null);
   const [mapRoom, setMapRoom] = useState<Room<unknown, MapRoomState> | null>(null);
   const mapRoomRef = useRef<Room<unknown, MapRoomState> | null>(null);
+  const intentionalMapClosures = useRef(new WeakSet<Room<unknown, MapRoomState>>());
   const [authoritativeProfile, setAuthoritativeProfile] = useState<AuthoritativeProfile | null>(null);
   const [trades, setTrades] = useState<TradeSnapshot[]>([]);
   const [activeTradeId, setActiveTradeId] = useState<string | null>(null);
@@ -190,6 +191,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     }
     mapExitRequests.current.clear();
     void roomRef.current?.leave(true);
+    if (mapRoomRef.current) intentionalMapClosures.current.add(mapRoomRef.current);
     void mapRoomRef.current?.leave(true);
   }, []);
 
@@ -259,6 +261,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
   const leaveCharacter = useCallback(() => run(async () => {
     await roomRef.current?.leave(true);
     roomRef.current = null;
+    if (mapRoomRef.current) intentionalMapClosures.current.add(mapRoomRef.current);
     await mapRoomRef.current?.leave(true);
     mapRoomRef.current = null;
     if (session && party) await client.leaveParty(session).catch(() => null);
@@ -276,6 +279,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
   const leaveAccount = useCallback(() => run(async () => {
     await roomRef.current?.leave(true);
     roomRef.current = null;
+    if (mapRoomRef.current) intentionalMapClosures.current.add(mapRoomRef.current);
     await mapRoomRef.current?.leave(true);
     mapRoomRef.current = null;
     if (session && party) await client.leaveParty(session).catch(() => null);
@@ -339,6 +343,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     roomRef.current = null;
     setConnectedPlayers([]);
     setRoom(null);
+    if (mapRoomRef.current) intentionalMapClosures.current.add(mapRoomRef.current);
     await mapRoomRef.current?.leave(true);
     mapRoomRef.current = null;
     setMapRoom(null);
@@ -366,13 +371,31 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     const portal = activeMap.portals.find((candidate) => candidate.index === portalIndex);
     if (!portal || portal.used) throw new Error("That portal has already been used.");
     const connected = await client.connectMap(session, activeMap.mapTicket, portalIndex, activeMap.roomId ?? undefined);
-    connected.onLeave(() => {
+    connected.onLeave((code) => {
       if (mapRoomRef.current !== connected) return;
+      const intentional = intentionalMapClosures.current.has(connected);
       for (const pending of mapExitRequests.current.values()) {
         clearTimeout(pending.timeout);
         pending.reject(new Error("Map connection closed before the server confirmed your saved progress."));
       }
       mapExitRequests.current.clear();
+      combatEventQueue.current = [];
+      monsterBuffer.current = new MonsterInterpolationBuffer();
+      dropPayloads.current.clear();
+      mapRoomRef.current = null;
+      setMapRoom(null);
+      if (intentional) return;
+
+      console.warn(`[multiplayer] Map connection closed unexpectedly (code ${code}). Returning to hideout.`);
+      setError("The map connection was interrupted. You were returned to your hideout instead of being left in a frozen map.");
+      void client.currentParty(session)
+        .catch(() => null)
+        .then(async (currentParty) => {
+          const destination = currentParty ?? await client.createSoloParty(session);
+          setParty(destination);
+          await connectToPartyHideout(session, destination);
+        })
+        .catch((caught) => setError(errorMessage(caught)));
     });
     connected.onMessage(SERVER_MESSAGES.profileUpdated, (updated: AuthoritativeProfile) => setAuthoritativeProfile(updated));
     connected.onMessage(SERVER_MESSAGES.mapExitReady, (message: MapExitReadyMessage) => {
@@ -522,7 +545,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     await roomRef.current?.leave(true);
     roomRef.current = null;
     setRoom(null);
-  }), [client, party, run, session]);
+  }), [client, connectToPartyHideout, party, run, session]);
 
   const leaveMap = useCallback(() => {
     if (mapExitRequests.current.size > 0) return Promise.resolve();
@@ -543,6 +566,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
       combatEventQueue.current = [];
       monsterBuffer.current = new MonsterInterpolationBuffer();
       dropPayloads.current.clear();
+      if (activeRoom) intentionalMapClosures.current.add(activeRoom);
       await activeRoom?.leave(true);
       mapRoomRef.current = null;
       setMapRoom(null);
@@ -659,6 +683,8 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
         maxLife: player.maxLife,
         focus: player.focus,
         maxFocus: player.maxFocus,
+        attackSpeed: player.attackSpeed,
+        castSpeed: player.castSpeed,
         experience: player.experience,
         persistedExperience: player.persistedExperience,
       }));

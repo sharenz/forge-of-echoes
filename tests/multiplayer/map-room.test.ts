@@ -14,7 +14,6 @@ import {
   type RejectedCommandMessage,
 } from "../../multiplayer/protocol";
 import { decodeWorldEvents } from "../../multiplayer/wire/events";
-import { signMapTicket } from "../../server/auth/map-ticket";
 import { signSessionToken } from "../../server/auth/session-token";
 import { createGameServer } from "../../server/createGameServer";
 import { ItemLockedError } from "../../server/persistence/errors";
@@ -23,12 +22,16 @@ import type { AuthoritativeProfile } from "../../server/persistence/PlayerReposi
 import { MapRoom } from "../../server/rooms/MapRoom";
 import { configureServerServices } from "../../server/services";
 import type { MapRoomState } from "../../server/state/MapState";
-import { PartyService } from "../../server/services/PartyService";
-import { MapAdmissionService } from "../../server/services/MapAdmissionService";
+import { InMemoryCoordination } from "../../server/coordination/InMemoryCoordination";
+import { MapService } from "../../server/services/MapService";
+import { ProfileCommandService } from "../../server/services/ProfileCommandService";
 import { MonsterArchetype, type World } from "../../server/engine/World";
 import { WorldEventType, type WorldEvent } from "../../server/engine/events";
 import { entitySlot } from "../../server/engine/entity";
 import { MonsterFlags } from "../../server/engine/stores/Monsters";
+import { ACTIVE_SKILLS } from "../../app/game/config/skills";
+import { resolveSkillDefinition } from "../../app/game/skills";
+import { calculateCharacterStats } from "../../app/game/stats";
 
 const secret = "four-player-map-test-secret";
 
@@ -104,26 +107,20 @@ test("four players fight the same authoritative monsters and damage cannot be fo
     ...player,
     expiresAt: Date.now() + 60_000,
   }));
-  const parties = new PartyService();
-  const party = parties.create(identities[0].characterId);
-  identities.slice(1, 4).forEach((identity) => parties.join(identity.characterId, party.id));
-  configureServerServices({ authSecret: secret, players: repository, parties, mapAdmissions: new MapAdmissionService() });
+  const parties = new InMemoryCoordination(repository);
+  const party = await parties.create(identities[0].characterId);
+  for (const identity of identities.slice(1, 4)) await parties.join(identity.characterId, party.id);
+  configureServerServices({ authSecret: secret, players: repository, parties, expeditions: parties });
   const leaderProfile = await repository.loadProfile(identities[0].characterId);
   assert.ok(leaderProfile);
   const mapEntry = leaderProfile.profile.inventory.entries.find((entry) => entry.item.kind === "map");
   assert.ok(mapEntry && mapEntry.item.kind === "map");
   const map = mapEntry.item;
-  const ticketId = randomUUID();
-  const mapTicket = signMapTicket({
-    ticketId,
-    mapItemId: map.id,
-    ownerCharacterId: identities[0].characterId,
-    allowedCharacterIds: identities.slice(0, 4).map(({ characterId }) => characterId),
-    tier: 1,
-    seed: 42,
-    expiresAt: Date.now() + 60_000,
-  }, secret);
-  parties.activateMap(identities[0].characterId, { ticketId, mapTicket, map, expiresAt: Date.now() + 60_000 });
+  const slotted = await new ProfileCommandService(repository).execute(identities[0].characterId, leaderProfile.revision, {
+    type: "slot_map", itemId: map.id,
+  });
+  const opened = await new MapService(repository, parties, parties, secret).open(identities[0].characterId, slotted.revision);
+  const mapTicket = opened.mapTicket;
   const tokens = identities.map((identity) => signSessionToken(identity, secret));
   let server: ColyseusTestServer | null = null;
   const clients: ClientRoom<MapRoom, MapRoomState>[] = [];
@@ -138,8 +135,16 @@ test("four players fight the same authoritative monsters and damage cannot be fo
     }
     await waitFor(() => authoritativeRoom.state.players.size === 4 && clients.every((client) => client.state.players.size === 4));
     assert.equal(authoritativeRoom.clients.length, 4);
+    let firstClientLeft = false;
+    clients[0].onLeave(() => { firstClientLeft = true; });
+    for (let sequence = 1; sequence <= 55; sequence += 1) {
+      clients[0].send(CLIENT_MESSAGES.movement, { sequence, x: 0, y: 0 });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(firstClientLeft, false, "a valid movement-and-held-action-sized input burst stays connected");
+    assert.equal(authoritativeRoom.clients.length, 4);
     assert.notEqual(
-      authoritativeRoom.onAuth(authoritativeRoom.clients[0], { token: tokens[0], mapTicket, portalIndex: 0 }),
+      await authoritativeRoom.onAuth(authoritativeRoom.clients[0], { token: tokens[0], mapTicket, portalIndex: 0 }),
       false,
       "a stale-socket replacement for an existing character does not consume another portal",
     );
@@ -204,10 +209,17 @@ test("four players fight the same authoritative monsters and damage cannot be fo
 
     clients[0].send(CLIENT_MESSAGES.attack, { sequence: 2, skill: "nova" });
     await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Skill && event.sequence === 2));
+    const novaReleasedAt = authoritativeRoom.state.elapsedMilliseconds;
     assert.equal(world.monsters.life[targetSlot], 5_000, "nova damage waits for its authoritative projectiles to travel");
     await waitFor(() => world.monsters.life[targetSlot] < 5_000);
     const afterNovaLife = world.monsters.life[targetSlot];
     await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Damage && event.sequence === 2 && event.auxB === 1 && event.amount > 0));
+
+    const attackerProfile = await repository.loadProfile(identities[0].characterId);
+    assert.ok(attackerProfile);
+    const attackerStats = calculateCharacterStats(attackerProfile.profile).stats;
+    const novaCastTime = resolveSkillDefinition(ACTIVE_SKILLS.nova, 1, attackerStats.skillCooldown, attackerStats.castSpeed).castTime;
+    await waitFor(() => authoritativeRoom.state.elapsedMilliseconds >= novaReleasedAt + novaCastTime * 1_000);
 
     clients[0].send(CLIENT_MESSAGES.attack, { sequence: 3, skill: "flameWave", direction: { x: 1, y: 0 } });
     await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Skill && event.sequence === 3));

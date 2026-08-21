@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { resolveAttackTimeSeconds, resolveCastTimeSeconds } from "../game/action-timing";
 import { ACTIVE_SKILLS, BASIC_ATTACK, type RolledHitDamage } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import {
@@ -24,6 +25,7 @@ import { isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "../game
 import { equipmentDropPresentation } from "../game/loot";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
 import { CharacterAnimator } from "./CharacterAnimator";
+import { isWorldPointerOrigin } from "./input-boundary";
 import { GameAudio } from "./audio/GameAudio";
 import { MonsterAudioMixer } from "./audio/MonsterAudioMixer";
 import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
@@ -35,13 +37,15 @@ const VIEW_SIZE = 960;
 const MAP_SIZE = VIEW_SIZE * 4;
 const FIXED_STEP = 1000 / 60;
 const MAX_FRAME_DELTA = 50;
-const PROJECTILE_POOL_SIZE = 160;
+const PROJECTILE_POOL_SIZE = MULTIPLAYER_COMBAT.projectile.maximumRenderedPerClient;
 const ENEMY_PROJECTILE_POOL_SIZE = 240;
 const DAMAGE_NUMBER_POOL_SIZE = 160;
 const VFX_PARTICLE_POOL_SIZE = 240;
 const HEALTH_BAR_WIDTH = 42;
 const HEALTH_BAR_HEIGHT = 5;
 const BASIC_ATTACK_INPUT_BUFFER_SECONDS = 0.22;
+const MAX_DAMAGE_PRESENTATIONS_PER_BATCH = 12;
+const MAX_PROJECTILE_HIT_PRESENTATIONS_PER_BATCH = 12;
 const NETWORK_ARCHETYPE_IDS = ["ashling", "cinder-spitter", "rift-stalker", "ironhide-brute", "ember-skitter"] as const;
 
 interface EnemyState {
@@ -190,6 +194,7 @@ class CraftyScene extends Phaser.Scene {
   private vfxPool: Phaser.GameObjects.Group | null = null;
   private vfxParticles: VfxParticleState[] = [];
   private accumulator = 0;
+  private worldPointerHeld = false;
   private attackCooldown = 0;
   private basicAttackIntent: BasicAttackIntent | null = null;
   private novaCooldown = 0;
@@ -242,11 +247,12 @@ class CraftyScene extends Phaser.Scene {
     super("crafty-world");
     this.options = options;
     const cooldownMultiplier = options.arenaBalance?.skillCooldown ?? 1;
+    const castSpeedMultiplier = options.arenaBalance?.castSpeed ?? 1;
     this.resolvedBasic = resolveSkillDefinition(BASIC_ATTACK, 1);
-    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, options.skillLevels.nova, cooldownMultiplier);
-    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, options.skillLevels.dash, cooldownMultiplier);
-    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, options.skillLevels.ward, cooldownMultiplier);
-    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, options.skillLevels.flameWave, cooldownMultiplier);
+    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, options.skillLevels.nova, cooldownMultiplier, castSpeedMultiplier);
+    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, options.skillLevels.dash, cooldownMultiplier, castSpeedMultiplier);
+    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, options.skillLevels.ward, cooldownMultiplier, castSpeedMultiplier);
+    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, options.skillLevels.flameWave, cooldownMultiplier, castSpeedMultiplier);
     this.riftCharges = this.resolvedDash.maxCharges;
     this.life = options.arenaBalance?.maxLife ?? 100;
     this.focus = options.arenaBalance?.maxFocus ?? 100;
@@ -347,9 +353,13 @@ class CraftyScene extends Phaser.Scene {
       flask4: Phaser.Input.Keyboard.KeyCodes.FOUR,
       flask5: Phaser.Input.Keyboard.KeyCodes.FIVE,
     }) as Record<string, Phaser.Input.Keyboard.Key>;
-    this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
-      if (this.options.mode === "arena" && !this.options.paused && !this.options.controlsBlocked && !this.arenaComplete) this.queueBasicAttack(true);
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer, interactiveTargets: Phaser.GameObjects.GameObject[]) => {
+      this.worldPointerHeld = isWorldPointerOrigin(pointer.event?.target ?? null, this.game.canvas, interactiveTargets.length);
+      if (this.worldPointerHeld && this.options.mode === "arena" && !this.options.paused && !this.options.controlsBlocked && !this.arenaComplete) {
+        this.queueBasicAttack(true);
+      }
     });
+    this.input.on(Phaser.Input.Events.POINTER_UP, () => { this.worldPointerHeld = false; });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.playerAnimator?.destroy();
       for (const remote of this.remotePlayers.values()) remote.animator.destroy();
@@ -513,10 +523,11 @@ class CraftyScene extends Phaser.Scene {
   updateSkillLevels(skillLevels: SkillLevels): void {
     const previousMaxCharges = this.resolvedDash.maxCharges;
     const cooldownMultiplier = this.options.arenaBalance?.skillCooldown ?? 1;
-    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova, cooldownMultiplier);
-    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash, cooldownMultiplier);
-    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward, cooldownMultiplier);
-    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave, cooldownMultiplier);
+    const castSpeedMultiplier = this.options.arenaBalance?.castSpeed ?? 1;
+    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova, cooldownMultiplier, castSpeedMultiplier);
+    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash, cooldownMultiplier, castSpeedMultiplier);
+    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward, cooldownMultiplier, castSpeedMultiplier);
+    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave, cooldownMultiplier, castSpeedMultiplier);
     this.riftCharges = Phaser.Math.Clamp(
       this.riftCharges + Math.max(0, this.resolvedDash.maxCharges - previousMaxCharges),
       0,
@@ -568,7 +579,7 @@ class CraftyScene extends Phaser.Scene {
       if (this.options.controlsBlocked) {
         this.basicAttackIntent = null;
       } else {
-        if (this.keys?.attack.isDown || this.input.activePointer.isDown) this.queueBasicAttack(false);
+        if (this.keys?.attack.isDown || this.worldPointerHeld) this.queueBasicAttack(false);
         this.consumeBasicAttackIntent();
       }
       this.syncNetworkMonsters(delta);
@@ -987,7 +998,18 @@ class CraftyScene extends Phaser.Scene {
   private syncNetworkCombatEvents(): void {
     const multiplayer = this.options.multiplayer;
     if (!multiplayer?.drainCombatEvents) return;
-    for (const event of multiplayer.drainCombatEvents()) {
+    const events = multiplayer.drainCombatEvents();
+    const hitAudioTargets = new Set<number>();
+    const damagePresentations = new Map<string, {
+      amount: number;
+      damageType: Extract<CombatEvent, { kind: "damage" }>["damageType"];
+      evaded: boolean;
+      x: number;
+      y: number;
+    }>();
+    let projectileHitPresentations = 0;
+
+    for (const event of events) {
       if (event.kind === "monster-aggro") {
         this.monsterAudio.aggro(event.monsterId, event.archetypeId, event.x, event.y, this.time.now);
         continue;
@@ -1005,7 +1027,10 @@ class CraftyScene extends Phaser.Scene {
         continue;
       }
       if (event.kind === "projectile-hit") {
-        this.emitRadialVfx(event.x, event.y, 5, 0xff9a4b, 42, 0.18);
+        if (projectileHitPresentations < MAX_PROJECTILE_HIT_PRESENTATIONS_PER_BATCH) {
+          this.emitRadialVfx(event.x, event.y, 3, 0xff9a4b, 42, 0.16);
+          projectileHitPresentations += 1;
+        }
         continue;
       }
       if (event.kind === "projectile-expire") {
@@ -1018,7 +1043,8 @@ class CraftyScene extends Phaser.Scene {
       }
       if (event.kind === "damage") {
         const target = this.networkEnemies.get(event.targetId);
-        if (target && !event.evaded) {
+        if (target && !event.evaded && !hitAudioTargets.has(event.targetId)) {
+          hitAudioTargets.add(event.targetId);
           this.monsterAudio.hit(
             event.targetId,
             target.archetypeId,
@@ -1029,16 +1055,44 @@ class CraftyScene extends Phaser.Scene {
           );
         }
         if (event.actorCharacterId !== multiplayer.localCharacterId) continue;
-        this.showDamageNumber(
-          target?.sprite.x ?? event.targetX,
-          target?.sprite.y ?? event.targetY,
-          event.evaded ? "EVADE" : { amount: event.amount, type: event.damageType },
-        );
-        this.emitRadialVfx(event.targetX, event.targetY, event.evaded ? 3 : 6, event.evaded ? 0xaeb4bd : 0xff9a4b, 54, 0.22);
+        const presentationKey = `${event.targetId}:${event.evaded ? "evade" : event.damageType}`;
+        const existing = damagePresentations.get(presentationKey);
+        if (existing) {
+          existing.amount += event.amount;
+          existing.x = target?.sprite.x ?? event.targetX;
+          existing.y = target?.sprite.y ?? event.targetY;
+        } else {
+          damagePresentations.set(presentationKey, {
+            amount: event.amount,
+            damageType: event.damageType,
+            evaded: event.evaded,
+            x: target?.sprite.x ?? event.targetX,
+            y: target?.sprite.y ?? event.targetY,
+          });
+        }
         continue;
       }
       if (event.actorCharacterId === multiplayer.localCharacterId) continue;
       this.playRemoteSkillAnimation(event);
+    }
+
+    let presentedDamage = 0;
+    for (const presentation of damagePresentations.values()) {
+      if (presentedDamage >= MAX_DAMAGE_PRESENTATIONS_PER_BATCH) break;
+      this.showDamageNumber(
+        presentation.x,
+        presentation.y,
+        presentation.evaded ? "EVADE" : { amount: presentation.amount, type: presentation.damageType },
+      );
+      this.emitRadialVfx(
+        presentation.x,
+        presentation.y,
+        presentation.evaded ? 2 : 4,
+        presentation.evaded ? 0xaeb4bd : 0xff9a4b,
+        54,
+        0.2,
+      );
+      presentedDamage += 1;
     }
   }
 
@@ -1147,14 +1201,22 @@ class CraftyScene extends Phaser.Scene {
   private playRemoteSkillAnimation(event: Extract<CombatEvent, { kind: "skill" }>): void {
     const remote = this.remotePlayers.get(event.actorCharacterId);
     if (!remote) return;
+    const networkPlayer = this.options.multiplayer?.getPlayers().find((player) => player.characterId === event.actorCharacterId);
     const skill = event.skill === "basic" ? this.resolvedBasic
       : event.skill === "nova" ? this.resolvedNova
         : event.skill === "dash" ? this.resolvedDash
           : event.skill === "ward" ? this.resolvedWard
             : this.resolvedFlameWave;
     const direction = resolveCharacterDirection(event.direction.x, event.direction.y, remote.animator.currentDirection);
-    const playbackRate = skill.presentation.animation === "attack" ? 1.2 : skill.presentation.animation === "dash" ? 1.35 : 1;
-    remote.animator.playAction(skill.presentation.animation, direction, playbackRate, () => undefined);
+    const baseCastTime = event.skill === "nova" ? ACTIVE_SKILLS.nova.castTime
+      : event.skill === "ward" ? ACTIVE_SKILLS.ward.castTime
+        : event.skill === "flameWave" ? ACTIVE_SKILLS.flameWave.castTime : 0;
+    const timing = skill.presentation.animation === "attack"
+      ? { durationSeconds: resolveAttackTimeSeconds(networkPlayer?.attackSpeed ?? 1.2) } as const
+      : skill.presentation.animation === "cast"
+        ? { durationSeconds: resolveCastTimeSeconds(baseCastTime, networkPlayer?.castSpeed ?? 1) } as const
+        : { playbackRate: 1.35 } as const;
+    remote.animator.playAction(skill.presentation.animation, direction, timing, () => undefined);
   }
 
   private launchReplicatedProjectile(event: Extract<CombatEvent, { kind: "projectile-spawn" }>): void {
@@ -1164,7 +1226,17 @@ class CraftyScene extends Phaser.Scene {
     const distance = event.skill === "nova" ? MULTIPLAYER_COMBAT.projectile.novaRange
       : event.skill === "flameWave" ? MULTIPLAYER_COMBAT.projectile.flameWaveRange
         : MULTIPLAYER_COMBAT.projectile.basicRange;
-    const sprite = this.projectilePool?.get(event.originX, event.originY, "projectile") as Phaser.GameObjects.Image | null;
+    let sprite = this.projectilePool?.get(event.originX, event.originY, "projectile") as Phaser.GameObjects.Image | null;
+    if (!sprite) {
+      // Preserve a strict rendering budget without making a fresh authoritative
+      // cast invisible. Oldest visuals are least useful and their later expire
+      // events safely become no-ops once removed from this map.
+      const oldestProjectileId = this.networkProjectiles.keys().next().value as number | undefined;
+      if (oldestProjectileId !== undefined) {
+        this.expireReplicatedProjectile(oldestProjectileId, event.originX, event.originY, false);
+        sprite = this.projectilePool?.get(event.originX, event.originY, "projectile") as Phaser.GameObjects.Image | null;
+      }
+    }
     if (!sprite) return;
     sprite.setTexture("projectile").setActive(true).setVisible(true)
       .setPosition(event.originX, event.originY)
@@ -1266,10 +1338,12 @@ class CraftyScene extends Phaser.Scene {
     startY?: number,
   ): boolean {
     if (!this.playerAnimator) return false;
-    const playbackRate = skill.presentation.animation === "attack"
-      ? Phaser.Math.Clamp(this.options.arenaBalance?.attackSpeed ?? 1, 0.8, 2.5)
-      : skill.presentation.animation === "dash" ? 1.35 : 1;
-    return this.playerAnimator.playAction(skill.presentation.animation, direction, playbackRate, () => {
+    const timing = skill.presentation.animation === "attack"
+      ? { durationSeconds: resolveAttackTimeSeconds(this.options.arenaBalance?.attackSpeed ?? 1) } as const
+      : skill.presentation.animation === "cast"
+        ? { durationSeconds: skill.castTime ?? 0.65 } as const
+        : { playbackRate: 1.35 } as const;
+    return this.playerAnimator.playAction(skill.presentation.animation, direction, timing, () => {
       onRelease();
       this.audio.playSkill(skill.presentation.audio);
       this.playSkillReleaseVfx(skill, direction, startX, startY);
@@ -1659,6 +1733,12 @@ class CraftyScene extends Phaser.Scene {
     if (consumeImmediately) this.consumeBasicAttackIntent();
   }
 
+  cancelCombatInput(): void {
+    this.worldPointerHeld = false;
+    this.basicAttackIntent = null;
+    this.playerAnimator?.cancelAction();
+  }
+
   private consumeBasicAttackIntent(): void {
     const intent = this.basicAttackIntent;
     if (!intent) return;
@@ -1680,7 +1760,7 @@ class CraftyScene extends Phaser.Scene {
       this.options.multiplayer?.sendAttack?.("basic", aim);
     });
     if (!started) return false;
-    this.attackCooldown = 1 / Math.max(0.01, this.options.arenaBalance?.attackSpeed ?? 1);
+    this.attackCooldown = resolveAttackTimeSeconds(this.options.arenaBalance?.attackSpeed ?? 1);
     return true;
   }
 
@@ -1954,6 +2034,7 @@ class CraftyScene extends Phaser.Scene {
   private activateReturnPortal(): void {
     if (this.options.paused || !this.returnPortal || this.returnPortalUsed) return;
     this.returnPortalUsed = true;
+    this.cancelCombatInput();
     this.returnPortal.interaction.disableInteractive();
     this.options.onReturnToHideout();
   }
@@ -2011,10 +2092,16 @@ export class PhaserRuntime {
 
   setPaused(paused: boolean): void {
     this.options.paused = paused;
+    if (paused) this.scene?.cancelCombatInput();
   }
 
   setControlsBlocked(blocked: boolean): void {
     this.options.controlsBlocked = blocked;
+    if (blocked) this.scene?.cancelCombatInput();
+  }
+
+  cancelCombatInput(): void {
+    this.scene?.cancelCombatInput();
   }
 
   updateArenaBalance(balance: NonNullable<WorldRuntimeOptions["arenaBalance"]>): void {
