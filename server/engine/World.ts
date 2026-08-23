@@ -96,6 +96,13 @@ export interface WorldDependencies {
   onSlowTick?: (durationMilliseconds: number, tick: number) => void;
 }
 
+export interface WorldHealthMetrics {
+  droppedSimulationSteps: number;
+  droppedCosmeticEvents: number;
+  slowTicks: number;
+  slowestTickMilliseconds: number;
+}
+
 const PLAYER_ENTITY_FLAG = 0x8000_0000;
 
 export class World {
@@ -107,6 +114,12 @@ export class World {
   readonly events: WorldEventBuffer;
   readonly outcomes: WorldOutcomeBuffer;
   readonly config: WorldConfig;
+  readonly metrics: WorldHealthMetrics = {
+    droppedSimulationSteps: 0,
+    droppedCosmeticEvents: 0,
+    slowTicks: 0,
+    slowestTickMilliseconds: 0,
+  };
   tickNumber = 0;
   simulationSeconds = 0;
   rejectedInputs = 0;
@@ -276,10 +289,20 @@ export class World {
 
   advance(elapsedMilliseconds: number, onTick?: (events: WorldEventBuffer, outcomes: readonly WorldEvent[]) => void): number {
     if (!Number.isFinite(elapsedMilliseconds) || elapsedMilliseconds < 0) throw new RangeError("World advance must be finite and non-negative");
-    this.accumulatorMilliseconds = Math.min(
-      this.accumulatorMilliseconds + elapsedMilliseconds,
-      this.config.fixedStepMilliseconds * this.config.maximumCatchUpSteps,
-    );
+    const maximumAccumulated = this.config.fixedStepMilliseconds * this.config.maximumCatchUpSteps;
+    let accumulated = this.accumulatorMilliseconds + elapsedMilliseconds;
+    if (accumulated > maximumAccumulated) {
+      // Skip whole stale steps instead of letting the simulation tick clock
+      // permanently drift behind monotonic wall time. Entity state is not
+      // simulated for skipped time, but every replicated timeline remains
+      // correctly aligned and clients can resume interpolation immediately.
+      const droppedSteps = Math.ceil((accumulated - maximumAccumulated) / this.config.fixedStepMilliseconds);
+      this.tickNumber += droppedSteps;
+      this.simulationSeconds += droppedSteps * this.config.fixedStepMilliseconds / 1_000;
+      this.metrics.droppedSimulationSteps += droppedSteps;
+      accumulated -= droppedSteps * this.config.fixedStepMilliseconds;
+    }
+    this.accumulatorMilliseconds = Math.max(0, accumulated);
     let steps = 0;
     while (this.accumulatorMilliseconds >= this.config.fixedStepMilliseconds && steps < this.config.maximumCatchUpSteps) {
       this.tick(this.config.fixedStepMilliseconds / 1_000);
@@ -307,7 +330,12 @@ export class World {
     this.performMonsterActions();
     this.applyMonsterDamage();
     const duration = this.clock.nowMilliseconds() - startedAt;
-    if (duration > this.config.tickWarningMilliseconds) this.onSlowTick?.(duration, this.tickNumber);
+    this.metrics.droppedCosmeticEvents += this.events.dropped;
+    if (duration > this.config.tickWarningMilliseconds) {
+      this.metrics.slowTicks += 1;
+      this.metrics.slowestTickMilliseconds = Math.max(this.metrics.slowestTickMilliseconds, duration);
+      this.onSlowTick?.(duration, this.tickNumber);
+    }
     return this.events.view();
   }
 

@@ -9,6 +9,7 @@ import {
   CLIENT_MESSAGES,
   MULTIPLAYER_LIMITS,
   SERVER_MESSAGES,
+  WIRE_PROTOCOL_VERSION,
   type MapExitReadyMessage,
   type PickupResultMessage,
   type RejectedCommandMessage,
@@ -21,7 +22,7 @@ import { InMemoryPlayerRepository } from "../../server/persistence/InMemoryPlaye
 import type { AuthoritativeProfile } from "../../server/persistence/PlayerRepository";
 import { MapRoom } from "../../server/rooms/MapRoom";
 import { configureServerServices } from "../../server/services";
-import type { MapRoomState } from "../../server/state/MapState";
+import { MapRoomState } from "../../server/state/MapState";
 import { InMemoryCoordination } from "../../server/coordination/InMemoryCoordination";
 import { MapService } from "../../server/services/MapService";
 import { ProfileCommandService } from "../../server/services/ProfileCommandService";
@@ -53,6 +54,20 @@ class LockablePlayerRepository extends InMemoryPlayerRepository {
   }
 
   override async saveProfile(characterId: string, expectedRevision: number, profile: PlayerProfile): Promise<AuthoritativeProfile> {
+    await this.interceptWrite(characterId);
+    return super.saveProfile(characterId, expectedRevision, profile);
+  }
+
+  override async mutateProfile(
+    characterId: string,
+    expectedRevision: number | null,
+    transform: (profile: PlayerProfile) => PlayerProfile,
+  ): Promise<AuthoritativeProfile> {
+    await this.interceptWrite(characterId);
+    return super.mutateProfile(characterId, expectedRevision, transform);
+  }
+
+  private async interceptWrite(characterId: string): Promise<void> {
     if (this.pausedSave?.characterId === characterId) {
       const paused = this.pausedSave;
       this.pausedSave = null;
@@ -64,7 +79,6 @@ class LockablePlayerRepository extends InMemoryPlayerRepository {
       this.nextLockedSave = null;
       throw new ItemLockedError(itemId);
     }
-    return super.saveProfile(characterId, expectedRevision, profile);
   }
 }
 
@@ -104,9 +118,15 @@ test("four players fight the same authoritative monsters and damage cannot be fo
   })));
   const identities = players.map((player) => ({
     sessionId: randomUUID(),
+    authSessionId: randomUUID(),
     ...player,
     expiresAt: Date.now() + 60_000,
   }));
+  await Promise.all(identities.map((identity) => repository.createAuthSession(
+    identity.authSessionId,
+    identity.accountId,
+    identity.expiresAt,
+  )));
   const parties = new InMemoryCoordination(repository);
   const party = await parties.create(identities[0].characterId);
   for (const identity of identities.slice(1, 4)) await parties.join(identity.characterId, party.id);
@@ -127,9 +147,9 @@ test("four players fight the same authoritative monsters and damage cannot be fo
   let releasePausedSave: (() => void) | null = null;
   try {
     server = await boot(createGameServer(), 0);
-    const authoritativeRoom = await server.createRoom<MapRoom>("map", { token: tokens[0], mapTicket, portalIndex: 0 });
+    const authoritativeRoom = await server.createRoom<MapRoom>("map", { token: tokens[0], mapTicket, portalIndex: 0, protocolVersion: WIRE_PROTOCOL_VERSION });
     for (let index = 0; index < 4; index += 1) {
-      const client = await server.connectTo(authoritativeRoom, { token: tokens[index], mapTicket, portalIndex: index });
+      const client = await server.connectTo(authoritativeRoom, { token: tokens[index], mapTicket, portalIndex: index, protocolVersion: WIRE_PROTOCOL_VERSION });
       client.onMessage("*", () => undefined);
       clients.push(client);
     }
@@ -144,11 +164,11 @@ test("four players fight the same authoritative monsters and damage cannot be fo
     assert.equal(firstClientLeft, false, "a valid movement-and-held-action-sized input burst stays connected");
     assert.equal(authoritativeRoom.clients.length, 4);
     assert.notEqual(
-      await authoritativeRoom.onAuth(authoritativeRoom.clients[0], { token: tokens[0], mapTicket, portalIndex: 0 }),
+      await authoritativeRoom.onAuth(authoritativeRoom.clients[0], { token: tokens[0], mapTicket, portalIndex: 0, protocolVersion: WIRE_PROTOCOL_VERSION }),
       false,
       "a stale-socket replacement for an existing character does not consume another portal",
     );
-    await assert.rejects(() => server!.connectTo(authoritativeRoom, { token: tokens[4], mapTicket, portalIndex: 4 }));
+    await assert.rejects(() => server!.connectTo(authoritativeRoom, { token: tokens[4], mapTicket, portalIndex: 4, protocolVersion: WIRE_PROTOCOL_VERSION }));
     const worldEvents: WorldEvent[] = [];
     clients[0].onMessage(SERVER_MESSAGES.worldEvents, (bytes: Uint8Array) => worldEvents.push(...decodeWorldEvents(bytes)));
     const dropPayloads = new Map<string, InventoryItem>();
@@ -182,9 +202,52 @@ test("four players fight the same authoritative monsters and damage cannot be fo
     const damagedLife = flaskWorldPlayer.life;
     const flaskProfileBefore = await repository.loadProfile(identities[0].characterId);
     const flaskCountBefore = flaskProfileBefore?.profile.flaskBelt[0]?.stackSize ?? 0;
+    const delayedFlaskSave = repository.pauseNextSave(identities[0].characterId);
     clients[0].send(CLIENT_MESSAGES.useFlask, { slot: 0 });
-    await waitFor(async () => (await repository.loadProfile(identities[0].characterId))?.profile.flaskBelt[0]?.stackSize === flaskCountBefore - 1);
+    await delayedFlaskSave.started;
     await waitFor(() => flaskWorldPlayer.life > damagedLife);
+    assert.equal(
+      (await repository.loadProfile(identities[0].characterId))?.profile.flaskBelt[0]?.stackSize,
+      flaskCountBefore,
+      "flask recovery starts while the durable belt write is still pending",
+    );
+    delayedFlaskSave.release();
+    await waitFor(async () => (await repository.loadProfile(identities[0].characterId))?.profile.flaskBelt[0]?.stackSize === flaskCountBefore - 1);
+
+    const xpBeforeCheckpoint = (await repository.loadProfile(identities[0].characterId))!.profile.character.xp;
+    flaskPlayer.experience += 17;
+    await (authoritativeRoom as unknown as { checkpointProgress: () => Promise<void> }).checkpointProgress();
+    assert.equal(
+      (await repository.loadProfile(identities[0].characterId))!.profile.character.xp,
+      xpBeforeCheckpoint + 17,
+      "periodic checkpoint persistence makes in-map XP durable before leave or completion",
+    );
+
+    const flaskRuntime = (authoritativeRoom as unknown as {
+      runtime: Map<string, { recoveries: Array<{ id: string }> }>;
+    }).runtime.get(identities[0].characterId)!;
+    flaskRuntime.recoveries.length = 0;
+    flaskWorldPlayer.life -= 20;
+    const rollbackLife = flaskWorldPlayer.life;
+    const rollbackBelt = (await repository.loadProfile(identities[0].characterId))!.profile.flaskBelt[0]!.stackSize;
+    const failedFlaskSave = repository.pauseNextSave(identities[0].characterId);
+    repository.rejectNextSaveAsLocked(identities[0].characterId, "locked-test-item");
+    let failedFlaskRejected = false;
+    clients[0].onMessage(SERVER_MESSAGES.rejected, (message: RejectedCommandMessage) => {
+      if (message.command === CLIENT_MESSAGES.useFlask && message.reason === "item_locked") failedFlaskRejected = true;
+    });
+    clients[0].send(CLIENT_MESSAGES.useFlask, { slot: 0 });
+    await failedFlaskSave.started;
+    await waitFor(() => flaskWorldPlayer.life > rollbackLife);
+    failedFlaskSave.release();
+    await waitFor(() => failedFlaskRejected);
+    assert.equal(flaskRuntime.recoveries.length, 0, "failed persistence removes the optimistic recovery effect");
+    assert.ok(flaskWorldPlayer.life <= rollbackLife + 0.01, "health already restored by the failed flask is rolled back");
+    assert.equal(
+      (await repository.loadProfile(identities[0].characterId))!.profile.flaskBelt[0]!.stackSize,
+      rollbackBelt,
+      "failed persistence rolls back both recovery and the authoritative belt charge",
+    );
 
     const targetId = firstMonsterId(world);
     const targetSlot = entitySlot(targetId);
@@ -260,6 +323,9 @@ test("four players fight the same authoritative monsters and damage cannot be fo
       world.monsters.x[slot] = playerBeforeDash.x + 600;
       world.monsters.y[slot] = playerBeforeDash.y + 600;
     }
+    const persistedBeforeKill = new Map(
+      [...authoritativeRoom.state.players.values()].map((candidate) => [candidate.characterId, candidate.persistedExperience]),
+    );
     clients.forEach((client, index) => {
       const attacker = authoritativeRoom.state.players.get(identities[index].characterId)!;
       const dx = world.monsters.x[targetSlot] - attacker.x;
@@ -277,7 +343,11 @@ test("four players fight the same authoritative monsters and damage cannot be fo
     assert.equal([...authoritativeRoom.state.players.values()].reduce((sum, player) => sum + player.kills, 0), 1);
     const killer = [...authoritativeRoom.state.players.values()].find((player) => player.kills === 1);
     assert.ok(killer && killer.experience > 0, "the credited killer receives replicated experience immediately");
-    assert.equal(killer.persistedExperience, 0, "map XP remains visibly pending until the next authoritative save");
+    assert.equal(
+      killer.persistedExperience,
+      persistedBeforeKill.get(killer.characterId),
+      "newly earned map XP remains visibly pending until the next authoritative checkpoint",
+    );
 
     await waitFor(() => authoritativeRoom.state.drops.size === 1);
     const drop = [...authoritativeRoom.state.drops.values()][0];
@@ -406,6 +476,9 @@ test("four players fight the same authoritative monsters and damage cannot be fo
     const exitingIdentity = identities[0];
     const exitingClient = clients[0];
     const exitingPlayer = authoritativeRoom.state.players.get(exitingIdentity.characterId)!;
+    const exitingWorldPlayer = world.players.get(exitingPlayer.worldIndex)!;
+    exitingWorldPlayer.life = exitingWorldPlayer.maxLife;
+    exitingPlayer.life = exitingPlayer.maxLife;
     const exitDrop = rewards.find((reward) => dropPayloads.get(reward.id)?.kind === "currency") ?? rewards[0];
     const exitItem = dropPayloads.get(exitDrop.id)!;
     exitDrop.x = exitingPlayer.x;
@@ -441,6 +514,77 @@ test("four players fight the same authoritative monsters and damage cannot be fo
     releasePausedSave?.();
     Math.random = originalRandom;
     await Promise.all(clients.map((client) => client.leave(true).catch(() => undefined)));
+    await server?.cleanup();
+    await server?.shutdown();
+    await repository.close();
+  }
+});
+
+test("a dropped map socket reconnects, resyncs world state, exits, and releases the room player", async () => {
+  const repository = new InMemoryPlayerRepository();
+  await repository.initialize();
+  const player = await createTestPlayer(repository, {
+    handle: "map-reconnect",
+    characterName: "Reconnect Player",
+    classId: "sorceress",
+  });
+  const parties = new InMemoryCoordination(repository);
+  await parties.create(player.characterId);
+  configureServerServices({ authSecret: secret, players: repository, parties, expeditions: parties });
+  const profile = await repository.loadProfile(player.characterId);
+  assert.ok(profile);
+  const mapEntry = profile.profile.inventory.entries.find((entry) => entry.item.kind === "map");
+  assert.ok(mapEntry && mapEntry.item.kind === "map");
+  const slotted = await new ProfileCommandService(repository).execute(player.characterId, profile.revision, {
+    type: "slot_map", itemId: mapEntry.item.id,
+  });
+  const opened = await new MapService(repository, parties, parties, secret).open(player.characterId, slotted.revision);
+  const claims = {
+    sessionId: randomUUID(),
+    authSessionId: randomUUID(),
+    ...player,
+    expiresAt: Date.now() + 60_000,
+  };
+  await repository.createAuthSession(claims.authSessionId, claims.accountId, claims.expiresAt);
+  const token = signSessionToken(claims, secret);
+  let server: ColyseusTestServer | null = null;
+  let client: ClientRoom<MapRoom, MapRoomState> | null = null;
+  try {
+    server = await boot(createGameServer(), 0);
+    const room = await server.createRoom<MapRoom>("map", { token, mapTicket: opened.mapTicket, portalIndex: 0, protocolVersion: WIRE_PROTOCOL_VERSION });
+    client = await server.connectTo(room, { token, mapTicket: opened.mapTicket, portalIndex: 0, protocolVersion: WIRE_PROTOCOL_VERSION });
+    client.onMessage("*", () => undefined);
+    await waitFor(() => room.state.players.get(player.characterId)?.connected === true);
+
+    const reconnectToken = client.reconnectionToken;
+    client.reconnection.enabled = false;
+    client.connection.close(4001, "simulate network loss");
+    await waitFor(() => room.state.players.get(player.characterId)?.connected === false);
+
+    client = await server.sdk.reconnect<MapRoomState>(reconnectToken, MapRoomState) as ClientRoom<MapRoom, MapRoomState>;
+    let snapshotReceived = false;
+    let unauthorizedSync = false;
+    client.onMessage(SERVER_MESSAGES.monsterSnapshot, () => { snapshotReceived = true; });
+    client.onMessage(SERVER_MESSAGES.rejected, (message: RejectedCommandMessage) => {
+      if (message.command === CLIENT_MESSAGES.requestWorldSync && message.reason === "unauthorized") unauthorizedSync = true;
+    });
+    client.send(CLIENT_MESSAGES.requestWorldSync, {});
+    await waitFor(() => snapshotReceived);
+    assert.equal(unauthorizedSync, false, "the replacement socket is rebound before resync messages arrive");
+    assert.equal(room.state.players.get(player.characterId)?.connected, true);
+
+    let exitReady: MapExitReadyMessage | null = null;
+    const requestId = randomUUID();
+    client.onMessage(SERVER_MESSAGES.mapExitReady, (message: MapExitReadyMessage) => { exitReady = message; });
+    client.send(CLIENT_MESSAGES.prepareMapExit, { requestId });
+    await waitFor(() => exitReady?.requestId === requestId);
+    await client.leave(true);
+    client = null;
+    await waitFor(() => room.state.players.size === 0);
+    assert.equal((room as unknown as { activeClients: Map<string, unknown> }).activeClients.size, 0);
+    assert.equal((room as unknown as { world: World }).world.players.getByCharacterId(player.characterId), null);
+  } finally {
+    await client?.leave(true).catch(() => undefined);
     await server?.cleanup();
     await server?.shutdown();
     await repository.close();

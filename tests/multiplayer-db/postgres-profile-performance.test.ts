@@ -6,7 +6,6 @@ import { createTestPlayer } from "../createTestPlayer";
 import { Client, Pool } from "pg";
 import type { CurrencyItem, PlayerProfile, StashTab } from "../../app/game/domain";
 import { PostgresPlayerRepository } from "../../server/persistence/PostgresPlayerRepository";
-import { CharacterWriteQueue } from "../../server/persistence/CharacterWriteQueue";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgres://crafty:crafty@127.0.0.1:5434/crafty";
 
@@ -78,10 +77,10 @@ test("mid-game profile persistence stays set-based and below the local latency b
       return originalQuery.apply(this, args);
     } as typeof originalQuery;
     const diffStartedAt = performance.now();
-    await repository.saveProfile(player.characterId, saved.revision, {
-      ...saved.profile,
-      character: { ...saved.profile.character, xp: saved.profile.character.xp + 1 },
-    });
+    await repository.mutateProfile(player.characterId, saved.revision, (currentProfile) => ({
+      ...currentProfile,
+      character: { ...currentProfile.character, xp: currentProfile.character.xp + 1 },
+    }));
     const diffDuration = performance.now() - diffStartedAt;
     Client.prototype.query = originalQuery;
     context.diagnostic(`diff save: ${queryCount} queries, ${diffDuration.toFixed(2)}ms with no item/location changes`);
@@ -95,10 +94,9 @@ test("mid-game profile persistence stays set-based and below the local latency b
   }
 });
 
-test("a burst of 20 character writes serialises without revision conflicts or pool exhaustion", async () => {
+test("a burst of 20 atomic character mutations serialises without revision conflicts or pool exhaustion", async () => {
   const repository = new PostgresPlayerRepository(databaseUrl);
   const cleanup = new Pool({ connectionString: databaseUrl, max: 1 });
-  const queue = new CharacterWriteQueue();
   const suffix = randomUUID().slice(0, 8);
   const handle = `profile_burst_${suffix}`;
   try {
@@ -106,19 +104,18 @@ test("a burst of 20 character writes serialises without revision conflicts or po
     const player = await createTestPlayer(repository, { handle, characterName: `Burst-${suffix}`, classId: "sorceress" });
     const before = await repository.loadProfile(player.characterId);
     assert.ok(before);
-    const results = await Promise.all(Array.from({ length: 20 }, () => queue.run(player.characterId, async () => {
-      const current = await repository.loadProfile(player.characterId);
-      assert.ok(current);
-      return repository.saveProfile(player.characterId, current.revision, {
-        ...current.profile,
-        character: { ...current.profile.character, xp: current.profile.character.xp + 1 },
-      });
-    })));
+    const results = await Promise.all(Array.from({ length: 20 }, () => repository.mutateProfile(
+      player.characterId,
+      null,
+      (current) => ({
+        ...current,
+        character: { ...current.character, xp: current.character.xp + 1 },
+      }),
+    )));
     const after = await repository.loadProfile(player.characterId);
     assert.equal(results.length, 20);
     assert.equal(after?.revision, before.revision + 20);
     assert.equal(after?.profile.character.xp, before.profile.character.xp + 20);
-    assert.equal(queue.pendingCharacters, 0);
   } finally {
     await cleanup.query("DELETE FROM accounts WHERE handle = $1", [handle]);
     await cleanup.end();

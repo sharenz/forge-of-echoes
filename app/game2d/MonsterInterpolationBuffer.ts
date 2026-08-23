@@ -1,8 +1,9 @@
 import { decodeMonsterLifecycle, decodeMonsterSnapshot, type MonsterSpawnRecord } from "../../multiplayer/wire/snapshot";
+import { AUTHORITATIVE_SIMULATION_STEP_SECONDS } from "../../multiplayer/simulation";
 import type { NetworkMonsterSampleConsumer, NetworkMonsterSampler } from "./types";
 
 interface TimedMonsterFrame {
-  receivedAt: number;
+  serverTime: number;
   x: number;
   y: number;
   lifePercent: number;
@@ -22,8 +23,14 @@ interface BufferedMonster {
 export class MonsterInterpolationBuffer implements NetworkMonsterSampler {
   private readonly monsters = new Map<number, BufferedMonster>();
   private readonly idsBySlot = new Map<number, number>();
+  private clockOffsetMilliseconds: number | null = null;
+  private renderAheadPackets = 0;
 
-  constructor(private readonly delayMilliseconds = 100, private readonly maximumFrames = 6) {}
+  constructor(
+    private readonly delayMilliseconds = 150,
+    private readonly maximumFrames = 8,
+    private readonly maximumExtrapolationMilliseconds = 100,
+  ) {}
 
   applyLifecycle(bytes: Uint8Array): void {
     const packet = decodeMonsterLifecycle(bytes);
@@ -39,6 +46,30 @@ export class MonsterInterpolationBuffer implements NetworkMonsterSampler {
 
   applySnapshot(bytes: Uint8Array, receivedAt: number): void {
     const packet = decodeMonsterSnapshot(bytes);
+    const serverTime = packet.tick * AUTHORITATIVE_SIMULATION_STEP_SECONDS * 1_000;
+    const measuredOffset = receivedAt - serverTime;
+    const renderedBeforeObservation = this.clockOffsetMilliseconds === null
+      ? Number.NEGATIVE_INFINITY
+      : receivedAt - this.clockOffsetMilliseconds - this.delayMilliseconds;
+    if (renderedBeforeObservation > serverTime + this.maximumExtrapolationMilliseconds / 2) {
+      this.renderAheadPackets += 1;
+    } else {
+      this.renderAheadPackets = 0;
+    }
+    if (this.renderAheadPackets >= 3) {
+      // A server stall can deliberately drop simulation steps. Re-anchor after
+      // three consecutive confirmations instead of spending minutes pinned at
+      // the extrapolation cap while the old min-filter offset crawls upward.
+      this.clockOffsetMilliseconds = measuredOffset;
+      this.renderAheadPackets = 0;
+    } else if (this.clockOffsetMilliseconds === null || measuredOffset < this.clockOffsetMilliseconds) {
+      // The lowest observed offset is the least-jittered clock sample. A slow
+      // upward nudge still follows long-running clock drift without turning a
+      // delayed packet into visible speed-up/slow-down.
+      this.clockOffsetMilliseconds = measuredOffset;
+    } else {
+      this.clockOffsetMilliseconds += Math.min(0.02, measuredOffset - this.clockOffsetMilliseconds);
+    }
     for (const frame of packet.monsters) {
       const resolvedId = this.idsBySlot.get(frame.id & 0xffff) ?? frame.id;
       const monster = this.monsters.get(resolvedId);
@@ -50,27 +81,20 @@ export class MonsterInterpolationBuffer implements NetworkMonsterSampler {
         : frame.positionUnchanged ? (previous?.y ?? monster.static.y) : frame.y;
       const lifePercent = frame.lifeChanged ? frame.lifePercent : (previous?.lifePercent ?? 1);
       const flags = frame.flagsChanged ? frame.flags : (previous?.flags ?? 0);
-      monster.frames.push({ receivedAt, x, y, lifePercent, flags });
+      // A repeated or reordered packet must never rewind an entity timeline.
+      if (previous && serverTime <= previous.serverTime) continue;
+      monster.frames.push({ serverTime, x, y, lifePercent, flags });
       if (monster.frames.length > this.maximumFrames) monster.frames.splice(0, monster.frames.length - this.maximumFrames);
     }
   }
 
   sample(now: number): InterpolatedMonster[] {
-    const renderAt = now - this.delayMilliseconds;
+    const renderAt = this.renderServerTime(now);
     const sampled: InterpolatedMonster[] = [];
     for (const monster of this.monsters.values()) {
       const frames = monster.frames;
       if (frames.length === 0) continue;
-      let from = frames[0];
-      let to = frames[frames.length - 1];
-      for (let index = 1; index < frames.length; index += 1) {
-        if (frames[index].receivedAt < renderAt) continue;
-        from = frames[index - 1];
-        to = frames[index];
-        break;
-      }
-      const duration = Math.max(1, to.receivedAt - from.receivedAt);
-      const progress = Math.max(0, Math.min(1, (renderAt - from.receivedAt) / duration));
+      const { from, to, progress } = this.framePair(frames, renderAt);
       sampled.push({
         ...monster.static,
         x: from.x + (to.x - from.x) * progress,
@@ -83,20 +107,11 @@ export class MonsterInterpolationBuffer implements NetworkMonsterSampler {
   }
 
   forEachSample(now: number, consumer: NetworkMonsterSampleConsumer): void {
-    const renderAt = now - this.delayMilliseconds;
+    const renderAt = this.renderServerTime(now);
     for (const [id, monster] of this.monsters) {
       const frames = monster.frames;
       if (frames.length === 0) continue;
-      let from = frames[0];
-      let to = frames[frames.length - 1];
-      for (let index = 1; index < frames.length; index += 1) {
-        if (frames[index].receivedAt < renderAt) continue;
-        from = frames[index - 1];
-        to = frames[index];
-        break;
-      }
-      const duration = Math.max(1, to.receivedAt - from.receivedAt);
-      const progress = Math.max(0, Math.min(1, (renderAt - from.receivedAt) / duration));
+      const { from, to, progress } = this.framePair(frames, renderAt);
       consumer(
         id,
         monster.static.archetype,
@@ -123,5 +138,32 @@ export class MonsterInterpolationBuffer implements NetworkMonsterSampler {
 
   get size(): number {
     return this.monsters.size;
+  }
+
+  private renderServerTime(now: number): number {
+    if (this.clockOffsetMilliseconds === null) return Number.NEGATIVE_INFINITY;
+    return now - this.clockOffsetMilliseconds - this.delayMilliseconds;
+  }
+
+  private framePair(frames: TimedMonsterFrame[], renderAt: number): {
+    from: TimedMonsterFrame;
+    to: TimedMonsterFrame;
+    progress: number;
+  } {
+    if (frames.length === 1 || renderAt <= frames[0].serverTime) {
+      return { from: frames[0], to: frames[0], progress: 0 };
+    }
+    for (let index = 1; index < frames.length; index += 1) {
+      const to = frames[index];
+      if (to.serverTime < renderAt) continue;
+      const from = frames[index - 1];
+      const duration = Math.max(1, to.serverTime - from.serverTime);
+      return { from, to, progress: Math.max(0, Math.min(1, (renderAt - from.serverTime) / duration)) };
+    }
+    const to = frames[frames.length - 1];
+    const from = frames[Math.max(0, frames.length - 2)];
+    const duration = Math.max(1, to.serverTime - from.serverTime);
+    const extrapolation = Math.min(this.maximumExtrapolationMilliseconds, Math.max(0, renderAt - to.serverTime));
+    return { from, to, progress: Math.min(2, 1 + extrapolation / duration) };
   }
 }

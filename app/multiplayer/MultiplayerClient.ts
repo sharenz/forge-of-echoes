@@ -1,6 +1,6 @@
 import { Client, type Room } from "@colyseus/sdk";
 import type { CharacterClassId } from "../game/domain";
-import type { ProfileCommand } from "../../multiplayer/protocol";
+import { MULTIPLAYER_LIMITS, WIRE_PROTOCOL_VERSION, type ProfileCommand } from "../../multiplayer/protocol";
 import type { AccountIdentity, AuthoritativeProfile, CharacterRosterEntry, PlayerIdentity } from "../../server/persistence/PlayerRepository";
 import type { PartySnapshot, PublicPartyListing } from "../../server/coordination/PartyCoordinator";
 import type { HideoutState } from "../../server/state/HideoutState";
@@ -30,6 +30,41 @@ export class MultiplayerRequestError extends Error {
   }
 }
 
+export class ProtocolMismatchError extends Error {
+  constructor(readonly serverVersion: string | null) {
+    super("The game was updated. Reload the page to reconnect with the current version.");
+  }
+}
+
+export interface RetryWindowOptions {
+  windowMilliseconds: number;
+  delaysMilliseconds?: readonly number[];
+  now?: () => number;
+  sleep?: (delayMilliseconds: number) => Promise<void>;
+}
+
+export async function retryWithinWindow<T>(attempt: () => Promise<T>, options: RetryWindowOptions): Promise<T> {
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? ((delayMilliseconds) => new Promise((resolve) => setTimeout(resolve, delayMilliseconds)));
+  const delays = options.delaysMilliseconds ?? [100, 200, 400, 800, 1_200, 1_600, 2_000];
+  const deadline = now() + options.windowMilliseconds;
+  let retry = 0;
+  let lastError: unknown = new Error("Connection recovery failed");
+  while (now() < deadline) {
+    try {
+      return await attempt();
+    } catch (error) {
+      lastError = error;
+    }
+    const remaining = deadline - now();
+    if (remaining <= 0) break;
+    const delay = Math.min(delays[Math.min(retry, delays.length - 1)] ?? remaining, remaining);
+    retry += 1;
+    await sleep(delay);
+  }
+  throw lastError;
+}
+
 function defaultHttpEndpoint(): string {
   if (typeof window === "undefined") return "http://127.0.0.1:2567";
   return `${window.location.protocol}//${window.location.hostname}:2567`;
@@ -39,6 +74,11 @@ async function responseJson<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => ({})) as { error?: string; message?: string };
   if (!response.ok) throw new MultiplayerRequestError(response.status, body.error ?? "request_failed", body.message ?? `Request failed (${response.status})`);
   return body as T;
+}
+
+function assertCompatibleProtocol(response: Response): void {
+  const version = response.headers.get("x-crafty-protocol-version");
+  if (version !== String(WIRE_PROTOCOL_VERSION)) throw new ProtocolMismatchError(version);
 }
 
 export class MultiplayerClient {
@@ -52,13 +92,23 @@ export class MultiplayerClient {
     this.realtime = new Client(this.websocketEndpoint);
   }
 
-  async createAccountSession(handle: string): Promise<AccountSession> {
+  async createAccountSession(handle: string, password: string, mode: "login" | "register"): Promise<AccountSession> {
     const response = await fetch(`${this.httpEndpoint}/api/accounts/session`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ handle }),
+      body: JSON.stringify({ handle, password, mode }),
     });
+    assertCompatibleProtocol(response);
     return responseJson<AccountSession>(response);
+  }
+
+  async logoutAccount(account: AccountSession): Promise<void> {
+    const response = await fetch(`${this.httpEndpoint}/api/accounts/logout`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${account.token}` },
+    });
+    assertCompatibleProtocol(response);
+    if (!response.ok) await responseJson<unknown>(response);
   }
 
   createCharacter(account: AccountSession, input: { characterName: string; classId: CharacterClassId }): Promise<CreatedCharacterResponse> {
@@ -154,14 +204,32 @@ export class MultiplayerClient {
   }
 
   connectHideout(session: MultiplayerSession, partyId: string): Promise<Room<unknown, HideoutState>> {
-    return this.realtime.joinOrCreate<HideoutState>("hideout", { token: session.token, partyId });
+    return this.realtime.joinOrCreate<HideoutState>("hideout", { token: session.token, partyId, protocolVersion: WIRE_PROTOCOL_VERSION });
   }
 
   connectMap(session: MultiplayerSession, mapTicket: string, portalIndex: number, roomId?: string): Promise<Room<unknown, MapRoomState>> {
-    const options = { token: session.token, mapTicket, portalIndex };
+    const options = { token: session.token, mapTicket, portalIndex, protocolVersion: WIRE_PROTOCOL_VERSION };
     return roomId
       ? this.realtime.joinById<MapRoomState>(roomId, options)
       : this.realtime.create<MapRoomState>("map", options);
+  }
+
+  async reconnectMap(reconnectionToken: string): Promise<Room<unknown, MapRoomState>> {
+    // Leave a small margin inside the server's seat window so the final
+    // attempt can complete before allowReconnection expires.
+    try {
+      return await retryWithinWindow(
+        () => this.realtime.reconnect<MapRoomState>(reconnectionToken),
+        { windowMilliseconds: MULTIPLAYER_LIMITS.reconnectSeconds * 1_000 - 250 },
+      );
+    } catch (error) {
+      // A rolling deploy may have replaced the server with an incompatible
+      // build while this socket was disconnected. Turn that into a clear
+      // reload instruction instead of repeated binary-decoder failures.
+      const health = await fetch(`${this.httpEndpoint}/healthz`).catch(() => null);
+      if (health) assertCompatibleProtocol(health);
+      throw error;
+    }
   }
 
   private async request<T>(path: string, session: { token: string }, init: RequestInit = {}): Promise<T> {
@@ -173,6 +241,7 @@ export class MultiplayerClient {
         ...init.headers,
       },
     });
+    assertCompatibleProtocol(response);
     return responseJson<T>(response);
   }
 }

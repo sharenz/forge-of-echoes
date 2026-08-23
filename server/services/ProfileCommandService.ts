@@ -10,7 +10,7 @@ import { allocateAttributePoint, allocateSkillPoint } from "../../app/game/progr
 import { setSkillLoadoutSlot } from "../../app/game/skill-loadout";
 import { activeStashTab, addStashTab, findStashEntry, renameStashTab, selectStashTab, updateStashContainer } from "../../app/game/stash";
 import type { ProfileCommand } from "../../multiplayer/protocol";
-import { ProfileRevisionConflict } from "../persistence/errors";
+import { CharacterNotFoundError, ProfileRevisionConflict } from "../persistence/errors";
 import type { AuthoritativeProfile, PlayerRepository } from "../persistence/PlayerRepository";
 
 export class ProfileCommandError extends Error {
@@ -23,17 +23,19 @@ export class ProfileCommandService {
   constructor(private readonly players: PlayerRepository) {}
 
   async execute(characterId: string, expectedRevision: number, command: ProfileCommand): Promise<AuthoritativeProfile> {
-    const current = await this.players.loadProfile(characterId);
-    if (!current) throw new ProfileCommandError("not_found", "Character profile was not found");
-    if (current.revision !== expectedRevision) throw new ProfileCommandError("revision_conflict", "Profile changed on another client");
     const merchantEntitlements = command.type === "buy_merchant_offer"
       ? await this.players.listMerchantEntitlementsForCharacter(characterId)
       : [];
-    const next = this.apply(current.profile, command, merchantEntitlements);
-    if (next === current.profile) throw new ProfileCommandError("invalid_command", "Command is not valid for the current profile state");
     try {
-      return await this.players.saveProfile(characterId, expectedRevision, next);
+      return await this.players.mutateProfile(characterId, expectedRevision, (current) => {
+        const next = this.apply(current, command, merchantEntitlements);
+        if (next === current) throw new ProfileCommandError("invalid_command", "Command is not valid for the current profile state");
+        return next;
+      });
     } catch (error) {
+      if (error instanceof CharacterNotFoundError) {
+        throw new ProfileCommandError("not_found", "Character profile was not found");
+      }
       if (error instanceof ProfileRevisionConflict) {
         throw new ProfileCommandError("revision_conflict", "Profile changed on another client");
       }

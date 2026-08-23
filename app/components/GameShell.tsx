@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTER_CLASSES } from "../game/config/classes";
-import { XP_BY_LEVEL } from "../game/config/progression";
 import { MERCHANTS, availableMerchantIds, isMerchantId, type MerchantId } from "../game/config/merchants";
 import { buildArenaBalance } from "../game/combat";
 import type { ActiveSkillId, AttributeKey, CharacterClassId, CharacterEquipmentSlot, ItemContainerId, SkillBarSkillId } from "../game/domain";
@@ -11,9 +10,12 @@ import { isEquipmentItem, isMapItem, profileCurrencyAmounts } from "../game/inve
 import { containerItems, findContainerEntry, findFirstFit } from "../game/item-container";
 import { activeStashTab, findStashEntry } from "../game/stash";
 import { calculateCharacterStats } from "../game/stats";
+import { effectiveMusicVolume, effectiveWorldVolume, type AudioSettingsChannel } from "../game/audio-settings";
 import type { WorldStation } from "../game2d/types";
 import { AttributesPanel } from "./AttributesPanel";
+import { AudioSettingsMenu } from "./AudioSettingsMenu";
 import { GameNotification } from "./GameNotification";
+import { GameMenuDock } from "./GameMenuDock";
 import { InventoryPanel } from "./InventoryPanel";
 import { MapWorkshop } from "./MapWorkshop";
 import { MerchantPanel } from "./MerchantPanel";
@@ -22,10 +24,11 @@ import { PhaserWorld } from "./PhaserWorld";
 import { SkillTreePanel } from "./SkillTreePanel";
 import { MultiplayerPanel } from "./MultiplayerPanel";
 import { useMultiplayerHideout } from "../multiplayer/useMultiplayerHideout";
+import { useAudioSettings } from "./useAudioSettings";
 import { ENABLED_CHARACTER_CLASS_IDS } from "../../multiplayer/protocol";
 
 type CharacterPanelView = "inventory" | "attributes" | "skills";
-type HideoutPanel = CharacterPanelView | "stash" | "maps" | "merchant" | "multiplayer" | null;
+type HideoutPanel = CharacterPanelView | "stash" | "maps" | "merchant" | "multiplayer" | "settings" | null;
 type AccountView = "roster" | "create-character";
 
 function isCharacterPanel(panel: HideoutPanel): panel is CharacterPanelView {
@@ -33,9 +36,15 @@ function isCharacterPanel(panel: HideoutPanel): panel is CharacterPanelView {
 }
 
 function characterPanelTitle(panel: CharacterPanelView): string {
-  if (panel === "attributes") return "Attributes";
-  if (panel === "skills") return "Skill Tree";
+  if (panel === "attributes") return "Character";
+  if (panel === "skills") return "Skills";
   return "Inventory";
+}
+
+function characterPanelKicker(panel: CharacterPanelView): string {
+  if (panel === "attributes") return "Attributes & combat values";
+  if (panel === "skills") return "Spellbook & bindings";
+  return "Equipment & backpack";
 }
 
 const ENABLED_CHARACTER_CLASSES: ReadonlySet<CharacterClassId> = new Set(ENABLED_CHARACTER_CLASS_IDS);
@@ -63,12 +72,15 @@ export function GameShell() {
   const [characterName, setCharacterName] = useState("");
   const [accountView, setAccountView] = useState<AccountView>("roster");
   const playerNameInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [panel, setPanel] = useState<HideoutPanel>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [mapFinalRageActive, setMapFinalRageActive] = useState(false);
   const [mapExitPending, setMapExitPending] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(true);
+  const [audioSettings, setAudioSettings] = useAudioSettings();
   const [activeMerchantId, setActiveMerchantId] = useState<MerchantId>("cartographer-rook");
   const merchantIds = useMemo(
     () => availableMerchantIds(multiplayer.account?.account.merchantEntitlements ?? []),
@@ -88,6 +100,21 @@ export function GameShell() {
     () => profile && activeMap ? buildArenaBalance(profile, activeMap) : undefined,
     [activeMap, profile],
   );
+  const musicVolume = effectiveMusicVolume(audioSettings);
+  const worldVolume = effectiveWorldVolume(audioSettings);
+  const effectiveMusicEnabled = musicEnabled && audioSettings.music > 0;
+
+  const updateAudioSetting = (channel: AudioSettingsChannel, value: number) => {
+    setAudioSettings((current) => ({ ...current, [channel]: value }));
+    if (channel === "music") setMusicEnabled(value > 0);
+  };
+
+  const updateMusicEnabled = (enabled: boolean) => {
+    if (enabled && audioSettings.music <= 0) {
+      setAudioSettings((current) => ({ ...current, music: 1 }));
+    }
+    setMusicEnabled(enabled);
+  };
 
   const requestMapExit = () => {
     if (mapExitPending) return;
@@ -107,24 +134,39 @@ export function GameShell() {
   }, [multiplayer.account]);
 
   useEffect(() => {
-    const toggleInventory = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    const toggleInterface = (event: KeyboardEvent) => {
+      const target = event.target;
       if (event.code === "Escape") {
-        setPanel(null);
+        event.preventDefault();
+        setPanel((current) => current === null ? "settings" : null);
         return;
       }
-      if (event.code !== "KeyI" || event.repeat || !profile) return;
-      setPanel((current) => current === "inventory" ? null : "inventory");
+      if (target instanceof HTMLInputElement
+        || target instanceof HTMLTextAreaElement
+        || target instanceof HTMLSelectElement
+        || (target instanceof HTMLElement && target.isContentEditable)) return;
+      if (!profile || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      const requested: HideoutPanel = event.code === "KeyI" ? "inventory"
+        : event.code === "KeyC" ? "attributes"
+          : event.code === "KeyK" ? "skills"
+            : !multiplayer.mapAdapter && event.code === "KeyM" ? "maps"
+              : !multiplayer.mapAdapter && event.code === "KeyP" ? "multiplayer"
+                : null;
+      if (!requested) return;
+      event.preventDefault();
+      setPanel((current) => current === requested ? null : requested);
     };
-    window.addEventListener("keydown", toggleInventory);
-    return () => window.removeEventListener("keydown", toggleInventory);
-  }, [profile]);
+    window.addEventListener("keydown", toggleInterface);
+    return () => window.removeEventListener("keydown", toggleInterface);
+  }, [multiplayer.mapAdapter, profile]);
 
   if (!multiplayer.account) {
     return (
       <>
-        <MenuSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
-        <PhaserWorld mode="login" classId="sorceress">
+        <MenuSoundtrack enabled={effectiveMusicEnabled} volume={musicVolume} />
+        <AudioSettingsMenu open={panel === "settings"} settings={audioSettings} musicEnabled={effectiveMusicEnabled} onOpenChange={(open) => setPanel(open ? "settings" : null)} onChange={updateAudioSetting} onMusicEnabledChange={updateMusicEnabled} />
+        <PhaserWorld mode="login" classId="sorceress" worldVolume={worldVolume}>
+          <GameMenuDock className="menu-screen-dock" settingsOpen={panel === "settings"} onSettingsClick={() => setPanel(panel === "settings" ? null : "settings")} />
           <div className="creation-header"><span className="brand-rune">F</span><div><strong>FORGE OF ECHOES</strong><small>The Ashen Realm</small></div></div>
           <section className="login-screen">
             <div className="login-card">
@@ -133,12 +175,17 @@ export function GameShell() {
               <form className="login-form" onSubmit={(event) => {
                 event.preventDefault();
                 const playerName = playerNameInputRef.current?.value.trim() ?? "";
+                const password = passwordInputRef.current?.value ?? "";
                 rememberPlayerName(playerName);
-                void multiplayer.connectAccount(playerName);
+                void multiplayer.connectAccount(playerName, password, authMode);
               }}>
-                <label><span>Player name</span><input ref={playerNameInputRef} required placeholder="player-one" minLength={2} maxLength={24} pattern="[A-Za-z0-9_\-]+" autoComplete="username" /></label>
-                <button type="submit" disabled={multiplayer.busy}><span>{multiplayer.busy ? "Entering…" : "Continue"}</span><small>Choose your character</small></button>
+                <label><span>Player name</span><input ref={playerNameInputRef} required placeholder="player-one" minLength={2} maxLength={24} pattern="[A-Za-z0-9_\\-]+" autoComplete="username" /></label>
+                <label><span>Password</span><input ref={passwordInputRef} required type="password" minLength={10} maxLength={128} autoComplete={authMode === "login" ? "current-password" : "new-password"} /></label>
+                <button type="submit" disabled={multiplayer.busy}><span>{multiplayer.busy ? "Entering…" : authMode === "login" ? "Enter" : "Create account"}</span><small>Choose your character</small></button>
               </form>
+              <button type="button" className="login-mode-toggle" onClick={() => { multiplayer.clearError(); setAuthMode((current) => current === "login" ? "register" : "login"); }}>
+                {authMode === "login" ? "New to the realm? Create an account" : "Already forged an account? Sign in"}
+              </button>
             </div>
             {multiplayer.error && <div className="multiplayer-error roster-error" role="alert">{multiplayer.error}</div>}
           </section>
@@ -152,8 +199,10 @@ export function GameShell() {
       const sorceress = CHARACTER_CLASSES.sorceress;
       return (
         <>
-          <MenuSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
-          <PhaserWorld mode="character-create" classId="sorceress">
+          <MenuSoundtrack enabled={effectiveMusicEnabled} volume={musicVolume} />
+          <AudioSettingsMenu open={panel === "settings"} settings={audioSettings} musicEnabled={effectiveMusicEnabled} onOpenChange={(open) => setPanel(open ? "settings" : null)} onChange={updateAudioSetting} onMusicEnabledChange={updateMusicEnabled} />
+          <PhaserWorld mode="character-create" classId="sorceress" worldVolume={worldVolume}>
+            <GameMenuDock className="menu-screen-dock" settingsOpen={panel === "settings"} onSettingsClick={() => setPanel(panel === "settings" ? null : "settings")} />
             <div className="creation-header"><span className="brand-rune">F</span><div><strong>FORGE OF ECHOES</strong><small>The Ashen Realm</small></div></div>
             <section className="dedicated-character-create">
               <button type="button" className="back-to-roster" onClick={() => { multiplayer.clearError(); setCharacterName(""); setAccountView("roster"); }}>‹ Back to characters</button>
@@ -166,7 +215,7 @@ export function GameShell() {
                   event.preventDefault();
                   void multiplayer.createCharacter(characterName.trim(), "sorceress");
                 }}>
-                  <label><span>Unique character name</span><input required value={characterName} onChange={(event) => setCharacterName(event.target.value)} placeholder="Name your Sorceress" minLength={2} maxLength={24} pattern="[A-Za-z][A-Za-z0-9_\-]*" autoComplete="off" /></label>
+                  <label><span>Unique character name</span><input required value={characterName} onChange={(event) => setCharacterName(event.target.value)} placeholder="Name your Sorceress" minLength={2} maxLength={24} pattern="[A-Za-z][A-Za-z0-9_\\-]*" autoComplete="off" /></label>
                   <button type="submit" disabled={multiplayer.busy || characterName.trim().length < 2}><span>{multiplayer.busy ? "Forging…" : "Create Sorceress"}</span><small>Enter the hideout</small></button>
                 </form>
                 <small className="name-rules">2–24 characters · begin with a letter · letters, numbers, hyphens, and underscores</small>
@@ -180,8 +229,10 @@ export function GameShell() {
 
     return (
       <>
-        <MenuSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
-        <PhaserWorld mode="login" classId="sorceress">
+        <MenuSoundtrack enabled={effectiveMusicEnabled} volume={musicVolume} />
+        <AudioSettingsMenu open={panel === "settings"} settings={audioSettings} musicEnabled={effectiveMusicEnabled} onOpenChange={(open) => setPanel(open ? "settings" : null)} onChange={updateAudioSetting} onMusicEnabledChange={updateMusicEnabled} />
+        <PhaserWorld mode="login" classId="sorceress" worldVolume={worldVolume}>
+          <GameMenuDock className="menu-screen-dock" settingsOpen={panel === "settings"} onSettingsClick={() => setPanel(panel === "settings" ? null : "settings")} />
           <div className="creation-header"><span className="brand-rune">F</span><div><strong>FORGE OF ECHOES</strong><small>The Ashen Realm</small></div></div>
           <section className="character-roster-screen">
             <header className="roster-heading"><div><span>{multiplayer.account.account.handle}</span><h1>Your Characters</h1><p>Select a character to enter the hideout.</p></div><div className="roster-heading-actions"><button type="button" className="create-character-action" onClick={() => { multiplayer.clearError(); setCharacterName(""); setAccountView("create-character"); }}>＋ Create Character</button><button type="button" onClick={() => { multiplayer.clearError(); setAccountView("roster"); void multiplayer.leaveAccount(); }}>Logout</button></div></header>
@@ -205,7 +256,7 @@ export function GameShell() {
 
   const authoritativeWorldReady = multiplayer.mapAdapter !== undefined || multiplayer.adapter !== undefined;
   if (!profile || !stats || !statCalculation || !currencies || !authoritativeWorldReady) {
-    return <PhaserWorld mode="loading" classId={multiplayer.session.player.classId}><div className="world-loader"><span /><strong>Loading {multiplayer.session.player.characterName}</strong><small>Fetching authoritative profile</small></div></PhaserWorld>;
+    return <PhaserWorld mode="loading" classId={multiplayer.session.player.classId} worldVolume={worldVolume}><div className="world-loader"><span /><strong>Loading {multiplayer.session.player.characterName}</strong><small>Fetching authoritative profile</small></div></PhaserWorld>;
   }
 
   const backpackItems = containerItems(profile.inventory);
@@ -219,11 +270,13 @@ export function GameShell() {
     const characterPanelOpen = isCharacterPanel(panel);
     return (
       <>
-        <MapSoundtrack finalRageActive={mapFinalRageActive} enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
+        <MapSoundtrack finalRageActive={mapFinalRageActive} enabled={effectiveMusicEnabled} volume={musicVolume} />
+        <AudioSettingsMenu open={panel === "settings"} settings={audioSettings} musicEnabled={effectiveMusicEnabled} onOpenChange={(open) => setPanel(open ? "settings" : null)} onChange={updateAudioSetting} onMusicEnabledChange={updateMusicEnabled} />
         <PhaserWorld
           mode="arena"
           classId={profile.character.classId!}
-          controlsBlocked={characterPanelOpen || mapExitPending}
+          controlsBlocked={characterPanelOpen || panel === "settings" || mapExitPending}
+          worldVolume={worldVolume}
           arenaBalance={arenaBalance}
           activeMap={activeMap}
           characterStats={stats}
@@ -236,12 +289,16 @@ export function GameShell() {
           onItemDropToGround={characterPanelOpen ? onlineDropItemToGround : undefined}
           onFinalRageChange={setMapFinalRageActive}
         >
-          <button type="button" className="arena-inventory-toggle" onClick={() => setPanel(characterPanelOpen ? null : "inventory")}>Character <kbd>I</kbd></button>
+          <GameMenuDock className="arena-hotkey-dock" settingsOpen={panel === "settings"} onSettingsClick={() => setPanel(panel === "settings" ? null : "settings")}>
+            <button type="button" className={panel === "inventory" ? "active" : ""} onClick={() => setPanel(panel === "inventory" ? null : "inventory")} aria-label="Inventory (I)"><i aria-hidden="true">▦</i><kbd>I</kbd><span>Inventory</span></button>
+            <button type="button" className={panel === "attributes" ? "active" : ""} onClick={() => setPanel(panel === "attributes" ? null : "attributes")} aria-label="Character (C)"><i aria-hidden="true">◆</i><kbd>C</kbd><span>Character</span></button>
+            <button type="button" className={panel === "skills" ? "active" : ""} onClick={() => setPanel(panel === "skills" ? null : "skills")} aria-label="Skills (K)"><i aria-hidden="true">✦</i><kbd>K</kbd><span>Skills</span></button>
+          </GameMenuDock>
           <button type="button" className="return-hideout" disabled={mapExitPending} onClick={requestMapExit}>{mapExitPending ? "Returning…" : "Return to hideout"}</button>
           {characterPanelOpen && (
             <div className="world-panel-backdrop arena-panel-backdrop character-interface-backdrop">
               <section className={`world-panel character-panel panel-${panel}`} aria-label={`Character ${panel}`}>
-                <header><div><span>Combat continues online · controls blocked · changes apply immediately</span><h2>{characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></header>
+                <header><div><span>{characterPanelKicker(panel)}</span><h2>{characterPanelTitle(panel)}</h2></div><div className="panel-header-actions"><button type="button" onClick={() => setPanel(null)} aria-label="Close character interface">×</button></div></header>
                 {panel === "inventory" && <InventoryPanel profile={profile} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onEquipItem={onlineEquipItem} onMoveItem={onlineMoveItem} onQuickStash={onlineQuickStash} onQuickUnstash={onlineQuickUnstash} onApplyCurrency={onlineApplyCurrency} onSelectStashTab={onlineSelectStash} onRenameStashTab={onlineRenameStash} onCreateStashTab={onlineCreateStash} onLoadFlask={onlineLoadFlask} />}
                 {panel === "attributes" && <AttributesPanel progress={profile.character} stats={stats} breakdown={statCalculation.breakdown} onAllocate={onlineAllocateAttribute} />}
                 {panel === "skills" && <SkillTreePanel progress={profile.character} castSpeed={stats.castSpeed} cooldownMultiplier={stats.skillCooldown} onAllocate={onlineAllocateSkill} onSetSlot={onlineSetSkillSlot} />}
@@ -253,9 +310,6 @@ export function GameShell() {
       </>
     );
   }
-
-  const xpRequired = XP_BY_LEVEL(profile.character.level);
-  const xpPercent = profile.character.level === 99 ? 100 : (profile.character.xp / xpRequired) * 100;
 
   function handleStation(station: WorldStation, portalIndex?: number) {
     if (station === "stash") setPanel("stash");
@@ -364,28 +418,24 @@ export function GameShell() {
 
   return (
     <>
-      <HideoutSoundtrack enabled={musicEnabled} onEnabledChange={setMusicEnabled} />
-      <PhaserWorld mode="hideout" classId={profile.character.classId!} portalIndexes={availablePortalIndexes} merchantIds={merchantIds} paused={Boolean(panel)} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation.breakdown} flaskBelt={profile.flaskBelt} onFlaskLoad={onlineLoadFlask} onStation={handleStation} multiplayer={multiplayer.adapter}>
-      <header className="hideout-hud">
-        <div className="brand-lockup"><span className="brand-mark">F</span><div><strong>FORGE OF ECHOES</strong><small>THE FORGE HIDEOUT</small></div></div>
-        <div className="hideout-character"><span className={`class-crest ${profile.character.classId}`}>{profile.character.classId!.charAt(0).toUpperCase()}</span><div><strong>{profile.character.name}</strong><small>Level {profile.character.level} {CHARACTER_CLASSES[profile.character.classId!].name}</small></div></div>
-        <nav>
-          <button type="button" onClick={() => setPanel("inventory")}>Inventory <kbd>I</kbd></button>
-          <button type="button" onClick={() => setPanel("attributes")}>Attributes <strong>{profile.character.unspentAttributePoints}</strong></button>
-          <button type="button" onClick={() => setPanel("skills")}>Skills <strong>{profile.character.unspentSkillPoints}</strong></button>
-          <button type="button" onClick={() => setPanel("maps")}>Maps <strong>{inventoryMaps.length + (profile.mapDevice ? 1 : 0)}</strong></button>
-          <button type="button" className={multiplayer.adapter ? "online" : ""} onClick={() => setPanel("multiplayer")}>Party <strong>{multiplayer.party?.visibility === "public" ? multiplayer.party.memberCharacterIds.length : 0}/4</strong></button>
-          <button type="button" onClick={() => { setCharacterName(""); setAccountView("roster"); void multiplayer.leaveCharacter(); }}>Characters</button>
-        </nav>
-        <div className="hideout-xp"><span style={{ width: `${xpPercent}%` }} /><small>{profile.character.xp}/{xpRequired} XP</small></div>
-      </header>
+      <HideoutSoundtrack enabled={effectiveMusicEnabled} volume={musicVolume} />
+      <AudioSettingsMenu open={panel === "settings"} settings={audioSettings} musicEnabled={effectiveMusicEnabled} onOpenChange={(open) => setPanel(open ? "settings" : null)} onChange={updateAudioSetting} onMusicEnabledChange={updateMusicEnabled} />
+      <PhaserWorld mode="hideout" classId={profile.character.classId!} portalIndexes={availablePortalIndexes} merchantIds={merchantIds} paused={Boolean(panel)} worldVolume={worldVolume} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation.breakdown} flaskBelt={profile.flaskBelt} onFlaskLoad={onlineLoadFlask} onStation={handleStation} multiplayer={multiplayer.adapter}>
+      <GameMenuDock className="hideout-hotkey-dock" settingsOpen={panel === "settings"} onSettingsClick={() => setPanel(panel === "settings" ? null : "settings")}>
+        <button type="button" className={panel === "inventory" ? "active" : ""} onClick={() => setPanel(panel === "inventory" ? null : "inventory")} aria-label="Inventory (I)"><i aria-hidden="true">▦</i><kbd>I</kbd><span>Inventory</span></button>
+        <button type="button" className={panel === "attributes" ? "active" : ""} onClick={() => setPanel(panel === "attributes" ? null : "attributes")} aria-label="Character (C)"><i aria-hidden="true">◆</i><kbd>C</kbd><span>Character</span>{profile.character.unspentAttributePoints > 0 && <strong>{profile.character.unspentAttributePoints}</strong>}</button>
+        <button type="button" className={panel === "skills" ? "active" : ""} onClick={() => setPanel(panel === "skills" ? null : "skills")} aria-label="Skills (K)"><i aria-hidden="true">✦</i><kbd>K</kbd><span>Skills</span>{profile.character.unspentSkillPoints > 0 && <strong>{profile.character.unspentSkillPoints}</strong>}</button>
+        <button type="button" className={panel === "maps" ? "active" : ""} onClick={() => setPanel(panel === "maps" ? null : "maps")} aria-label="Maps (M)"><i aria-hidden="true">◇</i><kbd>M</kbd><span>Maps</span>{inventoryMaps.length + (profile.mapDevice ? 1 : 0) > 0 && <strong>{inventoryMaps.length + (profile.mapDevice ? 1 : 0)}</strong>}</button>
+        <button type="button" className={panel === "multiplayer" ? "active" : ""} onClick={() => setPanel(panel === "multiplayer" ? null : "multiplayer")} aria-label="Party (P)"><i aria-hidden="true">♟</i><kbd>P</kbd><span>Party</span></button>
+        <button type="button" className="roster-dock-action" onClick={() => { setCharacterName(""); setAccountView("roster"); void multiplayer.leaveCharacter(); }} aria-label="Return to character selection"><i aria-hidden="true">↩</i><span>Characters</span></button>
+      </GameMenuDock>
 
       {activeMap && <div className="portal-notice"><span>{multiplayer.party?.visibility === "solo" ? "Solo map" : "Party map"}</span><strong>{activeMap.baseName}</strong><small>{availablePortalIndexes.length}/6 portals remain · each is one-use</small></div>}
 
-      {panel && (
+      {panel && panel !== "settings" && (
         <div className={`world-panel-backdrop ${isCharacterPanel(panel) ? "character-interface-backdrop" : ""}`}>
           <section className={`world-panel panel-${panel} ${isCharacterPanel(panel) ? "character-panel" : ""}`}>
-            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "maps" ? "Map device" : panel === "merchant" ? MERCHANTS[activeMerchantId].title : panel === "multiplayer" ? "Authoritative online realm" : "Character interface"}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "maps" ? "Open a Portal" : panel === "merchant" ? `${MERCHANTS[activeMerchantId].name}'s Shop` : panel === "multiplayer" ? "Multiplayer" : characterPanelTitle(panel)}</h2></div><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></header>
+            <header><div><span>{panel === "stash" ? "Hideout storage" : panel === "maps" ? "Waystones & portals" : panel === "merchant" ? MERCHANTS[activeMerchantId].title : panel === "multiplayer" ? "Party finder" : characterPanelKicker(panel)}</span><h2>{panel === "stash" ? "Stash Chest" : panel === "maps" ? "Map Device" : panel === "merchant" ? `${MERCHANTS[activeMerchantId].name}'s Shop` : panel === "multiplayer" ? "Party" : characterPanelTitle(panel)}</h2></div><div className="panel-header-actions"><button type="button" onClick={() => setPanel(null)} aria-label="Close panel">×</button></div></header>
             {panel === "maps" && <MapWorkshop profile={profile} slottedMap={profile.mapDevice} activeMap={activeMap} portalsRemaining={availablePortalIndexes.length} selectedItemId={effectiveSelectedItemId} onSelect={setSelectedItemId} onMoveItem={onlineMoveItem} onSlot={(itemId) => void multiplayer.executeProfileCommand({ type: "slot_map", itemId })} onRemove={() => void multiplayer.executeProfileCommand({ type: "remove_map" })} onOpen={onlineOpenMap} />}
             {panel === "merchant" && <MerchantPanel merchantId={activeMerchantId} profile={profile} currencies={currencies} selectedItemId={effectiveSelectedItemId} onSelectItem={setSelectedItemId} onMoveItem={onlineMoveItem} onBuy={(merchantId, offerId, position) => void multiplayer.executeProfileCommand({ type: "buy_merchant_offer", merchantId, offerId, position })} />}
             {panel === "multiplayer" && <MultiplayerPanel controller={multiplayer} onOpenMapDevice={() => setPanel("maps")} onPartyEntered={() => setPanel(null)} />}

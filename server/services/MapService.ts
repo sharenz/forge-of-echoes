@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import type { MapItem } from "../../app/game/domain";
 import type { MapTicketClaims } from "../../multiplayer/protocol";
+import { MULTIPLAYER_LIMITS } from "../../multiplayer/protocol";
 import { signMapTicket } from "../auth/map-ticket";
 import type { AuthoritativeProfile, PlayerRepository } from "../persistence/PlayerRepository";
 import { ExpeditionError, type ExpeditionCoordinator } from "../coordination/ExpeditionCoordinator";
@@ -13,6 +14,7 @@ export class MapOpenError extends Error {
 }
 
 export interface OpenedAuthoritativeMap {
+  partyId: string;
   map: MapItem;
   mapTicket: string;
   ticketClaims: MapTicketClaims;
@@ -42,7 +44,7 @@ export class MapService {
       allowedCharacterIds: party.memberCharacterIds,
       tier: map.tier,
       seed: randomInt(0x7fffffff),
-      expiresAt: Date.now() + 10 * 60_000,
+      expiresAt: Date.now() + MULTIPLAYER_LIMITS.expeditionLifetimeMilliseconds,
     };
     const mapTicket = signMapTicket(ticketClaims, this.authSecret);
     try {
@@ -55,7 +57,7 @@ export class MapService {
         ticketClaims,
         mapTicket,
       });
-      return { map: opened.map, ticketClaims: opened.ticketClaims, mapTicket: opened.mapTicket, authoritativeProfile: opened.authoritativeProfile };
+      return { partyId: party.id, map: opened.map, ticketClaims: opened.ticketClaims, mapTicket: opened.mapTicket, authoritativeProfile: opened.authoritativeProfile };
     } catch (error) {
       if (error instanceof ExpeditionError) {
         if (error.code === "not_leader") throw new MapOpenError("not_leader");

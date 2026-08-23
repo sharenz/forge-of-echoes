@@ -47,6 +47,7 @@ defineTypes(NetworkGroundDrop, {
 
 export class MapRoomState extends Schema {
   roomKind = "map";
+  serverTick = 0;
   ticketId = "";
   ownerCharacterId = "";
   tier = 1;
@@ -64,7 +65,7 @@ export class MapRoomState extends Schema {
 }
 
 defineTypes(MapRoomState, {
-  roomKind: "string", ticketId: "string", ownerCharacterId: "string",
+  roomKind: "string", serverTick: "number", ticketId: "string", ownerCharacterId: "string",
   tier: "number", wave: "number", totalWaves: "number", monstersAlive: "number",
   completed: "boolean", completionX: "number", completionY: "number",
   elapsedMilliseconds: "number", waveElapsedMilliseconds: "number", finalRageActive: "boolean",

@@ -45,7 +45,7 @@ Your hideout is the heart of the game. Prepare your equipment, organize your sta
 
 ## The current game loop
 
-1. Enter your account name and select or create a uniquely named Sorceress.
+1. Register or sign in with your account handle and password, then select or create a uniquely named Sorceress.
 2. Prepare your character in the hideout using the inventory, stash, merchant, and skill interfaces.
 3. Buy or find a map, craft it in your backpack, and place it into the map device.
 4. Open six one-use portals and enter alone or with a party of up to four players.
@@ -95,6 +95,10 @@ Open [http://localhost:3001](http://localhost:3001). The development command sta
 
 Local development is entirely self-contained. Copy `.env.example` to `.env` only when you need to override the safe defaults.
 
+Create an account from the opening screen on your first visit. Existing accounts
+created before password authentication was introduced need an administrator to set
+their initial password through `crafty-cli dev` (or `crafty-cli prod` for production).
+
 ```bash
 npm run db:down       # Stop the local PostgreSQL container
 npm run dev:web       # Start only the web client
@@ -141,6 +145,7 @@ The browser never creates items or decides damage, drops, cooldowns, ownership, 
 Read the deeper technical documents:
 
 - [Architecture](./ARCHITECTURE.md)
+- [AI-assisted asset pipeline](./ASSET_PIPELINE.md)
 - [Game design foundation](./GAME_DESIGN.md)
 - [Server scaling](./SERVER_SCALING.md)
 - [Production deployment](./DEPLOYMENT.md)
@@ -162,6 +167,14 @@ crafty-cli prod
 ```
 
 See [DEPLOYMENT.md](./DEPLOYMENT.md) before provisioning or deploying a server.
+
+The interactive asset-production wizard guides GPT Image and Veo source creation, writes reusable prompts, tracks expected media, and builds safe review candidates:
+
+```bash
+npm run assets
+# or, after npm link
+crafty-assets
+```
 
 ## Community
 

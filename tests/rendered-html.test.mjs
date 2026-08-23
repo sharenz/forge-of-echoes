@@ -86,6 +86,9 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   const quickAction = await readFile(new URL("../app/components/useQuickAction.ts", import.meta.url), "utf8");
   const crafting = await readFile(new URL("../app/game/crafting.ts", import.meta.url), "utf8");
   const menuSoundtrack = await readFile(new URL("../app/components/MenuSoundtrack.tsx", import.meta.url), "utf8");
+  const gameMenuDock = await readFile(new URL("../app/components/GameMenuDock.tsx", import.meta.url), "utf8");
+  const audioSettingsMenu = await readFile(new URL("../app/components/AudioSettingsMenu.tsx", import.meta.url), "utf8");
+  const agentGuidance = await readFile(new URL("../AGENTS.md", import.meta.url), "utf8");
   const completionRewardConfig = await readFile(new URL("../app/game/config/rewards.ts", import.meta.url), "utf8");
   const completionRewards = await readFile(new URL("../app/game/rewards.ts", import.meta.url), "utf8");
   const authoritativeMapRoom = await readFile(new URL("../server/rooms/MapRoom.ts", import.meta.url), "utf8");
@@ -97,15 +100,27 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(cursor, /addEventListener\("contextmenu", preventBrowserContextMenu\)/);
   assert.doesNotMatch(cursor, /requestAnimationFrame/);
   assert.match(shell, /<PhaserWorld/);
-  assert.match(shell, /<MenuSoundtrack enabled=\{musicEnabled\} onEnabledChange=\{setMusicEnabled\} \/>/);
-  assert.match(shell, /<HideoutSoundtrack enabled=\{musicEnabled\} onEnabledChange=\{setMusicEnabled\} \/>/);
-  assert.match(shell, /<MapSoundtrack finalRageActive=\{mapFinalRageActive\} enabled=\{musicEnabled\} onEnabledChange=\{setMusicEnabled\} \/>/);
+  assert.match(shell, /<MenuSoundtrack enabled=\{effectiveMusicEnabled\} volume=\{musicVolume\} \/>/);
+  assert.match(shell, /<HideoutSoundtrack enabled=\{effectiveMusicEnabled\} volume=\{musicVolume\} \/>/);
+  assert.match(shell, /<MapSoundtrack finalRageActive=\{mapFinalRageActive\} enabled=\{effectiveMusicEnabled\} volume=\{musicVolume\} \/>/);
+  assert.match(shell, /<AudioSettingsMenu/);
+  assert.match(shell, /<GameMenuDock/);
+  assert.match(gameMenuDock, /collapsible-game-menu/);
+  assert.match(gameMenuDock, /settings-dock-action/);
+  assert.match(audioSettingsMenu, /onMusicEnabledChange/);
+  assert.match(audioSettingsMenu, /aria-pressed=\{musicEnabled\}/);
+  assert.match(agentGuidance, /four-step type scale/);
+  assert.match(agentGuidance, /--font-ui-caption/);
+  assert.match(globalStyles, /--font-ui-caption: 12px/);
+  assert.match(globalStyles, /--font-ui-title: 25px/);
+  assert.match(shell, /worldVolume=\{worldVolume\}/);
   assert.match(shell, /onFinalRageChange=\{setMapFinalRageActive\}/);
   assert.match(menuSoundtrack, /finalRageActive \? FINAL_RAGE_SOUNDTRACK : MAP_SOUNDTRACK/);
   assert.match(menuSoundtrack, /<audio ref=\{audioRef\}[^>]+loop/);
   assert.match(menuSoundtrack, /pointerdown/);
-  assert.match(menuSoundtrack, /menu-soundtrack-control/);
-  assert.match(menuSoundtrack, /onEnabledChange\(false\)/);
+  assert.doesNotMatch(menuSoundtrack, /menu-soundtrack-control/);
+  assert.doesNotMatch(menuSoundtrack, /onEnabledChange/);
+  assert.match(menuSoundtrack, /soundtrack\.volume \* volume/);
   assert.match(audioConfig, /\/music\/amber-hollow\.mp3/);
   assert.match(audioConfig, /\/music\/amber-hollow-watch\.mp3/);
   assert.match(audioConfig, /\/music\/hunted-wilds\.mp3/);
@@ -125,6 +140,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(mapWorkshop, /mapModifierDescription/);
   assert.match(merchantConfig, /amount: 0/);
   assert.match(world, /MERCHANT/);
+  assert.match(world, /beginActiveSkillAction/);
+  assert.match(world, /activeActionState === "attack"/);
+  assert.match(world, /this\.activeSkillInputHeld = this\.consumeHeldSkillKeys\(\)/);
+  assert.match(world, /if \(this\.activeSkillInputHeld\)/);
+  assert.match(world, /queueBasicAttack\(false\)/);
+  assert.match(characterAnimator, /get activeActionState/);
   assert.match(notification, /aria-live="polite"/);
   assert.doesNotMatch(shell, /className="toast"/);
   assert.match(shell, /mode="loading"/);
@@ -134,9 +155,16 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /Back to characters/);
   assert.match(world, /class PhaserRuntime/);
   assert.match(world, /consumeHeldSkillKeys\(\)/);
-  assert.match(world, /this\.options\.skillLoadout\.forEach/);
-  assert.match(world, /this\.keys\?\.\[`skillSlot\$\{index\}`\]\?\.isDown/);
+  assert.match(world, /this\.options\.skillLoadout\.flatMap/);
+  assert.match(world, /key\?\.isDown/);
+  assert.match(world, /heldSkills\.find\(\(\{ key \}\) => Phaser\.Input\.Keyboard\.JustDown\(key\)\)/);
+  assert.match(world, /Phaser\.Input\.Keyboard\.Events\.DOWN/);
+  assert.match(world, /this\.activateSkillSlot\(index\)/);
   assert.doesNotMatch(world, /JustDown\(this\.keys\.(?:nova|dash|ward|flameWave)\)/);
+  assert.match(world, /this\.keys\[`flask\$\{index \+ 1\}`\]\?\.on\(Phaser\.Input\.Keyboard\.Events\.DOWN/);
+  assert.doesNotMatch(world, /JustDown\(this\.keys\.flask/);
+  assert.match(world, /state\.completed && !this\.completionObjectsSpawned/);
+  assert.doesNotMatch(world, /this\.arenaComplete/);
   assert.match(world, /pixelArt: true/);
   assert.doesNotMatch(world, /spatialBuckets/);
   assert.match(world, /MAP_SIZE = VIEW_SIZE \* 4/);
@@ -165,6 +193,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /this\.options\.onReturnToHideout\(\)/);
   assert.doesNotMatch(world, /this\.lives/);
   assert.match(phaserWorld, /world-hud-safe-area/);
+  assert.match(phaserWorld, /hud\.ping/);
+  assert.doesNotMatch(phaserWorld, /WebGL sprites/);
   assert.match(phaserWorld, /world-map-stats/);
   assert.match(phaserWorld, /Monster level/);
   assert.match(phaserWorld, /mapModifierDescription/);
@@ -252,12 +282,17 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(shell, /onlineQuickStash/);
   assert.match(shell, /activeStashTab/);
   assert.match(shell, /executeProfileCommand/);
-  assert.match(world, /sendPickup\?\.\(groundDrop\.networkId\)/);
-  assert.match(shell, /arena-inventory-toggle/);
+  assert.match(world, /sendPickup\?\.\(nearest\.networkId\)/);
+  assert.match(shell, /arena-hotkey-dock/);
+  assert.match(shell, /event\.code === "KeyC"/);
+  assert.match(shell, /event\.code === "KeyK"/);
+  assert.match(shell, /event\.code === "KeyM"/);
+  assert.match(shell, /event\.code === "KeyP"/);
+  assert.doesNotMatch(shell, /className="hideout-hud"/);
   assert.match(shell, /character-interface-backdrop/);
   assert.match(shell, /onFlaskLoad=\{onlineLoadFlask\}/);
   assert.match(shell, /paused=\{Boolean\(panel\)\}/);
-  assert.match(shell, /controlsBlocked=\{characterPanelOpen \|\| mapExitPending\}/);
+  assert.match(shell, /controlsBlocked=\{characterPanelOpen \|\| panel === "settings" \|\| mapExitPending\}/);
   assert.match(phaserWorld, /updateArenaBalance/);
   assert.match(phaserWorld, /world-action-bar/);
   assert.match(phaserWorld, /world-bottom-hud/);
@@ -303,7 +338,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(inventoryPanel, /event\.stopImmediatePropagation\(\)/);
   assert.match(inventoryPanel, /setActiveCurrencySelection\(null\)/);
   assert.match(inventoryPanel, /onApplyCurrency=\{applyCurrency\}/);
-  assert.match(inventoryPanel, /Right-click a crafting material/);
+  assert.doesNotMatch(inventoryPanel, /inventory-key-hints/);
   assert.match(inventoryGrid, /craft-target-valid/);
   assert.match(inventoryGrid, /findContainerEntry\(container, tooltip\.itemId\)/);
   assert.match(inventoryGrid, /CraftingTargetError/);
@@ -342,8 +377,8 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.doesNotMatch(inventoryPanel, /inventory-inspector/);
   assert.match(attributesPanel, /DERIVED_STAT_RULES/);
   assert.match(attributesPanel, /unspentAttributePoints/);
-  assert.match(attributesPanel, /derived-stat-grid/);
-  assert.match(skillTreePanel, /skill-node-track/);
+  assert.match(attributesPanel, /combat-ledger-columns/);
+  assert.match(skillTreePanel, /skill-ledger-progress/);
   assert.match(skillTreePanel, /\[5, 10, 15, 20\]/);
   assert.match(skillTreePanel, /skillChangeSummary/);
   assert.match(skillTreePanel, /Object\.entries\(ACTIVE_SKILLS\)/);
@@ -432,6 +467,12 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(world, /resolveAttackTimeSeconds\(this\.options\.arenaBalance\?\.attackSpeed/);
   assert.match(world, /resolveCastTimeSeconds\(baseCastTime, networkPlayer\?\.castSpeed/);
   assert.match(world, /isWorldPointerOrigin\(pointer\.event\?\.target/);
+  assert.match(world, /this\.worldPointerHeld \? this\.currentPointerAim\(aim\) : aim/);
+  assert.match(world, /launchPredictedBasicProjectile\(sequence, releaseAim\)/);
+  assert.match(world, /applyPredictedDash\(sequence, dashDirection\)/);
+  assert.match(world, /dashAwaitingAuthority/);
+  assert.match(world, /EXPECTED_INPUT_PIPELINE_SECONDS/);
+  assert.match(globalStyles, /cursor: url\("\/ui\/combat-cursor\.svg"\) 16 16, crosshair !important/);
   assert.doesNotMatch(world, /this\.input\.activePointer\.isDown/);
   assert.match(world, /MAX_DAMAGE_PRESENTATIONS_PER_BATCH/);
   assert.doesNotMatch(world, /Phaser loop stalled; restarting its animation-frame chain/);
@@ -439,6 +480,7 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.match(gameDesign, /No temporary run power/);
   assert.match(gameDesign, /The four map axes/);
   await access(new URL("../public/og-forge-of-echoes.png", import.meta.url));
+  await access(new URL("../public/ui/combat-cursor.svg", import.meta.url));
   await access(new URL("../public/music/amber-hollow.mp3", import.meta.url));
   await access(new URL("../public/music/amber-hollow-watch.mp3", import.meta.url));
   await access(new URL("../public/music/hunted-wilds.mp3", import.meta.url));
@@ -458,9 +500,10 @@ test("keeps the game systems modular and ships its social artwork", async () => 
   assert.equal(itemIcons.length, 22);
 });
 
-test("stores only the remembered player name in browser storage", async () => {
-  const [shell, client, profile, multiplayerHook, apiRouter] = await Promise.all([
+test("stores only client preferences in browser storage", async () => {
+  const [shell, audioPreferences, client, profile, multiplayerHook, apiRouter] = await Promise.all([
     readFile(new URL("../app/components/GameShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/useAudioSettings.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/multiplayer/MultiplayerClient.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game/profile.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/multiplayer/useMultiplayerHideout.ts", import.meta.url), "utf8"),
@@ -469,6 +512,7 @@ test("stores only the remembered player name in browser storage", async () => {
   for (const source of [client, profile]) assert.doesNotMatch(source, /localStorage|sessionStorage/);
   assert.match(shell, /localStorage/);
   assert.match(shell, /forgeOfEchoes\.playerName/);
+  assert.match(audioPreferences, /forgeOfEchoes\.audioSettings|AUDIO_SETTINGS_STORAGE_KEY/);
   assert.doesNotMatch(shell, /sessionStorage/);
   assert.match(shell, /authoritativeProfile/);
   assert.match(shell, /connectAccount/);
@@ -477,6 +521,8 @@ test("stores only the remembered player name in browser storage", async () => {
   assert.match(client, /\/api\/parties\/solo/);
   assert.match(multiplayerHook, /existingParty \?\?= await client\.createSoloParty\(selected\)/);
   assert.match(multiplayerHook, /connectToPartyHideout\(selected, existingParty\)/);
+  assert.match(multiplayerHook, /SERVER_MESSAGES\.publicParties/);
+  assert.doesNotMatch(multiplayerHook, /client\.listParties\(session\)\.then/);
   assert.doesNotMatch(apiRouter, /\/dev\/accounts|\/dev\/session/);
   assert.match(apiRouter, /\/parties\/solo/);
 });

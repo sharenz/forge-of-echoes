@@ -116,7 +116,7 @@ export function InventoryGrid({ container, profile, selectedId, onSelect, highli
 
   return (
     <div className={`poe-grid-wrap container-${container.id}`}>
-      <div className="poe-grid-label"><span>{definition.name}</span><em>{container.entries.length} items · positions saved</em></div>
+      <div className="poe-grid-label"><span>{definition.name}</span></div>
       <div
         className={`poe-grid ${preview ? preview.valid ? "drop-valid" : "drop-invalid" : ""}`}
         style={{ "--grid-columns": definition.columns, "--grid-rows": definition.rows } as CSSProperties}

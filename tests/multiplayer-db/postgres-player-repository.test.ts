@@ -6,6 +6,7 @@ import { Pool } from "pg";
 import { PostgresPlayerRepository } from "../../server/persistence/PostgresPlayerRepository";
 import { findFirstFit } from "../../app/game/item-container";
 import { ProfileCommandService } from "../../server/services/ProfileCommandService";
+import { AccountAuthService } from "../../server/services/AccountAuthService";
 
 const databaseUrl = process.env.DATABASE_URL ?? "postgres://crafty:crafty@127.0.0.1:5434/crafty";
 
@@ -15,8 +16,13 @@ test("PostgreSQL persists account identity and enforces item owner/location cons
   const suffix = randomUUID().slice(0, 8);
   const handle = `db_test_${suffix}`;
   const sameNameHandle = `${handle}_same_name`;
+  const authenticatedHandle = `${handle}_auth`;
   try {
     await repository.initialize();
+    const authenticated = await new AccountAuthService(repository).authenticate(authenticatedHandle, "database-test-password", "register");
+    assert.equal(await repository.isAuthSessionActive(authenticated.sessionId, authenticated.account.accountId), true);
+    await repository.revokeAuthSession(authenticated.sessionId, authenticated.account.accountId);
+    assert.equal(await repository.isAuthSessionActive(authenticated.sessionId, authenticated.account.accountId), false);
     const first = await createTestPlayer(repository, { handle, characterName: `Hero-${suffix}`, classId: "sorceress" });
     const reloaded = await createTestPlayer(repository, { handle, characterName: "Forged replacement", classId: "barbarian" });
     assert.deepEqual(reloaded, first, "an existing account handle must resolve to the persisted character, not overwrite it");
@@ -91,7 +97,7 @@ test("PostgreSQL persists account identity and enforces item owner/location cons
       [itemId, first.characterId],
     );
   } finally {
-    await pool.query("DELETE FROM accounts WHERE handle IN ($1, $2, $3)", [handle, `${handle}_2`, sameNameHandle]);
+    await pool.query("DELETE FROM accounts WHERE handle IN ($1, $2, $3, $4)", [handle, `${handle}_2`, sameNameHandle, authenticatedHandle]);
     await pool.end();
     await repository.close();
   }

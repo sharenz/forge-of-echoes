@@ -32,3 +32,10 @@ export class AccountNotFoundError extends Error {
     this.name = "AccountNotFoundError";
   }
 }
+
+export class AccountHandleTakenError extends Error {
+  constructor() {
+    super("account_handle_taken");
+    this.name = "AccountHandleTakenError";
+  }
+}

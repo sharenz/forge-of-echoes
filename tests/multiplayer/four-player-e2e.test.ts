@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Client, type Room } from "@colyseus/sdk";
 import { boot, type ColyseusTestServer } from "@colyseus/testing";
-import { CLIENT_MESSAGES } from "../../multiplayer/protocol";
+import { CLIENT_MESSAGES, WIRE_PROTOCOL_VERSION } from "../../multiplayer/protocol";
 import { createGameServer } from "../../server/createGameServer";
 import { InMemoryPlayerRepository } from "../../server/persistence/InMemoryPlayerRepository";
 import type { AuthoritativeProfile, PlayerIdentity } from "../../server/persistence/PlayerRepository";
@@ -38,7 +38,7 @@ async function createSession(index: number): Promise<SessionResponse> {
   const account = await json<{ token: string }>("/api/accounts/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ handle: `e2e-${index}` }),
+    body: JSON.stringify({ handle: `e2e-${index}`, password: "test-password-123", mode: "register" }),
   });
   const created = await json<{ session: SessionResponse }>(
     "/api/accounts/characters",
@@ -92,13 +92,14 @@ test("four clients complete the authenticated party-to-map admission path", asyn
     );
 
     const clients = sessions.map(() => new Client(websocketEndpoint));
-    const leaderRoom = await clients[0].create<MapRoomState>("map", { token: sessions[0].token, mapTicket: opened.mapTicket, portalIndex: 0 });
+    const leaderRoom = await clients[0].create<MapRoomState>("map", { token: sessions[0].token, mapTicket: opened.mapTicket, portalIndex: 0, protocolVersion: WIRE_PROTOCOL_VERSION });
     rooms.push(leaderRoom);
     for (let index = 1; index < sessions.length; index += 1) {
       rooms.push(await clients[index].joinById<MapRoomState>(leaderRoom.roomId, {
         token: sessions[index].token,
         mapTicket: opened.mapTicket,
         portalIndex: index,
+        protocolVersion: WIRE_PROTOCOL_VERSION,
       }));
     }
     await waitFor(() => rooms.every((room) => room.state.players.size === 4));

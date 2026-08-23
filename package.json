@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "bin": {
-    "crafty-cli": "./scripts/crafty-cli/index.mjs"
+    "crafty-cli": "./scripts/crafty-cli/index.mjs",
+    "crafty-assets": "./scripts/crafty-assets/index.mjs"
   },
   "engines": {
     "node": ">=22.13.0"
@@ -15,9 +16,10 @@
     "server:start": "TSX_TSCONFIG_PATH=tsconfig.json tsx server/index.ts",
     "db:up": "docker compose up -d --wait postgres",
     "db:down": "docker compose down",
+    "assets": "node scripts/crafty-assets/index.mjs",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "node --test tests/crafty-cli.test.mjs && node --import tsx --test --test-concurrency=1 tests/game-engine.test.ts tests/server-engine/*.test.ts tests/perf/*.test.ts tests/multiplayer/*.test.ts && npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "node --test tests/crafty-cli.test.mjs tests/crafty-assets.test.mjs && node --import tsx --test --test-concurrency=1 tests/game-engine.test.ts tests/server-engine/*.test.ts tests/perf/*.test.ts tests/multiplayer/*.test.ts && npm run build && node --test tests/rendered-html.test.mjs",
     "test:perf": "node --import tsx --test --test-concurrency=1 tests/perf/*.test.ts",
     "test:multiplayer": "node --import tsx --test --test-concurrency=1 tests/multiplayer/*.test.ts",
     "test:multiplayer:db": "node --import tsx --test --test-concurrency=1 tests/multiplayer-db/*.test.ts",

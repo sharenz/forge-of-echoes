@@ -7,6 +7,7 @@ import { signSessionToken, verifySessionToken } from "../../server/auth/session-
 const secret = "test-secret-with-sufficient-length";
 const claims = () => ({
   sessionId: randomUUID(),
+  authSessionId: randomUUID(),
   accountId: randomUUID(),
   characterId: randomUUID(),
   characterName: "Aster",

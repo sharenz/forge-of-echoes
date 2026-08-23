@@ -116,7 +116,11 @@ test("map opening, portals, and room leases are transactional across coordinator
       first.consumePortal(identities[0].characterId, opened.ticketClaims.ticketId, 0),
       second.consumePortal(identities[1].characterId, opened.ticketClaims.ticketId, 0),
     ]);
-    assert.deepEqual(portalResults.sort(), [false, true], "one conditional update owns the portal");
+    const portalOwner = portalResults[0] ? identities[0].characterId : identities[1].characterId;
+    const otherCharacter = portalResults[0] ? identities[1].characterId : identities[0].characterId;
+    assert.deepEqual([...portalResults].sort(), [false, true], "one conditional update owns the portal");
+    assert.equal(await first.consumePortal(portalOwner, opened.ticketClaims.ticketId, 0), true, "the owning character can reconnect through a consumed portal");
+    assert.equal(await second.consumePortal(otherCharacter, opened.ticketClaims.ticketId, 0), false, "consumed portals remain unavailable to other characters");
 
     const roomClaims = await Promise.all([
       first.claimRoom(opened.ticketClaims.ticketId, "worker-a/room-a"),

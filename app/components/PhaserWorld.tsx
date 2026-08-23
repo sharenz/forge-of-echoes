@@ -23,6 +23,7 @@ interface PhaserWorldProps {
   merchantIds?: readonly MerchantId[];
   paused?: boolean;
   controlsBlocked?: boolean;
+  worldVolume?: number;
   arenaBalance?: ArenaBalance;
   activeMap?: MapItem;
   characterStats?: CharacterStats;
@@ -142,7 +143,7 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
 
 const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null, null];
 
-export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [], paused = false, controlsBlocked = false, arenaBalance, activeMap, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onReturnToHideout, onFlaskLoad, onItemDropToGround, onFinalRageChange, multiplayer, children }: PhaserWorldProps) {
+export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [], paused = false, controlsBlocked = false, worldVolume = 1, arenaBalance, activeMap, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onReturnToHideout, onFlaskLoad, onItemDropToGround, onFinalRageChange, multiplayer, children }: PhaserWorldProps) {
   const runtimeClassId = classId;
   const novaLevel = characterProgress?.skillLevels.nova ?? 1;
   const dashLevel = characterProgress?.skillLevels.dash ?? 1;
@@ -160,6 +161,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
   const skillLoadoutRef = useRef<SkillLoadout>([...skillLoadout]);
   const pausedRef = useRef(paused);
   const controlsBlockedRef = useRef(controlsBlocked);
+  const worldVolumeRef = useRef(worldVolume);
   const arenaBalanceRef = useRef(arenaBalance);
   const [hud, setHud] = useState<WorldHudState | null>(null);
   const [flaskDropSlot, setFlaskDropSlot] = useState<number | null>(null);
@@ -191,6 +193,11 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
     controlsBlockedRef.current = controlsBlocked;
     runtimeRef.current?.setControlsBlocked(controlsBlocked);
   }, [controlsBlocked]);
+
+  useEffect(() => {
+    worldVolumeRef.current = worldVolume;
+    runtimeRef.current?.updateAudioVolume(worldVolume);
+  }, [worldVolume]);
 
   useEffect(() => {
     arenaBalanceRef.current = arenaBalance;
@@ -242,6 +249,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
       });
       runtimeRef.current = runtime;
       runtime.initialize();
+      runtime.updateAudioVolume(worldVolumeRef.current);
       window.setTimeout(() => { if (active) setLoading(false); }, 350);
     }).catch(() => {
       if (!active) return;
@@ -431,7 +439,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
           </div>
         </div>
       )}
-      {hud && <div className="world-fps">{hud.fps} FPS · WebGL sprites</div>}
+      {hud && <div className="world-fps">{hud.fps} FPS{hud.ping === null ? "" : ` · ${hud.ping} ms`}</div>}
       {mode !== "loading" && characterStats && (
         <div className="world-stat-stack">
           <aside className="world-character-stats" aria-label="Character statistics">

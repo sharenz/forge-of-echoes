@@ -13,6 +13,7 @@ SELECT coalesce(json_agg(account_record ORDER BY account_record.handle), '[]'::j
 FROM (
   SELECT
     accounts.handle,
+    (accounts.password_hash IS NOT NULL) AS "passwordConfigured",
     accounts.created_at::text AS "createdAt",
     count(characters.id)::integer AS "characterCount",
     coalesce(max(characters.level), 0)::integer AS "highestLevel",
@@ -94,6 +95,40 @@ COMMIT;
 `;
 }
 
+const SET_ACCOUNT_PASSWORD_SQL = String.raw`
+BEGIN;
+SELECT set_config('crafty.account_handle', lower(:'account_handle'), false) AS account_handle \gset
+SELECT set_config('crafty.password_hash', :'password_hash', false) AS password_hash \gset
+
+DO $block$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM accounts WHERE handle = current_setting('crafty.account_handle')) THEN
+    RAISE EXCEPTION 'Account "%" does not exist', current_setting('crafty.account_handle');
+  END IF;
+END
+$block$;
+
+UPDATE accounts
+SET password_hash = current_setting('crafty.password_hash'), updated_at = now()
+WHERE handle = current_setting('crafty.account_handle');
+
+UPDATE auth_sessions
+SET revoked_at = now()
+WHERE account_id = (SELECT id FROM accounts WHERE handle = current_setting('crafty.account_handle'))
+  AND revoked_at IS NULL;
+
+SELECT json_build_object(
+  'handle', accounts.handle,
+  'passwordConfigured', accounts.password_hash IS NOT NULL,
+  'sessionsRevoked', count(auth_sessions.id)::integer
+)::text
+FROM accounts
+LEFT JOIN auth_sessions ON auth_sessions.account_id = accounts.id AND auth_sessions.revoked_at IS NOT NULL
+WHERE accounts.handle = current_setting('crafty.account_handle')
+GROUP BY accounts.id, accounts.handle, accounts.password_hash;
+COMMIT;
+`;
+
 function shellQuote(value) {
   return `'${String(value).replaceAll("'", `'"'"'`)}'`;
 }
@@ -166,6 +201,15 @@ export class AdminDatabase {
     return this.queryJson(merchantMutationSql(enabled), {
       account_handle: handle.toLowerCase(),
       merchant_id: DEBUG_MERCHANT_ID,
+    });
+  }
+
+  setAccountPassword(handle, passwordHash) {
+    if (!/^[A-Za-z0-9_-]{2,24}$/.test(handle)) throw new Error("Invalid account handle");
+    if (!passwordHash.startsWith("scrypt$")) throw new Error("Invalid password hash");
+    return this.queryJson(SET_ACCOUNT_PASSWORD_SQL, {
+      account_handle: handle.toLowerCase(),
+      password_hash: passwordHash,
     });
   }
 

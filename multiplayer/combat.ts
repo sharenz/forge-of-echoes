@@ -3,6 +3,7 @@ export const MULTIPLAYER_COMBAT = {
   world: { width: 3_840, height: 3_840, margin: 48 },
   player: {
     pickupRange: 54,
+    dashDistance: 105,
   },
   projectile: {
     speed: 520,

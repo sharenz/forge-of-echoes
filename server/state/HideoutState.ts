@@ -26,6 +26,7 @@ defineTypes(NetworkPlayer, {
 
 export class HideoutState extends Schema {
   roomKind = "hideout";
+  serverTick = 0;
   partyId = "";
   ownerCharacterId = "";
   players = new MapSchema<NetworkPlayer>();
@@ -33,6 +34,7 @@ export class HideoutState extends Schema {
 
 defineTypes(HideoutState, {
   roomKind: "string",
+  serverTick: "number",
   partyId: "string",
   ownerCharacterId: "string",
   players: { map: NetworkPlayer },

@@ -1,7 +1,7 @@
 import type { ArenaBalance } from "../game/combat";
 import type { CharacterClassId, FlaskBelt, InventoryItem, SkillBarSkillId, SkillLevels, SkillLoadout } from "../game/domain";
 import type { MerchantId } from "../game/config/merchants";
-import type { CombatEvent } from "../../multiplayer/protocol";
+import type { CombatEvent, PickupResultMessage } from "../../multiplayer/protocol";
 
 export type WorldMode = "login" | "character-create" | "loading" | "hideout" | "arena";
 export type WorldStation = "stash" | "bench" | "map-device" | "portal" | `merchant:${MerchantId}`;
@@ -15,12 +15,17 @@ export interface NetworkPlayerView {
   facingX: number;
   facingY: number;
   connected: boolean;
+  serverTick?: number;
   life?: number;
   maxLife?: number;
   focus?: number;
   maxFocus?: number;
   attackSpeed?: number;
   castSpeed?: number;
+  /** Latest movement input sequence integrated by the authoritative server. */
+  lastProcessedMovement?: number;
+  /** Latest combat input sequence integrated by the authoritative server. */
+  lastProcessedAttack?: number;
   /** Total XP earned in this map instance. */
   experience?: number;
   /** Portion of map XP already included in the authoritative profile. */
@@ -65,11 +70,15 @@ export interface NetworkGroundDropView {
 export interface MultiplayerWorldAdapter {
   localCharacterId: string;
   getPlayers: () => readonly NetworkPlayerView[];
+  getPing: () => number | null;
   sendMovement: (x: number, y: number) => void;
   getMap?: () => NetworkMapView | null;
   getMonsterSampler?: () => NetworkMonsterSampler;
   drainCombatEvents?: () => CombatEvent[];
-  sendAttack?: (skill: SkillBarSkillId, direction?: { x: number; y: number }) => void;
+  drainPickupResults?: () => PickupResultMessage[];
+  getProfileRevision?: () => number;
+  /** Returns the client sequence used to reconcile immediate local presentation. */
+  sendAttack?: (skill: SkillBarSkillId, direction?: { x: number; y: number }) => number | undefined;
   sendPickup?: (dropId: string) => void;
   sendUseFlask?: (slotIndex: number) => void;
   sendDropItem?: (itemId: string) => void;
@@ -77,6 +86,7 @@ export interface MultiplayerWorldAdapter {
 
 export interface WorldHudState {
   fps: number;
+  ping: number | null;
   mode: WorldMode;
   wave: number;
   enemies: number;

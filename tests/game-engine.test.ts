@@ -4,6 +4,7 @@ import { MINIMUM_ACTION_TIME_SECONDS, resolveAnimationPlaybackRate, resolveAttac
 import { AFFIX_DEFINITIONS_BY_ID } from "../app/game/config/affixes";
 import { ARENA_RULES } from "../app/game/config/arena";
 import { SKILL_AUDIO } from "../app/game/config/audio";
+import { effectiveMusicVolume, effectiveWorldVolume, normalizeAudioSettings } from "../app/game/audio-settings";
 import { CHARACTER_ANIMATIONS, characterDirectionVector, resolveCharacterDirection, resolveLocomotionDirection } from "../app/game/config/character-animations";
 import { CURRENCY_DEFINITIONS } from "../app/game/config/currencies";
 import { FLASK_BELT_SLOT_COUNT, FLASK_DEFINITIONS } from "../app/game/config/flasks";
@@ -33,6 +34,14 @@ import { purchaseMerchantOffer } from "../app/game/merchant";
 import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, calculateHitDamage, isArenaCleared, monsterLevelForMapTier, rollHitDamage, shouldActivateFinalWaveRage, shouldSpawnNextWave } from "../app/game/combat";
 import { createMap, mapModifierDescription, mapModifierRewardDescription } from "../app/game/maps";
 import { packRarityChances, resolveMonsterStats, rollMonsterPack } from "../app/game/encounters";
+
+test("audio settings normalize stored preferences and resolve independent channel gains", () => {
+  const settings = normalizeAudioSettings({ overall: 0.5, music: 0.8, world: 2 });
+  assert.deepEqual(settings, { overall: 0.5, music: 0.8, world: 1 });
+  assert.equal(effectiveMusicVolume(settings), 0.4);
+  assert.equal(effectiveWorldVolume(settings), 0.5);
+  assert.deepEqual(normalizeAudioSettings(null), { overall: 1, music: 1, world: 1 });
+});
 import { dropChances, equipmentDropPresentation, rollEquipmentRarity, rollFlaskDrop, rollMapDropTier, rollMonsterDrop } from "../app/game/loot";
 import { activeStashTab, addStashTab, createStash, insertItemsIntoStash, renameStashTab, selectStashTab, stashItems } from "../app/game/stash";
 import { allocateAttributePoint, allocateSkillPoint, grantCharacterExperience, grantCharacterProgressExperience, monsterExperienceReward } from "../app/game/progression";
@@ -42,7 +51,7 @@ import { MULTIPLAYER_LIMITS } from "../multiplayer/protocol";
 import { MULTIPLAYER_COMBAT } from "../multiplayer/combat";
 import { createMapCompletionRewards } from "../app/game/rewards";
 import { applyBackpackCurrency, canApplyCraftingCurrency, craftingTargetError } from "../app/game/crafting";
-import { isWorldPointerOrigin } from "../app/game2d/input-boundary";
+import { isWorldPointerOrigin, resolveAimVector } from "../app/game2d/input-boundary";
 import { isSkillEquipped, normalizeSkillLoadout, setSkillLoadoutSlot } from "../app/game/skill-loadout";
 
 const source = "test";
@@ -69,6 +78,13 @@ test("world attacks accept only empty-canvas pointer origins", () => {
   assert.equal(isWorldPointerOrigin(interfaceButton, canvas, 0), false);
   assert.equal(isWorldPointerOrigin(canvas, canvas, 1), false);
   assert.equal(isWorldPointerOrigin(null, canvas, 0), false);
+});
+
+test("live mouse aim resolves the release pointer to a finite unit vector", () => {
+  const fallback = { x: 0, y: 1 };
+  assert.deepEqual(resolveAimVector(10, 20, 13, 24, fallback), { x: 0.6, y: 0.8 });
+  assert.deepEqual(resolveAimVector(10, 20, 10, 20, fallback), fallback);
+  assert.deepEqual(resolveAimVector(10, 20, Number.NaN, 20, fallback), fallback);
 });
 
 test("skill loadouts normalize persisted data and can clear or assign any slot", () => {

@@ -42,54 +42,54 @@ export function AttributesPanel({ progress, stats, breakdown, onAllocate }: Attr
 
   return (
     <div className="attributes-interface">
-      <section className="character-progression-banner">
-        <div className="character-level-seal"><small>Level</small><strong>{progress.level}</strong></div>
-        <div className="character-level-copy">
+      <section className={`character-sheet-identity identity-${progress.classId}`}>
+        <div className="character-sheet-portrait" aria-hidden="true"><i /></div>
+        <div className="character-sheet-name">
           <span>{classDefinition.title}</span>
-          <h3>{progress.name} · {classDefinition.name}</h3>
-          <p>{classDefinition.fantasy}</p>
-          <div className="character-xp-track"><i style={{ width: `${xpPercent}%` }} /></div>
-          <small>{progress.level === MAX_CHARACTER_LEVEL ? "Maximum level reached" : `${progress.xp} / ${xpRequired} experience`}</small>
+          <h3>{progress.name}</h3>
+          <small>Level {progress.level} {classDefinition.name}</small>
         </div>
-        <div className="unspent-point-vault"><span>Available</span><strong>{progress.unspentAttributePoints}</strong><small>Attribute points</small></div>
+        <div className="character-sheet-experience">
+          <span>{progress.level === MAX_CHARACTER_LEVEL ? "Mastered" : `Level ${progress.level}`}</span>
+          <div className="character-xp-track" title={progress.level === MAX_CHARACTER_LEVEL ? "Maximum level reached" : `${progress.xp} / ${xpRequired} experience`}><i style={{ width: `${xpPercent}%` }} /></div>
+        </div>
+        <div className={`character-sheet-points ${progress.unspentAttributePoints > 0 ? "available" : ""}`}><strong>{progress.unspentAttributePoints}</strong><span>points</span></div>
       </section>
 
-      <section className="attribute-card-grid" aria-label="Core attributes">
-        {ATTRIBUTES.map((attribute) => {
-          const benefits = DERIVED_STAT_RULES.filter((rule) => rule.kind === "perAttribute" && rule.attribute === attribute.id);
-          const classGrowth = classDefinition.attributesPerLevel[attribute.id];
-          return (
-            <article className={`attribute-card attribute-${attribute.id}`} style={{ "--attribute-color": attribute.color } as CSSProperties} key={attribute.id}>
-              <header><i>{attribute.glyph}</i><div><span>Core attribute</span><h3>{attribute.label}</h3></div><strong>{stats[attribute.id]}</strong></header>
-              <div className="attribute-allocation-line"><span>{progress.allocatedAttributes[attribute.id]} manually allocated</span><small>+{classGrowth} per character level</small></div>
-              <div className="attribute-benefits">
-                <span>Every point contributes</span>
-                {benefits.map((benefit) => <small key={benefit.source}>{benefit.label}</small>)}
-              </div>
-              <button type="button" disabled={progress.unspentAttributePoints <= 0} onClick={() => onAllocate(attribute.id)}>
-                <b>+</b><span>Allocate {attribute.label}</span>
-              </button>
-            </article>
-          );
-        })}
-      </section>
-
-      <section className="derived-stat-section">
-        <header><div><span>Resolved character sheet</span><h3>Combat outcomes</h3></div><small>All item, class, level, and attribute modifiers included</small></header>
-        <div className="derived-stat-grid">
-          {DERIVED_STATS.map((stat) => {
-            const sources = breakdown[stat.id].contributions.filter((modifier) => Math.abs(modifier.value) > 0.0001);
+      <div className="character-sheet-body">
+        <section className="attribute-ledger" aria-label="Core attributes">
+          <header><span>Core</span><h3>Attributes</h3><small>Spend points to shape your build</small></header>
+          {ATTRIBUTES.map((attribute) => {
+            const benefits = DERIVED_STAT_RULES.filter((rule) => rule.kind === "perAttribute" && rule.attribute === attribute.id);
+            const classGrowth = classDefinition.attributesPerLevel[attribute.id];
             return (
-              <article key={stat.id}>
-                <span>{stat.label}</span>
-                <strong>{number(stat.id === "castSpeed" ? stats[stat.id] * 100 : stats[stat.id], stat.decimals)}{stat.suffix}</strong>
-                <small>{sources.length} active source{sources.length === 1 ? "" : "s"}</small>
-                <div>{sources.slice(0, 2).map((source) => <em key={source.source}>{source.label ?? source.source}</em>)}</div>
+              <article className={`attribute-ledger-row attribute-${attribute.id}`} style={{ "--attribute-color": attribute.color } as CSSProperties} key={attribute.id}>
+                <i>{attribute.glyph}</i>
+                <div><h4>{attribute.label}</h4><small>{benefits.map((benefit) => benefit.label).join(" · ")}</small><em>{progress.allocatedAttributes[attribute.id]} allocated · +{classGrowth}/level</em></div>
+                <strong>{stats[attribute.id]}</strong>
+                <button type="button" disabled={progress.unspentAttributePoints <= 0} onClick={() => onAllocate(attribute.id)} aria-label={`Add one ${attribute.label}`}>+</button>
               </article>
             );
           })}
-        </div>
-      </section>
+          <footer><kbd>C</kbd><span>Close character sheet</span></footer>
+        </section>
+
+        <section className="combat-ledger">
+          <header><span>Resolved</span><h3>Combat</h3><small>Equipment and modifiers included</small></header>
+          <div className="combat-ledger-columns">
+            {DERIVED_STATS.map((stat) => {
+              const sources = breakdown[stat.id].contributions.filter((modifier) => Math.abs(modifier.value) > 0.0001);
+              return (
+                <div className="combat-ledger-row" title={sources.map((source) => source.label ?? source.source).join(" · ")} key={stat.id}>
+                  <span>{stat.label}</span>
+                  <strong>{number(stat.id === "castSpeed" ? stats[stat.id] * 100 : stats[stat.id], stat.decimals)}{stat.suffix}</strong>
+                  <small>{sources.length} source{sources.length === 1 ? "" : "s"}</small>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

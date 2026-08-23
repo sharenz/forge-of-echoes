@@ -30,6 +30,7 @@ interface PendingSample {
 }
 
 const MAX_PROCEDURAL_TONE_VOICES = 24;
+const DEFAULT_SFX_MASTER_GAIN = 0.72;
 
 /**
  * Owns the browser AudioContext, decoded sample cache and master SFX bus.
@@ -43,6 +44,12 @@ export class GameAudio implements SampleAudioPlayer {
   private readonly activeVoices = new Map<string, number>();
   private activeProceduralToneVoices = 0;
   private removeUnlockListeners: (() => void) | null = null;
+  private volume = 1;
+
+  setMasterVolume(volume: number): void {
+    this.volume = Math.max(0, Math.min(1, Number.isFinite(volume) ? volume : 0));
+    if (this.master) this.master.gain.value = DEFAULT_SFX_MASTER_GAIN * this.volume;
+  }
 
   playSkill(id: SkillAudioId): void {
     const context = this.getContext();
@@ -195,7 +202,7 @@ export class GameAudio implements SampleAudioPlayer {
     if (!AudioContextConstructor) return null;
     this.context = new AudioContextConstructor();
     this.master = this.context.createGain();
-    this.master.gain.value = 0.72;
+    this.master.gain.value = DEFAULT_SFX_MASTER_GAIN * this.volume;
     this.master.connect(this.context.destination);
     this.installUnlockListeners(this.context);
     return this.context;

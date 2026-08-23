@@ -2,8 +2,9 @@
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { randomBytes, scrypt as scryptCallback } from "node:crypto";
 import { AdminDatabase, DEBUG_MERCHANT_ID } from "./database.mjs";
-import { PromptInterruptedError, assertInteractive, clearScreen, pause, select, style } from "./prompt.mjs";
+import { PromptInterruptedError, assertInteractive, clearScreen, pause, secret, select, style } from "./prompt.mjs";
 
 const DEBUG_MERCHANT_NAME = "Veyra · Debug Artificer";
 
@@ -45,14 +46,59 @@ function printAccounts(accounts) {
     characters: String(account.characterCount).padStart(5),
     level: String(account.highestLevel).padStart(3),
     debug: debugEnabled(account) ? "ENABLED " : "disabled",
+    auth: account.passwordConfigured ? "ready" : "SETUP NEEDED",
     roster: characterSummary(account),
   }));
-  process.stdout.write(`${style.bold("ACCOUNT".padEnd(handleWidth))}  ${style.bold("CHARS")}  ${style.bold("MAX")}  ${style.bold("DEBUG")}   ${style.bold("CHARACTERS")}\n`);
-  process.stdout.write(`${"─".repeat(handleWidth)}  ─────  ───  ───────   ${"─".repeat(34)}\n`);
+  process.stdout.write(`${style.bold("ACCOUNT".padEnd(handleWidth))}  ${style.bold("CHARS")}  ${style.bold("MAX")}  ${style.bold("AUTH")}          ${style.bold("DEBUG")}   ${style.bold("CHARACTERS")}\n`);
+  process.stdout.write(`${"─".repeat(handleWidth)}  ─────  ───  ─────────────  ───────   ${"─".repeat(34)}\n`);
   for (const row of rows) {
     const status = row.debug.trim() === "ENABLED" ? style.green(row.debug) : style.dim(row.debug);
-    process.stdout.write(`${row.account}  ${row.characters}  ${row.level}  ${status}   ${row.roster}\n`);
+    const auth = row.auth === "ready" ? style.green(row.auth.padEnd(13)) : style.yellow(row.auth.padEnd(13));
+    process.stdout.write(`${row.account}  ${row.characters}  ${row.level}  ${auth}  ${status}   ${row.roster}\n`);
   }
+}
+
+function hashPassword(password) {
+  const salt = randomBytes(16);
+  return new Promise((resolve, reject) => {
+    scryptCallback(password, salt, 32, { N: 16_384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (error, derived) => {
+      if (error) reject(error);
+      else resolve(`scrypt$16384$8$1$${salt.toString("base64url")}$${derived.toString("base64url")}`);
+    });
+  });
+}
+
+async function setAccountPassword(database) {
+  clearScreen();
+  banner(database);
+  const accounts = loadAccounts(database);
+  if (!accounts.length) {
+    process.stdout.write(`${style.yellow("No accounts found.")}\n\n`);
+    await pause();
+    return;
+  }
+  const account = await select("Set or reset the password for which account?", [
+    ...accounts.map((candidate) => ({
+      label: `${candidate.handle} · ${candidate.passwordConfigured ? "password configured" : "setup required"}`,
+      value: candidate,
+    })),
+    { label: "Back", value: null },
+  ]);
+  if (!account) return;
+  const password = await secret("New password (10+ characters):");
+  if (!password) return;
+  const confirmation = await secret("Repeat password:");
+  if (!confirmation) return;
+  if (password !== confirmation) {
+    process.stdout.write(`${style.red("Passwords did not match.")}\n\n`);
+    await pause();
+    return;
+  }
+  process.stdout.write(style.dim("Hashing password and revoking old sessions…"));
+  const result = database.setAccountPassword(account.handle, await hashPassword(password));
+  process.stdout.write("\r\u001b[2K");
+  process.stdout.write(`${style.green("Password configured")} for ${style.bold(result.handle)}. Existing login sessions were revoked.\n\n`);
+  await pause();
 }
 
 function loadAccounts(database) {
@@ -134,6 +180,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     banner(database);
     const command = await select("Choose an administrative command", [
       { label: "List users", value: "list-users" },
+      { label: "Set / reset account password", value: "set-password" },
       { label: `Enable ${DEBUG_MERCHANT_NAME}`, value: "enable-debug" },
       { label: `Disable ${DEBUG_MERCHANT_NAME}`, value: "disable-debug" },
       { label: "Exit", value: "exit" },
@@ -141,6 +188,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     if (!command || command === "exit") return 0;
     try {
       if (command === "list-users") await listUsers(database);
+      if (command === "set-password") await setAccountPassword(database);
       if (command === "enable-debug") await changeDebugMerchant(database, true);
       if (command === "disable-debug") await changeDebugMerchant(database, false);
     } catch (error) {

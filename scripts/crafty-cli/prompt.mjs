@@ -115,3 +115,58 @@ export function pause(message = "Press Enter to continue", options = {}) {
     input.on("keypress", onKeypress);
   });
 }
+
+export function secret(message, options = {}) {
+  const input = options.input ?? process.stdin;
+  const output = options.output ?? process.stdout;
+  const minimumLength = options.minimumLength ?? 10;
+  const maximumLength = options.maximumLength ?? 128;
+  const previousRawMode = input.isRaw;
+  let value = "";
+
+  readline.emitKeypressEvents(input);
+  input.setRawMode(true);
+  input.resume();
+  output.write(`${style.bold(message)} `);
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      input.off("keypress", onKeypress);
+      input.setRawMode(Boolean(previousRawMode));
+      input.pause();
+      output.write("\n");
+    };
+    const onKeypress = (character = "", key = {}) => {
+      if (key.ctrl && key.name === "c") {
+        cleanup();
+        reject(new PromptInterruptedError("Interrupted"));
+        return;
+      }
+      if (key.name === "escape") {
+        cleanup();
+        resolve(null);
+        return;
+      }
+      if (key.name === "backspace") {
+        if (value.length > 0) {
+          value = value.slice(0, -1);
+          output.write("\b \b");
+        }
+        return;
+      }
+      if (key.name === "return" || key.name === "enter") {
+        if (value.length < minimumLength) {
+          output.write(`\n${style.yellow(`Use at least ${minimumLength} characters.`)}\n${style.bold(message)} ${"•".repeat(value.length)}`);
+          return;
+        }
+        cleanup();
+        resolve(value);
+        return;
+      }
+      if (!character || key.ctrl || key.meta || value.length >= maximumLength) return;
+      value += character;
+      output.write("•");
+    };
+    input.on("keypress", onKeypress);
+  });
+}

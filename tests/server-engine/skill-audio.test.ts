@@ -8,6 +8,7 @@ test("a sample requested before browser audio unlock is played after the next ge
   const listeners = new Map<string, EventListener>();
   let allowResume = false;
   let sourceStarts = 0;
+  const gainValues: Array<{ value: number }> = [];
 
   class FakeAudioContext {
     state: AudioContextState = "suspended";
@@ -15,7 +16,7 @@ test("a sample requested before browser audio unlock is played after the next ge
     destination = {} as AudioDestinationNode;
 
     createGain(): GainNode {
-      return {
+      const node = {
         gain: {
           value: 0,
           setValueAtTime: () => undefined,
@@ -23,6 +24,8 @@ test("a sample requested before browser audio unlock is played after the next ge
         },
         connect() { return this; },
       } as unknown as GainNode;
+      gainValues.push(node.gain);
+      return node;
     }
 
     createBufferSource(): AudioBufferSourceNode {
@@ -61,7 +64,9 @@ test("a sample requested before browser audio unlock is played after the next ge
   globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }) as Response;
   const audio = new GameAudio();
   try {
+    audio.setMasterVolume(0.5);
     audio.preloadSample("/sfx/ashling-aggro.m4a");
+    assert.equal(gainValues[0].value, 0.36, "the persisted world volume scales the shared SFX bus");
     audio.playSample("/sfx/ashling-aggro.m4a", { volume: 0.8 });
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));

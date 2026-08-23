@@ -3,22 +3,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Room } from "@colyseus/sdk";
 import type { CharacterClassId, InventoryItem } from "../game/domain";
-import type { MultiplayerWorldAdapter, NetworkPlayerView } from "../game2d/types";
+import type { MultiplayerWorldAdapter, NetworkMapView, NetworkPlayerView } from "../game2d/types";
 import {
   CLIENT_MESSAGES,
   SERVER_MESSAGES,
   type CombatEvent,
+  type LatencyProbeMessage,
   type MapExitReadyMessage,
+  type PartySnapshotMessage,
   type PickupResultMessage,
   type ProfileCommand,
+  type PublicPartiesMessage,
   type RejectedCommandMessage,
+  type TradeSnapshotsMessage,
 } from "../../multiplayer/protocol";
 import type { PartySnapshot, PublicPartyListing } from "../../server/coordination/PartyCoordinator";
 import type { HideoutState } from "../../server/state/HideoutState";
 import type { MapRoomState } from "../../server/state/MapState";
 import type { AuthoritativeProfile, CharacterRosterEntry } from "../../server/persistence/PlayerRepository";
 import type { TradeSnapshot } from "../../server/persistence/TradeRepository";
-import { MultiplayerClient, MultiplayerRequestError, type AccountSession, type MultiplayerSession } from "./MultiplayerClient";
+import { MultiplayerClient, MultiplayerRequestError, ProtocolMismatchError, type AccountSession, type MultiplayerSession } from "./MultiplayerClient";
 import { schemaValues } from "./schemaValues";
 import { MonsterInterpolationBuffer } from "../game2d/MonsterInterpolationBuffer";
 import { decodeWorldEvents, WorldEventType } from "../../multiplayer/wire/events";
@@ -40,7 +44,7 @@ export interface MultiplayerHideoutController {
   busy: boolean;
   error: string | null;
   clearError: () => void;
-  connectAccount: (handle: string) => Promise<void>;
+  connectAccount: (handle: string, password: string, mode: "login" | "register") => Promise<void>;
   createCharacter: (characterName: string, classId: CharacterClassId) => Promise<void>;
   selectCharacter: (characterId: string) => Promise<void>;
   leaveCharacter: () => Promise<void>;
@@ -63,6 +67,7 @@ export interface MultiplayerHideoutController {
 }
 
 function errorMessage(error: unknown): string {
+  if (error instanceof ProtocolMismatchError) return error.message;
   if (error instanceof MultiplayerRequestError) {
     if (error.status === 409 && error.code === "character_name_taken") return "That character name is already taken. Try another name.";
     if (error.status === 409 && error.code === "class_unavailable") return "That class is not playable yet. Sorceress is currently the only enabled class.";
@@ -71,6 +76,16 @@ function errorMessage(error: unknown): string {
     return error.message;
   }
   return error instanceof Error ? error.message : "The game server could not be reached.";
+}
+
+function samePresence(left: readonly NetworkPlayerView[], right: readonly NetworkPlayerView[]): boolean {
+  return left.length === right.length && left.every((player, index) => {
+    const candidate = right[index];
+    return candidate?.characterId === player.characterId
+      && candidate.name === player.name
+      && candidate.classId === player.classId
+      && candidate.connected === player.connected;
+  });
 }
 
 export function useMultiplayerHideout(): MultiplayerHideoutController {
@@ -89,9 +104,16 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
   const roomRef = useRef<Room<unknown, HideoutState> | null>(null);
   const sequence = useRef(0);
   const attackSequence = useRef(0);
+  const latencyMilliseconds = useRef<number | null>(null);
   const combatEventQueue = useRef<CombatEvent[]>([]);
+  const pickupResultQueue = useRef<PickupResultMessage[]>([]);
+  const profileRevision = useRef(0);
   const monsterBuffer = useRef(new MonsterInterpolationBuffer());
   const dropPayloads = useRef(new Map<string, InventoryItem>());
+  const dropPayloadRevision = useRef(0);
+  const hideoutPlayerViews = useRef<{ room: Room<unknown, HideoutState> | null; tick: number; value: readonly NetworkPlayerView[] }>({ room: null, tick: -1, value: [] });
+  const mapPlayerViews = useRef<{ room: Room<unknown, MapRoomState> | null; tick: number; value: readonly NetworkPlayerView[] }>({ room: null, tick: -1, value: [] });
+  const mapView = useRef<{ room: Room<unknown, MapRoomState> | null; tick: number; payloadRevision: number; value: NetworkMapView | null }>({ room: null, tick: -1, payloadRevision: -1, value: null });
   const mapExitRequests = useRef(new Map<string, {
     resolve: (profile: AuthoritativeProfile) => void;
     reject: (error: Error) => void;
@@ -102,10 +124,17 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    profileRevision.current = authoritativeProfile?.revision ?? 0;
+  }, [authoritativeProfile]);
+
+  useEffect(() => {
     roomRef.current = room;
     if (!room) return;
+    let timer: number | null = null;
+    let lastAppliedAt = 0;
     const sync = () => {
-      setConnectedPlayers(schemaValues(room.state?.players).map((player) => ({
+      lastAppliedAt = performance.now();
+      const next = schemaValues(room.state?.players).map((player) => ({
         characterId: player.characterId,
         name: player.name,
         classId: player.classId as CharacterClassId,
@@ -114,11 +143,30 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
         facingX: player.facingX,
         facingY: player.facingY,
         connected: player.connected,
-      })));
+        serverTick: room.state.serverTick,
+        lastProcessedMovement: player.lastProcessedSequence,
+      }));
+      setConnectedPlayers((current) => samePresence(current, next) ? current : next);
     };
-    room.onStateChange(sync);
+    const scheduleSync = () => {
+      const remaining = 500 - (performance.now() - lastAppliedAt);
+      if (remaining <= 0) {
+        if (timer !== null) window.clearTimeout(timer);
+        timer = null;
+        sync();
+      } else if (timer === null) {
+        timer = window.setTimeout(() => {
+          timer = null;
+          sync();
+        }, remaining);
+      }
+    };
+    room.onStateChange(scheduleSync);
     sync();
-    return () => room.onStateChange.remove(sync);
+    return () => {
+      room.onStateChange.remove(scheduleSync);
+      if (timer !== null) window.clearTimeout(timer);
+    };
   }, [room]);
 
   useEffect(() => {
@@ -129,15 +177,38 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     return undefined;
   }, [mapRoom]);
 
-  const partyId = party?.id;
   useEffect(() => {
-    if (!session || !partyId) return;
-    const refresh = () => void client.currentParty(session).then(setParty).catch((caught) => {
-      if (caught instanceof MultiplayerRequestError && caught.status === 404) setParty(null);
+    const activeRoom = mapRoom ?? room;
+    latencyMilliseconds.current = null;
+    if (!activeRoom) return;
+
+    let probeSequence = 0;
+    const pending = new Map<number, number>();
+    const removeListener = activeRoom.onMessage(SERVER_MESSAGES.latencyProbeResponse, (message: LatencyProbeMessage) => {
+      const sentAt = pending.get(message.sequence);
+      if (sentAt === undefined) return;
+      pending.delete(message.sequence);
+      const sample = Math.max(0, performance.now() - sentAt);
+      latencyMilliseconds.current = latencyMilliseconds.current === null
+        ? sample
+        : latencyMilliseconds.current * 0.7 + sample * 0.3;
     });
-    const interval = window.setInterval(refresh, 1_500);
-    return () => window.clearInterval(interval);
-  }, [client, partyId, session]);
+    const sendProbe = () => {
+      probeSequence += 1;
+      pending.set(probeSequence, performance.now());
+      for (const [sequenceId, sentAt] of pending) {
+        if (performance.now() - sentAt > 5_000) pending.delete(sequenceId);
+      }
+      activeRoom.send(CLIENT_MESSAGES.latencyProbe, { sequence: probeSequence });
+    };
+    sendProbe();
+    const interval = window.setInterval(sendProbe, 1_000);
+    return () => {
+      window.clearInterval(interval);
+      removeListener();
+      pending.clear();
+    };
+  }, [mapRoom, room]);
 
   const refreshParties = useCallback(async () => {
     if (!session || party?.visibility === "public") return;
@@ -147,42 +218,6 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
       setError(errorMessage(caught));
     }
   }, [client, party, session]);
-
-  useEffect(() => {
-    if (!session || party?.visibility === "public") return;
-    let disposed = false;
-    const refresh = () => void client.listParties(session).then((listings) => {
-      if (!disposed) setPublicParties(listings);
-    }).catch((caught) => {
-      if (!disposed) setError(errorMessage(caught));
-    });
-    refresh();
-    const interval = window.setInterval(refresh, 2_000);
-    return () => {
-      disposed = true;
-      window.clearInterval(interval);
-    };
-  }, [client, party, session]);
-
-  useEffect(() => {
-    if (!session) return;
-    let disposed = false;
-    const refresh = () => void client.listTrades(session).then((openTrades) => {
-      if (disposed) return;
-      setTrades(openTrades);
-      setActiveTradeId((current) => current && openTrades.some((trade) => trade.id === current)
-        ? current
-        : openTrades[0]?.id ?? null);
-    }).catch((caught) => {
-      if (!disposed) setError(errorMessage(caught));
-    });
-    refresh();
-    const interval = window.setInterval(refresh, 1_000);
-    return () => {
-      disposed = true;
-      window.clearInterval(interval);
-    };
-  }, [client, session]);
 
   useEffect(() => () => {
     for (const pending of mapExitRequests.current.values()) {
@@ -211,6 +246,18 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     await roomRef.current?.leave(true);
     sequence.current = 0;
     const connected = await client.connectHideout(selectedSession, selectedParty.id);
+    connected.onMessage(SERVER_MESSAGES.partySnapshot, (message: PartySnapshotMessage) => {
+      setParty(message.party);
+    });
+    connected.onMessage(SERVER_MESSAGES.tradeSnapshots, (message: TradeSnapshotsMessage) => {
+      setTrades(message.trades);
+      setActiveTradeId((current) => current && message.trades.some((trade) => trade.id === current)
+        ? current
+        : message.trades[0]?.id ?? null);
+    });
+    connected.onMessage(SERVER_MESSAGES.publicParties, (message: PublicPartiesMessage) => {
+      setPublicParties(message.parties);
+    });
     connected.onLeave(() => {
       if (roomRef.current === connected) {
         roomRef.current = null;
@@ -222,8 +269,8 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     setRoom(connected);
   }, [client]);
 
-  const connectAccount = useCallback((handle: string) => run(async () => {
-    const connected = await client.createAccountSession(handle);
+  const connectAccount = useCallback((handle: string, password: string, mode: "login" | "register") => run(async () => {
+    const connected = await client.createAccountSession(handle, password, mode);
     setAccount(connected);
     setAuthoritativeProfile(null);
     setSession(null);
@@ -283,6 +330,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     await mapRoomRef.current?.leave(true);
     mapRoomRef.current = null;
     if (session && party) await client.leaveParty(session).catch(() => null);
+    if (account) await client.logoutAccount(account).catch(() => undefined);
     setConnectedPlayers([]);
     setRoom(null);
     setMapRoom(null);
@@ -293,7 +341,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     setAuthoritativeProfile(null);
     setSession(null);
     setAccount(null);
-  }), [client, party, run, session]);
+  }), [account, client, party, run, session]);
 
   const createParty = useCallback(async (): Promise<boolean> => {
     setBusy(true);
@@ -371,41 +419,65 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     const portal = activeMap.portals.find((candidate) => candidate.index === portalIndex);
     if (!portal || portal.used) throw new Error("That portal has already been used.");
     const connected = await client.connectMap(session, activeMap.mapTicket, portalIndex, activeMap.roomId ?? undefined);
-    connected.onLeave((code) => {
-      if (mapRoomRef.current !== connected) return;
-      const intentional = intentionalMapClosures.current.has(connected);
+    const activateMapRoom = (activeConnection: Room<unknown, MapRoomState>): void => {
+      activeConnection.onLeave((code) => {
+      if (mapRoomRef.current !== activeConnection) return;
+      const intentional = intentionalMapClosures.current.has(activeConnection);
       for (const pending of mapExitRequests.current.values()) {
         clearTimeout(pending.timeout);
         pending.reject(new Error("Map connection closed before the server confirmed your saved progress."));
       }
       mapExitRequests.current.clear();
-      combatEventQueue.current = [];
-      monsterBuffer.current = new MonsterInterpolationBuffer();
-      dropPayloads.current.clear();
-      mapRoomRef.current = null;
-      setMapRoom(null);
       if (intentional) return;
 
-      console.warn(`[multiplayer] Map connection closed unexpectedly (code ${code}). Returning to hideout.`);
-      setError("The map connection was interrupted. You were returned to your hideout instead of being left in a frozen map.");
-      void client.currentParty(session)
-        .catch(() => null)
-        .then(async (currentParty) => {
-          const destination = currentParty ?? await client.createSoloParty(session);
-          setParty(destination);
-          await connectToPartyHideout(session, destination);
+      console.warn(`[multiplayer] Map connection closed unexpectedly (code ${code}). Attempting session recovery.`);
+      const reconnectionToken = activeConnection.reconnectionToken;
+      void client.reconnectMap(reconnectionToken)
+        .then((reconnected) => {
+          if (mapRoomRef.current !== activeConnection) {
+            intentionalMapClosures.current.add(reconnected);
+            return reconnected.leave(true);
+          }
+          combatEventQueue.current = [];
+          pickupResultQueue.current = [];
+          monsterBuffer.current = new MonsterInterpolationBuffer();
+          dropPayloads.current.clear();
+          dropPayloadRevision.current += 1;
+          activateMapRoom(reconnected);
+          setError(null);
+        })
+        .catch((reconnectError) => {
+          if (mapRoomRef.current !== activeConnection) return;
+          combatEventQueue.current = [];
+          pickupResultQueue.current = [];
+          monsterBuffer.current = new MonsterInterpolationBuffer();
+          dropPayloads.current.clear();
+          dropPayloadRevision.current += 1;
+          mapRoomRef.current = null;
+          setMapRoom(null);
+          setError(reconnectError instanceof ProtocolMismatchError
+            ? reconnectError.message
+            : "The map connection could not be recovered. Your progress was saved and you were returned to your hideout.");
+          return client.currentParty(session)
+            .catch(() => null)
+            .then(async (currentParty) => {
+              const destination = currentParty ?? await client.createSoloParty(session);
+              setParty(destination);
+              await connectToPartyHideout(session, destination);
+            });
         })
         .catch((caught) => setError(errorMessage(caught)));
-    });
-    connected.onMessage(SERVER_MESSAGES.profileUpdated, (updated: AuthoritativeProfile) => setAuthoritativeProfile(updated));
-    connected.onMessage(SERVER_MESSAGES.mapExitReady, (message: MapExitReadyMessage) => {
+      });
+    activeConnection.onMessage(SERVER_MESSAGES.profileUpdated, (updated: AuthoritativeProfile) => setAuthoritativeProfile(updated));
+    activeConnection.onMessage(SERVER_MESSAGES.mapExitReady, (message: MapExitReadyMessage) => {
       const pending = mapExitRequests.current.get(message.requestId);
       if (!pending) return;
       clearTimeout(pending.timeout);
       mapExitRequests.current.delete(message.requestId);
       pending.resolve(message.authoritativeProfile);
     });
-    connected.onMessage(SERVER_MESSAGES.pickupResult, (message: PickupResultMessage) => {
+    activeConnection.onMessage(SERVER_MESSAGES.pickupResult, (message: PickupResultMessage) => {
+      pickupResultQueue.current.push(message);
       if (message.status !== "rejected" || message.reason === "unauthorized") return;
       const description = message.reason === "inventory_full"
         ? "Your backpack is full. The item remains on the ground."
@@ -414,7 +486,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
           : "Pickup was not confirmed. The item remains on the ground.";
       setError(description);
     });
-    connected.onMessage(SERVER_MESSAGES.rejected, (message: RejectedCommandMessage) => {
+    activeConnection.onMessage(SERVER_MESSAGES.rejected, (message: RejectedCommandMessage) => {
       if (message.command !== CLIENT_MESSAGES.prepareMapExit) return;
       const error = new Error("The server could not finish saving your map progress. Please try returning again.");
       for (const [requestId, pending] of mapExitRequests.current) {
@@ -423,15 +495,15 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
         pending.reject(error);
       }
     });
-    connected.onMessage(SERVER_MESSAGES.monsterLifecycle, (payload: Uint8Array | ArrayBuffer) => {
+    activeConnection.onMessage(SERVER_MESSAGES.monsterLifecycle, (payload: Uint8Array | ArrayBuffer) => {
       monsterBuffer.current.applyLifecycle(asBytes(payload));
     });
-    connected.onMessage(SERVER_MESSAGES.monsterSnapshot, (payload: Uint8Array | ArrayBuffer) => {
+    activeConnection.onMessage(SERVER_MESSAGES.monsterSnapshot, (payload: Uint8Array | ArrayBuffer) => {
       monsterBuffer.current.applySnapshot(asBytes(payload), performance.now());
     });
-    connected.onMessage(SERVER_MESSAGES.worldEvents, (payload: Uint8Array | ArrayBuffer) => {
+    activeConnection.onMessage(SERVER_MESSAGES.worldEvents, (payload: Uint8Array | ArrayBuffer) => {
       const events = decodeWorldEvents(asBytes(payload));
-      const players = schemaValues(connected.state?.players);
+      const players = schemaValues(activeConnection.state?.players);
       for (const event of events) {
         const actor = players.find((player) => player.worldIndex === playerIndexFromEntity(event.actorId));
         const target = players.find((player) => player.worldIndex === playerIndexFromEntity(event.targetId));
@@ -535,12 +607,15 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
       }
       if (combatEventQueue.current.length > 512) combatEventQueue.current.splice(0, combatEventQueue.current.length - 512);
     });
-    connected.onMessage(SERVER_MESSAGES.dropPayload, (payload: { dropId: string; item: InventoryItem }) => {
+    activeConnection.onMessage(SERVER_MESSAGES.dropPayload, (payload: { dropId: string; item: InventoryItem }) => {
       dropPayloads.current.set(payload.dropId, payload.item);
+      dropPayloadRevision.current += 1;
     });
-    connected.send(CLIENT_MESSAGES.requestWorldSync, {});
-    mapRoomRef.current = connected;
-    setMapRoom(connected);
+      activeConnection.send(CLIENT_MESSAGES.requestWorldSync, {});
+      mapRoomRef.current = activeConnection;
+      setMapRoom(activeConnection);
+    };
+    activateMapRoom(connected);
     setParty(await client.currentParty(session));
     await roomRef.current?.leave(true);
     roomRef.current = null;
@@ -566,6 +641,7 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
       combatEventQueue.current = [];
       monsterBuffer.current = new MonsterInterpolationBuffer();
       dropPayloads.current.clear();
+      dropPayloadRevision.current += 1;
       if (activeRoom) intentionalMapClosures.current.add(activeRoom);
       await activeRoom?.leave(true);
       mapRoomRef.current = null;
@@ -643,10 +719,14 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
 
   const adapter = useMemo<MultiplayerWorldAdapter | undefined>(() => session && room ? {
     localCharacterId: session.player.characterId,
+    getPing: () => latencyMilliseconds.current === null ? null : Math.round(latencyMilliseconds.current),
     getPlayers: () => {
       const activeRoom = roomRef.current;
       if (!activeRoom) return [];
-      return schemaValues(activeRoom.state?.players).map((player) => ({
+      const tick = activeRoom.state.serverTick;
+      const cached = hideoutPlayerViews.current;
+      if (cached.room === activeRoom && cached.tick === tick) return cached.value;
+      const value = schemaValues(activeRoom.state?.players).map((player) => ({
         characterId: player.characterId,
         name: player.name,
         classId: player.classId as CharacterClassId,
@@ -655,7 +735,11 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
         facingX: player.facingX,
         facingY: player.facingY,
         connected: player.connected,
+        serverTick: activeRoom.state.serverTick,
+        lastProcessedMovement: player.lastProcessedSequence,
       }));
+      hideoutPlayerViews.current = { room: activeRoom, tick, value };
+      return value;
     },
     sendMovement: (x, y) => {
       const activeRoom = roomRef.current;
@@ -667,10 +751,14 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
 
   const mapAdapter = useMemo<MultiplayerWorldAdapter | undefined>(() => session && mapRoom ? {
     localCharacterId: session.player.characterId,
+    getPing: () => latencyMilliseconds.current === null ? null : Math.round(latencyMilliseconds.current),
     getPlayers: () => {
       const activeRoom = mapRoomRef.current;
       if (!activeRoom) return [];
-      return schemaValues(activeRoom.state?.players).map((player) => ({
+      const tick = activeRoom.state.serverTick;
+      const cached = mapPlayerViews.current;
+      if (cached.room === activeRoom && cached.tick === tick) return cached.value;
+      const value = schemaValues(activeRoom.state?.players).map((player) => ({
         characterId: player.characterId,
         name: player.name,
         classId: player.classId as CharacterClassId,
@@ -679,20 +767,30 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
         facingX: player.facingX,
         facingY: player.facingY,
         connected: player.connected,
+        serverTick: activeRoom.state.serverTick,
         life: player.life,
         maxLife: player.maxLife,
         focus: player.focus,
         maxFocus: player.maxFocus,
         attackSpeed: player.attackSpeed,
         castSpeed: player.castSpeed,
+        lastProcessedMovement: player.lastProcessedMovement,
+        lastProcessedAttack: player.lastProcessedAttack,
         experience: player.experience,
         persistedExperience: player.persistedExperience,
       }));
+      mapPlayerViews.current = { room: activeRoom, tick, value };
+      return value;
     },
     getMap: () => {
-      const state = mapRoomRef.current?.state;
+      const activeRoom = mapRoomRef.current;
+      const state = activeRoom?.state;
       if (!state?.drops) return null;
-      return {
+      const tick = state.serverTick;
+      const payloadRevision = dropPayloadRevision.current;
+      const cached = mapView.current;
+      if (cached.room === activeRoom && cached.tick === tick && cached.payloadRevision === payloadRevision) return cached.value;
+      const value: NetworkMapView = {
         wave: state.wave,
         totalWaves: state.totalWaves,
         monstersAlive: state.monstersAlive,
@@ -712,9 +810,13 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
             }] : [];
         }),
       };
+      mapView.current = { room: activeRoom, tick, payloadRevision, value };
+      return value;
     },
     getMonsterSampler: () => monsterBuffer.current,
     drainCombatEvents: () => combatEventQueue.current.splice(0),
+    drainPickupResults: () => pickupResultQueue.current.splice(0),
+    getProfileRevision: () => profileRevision.current,
     sendMovement: (x, y) => {
       const activeRoom = mapRoomRef.current;
       if (!activeRoom) return;
@@ -723,9 +825,10 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     },
     sendAttack: (skill, direction) => {
       const activeRoom = mapRoomRef.current;
-      if (!activeRoom) return;
+      if (!activeRoom) return undefined;
       attackSequence.current += 1;
       activeRoom.send(CLIENT_MESSAGES.attack, { sequence: attackSequence.current, skill, ...(direction ? { direction } : {}) });
+      return attackSequence.current;
     },
     sendPickup: (dropId) => mapRoomRef.current?.send(CLIENT_MESSAGES.pickup, { dropId }),
     sendUseFlask: (slot) => mapRoomRef.current?.send(CLIENT_MESSAGES.useFlask, { slot }),

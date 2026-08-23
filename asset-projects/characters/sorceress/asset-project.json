@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "assetType": "character",
+  "id": "sorceress",
+  "displayName": "Sorceress",
+  "sourceRoot": "art-source/characters/sorceress",
+  "projectRoot": "asset-projects/characters/sorceress",
+  "outputRoot": "art-source/characters/sorceress/build",
+  "directions": [
+    "south",
+    "north",
+    "east"
+  ],
+  "clips": [
+    {
+      "id": "idle",
+      "group": "locomotion",
+      "frames": 10,
+      "frameRate": 8,
+      "loop": true
+    },
+    {
+      "id": "run",
+      "group": "locomotion",
+      "frames": 12,
+      "frameRate": 12,
+      "loop": true
+    },
+    {
+      "id": "attack",
+      "group": "actions",
+      "frames": 10,
+      "frameRate": 14,
+      "loop": false
+    },
+    {
+      "id": "cast",
+      "group": "actions",
+      "frames": 12,
+      "frameRate": 12,
+      "loop": false
+    },
+    {
+      "id": "dash",
+      "group": "extended-actions",
+      "frames": 8,
+      "frameRate": 18,
+      "loop": false
+    },
+    {
+      "id": "hit",
+      "group": "extended-actions",
+      "frames": 7,
+      "frameRate": 14,
+      "loop": false
+    },
+    {
+      "id": "death",
+      "group": "extended-actions",
+      "frames": 16,
+      "frameRate": 12,
+      "loop": false
+    }
+  ],
+  "runtime": {
+    "initialDirections": [
+      "south",
+      "north",
+      "east"
+    ],
+    "mirroredDirection": {
+      "west": "east"
+    },
+    "atlasCellSize": 304
+  }
+}

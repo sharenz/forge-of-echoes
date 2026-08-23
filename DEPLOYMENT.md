@@ -40,7 +40,22 @@ Every subsequent release is one command:
 make deploy
 ```
 
-The deploy script uploads the current working tree into an immutable release directory, builds versioned images on the VM, starts the release, waits for container health checks, and restores the previous release if activation fails. CI deployment is deliberately postponed.
+The deploy script uploads the current working tree into an immutable release directory and builds versioned images while the current release keeps serving players. Before replacement it puts the game server into drain mode: new maps are rejected, existing maps may finish for up to ten minutes, and empty map rooms close immediately. It then starts the release, waits for container health checks, and restores the previous release if activation fails. CI deployment is deliberately postponed.
+
+## Account authentication migration
+
+Accounts use password-backed, revocable PostgreSQL sessions. After the first
+deployment containing migration `011_account_authentication.sql`, legacy
+name-only accounts deliberately cannot sign in until an administrator assigns
+a password:
+
+```bash
+crafty-cli prod
+```
+
+Choose **Set / reset account password**, select the account, and enter the new
+password twice. Resetting a password revokes every existing account and
+character session. Development uses the same flow with `crafty-cli dev`.
 
 ## Super-admin CLI
 

@@ -24,8 +24,12 @@ import type { PlayerIdentity } from "../persistence/PlayerRepository";
 import { TradeError } from "../persistence/TradeRepository";
 import type { ServerServices } from "../services";
 import { MapOpenError, MapService } from "../services/MapService";
-import { PartyError, type PublicPartyListing } from "../coordination/PartyCoordinator";
+import { PartyError } from "../coordination/PartyCoordinator";
 import { ProfileCommandError, ProfileCommandService } from "../services/ProfileCommandService";
+import { AccountAuthError, AccountAuthService } from "../services/AccountAuthService";
+import { listPublicPartyListings } from "../services/PublicPartyService";
+import type { SocialInvalidation } from "../social/SocialEventBus";
+import { serverDrain } from "../observability/ServerDrain";
 
 class HttpError extends Error {
   constructor(readonly status: number, readonly code: string, readonly details?: unknown) {
@@ -44,9 +48,10 @@ function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
   return parsed.data;
 }
 
-function issuePlayerSession(player: PlayerIdentity, secret: string) {
+function issuePlayerSession(player: PlayerIdentity, authSessionId: string, secret: string) {
   const claims = {
     sessionId: randomUUID(),
+    authSessionId,
     ...player,
     expiresAt: Date.now() + 12 * 60 * 60 * 1000,
   };
@@ -54,20 +59,26 @@ function issuePlayerSession(player: PlayerIdentity, secret: string) {
 }
 
 function requireSession(services: ServerServices): RequestHandler {
-  return (request, response, next) => {
+  return async (request, response, next) => {
     const token = bearerToken(request.headers.authorization);
     const session = token ? verifySessionToken(token, services.authSecret) : null;
-    if (!session) return void response.status(401).json({ error: "unauthorized" });
+    if (!session || !await services.players.isAuthSessionActive(session.authSessionId, session.accountId)) {
+      response.status(401).json({ error: "unauthorized" });
+      return;
+    }
     (request as Request & { session?: SessionClaims }).session = session;
     next();
   };
 }
 
 function requireAccount(services: ServerServices): RequestHandler {
-  return (request, response, next) => {
+  return async (request, response, next) => {
     const token = bearerToken(request.headers.authorization);
     const account = token ? verifyAccountToken(token, services.authSecret) : null;
-    if (!account) return void response.status(401).json({ error: "unauthorized" });
+    if (!account || !await services.players.isAuthSessionActive(account.sessionId, account.accountId)) {
+      response.status(401).json({ error: "unauthorized" });
+      return;
+    }
     (request as Request & { account?: AccountSessionClaims }).account = account;
     next();
   };
@@ -91,11 +102,22 @@ function routeParam(value: string | string[] | undefined): string {
   return value;
 }
 
+async function publishSocial(services: ServerServices, event: SocialInvalidation): Promise<void> {
+  try {
+    await services.social?.publish(event);
+  } catch (error) {
+    // The committed database mutation remains authoritative. A failed hint is
+    // observable, while clients recover on their next relevant room join.
+    console.error(`[social-events] publish failed\n${formatError(error)}`);
+  }
+}
+
 export function createApiRouter(services: ServerServices): express.Router {
   const router = express.Router();
   const playerSession = requireSession(services);
   const accountSession = requireAccount(services);
   const profileCommands = new ProfileCommandService(services.players);
+  const accountAuth = new AccountAuthService(services.players);
   const maps = new MapService(services.players, services.parties, services.expeditions, services.authSecret);
 
   router.get("/health", (_request, response) => {
@@ -104,15 +126,21 @@ export function createApiRouter(services: ServerServices): express.Router {
 
   router.post("/accounts/session", async (request, response) => {
     const input = parseBody(accountSessionRequestSchema, request.body);
-    const createdAccount = await services.players.createOrLoadAccount(input.handle);
-    const characters = await services.players.listCharacters(createdAccount.accountId);
+    const authenticated = await accountAuth.authenticate(input.handle, input.password, input.mode);
+    const characters = await services.players.listCharacters(authenticated.account.accountId);
     const token = signAccountToken({
-      sessionId: randomUUID(),
-      accountId: createdAccount.accountId,
+      sessionId: authenticated.sessionId,
+      accountId: authenticated.account.accountId,
       scope: "account",
-      expiresAt: Date.now() + 12 * 60 * 60 * 1000,
+      expiresAt: authenticated.expiresAt,
     }, services.authSecret);
-    response.json({ token, account: createdAccount, characters });
+    response.json({ token, account: authenticated.account, characters });
+  });
+
+  router.post("/accounts/logout", accountSession, async (request, response) => {
+    const claims = account(request);
+    await services.players.revokeAuthSession(claims.sessionId, claims.accountId);
+    response.status(204).end();
   });
 
   router.get("/accounts/characters", accountSession, async (request, response) => {
@@ -123,7 +151,7 @@ export function createApiRouter(services: ServerServices): express.Router {
     const input = parseBody(createCharacterRequestSchema, request.body);
     const created = await services.players.createCharacter(account(request).accountId, input);
     response.status(201).json({
-      session: issuePlayerSession(created, services.authSecret),
+      session: issuePlayerSession(created, account(request).sessionId, services.authSecret),
       characters: await services.players.listCharacters(account(request).accountId),
     });
   });
@@ -135,7 +163,7 @@ export function createApiRouter(services: ServerServices): express.Router {
     if (!(ENABLED_CHARACTER_CLASS_IDS as readonly string[]).includes(player.classId)) {
       throw new HttpError(409, "class_unavailable");
     }
-    response.json(issuePlayerSession(player, services.authSecret));
+    response.json(issuePlayerSession(player, account(request).sessionId, services.authSecret));
   });
 
   router.get("/profile", playerSession, async (request, response) => {
@@ -150,36 +178,19 @@ export function createApiRouter(services: ServerServices): express.Router {
   });
 
   router.post("/parties", playerSession, async (request, response) => {
-    response.status(201).json(await services.parties.create(session(request).characterId));
+    const party = await services.parties.create(session(request).characterId);
+    await publishSocial(services, { scope: "party", partyIds: [party.id], publicPartiesChanged: true });
+    response.status(201).json(party);
   });
 
   router.post("/parties/solo", playerSession, async (request, response) => {
-    response.status(201).json(await services.parties.createSolo(session(request).characterId));
+    const party = await services.parties.createSolo(session(request).characterId);
+    await publishSocial(services, { scope: "party", partyIds: [party.id] });
+    response.status(201).json(party);
   });
 
   router.get("/parties", playerSession, async (request, response) => {
-    const activeSession = session(request);
-    const listings: PublicPartyListing[] = [];
-    for (const party of await services.parties.listPublic()) {
-      if (party.memberCharacterIds.includes(activeSession.characterId)) continue;
-      const leader = await services.players.findCharacter(party.leaderCharacterId);
-      if (!leader) continue;
-      listings.push({
-        id: party.id,
-        name: `${leader.characterName}'s Party`,
-        leader: {
-          characterId: leader.characterId,
-          characterName: leader.characterName,
-          classId: leader.classId,
-          level: leader.level,
-        },
-        memberCount: party.memberCharacterIds.length,
-        maximumMembers: MULTIPLAYER_LIMITS.playersPerRoom,
-        activity: party.activeMap ? "map" : "hideout",
-        activeMap: party.activeMap ? { name: party.activeMap.map.baseName, tier: party.activeMap.map.tier } : null,
-      });
-    }
-    response.json(listings);
+    response.json(await listPublicPartyListings(services.parties, services.players, session(request).characterId));
   });
 
   router.get("/parties/current", playerSession, async (request, response) => {
@@ -190,24 +201,33 @@ export function createApiRouter(services: ServerServices): express.Router {
 
   router.post("/parties/join", playerSession, async (request, response) => {
     const input = parseBody(joinPartyRequestSchema, request.body);
-    response.json(await services.parties.join(session(request).characterId, input.partyId));
+    const party = await services.parties.join(session(request).characterId, input.partyId);
+    await publishSocial(services, { scope: "party", partyIds: [party.id], publicPartiesChanged: true });
+    response.json(party);
   });
 
   router.post("/parties/leave", playerSession, async (request, response) => {
-    response.json({ party: await services.parties.leave(session(request).characterId) });
+    const party = await services.parties.leave(session(request).characterId);
+    await publishSocial(services, { scope: "party", partyIds: party ? [party.id] : undefined, publicPartiesChanged: true });
+    response.json({ party });
   });
 
   router.post("/maps/open", playerSession, async (request, response) => {
+    if (serverDrain.isDraining) throw new HttpError(503, "server_draining");
     const input = parseBody(openMapRequestSchema, request.body);
-    response.status(201).json(await maps.open(session(request).characterId, input.revision));
+    const opened = await maps.open(session(request).characterId, input.revision);
+    await publishSocial(services, { scope: "party", partyIds: [opened.partyId], publicPartiesChanged: true });
+    response.status(201).json(opened);
   });
 
   router.post("/trades", playerSession, async (request, response) => {
     const input = parseBody(createTradeRequestSchema, request.body);
-    response.status(201).json(await requireTrades(services).createTrade(
+    const trade = await requireTrades(services).createTrade(
       session(request).characterId,
       input.targetCharacterId,
-    ));
+    );
+    await publishSocial(services, { scope: "trade", characterIds: trade.participants });
+    response.status(201).json(trade);
   });
 
   router.get("/trades", playerSession, async (request, response) => {
@@ -220,25 +240,31 @@ export function createApiRouter(services: ServerServices): express.Router {
 
   router.post("/trades/:tradeId/offer", playerSession, async (request, response) => {
     const input = parseBody(setTradeOfferRequestSchema, request.body);
-    response.json(await requireTrades(services).setOffer(
+    const trade = await requireTrades(services).setOffer(
       routeParam(request.params.tradeId),
       session(request).characterId,
       input.revision,
       input.itemIds,
-    ));
+    );
+    await publishSocial(services, { scope: "trade", characterIds: trade.participants });
+    response.json(trade);
   });
 
   router.post("/trades/:tradeId/accept", playerSession, async (request, response) => {
     const input = parseBody(acceptTradeRequestSchema, request.body);
-    response.json(await requireTrades(services).acceptTrade(
+    const trade = await requireTrades(services).acceptTrade(
       routeParam(request.params.tradeId),
       session(request).characterId,
       input.revision,
-    ));
+    );
+    await publishSocial(services, { scope: "trade", characterIds: trade.participants });
+    response.json(trade);
   });
 
   router.post("/trades/:tradeId/cancel", playerSession, async (request, response) => {
-    response.json(await requireTrades(services).cancelTrade(routeParam(request.params.tradeId), session(request).characterId));
+    const trade = await requireTrades(services).cancelTrade(routeParam(request.params.tradeId), session(request).characterId);
+    await publishSocial(services, { scope: "trade", characterIds: trade.participants });
+    response.json(trade);
   });
 
   router.use((error: unknown, request: Request, response: Response, next: NextFunction) => {
@@ -260,6 +286,13 @@ export function createApiRouter(services: ServerServices): express.Router {
 
 function mapError(error: unknown): { status: number; code: string; message?: string; details?: unknown } | null {
   if (error instanceof HttpError) return { status: error.status, code: error.code, details: error.details };
+  if (error instanceof AccountAuthError) {
+    return {
+      status: error.code === "account_exists" ? 409 : 401,
+      code: error.code,
+      message: error.code === "account_exists" ? "That player name is already registered." : "Player name or password is incorrect.",
+    };
+  }
   if (error instanceof CharacterNameTakenError) return { status: 409, code: "character_name_taken", message: "That character name is already taken." };
   if (error instanceof CharacterNotFoundError) return { status: 404, code: "character_not_found" };
   if (error instanceof ProfileRevisionConflict) return { status: 409, code: "revision_conflict" };

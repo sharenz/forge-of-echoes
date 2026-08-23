@@ -72,6 +72,17 @@ test("debug merchant enable and disable operations are account-scoped and parame
   assert.throws(() => database.setDebugMerchant("unsafe account", true), /Invalid account handle/);
 });
 
+test("password reset is account-scoped, parameterized, and revokes sessions", () => {
+  const runner = successfulRunner('{"handle":"roman","passwordConfigured":true,"sessionsRevoked":2}\n');
+  const database = new AdminDatabase("dev", { runProcess: runner.runProcess });
+  const result = database.setAccountPassword("Roman", "scrypt$16384$8$1$c2FsdA$aGFzaA");
+  assert.equal(result.passwordConfigured, true);
+  assert.ok(runner.calls[0].args.includes("account_handle=roman"));
+  assert.ok(runner.calls[0].args.some((argument) => argument.startsWith("password_hash=scrypt$")));
+  assert.match(runner.calls[0].options.input, /UPDATE accounts/);
+  assert.match(runner.calls[0].options.input, /UPDATE auth_sessions/);
+});
+
 test("interactive selector responds to arrow keys and Enter", async () => {
   const input = new EventEmitter();
   input.isTTY = true;

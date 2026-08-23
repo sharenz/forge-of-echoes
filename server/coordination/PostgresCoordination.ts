@@ -5,6 +5,7 @@ import { MULTIPLAYER_LIMITS } from "../../multiplayer/protocol";
 import type { PlayerRepository } from "../persistence/PlayerRepository";
 import { ExpeditionError, type ExpeditionCoordinator, type OpenExpeditionInput, type OpenedExpedition } from "./ExpeditionCoordinator";
 import { PartyError, type ActivePartyMap, type PartyCoordinator, type PartySnapshot } from "./PartyCoordinator";
+import type { SocialEventBus } from "../social/SocialEventBus";
 
 interface PartyRow {
   id: string;
@@ -14,26 +15,36 @@ interface PartyRow {
   current_expedition_id: string | null;
 }
 
-interface ExpeditionRow {
-  id: string;
-  ticket_id: string;
-  map_ticket: string;
-  map_data: MapItem;
-  expires_at_ms: string;
-  room_id: string | null;
+interface PartySnapshotRow extends PartyRow {
+  member_character_ids: string[];
+  active_map: ActivePartyMap | null;
 }
 
 export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordinator {
   private readonly pool: Pool;
+  private readonly leasePool: Pool;
+  private readonly initialReap: Promise<void>;
+  private readonly reapTimer: ReturnType<typeof setInterval>;
   private closed = false;
 
   constructor(
     connectionString: string,
     private readonly players: PlayerRepository,
     private readonly presenceGraceMilliseconds: number = MULTIPLAYER_LIMITS.partyPresenceGraceMilliseconds,
-    private readonly roomLeaseMilliseconds: number = 30_000,
+    private readonly roomLeaseMilliseconds: number = 45_000,
+    private readonly social?: SocialEventBus,
   ) {
     this.pool = new Pool({ connectionString, max: 8 });
+    // Lease renewals must never queue behind profile/social reads. This small
+    // dedicated pool protects presence and live map ownership under load.
+    this.leasePool = new Pool({ connectionString, max: 2 });
+    this.initialReap = this.reapExpired().catch((error) => {
+      console.error("[coordination] initial expiry reap failed", error);
+    });
+    this.reapTimer = setInterval(() => {
+      void this.reapExpired().catch((error) => console.error("[coordination] expiry reap failed", error));
+    }, 5_000);
+    this.reapTimer.unref();
   }
 
   async create(leaderCharacterId: string): Promise<PartySnapshot> {
@@ -48,7 +59,6 @@ export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordin
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      await this.reapExpired(client);
       const targetResult = await client.query<PartyRow>(
         "SELECT id, visibility, leader_character_id, revision, current_expedition_id FROM parties WHERE id = $1 FOR UPDATE",
         [partyId],
@@ -114,31 +124,34 @@ export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordin
   }
 
   async getForMember(characterId: string): Promise<PartySnapshot | null> {
-    await this.reapExpired();
-    const result = await this.pool.query<{ party_id: string }>("SELECT party_id FROM party_members WHERE character_id = $1", [characterId]);
-    return result.rows[0] ? this.getSnapshot(result.rows[0].party_id) : null;
+    await this.initialReap;
+    return (await this.getSnapshots(
+      `WHERE EXISTS (
+         SELECT 1 FROM party_members AS membership
+         WHERE membership.party_id = parties.id AND membership.character_id = $1
+       )`,
+      [characterId],
+    ))[0] ?? null;
   }
 
   async get(partyId: string): Promise<PartySnapshot | null> {
-    await this.reapExpired();
+    await this.initialReap;
     return this.getSnapshot(partyId);
   }
 
   async listPublic(): Promise<PartySnapshot[]> {
-    await this.reapExpired();
-    const result = await this.pool.query<{ id: string }>("SELECT id FROM parties WHERE visibility = 'public' ORDER BY created_at, id");
-    const parties = await Promise.all(result.rows.map((row) => this.getSnapshot(row.id)));
-    return parties.filter((party): party is PartySnapshot => Boolean(party));
+    await this.initialReap;
+    return this.getSnapshots("WHERE parties.visibility = 'public' ORDER BY parties.created_at, parties.id", []);
   }
 
   async isMember(partyId: string, characterId: string): Promise<boolean> {
-    await this.reapExpired();
+    await this.initialReap;
     const result = await this.pool.query("SELECT 1 FROM party_members WHERE party_id = $1 AND character_id = $2", [partyId, characterId]);
     return Boolean(result.rowCount);
   }
 
   async connect(partyId: string, characterId: string, connectionId: string): Promise<void> {
-    await this.pool.query(
+    await this.leasePool.query(
       `INSERT INTO party_connections (connection_id, party_id, character_id, lease_expires_at)
        SELECT $3, $1, $2, now() + ($4 * interval '1 millisecond')
        WHERE EXISTS (SELECT 1 FROM party_members WHERE party_id = $1 AND character_id = $2)
@@ -154,7 +167,7 @@ export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordin
   }
 
   async disconnect(partyId: string, characterId: string, connectionId: string): Promise<void> {
-    await this.pool.query(
+    await this.leasePool.query(
       `UPDATE party_connections
        SET lease_expires_at = now() + ($4 * interval '1 millisecond'), updated_at = now()
        WHERE connection_id = $3 AND party_id = $1 AND character_id = $2`,
@@ -247,7 +260,7 @@ export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordin
   }
 
   async claimRoom(ticketId: string, roomId: string): Promise<boolean> {
-    const result = await this.pool.query(
+    const result = await this.leasePool.query(
       `UPDATE map_expeditions
        SET room_id = $2,
            room_lease_expires_at = now() + ($3 * interval '1 millisecond'),
@@ -261,7 +274,7 @@ export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordin
   }
 
   async renewRoom(ticketId: string, roomId: string): Promise<boolean> {
-    const result = await this.pool.query(
+    const result = await this.leasePool.query(
       `UPDATE map_expeditions
        SET room_lease_expires_at = now() + ($3 * interval '1 millisecond'), updated_at = now()
        WHERE ticket_id = $1 AND room_id = $2 AND status = 'active' AND expires_at > now()
@@ -305,7 +318,11 @@ export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordin
        WHERE portals.expedition_id = expeditions.id
          AND expeditions.ticket_id = $2 AND expeditions.status = 'active' AND expeditions.expires_at > now()
          AND parties.id = expeditions.party_id AND parties.current_expedition_id = expeditions.id
-         AND portals.portal_index = $3 AND portals.used_at IS NULL
+         AND portals.portal_index = $3
+         -- A portal is consumed by its first character, but that same
+         -- character may reconnect through it after a socket or worker
+         -- restart. It remains unavailable to every other character.
+         AND (portals.used_at IS NULL OR portals.used_by_character_id = $1)
          AND EXISTS (
            SELECT 1 FROM party_members
            WHERE party_members.party_id = expeditions.party_id AND party_members.character_id = $1
@@ -319,7 +336,9 @@ export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordin
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    await this.pool.end();
+    clearInterval(this.reapTimer);
+    await this.initialReap;
+    await Promise.all([this.pool.end(), this.leasePool.end()]);
   }
 
   private async createFor(characterId: string, visibility: PartySnapshot["visibility"], retryConcurrentCreate = true): Promise<PartySnapshot> {
@@ -328,7 +347,6 @@ export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordin
     let shouldRetry = false;
     try {
       await client.query("BEGIN");
-      await this.reapExpired(client);
       const existing = await client.query<{ party_id: string; visibility: PartySnapshot["visibility"] }>(
         `SELECT members.party_id, parties.visibility
          FROM party_members AS members INNER JOIN parties ON parties.id = members.party_id
@@ -364,50 +382,46 @@ export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordin
   }
 
   private async getSnapshot(partyId: string): Promise<PartySnapshot | null> {
-    const partyResult = await this.pool.query<PartyRow>(
-      "SELECT id, visibility, leader_character_id, revision, current_expedition_id FROM parties WHERE id = $1",
-      [partyId],
+    return (await this.getSnapshots("WHERE parties.id = $1", [partyId]))[0] ?? null;
+  }
+
+  private async getSnapshots(whereClause: string, parameters: unknown[]): Promise<PartySnapshot[]> {
+    const result = await this.pool.query<PartySnapshotRow>(
+      `SELECT parties.id, parties.visibility, parties.leader_character_id, parties.revision,
+              parties.current_expedition_id,
+              COALESCE(members.character_ids, ARRAY[]::uuid[]) AS member_character_ids,
+              CASE WHEN expeditions.id IS NULL THEN NULL ELSE jsonb_build_object(
+                'ticketId', expeditions.ticket_id,
+                'mapTicket', expeditions.map_ticket,
+                'map', expeditions.map_data,
+                'expiresAt', (extract(epoch FROM expeditions.expires_at) * 1000)::bigint,
+                'roomId', CASE WHEN expeditions.room_lease_expires_at > now() THEN expeditions.room_id ELSE NULL END,
+                'portals', COALESCE(portals.entries, '[]'::jsonb)
+              ) END AS active_map
+       FROM parties
+       LEFT JOIN LATERAL (
+         SELECT array_agg(party_members.character_id ORDER BY party_members.joined_at, party_members.character_id) AS character_ids
+         FROM party_members WHERE party_members.party_id = parties.id
+       ) AS members ON true
+       LEFT JOIN map_expeditions AS expeditions
+         ON expeditions.id = parties.current_expedition_id
+        AND expeditions.status = 'active' AND expeditions.expires_at > now()
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object('index', map_portals.portal_index, 'used', map_portals.used_at IS NOT NULL)
+                          ORDER BY map_portals.portal_index) AS entries
+         FROM map_portals WHERE map_portals.expedition_id = expeditions.id
+       ) AS portals ON true
+       ${whereClause}`,
+      parameters,
     );
-    const row = partyResult.rows[0];
-    if (!row) return null;
-    const members = await this.pool.query<{ character_id: string }>(
-      "SELECT character_id FROM party_members WHERE party_id = $1 ORDER BY joined_at, character_id",
-      [partyId],
-    );
-    let activeMap: ActivePartyMap | null = null;
-    if (row.current_expedition_id) {
-      const expeditionResult = await this.pool.query<ExpeditionRow>(
-        `SELECT id, ticket_id, map_ticket, map_data,
-                (extract(epoch FROM expires_at) * 1000)::bigint::text AS expires_at_ms,
-                CASE WHEN room_lease_expires_at > now() THEN room_id ELSE NULL END AS room_id
-         FROM map_expeditions
-         WHERE id = $1 AND status = 'active' AND expires_at > now()`,
-        [row.current_expedition_id],
-      );
-      const expedition = expeditionResult.rows[0];
-      if (expedition) {
-        const portals = await this.pool.query<{ portal_index: number; used: boolean }>(
-          "SELECT portal_index, used_at IS NOT NULL AS used FROM map_portals WHERE expedition_id = $1 ORDER BY portal_index",
-          [expedition.id],
-        );
-        activeMap = {
-          ticketId: expedition.ticket_id,
-          mapTicket: expedition.map_ticket,
-          map: expedition.map_data,
-          expiresAt: Number(expedition.expires_at_ms),
-          roomId: expedition.room_id,
-          portals: portals.rows.map((portal) => ({ index: portal.portal_index, used: portal.used })),
-        };
-      }
-    }
-    return {
+    return result.rows.map((row) => ({
       id: row.id,
       visibility: row.visibility,
       leaderCharacterId: row.leader_character_id,
-      memberCharacterIds: members.rows.map((member) => member.character_id),
+      memberCharacterIds: row.member_character_ids,
       revision: Number(row.revision),
-      activeMap,
-    };
+      activeMap: row.active_map,
+    }));
   }
 
   private async reapExpired(existingClient?: PoolClient): Promise<void> {
@@ -446,6 +460,13 @@ export class PostgresCoordination implements PartyCoordinator, ExpeditionCoordin
         );
       }
       if (ownsTransaction) await client.query("COMMIT");
+      if (affected.rows.length > 0) {
+        await this.social?.publish({
+          scope: "party",
+          partyIds: affected.rows.map((row) => row.party_id),
+          publicPartiesChanged: true,
+        }).catch((error) => console.error("[coordination] expiry invalidation failed", error));
+      }
     } catch (error) {
       if (ownsTransaction) await client.query("ROLLBACK");
       throw error;

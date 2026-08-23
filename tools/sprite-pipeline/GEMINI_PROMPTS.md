@@ -1,4 +1,12 @@
-# Sorceress rebuild via Gemini (Nano Banana stills + Veo clips)
+# Legacy Sorceress prompt notes
+
+The maintained workflow and generated prompt kit now live behind the interactive asset forge:
+
+```bash
+npm run assets
+```
+
+See `ASSET_PIPELINE.md`. The notes below remain as historical context for the current v3 sheets; use the CLI-generated prompts for new source media.
 
 Target: replace `/player-sorceress-locomotion-v3.png` + `/player-sorceress-actions-v3.png`
 (both 8 columns × 6 rows, 304 px cells) with generated frames. West is mirrored east, so only

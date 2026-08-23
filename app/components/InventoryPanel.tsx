@@ -129,7 +129,6 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
     <div className={`inventory-window ${showStash ? "stash-inventory-window" : "character-inventory-window"} ${activeCurrency ? "crafting-active" : ""}`}>
       {activeCurrency && activeCurrencySelection && <CraftingCursor currency={activeCurrency} initialPosition={activeCurrencySelection} />}
       <div className={`equipment-paperdoll paperdoll-${profile.character.classId}`}>
-        <div className="paperdoll-heading"><span className="eyebrow">Equipped</span><small>{profile.character.classId} paper doll · drag to equip</small></div>
         <div className="paperdoll-character" aria-hidden="true"><i /></div>
         {CHARACTER_EQUIPMENT_SLOTS.map((slot) => {
           const equipped = profile.equipped[slot.id];
@@ -139,9 +138,9 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
               className={`equipment-slot slot-${slot.id} ${draggedItem ? compatible ? "drop-compatible" : "drop-incompatible" : ""}`}
               onDragOver={(event) => { if (compatible) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
               onDrop={(event) => dropIntoSlot(event, slot.id)}
+              aria-label={slot.label}
               key={slot.id}
             >
-              <small>{slot.label}</small>
               {equipped
                 ? <ItemCard compact draggable item={equipped} profile={profile} onClick={() => onSelect(equipped.id)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-forge-of-echoes-item", equipped.id); event.dataTransfer.setData("application/x-forge-of-echoes-offset", JSON.stringify({ x: 0, y: 0 })); beginDrag(equipped.id); }} onDragEnd={endDrag} selected={selectedItemId === equipped.id} />
                 : <span>Empty</span>}
@@ -150,13 +149,7 @@ export function InventoryPanel({ profile, selectedItemId, showStash = false, fre
         })}
       </div>
       <div className="inventory-containers">
-        <div className={`inventory-crafting-help ${activeCurrency ? "active" : ""}`} aria-live="polite">
-          {activeCurrency ? (
-            <><ItemIcon item={activeCurrency} /><span><strong>{CURRENCY_DEFINITIONS[activeCurrency.baseId].name} selected</strong><small>Left-click a highlighted backpack item to apply · right-click elsewhere to cancel</small></span></>
-          ) : (
-            <><i aria-hidden="true">◇</i><span><strong>Inventory crafting</strong><small>Right-click a crafting material, then left-click a compatible item</small></span></>
-          )}
-        </div>
+        {activeCurrency && <div className="inventory-crafting-help active" aria-live="polite"><ItemIcon item={activeCurrency} /><span><strong>{CURRENCY_DEFINITIONS[activeCurrency.baseId].name}</strong><small>Choose an item · Esc cancels</small></span></div>}
         {showStash && (
           <section className="stash-tab-section" aria-label="Stash tabs">
             <div className="stash-tab-bar" role="tablist" aria-label="Stash tabs">

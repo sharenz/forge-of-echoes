@@ -10,6 +10,7 @@ import { SeededRng } from "../../server/engine/rng";
 import { MonsterStore } from "../../server/engine/stores/Monsters";
 import { MonsterReplicator } from "../../server/engine/snapshot";
 import { MonsterInterpolationBuffer } from "../../app/game2d/MonsterInterpolationBuffer";
+import { NetworkEntityInterpolator } from "../../app/game2d/NetworkEntityInterpolator";
 import { decodeMonsterLifecycle, encodeMonsterLifecycle, encodeMonsterSnapshot } from "../../multiplayer/wire/snapshot";
 
 class ManualClock implements Clock {
@@ -91,6 +92,38 @@ test("fixed timestep accumulator is driven by the injected clock", () => {
   assert.equal(world.tickNumber, 1);
   clock.advance(250);
   assert.equal(world.stepToClock(), 4, "catch-up work is capped");
+  assert.equal(world.tickNumber, 6, "the authoritative tick clock skips the unsimulated stale step");
+  assert.equal(world.metrics.droppedSimulationSteps, 1);
+});
+
+test("long stalls keep the authoritative tick timeline aligned with wall time", () => {
+  const world = new World({ fixedStepMilliseconds: 50, maximumCatchUpSteps: 4 }, { rng: new SeededRng(2) });
+  let simulatedTicks = 0;
+
+  assert.equal(world.advance(1_000, () => { simulatedTicks += 1; }), 4);
+  assert.equal(simulatedTicks, 4, "only the bounded catch-up work is simulated");
+  assert.equal(world.tickNumber, 20, "snapshot ticks remain aligned to the elapsed monotonic timeline");
+  assert.ok(Math.abs(world.simulationSeconds - 1) < 1e-9);
+  assert.equal(world.metrics.droppedSimulationSteps, 16);
+});
+
+test("slow simulation ticks are observable without parsing logs", () => {
+  let clockReads = 0;
+  const clock: Clock = {
+    nowMilliseconds: () => clockReads++ === 0 ? 100 : 126,
+  };
+  const slowTicks: Array<{ duration: number; tick: number }> = [];
+  const world = new World({ tickWarningMilliseconds: 20 }, {
+    clock,
+    rng: new SeededRng(4),
+    onSlowTick: (duration, tick) => slowTicks.push({ duration, tick }),
+  });
+
+  world.tick();
+
+  assert.deepEqual(slowTicks, [{ duration: 26, tick: 1 }]);
+  assert.equal(world.metrics.slowTicks, 1);
+  assert.equal(world.metrics.slowestTickMilliseconds, 26);
 });
 
 test("monsters emit one authoritative aggro event when they enter activation range", () => {
@@ -225,6 +258,7 @@ test("authoritative kill and drop outcomes survive a flooded cosmetic event buff
   world.tick(0.05);
 
   assert.ok(world.events.dropped > 0, "the cosmetic stream is intentionally saturated");
+  assert.equal(world.metrics.droppedCosmeticEvents, world.events.dropped, "event pressure is exported as an engine-health metric");
   assert.equal(world.outcomes.view().filter((outcome) => outcome.type === WorldEventType.Kill).length, 12);
   assert.equal(world.outcomes.view().filter((outcome) => outcome.type === WorldEventType.Drop).length, 12);
   assert.equal(world.outcomes.view().filter((outcome) => outcome.type === WorldEventType.MonsterDespawn).length, 12);
@@ -440,17 +474,70 @@ test("a 2000-monster rush stays below the per-client p95 snapshot bandwidth budg
   assert.ok(p95 <= 80 * 1_024, `rush snapshot p95 was ${(p95 / 1_024).toFixed(2)} KiB/s`);
 });
 
-test("client interpolation consumes lifecycle and snapshot packets with a 100ms buffer", () => {
+test("client interpolation uses server ticks instead of jittery packet arrival times", () => {
   const buffer = new MonsterInterpolationBuffer(100);
   buffer.applyLifecycle(encodeMonsterLifecycle({ spawns: [{ id: 65_537, archetype: 1, rarity: 0, maxLife: 100, x: 10, y: 20 }], despawns: [] }));
-  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 1, monsters: [{ id: 65_537, x: 10, y: 20, lifePercent: 1, flags: 1 }] }), 1_000);
-  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 2, monsters: [{ id: 65_537, x: 30, y: 40, lifePercent: 0.5, flags: 5 }] }), 1_100);
-  const [sample] = buffer.sample(1_150);
-  assert.equal(sample.x, 20);
-  assert.equal(sample.y, 30);
+  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 20, monsters: [{ id: 65_537, x: 10, y: 20, lifePercent: 1, flags: 1 }] }), 1_100);
+  // The next 100ms simulation frame arrives 125ms later. Arrival-time
+  // interpolation would visibly slow the monster; tick-time interpolation must
+  // still render the spatial midpoint.
+  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 22, monsters: [{ id: 65_537, x: 30, y: 40, lifePercent: 0.5, flags: 5 }] }), 1_225);
+  const [sample] = buffer.sample(1_250);
+  assert.ok(Math.abs(sample.x - 20) < 0.01);
+  assert.ok(Math.abs(sample.y - 30) < 0.01);
   assert.ok(Math.abs(sample.lifePercent - 0.75) < 0.01);
   buffer.applyLifecycle(encodeMonsterLifecycle({ spawns: [], despawns: [65_537] }));
   assert.equal(buffer.size, 0);
+});
+
+test("client interpolation extrapolates briefly instead of freezing on one late snapshot", () => {
+  const buffer = new MonsterInterpolationBuffer(100, 8, 100);
+  buffer.applyLifecycle(encodeMonsterLifecycle({ spawns: [{ id: 1, archetype: 0, rarity: 0, maxLife: 10, x: 0, y: 0 }], despawns: [] }));
+  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 20, monsters: [{ id: 1, x: 0, y: 0, lifePercent: 1, flags: 1 }] }), 1_100);
+  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 22, monsters: [{ id: 1, x: 20, y: 0, lifePercent: 1, flags: 1 }] }), 1_200);
+  const [sample] = buffer.sample(1_350);
+  assert.ok(sample.x > 20, "a short snapshot gap continues along the last authoritative velocity");
+  assert.ok(sample.x <= 40, "extrapolation remains strictly bounded");
+});
+
+test("remote player interpolation is driven by server ticks under irregular delivery", () => {
+  const motion = new NetworkEntityInterpolator(100);
+  motion.push({ tick: 20, x: 0, y: 10, facingX: 1, facingY: 0 }, 1_100);
+  motion.push({ tick: 22, x: 20, y: 10, facingX: 1, facingY: 0 }, 1_225);
+  const sample = motion.sample(1_250);
+  assert.ok(sample);
+  assert.ok(Math.abs(sample.x - 10) < 0.01);
+  assert.equal(sample.y, 10);
+});
+
+test("monster interpolation re-anchors after a persistent server-clock discontinuity", () => {
+  const buffer = new MonsterInterpolationBuffer(100, 8, 100);
+  buffer.applyLifecycle(encodeMonsterLifecycle({ spawns: [{ id: 7, archetype: 0, rarity: 0, maxLife: 10, x: 0, y: 0 }], despawns: [] }));
+  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 20, monsters: [{ id: 7, x: 0, y: 0, lifePercent: 1, flags: 1 }] }), 1_100);
+  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 22, monsters: [{ id: 7, x: 20, y: 0, lifePercent: 1, flags: 1 }] }), 1_200);
+
+  // Three packets now arrive with the server timeline persistently 200 ms
+  // behind its previous wall-clock relationship. The jitter buffer must treat
+  // this as a discontinuity, not ordinary packet jitter.
+  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 24, monsters: [{ id: 7, x: 40, y: 0, lifePercent: 1, flags: 1 }] }), 1_500);
+  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 26, monsters: [{ id: 7, x: 60, y: 0, lifePercent: 1, flags: 1 }] }), 1_600);
+  buffer.applySnapshot(encodeMonsterSnapshot({ tick: 28, monsters: [{ id: 7, x: 80, y: 0, lifePercent: 1, flags: 1 }] }), 1_700);
+
+  const [sample] = buffer.sample(1_700);
+  assert.ok(Math.abs(sample.x - 60) < 0.01, `expected a re-anchored interpolation sample, received ${sample.x}`);
+});
+
+test("remote-player interpolation re-anchors after a persistent clock discontinuity", () => {
+  const motion = new NetworkEntityInterpolator(100, 100);
+  motion.push({ tick: 20, x: 0, y: 0, facingX: 1, facingY: 0 }, 1_100);
+  motion.push({ tick: 22, x: 20, y: 0, facingX: 1, facingY: 0 }, 1_200);
+  motion.push({ tick: 24, x: 40, y: 0, facingX: 1, facingY: 0 }, 1_500);
+  motion.push({ tick: 26, x: 60, y: 0, facingX: 1, facingY: 0 }, 1_600);
+  motion.push({ tick: 28, x: 80, y: 0, facingX: 1, facingY: 0 }, 1_700);
+
+  const sample = motion.sample(1_700);
+  assert.ok(sample);
+  assert.ok(Math.abs(sample.x - 60) < 0.01, `expected a re-anchored interpolation sample, received ${sample.x}`);
 });
 
 test("replicator despawns the previous generation when a visible slot is reused", () => {

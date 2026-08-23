@@ -22,12 +22,24 @@ test("profile HTTP API authenticates and accepts commands without accepting stat
     const accountResponse = await fetch(`${endpoint}/api/accounts/session`, {
       method: "POST",
       headers: { "content-type": "application/json", origin: "http://localhost:3001" },
-      body: JSON.stringify({ handle: "roster-player" }),
+      body: JSON.stringify({ handle: "roster-player", password: "test-password-123", mode: "register" }),
     });
     assert.equal(accountResponse.status, 200);
     assert.equal(accountResponse.headers.get("access-control-allow-origin"), "http://localhost:3001");
     const account = await accountResponse.json() as { token: string; account: { accountId: string }; characters: unknown[] };
     assert.deepEqual(account.characters, []);
+    const wrongPassword = await fetch(`${endpoint}/api/accounts/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ handle: "roster-player", password: "incorrect-password", mode: "login" }),
+    });
+    assert.equal(wrongPassword.status, 401);
+    const duplicateRegistration = await fetch(`${endpoint}/api/accounts/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ handle: "roster-player", password: "another-password", mode: "register" }),
+    });
+    assert.equal(duplicateRegistration.status, 409);
     assert.equal((await fetch(`${endpoint}/api/profile`, { headers: { authorization: `Bearer ${account.token}` } })).status, 401, "account tokens cannot access character state");
 
     const createCharacter = (characterName: string, classId = "sorceress") => fetch(`${endpoint}/api/accounts/characters`, {
@@ -118,6 +130,17 @@ test("profile HTTP API authenticates and accepts commands without accepting stat
       console.error = originalConsoleError;
       repository.loadProfile = originalLoadProfile;
     }
+
+    const logout = await fetch(`${endpoint}/api/accounts/logout`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${account.token}` },
+    });
+    assert.equal(logout.status, 204);
+    assert.equal(
+      (await fetch(`${endpoint}/api/profile`, { headers: { authorization: `Bearer ${session.token}` } })).status,
+      401,
+      "revoking the account login invalidates every derived character token",
+    );
   } finally {
     await server?.cleanup();
     await server?.shutdown();

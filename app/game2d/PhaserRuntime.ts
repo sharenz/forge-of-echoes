@@ -25,13 +25,14 @@ import { isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "../game
 import { equipmentDropPresentation } from "../game/loot";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
 import { CharacterAnimator } from "./CharacterAnimator";
-import { isWorldPointerOrigin } from "./input-boundary";
+import { isWorldPointerOrigin, resolveAimVector, type AimVector } from "./input-boundary";
 import { GameAudio } from "./audio/GameAudio";
 import { MonsterAudioMixer } from "./audio/MonsterAudioMixer";
-import type { WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
-import type { CombatEvent } from "../../multiplayer/protocol";
+import type { NetworkGroundDropView, WorldHudState, WorldRuntimeOptions, WorldStation } from "./types";
+import { MULTIPLAYER_LIMITS, type CombatEvent } from "../../multiplayer/protocol";
 import { MULTIPLAYER_COMBAT } from "../../multiplayer/combat";
 import { MonsterFlags } from "../../multiplayer/wire/monster-flags";
+import { NetworkEntityInterpolator } from "./NetworkEntityInterpolator";
 
 const VIEW_SIZE = 960;
 const MAP_SIZE = VIEW_SIZE * 4;
@@ -46,6 +47,9 @@ const HEALTH_BAR_HEIGHT = 5;
 const BASIC_ATTACK_INPUT_BUFFER_SECONDS = 0.22;
 const MAX_DAMAGE_PRESENTATIONS_PER_BATCH = 12;
 const MAX_PROJECTILE_HIT_PRESENTATIONS_PER_BATCH = 12;
+const AUTO_PICKUP_INTERVAL_SECONDS = 0.15;
+const EXPECTED_INPUT_PIPELINE_SECONDS = 1 / MULTIPLAYER_LIMITS.simulationHz;
+const PREDICTED_DASH_TIMEOUT_SECONDS = 1;
 const NETWORK_ARCHETYPE_IDS = ["ashling", "cinder-spitter", "rift-stalker", "ironhide-brute", "ember-skitter"] as const;
 
 interface EnemyState {
@@ -83,9 +87,20 @@ interface NetworkEnemyProjectile {
   rarity: MonsterRarity;
 }
 
+interface PredictedProjectile {
+  sprite: Phaser.GameObjects.Image;
+  originX: number;
+  originY: number;
+  direction: AimVector;
+  range: number;
+  speed: number;
+}
+
 interface GroundDropState {
   networkId: string;
   networkPickupRetryAt?: number;
+  networkPickupSuppressedAtRevision?: number;
+  networkPickupWasInRange?: boolean;
   sprite: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   x: number;
@@ -142,6 +157,7 @@ interface RemotePlayerVisual {
   shadow: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   animator: CharacterAnimator;
+  motion: NetworkEntityInterpolator;
 }
 
 type MonsterActionEvent = Extract<CombatEvent, { kind: "monster-action" }>;
@@ -179,10 +195,13 @@ class ForgeOfEchoesScene extends Phaser.Scene {
   private keys: Record<string, Phaser.Input.Keyboard.Key> | null = null;
   private enemies: EnemyState[] = [];
   private groundDrops: GroundDropState[] = [];
+  private readonly groundDropsByNetworkId = new Map<string, GroundDropState>();
+  private lastNetworkDrops: readonly NetworkGroundDropView[] | null = null;
   private corpses: CorpseState[] = [];
   private enemyPool: Phaser.GameObjects.Group | null = null;
   private projectilePool: Phaser.GameObjects.Group | null = null;
   private readonly networkProjectiles = new Map<number, Phaser.GameObjects.Image>();
+  private readonly predictedBasicProjectiles = new Map<number, PredictedProjectile>();
   private enemyProjectilePool: Phaser.GameObjects.Group | null = null;
   private readonly networkEnemyProjectiles = new Map<number, NetworkEnemyProjectile>();
   private readonly processedMonsterDeaths = new Set<number>();
@@ -195,6 +214,7 @@ class ForgeOfEchoesScene extends Phaser.Scene {
   private vfxParticles: VfxParticleState[] = [];
   private accumulator = 0;
   private worldPointerHeld = false;
+  private activeSkillInputHeld = false;
   private attackCooldown = 0;
   private basicAttackIntent: BasicAttackIntent | null = null;
   private novaCooldown = 0;
@@ -211,8 +231,9 @@ class ForgeOfEchoesScene extends Phaser.Scene {
   private life: number;
   private focus: number;
   private elapsedSeconds = 0;
+  private nextAutoPickupAt = 0;
   private hudElapsed = 0;
-  private arenaComplete = false;
+  private completionObjectsSpawned = false;
   private returnPortal: ReturnPortalState | null = null;
   private returnPortalUsed = false;
   private completionChest: CompletionChestState | null = null;
@@ -241,6 +262,15 @@ class ForgeOfEchoesScene extends Phaser.Scene {
   private networkInputElapsed = 0;
   private lastNetworkInputX = Number.NaN;
   private lastNetworkInputY = Number.NaN;
+  private networkPredictionReady = false;
+  private lastAuthorityX = Number.NaN;
+  private lastAuthorityY = Number.NaN;
+  private lastAuthoritySequence = -1;
+  private lastAuthorityAttackSequence = -1;
+  private networkCorrectionX = 0;
+  private networkCorrectionY = 0;
+  private predictedDashSequence: number | null = null;
+  private predictedDashExpiresAt = 0;
   private hideoutPortalObjects: Phaser.GameObjects.GameObject[] = [];
 
   constructor(options: WorldRuntimeOptions) {
@@ -353,10 +383,29 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       flask4: Phaser.Input.Keyboard.KeyCodes.FOUR,
       flask5: Phaser.Input.Keyboard.KeyCodes.FIVE,
     }) as Record<string, Phaser.Input.Keyboard.Key>;
+    for (let index = 0; index < this.options.skillLoadout.length; index += 1) {
+      this.keys[`skillSlot${index}`]?.on(Phaser.Input.Keyboard.Events.DOWN, () => {
+        // Start an explicitly pressed skill in the keyboard event itself. The
+        // per-frame held-state path below remains responsible for retrying it
+        // as soon as cooldown, focus, charges, or another skill lock permits.
+        this.activateSkillSlot(index);
+      });
+    }
+    for (let index = 0; index < this.options.flaskBelt.length; index += 1) {
+      this.keys[`flask${index + 1}`]?.on(Phaser.Input.Keyboard.Events.DOWN, () => {
+        // Flask hotkeys must be handled at the keyboard event boundary. Polling
+        // JustDown during update can miss a complete press between render
+        // frames (for example during a busy combat frame or tab refocus).
+        this.useFlask(index);
+      });
+    }
     this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer, interactiveTargets: Phaser.GameObjects.GameObject[]) => {
       this.worldPointerHeld = isWorldPointerOrigin(pointer.event?.target ?? null, this.game.canvas, interactiveTargets.length);
-      if (this.worldPointerHeld && this.options.mode === "arena" && !this.options.paused && !this.options.controlsBlocked && !this.arenaComplete) {
-        this.queueBasicAttack(true);
+      if (this.worldPointerHeld && this.options.mode === "arena" && !this.options.paused && !this.options.controlsBlocked) {
+        // Pointer and keyboard input are resolved together at the start of the
+        // next scene update. Starting the basic attack here gave mouse input a
+        // head start over a skill key pressed during the same browser frame.
+        this.queueBasicAttack(false);
       }
     });
     this.input.on(Phaser.Input.Events.POINTER_UP, () => { this.worldPointerHeld = false; });
@@ -374,12 +423,7 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       this.accumulator = 0;
       return;
     }
-    this.consumeHeldSkillKeys();
-    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask1)) this.useFlask(0);
-    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask2)) this.useFlask(1);
-    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask3)) this.useFlask(2);
-    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask4)) this.useFlask(3);
-    if (!this.options.controlsBlocked && this.keys && Phaser.Input.Keyboard.JustDown(this.keys.flask5)) this.useFlask(4);
+    this.activeSkillInputHeld = this.consumeHeldSkillKeys();
     this.accumulator += Math.min(delta, MAX_FRAME_DELTA);
     while (this.accumulator >= FIXED_STEP) {
       this.previousPlayerX = this.player.x;
@@ -397,11 +441,35 @@ class ForgeOfEchoesScene extends Phaser.Scene {
    * animation lock all permit it. The authoritative server still validates
    * every resulting command.
    */
-  private consumeHeldSkillKeys(): void {
-    if (this.options.controlsBlocked || !this.keys || this.arenaComplete) return;
-    this.options.skillLoadout.forEach((skill, index) => {
-      if (skill && this.keys?.[`skillSlot${index}`]?.isDown) this.useSkill(skill);
+  private consumeHeldSkillKeys(): boolean {
+    if (this.options.controlsBlocked || !this.keys) return false;
+    const heldSkills = this.options.skillLoadout.flatMap((skill, index) => {
+      const key = this.keys?.[`skillSlot${index}`];
+      return skill && key?.isDown ? [{ skill, key }] : [];
     });
+    if (heldSkills.length === 0) return false;
+
+    // A newly pressed key wins over another key that is merely being held.
+    // This makes an explicit F/Q/E/R press deterministic even under extreme
+    // attack speed, without sending more than one skill command per frame.
+    const selected = heldSkills.find(({ key }) => Phaser.Input.Keyboard.JustDown(key)) ?? heldSkills[0];
+    if (selected.skill !== "basic") {
+      this.basicAttackIntent = null;
+      if (this.playerAnimator?.activeActionState === "attack") this.playerAnimator.cancelAction();
+    }
+    this.useSkill(selected.skill);
+    return true;
+  }
+
+  private activateSkillSlot(index: number): void {
+    if (this.options.controlsBlocked) return;
+    const skill = this.options.skillLoadout[index];
+    if (!skill) return;
+    if (skill !== "basic") {
+      this.basicAttackIntent = null;
+      if (this.playerAnimator?.activeActionState === "attack") this.playerAnimator.cancelAction();
+    }
+    this.useSkill(skill);
   }
 
   useSkill(skill: SkillBarSkillId): void {
@@ -413,7 +481,7 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     if (skill === "nova" && this.novaCooldown <= 0 && this.focus >= this.resolvedNova.focusCost) {
       const pointer = this.input.activePointer;
       const direction = resolveCharacterDirection(pointer.worldX - this.player.x, pointer.worldY - this.player.y, this.playerAnimator?.currentDirection);
-      const started = this.beginSkillAction(this.resolvedNova, direction, () => {
+      const started = this.beginActiveSkillAction(this.resolvedNova, direction, () => {
         const angle = Math.atan2(pointer.worldY - this.player!.y, pointer.worldX - this.player!.x);
         this.options.multiplayer?.sendAttack?.("nova", { x: Math.cos(angle), y: Math.sin(angle) });
       });
@@ -429,8 +497,10 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       const startX = this.player.x;
       const startY = this.player.y;
       const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
-      const started = this.beginSkillAction(this.resolvedDash, direction, () => {
-        this.options.multiplayer?.sendAttack?.("dash", { x: dx / length, y: dy / length });
+      const started = this.beginActiveSkillAction(this.resolvedDash, direction, () => {
+        const dashDirection = { x: dx / length, y: dy / length };
+        const sequence = this.options.multiplayer?.sendAttack?.("dash", dashDirection);
+        if (sequence !== undefined) this.applyPredictedDash(sequence, dashDirection);
       }, startX, startY);
       if (!started) return;
       this.focus -= this.resolvedDash.focusCost;
@@ -440,7 +510,7 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     if (skill === "ward" && this.wardCooldown <= 0 && this.focus >= this.resolvedWard.focusCost) {
       const pointer = this.input.activePointer;
       const direction = resolveCharacterDirection(pointer.worldX - this.player.x, pointer.worldY - this.player.y, this.playerAnimator?.currentDirection);
-      const started = this.beginSkillAction(this.resolvedWard, direction, () => {
+      const started = this.beginActiveSkillAction(this.resolvedWard, direction, () => {
         this.wardRemaining = this.resolvedWard.duration ?? 0;
         this.options.multiplayer?.sendAttack?.("ward");
       });
@@ -454,7 +524,7 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       const dy = pointer.worldY - this.player.y;
       const length = Math.hypot(dx, dy) || 1;
       const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
-      const started = this.beginSkillAction(this.resolvedFlameWave, direction, () => {
+      const started = this.beginActiveSkillAction(this.resolvedFlameWave, direction, () => {
         this.options.multiplayer?.sendAttack?.("flameWave", { x: dx / length, y: dy / length });
       });
       if (!started) return;
@@ -482,7 +552,8 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       ?.getPlayers().find((player) => player.characterId === this.options.multiplayer?.localCharacterId);
     const finalWave = networkMap?.totalWaves ?? this.options.arenaBalance?.waves ?? ARENA_RULES.totalWaves;
     return {
-      fps: Math.round(this.game.loop.actualFps || 0),
+      fps: Math.round(this.game?.loop?.actualFps || 0),
+      ping: this.options.multiplayer?.getPing() ?? null,
       mode: this.options.mode,
       wave: networkMap?.wave ?? 1,
       enemies: networkMap?.monstersAlive ?? 0,
@@ -517,6 +588,10 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     this.focus = Phaser.Math.Clamp(this.focus * (balance.maxFocus / previousMaxFocus), 0, balance.maxFocus);
     this.options.arenaBalance = balance;
     this.updateSkillLevels(this.options.skillLevels);
+  }
+
+  updateAudioVolume(volume: number): void {
+    this.audio.setMasterVolume(volume);
   }
 
   updateSkillLevels(skillLevels: SkillLevels): void {
@@ -582,8 +657,14 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       if (this.options.controlsBlocked) {
         this.basicAttackIntent = null;
       } else {
-        if (this.worldPointerHeld) this.queueBasicAttack(false);
-        this.consumeBasicAttackIntent();
+        if (this.activeSkillInputHeld) {
+          // A held explicit hotkey owns this frame. Do not continuously rebuild
+          // a mouse intent behind it and steal the animator as soon as it opens.
+          this.basicAttackIntent = null;
+        } else {
+          if (this.worldPointerHeld) this.queueBasicAttack(false);
+          this.consumeBasicAttackIntent();
+        }
       }
       this.syncNetworkMonsters(delta);
       this.syncNetworkCombatEvents();
@@ -595,6 +676,7 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       this.updateCorpses(delta);
       this.renderEnemyHealth();
     }
+    this.syncPickupResults();
     this.updateGroundDrops(delta);
 
     this.hudElapsed += delta;
@@ -803,9 +885,68 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     if (local) {
       const previousX = this.player.x;
       const previousY = this.player.y;
-      const blend = 1 - Math.exp(-18 * delta);
-      this.player.x = Phaser.Math.Linear(this.player.x, local.x, blend);
-      this.player.y = Phaser.Math.Linear(this.player.y, local.y, blend);
+      const worldSize = this.options.mode === "arena" ? MAP_SIZE : VIEW_SIZE;
+      const margin = this.options.mode === "arena" ? 18 : MULTIPLAYER_LIMITS.world.margin;
+      const movementSpeed = (this.options.arenaBalance?.moveSpeed ?? 5.6) * 34;
+      if (!this.networkPredictionReady) {
+        this.player.setPosition(local.x, local.y);
+        this.networkPredictionReady = true;
+      } else {
+        // Predict the locally controlled character at the render clock. Waiting
+        // for 20 Hz schema patches is what produced the visible fast/slow pulse.
+        this.player.x = Phaser.Math.Clamp(this.player.x + inputX * movementSpeed * delta, margin, worldSize - margin);
+        this.player.y = Phaser.Math.Clamp(this.player.y + inputY * movementSpeed * delta, margin, worldSize - margin);
+      }
+      const dashAwaitingAuthority = this.predictedDashSequence !== null
+        && (local.lastProcessedAttack ?? -1) < this.predictedDashSequence
+        && this.elapsedSeconds < this.predictedDashExpiresAt;
+      const dashPredictionResolved = this.predictedDashSequence !== null && !dashAwaitingAuthority;
+      if (dashPredictionResolved) this.predictedDashSequence = null;
+      const authorityChanged = local.x !== this.lastAuthorityX
+        || local.y !== this.lastAuthorityY
+        || (local.lastProcessedMovement ?? -1) !== this.lastAuthoritySequence
+        || (local.lastProcessedAttack ?? -1) !== this.lastAuthorityAttackSequence
+        || dashPredictionResolved;
+      if (authorityChanged) {
+        // RTT/2 is only wire time. An input also waits for the next fixed tick
+        // and its state patch, so the expected pipeline delay must be included
+        // in the render target rather than leaving a permanent drag behind it.
+        const oneWaySeconds = Phaser.Math.Clamp(
+          (multiplayer.getPing() ?? 50) / 2_000 + EXPECTED_INPUT_PIPELINE_SECONDS,
+          EXPECTED_INPUT_PIPELINE_SECONDS,
+          0.2,
+        );
+        const targetX = Phaser.Math.Clamp(local.x + inputX * movementSpeed * oneWaySeconds, margin, worldSize - margin);
+        const targetY = Phaser.Math.Clamp(local.y + inputY * movementSpeed * oneWaySeconds, margin, worldSize - margin);
+        const errorX = targetX - this.player.x;
+        const errorY = targetY - this.player.y;
+        if (dashAwaitingAuthority) {
+          // The next patch may still describe the pre-dash position. Applying
+          // it would visually pull the predicted dash backwards before the
+          // server acknowledges the same combat sequence.
+          this.networkCorrectionX = 0;
+          this.networkCorrectionY = 0;
+        } else if (Math.hypot(errorX, errorY) > 180) {
+          // Teleports/dashes and major desyncs are authoritative discontinuities.
+          this.player.setPosition(targetX, targetY);
+          this.networkCorrectionX = 0;
+          this.networkCorrectionY = 0;
+        } else {
+          this.networkCorrectionX = errorX;
+          this.networkCorrectionY = errorY;
+        }
+        this.lastAuthorityX = local.x;
+        this.lastAuthorityY = local.y;
+        this.lastAuthoritySequence = local.lastProcessedMovement ?? -1;
+        this.lastAuthorityAttackSequence = local.lastProcessedAttack ?? -1;
+      }
+      const correctionBlend = 1 - Math.exp(-10 * delta);
+      const correctionX = this.networkCorrectionX * correctionBlend;
+      const correctionY = this.networkCorrectionY * correctionBlend;
+      this.player.x = Phaser.Math.Clamp(this.player.x + correctionX, margin, worldSize - margin);
+      this.player.y = Phaser.Math.Clamp(this.player.y + correctionY, margin, worldSize - margin);
+      this.networkCorrectionX -= correctionX;
+      this.networkCorrectionY -= correctionY;
       this.playerVelocityX = (this.player.x - previousX) / Math.max(delta, 0.001);
       this.playerVelocityY = (this.player.y - previousY) / Math.max(delta, 0.001);
       if (local.life !== undefined) this.life = local.life;
@@ -838,20 +979,28 @@ class ForgeOfEchoesScene extends Phaser.Scene {
             padding: { x: 5, y: 2 },
           }).setOrigin(0.5).setDepth(600),
           animator: new CharacterAnimator(this, sprite, networkPlayer.classId),
+          motion: new NetworkEntityInterpolator(),
         };
         this.remotePlayers.set(networkPlayer.characterId, remote);
       }
+      remote.motion.push({
+        tick: networkPlayer.serverTick ?? 0,
+        x: networkPlayer.x,
+        y: networkPlayer.y,
+        facingX: networkPlayer.facingX,
+        facingY: networkPlayer.facingY,
+      }, performance.now());
       const previousX = remote.x;
       const previousY = remote.y;
-      const blend = 1 - Math.exp(-14 * delta);
-      remote.x = Phaser.Math.Linear(remote.x, networkPlayer.x, blend);
-      remote.y = Phaser.Math.Linear(remote.y, networkPlayer.y, blend);
+      const sampled = remote.motion.sample(performance.now());
+      remote.x = sampled?.x ?? networkPlayer.x;
+      remote.y = sampled?.y ?? networkPlayer.y;
       const velocityX = (remote.x - previousX) / Math.max(delta, 0.001);
       const velocityY = (remote.y - previousY) / Math.max(delta, 0.001);
       const speed = Math.hypot(velocityX, velocityY);
       const moving = speed > 2;
-      const directionX = moving ? velocityX / speed : networkPlayer.facingX;
-      const directionY = moving ? velocityY / speed : networkPlayer.facingY;
+      const directionX = moving ? velocityX / speed : sampled?.facingX ?? networkPlayer.facingX;
+      const directionY = moving ? velocityY / speed : sampled?.facingY ?? networkPlayer.facingY;
       const depth = Math.round(remote.y / 10) + 11;
       remote.animator.setLocomotion(directionX, directionY, moving, Phaser.Math.Clamp(speed / 190, 0, 1));
       remote.animator.setWorldTransform(remote.x, remote.y, depth);
@@ -865,11 +1014,25 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     }
   }
 
+  private applyPredictedDash(sequence: number, direction: AimVector): void {
+    if (!this.player) return;
+    const worldSize = this.options.mode === "arena" ? MAP_SIZE : VIEW_SIZE;
+    const margin = this.options.mode === "arena" ? 18 : MULTIPLAYER_LIMITS.world.margin;
+    this.player.setPosition(
+      Phaser.Math.Clamp(this.player.x + direction.x * MULTIPLAYER_COMBAT.player.dashDistance, margin, worldSize - margin),
+      Phaser.Math.Clamp(this.player.y + direction.y * MULTIPLAYER_COMBAT.player.dashDistance, margin, worldSize - margin),
+    );
+    this.networkCorrectionX = 0;
+    this.networkCorrectionY = 0;
+    this.predictedDashSequence = sequence;
+    this.predictedDashExpiresAt = this.elapsedSeconds + PREDICTED_DASH_TIMEOUT_SECONDS;
+  }
+
   private syncNetworkMonsters(delta: number): void {
     const state = this.options.multiplayer?.getMap?.();
     if (!state) return;
-    if (state.completed && !this.arenaComplete) {
-      this.arenaComplete = true;
+    if (state.completed && !this.completionObjectsSpawned) {
+      this.completionObjectsSpawned = true;
       this.spawnNetworkCompletionObjects(state.completionX, state.completionY);
     }
     this.networkMonsterFrame += 1;
@@ -1229,7 +1392,15 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     const distance = event.skill === "nova" ? MULTIPLAYER_COMBAT.projectile.novaRange
       : event.skill === "flameWave" ? MULTIPLAYER_COMBAT.projectile.flameWaveRange
         : MULTIPLAYER_COMBAT.projectile.basicRange;
-    let sprite = this.projectilePool?.get(event.originX, event.originY, "projectile") as Phaser.GameObjects.Image | null;
+    const predicted = event.actorCharacterId === this.options.multiplayer?.localCharacterId && event.skill === "basic"
+      ? this.predictedBasicProjectiles.get(event.sequence)
+      : undefined;
+    if (predicted) {
+      this.predictedBasicProjectiles.delete(event.sequence);
+      this.tweens.killTweensOf(predicted.sprite);
+    }
+    let sprite = predicted?.sprite
+      ?? this.projectilePool?.get(event.originX, event.originY, "projectile") as Phaser.GameObjects.Image | null;
     if (!sprite) {
       // Preserve a strict rendering budget without making a fresh authoritative
       // cast invisible. Oldest visuals are least useful and their later expire
@@ -1241,8 +1412,12 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       }
     }
     if (!sprite) return;
+    const startX = predicted?.sprite.x ?? event.originX;
+    const startY = predicted?.sprite.y ?? event.originY;
+    const travelled = predicted ? Math.hypot(startX - predicted.originX, startY - predicted.originY) : 0;
+    const remainingDistance = Math.max(0, distance - travelled);
     sprite.setTexture("projectile").setActive(true).setVisible(true)
-      .setPosition(event.originX, event.originY)
+      .setPosition(startX, startY)
       .setAlpha(1)
       .setRotation(Math.atan2(event.direction.y, event.direction.x))
       .setScale((skill.projectileScale ?? 1) * 1.35)
@@ -1251,10 +1426,41 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     this.networkProjectiles.set(event.projectileId, sprite);
     this.tweens.add({
       targets: sprite,
-      x: event.originX + event.direction.x * distance,
-      y: event.originY + event.direction.y * distance,
-      duration: Math.max(180, distance / Math.max(1, event.speed) * 1_000),
+      x: startX + event.direction.x * remainingDistance,
+      y: startY + event.direction.y * remainingDistance,
+      duration: Math.max(80, remainingDistance / Math.max(1, event.speed) * 1_000),
       ease: "Linear",
+    });
+  }
+
+  private launchPredictedBasicProjectile(sequence: number, direction: AimVector): void {
+    if (!this.player || !this.projectilePool) return;
+    const originX = this.player.x;
+    const originY = this.player.y;
+    const range = MULTIPLAYER_COMBAT.projectile.basicRange;
+    const speed = MULTIPLAYER_COMBAT.projectile.speed;
+    const sprite = this.projectilePool.get(originX, originY, "projectile") as Phaser.GameObjects.Image | null;
+    if (!sprite) return;
+    sprite.setTexture("projectile").setActive(true).setVisible(true)
+      .setPosition(originX, originY)
+      .setAlpha(0.82)
+      .setRotation(Math.atan2(direction.y, direction.x))
+      .setScale((this.resolvedBasic.projectileScale ?? 1) * 1.35)
+      .setDepth(80)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const predicted: PredictedProjectile = { sprite, originX, originY, direction, range, speed };
+    this.predictedBasicProjectiles.set(sequence, predicted);
+    this.tweens.add({
+      targets: sprite,
+      x: originX + direction.x * range,
+      y: originY + direction.y * range,
+      duration: Math.max(180, range / Math.max(1, speed) * 1_000),
+      ease: "Linear",
+      onComplete: () => {
+        if (this.predictedBasicProjectiles.get(sequence) !== predicted) return;
+        this.predictedBasicProjectiles.delete(sequence);
+        this.projectilePool?.killAndHide(sprite);
+      },
     });
   }
 
@@ -1336,7 +1542,7 @@ class ForgeOfEchoesScene extends Phaser.Scene {
   private beginSkillAction(
     skill: SkillDefinition,
     direction: CharacterDirection,
-    onRelease: () => void,
+    onRelease: () => CharacterDirection | void,
     startX?: number,
     startY?: number,
   ): boolean {
@@ -1347,10 +1553,28 @@ class ForgeOfEchoesScene extends Phaser.Scene {
         ? { durationSeconds: skill.castTime ?? 0.65 } as const
         : { playbackRate: 1.35 } as const;
     return this.playerAnimator.playAction(skill.presentation.animation, direction, timing, () => {
-      onRelease();
+      const releaseDirection = onRelease() ?? direction;
       this.audio.playSkill(skill.presentation.audio);
-      this.playSkillReleaseVfx(skill, direction, startX, startY);
+      this.playSkillReleaseVfx(skill, releaseDirection, startX, startY);
     });
+  }
+
+  private beginActiveSkillAction(
+    skill: SkillDefinition,
+    direction: CharacterDirection,
+    onRelease: () => CharacterDirection | void,
+    startX?: number,
+    startY?: number,
+  ): boolean {
+    // Keyboard skills have priority over the repeatable left-click attack. If
+    // its wind-up has not released yet, cancelling it also prevents a phantom
+    // projectile; if it already released, only the remaining animation tail is
+    // skipped. Cast/dash actions never interrupt one another.
+    if (this.playerAnimator?.activeActionState === "attack") {
+      this.basicAttackIntent = null;
+      this.playerAnimator.cancelAction();
+    }
+    return this.beginSkillAction(skill, direction, onRelease, startX, startY);
   }
 
   private playSkillReleaseVfx(skill: SkillDefinition, direction: CharacterDirection, startX?: number, startY?: number): void {
@@ -1745,7 +1969,7 @@ class ForgeOfEchoesScene extends Phaser.Scene {
   private consumeBasicAttackIntent(): void {
     const intent = this.basicAttackIntent;
     if (!intent) return;
-    if (intent.expiresAt < this.elapsedSeconds || this.options.controlsBlocked || this.arenaComplete) {
+    if (intent.expiresAt < this.elapsedSeconds || this.options.controlsBlocked) {
       this.basicAttackIntent = null;
       return;
     }
@@ -1756,15 +1980,26 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     if (this.attackCooldown > 0 || !this.player) return false;
     const dx = worldX - this.player.x;
     const dy = worldY - this.player.y;
-    const length = Math.hypot(dx, dy) || 1;
     const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
-    const aim = Math.hypot(dx, dy) > 0.1 ? { x: dx / length, y: dy / length } : characterDirectionVector(direction);
+    const aim = resolveAimVector(this.player.x, this.player.y, worldX, worldY, characterDirectionVector(direction));
     const started = this.beginSkillAction(this.resolvedBasic, direction, () => {
-      this.options.multiplayer?.sendAttack?.("basic", aim);
+      // A held mouse attack follows the live pointer through its wind-up. A
+      // discrete click and keyboard-triggered attack retain their click-start
+      // direction, which avoids surprising post-release retargeting.
+      const releaseAim = this.worldPointerHeld ? this.currentPointerAim(aim) : aim;
+      const sequence = this.options.multiplayer?.sendAttack?.("basic", releaseAim);
+      if (sequence !== undefined) this.launchPredictedBasicProjectile(sequence, releaseAim);
+      return resolveCharacterDirection(releaseAim.x, releaseAim.y, direction);
     });
     if (!started) return false;
     this.attackCooldown = resolveAttackTimeSeconds(this.options.arenaBalance?.attackSpeed ?? 1);
     return true;
+  }
+
+  private currentPointerAim(fallback: AimVector): AimVector {
+    if (!this.player) return fallback;
+    const pointer = this.input.activePointer;
+    return resolveAimVector(this.player.x, this.player.y, pointer.worldX, pointer.worldY, fallback);
   }
 
   private spawnCorpse(death: MonsterDeathPresentation): void {
@@ -1866,16 +2101,20 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       backgroundColor: "#08090bcc",
       padding: { x: 4, y: 2 },
     }).setOrigin(0.5).setDepth(Math.round(y / 10) + 31);
-    this.groundDrops.push({ sprite, label, x, y, phase: Phaser.Math.FloatBetween(0, Math.PI * 2), networkId });
+    const groundDrop = { sprite, label, x, y, phase: Phaser.Math.FloatBetween(0, Math.PI * 2), networkId };
+    this.groundDrops.push(groundDrop);
+    this.groundDropsByNetworkId.set(networkId, groundDrop);
     return true;
   }
 
   private syncNetworkDrops(): void {
     const state = this.options.multiplayer?.getMap?.();
     if (!state) return;
+    if (state.drops === this.lastNetworkDrops) return;
+    this.lastNetworkDrops = state.drops;
     const present = new Set(state.drops.map((drop) => drop.id));
     for (const networkDrop of state.drops) {
-      const existing = this.groundDrops.find((drop) => drop.networkId === networkDrop.id);
+      const existing = this.groundDropsByNetworkId.get(networkDrop.id);
       if (existing) {
         existing.x = networkDrop.x;
         existing.y = networkDrop.y;
@@ -1887,23 +2126,61 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       const drop = this.groundDrops[index];
       if (!drop.networkId || present.has(drop.networkId)) continue;
       this.groundDrops.splice(index, 1);
+      this.groundDropsByNetworkId.delete(drop.networkId);
       this.dropPool?.killAndHide(drop.sprite);
       drop.label.destroy();
     }
   }
 
+  private syncPickupResults(): void {
+    const results = this.options.multiplayer?.drainPickupResults?.() ?? [];
+    if (results.length === 0) return;
+    const revision = this.options.multiplayer?.getProfileRevision?.() ?? 0;
+    for (const result of results) {
+      if (result.status !== "rejected") continue;
+      const drop = this.groundDropsByNetworkId.get(result.dropId);
+      if (!drop) continue;
+      drop.networkPickupSuppressedAtRevision = revision;
+      drop.networkPickupRetryAt = Number.POSITIVE_INFINITY;
+    }
+  }
+
   private updateGroundDrops(delta: number): void {
     if (!this.player) return;
+    const revision = this.options.multiplayer?.getProfileRevision?.() ?? 0;
+    let nearest: GroundDropState | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
     for (const groundDrop of this.groundDrops) {
       groundDrop.phase += delta * 3;
       const bob = Math.sin(groundDrop.phase) * 3;
       groundDrop.sprite.setPosition(groundDrop.x, groundDrop.y + bob);
       groundDrop.label.setPosition(groundDrop.x, groundDrop.y - 22 + bob);
-      if (Math.hypot(this.player.x - groundDrop.x, this.player.y - groundDrop.y) >= 38) continue;
+      const distance = Math.hypot(this.player.x - groundDrop.x, this.player.y - groundDrop.y);
+      if (distance >= 38) {
+        if (groundDrop.networkPickupWasInRange) {
+          // Leaving and re-entering is an explicit retry gesture.
+          groundDrop.networkPickupSuppressedAtRevision = undefined;
+          groundDrop.networkPickupRetryAt = 0;
+        }
+        groundDrop.networkPickupWasInRange = false;
+        continue;
+      }
+      groundDrop.networkPickupWasInRange = true;
+      if (groundDrop.networkPickupSuppressedAtRevision !== undefined) {
+        if (groundDrop.networkPickupSuppressedAtRevision === revision) continue;
+        groundDrop.networkPickupSuppressedAtRevision = undefined;
+        groundDrop.networkPickupRetryAt = 0;
+      }
       if (this.elapsedSeconds < (groundDrop.networkPickupRetryAt ?? 0)) continue;
-      groundDrop.networkPickupRetryAt = this.elapsedSeconds + 0.8;
-      this.options.multiplayer?.sendPickup?.(groundDrop.networkId);
+      if (distance < nearestDistance) {
+        nearest = groundDrop;
+        nearestDistance = distance;
+      }
     }
+    if (!nearest || this.elapsedSeconds < this.nextAutoPickupAt) return;
+    nearest.networkPickupRetryAt = this.elapsedSeconds + 0.8;
+    this.nextAutoPickupAt = this.elapsedSeconds + AUTO_PICKUP_INTERVAL_SECONDS;
+    this.options.multiplayer?.sendPickup?.(nearest.networkId);
   }
 
   private spawnCompletionChest(sharedPosition?: { x: number; y: number }): void {
@@ -2114,6 +2391,10 @@ export class PhaserRuntime {
 
   updateArenaBalance(balance: NonNullable<WorldRuntimeOptions["arenaBalance"]>): void {
     this.scene?.updateArenaBalance(balance);
+  }
+
+  updateAudioVolume(volume: number): void {
+    this.scene?.updateAudioVolume(volume);
   }
 
   resize(): void {

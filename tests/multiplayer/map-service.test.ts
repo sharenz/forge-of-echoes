@@ -6,6 +6,7 @@ import { InMemoryCoordination } from "../../server/coordination/InMemoryCoordina
 import { InMemoryPlayerRepository } from "../../server/persistence/InMemoryPlayerRepository";
 import { MapOpenError, MapService } from "../../server/services/MapService";
 import { ProfileCommandService } from "../../server/services/ProfileCommandService";
+import { MULTIPLAYER_LIMITS } from "../../multiplayer/protocol";
 
 test("opening a map atomically consumes the item and replacing it invalidates old portals", async () => {
   const repository = new InMemoryPlayerRepository();
@@ -31,6 +32,10 @@ test("opening a map atomically consumes the item and replacing it invalidates ol
     assert.equal(opened.authoritativeProfile.profile.mapDevice, null);
     assert.deepEqual(new Set(opened.ticketClaims.allowedCharacterIds), new Set(players.map((player) => player.characterId)));
     assert.deepEqual(verifyMapTicket(opened.mapTicket, secret), opened.ticketClaims);
+    assert.ok(
+      opened.ticketClaims.expiresAt - Date.now() > MULTIPLAYER_LIMITS.expeditionLifetimeMilliseconds - 5_000,
+      "a normal six-wave run cannot expire its own expedition",
+    );
     const activeMap = (await coordination.getForMember(players[3].characterId))?.activeMap;
     assert.equal(activeMap?.ticketId, opened.ticketClaims.ticketId);
     assert.equal(activeMap?.map.id, map.id);
@@ -38,6 +43,9 @@ test("opening a map atomically consumes the item and replacing it invalidates ol
     assert.equal(await coordination.claimRoom(opened.ticketClaims.ticketId, "authoritative-room-id"), true);
     assert.equal(await coordination.claimRoom(opened.ticketClaims.ticketId, "duplicate-room-id"), false);
     assert.equal((await coordination.getForMember(players[2].characterId))?.activeMap?.roomId, "authoritative-room-id");
+    assert.equal(await coordination.consumePortal(players[0].characterId, opened.ticketClaims.ticketId, 0), true);
+    assert.equal(await coordination.consumePortal(players[0].characterId, opened.ticketClaims.ticketId, 0), true, "the portal owner may reconnect");
+    assert.equal(await coordination.consumePortal(players[1].characterId, opened.ticketClaims.ticketId, 0), false, "another character cannot reuse it");
 
     const replacementMap = opened.authoritativeProfile.profile.inventory.entries.find((entry) => entry.item.kind === "map")!.item;
     const replacementSlotted = await commands.execute(players[0].characterId, opened.authoritativeProfile.revision, {

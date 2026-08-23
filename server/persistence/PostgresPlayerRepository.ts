@@ -6,12 +6,16 @@ import { isMerchantId, type MerchantId } from "../../app/game/config/merchants";
 import type { ActiveSkillId, CharacterClassId, CharacterEquipmentSlot, InventoryItem, PlayerProfile, SkillLoadout, StashTab } from "../../app/game/domain";
 import { normalizeSkillLoadout } from "../../app/game/skill-loadout";
 import { createAuthoritativeProfile } from "../domain/profile";
-import { AccountNotFoundError, CharacterNameTakenError, CharacterNotFoundError, ItemLockedError, ProfileRevisionConflict } from "./errors";
-import type { AccountIdentity, AuthoritativeProfile, CharacterRosterEntry, CharacterSummary, CreatePlayerInput, PlayerIdentity, PlayerRepository } from "./PlayerRepository";
+import { AccountHandleTakenError, AccountNotFoundError, CharacterNameTakenError, CharacterNotFoundError, ItemLockedError, ProfileRevisionConflict } from "./errors";
+import type { AccountCredentials, AccountIdentity, AuthoritativeProfile, CharacterRosterEntry, CharacterSummary, CreatePlayerInput, PlayerIdentity, PlayerRepository } from "./PlayerRepository";
 
 interface AccountRow {
   id: string;
   handle: string;
+}
+
+interface AccountCredentialRow extends AccountRow {
+  password_hash: string | null;
 }
 
 interface PlayerRow {
@@ -53,6 +57,12 @@ interface StoredItemRow {
 }
 
 interface ExistingItemRow extends StoredItemRow {
+  locked_trade_id: string | null;
+}
+
+interface ItemMutationGuardRow {
+  id: string;
+  owner_character_id: string;
   locked_trade_id: string | null;
 }
 
@@ -136,6 +146,65 @@ export class PostgresPlayerRepository implements PlayerRepository {
     };
   }
 
+  async findAccountCredentials(rawHandle: string): Promise<AccountCredentials | null> {
+    const result = await this.pool.query<AccountCredentialRow>(
+      "SELECT id, handle, password_hash FROM accounts WHERE handle = $1",
+      [rawHandle.trim().toLowerCase()],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      account: {
+        accountId: row.id,
+        handle: row.handle,
+        merchantEntitlements: await this.listMerchantEntitlementsForAccount(row.id),
+      },
+      passwordHash: row.password_hash,
+    };
+  }
+
+  async createAuthenticatedAccount(rawHandle: string, passwordHash: string): Promise<AccountIdentity> {
+    const handle = rawHandle.trim().toLowerCase();
+    try {
+      const result = await this.pool.query<AccountRow>(
+        "INSERT INTO accounts (handle, password_hash) VALUES ($1, $2) RETURNING id, handle",
+        [handle, passwordHash],
+      );
+      return { accountId: result.rows[0].id, handle: result.rows[0].handle, merchantEntitlements: [] };
+    } catch (error) {
+      if (typeof error === "object" && error && "code" in error && error.code === "23505") throw new AccountHandleTakenError();
+      throw error;
+    }
+  }
+
+  async createAuthSession(sessionId: string, accountId: string, expiresAt: number): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO auth_sessions (id, account_id, expires_at)
+       VALUES ($1, $2, to_timestamp($3 / 1000.0))`,
+      [sessionId, accountId, expiresAt],
+    );
+    // Session creation is a convenient bounded cleanup point and avoids a
+    // permanently growing table without putting work on request hot paths.
+    await this.pool.query("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days'");
+  }
+
+  async isAuthSessionActive(sessionId: string, accountId: string, now = Date.now()): Promise<boolean> {
+    const result = await this.pool.query(
+      `SELECT 1 FROM auth_sessions
+       WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL
+         AND expires_at > to_timestamp($3 / 1000.0)`,
+      [sessionId, accountId, now],
+    );
+    return Boolean(result.rowCount);
+  }
+
+  async revokeAuthSession(sessionId: string, accountId: string): Promise<void> {
+    await this.pool.query(
+      "UPDATE auth_sessions SET revoked_at = now() WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL",
+      [sessionId, accountId],
+    );
+  }
+
   async listCharacters(accountId: string): Promise<CharacterRosterEntry[]> {
     const result = await this.pool.query<CharacterRosterRow>(
       `SELECT account_id, id AS character_id, name AS character_name, class_id, level
@@ -192,6 +261,16 @@ export class PostgresPlayerRepository implements PlayerRepository {
     return result.rows[0] ? rosterEntry(result.rows[0]) : null;
   }
 
+  async findCharacters(characterIds: readonly string[]): Promise<CharacterSummary[]> {
+    if (characterIds.length === 0) return [];
+    const result = await this.pool.query<CharacterRosterRow>(
+      `SELECT account_id, id AS character_id, name AS character_name, class_id, level
+       FROM characters WHERE id = ANY($1::uuid[]) AND profile_initialized = true`,
+      [[...new Set(characterIds)]],
+    );
+    return result.rows.map(rosterEntry);
+  }
+
   async listMerchantEntitlementsForCharacter(characterId: string): Promise<MerchantId[]> {
     const result = await this.pool.query<{ merchant_id: string }>(
       `SELECT entitlements.merchant_id
@@ -225,6 +304,41 @@ export class PostgresPlayerRepository implements PlayerRepository {
 
   async saveProfile(characterId: string, expectedRevision: number, profile: PlayerProfile): Promise<AuthoritativeProfile> {
     return this.enqueueCharacterWrite(characterId, () => this.saveProfileNow(characterId, expectedRevision, profile));
+  }
+
+  async mutateProfile(
+    characterId: string,
+    expectedRevision: number | null,
+    transform: (profile: PlayerProfile) => PlayerProfile,
+  ): Promise<AuthoritativeProfile> {
+    return this.enqueueCharacterWrite(characterId, () => this.mutateProfileNow(characterId, expectedRevision, transform));
+  }
+
+  private async mutateProfileNow(
+    characterId: string,
+    expectedRevision: number | null,
+    transform: (profile: PlayerProfile) => PlayerProfile,
+  ): Promise<AuthoritativeProfile> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const character = await this.selectProfileCharacter(client, characterId, true);
+      if (!character?.profile_initialized) throw new CharacterNotFoundError(characterId);
+      const current = await this.hydrateProfile(client, character);
+      if (expectedRevision !== null && current.revision !== expectedRevision) throw new ProfileRevisionConflict();
+      const next = transform(structuredClone(current.profile));
+      const revision = current.revision + 1;
+      const updated = await this.updateCharacterProgress(client, characterId, next, revision, current.revision);
+      if (!updated) throw new ProfileRevisionConflict();
+      await this.persistProfileDelta(client, characterId, current.profile, next);
+      await client.query("COMMIT");
+      return { profile: structuredClone(next), revision };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   private async saveProfileNow(characterId: string, expectedRevision: number, profile: PlayerProfile): Promise<AuthoritativeProfile> {
@@ -367,6 +481,125 @@ export class PostgresPlayerRepository implements PlayerRepository {
     });
     if (profile.mapDevice) locations.push({ item: profile.mapDevice, location: "map_device" });
     return locations;
+  }
+
+  /**
+   * Persists only the rows changed by one authoritative profile mutation.
+   * The caller holds the character row lock and has already advanced the
+   * optimistic profile revision, so the supplied baseline exactly identifies
+   * the database state without scanning every owned item again.
+   */
+  private async persistProfileDelta(
+    client: PoolClient,
+    characterId: string,
+    baseline: PlayerProfile,
+    profile: PlayerProfile,
+  ): Promise<void> {
+    const before = this.profileItems(baseline);
+    const after = this.profileItems(profile);
+    const beforeById = new Map(before.map((location) => [location.item.id, location]));
+    const afterById = new Map(after.map((location) => [location.item.id, location]));
+    if (beforeById.size !== before.length || afterById.size !== after.length) throw new Error("duplicate_item_location");
+    if (profile.stash.tabs.length === 0) throw new Error("stash_requires_a_tab");
+
+    const locationMatches = (left: ProfileItemLocation, right: ProfileItemLocation): boolean => left.location === right.location
+      && (left.containerId ?? null) === (right.containerId ?? null)
+      && (left.x ?? null) === (right.x ?? null)
+      && (left.y ?? null) === (right.y ?? null)
+      && (left.equipmentSlot ?? null) === (right.equipmentSlot ?? null);
+    const removedIds = before.filter(({ item }) => !afterById.has(item.id)).map(({ item }) => item.id);
+    const changedItems = after.filter((location) => {
+      const previous = beforeById.get(location.item.id);
+      return !previous || !isDeepStrictEqual(previous.item, location.item);
+    });
+    const changedLocations = after.filter((location) => {
+      const previous = beforeById.get(location.item.id);
+      return !previous || !locationMatches(previous, location);
+    });
+    const touchedIds = [...new Set([
+      ...removedIds,
+      ...changedItems.map(({ item }) => item.id),
+      ...changedLocations.map(({ item }) => item.id),
+    ])];
+    if (touchedIds.length > 0) {
+      const guarded = await client.query<ItemMutationGuardRow>(
+        "SELECT id, owner_character_id, locked_trade_id FROM item_instances WHERE id = ANY($1::uuid[]) FOR UPDATE",
+        [touchedIds],
+      );
+      for (const row of guarded.rows) {
+        if (row.owner_character_id !== characterId) throw new Error("item_owned_by_another_character");
+        if (row.locked_trade_id) throw new ItemLockedError(row.id);
+      }
+    }
+
+    if (removedIds.length > 0) {
+      await client.query(
+        "DELETE FROM item_instances WHERE owner_character_id = $1 AND locked_trade_id IS NULL AND id = ANY($2::uuid[])",
+        [characterId, removedIds],
+      );
+    }
+    if (changedItems.length > 0) {
+      await client.query(
+        `INSERT INTO item_instances (id, owner_character_id, kind, item_data)
+         SELECT payload.id, $1, payload.kind, payload.item_data
+         FROM jsonb_to_recordset($2::jsonb) AS payload(id uuid, kind text, item_data jsonb)
+         ON CONFLICT (id) DO UPDATE SET
+           kind = EXCLUDED.kind,
+           item_data = EXCLUDED.item_data,
+           item_version = item_instances.item_version + 1,
+           updated_at = now()
+         WHERE item_instances.owner_character_id = $1 AND item_instances.locked_trade_id IS NULL`,
+        [characterId, JSON.stringify(changedItems.map(({ item }) => ({ id: item.id, kind: item.kind, item_data: item })))],
+      );
+    }
+    if (changedLocations.length > 0) {
+      const changedLocationIds = changedLocations.map(({ item }) => item.id);
+      await client.query(
+        "DELETE FROM item_locations WHERE character_id = $1 AND item_id = ANY($2::uuid[])",
+        [characterId, changedLocationIds],
+      );
+      await client.query(
+        `INSERT INTO item_locations
+           (item_id, character_id, location, container_id, position_x, position_y, equipment_slot)
+         SELECT payload.item_id, $1, payload.location, payload.container_id,
+                payload.position_x, payload.position_y, payload.equipment_slot
+         FROM jsonb_to_recordset($2::jsonb) AS payload(
+           item_id uuid, location text, container_id text, position_x integer,
+           position_y integer, equipment_slot text
+         )`,
+        [characterId, JSON.stringify(changedLocations.map((location) => ({
+          item_id: location.item.id,
+          location: location.location,
+          container_id: location.containerId ?? null,
+          position_x: location.x ?? null,
+          position_y: location.y ?? null,
+          equipment_slot: location.equipmentSlot ?? null,
+        })))],
+      );
+    }
+
+    if (!isDeepStrictEqual(baseline.stash.tabs.map(({ id, name }) => ({ id, name })), profile.stash.tabs.map(({ id, name }) => ({ id, name })))) {
+      const desiredTabIds = profile.stash.tabs.map((tab) => tab.id);
+      await client.query(
+        "DELETE FROM stash_tabs WHERE character_id = $1 AND NOT (tab_id = ANY($2::text[]))",
+        [characterId, desiredTabIds],
+      );
+      // Avoid the unique sort-order constraint while tabs are reordered.
+      await client.query("UPDATE stash_tabs SET sort_order = sort_order + 1000000 WHERE character_id = $1", [characterId]);
+      await client.query(
+        `INSERT INTO stash_tabs (character_id, tab_id, name, sort_order)
+         SELECT $1, payload.tab_id, payload.name, payload.sort_order
+         FROM jsonb_to_recordset($2::jsonb) AS payload(tab_id text, name text, sort_order integer)
+         ON CONFLICT (character_id, tab_id) DO UPDATE SET
+           name = EXCLUDED.name,
+           sort_order = EXCLUDED.sort_order`,
+        [characterId, JSON.stringify(profile.stash.tabs.map((tab, sortOrder) => ({
+          tab_id: tab.id,
+          name: tab.name,
+          sort_order: sortOrder,
+        })))],
+      );
+    }
   }
 
   private async persistProfile(

@@ -24,7 +24,7 @@ import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, isArenaCleared, resolve
 import { resolveAttackTimeSeconds } from "../../app/game/action-timing";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../../app/game/config/monsters";
 import { MAP_COMPLETION_REWARDS } from "../../app/game/config/rewards";
-import type { DamageType, InventoryItem, SkillLoadout } from "../../app/game/domain";
+import type { DamageType, FlaskBelt, InventoryItem, SkillLoadout } from "../../app/game/domain";
 import { isSkillEquipped } from "../../app/game/skill-loadout";
 import { resolveMonsterStats, rollMonsterPack } from "../../app/game/encounters";
 import { consumeFlaskFromBelt, createFlaskStack } from "../../app/game/flasks";
@@ -38,16 +38,19 @@ import { calculateCharacterStats } from "../../app/game/stats";
 import { verifyMapTicket } from "../auth/map-ticket";
 import { verifySessionToken } from "../auth/session-token";
 import { MULTIPLAYER_COMBAT, advanceCooldownDeadline } from "../config/multiplayer-combat";
-import { DamageTypeCode, MonsterArchetype, World } from "../engine/World";
+import { DamageTypeCode, MonsterArchetype, World, type WorldHealthMetrics } from "../engine/World";
 import { WorldEventBuffer, WorldEventType, type WorldEvent } from "../engine/events";
 import { SeededRng } from "../engine/rng";
 import { MonsterReplicator } from "../engine/snapshot";
 import { formatError } from "../logging";
-import { ItemLockedError, ProfileRevisionConflict } from "../persistence/errors";
+import { ItemLockedError } from "../persistence/errors";
 import { CharacterWriteQueue } from "../persistence/CharacterWriteQueue";
+import type { AuthoritativeProfile } from "../persistence/PlayerRepository";
 import { getServerServices } from "../services";
 import { MapRoomState, NetworkGroundDrop, NetworkMapPlayer } from "../state/MapState";
 import { PartyRoom } from "./PartyRoom";
+import { serverHealth } from "../observability/ServerHealth";
+import { serverDrain } from "../observability/ServerDrain";
 
 const SNAPSHOT_EVERY_TICKS = 2;
 const DROP_TTL_MILLISECONDS = 2 * 60_000;
@@ -56,6 +59,8 @@ const EVENT_AOI_HALF_WIDTH = 800;
 const EVENT_AOI_HALF_HEIGHT = 680;
 const MAX_EVENTS_PER_CLIENT_TICK = 256;
 const PLAYER_ENTITY_FLAG = 0x8000_0000;
+const MAX_PICKUPS_PER_PLAYER_PER_SECOND = 8;
+const EXPERIENCE_CHECKPOINT_MILLISECONDS = 30_000;
 
 const SKILL_CODE = { basic: 0, nova: 1, dash: 2, ward: 3, flameWave: 4 } as const;
 const ARCHETYPE_IDS: MonsterArchetypeId[] = ["ashling", "cinder-spitter", "rift-stalker", "ironhide-brute", "ember-skitter"];
@@ -80,7 +85,15 @@ interface PlayerRuntime {
     ward: ResolvedSkillDefinition;
     flameWave: ResolvedSkillDefinition;
   };
-  recoveries: Array<{ resource: "life" | "mana"; remainingAmount: number; remainingSeconds: number }>;
+  flaskBelt: FlaskBelt;
+  flaskPersistenceInFlight: boolean;
+  recoveries: Array<{
+    id: string;
+    resource: "life" | "mana";
+    remainingAmount: number;
+    remainingSeconds: number;
+    appliedAmount: number;
+  }>;
 }
 
 export class MapRoom extends PartyRoom<MapRoomState> {
@@ -95,6 +108,8 @@ export class MapRoom extends PartyRoom<MapRoomState> {
   private readonly persistedExperience = new Map<string, number>();
   private readonly completionPersisted = new Set<string>();
   private readonly pickupInFlight = new Set<string>();
+  private readonly pickupRateWindows = new Map<string, { startedAt: number; count: number }>();
+  private readonly profileCache = new Map<string, AuthoritativeProfile>();
   private readonly exitingCharacters = new Set<string>();
   private readonly eventSelections = new Map<string, Uint16Array>();
   private readonly eventPackets = new Map<string, Uint8Array>();
@@ -104,13 +119,23 @@ export class MapRoom extends PartyRoom<MapRoomState> {
   private packSequence = 0;
   private completionStarted = false;
   private emptyRoomExpiry: ReturnType<typeof setTimeout> | null = null;
+  private healthRegistered = false;
+  private unsubscribeDrain: (() => void) | null = null;
+  private reportedWorldMetrics: WorldHealthMetrics = {
+    droppedSimulationSteps: 0,
+    droppedCosmeticEvents: 0,
+    slowTicks: 0,
+    slowestTickMilliseconds: 0,
+  };
 
   async onCreate(rawOptions: unknown): Promise<void> {
+    if (serverDrain.isDraining) throw new Error("The game server is draining and cannot create a new map");
     const options = joinMapOptionsSchema.safeParse(rawOptions);
     if (!options.success) throw new Error("A signed map ticket is required to create a map room");
     this.services = getServerServices();
     const ticket = verifyMapTicket(options.data.mapTicket, this.services.authSecret);
     if (!ticket) throw new Error("The map ticket is invalid or expired");
+    if (serverDrain.isDraining) throw new Error("The game server is draining and cannot create a new map");
     if (!await this.services.expeditions.claimRoom(ticket.ticketId, this.roomId)) throw new Error("The map ticket has already created an instance");
     this.ticket = ticket;
     this.state.ticketId = ticket.ticketId;
@@ -148,11 +173,27 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     this.clock.setInterval(() => {
       void this.renewRoomLease();
     }, 10_000);
+    this.clock.setInterval(() => {
+      this.runAsyncTask("experience_checkpoint", () => this.checkpointProgress());
+    }, EXPERIENCE_CHECKPOINT_MILLISECONDS);
     this.scheduleEmptyRoomExpiry(60_000);
+    serverHealth.roomStarted("map");
+    this.healthRegistered = true;
+    this.unsubscribeDrain = serverDrain.subscribe(() => {
+      if (this.activeClients.size === 0) this.runAsyncTask("drain_dispose", () => this.disconnect(1012));
+    });
   }
 
   async onDispose(): Promise<void> {
+    this.unsubscribeDrain?.();
+    this.unsubscribeDrain = null;
     if (this.emptyRoomExpiry) clearTimeout(this.emptyRoomExpiry);
+    if (this.healthRegistered) {
+      serverHealth.recordWorldDelta(this.reportedWorldMetrics, this.world.metrics);
+      Object.assign(this.reportedWorldMetrics, this.world.metrics);
+      serverHealth.roomStopped("map");
+      this.healthRegistered = false;
+    }
     await Promise.all([...this.state.players.values()].map((player) => this.persistProgress(player, false).catch((error) => {
       console.error(`[map-room:${this.roomId}] dispose persistence failed\n${formatError(error)}`);
     })));
@@ -176,7 +217,10 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     if (!options.success) return false;
     const session = verifySessionToken(options.data.token, this.services.authSecret);
     const ticket = verifyMapTicket(options.data.mapTicket, this.services.authSecret);
-    if (!session || !ticket || ticket.ticketId !== this.ticket.ticketId) return false;
+    if (!session
+      || !await this.services.players.isAuthSessionActive(session.authSessionId, session.accountId)
+      || !ticket
+      || ticket.ticketId !== this.ticket.ticketId) return false;
     if (!ticket.allowedCharacterIds.includes(session.characterId)
       || !await this.services.parties.isMember(this.partyId, session.characterId)) return false;
     // Replacing a stale socket / refreshing the page is not a new portal entry.
@@ -201,6 +245,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     }
     const authoritative = await this.services.players.loadProfile(claims.characterId);
     if (!authoritative) throw new Error("Authoritative profile is unavailable");
+    this.profileCache.set(claims.characterId, authoritative);
     const stats = calculateCharacterStats(authoritative.profile).stats;
     const skillLevels = authoritative.profile.character.skillLevels;
     const skills = {
@@ -248,6 +293,8 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       basicAttackCooldownMilliseconds: resolveAttackTimeSeconds(stats.attackSpeed) * 1_000,
       skillLoadout: authoritative.profile.character.skillLoadout,
       skills,
+      flaskBelt: cloneFlaskBelt(authoritative.profile.flaskBelt),
+      flaskPersistenceInFlight: false,
       recoveries: [],
     });
     this.replicators.set(claims.characterId, new MonsterReplicator(this.world));
@@ -273,15 +320,25 @@ export class MapRoom extends PartyRoom<MapRoomState> {
           worldPlayer.movementY = 0;
         }
       }
+    }, (reconnectedClient) => {
+      // A reconnect begins with empty client-side AOI/drop caches. Rebuild the
+      // per-client delta baseline and replay durable drop payloads immediately.
+      this.replicators.set(claims.characterId, new MonsterReplicator(this.world));
+      this.sendAllDropPayloads(reconnectedClient);
     });
     if (!remove) return;
     await this.persistProgress(player, false);
     this.replicators.delete(claims.characterId);
     this.runtime.delete(claims.characterId);
+    this.profileCache.delete(claims.characterId);
+    this.pickupRateWindows.delete(claims.characterId);
     this.exitingCharacters.delete(claims.characterId);
     this.world.removePlayer(claims.characterId);
     this.state.players.delete(claims.characterId);
-    if (this.activeClients.size === 0) this.scheduleEmptyRoomExpiry(10 * 60_000);
+    if (this.activeClients.size === 0) {
+      if (serverDrain.isDraining) this.runAsyncTask("drain_dispose", () => this.disconnect(1012));
+      else this.scheduleEmptyRoomExpiry(10 * 60_000);
+    }
   }
 
   private parseMovement(client: Client, raw: unknown): void {
@@ -299,7 +356,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
 
   private requestWorldSync(client: Client): void {
     const claims = client.auth as SessionClaims | undefined;
-    if (!claims || this.activeClients.get(claims.characterId) !== client) return this.reject(client, CLIENT_MESSAGES.requestWorldSync, "unauthorized");
+    if (!claims || !this.isActivePartyClient(claims.characterId, client)) return this.reject(client, CLIENT_MESSAGES.requestWorldSync, "unauthorized");
     this.replicators.set(claims.characterId, new MonsterReplicator(this.world));
     this.sendAllDropPayloads(client);
   }
@@ -378,7 +435,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       if (runtime.nextDashRechargeAt === 0) runtime.nextDashRechargeAt = now + skill.recharge * 1_000;
       this.world.enqueueInput({
         kind: "dash", playerIndex: runtime.worldPlayerIndex, sequence: command.sequence,
-        directionX: direction!.x, directionY: direction!.y, distance: 105, skillId: SKILL_CODE.dash,
+        directionX: direction!.x, directionY: direction!.y, distance: MULTIPLAYER_COMBAT.player.dashDistance, skillId: SKILL_CODE.dash,
       });
       return;
     }
@@ -435,8 +492,11 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     this.expireDrops();
     const previousSimulationSeconds = this.world.simulationSeconds;
     this.world.advance(deltaMilliseconds, (events, outcomes) => this.flushWorldTick(events, outcomes));
+    serverHealth.recordWorldDelta(this.reportedWorldMetrics, this.world.metrics);
+    Object.assign(this.reportedWorldMetrics, this.world.metrics);
     const simulationDeltaSeconds = this.world.simulationSeconds - previousSimulationSeconds;
     this.state.elapsedMilliseconds = this.world.simulationSeconds * 1_000;
+    this.state.serverTick = this.world.tickNumber;
     this.state.waveElapsedMilliseconds += simulationDeltaSeconds * 1_000;
     this.updatePlayerResources(simulationDeltaSeconds);
     this.state.monstersAlive = this.world.monsters.count;
@@ -586,8 +646,11 @@ export class MapRoom extends PartyRoom<MapRoomState> {
         const recovery = runtime.recoveries[index];
         const duration = Math.min(deltaSeconds, recovery.remainingSeconds);
         const restored = recovery.remainingSeconds > 0 ? recovery.remainingAmount / recovery.remainingSeconds * duration : recovery.remainingAmount;
+        const before = recovery.resource === "life" ? player.life : player.focus;
         if (recovery.resource === "life") player.life = Math.min(player.maxLife, player.life + restored);
         else player.focus = Math.min(player.maxFocus, player.focus + restored);
+        const after = recovery.resource === "life" ? player.life : player.focus;
+        recovery.appliedAmount += Math.max(0, after - before);
         recovery.remainingAmount = Math.max(0, recovery.remainingAmount - restored);
         recovery.remainingSeconds = Math.max(0, recovery.remainingSeconds - duration);
         const full = recovery.resource === "life" ? player.life >= player.maxLife : player.focus >= player.maxFocus;
@@ -727,27 +790,25 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     if (!claims || !player || player.life <= 0 || this.exitingCharacters.has(claims.characterId) || !drop || !item) {
       return this.rejectPickup(client, parsed.data.dropId, "unauthorized");
     }
+    if (!this.consumePickupBudget(claims.characterId)) return this.rejectPickup(client, parsed.data.dropId, "rate_limited");
     if (Math.hypot(player.x - drop.x, player.y - drop.y) > MULTIPLAYER_COMBAT.player.pickupRange) {
       return this.rejectPickup(client, parsed.data.dropId, "invalid");
+    }
+    const cached = this.profileCache.get(claims.characterId);
+    if (cached && !storePickedUpItem(cached.profile, item)) {
+      return this.rejectPickup(client, parsed.data.dropId, "inventory_full");
     }
     if (this.pickupInFlight.has(drop.id)) return;
     this.pickupInFlight.add(drop.id);
     try {
-      const saved = await this.profileWrites.run(claims.characterId, async () => {
-        for (let attempt = 0; attempt < 2; attempt += 1) {
-          const current = await this.services.players.loadProfile(claims.characterId);
-          if (!current) return null;
-          const profile = storePickedUpItem(current.profile, item);
+      const saved = await this.profileWrites.run(claims.characterId, () => (
+        this.services.players.mutateProfile(claims.characterId, null, (current) => {
+          const profile = storePickedUpItem(current, item);
           if (!profile) throw new Error("inventory_full");
-          try {
-            return await this.services.players.saveProfile(claims.characterId, current.revision, profile);
-          } catch (error) {
-            if (!(error instanceof ProfileRevisionConflict)) throw error;
-          }
-        }
-        return null;
-      });
-      if (!saved) return this.rejectPickup(client, parsed.data.dropId, "conflict");
+          return profile;
+        })
+      ));
+      this.profileCache.set(claims.characterId, saved);
       this.state.drops.delete(drop.id);
       this.dropItems.delete(drop.id);
       client.send(SERVER_MESSAGES.pickupResult, {
@@ -769,7 +830,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     if (!parsed.success) return this.reject(client, CLIENT_MESSAGES.prepareMapExit, "invalid");
     const claims = client.auth as SessionClaims | undefined;
     const player = claims ? this.state.players.get(claims.characterId) : null;
-    if (!claims || !player || this.activeClients.get(claims.characterId) !== client) {
+    if (!claims || !player || !this.isActivePartyClient(claims.characterId, client)) {
       return this.reject(client, CLIENT_MESSAGES.prepareMapExit, "unauthorized");
     }
     this.exitingCharacters.add(claims.characterId);
@@ -800,25 +861,20 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     if (!claims || !player || player.life <= 0 || this.exitingCharacters.has(claims.characterId)) {
       return this.reject(client, CLIENT_MESSAGES.dropItem, "unauthorized");
     }
-    const result = await this.profileWrites.run(claims.characterId, async () => {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const current = await this.services.players.loadProfile(claims.characterId);
-        if (!current) return null;
-        const taken = takeProfileItem(current.profile, parsed.data.itemId);
+    let droppedItem: InventoryItem | null = null;
+    const saved = await this.profileWrites.run(claims.characterId, () => (
+      this.services.players.mutateProfile(claims.characterId, null, (current) => {
+        const taken = takeProfileItem(current, parsed.data.itemId);
         if (!taken) throw new Error("invalid_item");
-        try {
-          const saved = await this.services.players.saveProfile(claims.characterId, current.revision, taken.profile);
-          return { saved, item: taken.item };
-        } catch (error) {
-          if (!(error instanceof ProfileRevisionConflict)) throw error;
-        }
-      }
-      return null;
-    });
-    if (!result) return this.reject(client, CLIENT_MESSAGES.dropItem, "conflict");
+        droppedItem = taken.item;
+        return taken.profile;
+      })
+    ));
+    if (!droppedItem) return this.reject(client, CLIENT_MESSAGES.dropItem, "conflict");
+    this.profileCache.set(claims.characterId, saved);
     const angle = Math.atan2(player.facingY, player.facingX);
-    this.spawnWorldItem(player.x + Math.cos(angle) * 46, player.y + Math.sin(angle) * 46, result.item, "player");
-    client.send(SERVER_MESSAGES.profileUpdated, result.saved);
+    this.spawnWorldItem(player.x + Math.cos(angle) * 46, player.y + Math.sin(angle) * 46, droppedItem, "player");
+    client.send(SERVER_MESSAGES.profileUpdated, saved);
   }
 
   private async refreshPlayerProfile(client: Client, raw: unknown): Promise<void> {
@@ -830,6 +886,8 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     if (!claims || !networkPlayer || !runtime || !player) return this.reject(client, CLIENT_MESSAGES.refreshProfile, "unauthorized");
     const current = await this.services.players.loadProfile(claims.characterId);
     if (!current) return this.reject(client, CLIENT_MESSAGES.refreshProfile, "unauthorized");
+    this.profileCache.set(claims.characterId, current);
+    if (!runtime.flaskPersistenceInFlight) runtime.flaskBelt = cloneFlaskBelt(current.profile.flaskBelt);
     const stats = calculateCharacterStats(current.profile).stats;
     const lifeRatio = player.maxLife > 0 ? player.life / player.maxLife : 1;
     const focusRatio = player.maxFocus > 0 ? player.focus / player.maxFocus : 1;
@@ -865,30 +923,67 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     if (!claims || !runtime || !player || player.life <= 0 || this.exitingCharacters.has(claims.characterId)) {
       return this.reject(client, CLIENT_MESSAGES.useFlask, "unauthorized");
     }
-    const result = await this.profileWrites.run(claims.characterId, async () => {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const current = await this.services.players.loadProfile(claims.characterId);
-        if (!current) return null;
-        const consumed = consumeFlaskFromBelt(current.profile, parsed.data.slot);
-        if (!consumed) throw new Error("invalid_flask");
-        const full = consumed.definition.resource === "life" ? player.life >= player.maxLife : player.focus >= player.maxFocus;
-        if (full) throw new Error("resource_full");
-        try {
-          const saved = await this.services.players.saveProfile(claims.characterId, current.revision, consumed.profile);
-          return { saved, definition: consumed.definition };
-        } catch (error) {
-          if (!(error instanceof ProfileRevisionConflict)) throw error;
-        }
-      }
-      return null;
-    });
-    if (!result) return this.reject(client, CLIENT_MESSAGES.useFlask, "conflict");
-    runtime.recoveries.push({
-      resource: result.definition.resource,
-      remainingAmount: result.definition.recovery,
-      remainingSeconds: result.definition.durationSeconds,
-    });
-    client.send(SERVER_MESSAGES.profileUpdated, result.saved);
+    if (runtime.flaskPersistenceInFlight) return this.reject(client, CLIENT_MESSAGES.useFlask, "rate_limited");
+    const cached = this.profileCache.get(claims.characterId);
+    if (!cached) return this.reject(client, CLIENT_MESSAGES.useFlask, "unauthorized");
+    const optimisticProfile = { ...cached.profile, flaskBelt: runtime.flaskBelt };
+    const optimistic = consumeFlaskFromBelt(optimisticProfile, parsed.data.slot);
+    if (!optimistic) return this.reject(client, CLIENT_MESSAGES.useFlask, "invalid");
+    const full = optimistic.definition.resource === "life" ? player.life >= player.maxLife : player.focus >= player.maxFocus;
+    if (full) return this.reject(client, CLIENT_MESSAGES.useFlask, "invalid");
+
+    const previousBelt = runtime.flaskBelt;
+    const recovery = {
+      id: randomUUID(),
+      resource: optimistic.definition.resource,
+      remainingAmount: optimistic.definition.recovery,
+      remainingSeconds: optimistic.definition.durationSeconds,
+      appliedAmount: 0,
+    };
+    // Gameplay authority is in the room: healing begins on the next fixed tick,
+    // without waiting for PostgreSQL. Persistence follows through the existing
+    // per-character queue and this optimistic mutation is explicitly reversible.
+    runtime.flaskBelt = cloneFlaskBelt(optimistic.profile.flaskBelt);
+    runtime.flaskPersistenceInFlight = true;
+    runtime.recoveries.push(recovery);
+
+    try {
+      const saved = await this.profileWrites.run(claims.characterId, () => (
+        this.services.players.mutateProfile(claims.characterId, null, (current) => {
+          const consumed = consumeFlaskFromBelt(current, parsed.data.slot);
+          if (!consumed || consumed.definition.resource !== recovery.resource) throw new Error("invalid_flask");
+          return consumed.profile;
+        })
+      ));
+      this.profileCache.set(claims.characterId, saved);
+      runtime.flaskBelt = cloneFlaskBelt(saved.profile.flaskBelt);
+      client.send(SERVER_MESSAGES.profileUpdated, saved);
+    } catch (error) {
+      this.rollbackFlaskUse(runtime, player, previousBelt, recovery.id);
+      throw error;
+    } finally {
+      runtime.flaskPersistenceInFlight = false;
+    }
+  }
+
+  private rollbackFlaskUse(
+    runtime: PlayerRuntime,
+    player: NonNullable<ReturnType<World["players"]["get"]>>,
+    previousBelt: FlaskBelt,
+    recoveryId: string,
+  ): void {
+    const index = runtime.recoveries.findIndex((candidate) => candidate.id === recoveryId);
+    const recovery = index >= 0 ? runtime.recoveries[index] : null;
+    if (index >= 0) runtime.recoveries.splice(index, 1);
+    if (recovery?.appliedAmount) {
+      if (recovery.resource === "life") player.life = Math.max(0, player.life - recovery.appliedAmount);
+      else player.focus = Math.max(0, player.focus - recovery.appliedAmount);
+    }
+    runtime.flaskBelt = previousBelt;
+  }
+
+  private async checkpointProgress(): Promise<void> {
+    await Promise.all([...this.state.players.values()].map((player) => this.persistProgress(player, false)));
   }
 
   private async completeMap(): Promise<void> {
@@ -930,11 +1025,9 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     const experienceDelta = Math.max(0, player.experience - alreadyPersisted);
     const shouldComplete = completed && !this.completionPersisted.has(player.characterId);
     if (experienceDelta === 0 && !shouldComplete) return;
-    const saved = await this.profileWrites.run(player.characterId, async () => {
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        const current = await this.services.players.loadProfile(player.characterId);
-        if (!current) return null;
-        const progressed = grantCharacterExperience(current.profile, experienceDelta).profile;
+    const saved = await this.profileWrites.run(player.characterId, () => (
+      this.services.players.mutateProfile(player.characterId, null, (current) => {
+        const progressed = grantCharacterExperience(current, experienceDelta).profile;
         const next = shouldComplete ? {
           ...progressed,
           character: {
@@ -943,15 +1036,10 @@ export class MapRoom extends PartyRoom<MapRoomState> {
             highestWave: Math.max(progressed.character.highestWave, this.state.wave),
           },
         } : progressed;
-        try {
-          return await this.services.players.saveProfile(player.characterId, current.revision, next);
-        } catch (error) {
-          if (!(error instanceof ProfileRevisionConflict)) throw error;
-        }
-      }
-      return null;
-    });
-    if (!saved) return;
+        return next;
+      })
+    ));
+    this.profileCache.set(player.characterId, saved);
     this.persistedExperience.set(player.characterId, player.experience);
     player.persistedExperience = player.experience;
     if (shouldComplete) this.completionPersisted.add(player.characterId);
@@ -982,6 +1070,18 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     };
   }
 
+  private consumePickupBudget(characterId: string): boolean {
+    const now = this.state.elapsedMilliseconds;
+    const current = this.pickupRateWindows.get(characterId);
+    if (!current || now - current.startedAt >= 1_000) {
+      this.pickupRateWindows.set(characterId, { startedAt: now, count: 1 });
+      return true;
+    }
+    if (current.count >= MAX_PICKUPS_PER_PLAYER_PER_SECOND) return false;
+    current.count += 1;
+    return true;
+  }
+
   private runAsyncCommand(client: Client, command: string, operation: () => Promise<unknown>): void {
     this.runAsyncTask(command, operation, command, client);
   }
@@ -1004,6 +1104,10 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     this.reject(client, CLIENT_MESSAGES.pickup, reason);
     client.send(SERVER_MESSAGES.pickupResult, { dropId, status: "rejected", reason } satisfies PickupResultMessage);
   }
+}
+
+function cloneFlaskBelt(belt: FlaskBelt): FlaskBelt {
+  return belt.map((flask) => flask ? { ...flask } : null) as FlaskBelt;
 }
 
 function normalizedDirection(direction: { x: number; y: number } | undefined): { x: number; y: number } | null {

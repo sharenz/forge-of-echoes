@@ -6,6 +6,7 @@ import type { TradeRepository } from "./persistence/TradeRepository";
 import type { PartyCoordinator } from "./coordination/PartyCoordinator";
 import type { ExpeditionCoordinator } from "./coordination/ExpeditionCoordinator";
 import { PostgresCoordination } from "./coordination/PostgresCoordination";
+import { PostgresSocialEventBus, type SocialEventBus } from "./social/SocialEventBus";
 
 export interface ServerServices {
   authSecret: string;
@@ -13,6 +14,7 @@ export interface ServerServices {
   parties: PartyCoordinator;
   expeditions: ExpeditionCoordinator;
   trades?: TradeRepository;
+  social?: SocialEventBus;
 }
 
 let activeServices: ServerServices | null = null;
@@ -29,12 +31,15 @@ export function configureServerServices(services: ServerServices): void {
 export async function createServerServices(config: ServerConfig = loadServerConfig()): Promise<ServerServices> {
   const players = new PostgresPlayerRepository(config.databaseUrl);
   await players.initialize();
-  const coordination = new PostgresCoordination(config.databaseUrl, players);
+  const social = new PostgresSocialEventBus(config.databaseUrl);
+  await social.initialize();
+  const coordination = new PostgresCoordination(config.databaseUrl, players, undefined, undefined, social);
   return {
     authSecret: config.authSecret,
     players,
     parties: coordination,
     expeditions: coordination,
     trades: new PostgresTradeRepository(config.databaseUrl),
+    social,
   };
 }

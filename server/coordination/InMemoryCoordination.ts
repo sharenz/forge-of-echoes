@@ -17,6 +17,7 @@ export class InMemoryCoordination implements PartyCoordinator, ExpeditionCoordin
   private readonly partyByMember = new Map<string, string>();
   private readonly connections = new Map<string, ConnectionLease>();
   private readonly roomClaims = new Map<string, { roomId: string; expiresAt: number }>();
+  private readonly portalOwners = new Map<string, string>();
 
   constructor(
     private readonly players: PlayerRepository,
@@ -170,8 +171,12 @@ export class InMemoryCoordination implements PartyCoordinator, ExpeditionCoordin
     const party = this.mutableForMember(characterId);
     if (!party?.activeMap || party.activeMap.ticketId !== ticketId) return false;
     const portal = party.activeMap.portals.find((candidate) => candidate.index === portalIndex);
-    if (!portal || portal.used) return false;
+    if (!portal) return false;
+    const ownerKey = `${ticketId}:${portalIndex}`;
+    const existingOwner = this.portalOwners.get(ownerKey);
+    if (portal.used && existingOwner !== characterId) return false;
     portal.used = true;
+    this.portalOwners.set(ownerKey, characterId);
     party.revision += 1;
     return true;
   }

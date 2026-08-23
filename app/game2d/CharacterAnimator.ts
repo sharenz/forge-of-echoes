@@ -13,6 +13,7 @@ import type { CharacterClassId } from "../game/domain";
 
 interface PendingAction {
   key: string;
+  state: Extract<CharacterAnimationState, "attack" | "cast" | "dash">;
   releaseTextureFrame: number;
   released: boolean;
   onRelease: () => void;
@@ -58,6 +59,10 @@ export class CharacterAnimator {
     return this.pendingAction?.key ?? null;
   }
 
+  get activeActionState(): Extract<CharacterAnimationState, "attack" | "cast" | "dash"> | null {
+    return this.pendingAction?.state ?? null;
+  }
+
   setLocomotion(x: number, y: number, moving: boolean, speedRatio = 1): void {
     this.moving = moving;
     this.locomotionPlaybackRate = moving ? Phaser.Math.Clamp(0.82 + speedRatio * 0.22, 0.82, 1.04) : 1;
@@ -82,7 +87,7 @@ export class CharacterAnimator {
     const sourceDirection = direction === "west" ? "west" : direction;
     const key = characterAnimationKey(this.classId, sourceDirection, state);
     const releaseTextureFrame = clip.row * sheet.columns + clip.startColumn + (clip.releaseFrame ?? clip.frameCount - 1);
-    const pending: PendingAction = { key, releaseTextureFrame, released: false, onRelease, onComplete };
+    const pending: PendingAction = { key, state, releaseTextureFrame, released: false, onRelease, onComplete };
     const playbackRate = resolveAnimationPlaybackRate(clip.frameCount, clip.frameRate, timing);
     this.pendingAction = pending;
     this.applyDirectionFlip();

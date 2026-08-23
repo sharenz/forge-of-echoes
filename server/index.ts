@@ -2,6 +2,7 @@ import { createGameServer } from "./createGameServer";
 import { loadServerConfig } from "./config";
 import { formatError } from "./logging";
 import { configureServerServices, createServerServices } from "./services";
+import { serverHealth } from "./observability/ServerHealth";
 
 let server: ReturnType<typeof createGameServer> | null = null;
 let fatalShutdownStarted = false;
@@ -22,8 +23,17 @@ function fatalShutdown(reason: unknown, label: string): void {
   });
 }
 
-process.on("unhandledRejection", (reason) => fatalShutdown(reason, "unhandled promise rejection"));
-process.on("uncaughtException", (error, origin) => fatalShutdown(error, `uncaught exception (${origin})`));
+process.on("unhandledRejection", (reason) => {
+  serverHealth.recordUnhandledRejection();
+  // A rejected background promise is isolated and observable, but does not
+  // destroy every active map. Truly unsafe synchronous corruption still exits
+  // through the uncaughtException path below.
+  console.error(`[game-server] unhandled promise rejection\n${formatError(reason)}`);
+});
+process.on("uncaughtException", (error, origin) => {
+  serverHealth.recordUncaughtException();
+  fatalShutdown(error, `uncaught exception (${origin})`);
+});
 
 const config = loadServerConfig();
 const services = await createServerServices(config);
@@ -31,6 +41,7 @@ configureServerServices(services);
 
 server = createGameServer(services, { allowedOrigins: config.allowedOrigins });
 server.onShutdown(async () => {
+  await services.social?.close();
   await services.trades?.close();
   await services.expeditions.close();
   await services.parties.close();

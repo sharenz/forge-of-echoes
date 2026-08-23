@@ -6,6 +6,7 @@ import { InMemoryPlayerRepository } from "../../server/persistence/InMemoryPlaye
 import { configureServerServices } from "../../server/services";
 import type { PartySnapshot, PublicPartyListing } from "../../server/coordination/PartyCoordinator";
 import { InMemoryCoordination } from "../../server/coordination/InMemoryCoordination";
+import { WIRE_PROTOCOL_VERSION } from "../../multiplayer/protocol";
 
 const endpoint = "http://127.0.0.1:2568";
 
@@ -13,9 +14,10 @@ async function session(index: number): Promise<string> {
   const accountResponse = await fetch(`${endpoint}/api/accounts/session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ handle: `party-api-${index}` }),
+    body: JSON.stringify({ handle: `party-api-${index}`, password: "test-password-123", mode: "register" }),
   });
   assert.equal(accountResponse.status, 200);
+  assert.equal(accountResponse.headers.get("x-crafty-protocol-version"), String(WIRE_PROTOCOL_VERSION));
   const account = await accountResponse.json() as { token: string };
   const characterResponse = await fetch(`${endpoint}/api/accounts/characters`, authenticated(account.token, "POST", {
     characterName: `PartyHero${index}`,

@@ -2,6 +2,9 @@ import { z } from "zod";
 import type { CharacterClassId, DamageType, MonsterRarity, PlayerProfile } from "../app/game/domain";
 import type { MonsterArchetypeId } from "../app/game/config/monsters";
 import { MERCHANTS, type MerchantId } from "../app/game/config/merchants";
+import type { PartySnapshot } from "../server/coordination/PartyCoordinator";
+import type { PublicPartyListing } from "../server/coordination/PartyCoordinator";
+import type { TradeSnapshot } from "../server/persistence/TradeRepository";
 import { AUTHORITATIVE_SIMULATION_HZ } from "./simulation";
 
 export const MULTIPLAYER_LIMITS = {
@@ -15,15 +18,24 @@ export const MULTIPLAYER_LIMITS = {
   maximumClientMessagesPerSecond: 120,
   reconnectSeconds: 12,
   partyPresenceGraceMilliseconds: 15_000,
+  // Expeditions are durable gameplay state, not short-lived matchmaking
+  // reservations. This must comfortably outlive a full six-wave run (and a
+  // temporary disconnect); the much shorter room lease still detects dead
+  // game-server processes.
+  expeditionLifetimeMilliseconds: 12 * 60 * 60_000,
   world: { width: 960, height: 960, margin: 32 },
   playerSpeed: 190,
 } as const;
+
+/** Increment whenever a rolling client/server deploy cannot safely interoperate. */
+export const WIRE_PROTOCOL_VERSION = 1;
 
 // Session claims can represent existing characters; new roster entries are
 // restricted independently to classes that are ready for players.
 export const ENABLED_CHARACTER_CLASS_IDS = ["sorceress"] as const satisfies readonly CharacterClassId[];
 
 export const CLIENT_MESSAGES = {
+  latencyProbe: "connection/ping",
   movement: "player/movement",
   attack: "player/attack",
   pickup: "player/pickup",
@@ -35,6 +47,7 @@ export const CLIENT_MESSAGES = {
 } as const;
 
 export const SERVER_MESSAGES = {
+  latencyProbeResponse: "connection/pong",
   rejected: "command/rejected",
   profileUpdated: "profile/updated",
   worldEvents: "world/events",
@@ -43,10 +56,18 @@ export const SERVER_MESSAGES = {
   dropPayload: "drop/payload",
   pickupResult: "pickup/result",
   mapExitReady: "map/exit-ready",
+  partySnapshot: "social/party",
+  tradeSnapshots: "social/trades",
+  publicParties: "social/public-parties",
 } as const;
+
+export interface PartySnapshotMessage { party: PartySnapshot | null }
+export interface TradeSnapshotsMessage { trades: TradeSnapshot[] }
+export interface PublicPartiesMessage { parties: PublicPartyListing[] }
 
 export const sessionClaimsSchema = z.object({
   sessionId: z.string().uuid(),
+  authSessionId: z.string().uuid(),
   accountId: z.string().uuid(),
   characterId: z.string().uuid(),
   characterName: z.string().trim().min(1).max(24),
@@ -79,6 +100,7 @@ export type MapTicketClaims = z.infer<typeof mapTicketClaimsSchema>;
 
 export const joinRoomOptionsSchema = z.object({
   token: z.string().min(32).max(4096),
+  protocolVersion: z.literal(WIRE_PROTOCOL_VERSION),
 }).strict();
 
 export const joinHideoutOptionsSchema = joinRoomOptionsSchema.extend({
@@ -97,6 +119,12 @@ export const movementCommandSchema = z.object({
 }).strict();
 
 export type MovementCommand = z.infer<typeof movementCommandSchema>;
+
+export const latencyProbeSchema = z.object({
+  sequence: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+}).strict();
+
+export type LatencyProbeMessage = z.infer<typeof latencyProbeSchema>;
 
 export const attackCommandSchema = z.object({
   sequence: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
@@ -217,6 +245,8 @@ export const useFlaskCommandSchema = z.object({ slot: z.number().int().min(0).ma
 
 export const accountSessionRequestSchema = z.object({
   handle: z.string().trim().min(2).max(24).regex(/^[a-zA-Z0-9_-]+$/),
+  password: z.string().min(10).max(128),
+  mode: z.enum(["login", "register"]),
 }).strict();
 
 export const createCharacterRequestSchema = z.object({
