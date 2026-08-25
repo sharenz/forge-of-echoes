@@ -69,14 +69,17 @@ export function grantCharacterProgressExperience(character: CharacterProgress, a
 export function normalizeSkillLevels(value: unknown): Record<ActiveSkillId, number> {
   const stored = (value ?? {}) as Partial<Record<ActiveSkillId, unknown>>;
   const normalized = {} as Record<ActiveSkillId, number>;
+  const legacyDefault = (skillId: ActiveSkillId) => ((LAUNCH_SKILL_IDS as readonly string[]).includes(skillId) ? 1 : 0);
   for (const [skillId, definition] of Object.entries(ACTIVE_SKILLS) as [ActiveSkillId, (typeof ACTIVE_SKILLS)[ActiveSkillId]][]) {
     const maximum = definition.progression.maxLevel;
-    const raw = Number(stored[skillId]);
-    if (!Number.isFinite(raw) || raw <= 0) {
-      normalized[skillId] = (LAUNCH_SKILL_IDS as readonly string[]).includes(skillId) ? 1 : 0;
+    // Only ABSENT keys fall back to launch defaults; an explicit 0 is a real
+    // locked rank for skills introduced after a profile was created.
+    if (stored[skillId] === undefined || stored[skillId] === null) {
+      normalized[skillId] = legacyDefault(skillId);
       continue;
     }
-    normalized[skillId] = Math.min(maximum, Math.floor(raw));
+    const raw = Number(stored[skillId]);
+    normalized[skillId] = Number.isFinite(raw) ? Math.min(maximum, Math.max(0, Math.floor(raw))) : legacyDefault(skillId);
   }
   return normalized;
 }

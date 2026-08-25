@@ -288,6 +288,7 @@ export function GameShell() {
           multiplayer={multiplayer.mapAdapter}
           onItemDropToGround={characterPanelOpen ? onlineDropItemToGround : undefined}
           onFinalRageChange={setMapFinalRageActive}
+          onOpenCharacterPanel={setPanel}
         >
           <GameMenuDock className="arena-hotkey-dock" settingsOpen={panel === "settings"} onSettingsClick={() => setPanel(panel === "settings" ? null : "settings")}>
             <button type="button" className={panel === "inventory" ? "active" : ""} onClick={() => setPanel(panel === "inventory" ? null : "inventory")} aria-label="Inventory (I)"><i aria-hidden="true">▦</i><kbd>I</kbd><span>Inventory</span></button>
@@ -420,7 +421,7 @@ export function GameShell() {
     <>
       <HideoutSoundtrack enabled={effectiveMusicEnabled} volume={musicVolume} />
       <AudioSettingsMenu open={panel === "settings"} settings={audioSettings} musicEnabled={effectiveMusicEnabled} onOpenChange={(open) => setPanel(open ? "settings" : null)} onChange={updateAudioSetting} onMusicEnabledChange={updateMusicEnabled} />
-      <PhaserWorld mode="hideout" classId={profile.character.classId!} portalIndexes={availablePortalIndexes} merchantIds={merchantIds} paused={Boolean(panel)} worldVolume={worldVolume} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation.breakdown} flaskBelt={profile.flaskBelt} onFlaskLoad={onlineLoadFlask} onStation={handleStation} multiplayer={multiplayer.adapter}>
+      <PhaserWorld mode="hideout" classId={profile.character.classId!} portalIndexes={availablePortalIndexes} merchantIds={merchantIds} paused={Boolean(panel)} worldVolume={worldVolume} characterStats={stats} characterProgress={profile.character} characterStatBreakdown={statCalculation.breakdown} flaskBelt={profile.flaskBelt} onFlaskLoad={onlineLoadFlask} onStation={handleStation} onOpenCharacterPanel={setPanel} multiplayer={multiplayer.adapter}>
       <GameMenuDock className="hideout-hotkey-dock" settingsOpen={panel === "settings"} onSettingsClick={() => setPanel(panel === "settings" ? null : "settings")}>
         <button type="button" className={panel === "inventory" ? "active" : ""} onClick={() => setPanel(panel === "inventory" ? null : "inventory")} aria-label="Inventory (I)"><i aria-hidden="true">▦</i><kbd>I</kbd><span>Inventory</span></button>
         <button type="button" className={panel === "attributes" ? "active" : ""} onClick={() => setPanel(panel === "attributes" ? null : "attributes")} aria-label="Character (C)"><i aria-hidden="true">◆</i><kbd>C</kbd><span>Character</span>{profile.character.unspentAttributePoints > 0 && <strong>{profile.character.unspentAttributePoints}</strong>}</button>

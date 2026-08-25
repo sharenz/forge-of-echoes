@@ -26,16 +26,18 @@ export function createInitialProfile(
   name = CHARACTER_CLASSES.sorceress.name,
   classId: CharacterClassId = "sorceress",
 ): PlayerProfile {
-  const classDefinition = CHARACTER_CLASSES[classId];
   return {
     version: 10,
     character: {
-      name: name.trim() || classDefinition.name, classId, level: 1, xp: 0,
+      name,
+      classId,
+      level: 1,
+      xp: 0,
       allocatedAttributes: { strength: 0, dexterity: 0, intelligence: 0 },
       unspentAttributePoints: 0,
       skillLevels: createInitialSkillLevels(),
       skillLoadout: [...DEFAULT_SKILL_LOADOUT],
-      unspentSkillPoints: 0,
+      unspentSkillPoints: 1,
       mapsCompleted: 0, highestWave: 0,
     },
     inventory: createItemContainer("backpack", startingInventory()),

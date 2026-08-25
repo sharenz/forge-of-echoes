@@ -136,17 +136,33 @@ test("four players fight the same authoritative monsters and damage cannot be fo
   const mapEntry = leaderProfile.profile.inventory.entries.find((entry) => entry.item.kind === "map");
   assert.ok(mapEntry && mapEntry.item.kind === "map");
   const map = mapEntry.item;
-  const slotted = await new ProfileCommandService(repository).execute(identities[0].characterId, leaderProfile.revision, {
+  // Fresh characters start with no arts learned; grant the ranks this test
+  // exercises before binding them to the bar.
+  await repository.mutateProfile(identities[0].characterId, null, (current) => ({
+    ...current,
+    character: { ...current.character, skillLevels: { ...current.character.skillLevels, nova: 3, ward: 1, dash: 3, flameWave: 1 } },
+  }));
+  const granted = await repository.loadProfile(identities[0].characterId)!;
+  const slotted = await new ProfileCommandService(repository).execute(identities[0].characterId, granted!.revision, {
     type: "slot_map", itemId: map.id,
   });
-  const opened = await new MapService(repository, parties, parties, secret).open(identities[0].characterId, slotted.revision);
-    // New characters no longer pre-equip Flame Wave on the fifth socket.
-    const flameEquip = await new ProfileCommandService(repository).execute(
-      identities[0].characterId,
-      (await repository.loadProfile(identities[0].characterId))!.revision,
-      { type: "set_skill_slot", slot: 4, skill: "flameWave" },
-    );
-    assert.ok(flameEquip);
+  const flameEquip = await new ProfileCommandService(repository).execute(
+    identities[0].characterId,
+    slotted.revision,
+    { type: "set_skill_slot", slot: 4, skill: "flameWave" },
+  );
+  assert.ok(flameEquip);
+  const dashEquip = await new ProfileCommandService(repository).execute(
+    identities[0].characterId,
+    flameEquip.revision,
+    { type: "set_skill_slot", slot: 2, skill: "dash" },
+  );
+  await new ProfileCommandService(repository).execute(
+    identities[0].characterId,
+    dashEquip.revision,
+    { type: "set_skill_slot", slot: 1, skill: "nova" },
+  );
+  const opened = await new MapService(repository, parties, parties, secret).open(identities[0].characterId, (await repository.loadProfile(identities[0].characterId))!.revision);
   const mapTicket = opened.mapTicket;
   const tokens = identities.map((identity) => signSessionToken(identity, secret));
   let server: ColyseusTestServer | null = null;
@@ -188,8 +204,9 @@ test("four players fight the same authoritative monsters and damage cannot be fo
 
     const loadoutProfile = await repository.loadProfile(identities[0].characterId);
     assert.ok(loadoutProfile);
-    await new ProfileCommandService(repository).execute(identities[0].characterId, loadoutProfile.revision, {
-      type: "set_skill_slot", slot: 3, skill: null,
+    const service = new ProfileCommandService(repository);
+    await service.execute(identities[0].characterId, loadoutProfile.revision, {
+      type: "set_skill_slot", slot: 3, skill: "ward",
     });
     let refreshedLoadout = false;
     let unequippedSkillRejected = false;
@@ -199,11 +216,20 @@ test("four players fight the same authoritative monsters and damage cannot be fo
     });
     clients[0].send(CLIENT_MESSAGES.refreshProfile, {});
     await waitFor(() => refreshedLoadout);
+    refreshedLoadout = false;
     clients[0].send(CLIENT_MESSAGES.attack, { sequence: 1, skill: "ward" });
+    await waitFor(() => authoritativeRoom.state.players.get(identities[0].characterId)!.lastProcessedAttack === 1);
+    await service.execute(identities[0].characterId, (await repository.loadProfile(identities[0].characterId))!.revision, {
+      type: "set_skill_slot", slot: 3, skill: null,
+    });
+    clients[0].send(CLIENT_MESSAGES.refreshProfile, {});
+    await waitFor(() => refreshedLoadout);
+    clients[0].send(CLIENT_MESSAGES.attack, { sequence: 2, skill: "ward" });
     await waitFor(() => unequippedSkillRejected);
-    assert.equal(authoritativeRoom.state.players.get(identities[0].characterId)!.lastProcessedAttack, 0, "unequipped skills never enter the simulation");
+    assert.equal(authoritativeRoom.state.players.get(identities[0].characterId)!.lastProcessedAttack, 1, "unequipped skills never enter the simulation");
 
     const flaskPlayer = authoritativeRoom.state.players.get(identities[0].characterId)!;
+    const wardReleasedAt = authoritativeRoom.state.elapsedMilliseconds;
     const flaskWorldPlayer = world.players.get(flaskPlayer.worldIndex)!;
     flaskWorldPlayer.life -= 30;
     const damagedLife = flaskWorldPlayer.life;
@@ -280,7 +306,7 @@ test("four players fight the same authoritative monsters and damage cannot be fo
 
     const dashStartX = playerBeforeDash.x;
     const dashStartFocus = playerBeforeDash.focus;
-    clients[0].send(CLIENT_MESSAGES.attack, { sequence: 1, skill: "dash", direction: { x: 1, y: 0 } });
+    clients[0].send(CLIENT_MESSAGES.attack, { sequence: 3, skill: "dash", direction: { x: 1, y: 0 } });
     await waitFor(() => playerBeforeDash.x >= dashStartX + 100);
     assert.ok(playerBeforeDash.focus < dashStartFocus, "dash cost and position are resolved by the server");
     world.monsters.x[targetSlot] = playerBeforeDash.x + 300;
@@ -294,32 +320,33 @@ test("four players fight the same authoritative monsters and damage cannot be fo
       world.monsters.y[slot] = playerBeforeDash.y + 700;
     }
 
-    clients[0].send(CLIENT_MESSAGES.attack, { sequence: 2, skill: "nova" });
-    await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Skill && event.sequence === 2));
+    await waitFor(() => authoritativeRoom.state.elapsedMilliseconds >= wardReleasedAt + 1_000);
+    clients[0].send(CLIENT_MESSAGES.attack, { sequence: 4, skill: "nova" });
+    await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Skill && event.sequence === 4));
     const novaReleasedAt = authoritativeRoom.state.elapsedMilliseconds;
     assert.equal(world.monsters.life[targetSlot], 5_000, "nova damage waits for its authoritative projectiles to travel");
     await waitFor(() => world.monsters.life[targetSlot] < 5_000);
     const afterNovaLife = world.monsters.life[targetSlot];
-    await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Damage && event.sequence === 2 && event.auxB === 1 && event.amount > 0));
+    await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Damage && event.sequence === 4 && event.auxB === 1 && event.amount > 0));
 
     const attackerProfile = await repository.loadProfile(identities[0].characterId);
     assert.ok(attackerProfile);
     const attackerStats = calculateCharacterStats(attackerProfile.profile).stats;
     const novaCastTime = resolveSkillDefinition(ACTIVE_SKILLS.nova, 1, attackerStats.skillCooldown, attackerStats.castSpeed).castTime;
-    await waitFor(() => authoritativeRoom.state.elapsedMilliseconds >= novaReleasedAt + novaCastTime * 1_000);
+    await waitFor(() => authoritativeRoom.state.elapsedMilliseconds >= novaReleasedAt + novaCastTime * 1_000 + 250);
 
-    clients[0].send(CLIENT_MESSAGES.attack, { sequence: 3, skill: "flameWave", direction: { x: 1, y: 0 } });
-    await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Skill && event.sequence === 3));
+    clients[0].send(CLIENT_MESSAGES.attack, { sequence: 5, skill: "flameWave", direction: { x: 1, y: 0 } });
+    await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Skill && event.sequence === 5));
     assert.equal(world.monsters.life[targetSlot], afterNovaLife, "flame wave damage waits for projectile collision");
     await waitFor(() => world.monsters.life[targetSlot] < afterNovaLife);
-    await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Damage && event.sequence === 3 && event.auxB === 4));
+    await waitFor(() => worldEvents.some((event) => event.type === WorldEventType.Damage && event.sequence === 5 && event.auxB === 4));
     await waitFor(() => activeProjectileCount(world) === 0);
 
     const lifeBeforeForgedAttack = world.monsters.life[targetSlot];
-    clients[0].send(CLIENT_MESSAGES.attack, { sequence: 4, skill: "basic", direction: { x: 1, y: 0 }, claimedDamage: 1_000_000 });
+    clients[0].send(CLIENT_MESSAGES.attack, { sequence: 6, skill: "basic", direction: { x: 1, y: 0 }, claimedDamage: 1_000_000 });
     await new Promise((resolve) => setTimeout(resolve, 70));
     assert.equal(world.monsters.life[targetSlot], lifeBeforeForgedAttack, "a payload containing client-authored damage must be rejected");
-    assert.equal(authoritativeRoom.state.players.get(identities[0].characterId)!.lastProcessedAttack, 3);
+    assert.equal(authoritativeRoom.state.players.get(identities[0].characterId)!.lastProcessedAttack, 5);
 
     world.monsters.x[targetSlot] = playerBeforeDash.x + 100;
     world.monsters.y[targetSlot] = playerBeforeDash.y;

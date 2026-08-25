@@ -74,20 +74,26 @@ test("skill bar assignments and empty slots persist authoritatively", async () =
     const identity = await createTestPlayer(repository, { handle: "loadout-test", characterName: "Loadout", classId: "sorceress" });
     const initial = await repository.loadProfile(identity.characterId);
     assert.ok(initial);
-    assert.deepEqual(initial.profile.character.skillLoadout, ["basic", "nova", "dash", "ward", null]);
+    assert.deepEqual(initial.profile.character.skillLoadout, ["basic", null, null, null, null]);
+    assert.equal(initial.profile.character.unspentSkillPoints, 1, "new characters bank one skill point");
     const service = new ProfileCommandService(repository);
 
-    const cleared = await service.execute(identity.characterId, initial.revision, { type: "set_skill_slot", slot: 2, skill: null });
-    assert.deepEqual(cleared.profile.character.skillLoadout, ["basic", "nova", null, "ward", null]);
-
-    const assigned = await service.execute(identity.characterId, cleared.revision, { type: "set_skill_slot", slot: 2, skill: "nova" });
-    assert.deepEqual(assigned.profile.character.skillLoadout, ["basic", "nova", "nova", "ward", null]);
-    assert.deepEqual((await repository.loadProfile(identity.characterId))?.profile.character.skillLoadout, assigned.profile.character.skillLoadout);
-
+    // Learning is a prerequisite for binding: an unlearned art cannot be slotted.
     await assert.rejects(
-      () => service.execute(identity.characterId, assigned.revision, { type: "set_skill_slot", slot: 2, skill: "nova" }),
+      () => service.execute(identity.characterId, initial.revision, { type: "set_skill_slot", slot: 1, skill: "nova" }),
       (error) => error instanceof ProfileCommandError && error.code === "invalid_command",
     );
+
+    const learned = await service.execute(identity.characterId, initial.revision, { type: "allocate_skill", skill: "nova" });
+    assert.equal(learned.profile.character.skillLevels.nova, 1);
+    assert.equal(learned.profile.character.unspentSkillPoints, 0);
+
+    const assigned = await service.execute(identity.characterId, learned.revision, { type: "set_skill_slot", slot: 1, skill: "nova" });
+    assert.deepEqual(assigned.profile.character.skillLoadout, ["basic", "nova", null, null, null]);
+    assert.deepEqual((await repository.loadProfile(identity.characterId))?.profile.character.skillLoadout, assigned.profile.character.skillLoadout);
+
+    const cleared = await service.execute(identity.characterId, assigned.revision, { type: "set_skill_slot", slot: 1, skill: null });
+    assert.deepEqual(cleared.profile.character.skillLoadout, ["basic", null, null, null, null]);
   } finally {
     await repository.close();
   }

@@ -31,6 +31,7 @@ interface PhaserWorldProps {
   characterStatBreakdown?: CharacterStatCalculation["breakdown"];
   flaskBelt?: FlaskBelt;
   onStation?: (station: WorldStation, portalIndex?: number) => void;
+  onOpenCharacterPanel?: (panel: "attributes" | "skills") => void;
   onReturnToHideout?: () => void;
   onFlaskLoad?: (itemId: string, slotIndex: number) => void;
   onItemDropToGround?: (itemId: string) => void;
@@ -126,12 +127,26 @@ function skillActionView(skill: SkillBarSkillId, definitions: ResolvedSkillBar, 
   return { className: SKILL_SLOT_CLASS[skill], ready, progress, cooldown, active, tooltip, charges: maxCharges > 0 ? charges ?? 0 : null };
 }
 
-function ResourceGlobe({ kind, label, current, maximum }: ResourceGlobeProps) {
+function ResourceUpgradeBadge({ kind, count, onClick }: { kind: "skill" | "attribute"; count: number; onClick?: () => void }) {
+  if (count <= 0 || !onClick) return null;
+  const label = kind === "skill"
+    ? `${count} unspent skill ${count === 1 ? "point" : "points"} · open skills (K)`
+    : `${count} unspent attribute ${count === 1 ? "point" : "points"} · open character (C)`;
+  return (
+    <button type="button" className={`resource-upgrade-badge ${kind}-badge`} onClick={onClick} aria-label={label} data-tooltip={label}>
+      <b aria-hidden="true">+</b>
+      <strong className="ui-type-caption">{count}</strong>
+    </button>
+  );
+}
+
+function ResourceGlobe({ kind, label, current, maximum, badge }: ResourceGlobeProps & { badge?: React.ReactNode }) {
   const percentage = maximum > 0 ? Math.max(0, Math.min(100, (current / maximum) * 100)) : 0;
   const displayedCurrent = kind === "life" ? Math.ceil(current) : Math.floor(current);
   const displayedMaximum = kind === "life" ? Math.ceil(maximum) : Math.floor(maximum);
   return (
     <div className={`resource-tank ${kind}-tank`} aria-label={`${label}: ${displayedCurrent} of ${displayedMaximum}`}>
+      {badge}
       <div className="globe-reservoir" style={{ "--resource-level": `${percentage}%` } as CSSProperties}>
         <i className="globe-liquid" />
         <strong><span>{label}</span>{displayedCurrent}<small>/{displayedMaximum}</small></strong>
@@ -158,7 +173,6 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
           </div>
           <footer>
             <span>{compactNumber(resolution.flat)} flat</span>
-            <span>{compactNumber(Math.abs(resolution.increased))}% {resolution.increased >= 0 ? "increased" : "reduced"}</span>
             {resolution.more.length > 0 && <span>{resolution.more.map((value) => `${compactNumber(Math.abs(value))}% ${value >= 0 ? "more" : "less"}`).join(" × ")}</span>}
           </footer>
         </div>
@@ -169,7 +183,7 @@ function CharacterStatRow({ stat, label, hint, value, resolution }: CharacterSta
 
 const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null, null];
 
-export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [], paused = false, controlsBlocked = false, worldVolume = 1, arenaBalance, activeMap, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onReturnToHideout, onFlaskLoad, onItemDropToGround, onFinalRageChange, multiplayer, children }: PhaserWorldProps) {
+export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [], paused = false, controlsBlocked = false, worldVolume = 1, arenaBalance, activeMap, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onOpenCharacterPanel, onReturnToHideout, onFlaskLoad, onItemDropToGround, onFinalRageChange, multiplayer, children }: PhaserWorldProps) {
   const runtimeClassId = classId;
   const skillLevels: SkillLevels = characterProgress?.skillLevels ?? createInitialSkillLevels();
   const skillLoadout = characterProgress?.skillLoadout ?? DEFAULT_SKILL_LOADOUT;
@@ -376,7 +390,13 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
         <div className="world-hud-safe-area" aria-label="Character resources">
           <div className="world-bottom-hud">
             <div className="world-command-deck">
-              <ResourceGlobe kind="life" label="Life" current={displayedLife} maximum={displayedMaxLife} />
+              <ResourceGlobe
+                kind="life"
+                label="Life"
+                current={displayedLife}
+                maximum={displayedMaxLife}
+                badge={<ResourceUpgradeBadge kind="attribute" count={characterProgress?.unspentAttributePoints ?? 0} onClick={() => onOpenCharacterPanel?.("attributes")} />}
+              />
               <div className="world-command-row">
                 <div className="world-flask-belt" aria-label="Flask belt">
                   <span className="hud-section-label">Flasks</span>
@@ -389,7 +409,6 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
                       <div
                         className={`world-flask-slot-target ${flaskDropSlot === index ? "drop-ready" : ""}`}
                         onDragOver={(event) => { if (onFlaskLoad) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setFlaskDropSlot(index); } }}
-                        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFlaskDropSlot(null); }}
                         onDrop={(event) => {
                           event.preventDefault();
                           const itemId = event.dataTransfer.getData("application/x-forge-of-echoes-item") || event.dataTransfer.getData("text/plain");
@@ -447,7 +466,13 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
               >
                 <i><b style={{ width: `${xpPercent}%` }} /></i>
               </div>
-              <ResourceGlobe kind="mana" label="Mana" current={displayedMana} maximum={displayedMaxMana} />
+              <ResourceGlobe
+                kind="mana"
+                label="Mana"
+                current={displayedMana}
+                maximum={displayedMaxMana}
+                badge={<ResourceUpgradeBadge kind="skill" count={characterProgress?.unspentSkillPoints ?? 0} onClick={() => onOpenCharacterPanel?.("skills")} />}
+              />
             </div>
           </div>
         </div>

@@ -20,13 +20,17 @@ const leveled = (times: number) => {
   return profile;
 };
 
+
 test("tree prerequisites gate learning until entry skills reach the required rank", () => {
   const fresh = createInitialProfile();
-  const before = allocateSkillPoint(fresh, "frostShards");
-  assert.equal(before, fresh, "locked tier-2 skills cannot be learned");
-
+  const before = allocateSkillPoint(fresh, "nova");
+  assert.notEqual(before, fresh, "entry skills cost the banked starting point");
+  assert.equal(before.character.skillLevels.nova, 1);
+  assert.equal(before.character.unspentSkillPoints, 0);
+  const brokeAgain = allocateSkillPoint(before, "frostShards");
+  assert.equal(brokeAgain, before, "no points means no allocation");
   const prepared = leveled(3);
-  assert.equal(prepared.character.skillLevels.nova, 4);
+  assert.equal(prepared.character.skillLevels.nova, 3);
   const unlocked = allocateSkillPoint(prepared, "frostShards");
   assert.equal(unlocked.character.skillLevels.frostShards, 1);
   assert.equal(unlocked.character.unspentSkillPoints, prepared.character.unspentSkillPoints - 1);
@@ -63,6 +67,9 @@ test("legacy profiles migrate to the full skill-level record", () => {
   const clamped = normalizeSkillLevels({ nova: 999, frostShards: 3.9 });
   assert.equal(clamped.nova, ACTIVE_SKILLS.nova.progression.maxLevel);
   assert.equal(clamped.frostShards, 3);
+  const explicitZero = normalizeSkillLevels({ nova: 0, frostShards: 0 });
+  assert.equal(explicitZero.nova, 0, "an explicit 0 stays a locked rank");
+  assert.equal(explicitZero.frostShards, 0);
 });
 
 test("wire schemas accept every tree skill id", () => {

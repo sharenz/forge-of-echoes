@@ -9,7 +9,7 @@ export const SKILL_BAR_SLOTS = [
   { index: 4, key: "F", keyboardKey: "F" },
 ] as const;
 
-export const DEFAULT_SKILL_LOADOUT: SkillLoadout = ["basic", "nova", "dash", "ward", null];
+export const DEFAULT_SKILL_LOADOUT: SkillLoadout = ["basic", null, null, null, null];
 
 const SKILL_IDS = new Set<SkillBarSkillId>(["basic", ...Object.keys(ACTIVE_SKILLS) as ActiveSkillId[]]);
 

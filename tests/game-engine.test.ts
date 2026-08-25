@@ -91,14 +91,15 @@ test("live mouse aim resolves the release pointer to a finite unit vector", () =
 
 test("skill loadouts normalize persisted data and can clear or assign any slot", () => {
   const profile = createInitialProfile();
-  const cleared = setSkillLoadoutSlot(profile, 4, null);
-  assert.equal(cleared.character.skillLoadout[4], null);
-  const reassigned = setSkillLoadoutSlot(cleared, 4, "nova");
+  assert.deepEqual(profile.character.skillLoadout, ["basic", null, null, null, null]);
+  const learned = { ...profile, character: { ...profile.character, skillLevels: { ...profile.character.skillLevels, nova: 1 } } };
+  const reassigned = setSkillLoadoutSlot(learned, 4, "nova");
   assert.equal(reassigned.character.skillLoadout[4], "nova");
+  assert.equal(setSkillLoadoutSlot(profile, 4, "nova"), profile, "unlearned arts cannot be bound");
   assert.equal(isSkillEquipped(reassigned.character.skillLoadout, "flameWave"), false);
   assert.equal(isSkillEquipped(reassigned.character.skillLoadout, "basic"), true);
   assert.deepEqual(normalizeSkillLoadout(["basic", "nova", "invalid", null, "ward"]), ["basic", "nova", null, null, "ward"]);
-  assert.deepEqual(normalizeSkillLoadout(null), ["basic", "nova", "dash", "ward", null]);
+  assert.deepEqual(normalizeSkillLoadout(null), ["basic", null, null, null, null]);
 });
 
 test("map completion rewards guarantee two equipment items, one magic-or-better, and crafting materials", () => {

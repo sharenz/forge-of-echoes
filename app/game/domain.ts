@@ -45,11 +45,11 @@ export const ACTIVE_SKILL_IDS = [
   "frostShards", "cinderComet", "lifeBloom", "phaseStep",
 ] as const;
 export type ActiveSkillId = (typeof ACTIVE_SKILL_IDS)[number];
-/** Skills available since launch: fresh characters know them without spending points. */
+/** Skills that existed at launch: legacy profiles missing keys default them to rank 1. */
 export const LAUNCH_SKILL_IDS = ["nova", "dash", "ward", "flameWave"] as const satisfies readonly ActiveSkillId[];
-
+/** Fresh characters know no arts: every skill starts locked at rank 0. */
 export function createInitialSkillLevels(): Record<ActiveSkillId, number> {
-  return Object.fromEntries(ACTIVE_SKILL_IDS.map((id) => [id, (LAUNCH_SKILL_IDS as readonly string[]).includes(id) ? 1 : 0])) as Record<ActiveSkillId, number>;
+  return Object.fromEntries(ACTIVE_SKILL_IDS.map((id) => [id, 0])) as Record<ActiveSkillId, number>;
 }
 export type SkillLevels = Record<ActiveSkillId, number>;
 export type SkillBarSkillId = "basic" | ActiveSkillId;
