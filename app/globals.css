@@ -1984,3 +1984,4 @@ body:has(.pixel-shell) { overflow: hidden; }
 .skill-badge { border-color: #d99a4e; }
 .attribute-badge { border-color: #c96f4a; }
 @keyframes resource-badge-pulse { 0%, 100% { box-shadow: 0 0 5px #ff944033, 0 2px 6px #000c; } 50% { box-shadow: 0 0 15px #ff944088, 0 2px 6px #000c; } }
+.skilltree-allocate.locked { border-style: dashed; opacity: .75; filter: saturate(.6); }

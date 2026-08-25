@@ -437,6 +437,18 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       });
       return;
     }
+    if (skill.damageReduction > 0) {
+      // Ward-kind skills raise a timed damage-reduction state in the world.
+      player.lastProcessedAttack = command.sequence;
+      worldPlayer.focus -= skill.focusCost;
+      runtime.nextAvailableAt[skillId] = now + skill.cooldown * 1_000;
+      runtime.nextCastAt = nextCastDeadline;
+      this.world.enqueueInput({
+        kind: "ward", playerIndex: runtime.worldPlayerIndex, sequence: command.sequence,
+        durationSeconds: skill.duration, damageReduction: skill.damageReduction / 100, skillId: skillCodeFromId(skillId),
+      });
+      return;
+    }
     const direction = normalizedDirection(command.direction);
     if (skill.aiming !== "ring" && !direction) return this.reject(client, CLIENT_MESSAGES.attack, "invalid");
     const directions = skill.aiming === "ring"
@@ -475,7 +487,23 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     });
   }
 
+  private simulationPaused = false;
+
   private simulate(deltaMilliseconds: number): void {
+    // An empty map is a frozen map: the wave clock, cooldowns, regeneration,
+    // projectiles, and drop decay all run on the simulation clock, so skipping
+    // the tick pauses every timeline until someone re-enters through a portal.
+    const anyPlayerConnected = [...this.state.players.values()].some((player) => player.connected);
+    if (!anyPlayerConnected) {
+      this.simulationPaused = true;
+      return;
+    }
+    if (this.simulationPaused) {
+      // Swallow the resume tick so the world does not fast-forward through the
+      // whole pause duration in one giant catch-up step.
+      this.simulationPaused = false;
+      return;
+    }
     this.expireDrops();
     const previousSimulationSeconds = this.world.simulationSeconds;
     this.world.advance(deltaMilliseconds, (events, outcomes) => this.flushWorldTick(events, outcomes));
@@ -748,7 +776,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     drop.y = Math.max(24, Math.min(MULTIPLAYER_COMBAT.world.height - 24, y));
     drop.source = source;
     drop.rarity = item.kind === "equipment" ? item.rarity : item.kind;
-    drop.expiresAt = Date.now() + (source === "completion" ? COMPLETION_DROP_TTL_MILLISECONDS : DROP_TTL_MILLISECONDS);
+    drop.expiresAt = this.state.elapsedMilliseconds + (source === "completion" ? COMPLETION_DROP_TTL_MILLISECONDS : DROP_TTL_MILLISECONDS);
     this.dropItems.set(drop.id, item);
     this.state.drops.set(drop.id, drop);
     for (const client of this.activeClients.values()) client.send(SERVER_MESSAGES.dropPayload, { dropId: drop.id, item });
@@ -762,7 +790,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
   }
 
   private expireDrops(): void {
-    const now = Date.now();
+    const now = this.state.elapsedMilliseconds;
     for (const drop of this.state.drops.values()) {
       if (drop.expiresAt > now) continue;
       this.state.drops.delete(drop.id);

@@ -187,13 +187,16 @@ export function SkillTreePanel({ progress, castSpeed, cooldownMultiplier, onAllo
         <div className="skilltree-detail-actions">
           <button
             type="button"
-            className="skilltree-allocate"
+            className={`skilltree-allocate ${!selected.requirementsMet ? "locked" : ""}`}
             disabled={!selected.canAllocate}
             onClick={() => onAllocate(selectedSkill)}
           >
-            {selected.isMaxed ? "Mastered" : selected.level === 0 ? `Learn · 1 point` : `Raise to ${selected.level + 1}`}
+            {selected.isMaxed ? "Mastered"
+              : !selected.requirementsMet ? `Locked · needs ${prerequisiteText(selected.requirements)}`
+              : selected.level === 0 ? "Learn · 1 point"
+              : `Raise to ${selected.level + 1}`}
           </button>
-          {!selected.isMaxed && selectedNext.level > selected.level && (
+          {!selected.isMaxed && selected.requirementsMet && selectedNext.level > selected.level && (
             <small className="ui-type-caption">{skillChangeSummary(selected.resolved, selectedNext)}</small>
           )}
         </div>

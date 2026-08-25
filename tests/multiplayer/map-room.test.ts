@@ -643,3 +643,46 @@ function activeProjectileCount(world: World): number {
   for (let slot = 0; slot < world.projectiles.capacity; slot += 1) if (world.projectiles.active[slot]) count += 1;
   return count;
 }
+
+test("an empty map freezes its simulation and wave clock until someone returns", async () => {
+  const repository = new InMemoryPlayerRepository();
+  await repository.initialize();
+  const player = await createTestPlayer(repository, { handle: "pause-test", characterName: "Pause Mage", classId: "sorceress" });
+  const identity = { sessionId: randomUUID(), authSessionId: randomUUID(), ...player, expiresAt: Date.now() + 120_000 };
+  await repository.createAuthSession(identity.authSessionId, identity.accountId, identity.expiresAt);
+  const parties = new InMemoryCoordination(repository);
+  await parties.create(identity.characterId);
+  configureServerServices({ authSecret: secret, players: repository, parties, expeditions: parties });
+  const profile = await repository.loadProfile(identity.characterId);
+  assert.ok(profile);
+  const mapEntry = profile.profile.inventory.entries.find((entry) => entry.item.kind === "map");
+  assert.ok(mapEntry && mapEntry.item.kind === "map");
+  const service = new ProfileCommandService(repository);
+  const slotted = await service.execute(identity.characterId, profile.revision, { type: "slot_map", itemId: mapEntry.item.id });
+  const opened = await new MapService(repository, parties, parties, secret).open(identity.characterId, slotted.revision);
+  const token = signSessionToken(identity, secret);
+
+  let server: ColyseusTestServer | null = null;
+  try {
+    server = await boot(createGameServer(), 0);
+    const room = await server.createRoom<MapRoom>("map", { token, mapTicket: opened.mapTicket, portalIndex: 0, protocolVersion: WIRE_PROTOCOL_VERSION });
+    const client = await server.connectTo(room, { token, mapTicket: opened.mapTicket, portalIndex: 0, protocolVersion: WIRE_PROTOCOL_VERSION });
+    client.onMessage("*", () => undefined);
+    await waitFor(() => room.state.players.size === 1);
+    await waitFor(() => room.state.elapsedMilliseconds > 0, 15_000);
+
+    await client.leave(true).catch(() => undefined);
+    await waitFor(() => !room.state.players.has(identity.characterId));
+    const frozenElapsed = room.state.elapsedMilliseconds;
+    const frozenTick = room.state.serverTick;
+
+    // Observing the ABSENCE of simulation progress requires a real wait: the
+    // room's 20 Hz interval is the system under test, so fake timers cannot
+    // drive it. 900 ms of wall clock would advance a live sim by ~18 ticks.
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    assert.equal(room.state.elapsedMilliseconds, frozenElapsed, "the wave and simulation clock freeze while nobody is connected");
+    assert.equal(room.state.serverTick, frozenTick, "the world stops ticking while nobody is connected");
+  } finally {
+    await server?.shutdown();
+  }
+});
