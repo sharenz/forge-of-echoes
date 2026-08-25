@@ -20,7 +20,7 @@ import { MERCHANTS } from "../game/config/merchants";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
 import { MAP_COMPLETION_REWARDS } from "../game/config/rewards";
 import type { SkillDefinition } from "../game/config/schema";
-import type { CharacterClassId, FlaskBelt, InventoryItem, MonsterRarity, SkillBarSkillId, SkillLevels, SkillLoadout } from "../game/domain";
+import { ACTIVE_SKILL_IDS, type ActiveSkillId, type CharacterClassId, type FlaskBelt, type InventoryItem, type MonsterRarity, type SkillBarSkillId, type SkillLevels, type SkillLoadout } from "../game/domain";
 import { isCurrencyItem, isEquipmentItem, isFlaskItem, isMapItem } from "../game/inventory";
 import { equipmentDropPresentation } from "../game/loot";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
@@ -33,6 +33,7 @@ import { MULTIPLAYER_LIMITS, type CombatEvent } from "../../multiplayer/protocol
 import { MULTIPLAYER_COMBAT } from "../../multiplayer/combat";
 import { MonsterFlags } from "../../multiplayer/wire/monster-flags";
 import { NetworkEntityInterpolator } from "./NetworkEntityInterpolator";
+import { isRestingMovementError, LocalMovementPrediction } from "./LocalMovementPrediction";
 
 const VIEW_SIZE = 960;
 const MAP_SIZE = VIEW_SIZE * 4;
@@ -217,17 +218,13 @@ class ForgeOfEchoesScene extends Phaser.Scene {
   private activeSkillInputHeld = false;
   private attackCooldown = 0;
   private basicAttackIntent: BasicAttackIntent | null = null;
-  private novaCooldown = 0;
-  private riftCharges = 0;
-  private riftRecharge = 0;
-  private wardCooldown = 0;
+  /** Remaining cooldown seconds keyed by active skill. */
+  private skillCooldowns: Record<ActiveSkillId, number> = createEmptySkillCooldowns();
+  /** Charge pools for dash-family mobility skills. */
+  private chargePools = new Map<ActiveSkillId, SkillChargePool>();
   private wardRemaining = 0;
-  private flameWaveCooldown = 0;
   private resolvedBasic: ResolvedSkillDefinition;
-  private resolvedNova: ResolvedSkillDefinition;
-  private resolvedDash: ResolvedSkillDefinition;
-  private resolvedWard: ResolvedSkillDefinition;
-  private resolvedFlameWave: ResolvedSkillDefinition;
+  private resolvedSkills: Record<ActiveSkillId, ResolvedSkillDefinition>;
   private life: number;
   private focus: number;
   private elapsedSeconds = 0;
@@ -269,6 +266,7 @@ class ForgeOfEchoesScene extends Phaser.Scene {
   private lastAuthorityAttackSequence = -1;
   private networkCorrectionX = 0;
   private networkCorrectionY = 0;
+  private readonly localMovementPrediction = new LocalMovementPrediction();
   private predictedDashSequence: number | null = null;
   private predictedDashExpiresAt = 0;
   private hideoutPortalObjects: Phaser.GameObjects.GameObject[] = [];
@@ -279,11 +277,8 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     const cooldownMultiplier = options.arenaBalance?.skillCooldown ?? 1;
     const castSpeedMultiplier = options.arenaBalance?.castSpeed ?? 1;
     this.resolvedBasic = resolveSkillDefinition(BASIC_ATTACK, 1);
-    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, options.skillLevels.nova, cooldownMultiplier, castSpeedMultiplier);
-    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, options.skillLevels.dash, cooldownMultiplier, castSpeedMultiplier);
-    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, options.skillLevels.ward, cooldownMultiplier, castSpeedMultiplier);
-    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, options.skillLevels.flameWave, cooldownMultiplier, castSpeedMultiplier);
-    this.riftCharges = this.resolvedDash.maxCharges;
+    this.resolvedSkills = resolveAllSkills(options.skillLevels, cooldownMultiplier, castSpeedMultiplier);
+    this.chargePools = createChargePools(this.resolvedSkills);
     this.life = options.arenaBalance?.maxLife ?? 100;
     this.focus = options.arenaBalance?.maxFocus ?? 100;
   }
@@ -478,59 +473,56 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       this.queueBasicAttack(true);
       return;
     }
-    if (skill === "nova" && this.novaCooldown <= 0 && this.focus >= this.resolvedNova.focusCost) {
-      const pointer = this.input.activePointer;
-      const direction = resolveCharacterDirection(pointer.worldX - this.player.x, pointer.worldY - this.player.y, this.playerAnimator?.currentDirection);
-      const started = this.beginActiveSkillAction(this.resolvedNova, direction, () => {
-        const angle = Math.atan2(pointer.worldY - this.player!.y, pointer.worldX - this.player!.x);
-        this.options.multiplayer?.sendAttack?.("nova", { x: Math.cos(angle), y: Math.sin(angle) });
-      });
-      if (!started) return;
-      this.focus -= this.resolvedNova.focusCost;
-      this.novaCooldown = this.resolvedNova.cooldown;
-    }
-    if (skill === "dash" && this.riftCharges > 0 && this.focus >= this.resolvedDash.focusCost) {
-      const pointer = this.input.activePointer;
-      const dx = pointer.worldX - this.player.x;
-      const dy = pointer.worldY - this.player.y;
-      const length = Math.hypot(dx, dy) || 1;
+    const definition = this.resolvedSkills[skill];
+    if (!definition || definition.level < 1) return;
+    if (this.skillCooldowns[skill] > 0 || this.focus < definition.focusCost) return;
+
+    const pointer = this.input.activePointer;
+    const dx = pointer.worldX - this.player.x;
+    const dy = pointer.worldY - this.player.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
+
+    const chargePool = this.chargePools.get(skill);
+    if (chargePool) {
+      if (chargePool.charges <= 0) return;
       const startX = this.player.x;
       const startY = this.player.y;
-      const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
-      const started = this.beginActiveSkillAction(this.resolvedDash, direction, () => {
+      const started = this.beginActiveSkillAction(definition, direction, () => {
         const dashDirection = { x: dx / length, y: dy / length };
-        const sequence = this.options.multiplayer?.sendAttack?.("dash", dashDirection);
-        if (sequence !== undefined) this.applyPredictedDash(sequence, dashDirection);
+        const sequence = this.options.multiplayer?.sendAttack?.(skill, dashDirection);
+        // Only the equipped dash keeps its established local prediction path.
+        if (sequence !== undefined && skill === "dash") this.applyPredictedDash(sequence, dashDirection);
       }, startX, startY);
       if (!started) return;
-      this.focus -= this.resolvedDash.focusCost;
-      this.riftCharges -= 1;
-      if (this.riftRecharge <= 0) this.riftRecharge = this.resolvedDash.recharge;
+      this.focus -= definition.focusCost;
+      chargePool.charges -= 1;
+      if (chargePool.rechargeTimer <= 0) chargePool.rechargeTimer = definition.recharge;
+      return;
     }
-    if (skill === "ward" && this.wardCooldown <= 0 && this.focus >= this.resolvedWard.focusCost) {
-      const pointer = this.input.activePointer;
-      const direction = resolveCharacterDirection(pointer.worldX - this.player.x, pointer.worldY - this.player.y, this.playerAnimator?.currentDirection);
-      const started = this.beginActiveSkillAction(this.resolvedWard, direction, () => {
-        this.wardRemaining = this.resolvedWard.duration ?? 0;
-        this.options.multiplayer?.sendAttack?.("ward");
+
+    if (definition.recoveryAmount > 0 || definition.damageReduction > 0) {
+      // Ward and recovery-kind skills are server-applied states; locally they
+      // only drive presentation and the shared cooldown clock.
+      const maxLife = this.options.arenaBalance?.maxLife ?? 100;
+      if (definition.recoveryAmount > 0 && this.life >= maxLife) return;
+      const started = this.beginActiveSkillAction(definition, direction, () => {
+        if (definition.damageReduction > 0) this.wardRemaining = definition.duration;
+        this.options.multiplayer?.sendAttack?.(skill);
       });
       if (!started) return;
-      this.focus -= this.resolvedWard.focusCost;
-      this.wardCooldown = this.resolvedWard.cooldown;
+      this.focus -= definition.focusCost;
+      this.skillCooldowns[skill] = definition.cooldown;
+      return;
     }
-    if (skill === "flameWave" && this.flameWaveCooldown <= 0 && this.focus >= this.resolvedFlameWave.focusCost) {
-      const pointer = this.input.activePointer;
-      const dx = pointer.worldX - this.player.x;
-      const dy = pointer.worldY - this.player.y;
-      const length = Math.hypot(dx, dy) || 1;
-      const direction = resolveCharacterDirection(dx, dy, this.playerAnimator?.currentDirection);
-      const started = this.beginActiveSkillAction(this.resolvedFlameWave, direction, () => {
-        this.options.multiplayer?.sendAttack?.("flameWave", { x: dx / length, y: dy / length });
-      });
-      if (!started) return;
-      this.focus -= this.resolvedFlameWave.focusCost;
-      this.flameWaveCooldown = this.resolvedFlameWave.cooldown;
-    }
+
+    const started = this.beginActiveSkillAction(definition, direction, () => {
+      const angle = Math.atan2(pointer.worldY - this.player!.y, pointer.worldX - this.player!.x);
+      this.options.multiplayer?.sendAttack?.(skill, { x: Math.cos(angle), y: Math.sin(angle) });
+    });
+    if (!started) return;
+    this.focus -= definition.focusCost;
+    this.skillCooldowns[skill] = definition.cooldown;
   }
 
   useFlask(slotIndex: number): void {
@@ -560,8 +552,8 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       nextWaveIn: (networkMap?.wave ?? finalWave) < finalWave
         ? Math.max(0, ARENA_RULES.waveSpawnIntervalSeconds - (networkMap?.waveElapsedMilliseconds ?? 0) / 1000)
         : null,
-      finalRageIn: networkMap?.wave === finalWave && !networkMap.finalRageActive && !networkMap.completed
-        ? Math.max(0, ARENA_RULES.finalWaveRageDelaySeconds - networkMap.waveElapsedMilliseconds / 1000)
+      finalRageIn: networkMap?.wave === finalWave && networkMap.finalRageActive === false && networkMap.completed === false
+        ? Math.max(0, ARENA_RULES.finalWaveRageDelaySeconds - (networkMap.waveElapsedMilliseconds ?? 0) / 1000)
         : null,
       finalRageActive: networkMap?.finalRageActive ?? false,
       life: Math.max(0, networkPlayer?.life ?? this.life),
@@ -570,13 +562,11 @@ class ForgeOfEchoesScene extends Phaser.Scene {
       maxFocus: networkPlayer?.maxFocus ?? this.options.arenaBalance?.maxFocus ?? 100,
       pendingExperience: Math.max(0, (networkPlayer?.experience ?? 0) - (networkPlayer?.persistedExperience ?? 0)),
       groundDrops: this.groundDrops.length,
-      novaCooldown: this.novaCooldown,
-      riftCharges: this.riftCharges,
-      riftMaxCharges: this.resolvedDash.maxCharges,
-      riftRecharge: this.riftRecharge,
-      wardCooldown: this.wardCooldown,
+      skillCooldowns: { ...this.skillCooldowns },
       wardRemaining: this.wardRemaining,
-      flameWaveCooldown: this.flameWaveCooldown,
+      charges: Object.fromEntries([...this.chargePools].map(([id, pool]) => [id, pool.charges])) as WorldHudState["charges"],
+      maxCharges: Object.fromEntries([...this.chargePools].map(([id]) => [id, this.resolvedSkills[id].maxCharges])) as WorldHudState["maxCharges"],
+      rechargeTimers: Object.fromEntries([...this.chargePools].map(([id, pool]) => [id, pool.rechargeTimer])) as WorldHudState["rechargeTimers"],
       arenaComplete: networkMap?.completed ?? false,
     };
   }
@@ -595,19 +585,20 @@ class ForgeOfEchoesScene extends Phaser.Scene {
   }
 
   updateSkillLevels(skillLevels: SkillLevels): void {
-    const previousMaxCharges = this.resolvedDash.maxCharges;
     const cooldownMultiplier = this.options.arenaBalance?.skillCooldown ?? 1;
     const castSpeedMultiplier = this.options.arenaBalance?.castSpeed ?? 1;
-    this.resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova, cooldownMultiplier, castSpeedMultiplier);
-    this.resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash, cooldownMultiplier, castSpeedMultiplier);
-    this.resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward, cooldownMultiplier, castSpeedMultiplier);
-    this.resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave, cooldownMultiplier, castSpeedMultiplier);
-    this.riftCharges = Phaser.Math.Clamp(
-      this.riftCharges + Math.max(0, this.resolvedDash.maxCharges - previousMaxCharges),
-      0,
-      this.resolvedDash.maxCharges,
-    );
-    if (this.riftCharges === this.resolvedDash.maxCharges) this.riftRecharge = 0;
+    const previousResolved = this.resolvedSkills;
+    this.resolvedSkills = resolveAllSkills(skillLevels, cooldownMultiplier, castSpeedMultiplier);
+    for (const [skillId, pool] of this.chargePools) {
+      const newMax = this.resolvedSkills[skillId].maxCharges;
+      pool.charges = Phaser.Math.Clamp(pool.charges + Math.max(0, newMax - previousResolved[skillId].maxCharges), 0, newMax);
+      if (pool.charges === newMax) pool.rechargeTimer = 0;
+    }
+    for (const skillId of ACTIVE_SKILL_IDS) {
+      if (this.resolvedSkills[skillId].maxCharges > 0 && !this.chargePools.has(skillId)) {
+        this.chargePools.set(skillId, { charges: this.resolvedSkills[skillId].maxCharges, rechargeTimer: 0 });
+      }
+    }
     this.options.skillLevels = skillLevels;
     this.options.onHud(this.getHud());
   }
@@ -624,15 +615,17 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     if (!this.player) return;
     this.elapsedSeconds += delta;
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
-    this.novaCooldown = Math.max(0, this.novaCooldown - delta);
-    this.wardCooldown = Math.max(0, this.wardCooldown - delta);
-    this.flameWaveCooldown = Math.max(0, this.flameWaveCooldown - delta);
+    for (const skillId of ACTIVE_SKILL_IDS) {
+      this.skillCooldowns[skillId] = Math.max(0, this.skillCooldowns[skillId] - delta);
+    }
     this.wardRemaining = Math.max(0, this.wardRemaining - delta);
-    if (this.riftCharges < this.resolvedDash.maxCharges) {
-      this.riftRecharge = Math.max(0, this.riftRecharge - delta);
-      if (this.riftRecharge <= 0) {
-        this.riftCharges += 1;
-        this.riftRecharge = this.riftCharges < this.resolvedDash.maxCharges ? this.resolvedDash.recharge : 0;
+    for (const [skillId, pool] of this.chargePools) {
+      const maxCharges = this.resolvedSkills[skillId].maxCharges;
+      if (pool.charges >= maxCharges) continue;
+      pool.rechargeTimer = Math.max(0, pool.rechargeTimer - delta);
+      if (pool.rechargeTimer <= 0) {
+        pool.charges += 1;
+        pool.rechargeTimer = pool.charges < maxCharges ? this.resolvedSkills[skillId].recharge : 0;
       }
     }
     let xInput = 0;
@@ -646,10 +639,15 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     const hasInput = Boolean(xInput || yInput);
     this.updateNetworkPlayers(delta, hasInput ? xInput / inputLength : 0, hasInput ? yInput / inputLength : 0);
 
-    const movementSpeed = Math.hypot(this.playerVelocityX, this.playerVelocityY);
-    const isMoving = movementSpeed > 2;
-    const directionX = isMoving ? this.playerVelocityX / movementSpeed : xInput / inputLength;
-    const directionY = isMoving ? this.playerVelocityY / movementSpeed : yInput / inputLength;
+    // The local character's locomotion represents player intent. Network
+    // reconciliation can move the render sprite in either direction, but that
+    // corrective displacement must not make a released key play a run cycle or
+    // flip the character to face the opposite way.
+    const measuredMovementSpeed = Math.hypot(this.playerVelocityX, this.playerVelocityY);
+    const movementSpeed = this.options.multiplayer ? (hasInput ? speed : 0) : measuredMovementSpeed;
+    const isMoving = this.options.multiplayer ? hasInput : movementSpeed > 2;
+    const directionX = this.options.multiplayer ? xInput / inputLength : (isMoving ? this.playerVelocityX / movementSpeed : xInput / inputLength);
+    const directionY = this.options.multiplayer ? yInput / inputLength : (isMoving ? this.playerVelocityY / movementSpeed : yInput / inputLength);
     this.playerAnimator?.setLocomotion(directionX, directionY, isMoving, speed > 0 ? movementSpeed / speed : 0);
 
     if (this.options.mode === "arena") {
@@ -875,7 +873,17 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     this.networkInputElapsed += delta;
     const inputChanged = inputX !== this.lastNetworkInputX || inputY !== this.lastNetworkInputY;
     if (inputChanged || this.networkInputElapsed >= 0.08) {
-      multiplayer.sendMovement(inputX, inputY);
+      const sequence = multiplayer.sendMovement(inputX, inputY);
+      if (sequence !== undefined) {
+        this.localMovementPrediction.record({
+          sequence,
+          x: inputX,
+          y: inputY,
+          // fixedUpdate advances the clock before applying this frame, while
+          // the input state applies from the beginning of the frame.
+          sentAtSeconds: Math.max(0, this.elapsedSeconds - delta),
+        });
+      }
       this.lastNetworkInputX = inputX;
       this.lastNetworkInputY = inputY;
       this.networkInputElapsed = 0;
@@ -906,7 +914,8 @@ class ForgeOfEchoesScene extends Phaser.Scene {
         || local.y !== this.lastAuthorityY
         || (local.lastProcessedMovement ?? -1) !== this.lastAuthoritySequence
         || (local.lastProcessedAttack ?? -1) !== this.lastAuthorityAttackSequence
-        || dashPredictionResolved;
+        || dashPredictionResolved
+        || inputChanged;
       if (authorityChanged) {
         // RTT/2 is only wire time. An input also waits for the next fixed tick
         // and its state patch, so the expected pipeline delay must be included
@@ -916,8 +925,15 @@ class ForgeOfEchoesScene extends Phaser.Scene {
           EXPECTED_INPUT_PIPELINE_SECONDS,
           0.2,
         );
-        const targetX = Phaser.Math.Clamp(local.x + inputX * movementSpeed * oneWaySeconds, margin, worldSize - margin);
-        const targetY = Phaser.Math.Clamp(local.y + inputY * movementSpeed * oneWaySeconds, margin, worldSize - margin);
+        const target = this.localMovementPrediction.reconcile(
+          { x: local.x, y: local.y, acknowledgedSequence: local.lastProcessedMovement ?? 0 },
+          this.elapsedSeconds,
+          oneWaySeconds,
+          movementSpeed,
+          { minimumX: margin, maximumX: worldSize - margin, minimumY: margin, maximumY: worldSize - margin },
+        );
+        const targetX = target.x;
+        const targetY = target.y;
         const errorX = targetX - this.player.x;
         const errorY = targetY - this.player.y;
         if (dashAwaitingAuthority) {
@@ -929,6 +945,18 @@ class ForgeOfEchoesScene extends Phaser.Scene {
         } else if (Math.hypot(errorX, errorY) > 180) {
           // Teleports/dashes and major desyncs are authoritative discontinuities.
           this.player.setPosition(targetX, targetY);
+          this.networkCorrectionX = 0;
+          this.networkCorrectionY = 0;
+        } else if (inputX === 0 && inputY === 0 && isRestingMovementError(
+          errorX,
+          errorY,
+          movementSpeed,
+          EXPECTED_INPUT_PIPELINE_SECONDS,
+        )) {
+          // A held-state command can begin/end on opposite sides of a 20 Hz
+          // server tick. Preserve that sub-tick visual offset while idle; it is
+          // reconciled unobtrusively when movement resumes. Paying it back now
+          // makes the character appear to float backward after every key-up.
           this.networkCorrectionX = 0;
           this.networkCorrectionY = 0;
         } else {
@@ -1368,15 +1396,9 @@ class ForgeOfEchoesScene extends Phaser.Scene {
     const remote = this.remotePlayers.get(event.actorCharacterId);
     if (!remote) return;
     const networkPlayer = this.options.multiplayer?.getPlayers().find((player) => player.characterId === event.actorCharacterId);
-    const skill = event.skill === "basic" ? this.resolvedBasic
-      : event.skill === "nova" ? this.resolvedNova
-        : event.skill === "dash" ? this.resolvedDash
-          : event.skill === "ward" ? this.resolvedWard
-            : this.resolvedFlameWave;
+    const skill = event.skill === "basic" ? this.resolvedBasic : this.resolvedSkills[event.skill];
     const direction = resolveCharacterDirection(event.direction.x, event.direction.y, remote.animator.currentDirection);
-    const baseCastTime = event.skill === "nova" ? ACTIVE_SKILLS.nova.castTime
-      : event.skill === "ward" ? ACTIVE_SKILLS.ward.castTime
-        : event.skill === "flameWave" ? ACTIVE_SKILLS.flameWave.castTime : 0;
+    const baseCastTime = skill.castTime;
     const timing = skill.presentation.animation === "attack"
       ? { durationSeconds: resolveAttackTimeSeconds(networkPlayer?.attackSpeed ?? 1.2) } as const
       : skill.presentation.animation === "cast"
@@ -1387,11 +1409,8 @@ class ForgeOfEchoesScene extends Phaser.Scene {
 
   private launchReplicatedProjectile(event: Extract<CombatEvent, { kind: "projectile-spawn" }>): void {
     this.expireReplicatedProjectile(event.projectileId, event.originX, event.originY, false);
-    const skill = event.skill === "nova" ? this.resolvedNova
-      : event.skill === "flameWave" ? this.resolvedFlameWave : this.resolvedBasic;
-    const distance = event.skill === "nova" ? MULTIPLAYER_COMBAT.projectile.novaRange
-      : event.skill === "flameWave" ? MULTIPLAYER_COMBAT.projectile.flameWaveRange
-        : MULTIPLAYER_COMBAT.projectile.basicRange;
+    const skill = event.skill === "basic" ? this.resolvedBasic : this.resolvedSkills[event.skill];
+    const distance = skill.projectileRange ?? MULTIPLAYER_COMBAT.projectile.basicRange;
     const predicted = event.actorCharacterId === this.options.multiplayer?.localCharacterId && event.skill === "basic"
       ? this.predictedBasicProjectiles.get(event.sequence)
       : undefined;
@@ -2406,4 +2425,33 @@ export class PhaserRuntime {
     this.scene = null;
     this.game = null;
   }
+}
+
+interface SkillChargePool {
+  charges: number;
+  rechargeTimer: number;
+}
+
+function createEmptySkillCooldowns(): Record<ActiveSkillId, number> {
+  return Object.fromEntries(ACTIVE_SKILL_IDS.map((id) => [id, 0])) as Record<ActiveSkillId, number>;
+}
+
+function resolveAllSkills(
+  skillLevels: SkillLevels,
+  cooldownMultiplier: number,
+  castSpeedMultiplier: number,
+): Record<ActiveSkillId, ResolvedSkillDefinition> {
+  const resolved = {} as Record<ActiveSkillId, ResolvedSkillDefinition>;
+  for (const id of ACTIVE_SKILL_IDS) {
+    resolved[id] = resolveSkillDefinition(ACTIVE_SKILLS[id], skillLevels[id], cooldownMultiplier, castSpeedMultiplier);
+  }
+  return resolved;
+}
+
+function createChargePools(resolved: Record<ActiveSkillId, ResolvedSkillDefinition>): Map<ActiveSkillId, SkillChargePool> {
+  const pools = new Map<ActiveSkillId, SkillChargePool>();
+  for (const id of ACTIVE_SKILL_IDS) {
+    if (resolved[id].maxCharges > 0) pools.set(id, { charges: resolved[id].maxCharges, rechargeTimer: 0 });
+  }
+  return pools;
 }

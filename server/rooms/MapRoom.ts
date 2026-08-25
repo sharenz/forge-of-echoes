@@ -12,6 +12,7 @@ import {
   prepareMapExitCommandSchema,
   refreshProfileCommandSchema,
   useFlaskCommandSchema,
+  skillCodeFromId,
   type AttackCommand,
   type MapTicketClaims,
   type RejectedCommandMessage,
@@ -24,7 +25,7 @@ import { ACTIVE_SKILLS, BASIC_ATTACK, buildArenaBalance, isArenaCleared, resolve
 import { resolveAttackTimeSeconds } from "../../app/game/action-timing";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../../app/game/config/monsters";
 import { MAP_COMPLETION_REWARDS } from "../../app/game/config/rewards";
-import type { DamageType, FlaskBelt, InventoryItem, SkillLoadout } from "../../app/game/domain";
+import { ACTIVE_SKILL_IDS, type ActiveSkillId, type CharacterStats, type DamageType, type FlaskBelt, type InventoryItem, type PlayerProfile, type SkillLoadout } from "../../app/game/domain";
 import { isSkillEquipped } from "../../app/game/skill-loadout";
 import { resolveMonsterStats, rollMonsterPack } from "../../app/game/encounters";
 import { consumeFlaskFromBelt, createFlaskStack } from "../../app/game/flasks";
@@ -62,29 +63,28 @@ const PLAYER_ENTITY_FLAG = 0x8000_0000;
 const MAX_PICKUPS_PER_PLAYER_PER_SECOND = 8;
 const EXPERIENCE_CHECKPOINT_MILLISECONDS = 30_000;
 
-const SKILL_CODE = { basic: 0, nova: 1, dash: 2, ward: 3, flameWave: 4 } as const;
 const ARCHETYPE_IDS: MonsterArchetypeId[] = ["ashling", "cinder-spitter", "rift-stalker", "ironhide-brute", "ember-skitter"];
+
+interface SkillChargeRuntime {
+  charges: number;
+  nextRechargeAt: number;
+}
 
 interface PlayerRuntime {
   worldPlayerIndex: number;
   movementSequence: number;
   nextBasicAttackAt: number;
+  /** Shared cast-animation deadline across cast-tagged skills. */
   nextCastAt: number;
-  nextNovaAt: number;
-  nextWardAt: number;
-  nextFlameWaveAt: number;
-  dashCharges: number;
-  nextDashRechargeAt: number;
+  /** Per-skill cooldown deadlines keyed by active skill id. */
+  nextAvailableAt: Record<ActiveSkillId, number>;
+  /** Charge pools for mobility-kind skills (dash-family). */
+  charges: Partial<Record<ActiveSkillId, SkillChargeRuntime>>;
   attackDamage: number;
   focusRegen: number;
   basicAttackCooldownMilliseconds: number;
   skillLoadout: SkillLoadout;
-  skills: {
-    nova: ResolvedSkillDefinition;
-    dash: ResolvedSkillDefinition;
-    ward: ResolvedSkillDefinition;
-    flameWave: ResolvedSkillDefinition;
-  };
+  skills: Record<ActiveSkillId, ResolvedSkillDefinition>;
   flaskBelt: FlaskBelt;
   flaskPersistenceInFlight: boolean;
   recoveries: Array<{
@@ -247,13 +247,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     if (!authoritative) throw new Error("Authoritative profile is unavailable");
     this.profileCache.set(claims.characterId, authoritative);
     const stats = calculateCharacterStats(authoritative.profile).stats;
-    const skillLevels = authoritative.profile.character.skillLevels;
-    const skills = {
-      nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, skillLevels.nova, stats.skillCooldown, stats.castSpeed),
-      dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, skillLevels.dash, stats.skillCooldown, stats.castSpeed),
-      ward: resolveSkillDefinition(ACTIVE_SKILLS.ward, skillLevels.ward, stats.skillCooldown, stats.castSpeed),
-      flameWave: resolveSkillDefinition(ACTIVE_SKILLS.flameWave, skillLevels.flameWave, stats.skillCooldown, stats.castSpeed),
-    };
+    const { skills, charges } = resolveSkillRuntimes(authoritative.profile, stats);
     const spawn = this.playerSpawn(this.state.players.size);
     const worldPlayer = this.world.addPlayer({
       characterId: claims.characterId,
@@ -283,11 +277,8 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       movementSequence: 0,
       nextBasicAttackAt: 0,
       nextCastAt: 0,
-      nextNovaAt: 0,
-      nextWardAt: 0,
-      nextFlameWaveAt: 0,
-      dashCharges: skills.dash.maxCharges,
-      nextDashRechargeAt: 0,
+      nextAvailableAt: emptySkillDeadlineRecord(),
+      charges,
       attackDamage: stats.attackDamage,
       focusRegen: resolveArenaFocusRegen(stats.focusRegen, this.arenaBalance.arenaModifiers).value,
       basicAttackCooldownMilliseconds: resolveAttackTimeSeconds(stats.attackSpeed) * 1_000,
@@ -368,7 +359,8 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     const player = this.state.players.get(claims.characterId);
     const runtime = this.runtime.get(claims.characterId);
     const worldPlayer = runtime ? this.world.players.get(runtime.worldPlayerIndex) : null;
-    if (!player || !runtime || !worldPlayer || !player.connected || worldPlayer.life <= 0) return this.reject(client, CLIENT_MESSAGES.attack, "unauthorized");
+    if (!player || !runtime || !worldPlayer || !player.connected) return this.reject(client, CLIENT_MESSAGES.attack, "unauthorized");
+    if (worldPlayer.life <= 0) return this.reject(client, CLIENT_MESSAGES.attack, "dead");
     if (parsed.data.sequence <= player.lastProcessedAttack) return this.reject(client, CLIENT_MESSAGES.attack, "stale");
     this.attack(client, player, runtime, parsed.data);
   }
@@ -390,17 +382,16 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       if (nextDeadline === null) return this.reject(client, CLIENT_MESSAGES.attack, "rate_limited");
       const direction = normalizedDirection(command.direction);
       if (!direction) return this.reject(client, CLIENT_MESSAGES.attack, "invalid");
-      if (!this.enqueueProjectileBurst(runtime, command, BASIC_ATTACK, [direction], MULTIPLAYER_COMBAT.projectile.basicRange)) {
+      if (!this.enqueueProjectileBurst(runtime, command, BASIC_ATTACK, [direction], BASIC_ATTACK.projectileRange ?? MULTIPLAYER_COMBAT.projectile.basicRange)) {
         return this.reject(client, CLIENT_MESSAGES.attack, "projectile_capacity");
       }
       runtime.nextBasicAttackAt = nextDeadline;
       player.lastProcessedAttack = command.sequence;
       return;
     }
-    const skill = runtime.skills[command.skill];
-    const nextAt = command.skill === "nova" ? runtime.nextNovaAt
-      : command.skill === "ward" ? runtime.nextWardAt
-        : command.skill === "flameWave" ? runtime.nextFlameWaveAt : 0;
+    const skillId = command.skill;
+    const skill = runtime.skills[skillId];
+    const chargeState = runtime.charges[skillId];
     const nextCastDeadline = skill.presentation.animation === "cast"
       ? advanceCooldownDeadline(
           now,
@@ -409,65 +400,61 @@ export class MapRoom extends PartyRoom<MapRoomState> {
           1_000 / MULTIPLAYER_LIMITS.simulationHz,
         )
       : 0;
-    if (nextCastDeadline === null || now < nextAt || worldPlayer.focus < skill.focusCost || (command.skill === "dash" && runtime.dashCharges <= 0)) {
+    const offCooldown = now >= (runtime.nextAvailableAt[skillId] ?? 0);
+    const chargesRemaining = !chargeState || chargeState.charges > 0;
+    if (nextCastDeadline === null || !offCooldown || !chargesRemaining || worldPlayer.focus < skill.focusCost) {
       return this.reject(client, CLIENT_MESSAGES.attack, "rate_limited");
     }
-    const direction = command.direction ? normalizedDirection(command.direction) : null;
-    if ((command.skill === "dash" || command.skill === "flameWave") && !direction) return this.reject(client, CLIENT_MESSAGES.attack, "invalid");
-    if (command.skill === "nova") {
-      const directions = Array.from({ length: skill.projectileCount }, (_, index) => {
-        const angle = Math.PI * 2 * index / skill.projectileCount;
-        return { x: Math.cos(angle), y: Math.sin(angle) };
-      });
-      if (!this.enqueueProjectileBurst(runtime, command, skill, directions, MULTIPLAYER_COMBAT.projectile.novaRange)) {
-        return this.reject(client, CLIENT_MESSAGES.attack, "projectile_capacity");
-      }
+    if (chargeState) {
+      // Charge-based mobility blinks along an aimed direction.
+      const direction = normalizedDirection(command.direction);
+      if (!direction) return this.reject(client, CLIENT_MESSAGES.attack, "invalid");
       player.lastProcessedAttack = command.sequence;
       worldPlayer.focus -= skill.focusCost;
-      runtime.nextNovaAt = now + skill.cooldown * 1_000;
-      runtime.nextCastAt = nextCastDeadline;
-      return;
-    }
-    if (command.skill === "dash") {
-      player.lastProcessedAttack = command.sequence;
-      worldPlayer.focus -= skill.focusCost;
-      runtime.dashCharges -= 1;
-      if (runtime.nextDashRechargeAt === 0) runtime.nextDashRechargeAt = now + skill.recharge * 1_000;
+      chargeState.charges -= 1;
+      if (chargeState.nextRechargeAt === 0) chargeState.nextRechargeAt = now + skill.recharge * 1_000;
       this.world.enqueueInput({
         kind: "dash", playerIndex: runtime.worldPlayerIndex, sequence: command.sequence,
-        directionX: direction!.x, directionY: direction!.y, distance: MULTIPLAYER_COMBAT.player.dashDistance, skillId: SKILL_CODE.dash,
+        directionX: direction.x, directionY: direction.y,
+        distance: skill.dashDistance ?? MULTIPLAYER_COMBAT.player.dashDistance,
+        skillId: skillCodeFromId(skillId),
       });
       return;
     }
-    if (command.skill === "ward") {
+    if (skill.recoveryAmount > 0) {
+      // Recovery-kind skills convert focus into steady life regeneration.
+      if (worldPlayer.life >= worldPlayer.maxLife) return this.reject(client, CLIENT_MESSAGES.attack, "invalid");
       player.lastProcessedAttack = command.sequence;
       worldPlayer.focus -= skill.focusCost;
-      runtime.nextWardAt = now + skill.cooldown * 1_000;
+      runtime.nextAvailableAt[skillId] = now + skill.cooldown * 1_000;
       runtime.nextCastAt = nextCastDeadline;
-      this.world.enqueueInput({
-        kind: "ward", playerIndex: runtime.worldPlayerIndex, sequence: command.sequence,
-        durationSeconds: skill.duration, damageReduction: skill.damageReduction / 100, skillId: SKILL_CODE.ward,
+      runtime.recoveries.push({
+        id: randomUUID(),
+        resource: "life",
+        remainingAmount: skill.recoveryAmount,
+        remainingSeconds: skill.duration,
+        appliedAmount: 0,
       });
       return;
     }
-    const center = Math.atan2(direction!.y, direction!.x);
-    const directions = Array.from({ length: skill.projectileCount }, (_, index) => {
-      const offset = skill.projectileCount === 1 ? 0 : (index / (skill.projectileCount - 1) - 0.5) * 0.78;
-      return { x: Math.cos(center + offset), y: Math.sin(center + offset) };
-    });
-    if (!this.enqueueProjectileBurst(runtime, command, skill, directions, MULTIPLAYER_COMBAT.projectile.flameWaveRange)) {
+    const direction = normalizedDirection(command.direction);
+    if (skill.aiming !== "ring" && !direction) return this.reject(client, CLIENT_MESSAGES.attack, "invalid");
+    const directions = skill.aiming === "ring"
+      ? ringDirections(Math.max(1, skill.projectileCount))
+      : fanDirections(direction!, Math.max(1, skill.projectileCount), skill.projectileSpreadRadians ?? 0);
+    if (!this.enqueueProjectileBurst(runtime, command, skill, directions, skill.projectileRange ?? MULTIPLAYER_COMBAT.projectile.basicRange)) {
       return this.reject(client, CLIENT_MESSAGES.attack, "projectile_capacity");
     }
     player.lastProcessedAttack = command.sequence;
     worldPlayer.focus -= skill.focusCost;
-    runtime.nextFlameWaveAt = now + skill.cooldown * 1_000;
+    runtime.nextAvailableAt[skillId] = now + skill.cooldown * 1_000;
     runtime.nextCastAt = nextCastDeadline;
   }
 
   private enqueueProjectileBurst(
     runtime: PlayerRuntime,
     command: AttackCommand,
-    skill: Pick<ResolvedSkillDefinition, "damage" | "piercing">,
+    skill: Pick<ResolvedSkillDefinition, "damage" | "piercing" | "projectileSpeed">,
     directions: ReadonlyArray<{ x: number; y: number }>,
     range: number,
   ): boolean {
@@ -478,13 +465,13 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       playerIndex: runtime.worldPlayerIndex,
       sequence: command.sequence,
       directions,
-      speed: MULTIPLAYER_COMBAT.projectile.speed,
+      speed: skill.projectileSpeed ?? MULTIPLAYER_COMBAT.projectile.speed,
       range,
       radius: MULTIPLAYER_COMBAT.projectile.collisionRadius,
       damage: rolled.amount,
       damageType: damageTypeCode(rolled.type),
       pierces: skill.piercing,
-      skillId: SKILL_CODE[command.skill],
+      skillId: skillCodeFromId(command.skill),
     });
   }
 
@@ -637,10 +624,13 @@ export class MapRoom extends PartyRoom<MapRoomState> {
       const player = this.world.players.get(runtime.worldPlayerIndex);
       if (!player?.connected || player.life <= 0) continue;
       player.focus = Math.min(player.maxFocus, player.focus + runtime.focusRegen * deltaSeconds);
-      if (runtime.dashCharges < runtime.skills.dash.maxCharges && this.state.elapsedMilliseconds >= runtime.nextDashRechargeAt) {
-        runtime.dashCharges += 1;
-        runtime.nextDashRechargeAt = runtime.dashCharges < runtime.skills.dash.maxCharges
-          ? this.state.elapsedMilliseconds + runtime.skills.dash.recharge * 1_000 : 0;
+      for (const [skillId, chargeState] of Object.entries(runtime.charges) as [ActiveSkillId, SkillChargeRuntime][]) {
+        const definition = runtime.skills[skillId];
+        if (chargeState.charges >= definition.maxCharges) continue;
+        if (this.state.elapsedMilliseconds < chargeState.nextRechargeAt) continue;
+        chargeState.charges += 1;
+        chargeState.nextRechargeAt = chargeState.charges < definition.maxCharges
+          ? this.state.elapsedMilliseconds + definition.recharge * 1_000 : 0;
       }
       for (let index = runtime.recoveries.length - 1; index >= 0; index -= 1) {
         const recovery = runtime.recoveries[index];
@@ -798,7 +788,7 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     if (cached && !storePickedUpItem(cached.profile, item)) {
       return this.rejectPickup(client, parsed.data.dropId, "inventory_full");
     }
-    if (this.pickupInFlight.has(drop.id)) return;
+    if (this.pickupInFlight.has(drop.id)) return this.rejectPickup(client, parsed.data.dropId, "conflict");
     this.pickupInFlight.add(drop.id);
     try {
       const saved = await this.profileWrites.run(claims.characterId, () => (
@@ -903,14 +893,17 @@ export class MapRoom extends PartyRoom<MapRoomState> {
     runtime.attackDamage = stats.attackDamage;
     runtime.focusRegen = resolveArenaFocusRegen(stats.focusRegen, this.arenaBalance.arenaModifiers).value;
     runtime.basicAttackCooldownMilliseconds = resolveAttackTimeSeconds(stats.attackSpeed) * 1_000;
+    const refreshed = resolveSkillRuntimes(current.profile, stats);
     runtime.skillLoadout = current.profile.character.skillLoadout;
-    runtime.skills = {
-      nova: resolveSkillDefinition(ACTIVE_SKILLS.nova, current.profile.character.skillLevels.nova, stats.skillCooldown, stats.castSpeed),
-      dash: resolveSkillDefinition(ACTIVE_SKILLS.dash, current.profile.character.skillLevels.dash, stats.skillCooldown, stats.castSpeed),
-      ward: resolveSkillDefinition(ACTIVE_SKILLS.ward, current.profile.character.skillLevels.ward, stats.skillCooldown, stats.castSpeed),
-      flameWave: resolveSkillDefinition(ACTIVE_SKILLS.flameWave, current.profile.character.skillLevels.flameWave, stats.skillCooldown, stats.castSpeed),
-    };
-    runtime.dashCharges = Math.min(runtime.dashCharges, runtime.skills.dash.maxCharges);
+    runtime.skills = refreshed.skills;
+    // Preserve live cooldown clocks and partial charge pools across a refresh.
+    for (const [skillId, chargeState] of Object.entries(refreshed.charges) as [ActiveSkillId, SkillChargeRuntime][]) {
+      const existing = runtime.charges[skillId];
+      runtime.charges[skillId] = {
+        charges: Math.min(existing !== undefined ? existing.charges : chargeState.charges, chargeState.charges),
+        nextRechargeAt: existing?.nextRechargeAt ?? 0,
+      };
+    }
     client.send(SERVER_MESSAGES.profileUpdated, current);
   }
 
@@ -1120,4 +1113,41 @@ function damageTypeCode(type: DamageType): DamageTypeCode {
   return type === "fire" ? DamageTypeCode.Fire
     : type === "cold" ? DamageTypeCode.Cold
       : type === "lightning" ? DamageTypeCode.Lightning : DamageTypeCode.Physical;
+}
+
+function emptySkillDeadlineRecord(): Record<ActiveSkillId, number> {
+  return Object.fromEntries(ACTIVE_SKILL_IDS.map((id) => [id, 0])) as Record<ActiveSkillId, number>;
+}
+
+function resolveSkillRuntimes(profile: PlayerProfile, stats: CharacterStats): {
+  skills: Record<ActiveSkillId, ResolvedSkillDefinition>;
+  charges: Partial<Record<ActiveSkillId, SkillChargeRuntime>>;
+} {
+  const skillLevels = profile.character.skillLevels;
+  const skills = {} as Record<ActiveSkillId, ResolvedSkillDefinition>;
+  const charges: Partial<Record<ActiveSkillId, SkillChargeRuntime>> = {};
+  for (const id of ACTIVE_SKILL_IDS) {
+    skills[id] = resolveSkillDefinition(ACTIVE_SKILLS[id], skillLevels[id], stats.skillCooldown, stats.castSpeed);
+    if (skills[id].maxCharges > 0) charges[id] = { charges: skills[id].maxCharges, nextRechargeAt: 0 };
+  }
+  return { skills, charges };
+}
+
+function ringDirections(count: number): Array<{ x: number; y: number }> {
+  return Array.from({ length: count }, (_, index) => {
+    const angle = Math.PI * 2 * index / count;
+    return { x: Math.cos(angle), y: Math.sin(angle) };
+  });
+}
+
+function fanDirections(
+  direction: { x: number; y: number },
+  count: number,
+  spreadRadians: number,
+): Array<{ x: number; y: number }> {
+  const center = Math.atan2(direction.y, direction.x);
+  return Array.from({ length: count }, (_, index) => {
+    const offset = count === 1 ? 0 : (index / (count - 1) - 0.5) * spreadRadians;
+    return { x: Math.cos(center + offset), y: Math.sin(center + offset) };
+  });
 }

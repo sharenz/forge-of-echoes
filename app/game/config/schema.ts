@@ -6,6 +6,7 @@ import type {
   EquipmentSlot,
   MapModifierId,
   ModifierStatKey,
+  ActiveSkillId,
   SkillAnimationId,
   SkillAudioId,
   SkillVfxId,
@@ -189,11 +190,27 @@ export interface SkillDefinition {
   projectileScale?: number;
   projectileCount?: number;
   piercing?: number;
+  /** Projectile travel distance in world units; defaults to the shared basic-attack range. */
+  projectileRange?: number;
+  /** Full angular width of fan-shaped bursts in radians. */
+  projectileSpreadRadians?: number;
+  /** Ring bursts emit evenly around the caster; fans aim along a direction. Defaults to fan. */
+  aiming?: "ring" | "fan";
+  /** Projectile launch speed in world units per second; defaults to the shared combat speed. */
+  projectileSpeed?: number;
+  /** Travel distance for dash-kind skills in world units. */
+  dashDistance?: number;
+  /** Total life restored over `duration` seconds by recovery-kind skills. */
+  recoveryAmount?: number;
   tree: {
     branch: "core" | "destruction" | "survival" | "mobility";
     role: string;
     description: string;
     accent: string;
+    /** Placement depth inside the branch column; entry nodes are tier 1. */
+    tier: number;
+    /** All entries must hold before another skill point may be invested. */
+    requires?: readonly { skill: ActiveSkillId; level: number }[];
   };
   progression?: {
     maxLevel: number;
@@ -206,6 +223,7 @@ export interface SkillDefinition {
     chargeEveryLevels?: number;
     durationPerLevel?: number;
     damageReductionPerLevel?: number;
+    recoveryPerLevel?: number;
   };
   presentation: {
     animation: SkillAnimationId;

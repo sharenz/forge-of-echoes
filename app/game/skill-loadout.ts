@@ -1,4 +1,5 @@
-import type { PlayerProfile, SkillBarSkillId, SkillLoadout } from "./domain";
+import { ACTIVE_SKILLS } from "./config/skills";
+import type { ActiveSkillId, PlayerProfile, SkillBarSkillId, SkillLoadout } from "./domain";
 
 export const SKILL_BAR_SLOTS = [
   { index: 0, key: "Space", keyboardKey: "SPACE" },
@@ -8,9 +9,9 @@ export const SKILL_BAR_SLOTS = [
   { index: 4, key: "F", keyboardKey: "F" },
 ] as const;
 
-export const DEFAULT_SKILL_LOADOUT: SkillLoadout = ["basic", "nova", "dash", "ward", "flameWave"];
+export const DEFAULT_SKILL_LOADOUT: SkillLoadout = ["basic", "nova", "dash", "ward", null];
 
-const SKILL_IDS = new Set<SkillBarSkillId>(["basic", "nova", "dash", "ward", "flameWave"]);
+const SKILL_IDS = new Set<SkillBarSkillId>(["basic", ...Object.keys(ACTIVE_SKILLS) as ActiveSkillId[]]);
 
 export function normalizeSkillLoadout(value: unknown): SkillLoadout {
   if (!Array.isArray(value) || value.length !== SKILL_BAR_SLOTS.length) return [...DEFAULT_SKILL_LOADOUT];

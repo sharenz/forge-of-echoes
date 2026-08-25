@@ -140,6 +140,13 @@ test("four players fight the same authoritative monsters and damage cannot be fo
     type: "slot_map", itemId: map.id,
   });
   const opened = await new MapService(repository, parties, parties, secret).open(identities[0].characterId, slotted.revision);
+    // New characters no longer pre-equip Flame Wave on the fifth socket.
+    const flameEquip = await new ProfileCommandService(repository).execute(
+      identities[0].characterId,
+      (await repository.loadProfile(identities[0].characterId))!.revision,
+      { type: "set_skill_slot", slot: 4, skill: "flameWave" },
+    );
+    assert.ok(flameEquip);
   const mapTicket = opened.mapTicket;
   const tokens = identities.map((identity) => signSessionToken(identity, secret));
   let server: ColyseusTestServer | null = null;

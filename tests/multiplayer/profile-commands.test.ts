@@ -74,14 +74,14 @@ test("skill bar assignments and empty slots persist authoritatively", async () =
     const identity = await createTestPlayer(repository, { handle: "loadout-test", characterName: "Loadout", classId: "sorceress" });
     const initial = await repository.loadProfile(identity.characterId);
     assert.ok(initial);
-    assert.deepEqual(initial.profile.character.skillLoadout, ["basic", "nova", "dash", "ward", "flameWave"]);
+    assert.deepEqual(initial.profile.character.skillLoadout, ["basic", "nova", "dash", "ward", null]);
     const service = new ProfileCommandService(repository);
 
     const cleared = await service.execute(identity.characterId, initial.revision, { type: "set_skill_slot", slot: 2, skill: null });
-    assert.deepEqual(cleared.profile.character.skillLoadout, ["basic", "nova", null, "ward", "flameWave"]);
+    assert.deepEqual(cleared.profile.character.skillLoadout, ["basic", "nova", null, "ward", null]);
 
     const assigned = await service.execute(identity.characterId, cleared.revision, { type: "set_skill_slot", slot: 2, skill: "nova" });
-    assert.deepEqual(assigned.profile.character.skillLoadout, ["basic", "nova", "nova", "ward", "flameWave"]);
+    assert.deepEqual(assigned.profile.character.skillLoadout, ["basic", "nova", "nova", "ward", null]);
     assert.deepEqual((await repository.loadProfile(identity.characterId))?.profile.character.skillLoadout, assigned.profile.character.skillLoadout);
 
     await assert.rejects(

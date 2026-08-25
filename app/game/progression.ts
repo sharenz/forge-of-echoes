@@ -2,7 +2,8 @@ import { MONSTER_PACK_RULES } from "./config/monster-packs";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "./config/monsters";
 import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "./config/progression";
 import { ACTIVE_SKILLS } from "./config/skills";
-import type { ActiveSkillId, AttributeKey, CharacterProgress, MonsterRarity, PlayerProfile } from "./domain";
+import type { SkillDefinition } from "./config/schema";
+import { LAUNCH_SKILL_IDS, type ActiveSkillId, type AttributeKey, type CharacterProgress, type MonsterRarity, type PlayerProfile } from "./domain";
 
 export const ATTRIBUTE_POINTS_PER_LEVEL = 5;
 
@@ -59,6 +60,27 @@ export function grantCharacterProgressExperience(character: CharacterProgress, a
   };
 }
 
+/**
+ * Restores the full SkillLevels shape for profiles persisted before newer
+ * skills existed: known keys clamp into their configured range, missing keys
+ * default to 1 only for the original launch skills and stay locked at 0 for
+ * skills introduced later.
+ */
+export function normalizeSkillLevels(value: unknown): Record<ActiveSkillId, number> {
+  const stored = (value ?? {}) as Partial<Record<ActiveSkillId, unknown>>;
+  const normalized = {} as Record<ActiveSkillId, number>;
+  for (const [skillId, definition] of Object.entries(ACTIVE_SKILLS) as [ActiveSkillId, (typeof ACTIVE_SKILLS)[ActiveSkillId]][]) {
+    const maximum = definition.progression.maxLevel;
+    const raw = Number(stored[skillId]);
+    if (!Number.isFinite(raw) || raw <= 0) {
+      normalized[skillId] = (LAUNCH_SKILL_IDS as readonly string[]).includes(skillId) ? 1 : 0;
+      continue;
+    }
+    normalized[skillId] = Math.min(maximum, Math.floor(raw));
+  }
+  return normalized;
+}
+
 export function allocateAttributePoint(profile: PlayerProfile, attribute: AttributeKey): PlayerProfile {
   if (profile.character.unspentAttributePoints <= 0) return profile;
   return {
@@ -75,8 +97,13 @@ export function allocateAttributePoint(profile: PlayerProfile, attribute: Attrib
 }
 
 export function allocateSkillPoint(profile: PlayerProfile, skillId: ActiveSkillId): PlayerProfile {
-  const maximum = ACTIVE_SKILLS[skillId].progression.maxLevel;
-  if (profile.character.unspentSkillPoints <= 0 || profile.character.skillLevels[skillId] >= maximum) return profile;
+  const definition = ACTIVE_SKILLS[skillId];
+  const requirements = (definition.tree as SkillDefinition["tree"]).requires ?? [];
+  const requirementsMet = requirements.every((requirement) => (
+    profile.character.skillLevels[requirement.skill] >= requirement.level
+  ));
+  const maximum = definition.progression.maxLevel;
+  if (!requirementsMet || profile.character.unspentSkillPoints <= 0 || profile.character.skillLevels[skillId] >= maximum) return profile;
   return {
     ...profile,
     character: {

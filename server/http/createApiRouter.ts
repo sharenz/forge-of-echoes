@@ -28,6 +28,7 @@ import { PartyError } from "../coordination/PartyCoordinator";
 import { ProfileCommandError, ProfileCommandService } from "../services/ProfileCommandService";
 import { AccountAuthError, AccountAuthService } from "../services/AccountAuthService";
 import { listPublicPartyListings } from "../services/PublicPartyService";
+import { createRateLimiter } from "./rateLimit";
 import type { SocialInvalidation } from "../social/SocialEventBus";
 import { serverDrain } from "../observability/ServerDrain";
 
@@ -119,12 +120,18 @@ export function createApiRouter(services: ServerServices): express.Router {
   const profileCommands = new ProfileCommandService(services.players);
   const accountAuth = new AccountAuthService(services.players);
   const maps = new MapService(services.players, services.parties, services.expeditions, services.authSecret);
+  // Credential endpoints are the unauthenticated abuse surface: a strict
+  // per-client window caps scrypt work and registration spam, while the
+  // whole API keeps a generous ceiling. trustedProxyHops=1 matches the
+  // single Caddy hop in deploy/Caddyfile.
+  const authenticationLimiter = createRateLimiter({ windowMilliseconds: 60_000, maximumRequests: 30, trustedProxyHops: 1 });
+  const apiLimiter = createRateLimiter({ windowMilliseconds: 60_000, maximumRequests: 600, trustedProxyHops: 1 });
 
   router.get("/health", (_request, response) => {
     response.json({ ok: true, service: "forge-of-echoes-game-server", maximumPlayersPerRoom: MULTIPLAYER_LIMITS.playersPerRoom });
   });
-
-  router.post("/accounts/session", async (request, response) => {
+  router.use(apiLimiter);
+  router.post("/accounts/session", authenticationLimiter, async (request, response) => {
     const input = parseBody(accountSessionRequestSchema, request.body);
     const authenticated = await accountAuth.authenticate(input.handle, input.password, input.mode);
     const characters = await services.players.listCharacters(authenticated.account.accountId);
@@ -287,6 +294,9 @@ export function createApiRouter(services: ServerServices): express.Router {
 function mapError(error: unknown): { status: number; code: string; message?: string; details?: unknown } | null {
   if (error instanceof HttpError) return { status: error.status, code: error.code, details: error.details };
   if (error instanceof AccountAuthError) {
+    if (error.code === "account_locked") {
+      return { status: 429, code: "account_locked", message: "Too many failed sign-in attempts. Try again in a few minutes." };
+    }
     return {
       status: error.code === "account_exists" ? 409 : 401,
       code: error.code,

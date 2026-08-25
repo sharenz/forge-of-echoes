@@ -12,6 +12,12 @@ export interface ResolvedSkillDefinition extends SkillDefinition {
   cooldown: number;
   duration: number;
   damageReduction: number;
+  projectileSpeed?: number;
+  projectileRange?: number;
+  projectileSpreadRadians?: number;
+  aiming?: "ring" | "fan";
+  dashDistance?: number;
+  recoveryAmount: number;
 }
 
 export function resolveSkillDefinition(
@@ -53,5 +59,11 @@ export function resolveSkillDefinition(
       : Math.max(0.1, (definition.cooldown + (definition.progression?.cooldownPerLevel ?? 0) * levelsAfterFirst) * cooldownMultiplier),
     duration: Math.max(0, (definition.duration ?? 0) + (definition.progression?.durationPerLevel ?? 0) * levelsAfterFirst),
     damageReduction: Math.min(80, Math.max(0, (definition.damageReduction ?? 0) + (definition.progression?.damageReductionPerLevel ?? 0) * levelsAfterFirst)),
+    projectileSpeed: definition.projectileSpeed,
+    projectileRange: definition.projectileRange,
+    projectileSpreadRadians: definition.projectileSpreadRadians,
+    aiming: definition.aiming,
+    dashDistance: definition.dashDistance,
+    recoveryAmount: Math.max(0, (definition.recoveryAmount ?? 0) + (definition.progression?.recoveryPerLevel ?? 0) * levelsAfterFirst),
   };
 }

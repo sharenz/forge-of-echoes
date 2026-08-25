@@ -26,6 +26,7 @@ import { MultiplayerClient, MultiplayerRequestError, ProtocolMismatchError, type
 import { schemaValues } from "./schemaValues";
 import { MonsterInterpolationBuffer } from "../game2d/MonsterInterpolationBuffer";
 import { decodeWorldEvents, WorldEventType } from "../../multiplayer/wire/events";
+import { skillIdFromCode as skillFromCode } from "../../multiplayer/protocol";
 import { MONSTER_ARCHETYPES, type MonsterArchetypeId } from "../game/config/monsters";
 
 export interface MultiplayerHideoutController {
@@ -743,9 +744,10 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     },
     sendMovement: (x, y) => {
       const activeRoom = roomRef.current;
-      if (!activeRoom) return;
+      if (!activeRoom) return undefined;
       sequence.current += 1;
       activeRoom.send(CLIENT_MESSAGES.movement, { sequence: sequence.current, x, y });
+      return sequence.current;
     },
   } : undefined, [room, session]);
 
@@ -819,9 +821,10 @@ export function useMultiplayerHideout(): MultiplayerHideoutController {
     getProfileRevision: () => profileRevision.current,
     sendMovement: (x, y) => {
       const activeRoom = mapRoomRef.current;
-      if (!activeRoom) return;
+      if (!activeRoom) return undefined;
       sequence.current += 1;
       activeRoom.send(CLIENT_MESSAGES.movement, { sequence: sequence.current, x, y });
+      return sequence.current;
     },
     sendAttack: (skill, direction) => {
       const activeRoom = mapRoomRef.current;
@@ -853,8 +856,9 @@ function playerIndexFromEntity(entityId: number): number {
   return (entityId & 0x8000_0000) !== 0 ? entityId & 0x7fff_ffff : -1;
 }
 
-function skillFromCode(code: number): "basic" | "nova" | "dash" | "ward" | "flameWave" {
-  return (["basic", "nova", "dash", "ward", "flameWave"] as const)[code] ?? "basic";
+function directionFromCode(code: number): { x: number; y: number } {
+  const angle = code / 65_535 * Math.PI * 2 - Math.PI;
+  return { x: Math.cos(angle), y: Math.sin(angle) };
 }
 
 function damageTypeFromCode(code: number): "physical" | "fire" | "cold" | "lightning" {
@@ -863,9 +867,4 @@ function damageTypeFromCode(code: number): "physical" | "fire" | "cold" | "light
 
 function monsterArchetypeFromCode(code: number): MonsterArchetypeId {
   return (["ashling", "cinder-spitter", "rift-stalker", "ironhide-brute", "ember-skitter"] as const)[code] ?? "ashling";
-}
-
-function directionFromCode(code: number): { x: number; y: number } {
-  const angle = code / 65_535 * Math.PI * 2 - Math.PI;
-  return { x: Math.cos(angle), y: Math.sin(angle) };
 }

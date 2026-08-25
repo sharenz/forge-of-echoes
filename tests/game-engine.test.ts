@@ -62,8 +62,10 @@ const countCurrency = (items: readonly InventoryItem[], currencyId: CurrencyId):
 const characterProgress = (level = 1): PlayerProfile["character"] => ({
   name: "Test", classId: "amazon", level, xp: 0,
   allocatedAttributes: { strength: 0, dexterity: 0, intelligence: 0 },
-  unspentAttributePoints: 0, skillLevels: { nova: 1, dash: 1, ward: 1, flameWave: 1 }, unspentSkillPoints: 0,
-  skillLoadout: ["basic", "nova", "dash", "ward", "flameWave"],
+  unspentAttributePoints: 0,
+  skillLevels: { nova: 1, dash: 1, ward: 1, flameWave: 1, frostShards: 0, cinderComet: 0, lifeBloom: 0, phaseStep: 0 },
+  unspentSkillPoints: 0,
+  skillLoadout: ["basic", "nova", "dash", "ward", null],
   mapsCompleted: 0, highestWave: 0,
 });
 const profileWithEmptyFlaskBelt = (): PlayerProfile => ({
@@ -96,7 +98,7 @@ test("skill loadouts normalize persisted data and can clear or assign any slot",
   assert.equal(isSkillEquipped(reassigned.character.skillLoadout, "flameWave"), false);
   assert.equal(isSkillEquipped(reassigned.character.skillLoadout, "basic"), true);
   assert.deepEqual(normalizeSkillLoadout(["basic", "nova", "invalid", null, "ward"]), ["basic", "nova", null, null, "ward"]);
-  assert.deepEqual(normalizeSkillLoadout(null), ["basic", "nova", "dash", "ward", "flameWave"]);
+  assert.deepEqual(normalizeSkillLoadout(null), ["basic", "nova", "dash", "ward", null]);
 });
 
 test("map completion rewards guarantee two equipment items, one magic-or-better, and crafting materials", () => {

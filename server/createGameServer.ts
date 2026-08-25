@@ -6,6 +6,8 @@ import { MapRoom } from "./rooms/MapRoom";
 import { getServerServices, type ServerServices } from "./services";
 import { serverHealth } from "./observability/ServerHealth";
 import { serverDrain } from "./observability/ServerDrain";
+import { renderPrometheusMetrics } from "./observability/prometheus";
+import { peerIsLoopback, peerIsOnTrustedNetwork } from "./http/rateLimit";
 import { WIRE_PROTOCOL_VERSION } from "../multiplayer/protocol";
 
 export interface GameServerOptions {
@@ -24,31 +26,43 @@ export function createGameServer(injectedServices?: ServerServices, options: Gam
     },
     express: (app) => {
       const services = injectedServices ?? getServerServices();
-      app.use(express.json({ limit: "16kb" }));
-      app.use((request, response, next) => {
-        response.setHeader("X-Crafty-Protocol-Version", String(WIRE_PROTOCOL_VERSION));
-        const origin = request.headers.origin?.replace(/\/$/, "");
-        if (origin && allowedOrigins.has(origin)) {
-          response.setHeader("Access-Control-Allow-Origin", origin);
-          response.setHeader("Vary", "Origin");
-          response.setHeader("Access-Control-Allow-Headers", "authorization, content-type");
-          response.setHeader("Access-Control-Expose-Headers", "x-crafty-protocol-version");
-          response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        }
-        if (request.method === "OPTIONS") return void response.sendStatus(204);
-        next();
-      });
-      app.get("/healthz", (_request, response) => response.status(200).json({
+    app.use(express.json({ limit: "16kb" }));
+    app.use((request, response, next) => {
+      // The version header must be readable by cross-origin browser clients
+      // (fetch exposes only allowlisted response headers), so exposure is
+      // unconditional while reflected CORS access stays origin-filtered.
+      response.setHeader("X-Crafty-Protocol-Version", String(WIRE_PROTOCOL_VERSION));
+      response.setHeader("Access-Control-Expose-Headers", "x-crafty-protocol-version");
+      const origin = request.headers.origin?.replace(/\/$/, "");
+      if (origin && allowedOrigins.has(origin)) {
+        response.setHeader("Access-Control-Allow-Origin", origin);
+        response.setHeader("Vary", "Origin");
+        response.setHeader("Access-Control-Allow-Headers", "authorization, content-type");
+        response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      }
+      if (request.method === "OPTIONS") return void response.sendStatus(204);
+      next();
+    });
+    app.get("/metrics", (request, response) => {
+      // deploy/Caddyfile forwards every path on the game domain, so
+      // operational metrics stay reachable from the private network only.
+      if (!peerIsOnTrustedNetwork(request.socket.remoteAddress ?? "")) {
+        response.status(403).json({ error: "forbidden" });
+        return;
+      }
+      response.setHeader("content-type", "text/plain; version=4.0.0; charset=utf-8");
+      response.end(renderPrometheusMetrics(serverHealth.snapshot(), serverDrain.isDraining));
+    });
+    app.get("/healthz", (_request, response) => response.status(200).json({
         status: serverDrain.isDraining ? "draining" : "ok",
         ...serverDrain.snapshot(),
         ...serverHealth.snapshot(),
       }));
       app.post("/admin/drain", (request, response) => {
-        const remoteAddress = request.socket.remoteAddress ?? "";
-        if (remoteAddress !== "127.0.0.1" && remoteAddress !== "::1" && remoteAddress !== "::ffff:127.0.0.1") {
-          response.status(403).json({ error: "forbidden" });
-          return;
-        }
+      if (!peerIsLoopback(request.socket.remoteAddress ?? "")) {
+        response.status(403).json({ error: "forbidden" });
+        return;
+      }
         response.status(202).json(serverDrain.begin());
       });
       app.use("/api", createApiRouter(services));

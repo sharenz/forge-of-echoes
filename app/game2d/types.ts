@@ -1,5 +1,5 @@
 import type { ArenaBalance } from "../game/combat";
-import type { CharacterClassId, FlaskBelt, InventoryItem, SkillBarSkillId, SkillLevels, SkillLoadout } from "../game/domain";
+import type { ActiveSkillId, CharacterClassId, FlaskBelt, InventoryItem, SkillBarSkillId, SkillLevels, SkillLoadout } from "../game/domain";
 import type { MerchantId } from "../game/config/merchants";
 import type { CombatEvent, PickupResultMessage } from "../../multiplayer/protocol";
 
@@ -71,7 +71,8 @@ export interface MultiplayerWorldAdapter {
   localCharacterId: string;
   getPlayers: () => readonly NetworkPlayerView[];
   getPing: () => number | null;
-  sendMovement: (x: number, y: number) => void;
+  /** Sends a held movement state and returns its reconciliation sequence. */
+  sendMovement: (x: number, y: number) => number | undefined;
   getMap?: () => NetworkMapView | null;
   getMonsterSampler?: () => NetworkMonsterSampler;
   drainCombatEvents?: () => CombatEvent[];
@@ -99,13 +100,11 @@ export interface WorldHudState {
   maxFocus: number;
   pendingExperience: number;
   groundDrops: number;
-  novaCooldown: number;
-  riftCharges: number;
-  riftMaxCharges: number;
-  riftRecharge: number;
-  wardCooldown: number;
+  skillCooldowns: Record<ActiveSkillId, number>;
   wardRemaining: number;
-  flameWaveCooldown: number;
+  charges: Partial<Record<ActiveSkillId, number>>;
+  maxCharges: Partial<Record<ActiveSkillId, number>>;
+  rechargeTimers: Partial<Record<ActiveSkillId, number>>;
   arenaComplete: boolean;
 }
 

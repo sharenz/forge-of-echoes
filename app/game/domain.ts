@@ -40,7 +40,17 @@ export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos";
 export type SkillAnimationId = "attack" | "cast" | "dash";
 export type SkillVfxId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward" | "flame-wave";
 export type SkillAudioId = "ember-lance" | "ember-nova" | "rift-step" | "cinder-ward" | "flame-wave";
-export type ActiveSkillId = "nova" | "dash" | "ward" | "flameWave";
+export const ACTIVE_SKILL_IDS = [
+  "nova", "dash", "ward", "flameWave",
+  "frostShards", "cinderComet", "lifeBloom", "phaseStep",
+] as const;
+export type ActiveSkillId = (typeof ACTIVE_SKILL_IDS)[number];
+/** Skills available since launch: fresh characters know them without spending points. */
+export const LAUNCH_SKILL_IDS = ["nova", "dash", "ward", "flameWave"] as const satisfies readonly ActiveSkillId[];
+
+export function createInitialSkillLevels(): Record<ActiveSkillId, number> {
+  return Object.fromEntries(ACTIVE_SKILL_IDS.map((id) => [id, (LAUNCH_SKILL_IDS as readonly string[]).includes(id) ? 1 : 0])) as Record<ActiveSkillId, number>;
+}
 export type SkillLevels = Record<ActiveSkillId, number>;
 export type SkillBarSkillId = "basic" | ActiveSkillId;
 export type SkillLoadout = [

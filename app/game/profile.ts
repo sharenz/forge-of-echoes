@@ -9,6 +9,7 @@ import { createFlaskStack } from "./flasks";
 import { createStash } from "./stash";
 import { calculateCharacterStats } from "./stats";
 import { DEFAULT_SKILL_LOADOUT } from "./skill-loadout";
+import { createInitialSkillLevels } from "./domain";
 
 function startingInventory(): InventoryItem[] {
   const items: InventoryItem[] = [];
@@ -32,7 +33,7 @@ export function createInitialProfile(
       name: name.trim() || classDefinition.name, classId, level: 1, xp: 0,
       allocatedAttributes: { strength: 0, dexterity: 0, intelligence: 0 },
       unspentAttributePoints: 0,
-      skillLevels: { nova: 1, dash: 1, ward: 1, flameWave: 1 },
+      skillLevels: createInitialSkillLevels(),
       skillLoadout: [...DEFAULT_SKILL_LOADOUT],
       unspentSkillPoints: 0,
       mapsCompleted: 0, highestWave: 0,

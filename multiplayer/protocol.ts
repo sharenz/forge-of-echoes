@@ -1,10 +1,10 @@
 import { z } from "zod";
-import type { CharacterClassId, DamageType, MonsterRarity, PlayerProfile } from "../app/game/domain";
+import type { CharacterClassId, DamageType, MonsterRarity, PlayerProfile, SkillBarSkillId } from "../app/game/domain";
+import { ACTIVE_SKILL_IDS } from "../app/game/domain";
+import type { PartySnapshot, PublicPartyListing } from "../server/coordination/PartyCoordinator";
+import type { TradeSnapshot } from "../server/persistence/TradeRepository";
 import type { MonsterArchetypeId } from "../app/game/config/monsters";
 import { MERCHANTS, type MerchantId } from "../app/game/config/merchants";
-import type { PartySnapshot } from "../server/coordination/PartyCoordinator";
-import type { PublicPartyListing } from "../server/coordination/PartyCoordinator";
-import type { TradeSnapshot } from "../server/persistence/TradeRepository";
 import { AUTHORITATIVE_SIMULATION_HZ } from "./simulation";
 
 export const MULTIPLAYER_LIMITS = {
@@ -29,6 +29,17 @@ export const MULTIPLAYER_LIMITS = {
 
 /** Increment whenever a rolling client/server deploy cannot safely interoperate. */
 export const WIRE_PROTOCOL_VERSION = 1;
+
+/** Wire code assignments for skill ids. Append-only: existing codes must stay stable. */
+export const SKILL_CODES = { basic: 0, nova: 1, dash: 2, ward: 3, flameWave: 4, frostShards: 5, cinderComet: 6, lifeBloom: 7, phaseStep: 8 } as const;
+
+export function skillIdFromCode(code: number): SkillBarSkillId {
+  return (Object.entries(SKILL_CODES) as [SkillBarSkillId, number][]).find(([, wired]) => wired === code)?.[0] ?? "basic";
+}
+
+export function skillCodeFromId(id: SkillBarSkillId): number {
+  return SKILL_CODES[id];
+}
 
 // Session claims can represent existing characters; new roster entries are
 // restricted independently to classes that are ready for players.
@@ -128,7 +139,7 @@ export type LatencyProbeMessage = z.infer<typeof latencyProbeSchema>;
 
 export const attackCommandSchema = z.object({
   sequence: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  skill: z.enum(["basic", "nova", "dash", "ward", "flameWave"]),
+  skill: z.enum(["basic", ...ACTIVE_SKILL_IDS]),
   direction: z.object({ x: z.number().finite().min(-1).max(1), y: z.number().finite().min(-1).max(1) }).strict().optional(),
 }).strict().superRefine((command, context) => {
   if ((command.skill === "basic" || command.skill === "dash" || command.skill === "flameWave") && !command.direction) {
@@ -275,11 +286,11 @@ export const profileCommandSchema = z.discriminatedUnion("type", [
   }).strict(),
   z.object({ type: z.literal("equip_item"), itemId: itemIdSchema, slot: characterEquipmentSlotSchema }).strict(),
   z.object({ type: z.literal("allocate_attribute"), attribute: z.enum(["strength", "dexterity", "intelligence"]) }).strict(),
-  z.object({ type: z.literal("allocate_skill"), skill: z.enum(["nova", "dash", "ward", "flameWave"]) }).strict(),
+  z.object({ type: z.literal("allocate_skill"), skill: z.enum(ACTIVE_SKILL_IDS) }).strict(),
   z.object({
     type: z.literal("set_skill_slot"),
     slot: z.number().int().min(0).max(4),
-    skill: z.enum(["basic", "nova", "dash", "ward", "flameWave"]).nullable(),
+    skill: z.enum(["basic", ...ACTIVE_SKILL_IDS]).nullable(),
   }).strict(),
   z.object({ type: z.literal("load_flask"), itemId: itemIdSchema, slot: z.number().int().min(0).max(4) }).strict(),
   z.object({ type: z.literal("unload_flask"), slot: z.number().int().min(0).max(4) }).strict(),
@@ -327,5 +338,5 @@ export const acceptTradeRequestSchema = z.object({
 
 export interface RejectedCommandMessage {
   command: string;
-  reason: "invalid" | "stale" | "unauthorized" | "rate_limited" | "projectile_capacity" | "inventory_full" | "conflict" | "item_locked" | "server_error";
+  reason: "invalid" | "stale" | "unauthorized" | "rate_limited" | "projectile_capacity" | "inventory_full" | "conflict" | "item_locked" | "server_error" | "dead";
 }

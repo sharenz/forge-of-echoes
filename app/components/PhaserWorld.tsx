@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ACTIVE_SKILLS, BASIC_ATTACK, type ArenaBalance } from "../game/combat";
 import { ARENA_RULES } from "../game/config/arena";
 import { FLASK_DEFINITIONS } from "../game/config/flasks";
 import { MAP_MODIFIERS } from "../game/config/maps";
-import type { MerchantId } from "../game/config/merchants";
+import { ACTIVE_SKILL_IDS, createInitialSkillLevels, type ActiveSkillId, type CharacterClassId, type CharacterProgress, type CharacterStats, type FlaskBelt, type MapItem, type SkillBarSkillId, type SkillLevels, type SkillLoadout, type StatKey, type StatModifier } from "../game/domain";
+import { MerchantId } from "../game/config/merchants";
 import { MAX_CHARACTER_LEVEL, XP_BY_LEVEL } from "../game/config/progression";
-import type { CharacterClassId, CharacterProgress, CharacterStats, FlaskBelt, MapItem, SkillBarSkillId, SkillLoadout, StatKey, StatModifier } from "../game/domain";
 import { mapModifierDescription, mapModifierRewardDescription } from "../game/maps";
 import { grantCharacterProgressExperience } from "../game/progression";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
@@ -66,38 +66,64 @@ interface ResourceGlobeProps {
 }
 
 type ResolvedSkillBar = Record<SkillBarSkillId, ResolvedSkillDefinition>;
+const SKILL_SLOT_CLASS: Record<SkillBarSkillId, string> = {
+  basic: "lance-slot",
+  nova: "nova-slot",
+  dash: "rift-slot",
+  ward: "ward-slot",
+  flameWave: "flame-wave-slot",
+  frostShards: "frost-shards-slot",
+  cinderComet: "cinder-comet-slot",
+  lifeBloom: "life-bloom-slot",
+  phaseStep: "phase-step-slot",
+};
 
-function skillActionView(
-  skill: SkillBarSkillId,
-  definitions: ResolvedSkillBar,
-  hud: WorldHudState | null,
-  readiness: { novaReady: boolean; riftReady: boolean; wardReady: boolean; flameWaveReady: boolean },
-  progress: { novaProgress: number; riftProgress: number; wardProgress: number; flameWaveProgress: number },
-) {
+function skillTooltip(skill: SkillBarSkillId, definition: ResolvedSkillDefinition): string {
+  const parts = [`${definition.name} · Level ${definition.level}`];
+  if (skill === "basic") parts.push("Basic fire attack");
+  if (definition.focusCost > 0) parts.push(`${definition.focusCost} focus`);
+  if (definition.castTime > 0 && definition.presentation.animation === "cast") parts.push(`${definition.castTime.toFixed(2)}s cast`);
+  if (definition.maxCharges > 0) parts.push(`${definition.maxCharges} charges · ${definition.recharge.toFixed(1)}s recharge`);
+  else if (definition.cooldown > 0) parts.push(`${definition.cooldown.toFixed(1)}s cooldown`);
+  if (definition.damageReduction > 0) parts.push(`${Math.round(definition.damageReduction)}% less damage for ${definition.duration.toFixed(1)}s`);
+  if (definition.recoveryAmount > 0) parts.push(`Restores ~${Math.round(definition.recoveryAmount)} life over ${definition.duration.toFixed(1)}s`);
+  if (definition.damage && skill !== "basic") {
+    const piercing = definition.piercing > 0 ? ` · pierces ${definition.piercing}` : "";
+    parts.push(`${definition.projectileCount} projectile${definition.projectileCount === 1 ? "" : "s"}${piercing}`);
+  }
+  return parts.join(" · ");
+}
+
+interface SkillActionView {
+  className: string;
+  ready: boolean;
+  progress: number;
+  cooldown: number;
+  active: boolean;
+  tooltip: string;
+  charges: number | null;
+}
+
+function skillActionView(skill: SkillBarSkillId, definitions: ResolvedSkillBar, hud: WorldHudState | null): SkillActionView {
   const definition = definitions[skill];
-  if (skill === "basic") return {
-    className: "lance-slot", ready: true, progress: 0, cooldown: 0, active: false,
-    tooltip: `${definition.name} · Basic fire attack`,
-  };
-  if (skill === "nova") return {
-    className: "nova-slot", ready: readiness.novaReady, progress: progress.novaProgress,
-    cooldown: hud?.novaCooldown ?? 0, active: false,
-    tooltip: `${definition.name} · Level ${definition.level} · ${definition.castTime.toFixed(2)}s cast`,
-  };
-  if (skill === "dash") return {
-    className: "rift-slot", ready: readiness.riftReady, progress: progress.riftProgress,
-    cooldown: 0, active: false, tooltip: `${definition.name} · Level ${definition.level}`,
-  };
-  if (skill === "ward") return {
-    className: "ward-slot", ready: readiness.wardReady, progress: progress.wardProgress,
-    cooldown: hud?.wardCooldown ?? 0, active: Boolean(hud && hud.wardRemaining > 0),
-    tooltip: `${definition.name} · Level ${definition.level} · ${definition.castTime.toFixed(2)}s cast · ${Math.round(definition.damageReduction)}% less damage for ${definition.duration.toFixed(1)}s`,
-  };
-  return {
-    className: "flame-wave-slot", ready: readiness.flameWaveReady, progress: progress.flameWaveProgress,
-    cooldown: hud?.flameWaveCooldown ?? 0, active: false,
-    tooltip: `${definition.name} · Level ${definition.level} · ${definition.castTime.toFixed(2)}s cast · ${definition.projectileCount} piercing projectiles`,
-  };
+  const tooltip = skillTooltip(skill, definition);
+  if (skill === "basic") {
+    return { className: SKILL_SLOT_CLASS.basic, ready: true, progress: 0, cooldown: 0, active: false, tooltip, charges: null };
+  }
+  const cooldown = hud?.skillCooldowns[skill] ?? 0;
+  const charges = hud?.charges[skill];
+  const maxCharges = hud?.maxCharges[skill] ?? definition.maxCharges;
+  const rechargeTimer = hud?.rechargeTimers[skill] ?? 0;
+  let progress = cooldown > 0.05 && definition.cooldown > 0
+    ? Math.min(100, (cooldown / definition.cooldown) * 100)
+    : 0;
+  if (maxCharges > 0 && charges !== undefined && charges < maxCharges && definition.recharge > 0) {
+    progress = Math.min(100, (rechargeTimer / definition.recharge) * 100);
+  }
+  const offCooldown = maxCharges > 0 ? (charges ?? 0) > 0 : cooldown <= 0.05;
+  const ready = Boolean(hud && offCooldown && hud.focus >= definition.focusCost);
+  const active = Boolean(hud && definition.damageReduction > 0 && hud.wardRemaining > 0);
+  return { className: SKILL_SLOT_CLASS[skill], ready, progress, cooldown, active, tooltip, charges: maxCharges > 0 ? charges ?? 0 : null };
 }
 
 function ResourceGlobe({ kind, label, current, maximum }: ResourceGlobeProps) {
@@ -145,10 +171,7 @@ const EMPTY_FLASK_BELT: FlaskBelt = [null, null, null, null, null];
 
 export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [], paused = false, controlsBlocked = false, worldVolume = 1, arenaBalance, activeMap, characterStats, characterProgress, characterStatBreakdown, flaskBelt = EMPTY_FLASK_BELT, onStation, onReturnToHideout, onFlaskLoad, onItemDropToGround, onFinalRageChange, multiplayer, children }: PhaserWorldProps) {
   const runtimeClassId = classId;
-  const novaLevel = characterProgress?.skillLevels.nova ?? 1;
-  const dashLevel = characterProgress?.skillLevels.dash ?? 1;
-  const wardLevel = characterProgress?.skillLevels.ward ?? 1;
-  const flameWaveLevel = characterProgress?.skillLevels.flameWave ?? 1;
+  const skillLevels: SkillLevels = characterProgress?.skillLevels ?? createInitialSkillLevels();
   const skillLoadout = characterProgress?.skillLoadout ?? DEFAULT_SKILL_LOADOUT;
   const parentRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<PhaserRuntime | null>(null);
@@ -157,7 +180,7 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
   const flaskBeltRef = useRef(flaskBelt);
   const portalIndexesRef = useRef([...portalIndexes]);
   const merchantIdsKey = merchantIds.join("|");
-  const skillLevelsRef = useRef({ nova: novaLevel, dash: dashLevel, ward: wardLevel, flameWave: flameWaveLevel });
+  const skillLevelsRef = useRef<SkillLevels>(skillLevels);
   const skillLoadoutRef = useRef<SkillLoadout>([...skillLoadout]);
   const pausedRef = useRef(paused);
   const controlsBlockedRef = useRef(controlsBlocked);
@@ -208,13 +231,10 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
     onFinalRageChange?.(Boolean(hud?.finalRageActive));
   }, [hud?.finalRageActive, onFinalRageChange]);
 
-  useEffect(() => () => onFinalRageChange?.(false), [onFinalRageChange]);
-
   useEffect(() => {
-    const skillLevels = { nova: novaLevel, dash: dashLevel, ward: wardLevel, flameWave: flameWaveLevel };
     skillLevelsRef.current = skillLevels;
     runtimeRef.current?.updateSkillLevels(skillLevels);
-  }, [novaLevel, dashLevel, wardLevel, flameWaveLevel]);
+  }, [skillLevels]);
 
   useEffect(() => {
     skillLoadoutRef.current = [...(characterProgress?.skillLoadout ?? DEFAULT_SKILL_LOADOUT)];
@@ -269,19 +289,14 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
 
   const cooldownMultiplier = characterStats?.skillCooldown ?? 1;
   const castSpeedMultiplier = characterStats?.castSpeed ?? 1;
-  const resolvedNova = resolveSkillDefinition(ACTIVE_SKILLS.nova, novaLevel, cooldownMultiplier, castSpeedMultiplier);
-  const resolvedBasic = resolveSkillDefinition(BASIC_ATTACK, 1);
-  const resolvedDash = resolveSkillDefinition(ACTIVE_SKILLS.dash, dashLevel, cooldownMultiplier, castSpeedMultiplier);
-  const resolvedWard = resolveSkillDefinition(ACTIVE_SKILLS.ward, wardLevel, cooldownMultiplier, castSpeedMultiplier);
-  const resolvedFlameWave = resolveSkillDefinition(ACTIVE_SKILLS.flameWave, flameWaveLevel, cooldownMultiplier, castSpeedMultiplier);
-  const novaReady = Boolean(hud && hud.novaCooldown <= 0.05 && hud.focus >= resolvedNova.focusCost);
-  const riftReady = Boolean(hud && hud.riftCharges > 0 && hud.focus >= resolvedDash.focusCost);
-  const wardReady = Boolean(hud && hud.wardCooldown <= 0.05 && hud.focus >= resolvedWard.focusCost);
-  const flameWaveReady = Boolean(hud && hud.flameWaveCooldown <= 0.05 && hud.focus >= resolvedFlameWave.focusCost);
-  const novaProgress = hud ? Math.min(100, (hud.novaCooldown / resolvedNova.cooldown) * 100) : 0;
-  const riftProgress = hud ? Math.min(100, (hud.riftRecharge / resolvedDash.recharge) * 100) : 0;
-  const wardProgress = hud ? Math.min(100, (hud.wardCooldown / resolvedWard.cooldown) * 100) : 0;
-  const flameWaveProgress = hud ? Math.min(100, (hud.flameWaveCooldown / resolvedFlameWave.cooldown) * 100) : 0;
+  const resolvedSkills = useMemo(() => {
+    const basicEntry = resolveSkillDefinition(BASIC_ATTACK, 1, cooldownMultiplier, castSpeedMultiplier);
+    const resolved = {} as Record<ActiveSkillId, ResolvedSkillDefinition>;
+    for (const id of ACTIVE_SKILL_IDS) {
+      resolved[id] = resolveSkillDefinition(ACTIVE_SKILLS[id], skillLevels[id], cooldownMultiplier, castSpeedMultiplier);
+    }
+    return { basic: basicEntry, ...resolved } as ResolvedSkillBar;
+  }, [cooldownMultiplier, castSpeedMultiplier, skillLevels]);
   const displayedProgress = characterProgress
     ? grantCharacterProgressExperience(characterProgress, hud?.pendingExperience ?? 0).character
     : undefined;
@@ -408,15 +423,13 @@ export function PhaserWorld({ mode, classId, portalIndexes = [], merchantIds = [
                         <span className="skill-icon"><i /></span><kbd>{slot.key}</kbd>
                       </button>
                     );
-                    const view = skillActionView(skill, {
-                      basic: resolvedBasic, nova: resolvedNova, dash: resolvedDash, ward: resolvedWard, flameWave: resolvedFlameWave,
-                    }, hud, { novaReady, riftReady, wardReady, flameWaveReady }, { novaProgress, riftProgress, wardProgress, flameWaveProgress });
+                    const view = skillActionView(skill, resolvedSkills, hud);
                     return (
                       <button type="button" className={`action-slot ${view.className} ${view.active ? "is-active" : ""}`} disabled={mode !== "arena" || !view.ready} data-tooltip={view.tooltip} onClick={() => runtimeRef.current?.useSkill(skill)} key={slot.index}>
                         {view.progress > 0 && <span className="skill-cooldown" style={{ height: `${view.progress}%` }} />}
                         <span className="skill-icon"><i /></span><kbd>{slot.key}</kbd>
                         {view.cooldown > 0.05 && <strong>{view.cooldown.toFixed(1)}</strong>}
-                        {skill === "dash" && hud && <span className="slot-charges" aria-label={`${hud.riftCharges} of ${hud.riftMaxCharges} charges`}>{hud.riftCharges}</span>}
+                        {view.charges !== null && <span className="slot-charges" aria-label={`${view.charges} charges remaining`}>{view.charges}</span>}
                       </button>
                     );
                   })}

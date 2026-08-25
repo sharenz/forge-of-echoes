@@ -1,5 +1,8 @@
-import { useState, type CSSProperties } from "react";
+"use client";
+
+import { useMemo, useState, type CSSProperties } from "react";
 import { ACTIVE_SKILLS, BASIC_ATTACK, SKILL_TREE_BRANCHES } from "../game/config/skills";
+import type { SkillDefinition } from "../game/config/schema";
 import type { ActiveSkillId, CharacterProgress, SkillBarSkillId } from "../game/domain";
 import { SKILL_BAR_SLOTS } from "../game/skill-loadout";
 import { resolveSkillDefinition, type ResolvedSkillDefinition } from "../game/skills";
@@ -12,29 +15,11 @@ interface SkillTreePanelProps {
   onSetSlot: (slot: number, skill: SkillBarSkillId | null) => void;
 }
 
-interface SkillNodeProps {
-  id: ActiveSkillId;
-  current: ResolvedSkillDefinition;
-  castSpeed: number;
-  cooldownMultiplier: number;
-  points: number;
-  onAllocate: (skill: ActiveSkillId) => void;
-}
-
 const ACTIVE_SKILL_ENTRIES = Object.entries(ACTIVE_SKILLS) as [ActiveSkillId, (typeof ACTIVE_SKILLS)[ActiveSkillId]][];
-const SKILL_OPTIONS: readonly [SkillBarSkillId, typeof BASIC_ATTACK | (typeof ACTIVE_SKILLS)[ActiveSkillId]][] = [
-  ["basic", BASIC_ATTACK],
-  ...ACTIVE_SKILL_ENTRIES,
+const ALL_SKILL_OPTIONS: readonly (readonly [SkillBarSkillId, string, string])[] = [
+  ["basic", BASIC_ATTACK.name, BASIC_ATTACK.tree.accent],
+  ...ACTIVE_SKILL_ENTRIES.map(([id, definition]) => [id, definition.name, definition.tree.accent] as const),
 ];
-
-function skillSlotClass(skill: SkillBarSkillId | null): string {
-  if (skill === "basic") return "lance-slot";
-  if (skill === "nova") return "nova-slot";
-  if (skill === "dash") return "rift-slot";
-  if (skill === "ward") return "ward-slot";
-  if (skill === "flameWave") return "flame-wave-slot";
-  return "empty-skill-slot";
-}
 
 function formatNumber(value: number, decimals = 1): string {
   return value.toFixed(decimals).replace(/\.0+$/, "");
@@ -43,16 +28,17 @@ function formatNumber(value: number, decimals = 1): string {
 function skillMetrics(skill: ResolvedSkillDefinition): readonly [string, string][] {
   const metrics: [string, string][] = [];
   if (skill.damage) metrics.push(["Damage", `${Math.round(skill.damage.effectiveness * 100)}%`]);
-  if (skill.projectileCount > 0) metrics.push(["Projectiles", String(skill.projectileCount)]);
-  if (skill.piercing > 0 || skill.damage) metrics.push(["Pierce", String(skill.piercing)]);
+  if (skill.projectileCount > 0 && skill.damage) metrics.push(["Projectiles", String(skill.projectileCount)]);
+  if (skill.piercing > 0 && skill.damage) metrics.push(["Pierce", String(skill.piercing)]);
   if (skill.maxCharges > 0) metrics.push(["Charges", String(skill.maxCharges)]);
   if (skill.recharge > 0) metrics.push(["Recharge", `${formatNumber(skill.recharge, 2)}s`]);
   if (skill.damageReduction > 0) metrics.push(["Guard", `${formatNumber(skill.damageReduction)}%`]);
-  if (skill.duration > 0) metrics.push(["Duration", `${formatNumber(skill.duration)}s`]);
-  if (skill.castTime > 0) metrics.push(["Cast time", `${formatNumber(skill.castTime, 2)}s`]);
+  if (skill.recoveryAmount > 0) metrics.push(["Restores", `~${Math.round(skill.recoveryAmount)} life`]);
+  if (skill.duration > 0 && (skill.damageReduction > 0 || skill.recoveryAmount > 0)) metrics.push(["Duration", `${formatNumber(skill.duration)}s`]);
+  if (skill.castTime > 0 && skill.presentation.animation === "cast") metrics.push(["Cast", `${formatNumber(skill.castTime, 2)}s`]);
   if (skill.cooldown > 0) metrics.push(["Cooldown", `${formatNumber(skill.cooldown, 2)}s`]);
   metrics.push(["Focus", String(skill.focusCost)]);
-  return metrics.slice(0, 4);
+  return metrics;
 }
 
 function skillChangeSummary(current: ResolvedSkillDefinition, next: ResolvedSkillDefinition): string {
@@ -66,110 +52,191 @@ function skillChangeSummary(current: ResolvedSkillDefinition, next: ResolvedSkil
   if (next.recharge < current.recharge) changes.push(`${formatNumber(current.recharge - next.recharge, 2)}s faster recharge`);
   if (next.duration > current.duration) changes.push(`+${formatNumber(next.duration - current.duration, 2)}s duration`);
   if (next.damageReduction > current.damageReduction) changes.push(`+${formatNumber(next.damageReduction - current.damageReduction)}% guard`);
-  return changes.length > 0 ? changes.join(" · ") : "Improves this discipline";
+  if (next.recoveryAmount > current.recoveryAmount) changes.push(`+${Math.round(next.recoveryAmount - current.recoveryAmount)} life restored`);
+  return changes.length > 0 ? changes.join(" · ") : "Deepens this art";
 }
 
-function milestoneSummary(id: ActiveSkillId, level: number, cooldownMultiplier = 1, castSpeed = 1): string {
-  const definition = ACTIVE_SKILLS[id];
-  return skillChangeSummary(
-    resolveSkillDefinition(definition, level - 1, cooldownMultiplier, castSpeed),
-    resolveSkillDefinition(definition, level, cooldownMultiplier, castSpeed),
-  );
+function prerequisiteText(requires: readonly { skill: ActiveSkillId; level: number }[]): string | null {
+  if (requires.length === 0) return null;
+  return requires
+    .map((requirement) => `${ACTIVE_SKILLS[requirement.skill].name} ${requirement.level}`)
+    .join(" + ");
 }
 
-function SkillNode({ id, current, castSpeed, cooldownMultiplier, points, onAllocate }: SkillNodeProps) {
-  const next = resolveSkillDefinition(ACTIVE_SKILLS[id], current.level + 1, cooldownMultiplier, castSpeed);
-  const canAllocate = points > 0 && current.level < current.maxLevel;
-  const progress = current.level / current.maxLevel * 100;
-
-  return (
-    <article className={`skill-ledger-node skill-${id}`} style={{ "--skill-accent": current.tree.accent } as CSSProperties}>
-      <div className="skill-ledger-icon"><span>{current.key}</span><i /></div>
-      <div className="skill-ledger-copy">
-        <span>{current.tree.role}</span>
-        <h4>{current.name}</h4>
-        <small>{current.tree.description}</small>
-        <div className="skill-ledger-progress"><i style={{ width: `${progress}%` }} /></div>
-      </div>
-      <div className="skill-ledger-metrics">
-        {skillMetrics(current).slice(0, 3).map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-      </div>
-      <div className="skill-ledger-level"><small>Level</small><strong>{current.level}</strong><em>/ {current.maxLevel}</em></div>
-      <button type="button" disabled={!canAllocate} onClick={() => onAllocate(id)} aria-label={`Raise ${current.name}`}>
-        <b>+</b><span>{current.level >= current.maxLevel ? "Mastered" : skillChangeSummary(current, next)}</span>
-      </button>
-      <div className="skill-ledger-milestones">
-        {[5, 10, 15, 20].map((level) => <i className={current.level >= level ? "earned" : ""} title={`Level ${level}: ${milestoneSummary(id, level, cooldownMultiplier, castSpeed)}`} key={level}>{level}</i>)}
-      </div>
-    </article>
-  );
+interface NodeState {
+  resolved: ResolvedSkillDefinition;
+  level: number;
+  unlocked: boolean;
+  requirementsMet: boolean;
+  requirements: readonly { skill: ActiveSkillId; level: number }[];
+  canAllocate: boolean;
+  isMaxed: boolean;
 }
 
 export function SkillTreePanel({ progress, castSpeed, cooldownMultiplier, onAllocate, onSetSlot }: SkillTreePanelProps) {
-  const basic = resolveSkillDefinition(BASIC_ATTACK, 1);
   const [selectedSlot, setSelectedSlot] = useState(0);
+  const [selectedSkill, setSelectedSkill] = useState<ActiveSkillId>("nova");
+
+  const states = useMemo(() => {
+    const record = {} as Record<ActiveSkillId, NodeState>;
+    for (const [id, definition] of ACTIVE_SKILL_ENTRIES) {
+      const level = progress.skillLevels[id];
+      const requirements = (definition.tree as SkillDefinition["tree"]).requires ?? [];
+      const requirementsMet = (requirements as readonly { skill: ActiveSkillId; level: number }[]).every((requirement) => progress.skillLevels[requirement.skill] >= requirement.level);
+      record[id] = {
+        resolved: resolveSkillDefinition(definition, Math.max(1, level), cooldownMultiplier, castSpeed),
+        level,
+        unlocked: level >= 1,
+        requirements,
+        requirementsMet,
+        canAllocate: progress.unspentSkillPoints > 0 && level < definition.progression.maxLevel && requirementsMet,
+        isMaxed: level >= definition.progression.maxLevel,
+      };
+    }
+    return record;
+  }, [progress.skillLevels, progress.unspentSkillPoints, cooldownMultiplier, castSpeed]);
+
+  const selected = states[selectedSkill];
+  const selectedNext = resolveSkillDefinition(ACTIVE_SKILLS[selectedSkill], Math.min(selected.resolved.maxLevel, selected.level + 1), cooldownMultiplier, castSpeed);
+
+  const bindableSkills = ALL_SKILL_OPTIONS.filter(([id]) => id === "basic" || states[id].unlocked);
+  const boundSkill = progress.skillLoadout[selectedSlot];
 
   return (
-    <div className="skill-tree-interface">
-      <section className="skill-loadout-editor" aria-label="Skill bar loadout">
-        <header>
-          <div><span>Combat bindings</span><h3>Skill Bar</h3></div>
-          <small>Select a socket, then choose a learned skill</small>
-        </header>
-        <div className="skill-loadout-slots">
-          {SKILL_BAR_SLOTS.map((slot) => {
-            const skill = progress.skillLoadout[slot.index];
-            const definition = skill ? (skill === "basic" ? BASIC_ATTACK : ACTIVE_SKILLS[skill]) : null;
-            return (
-              <button type="button" className={`skill-loadout-slot ${skillSlotClass(skill)} ${selectedSlot === slot.index ? "selected" : ""}`} onClick={() => setSelectedSlot(slot.index)} key={slot.index}>
-                <kbd>{slot.key}</kbd>
-                <span className="skill-icon"><i /></span>
-                <strong>{definition?.name ?? "Empty"}</strong>
-              </button>
-            );
-          })}
+    <div className="skilltree">
+      <header className="skilltree-masthead">
+        <div className="skilltree-title">
+          <span className="ui-type-caption">Sorceress · Spellweave</span>
+          <h3 className="ui-type-title">Grimoire of Echoes</h3>
         </div>
-        <div className="skill-loadout-picker">
-          <span>Bind to <strong>{SKILL_BAR_SLOTS[selectedSlot].key}</strong></span>
-          <div>
-            {SKILL_OPTIONS.map(([skill, definition]) => (
-              <button type="button" className={`${skillSlotClass(skill)} ${progress.skillLoadout[selectedSlot] === skill ? "assigned" : ""}`} onClick={() => onSetSlot(selectedSlot, skill)} key={skill}>
-                <span className="skill-icon"><i /></span><strong>{definition.name}</strong><small>{skill === "basic" ? "Innate" : `Lv ${progress.skillLevels[skill]}`}</small>
-              </button>
-            ))}
-            <button type="button" className="clear-loadout-choice" onClick={() => onSetSlot(selectedSlot, null)}><strong>Clear</strong><small>Empty socket</small></button>
-          </div>
+        <div className={`skilltree-orb ${progress.unspentSkillPoints > 0 ? "available" : ""}`} aria-label={`${progress.unspentSkillPoints} unspent skill points`}>
+          <strong className="ui-type-title">{progress.unspentSkillPoints}</strong>
+          <span className="ui-type-caption">{progress.unspentSkillPoints === 1 ? "skill point" : "skill points"}</span>
+        </div>
+      </header>
+
+      <div className="skilltree-grove" role="tree" aria-label="Skill tree">
+        {SKILL_TREE_BRANCHES.map((branch) => {
+          const branchNodes = ACTIVE_SKILL_ENTRIES
+            .filter(([, definition]) => definition.tree.branch === branch.id)
+            .sort(([, left], [, right]) => left.tree.tier - right.tree.tier);
+          const deepestTier = Math.max(...branchNodes.map(([, definition]) => definition.tree.tier));
+          return (
+            <section className={`skilltree-branch branch-${branch.id}`} key={branch.id} style={{ "--branch-accent": branch.accent } as CSSProperties}>
+              <header className="skilltree-branch-head">
+                <i aria-hidden="true">{branch.numeral}</i>
+                <div>
+                  <h4 className="ui-type-body">{branch.name}</h4>
+                  <small className="ui-type-caption">{branch.subtitle}</small>
+                </div>
+              </header>
+              <div className="skilltree-ladder" style={{ "--tiers": deepestTier } as CSSProperties}>
+                {[...branchNodes].reverse().map(([id], index, ladder) => {
+                  const state = states[id];
+                  const nodeState = !state.requirementsMet ? "locked" : state.isMaxed ? "maxed" : state.unlocked ? "learned" : "available";
+                  const nextId = index < ladder.length - 1 ? ladder[index + 1][0] : null;
+                  return (
+                    <div className="skilltree-rung" key={id}>
+                      <button
+                        type="button"
+                        role="treeitem"
+                        aria-selected={selectedSkill === id}
+                        className={`skilltree-node ${nodeState} ${selectedSkill === id ? "selected" : ""}`}
+                        style={{ "--skill-accent": state.resolved.tree.accent } as CSSProperties}
+                        onClick={() => setSelectedSkill(id)}
+                        data-tooltip={state.unlocked ? undefined : `Locked · needs ${prerequisiteText(state.requirements)}`}
+                      >
+                        <span className="skilltree-node-ring" aria-hidden="true" />
+                        <span className="ui-type-caption skilltree-node-level">{state.level}/{state.resolved.maxLevel}</span>
+                        <strong className="ui-type-secondary">{state.resolved.name}</strong>
+                        {!state.requirementsMet && <small className="ui-type-caption">Needs {prerequisiteText(state.requirements)}</small>}
+                      </button>
+                      {nextId && (
+                        <svg className="skilltree-link" viewBox="0 0 8 44" aria-hidden="true">
+                          <line x1="4" y1="2" x2="4" y2="42" data-lit={state.level >= 1 ? "true" : undefined} />
+                        </svg>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+        <aside className="skilltree-core" style={{ "--skill-accent": BASIC_ATTACK.tree.accent } as CSSProperties}>
+          <span className="ui-type-caption">Innate</span>
+          <strong className="ui-type-secondary">{BASIC_ATTACK.name}</strong>
+          <kbd>Space</kbd>
+        </aside>
+      </div>
+
+      <section className="skilltree-detail" aria-label={`Details for ${selected.resolved.name}`} style={{ "--skill-accent": selected.resolved.tree.accent } as CSSProperties}>
+        <div className="skilltree-detail-copy">
+          <span className="ui-type-caption">{selected.resolved.tree.role}</span>
+          <h4 className="ui-type-body">{selected.resolved.name}{selected.level > 0 ? ` · Rank ${selected.level}` : " · Unlearned"}</h4>
+          <p className="ui-type-secondary">{selected.resolved.tree.description}</p>
+          {!selected.requirementsMet && (
+            <p className="ui-type-caption skilltree-detail-lock">Requires {prerequisiteText(selected.requirements)}</p>
+          )}
+        </div>
+        <dl className="skilltree-detail-stats">
+          {skillMetrics(selected.resolved).map(([label, value]) => (
+            <div key={label}><dt className="ui-type-caption">{label}</dt><dd className="ui-type-secondary">{value}</dd></div>
+          ))}
+        </dl>
+        <div className="skilltree-detail-actions">
+          <button
+            type="button"
+            className="skilltree-allocate"
+            disabled={!selected.canAllocate}
+            onClick={() => onAllocate(selectedSkill)}
+          >
+            {selected.isMaxed ? "Mastered" : selected.level === 0 ? `Learn · 1 point` : `Raise to ${selected.level + 1}`}
+          </button>
+          {!selected.isMaxed && selectedNext.level > selected.level && (
+            <small className="ui-type-caption">{skillChangeSummary(selected.resolved, selectedNext)}</small>
+          )}
         </div>
       </section>
 
-      <div className="skill-book-body">
-        <aside className="skill-book-spine">
-          <div><span>Sorceress</span><h3>Emberweave</h3><small>Every learned combat art</small></div>
-          <section className="skill-tree-core" style={{ "--skill-accent": basic.tree.accent } as CSSProperties}>
-            <div className="skill-core-sigil"><span>{basic.key}</span><i /></div>
-            <div><span>Innate</span><h4>{basic.name}</h4><p>{basic.tree.description}</p></div>
-            <div className="skill-core-metrics">{skillMetrics(basic).slice(0, 3).map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-          </section>
-          <div className={`skill-point-orb ${progress.unspentSkillPoints > 0 ? "available" : ""}`}><strong>{progress.unspentSkillPoints}</strong><span>skill points</span></div>
-          <footer><kbd>K</kbd><span>Close spellbook</span></footer>
-        </aside>
-
-        <section className="skill-discipline-grid">
-          {SKILL_TREE_BRANCHES.map((branch) => {
-            const skills = ACTIVE_SKILL_ENTRIES.filter(([, definition]) => definition.tree.branch === branch.id);
+      <section className="skilltree-bindings" aria-label="Skill bar bindings">
+        <header className="ui-type-caption"><span>Skill bar</span><span>Pick a socket, then a learned art</span></header>
+        <div className="skilltree-binding-row">
+          {SKILL_BAR_SLOTS.map((slot) => {
+            const bound = progress.skillLoadout[slot.index];
+            const accent = bound ? (bound === "basic" ? BASIC_ATTACK.tree.accent : ACTIVE_SKILLS[bound].tree.accent) : undefined;
             return (
-              <section className={`skill-discipline discipline-${branch.id}`} key={branch.id}>
-                <header><i>{branch.numeral}</i><div><span>Discipline</span><h3>{branch.name}</h3><small>{branch.subtitle}</small></div></header>
-                <div className="skill-discipline-nodes">
-                  {skills.map(([id, definition]) => (
-                    <SkillNode id={id} current={resolveSkillDefinition(definition, progress.skillLevels[id], cooldownMultiplier, castSpeed)} castSpeed={castSpeed} cooldownMultiplier={cooldownMultiplier} points={progress.unspentSkillPoints} onAllocate={onAllocate} key={id} />
-                  ))}
-                </div>
-              </section>
+              <button
+                type="button"
+                className={`skilltree-slot ${selectedSlot === slot.index ? "selected" : ""}`}
+                style={accent ? ({ "--skill-accent": accent } as CSSProperties) : undefined}
+                onClick={() => setSelectedSlot(slot.index)}
+                key={slot.index}
+              >
+                <kbd className="ui-type-caption">{slot.key}</kbd>
+                <strong className="ui-type-caption">{bound ? (bound === "basic" ? BASIC_ATTACK.name : ACTIVE_SKILLS[bound].name) : "Empty"}</strong>
+              </button>
             );
           })}
-        </section>
-      </div>
+        </div>
+        <div className="skilltree-picker">
+          {bindableSkills.map(([id, name, accent]) => (
+            <button
+              type="button"
+              className={`skilltree-choice ${boundSkill === id ? "assigned" : ""}`}
+              style={{ "--skill-accent": accent } as CSSProperties}
+              onClick={() => onSetSlot(selectedSlot, id)}
+              key={id}
+            >
+              <span className="ui-type-caption">{name}</span>
+              <small className="ui-type-caption">{id === "basic" ? "Innate" : `Rank ${progress.skillLevels[id]}`}</small>
+            </button>
+          ))}
+          <button type="button" className="skilltree-choice clear" onClick={() => onSetSlot(selectedSlot, null)}>
+            <span className="ui-type-caption">Clear socket</span>
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

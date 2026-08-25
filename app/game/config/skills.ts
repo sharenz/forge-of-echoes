@@ -1,9 +1,10 @@
+import type { ActiveSkillId } from "../domain";
 import type { SkillDefinition } from "./schema";
 
 export const SKILL_TREE_BRANCHES = [
-  { id: "destruction", name: "Destruction", subtitle: "Shape fire into pack-clearing force", numeral: "I" },
-  { id: "survival", name: "Survival", subtitle: "Endure the deadliest moments", numeral: "II" },
-  { id: "mobility", name: "Mobility", subtitle: "Control distance and tempo", numeral: "III" },
+  { id: "destruction", name: "Destruction", subtitle: "Shape raw force into pack-clearing power", numeral: "I", accent: "#dc6c37" },
+  { id: "survival", name: "Survival", subtitle: "Endure the deadliest moments", numeral: "II", accent: "#58a7a0" },
+  { id: "mobility", name: "Mobility", subtitle: "Control distance and tempo", numeral: "III", accent: "#9371d0" },
 ] as const;
 
 export const BASIC_ATTACK = {
@@ -15,7 +16,9 @@ export const BASIC_ATTACK = {
   projectileScale: 1,
   projectileCount: 1,
   piercing: 0,
-  tree: { branch: "core", role: "Innate attack", description: "A focused fire bolt woven into every Sorceress loadout.", accent: "#d98143" },
+  projectileRange: 700,
+  aiming: "fan",
+  tree: { branch: "core", role: "Innate attack", description: "A focused fire bolt woven into every Sorceress loadout.", accent: "#d98143", tier: 0 },
   presentation: { animation: "attack", vfx: "ember-lance", audio: "ember-lance" },
 } as const satisfies SkillDefinition;
 
@@ -26,23 +29,46 @@ export const ACTIVE_SKILLS = {
     projectileScale: 1.35,
     projectileCount: 18,
     piercing: 0,
-    tree: { branch: "destruction", role: "Area devastation", description: "Detonate an expanding crown of embers to erase dense monster packs.", accent: "#dc6c37" },
+    projectileRange: 340,
+    aiming: "ring",
+    tree: { branch: "destruction", role: "Area devastation", description: "Detonate an expanding crown of embers to erase dense monster packs.", accent: "#dc6c37", tier: 1 },
     progression: { maxLevel: 20, damageEffectivenessPerLevel: 0.06, projectilesPerLevel: 1, piercingEveryLevels: 5 },
     presentation: { animation: "cast", vfx: "ember-nova", audio: "ember-nova" },
   },
-  dash: {
-    id: "dash", name: "Rift Step", key: "E", focusCost: 15, maxCharges: 3, recharge: 3,
-    tree: { branch: "mobility", role: "Mobility", description: "Tear through the rift to escape danger and reposition between packs.", accent: "#9371d0" },
-    progression: { maxLevel: 20, rechargePerLevel: -0.08, chargeEveryLevels: 5 },
-    presentation: { animation: "dash", vfx: "rift-step", audio: "rift-step" },
+  frostShards: {
+    id: "rime-shards", name: "Rime Shards", key: "", focusCost: 18, castTime: 0.55, cooldown: 2.6,
+    damage: { type: "cold", effectiveness: 0.95, range: { minMultiplier: 0.8, maxMultiplier: 1.2 } },
+    projectileScale: 0.85,
+    projectileCount: 3,
+    piercing: 2,
+    projectileRange: 620,
+    projectileSpreadRadians: 0.32,
+    aiming: "fan",
+    tree: {
+      branch: "destruction", role: "Piercing fan", tier: 2,
+      requires: [{ skill: "nova", level: 3 }],
+      description: "Loose a tight fan of freezing shards that punch through ranks without slowing.",
+      accent: "#6fb7d9",
+    },
+    progression: { maxLevel: 20, damageEffectivenessPerLevel: 0.05, piercingEveryLevels: 4 },
+    presentation: { animation: "attack", vfx: "flame-wave", audio: "ember-lance" },
   },
-  ward: {
-    id: "ward", name: "Cinder Ward", key: "R", focusCost: 25, castTime: 0.65, cooldown: 9,
-    duration: 4,
-    damageReduction: 45,
-    tree: { branch: "survival", role: "Defensive guard", description: "Wrap yourself in cinders that blunt incoming damage during lethal engagements.", accent: "#58a7a0" },
-    progression: { maxLevel: 20, cooldownPerLevel: -0.15, durationPerLevel: 0.08, damageReductionPerLevel: 0.6 },
-    presentation: { animation: "cast", vfx: "cinder-ward", audio: "cinder-ward" },
+  cinderComet: {
+    id: "cinder-comet", name: "Cinder Comet", key: "", focusCost: 38, castTime: 1.1, cooldown: 7,
+    damage: { type: "fire", effectiveness: 2.75, range: { minMultiplier: 0.8, maxMultiplier: 1.2 } },
+    projectileScale: 1.7,
+    projectileCount: 1,
+    projectileSpeed: 400,
+    projectileRange: 860,
+    aiming: "fan",
+    tree: {
+      branch: "destruction", role: "Heavy strike", tier: 3,
+      requires: [{ skill: "frostShards", level: 5 }],
+      description: "Hurl a slow mass of molten slag that grinds through everything in its lane.",
+      accent: "#e2683a",
+    },
+    progression: { maxLevel: 20, damageEffectivenessPerLevel: 0.09 },
+    presentation: { animation: "cast", vfx: "ember-lance", audio: "ember-nova" },
   },
   flameWave: {
     id: "flame-wave", name: "Flame Wave", key: "F", focusCost: 22, castTime: 0.7, cooldown: 5.5,
@@ -50,8 +76,55 @@ export const ACTIVE_SKILLS = {
     projectileScale: 1.18,
     projectileCount: 7,
     piercing: 1,
-    tree: { branch: "destruction", role: "Focused clearing", description: "Project a searing fan through a chosen lane for controlled pack destruction.", accent: "#e49a3f" },
+    projectileRange: 360,
+    projectileSpreadRadians: 0.78,
+    aiming: "fan",
+    tree: {
+      branch: "destruction", role: "Focused clearing", tier: 2,
+      requires: [{ skill: "nova", level: 3 }],
+      description: "Project a searing fan through a chosen lane for controlled pack destruction.",
+      accent: "#e49a3f",
+    },
     progression: { maxLevel: 20, damageEffectivenessPerLevel: 0.05, projectilesEveryLevels: 5, piercingEveryLevels: 5 },
     presentation: { animation: "cast", vfx: "flame-wave", audio: "flame-wave" },
   },
-} as const satisfies Record<string, SkillDefinition>;
+  ward: {
+    id: "ward", name: "Cinder Ward", key: "R", focusCost: 25, castTime: 0.65, cooldown: 9,
+    duration: 4,
+    damageReduction: 45,
+    tree: { branch: "survival", role: "Defensive guard", description: "Wrap yourself in cinders that blunt incoming damage during lethal engagements.", accent: "#58a7a0", tier: 1 },
+    progression: { maxLevel: 20, cooldownPerLevel: -0.15, durationPerLevel: 0.08, damageReductionPerLevel: 0.6 },
+    presentation: { animation: "cast", vfx: "cinder-ward", audio: "cinder-ward" },
+  },
+  lifeBloom: {
+    id: "echo-bloom", name: "Echo Bloom", key: "", focusCost: 28, castTime: 0.6, cooldown: 13,
+    duration: 5,
+    recoveryAmount: 26,
+    tree: {
+      branch: "survival", role: "Renewal", tier: 2,
+      requires: [{ skill: "ward", level: 3 }],
+      description: "Bind an echo of spent vitality that blooms back as steady life recovery.",
+      accent: "#69b98a",
+    },
+    progression: { maxLevel: 20, cooldownPerLevel: -0.2, durationPerLevel: 0.06, recoveryPerLevel: 2.2 },
+    presentation: { animation: "cast", vfx: "cinder-ward", audio: "cinder-ward" },
+  },
+  dash: {
+    id: "dash", name: "Rift Step", key: "E", focusCost: 15, maxCharges: 3, recharge: 3,
+    dashDistance: 105,
+    tree: { branch: "mobility", role: "Mobility", description: "Tear through the rift to escape danger and reposition between packs.", accent: "#9371d0", tier: 1 },
+    progression: { maxLevel: 20, rechargePerLevel: -0.08, chargeEveryLevels: 5 },
+    presentation: { animation: "dash", vfx: "rift-step", audio: "rift-step" },
+  },
+  phaseStep: {
+    id: "phase-step", name: "Phase Step", key: "", focusCost: 14, maxCharges: 2, recharge: 5.2, dashDistance: 205,
+    tree: {
+      branch: "mobility", role: "Long escape", tier: 2,
+      requires: [{ skill: "dash", level: 3 }],
+      description: "Step twice the distance in one blink, trading charges for reach.",
+      accent: "#b08ae0",
+    },
+    progression: { maxLevel: 20, rechargePerLevel: -0.12, chargeEveryLevels: 8 },
+    presentation: { animation: "dash", vfx: "rift-step", audio: "rift-step" },
+  },
+} as const satisfies Record<ActiveSkillId, SkillDefinition>;
