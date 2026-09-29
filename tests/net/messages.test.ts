@@ -587,3 +587,10 @@ describe('event timeline', () => {
     expect(tl.drain(1000)).toEqual([]);
   });
 });
+
+
+it('validates optional quoted Scrap prices without changing legacy bench commands', () => {
+  const base = { c: 'benchCraft', targetUid: 'i1', recipeId: 'bench:repair' };
+  expect(ok(cmd({ ...base, expectedScrap: 17 }))).toEqual(cmd({ ...base, expectedScrap: 17 }));
+  for (const expectedScrap of [-1, 1.5, '17', null, 1e20]) expect(rejected(cmd({ ...base, expectedScrap }))).toBeTruthy();
+});

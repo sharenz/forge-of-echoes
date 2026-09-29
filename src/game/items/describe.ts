@@ -92,7 +92,7 @@ export function describeEquipment(item: EquipmentItem, opts: EquipmentDescribeOp
 
   let hint: string | undefined;
   if (isUnique) hint = 'Unique items cannot be crafted.';
-  else if (finished) hint = 'Finished at 0 Stability: this item can no longer be crafted.';
+  else if (finished) hint = 'Finished at 0 Stability: repair Stability with Scrap at the bench to keep crafting.';
   else if (item.rarity === 'normal') hint = 'A clean Normal base: a Kindling Shard, an Essence or the Crafting Bench starts a craft.';
   else if (item.affixes.some((a) => a.crafted)) hint = 'The crafted affix can be removed for free at the Crafting Bench.';
 

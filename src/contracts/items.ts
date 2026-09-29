@@ -99,6 +99,10 @@ export interface EquipmentItem {
   maxStability: number;
   /** Short human-readable crafting history ("Ember Essence added Blazing (T4)"). */
   history: string[];
+  /** Lifetime craft count; independent of the capped display history. Missing on legacy items. */
+  craftCount?: number;
+  /** Paid Stability points restored at the bench; never reset by other crafting. */
+  repairCount?: number;
   isNew?: boolean;
 }
 
@@ -128,6 +132,8 @@ export interface MapItem {
   /** 0–20 (% increased item quantity & map drop chance). */
   quality: number;
   corrupted: boolean;
+  /** A paid commission: guarantees The Hunted when this map is opened. */
+  bounty?: boolean;
   isNew?: boolean;
 }
 

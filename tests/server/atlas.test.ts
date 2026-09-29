@@ -84,14 +84,18 @@ it('enforces fog and tier ceilings on commands before consuming the map', async 
   expect(server.db.loadOpenMaps()).toHaveLength(0);
 });
 
-it('refunds the original map and its key together if the sealed run cannot survive a restart', async () => {
+it('refunds the original Bounty map, key and paid territory fee together if the sealed run cannot survive a restart', async () => {
   const { path } = await boot();
   const aId = createLocalCharacter(server, 'Atlas Refund');
   const a = new LocalPlayer(server, aId);
-  server.game.setCharacter(a.session, { ...a.session.record.ch, atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 }, currencyStash: { reliquaryKey: 1 } });
+  server.game.setCharacter(a.session, { ...a.session.record.ch, atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 }, currencyStash: { reliquaryKey: 1, scrap: 20 } });
   const map = a.session.record.ch.backpack.entries.find((e) => e.item.kind === 'map')!.item;
   expect(a.command({ c: 'moveItem', uid: map.uid, to: { kind: 'mapDevice' } }).ok).toBe(true);
+  server.game.setCharacter(a.session, { ...a.session.record.ch, mapDevice: { ...a.session.record.ch.mapDevice!, tier: 7, bounty: true } });
+  const scrapBefore = currencyOnHand(a.session.record.ch, 'scrap');
   expect(a.command({ c: 'activateMapDevice', areaId: 'sealedReliquary' }).ok).toBe(true);
+  expect(currencyOnHand(a.session.record.ch, 'scrap')).toBe(scrapBefore - 2);
+  expect(JSON.parse(server.db.loadOpenMaps()[0].setup).entranceScrap).toBe(2);
   expect(currencyOnHand(a.session.record.ch, 'reliquaryKey')).toBe(0);
   await server.close();
   const db = await GameDatabase.open(path);
@@ -100,7 +104,33 @@ it('refunds the original map and its key together if the sealed run cannot survi
   db.close();
   await boot(path);
   const back = new LocalPlayer(server, aId);
-  expect(back.session.record.ch.mapDevice).toEqual({ ...map, isNew: undefined });
+  expect(back.session.record.ch.mapDevice).toEqual({ ...map, tier: 7, bounty: true, isNew: undefined });
   expect(currencyOnHand(back.session.record.ch, 'reliquaryKey')).toBe(1);
+  expect(currencyOnHand(back.session.record.ch, 'scrap')).toBe(scrapBefore);
   expect(server.db.loadOpenMaps()).toHaveLength(0);
+});
+
+
+it('restores a paid Bounty expedition without charging its owner again', async () => {
+  const { path } = await boot();
+  const id = createLocalCharacter(server, 'Paid Petra');
+  const p = new LocalPlayer(server, id);
+  const source = p.session.record.ch.backpack.entries.find(e => e.item.kind === 'map')!.item;
+  expect(p.command({ c: 'moveItem', uid: source.uid, to: { kind: 'mapDevice' } }).ok).toBe(true);
+  server.game.setCharacter(p.session, { ...p.session.record.ch,
+    atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 },
+    mapDevice: { ...p.session.record.ch.mapDevice!, tier: 7, bounty: true } });
+  const before = currencyOnHand(p.session.record.ch, 'scrap');
+  expect(p.command({ c: 'activateMapDevice', areaId: 'shatteredForge' }).ok).toBe(true);
+  expect(currencyOnHand(p.session.record.ch, 'scrap')).toBe(before - 2);
+  const originalEvent = server.game.instances.activeMapOf(id)!.setup.event;
+  expect(originalEvent?.kind).toBe('hunted');
+  await server.close();
+  await boot(path);
+  const back = new LocalPlayer(server, id);
+  expect(currencyOnHand(back.session.record.ch, 'scrap')).toBe(before - 2);
+  const restored = server.game.instances.activeMapOf(id)!;
+  expect(restored.setup.entranceScrap).toBe(2);
+  expect(restored.setup.event).toEqual(originalEvent);
+  expect(restored.sourceItem?.bounty).toBe(true);
 });

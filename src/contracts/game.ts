@@ -126,6 +126,15 @@ export interface DerivedStats {
 // Maps & runs
 // ---------------------------------------------------------------------------
 
+export interface BenchService {
+  id: string;
+  label: string;
+  lines: string[];
+  cost: { currencyId: CurrencyId; count: number }[];
+  available: boolean;
+  reason?: string;
+}
+
 export interface MapSummaryLine {
   label: string;        // "Item Quantity"
   value: string;        // "+64%"
@@ -139,6 +148,8 @@ export interface RunSetup {
   /** Original item for restart refunds when the chosen area changed its base. */
   sourceMap?: MapItem;
   atlasAreaId?: AtlasAreaId;
+  /** Actual Scrap entry fee paid; absent on legacy/free maps. Returned only for server-side run loss. */
+  entranceScrap?: number;
   seed: number;
   monsterLevel: number;
   /** Map-side item quantity % (100 = base): tier + mods + quality + implicit. Excludes any player's gear. */
@@ -262,6 +273,7 @@ export interface GameRulesApi {
   applyCurrency(ch: CharacterSave, currencyUid: string, targetUid: string, affixIndex?: number): Result<CraftOutcome>;
   /** Every bench recipe that fits the target's item class, with availability and cost. Empty for non-equipment. */
   benchRecipes(ch: CharacterSave, targetUid: string): BenchRecipe[];
+  benchServices(ch: CharacterSave, targetUid: string): BenchService[];
   applyBenchRecipe(ch: CharacterSave, targetUid: string, recipeId: string): Result<CraftOutcome>;
   /** Remove the target's bench-crafted affix (free; keeps stability spent). */
   clearCraftedAffix(ch: CharacterSave, targetUid: string): Result<CraftOutcome>;

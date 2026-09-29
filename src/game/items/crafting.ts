@@ -1,3 +1,4 @@
+import { nextCraftCount } from './crafting-history';
 // The Workbench: every equipment currency with exact GAME_SPEC §6 semantics.
 //
 // Pipeline for one craft:
@@ -186,7 +187,7 @@ export function equipmentCraftError(item: EquipmentItem, currencyId: CurrencyId,
   const base = findBase(item.baseId);
   if (!base) return 'This item can no longer be crafted.';
   if (item.rarity === 'unique') return 'Unique items cannot be crafted.';
-  if (item.stability <= 0) return 'This item is Finished and can no longer be crafted.';
+  if (item.stability <= 0) return 'This item is Finished. Repair Stability at the bench to continue.';
   if (item.stability < def.stabilityCost) {
     return `${def.name} needs ${def.stabilityCost} Stability; this item has ${item.stability} left.`;
   }
@@ -466,7 +467,7 @@ export function craftEquipment(
   }
   const finished = next.stability <= 0;
   if (finished) lines.push('Finished at 0 Stability');
-  next = { ...next, history: appendHistory(item.history, lines) };
+  next = { ...next, craftCount: nextCraftCount(item), history: appendHistory(item.history, lines) };
 
   let message = line;
   if (scarText) message += ` · Scarred: ${scarText}`;

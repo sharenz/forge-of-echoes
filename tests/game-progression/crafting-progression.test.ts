@@ -59,7 +59,7 @@ describe('advanced bases', () => {
   it('actually awards every advanced class through Tier 8 map loot, without dropping them at Tier 7', () => {
     const found = new Set<string>();
     for (const tier of [7, 8]) {
-      const ch = bareCharacter({ atlas: explored, mapDevice: map('ashenForge', tier) });
+      const ch = bareCharacter({ atlas: explored, mapDevice: map('ashenForge', tier), currencyStash: { scrap: 2 } });
       const setup = expectOk(rules.openMap(ch, 'crownFoundry')).setup;
       const rng = createRng(987);
       for (let i = 0; i < 1500; i++) for (const item of rules.rollChestLoot(setup, rng, ch)) {

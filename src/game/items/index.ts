@@ -216,7 +216,7 @@ export {
 } from './crafting';
 export type { CraftPreviewData, EquipmentCraftResult, EquipmentCurrencyId, OddsEntry } from './crafting';
 export {
-  applyBenchRecipe, backpackCurrency, benchAffixError, benchCost, benchCurrency, benchEssence, benchItemError, benchRecipes, benchTier,
+  applyBenchRecipe, benchServices, stabilityRepairCost, backpackCurrency, benchAffixError, benchCost, benchCurrency, benchEssence, benchItemError, benchRecipes, benchTier,
   clearCraftedAffix, craftedAffixIndex, findBenchRecipe,
 } from './bench';
 export type { BenchPrice } from './bench';

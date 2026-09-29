@@ -168,6 +168,13 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
       if (locked && (isLocked(locked, currencyUid) || isLocked(locked, targetUid))) return LOCKED_ITEM_ERROR;
       return base.craftingTargetError(ch, currencyUid, targetUid);
     },
+    benchServices: (ch, targetUid) => {
+      const locked = locksOf(ch);
+      if (!locked) return base.benchServices(ch, targetUid);
+      if (isLocked(locked, targetUid)) return base.benchServices(ch, targetUid)
+        .map(s => ({ ...s, available: false, reason: LOCKED_ITEM_ERROR }));
+      return base.benchServices(maskLocked(ch, locked).character, targetUid);
+    },
     benchRecipes: (ch, targetUid) => {
       const locked = locksOf(ch);
       if (!locked) return base.benchRecipes(ch, targetUid);

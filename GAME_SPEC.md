@@ -215,7 +215,7 @@ Luck affixes (item quantity / rarity) are personal: they raise only their wearer
   | Exposed | 3–6% increased damage taken |
   | Brittle | 15–25% reduced armour (armour bases only) |
   | Frayed | 15–25% reduced evasion (evasion bases only) |
-- **At 0 stability** the item is **Finished**: no more crafting, and it's never destroyed.
+- **At 0 stability** the item is **Finished**: ordinary crafting stops, and it is never destroyed. Scrap repair at the bench restores Stability so crafting can continue.
 - A craft that would do nothing is rejected without consuming anything.
 
 | Currency | Family | Cost | Effect |
@@ -243,6 +243,23 @@ rejected without spending the rune, Stability or RNG. Previews show preserved af
 Tooltips and the craft preview show exact odds, for example "Adds one of 5 fire affixes: Blazing 34%, Smouldering 28%, …", filtered by item class, free prefix/suffix room and item level.
 
 Every craft appends a line to `item.history`, so the item carries its own story.
+
+**Scrap services at the bench** (equipment or maps; costs shown before applying):
+
+| Service | Scrap cost | Effect |
+|---|---|---|
+| Repair 1 Stability | `8 + 3 × lifetime crafts + 6 × previous repairs²` | Restores exactly one point, even on Finished equipment. Keeps all affixes, seals, fractures and scars. Cannot exceed maximum Stability; uniques cannot be repaired. |
+| Reroll a chosen map danger mod | `3 + map tier` | Replaces just that danger/reward pair with a different eligible mod. Keeps every other mod, rarity, tier, quality and Bounty commission. Exact family odds and magnitude range are shown. |
+| Commission Bounty | `8 + 2 × map tier` | Attaches a Bounty commission to the map item. Guarantees The Hunted in wave 2 or 4 instead of the random event roll; its rare pursuer guarantees a Rare per living player. The map remains tradeable. |
+
+Map services reject corrupted maps, duplicate commissions and invalid targets without payment. Services spend
+backpack Scrap first, then the Crafting Stash, respecting trade locks. Repair prices use durable per-item craft
+and repair counters, independent of the capped display history; legacy gear uses surviving craft lines and spent
+Stability as a lower bound. Every equipment currency operation and bench addition/clear increases the craft
+counter; each repaired point increases the repair counter. Neither can be reset by crafting, trading or reloads.
+The server rejects a stale quoted service price, so a concurrent change cannot silently charge a higher amount.
+Hard currencies (Reforging Ember, Tempering Catalyst and Fracture Core) retain their scarce drop sources.
+
 
 **Map currencies:**
 - **Map Dust:** normal → magic (1 or 2 danger mods, 50/50), or rerolls the danger mods of a magic map (1–2) or a rare map (3–4, 50/50). A reward mod is kept.
@@ -320,6 +337,11 @@ Reward-only mods (Reward Ink):
 - The completion chest guarantees one map: 75% at the current tier, 25% one tier higher, capped at Tier 15.
 - Random map drops are same tier 60%, one lower 25%, one higher 15% (within 1–15). Their rarity mirrors equipment (normal 70 · magic 22·m · rare 1.6·m^1.3); all three bases are equally likely.
 - The merchant always sells T1 (free) and T2 (4 Scrap).
+- **Atlas territory fee:** paid once by the map owner on activation, from inventory/stash Scrap. T1–T3 free;
+  T4–T6 cost 1; T7–T9 cost 2; T10–T12 cost 3; T13–T15 cost 4. The device shows the fee before activation.
+  Portal entry and restored runs do not charge it again. If a server failure makes the run unrestorable,
+  its recorded fee, source map (including Bounty) and any entrance key are returned in one transaction.
+  Legacy runs have no fee to refund. Ordinary deaths, abandonment and voluntary map replacement do not refund fees.
 
 **Atlas (account-wide).** The Map Device opens maps at a chosen revealed destination. The item supplies
 tier, quality, mods and corruption; the destination supplies the theme, arena and implicit, plus weights for
@@ -355,7 +377,7 @@ an extra Rare. Its twin-boss event and Crown Fragment arrive with the remaining 
 The rules retain legacy map setups across a restart. A run that cannot be restored refunds its original
 map and entrance key together; discovery and its per-run receipt are also one transaction.
 
-**Map events.** At creation, each map privately rolls at most one encounter (25% base: 12.5% The Hunted,
+**Map events.** At creation, each map privately rolls at most one encounter (Bounty maps guarantee The Hunted; otherwise 25% base: 12.5% The Hunted,
 12.5% Echo Rift), appearing in wave 2 or 4. The actual roll is omitted from the client's setup and only revealed
 when it occurs. Map Device displays the odds, never the roll. Forge/arena areas add 5/10 percentage points to
 The Hunted; crypt/vault areas add 10/5 points to Echo Rift. Commanded adds 8 points and Restless 5 to The Hunted;
@@ -662,7 +684,7 @@ crafting history, protections and stability. The database stores shared holdings
 - **Withdrawing:** drag to the backpack, a stash tab or the map device, or Ctrl-click (to the backpack; into the map device while its panel is open). The map device panel also lists the Map Stash as a picker, so a map can be loaded without opening the stash. A map already in the device goes back into the Map Stash.
 - Map currencies can be used on maps while they sit in the Map Stash.
 
-**Crafting Stash — Equipment.** One fixed, labelled slot per equipment currency: Kindling, Scrap, Reforge, the 5 Essences, Catalyst, Solvent, Seal and Fracture Core. Empty slots stay visible, ghosted.
+**Crafting Stash — Equipment.** One fixed, labelled slot per equipment currency: Kindling, Scrap, Reforge, the 5 Essences, Prefix Rune, Suffix Rune, Catalyst, Solvent, Seal and Fracture Core. Empty slots stay visible, ghosted.
 - Each slot holds up to 5,000 of its currency.
 - **Depositing:** dropping or Ctrl-clicking any currency stack files it into its slot, wherever you drop it (either Crafting Stash tab accepts every currency). What doesn't fit in a full slot stays where it was. A **"Deposit all"** button moves every currency stack in the backpack (stacks in an open trade offer stay).
 - **Withdrawing** never pushes another item out: dropped on an occupied cell, it tops up a matching stack there or lands anywhere free in that grid.

@@ -15,7 +15,7 @@ import { normalizeLoadout, playerSkills } from './skills';
 import { computeCombat } from './stats';
 import { clean, fail, ok } from './util';
 import { findAtlasArea } from '../../data/progression/atlas';
-import { atlasAccessError, newAtlas } from './atlas';
+import { atlasAccessError, newAtlas, paidTerritoryFee, territoryEntryFee } from './atlas';
 import { spendCurrency } from './merchant';
 import { normalizeMapEvent, rollMapEvent } from './map-events';
 
@@ -69,9 +69,16 @@ export function openMap(ch: CharacterSave, areaId?: AtlasAreaId): Result<{ chara
       next = paid;
     }
   }
+  const fee = territoryEntryFee(map.tier, areaId);
+  if (fee > 0) {
+    const paid = spendCurrency(next, 'scrap', fee);
+    if (!paid) return fail(`This territory expedition costs ${fee} Forge Scrap from your inventory or stash.`);
+    next = paid;
+  }
   const rng = createRng(ch.rngState >>> 0);
   const seed = Math.floor(rng.next() * 0x100000000) >>> 0;
   const setup = setupFor(snapshotMap(map), seed, areaId);
+  if (fee > 0) setup.entranceScrap = fee;
   return ok({ character: { ...next, mapDevice: null, rngState: rng.state() }, setup });
 }
 
@@ -112,6 +119,8 @@ export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
   // Preserve the creation decision; pre-event maps do not gain a surprise on restart.
   if (wrapper && 'event' in wrapper) setup.event = normalizeMapEvent(wrapper.event);
   else delete setup.event;
+  const fee = paidTerritoryFee(wrapper?.entranceScrap);
+  if (fee > 0) setup.entranceScrap = fee;
   return setup;
 }
 

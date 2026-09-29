@@ -85,3 +85,28 @@ describe('crafting bench', () => {
     expect(host.session.record.ch).toBe(before);
   });
 });
+
+
+it('repairs Finished gear with a current price, rejects stale quotes and exposes persisted lifetime counters', async () => {
+  const { server, players } = await setup(['Repair Ren']);
+  const [p] = players;
+  const robe = { ...p.session.record.ch.equipment.chest!, stability: 0 };
+  server.game.setCharacter(p.session, { ...p.session.record.ch, equipment: { ...p.session.record.ch.equipment, chest: robe },
+    currencyStash: { scrap: 200 } });
+  const price = rules.benchServices(p.session.record.ch, robe.uid)[0].cost[0].count;
+  const cmd = { c: 'benchCraft' as const, targetUid: robe.uid, recipeId: 'bench:repair' };
+  expect(p.command(cmd).error).toContain('price');
+  const before = p.session.record.ch;
+  expect(p.command({ ...cmd, expectedScrap: price - 1 }).ok).toBe(false);
+  expect(p.session.record.ch).toBe(before);
+  expect(p.command({ ...cmd, expectedScrap: price }).ok).toBe(true);
+  const repaired = p.session.record.ch.equipment.chest!;
+  expect(repaired.stability).toBe(1);
+  expect(repaired.repairCount).toBe(1);
+  expect(repaired.craftCount).toBeGreaterThan(0);
+  expect(p.command({ ...cmd, expectedScrap: price }).error).toContain('price');
+  expect(p.session.record.ch.equipment.chest).toEqual(repaired);
+  server.game.store.flushAll();
+  const saved = JSON.parse(server.db.characterById(p.characterId)!.data).equipment.chest;
+  expect(saved).toEqual(repaired);
+});

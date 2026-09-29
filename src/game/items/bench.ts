@@ -16,9 +16,9 @@
 // Other currencies treat a crafted affix like any other (Scrap rerolls it, Reforge replaces it, Solvent
 // may remove it, Seal protects it) except that Fracture Core cannot fracture it and Tempering Catalyst
 // cannot raise it above T4 (src/game/items/crafting.ts).
-import type { BenchRecipe, CraftOutcome, Result } from '../../contracts/game';
+import type { BenchRecipe, BenchService, CraftOutcome, Result } from '../../contracts/game';
 import type {
-  AffixKind, CharacterSave, CurrencyStack, EquipmentItem, ItemLocation, RolledAffix,
+  AffixKind, CharacterSave, CurrencyStack, EquipmentItem, ItemLocation, MapItem, RolledAffix,
 } from '../../contracts/items';
 import type { CurrencyId } from '../../contracts/content';
 import { EQUIPMENT_CURRENCY_IDS } from '../../contracts/content';
@@ -31,10 +31,14 @@ import {
 import type { AffixDef, AffixLimits, AffixTierDef, BaseDef, BenchRecipeDef } from '../../data/items';
 import { affixAllowedOnBase, affixState, rollValue, sortAffixes } from './affix-pool';
 import { appendHistory } from './crafting';
-import { capitalize, formatLine, formatRangeLine, joinWords } from './format';
+import { capitalize, formatChance, formatLine, formatRangeLine, joinWords } from './format';
 import { findItem, replaceItemAt, setStackCount } from './inventory';
 import type { FoundItem } from './inventory';
 import { currencyStashItem } from './special-stash';
+import { historyCount, itemCraftCount, nextCraftCount } from './crafting-history';
+import { BOUNTY_COMMISSION, MAP_MOD_REROLL, STABILITY_REPAIR } from '../../data/items/economy';
+import { DANGER_MODS, getMapMod } from '../../data/progression';
+import { inclusionChances, mapModName, modValueRange, rollModValue, sortMapMods } from '../progression/maps';
 
 const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 const fail = <T>(error: string): Result<T> => ({ ok: false, error });
@@ -189,7 +193,7 @@ function benchLimits(item: EquipmentItem): AffixLimits {
 /** Why no recipe at all can be used on this item right now (unique, finished, crafted affix); else null. */
 export function benchItemError(item: EquipmentItem): string | null {
   if (item.rarity === 'unique') return 'Unique items cannot be crafted.';
-  if (item.stability <= 0) return 'This item is Finished and can no longer be crafted.';
+  if (item.stability <= 0) return 'This item is Finished. Repair Stability at the bench to continue.';
   if (item.stability < BENCH_STABILITY_COST) {
     return `The Crafting Bench needs ${BENCH_STABILITY_COST} Stability; this item has ${item.stability} left.`;
   }
@@ -298,6 +302,9 @@ export function benchRecipes(ch: CharacterSave, targetUid: string): BenchRecipe[
  * Normal → Magic, and appends "Bench: added <affix> (T<n>)" to the item's history. Nothing changes on failure.
  */
 export function applyBenchRecipe(ch: CharacterSave, targetUid: string, recipeId: string): Result<CraftOutcome> {
+  if (typeof recipeId === 'string' && (recipeId === 'bench:repair' || recipeId === 'bench:bounty' || recipeId.startsWith('bench:map:'))) {
+    return applyBenchService(ch, targetUid, recipeId);
+  }
   const recipe = findBenchRecipe(recipeId);
   if (!recipe) return fail('The Crafting Bench has no such recipe.');
   const def = getAffix(recipe.affixId);
@@ -326,6 +333,7 @@ export function applyBenchRecipe(ch: CharacterSave, targetUid: string, recipeId:
     name: becomesMagic ? null : t.item.name,
     affixes: sortAffixes([...t.item.affixes, added]),
     stability,
+    craftCount: nextCraftCount(t.item),
     history: appendHistory(t.item.history, lines),
   };
 
@@ -358,7 +366,85 @@ export function clearCraftedAffix(ch: CharacterSave, targetUid: string): Result<
     ...t.item,
     affixes,
     ...(becomesNormal ? { rarity: 'normal' as const, name: null } : {}),
+    craftCount: nextCraftCount(t.item),
     history: appendHistory(t.item.history, [line]),
   };
   return ok({ character: replaceItemAt(ch, t.location, item), message: line, kind: 'success', targetUid });
+}
+
+
+/** Authoritative price; online commands must quote this amount before payment. */
+export function stabilityRepairCost(item: EquipmentItem): number {
+  return STABILITY_REPAIR.base + STABILITY_REPAIR.perCraft * itemCraftCount(item)
+    + STABILITY_REPAIR.perRepairSquared * historyCount(item.repairCount) ** 2;
+}
+
+const replacementMods = (map: MapItem) => DANGER_MODS.filter(def => !map.mods.some(m => m.modId === def.id));
+
+export function benchServices(ch: CharacterSave, targetUid: string): BenchService[] {
+  const item = findItem(ch, targetUid)?.item;
+  if (!item) return [];
+  const service = (id: string, label: string, scrap: number, lines: string[], error: string | null): BenchService => {
+    const cost: BenchPrice = [{ currencyId: 'scrap', count: scrap }];
+    const reason = error ?? affordError(ch, cost);
+    return { id, label, lines, cost, available: reason === null, ...(reason ? { reason } : {}) };
+  };
+  if (item.kind === 'equipment') return [service('bench:repair', 'Repair 1 Stability', stabilityRepairCost(item), [
+    'Restores one Stability, including on Finished gear. Existing scars, rolls, seals and fractures stay unchanged.',
+    `${itemCraftCount(item)} lifetime crafts; ${historyCount(item.repairCount)} previous repairs. Each repair and craft increases future repair costs.`,
+    `Price: ${STABILITY_REPAIR.base} + ${STABILITY_REPAIR.perCraft} per craft + ${STABILITY_REPAIR.perRepairSquared} times previous repairs squared.`,
+  ], item.rarity === 'unique' ? 'Unique items cannot be repaired.'
+    : item.stability >= item.maxStability ? 'This item already has full Stability.' : null)];
+  if (item.kind !== 'map') return [];
+  const locked = item.corrupted ? 'Corrupted maps cannot be changed.' : null;
+  const services: BenchService[] = [service('bench:bounty', 'Commission Bounty',
+    BOUNTY_COMMISSION.base + BOUNTY_COMMISSION.perTier * item.tier, [
+      'Turns this into a Bounty map: The Hunted is guaranteed in wave 2 or 4, replacing the random encounter roll.',
+      'Defeat its rare pursuer for a guaranteed Rare item per living player. The commission travels with this map and can be traded.',
+    ], locked ?? (item.bounty ? 'This map already has a Bounty commission.' : null))];
+  const pool = replacementMods(item);
+  const odds = inclusionChances(pool, 1);
+  const range = modValueRange(item.tier);
+  for (const mod of item.mods) {
+    const def = getMapMod(mod.modId);
+    if (def?.kind !== 'danger') continue;
+    services.push(service(`bench:map:${mod.modId}`, `Reroll ${mapModName(def, item.baseId)}`,
+      MAP_MOD_REROLL.base + MAP_MOD_REROLL.perTier * item.tier, [
+        'Replaces this danger/reward pair with a different one. Keeps every other mod, rarity, tier, quality and any Bounty commission.',
+        `New mod: ${pool.map(d => `${mapModName(d, item.baseId)} ${formatChance(odds.get(d.id) ?? 0)}`).join(' · ')}.`,
+        `Magnitude: ${range.min}-${range.max}% of the new mod's base values; every integer is equally likely.`,
+      ], locked ?? (pool.length ? null : 'No other danger mod can be rolled.')));
+  }
+  return services;
+}
+
+function applyBenchService(ch: CharacterSave, targetUid: string, serviceId: string): Result<CraftOutcome> {
+  const found = findItem(ch, targetUid);
+  const service = benchServices(ch, targetUid).find(s => s.id === serviceId);
+  if (!found || !service) return fail('That bench service does not fit this item.');
+  if (!service.available) return fail(service.reason!);
+  let item = found.item;
+  let message: string;
+  let rngState = ch.rngState;
+  if (item.kind === 'equipment' && serviceId === 'bench:repair') {
+    const price = service.cost[0].count;
+    message = `Repaired 1 Stability for ${price} Forge Scrap`;
+    item = { ...item, stability: item.stability + 1, craftCount: itemCraftCount(item),
+      repairCount: historyCount(historyCount(item.repairCount) + 1), history: appendHistory(item.history, [message]) };
+  } else if (item.kind === 'map' && serviceId === 'bench:bounty') {
+    item = { ...item, bounty: true };
+    message = 'Bounty commissioned: The Hunted is guaranteed in this map';
+  } else if (item.kind === 'map') {
+    const id = serviceId.slice('bench:map:'.length);
+    const rng = createRng(ch.rngState >>> 0);
+    const replacement = rng.weighted(replacementMods(item), def => def.weight)!;
+    const tier = item.tier;
+    item = { ...item, mods: sortMapMods(item.mods.map(m => m.modId === id
+      ? { modId: replacement.id, value: rollModValue(rng, tier) } : m)) };
+    rngState = rng.state();
+    message = `Rerolled ${mapModName(getMapMod(id)!, item.baseId)} into ${mapModName(replacement, item.baseId)}`;
+  } else return fail('That bench service does not fit this item.');
+  const paid = payPrice(replaceItemAt(ch, found.location, item), service.cost);
+  const character = { ...paid, rngState, stats: { ...paid.stats, itemsCrafted: paid.stats.itemsCrafted + 1 } };
+  return ok({ character, message, kind: 'success', targetUid });
 }

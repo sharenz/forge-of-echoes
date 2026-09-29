@@ -709,6 +709,7 @@ export function describeMap(map: MapItem, opts: MapDescribeOptions = {}): ItemDe
   const affixes = map.mods.flatMap((m) => modLines(m, tier, mapBosses(map.baseId).boss.sentence, map.baseId));
 
   const headerLines = [`Tier ${tier} Map`];
+  if (map.bounty) headerLines.push('Bounty: The Hunted guaranteed');
   if (map.corrupted) headerLines.push('Corrupted');
   let hint = opts.inDevice
     ? 'Activate the Map Device to open a portal.'

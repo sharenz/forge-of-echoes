@@ -7,6 +7,7 @@ import { AREA_EVENT_BONUS, MAP_EVENT_BASE_CHANCE, MAP_EVENT_MAX_CHANCE, MOD_EVEN
 
 /** Public odds; the actual creation roll is server-only. */
 export function mapEventOdds(map: MapItem, areaId?: AtlasAreaId): { hunted: number; echoRift: number } {
+  if (map.bounty) return { hunted: 1, echoRift: 0 };
   const odds = { hunted: MAP_EVENT_BASE_CHANCE / 2, echoRift: MAP_EVENT_BASE_CHANCE / 2 };
   const area = findAtlasArea(areaId);
   const modBonuses = [...new Set(map.mods.map(m => m.modId))].map(id => MOD_EVENT_BONUS[id]);

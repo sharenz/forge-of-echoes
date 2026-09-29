@@ -8,7 +8,7 @@
 // Short screens (< 800 px high) fold the modifier list to a tally so the recipes stay in view; the choice sticks.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { CURRENCY_IDS, iconIdForCurrency, type CurrencyId } from '../../contracts/content';
-import type { BenchRecipe } from '../../contracts/game';
+import type { BenchRecipe, BenchService } from '../../contracts/game';
 import { currencyStashUid, type CharacterSave, type Item, type ItemDescription, type ItemLocation, type TooltipLine } from '../../contracts/items';
 import { Button, PixelIcon, cx } from '../components/common';
 import { AnvilGlyph } from '../items/ItemTooltip';
@@ -54,7 +54,7 @@ function StabilityBar({ current, max }: { current: number; max: number }) {
   const pips = Math.max(0, Math.min(16, max));
   const finished = current <= 0;
   return (
-    <div class={cx('fe-bench__stab', finished && 'fe-bench__stab--finished')} title="Every craft costs stability. At 0 the item is Finished.">
+    <div class={cx('fe-bench__stab', finished && 'fe-bench__stab--finished')} title="Every craft costs stability. At 0 the item is Finished. Repair Stability at the bench to continue.">
       <PixelIcon id="icon/ui/stability" width={16} height={16} />
       <span class="fe-bench__stab-pips">
         {Array.from({ length: pips }, (_, i) => (
@@ -651,6 +651,28 @@ function Palette({
   );
 }
 
+function Services({ services, carried, disabled, onCraft }: {
+  services: BenchService[]; carried: Map<CurrencyId, Carried>; disabled: boolean;
+  onCraft: (r: Pick<BenchRecipe, 'id'>, e?: MouseEvent) => void;
+}) {
+  if (!services.length) return null;
+  return <section class="fe-bench__section fe-bench-services">
+    <div class="fe-section-title">Scrap services</div>
+    {services.map(service => <div key={service.id} class="fe-bench-service">
+      <div class="fe-bench-service__row">
+        <span class="ui-type-secondary">{service.label}</span>
+        <CostChips cost={service.cost} carried={carried} />
+        <Button disabled={disabled || !service.available} onClick={e => onCraft(service, e as unknown as MouseEvent)}
+          class="fe-bench-service__apply" data-service={service.id}>Apply</Button>
+      </div>
+      <details class="ui-type-caption"><summary>Effects and price</summary>
+        {service.lines.map(line => <p key={line}>{line}</p>)}
+      </details>
+      {service.reason && <p class="fe-bench__note">{service.reason}</p>}
+    </div>)}
+  </section>;
+}
+
 export function CraftingBenchPanel() {
   const store = useStore();
   const local = useLocal();
@@ -672,6 +694,7 @@ export function CraftingBenchPanel() {
     () => (ch && uid && item?.kind === 'equipment' ? safe(() => store.rules.benchRecipes(ch, uid), [] as BenchRecipe[]) : []),
     [ch, uid, item, store],
   );
+  const services = ch && uid ? safe(() => store.rules.benchServices(ch, uid), []) : [];
   const hasCrafted = item?.kind === 'equipment' && item.affixes.some((a) => a.crafted);
   const withRecipes = item?.kind === 'equipment' && item.rarity !== 'unique';
 
@@ -706,7 +729,7 @@ export function CraftingBenchPanel() {
     return true;
   };
 
-  const craft = (r: BenchRecipe, e?: MouseEvent): void => {
+  const craft = (r: Pick<BenchRecipe, 'id'>, e?: MouseEvent): void => {
     if (!uid || craftInFlight(store, uid) || refuseLocked(uid, e)) return;
     noteCraftSent(store, uid);
     setBusyAt(performance.now());
@@ -738,6 +761,7 @@ export function CraftingBenchPanel() {
         {allowed && benchLocked && <p class="fe-bench__blocked">{LOCKED_REASON}</p>}
         {item && desc ? (
           <>
+            <Services services={services} carried={carried} disabled={busy || !allowed || benchLocked} onCraft={craft} />
             <Mods
               key={withRecipes ? 'gear' : 'plain'}
               desc={desc}

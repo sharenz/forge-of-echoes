@@ -257,7 +257,7 @@ describe('availability and reasons', () => {
     expect(expectErr(applyBenchRecipe(bench(u, RICH), T, 'bench:life'))).toBe('Unique items cannot be crafted.');
 
     const done = bench(item({ baseId: 'emberRing', itemLevel: 40, rarity: 'normal', stability: 0 }), RICH);
-    expect(reasonOf(done, 'bench:life')).toBe('This item is Finished and can no longer be crafted.');
+    expect(reasonOf(done, 'bench:life')).toBe('This item is Finished. Repair Stability at the bench to continue.');
   });
 
   it('allows one crafted affix per item', () => {

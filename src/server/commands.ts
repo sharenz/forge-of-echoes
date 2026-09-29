@@ -266,6 +266,8 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       if (lockedIn(game, s, cmd.targetUid)) return fail(ITEM_IN_TRADE);
       const where = itemsPlaceError(s, ch, cmd.targetUid);
       if (where) return fail(where);
+      const service = r.benchServices(ch, cmd.targetUid).find(service => service.id === cmd.recipeId);
+      if (service && cmd.expectedScrap !== service.cost[0].count) return fail('The Scrap price changed. Review the current price and try again.');
       return applyOutcome(game, s, ch, r.applyBenchRecipe(ch, cmd.targetUid, cmd.recipeId));
     }
     case 'benchClear': {

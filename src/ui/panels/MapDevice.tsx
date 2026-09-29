@@ -18,7 +18,7 @@ import { MapStashView } from './StashSpecial';
 import { AtlasView } from './Atlas';
 import type { AtlasAreaId } from '../../contracts/atlas';
 import { ATLAS_START, atlasTierCeiling, findAtlasArea } from '../../data/progression/atlas';
-import { newAtlas } from '../../game/progression/atlas';
+import { newAtlas, territoryEntryFee } from '../../game/progression/atlas';
 
 function PortalNote({ portal, own }: { portal: PortalInfo; own: boolean }) {
   const spent = portal.remaining === 0;
@@ -237,6 +237,7 @@ export function MapDevicePanel() {
           {/* Outside the scroll area: the open portal is what Activate would replace, so it stays in view. */}
           {ownPortal && <PortalNote portal={ownPortal} own />}
           <div class="fe-device__actions">
+            {map && <span class="ui-type-caption">Territory fee: {territoryEntryFee(map.tier, areaId)} Scrap</span>}
             {readout?.error && <span class="fe-atlas__error ui-type-secondary" role="status">{readout.error}</span>}
             <Button variant="ember" size="large" class="fe-device__activate" disabled={!map || !!readout?.error} onClick={confirmActivate}>
               Activate

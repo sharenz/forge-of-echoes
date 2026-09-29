@@ -720,3 +720,18 @@
     0 0 0 4px rgba(13, 11, 14, 0.85),
     inset 0 0 22px rgba(224, 70, 60, 0.4);
 }
+
+
+.fe-bench-service {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(201, 160, 100, 0.16);
+}
+.fe-bench-service__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fe-bench-service__row > :first-child { flex: 1; }
+.fe-bench-service details { margin-top: 4px; }
+.fe-bench-service summary { cursor: pointer; color: var(--bronze-light); }
+.fe-bench-service details p { margin: 6px 0; }

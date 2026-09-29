@@ -32,6 +32,7 @@ import {
 import {
   autoPlace, canPlace, clampItemLevel, createGrid, createStashTab, isReservedUid, placeItem, rollRareName, sortAffixes, uniqueModId,
 } from '../items';
+import { historyCount } from '../items/crafting-history';
 import { sanitizeName, xpToNext } from './character';
 import { clampTier, rarityForDangerCount, sortMapMods } from './maps';
 import { normalizeLoadout } from './skills';
@@ -231,7 +232,9 @@ function normalizeEquipment(raw: Json, uid: string): EquipmentItem | null {
   }
   return {
     kind: 'equipment', affixVersion: AFFIX_VERSION, uid, baseId: base.id, itemLevel, rarity, name, implicitValues, affixes: sortAffixes(affixes), scars,
-    stability, maxStability, history: normalizeHistory(raw.history), ...(raw.isNew === true ? { isNew: true } : {}),
+    stability, maxStability, history: normalizeHistory(raw.history),
+    ...(raw.craftCount !== undefined ? { craftCount: historyCount(raw.craftCount) } : {}),
+    ...(raw.repairCount !== undefined ? { repairCount: historyCount(raw.repairCount) } : {}), ...(raw.isNew === true ? { isNew: true } : {}),
   };
 }
 
@@ -275,6 +278,7 @@ export function normalizeMap(raw: Json, uid: string): MapItem | null {
   }
   return {
     kind: 'map',
+    ...(raw.bounty === true ? { bounty: true } : {}),
     uid,
     baseId,
     tier: clampTier(finite(raw.tier, 1)),

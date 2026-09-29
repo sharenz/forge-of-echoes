@@ -18,7 +18,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 7: account Atlas, area selection, entrance keys and revised map progression rewards.
 // 8: hidden map-event plans and replicated encounter progress (snapshot 6).
 // 9: Prefix/Suffix Runes, area ingredient sources and advanced equipment bases.
-export const PROTOCOL_VERSION = 9;
+// 10: durable crafting history, Scrap services, Bounty maps and refundable territory fees.
+export const PROTOCOL_VERSION = 10;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -126,7 +127,7 @@ export type Command =
   /** Drop an item you carry (backpack, equipment, belt; stash only in a hideout) on the floor at your feet — anyone in the area can pick it up. */
   | { c: 'dropItem'; uid: string }
   /** Crafting bench (any hideout): apply a deterministic bench recipe to an item you carry / have stashed. */
-  | { c: 'benchCraft'; targetUid: string; recipeId: string }
+  | { c: 'benchCraft'; targetUid: string; recipeId: string; expectedScrap?: number }
   /** Crafting bench: remove the item's bench-crafted affix (free). */
   | { c: 'benchClear'; targetUid: string }
   /** Leave the current map (re-entering costs a portal). Goes to the map owner's hideout while you may visit it, else your own. */

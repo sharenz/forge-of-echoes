@@ -64,7 +64,7 @@
 //   deriveRunStats(ch, setup) deprecated alias of rules.deriveStats(ch, setup)
 import type { ContentInfo, GameRulesApi } from '../contracts/game';
 import {
-  BASE_INFO, CURRENCY_INFO, FLASK_INFO, UNIQUE_INFO, addStashTab, addToBackpack, applyBenchRecipe, benchRecipes, canEquip,
+  BASE_INFO, CURRENCY_INFO, FLASK_INFO, UNIQUE_INFO, addStashTab, addToBackpack, applyBenchRecipe, benchRecipes, benchServices, canEquip,
   clearCraftedAffix, clearNewFlags, depositAllCurrency, discardItem, findItem, itemSize, moveItem, quickMove, renameStashTab,
 } from './items';
 import {
@@ -136,6 +136,7 @@ export const rules: GameRulesApi = {
   applyCurrency,
   benchRecipes,
   applyBenchRecipe,
+  benchServices,
   clearCraftedAffix,
 
   // --- maps & runs ---

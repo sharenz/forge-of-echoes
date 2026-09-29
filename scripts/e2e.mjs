@@ -3,7 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5|qol|account|atlas|events|crafting] [--smoke 30] [--lieutenant]
+//                        [--only wave5|qol|account|atlas|events|crafting|economy] [--smoke 30] [--lieutenant]
 //
 // --prod tests the production bundle instead of the Vite dev server: `vite build` (with VITE_FOE_DEBUG=1, so the
 // window.__foe hooks this script drives are compiled in) into a temp dir, served by the game server itself
@@ -71,7 +71,8 @@ const QOL_ONLY = opt('only', 'all') === 'qol';
 const ACCOUNT_ONLY = opt('only', 'all') === 'account';
 const ATLAS_ONLY = opt('only', 'all') === 'atlas';
 const EVENTS_ONLY = opt('only', 'all') === 'events';
-const CRAFTING_ONLY = opt('only', 'all') === 'crafting';
+const ECONOMY_ONLY = opt('only', 'all') === 'economy';
+const CRAFTING_ONLY = opt('only', 'all') === 'crafting' || ECONOMY_ONLY;
 /** Seconds of fighting in each new map type (longer while its family has not shown two kinds yet). */
 const SMOKE_SECONDS = Number(opt('smoke', '30'));
 /** --lieutenant: keep fighting each new map type until its lieutenant (wave 3) is on the field. */
@@ -1933,7 +1934,7 @@ async function craftingScenario({ A, port }) {
   const shot = async name => {
     await settlePanels(A);
     await A.page.waitForFunction(() => [...document.querySelectorAll('.fe-tooltip-layer')].every(e => getComputedStyle(e).opacity === '1'));
-    await A.shot(`${name}-${VW}x${VH}`);
+    await A.shot(`${ECONOMY_ONLY ? 'economy-' : ''}${name}-${VW}x${VH}`);
   };
   await step('prepare advanced gear and runes in the disposable database', async () => {
     outage = true;
@@ -1948,14 +1949,14 @@ async function craftingScenario({ A, port }) {
     const row = db.prepare('SELECT account_id, data FROM account_storage').get();
     const shared = JSON.parse(row.data);
     shared.atlas = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 12 };
-    shared.currencyStash = { prefixRune: 2, suffixRune: 2 };
+    shared.currencyStash = { prefixRune: 2, suffixRune: 2, ...(ECONOMY_ONLY ? { scrap: 500 } : {}) };
     db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), row.account_id);
     const character = db.prepare('SELECT id, data FROM characters').get();
     let saved = JSON.parse(character.data);
     saved.level = 46;
     saved.backpack.entries = [];
     saved.equipment.mainHand = buildEquipment({ uid: 'e2e-rune-project', baseId: 'emberheartWand', itemLevel: 46,
-      rarity: 'rare', name: 'Ember Testament', affixes: [
+      rarity: 'rare', name: 'Ember Testament', ...(ECONOMY_ONLY ? { stability: 6 } : {}), affixes: [
         { affixId: 'fireDamage', tier: 6 }, { affixId: 'spellDamage', tier: 6 },
         { affixId: 'castSpeed', tier: 6 }, { affixId: 'critChance', tier: 6 },
       ] }, createRng(1));
@@ -1964,6 +1965,13 @@ async function craftingScenario({ A, port }) {
       const result = addToBackpack(saved, generateEquipment(base.id, 46, 'normal', createRng(base.name.length), { uid: `e2e-${base.id}` }));
       assert(result.ok, `cannot place ${base.id}`);
       saved = result.value;
+    }
+    if (ECONOMY_ONLY) {
+      const addition = addToBackpack(saved, { kind: 'map', uid: 'e2e-sink-map:i1', baseId: 'ashenForge', tier: 5,
+        rarity: 'rare', quality: 7, corrupted: false,
+        mods: [{ modId: 'teeming', value: 100 }, { modId: 'restless', value: 110 }, { modId: 'commanded', value: 95 }] });
+      assert(addition.ok, 'cannot place service map');
+      saved = addition.value;
     }
     saved.mapDevice = { kind: 'map', uid: 'e2e-source-map', baseId: 'ashenForge', tier: 3, rarity: 'normal', mods: [], quality: 0, corrupted: false };
     db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(saved), character.id);
@@ -2009,6 +2017,38 @@ async function craftingScenario({ A, port }) {
     }
     await shot('crafting-runes-applied');
   });
+  if (ECONOMY_ONLY) await step('repair Finished gear twice and commission a selectively rerolled Bounty map through the bench', async () => {
+    const before = await A.eval(() => structuredClone(window.__foe.store.get().character.equipment.mainHand));
+    assert(before.stability === 0, 'the project should be Finished');
+    for (let n = 1; n <= 2; n++) {
+      const quoted = await A.eval(() => {
+        const s = window.__foe.store.get();
+        const service = window.__foe.store.rules.benchServices(s.character, s.benchItemUid).find(s => s.id === 'bench:repair');
+        return { price: service.cost[0].count, scrap: s.character.currencyStash.scrap };
+      });
+      await A.page.locator('.fe-bench-service details summary').first().click();
+      await shot(`repair-${n}-price`);
+      await A.page.locator('[data-service="bench:repair"]').click();
+      await A.waitFor('repaired Stability', n => window.__foe.store.get().character.equipment.mainHand.stability === n, n);
+      const now = await A.eval(() => ({ item: window.__foe.store.get().character.equipment.mainHand, scrap: window.__foe.store.get().character.currencyStash.scrap }));
+      assert(now.scrap === quoted.scrap - quoted.price, 'repair charged a different price');
+      assert(now.item.repairCount === n, 'repair lifetime counter was not saved');
+      assert(JSON.stringify(now.item.scars) === JSON.stringify(before.scars), 'repair changed scars');
+      assert(JSON.stringify(now.item.affixes) === JSON.stringify(before.affixes), 'repair changed affixes');
+    }
+    await A.page.locator('.fe-grid[data-drop="backpack"] .fe-item[data-uid="e2e-sink-map:i1"]').click({ modifiers: ['Control'] });
+    await A.waitFor('map on bench', () => window.__foe.store.get().benchItemUid === 'e2e-sink-map:i1');
+    const beforeMap = await A.eval(() => structuredClone(window.__foe.store.get().character.backpack.entries.find(e => e.item.uid === 'e2e-sink-map:i1').item));
+    await A.page.locator('[data-service="bench:map:teeming"]').click();
+    await A.waitFor('selected danger mod replaced', () => !window.__foe.store.get().character.backpack.entries.find(e => e.item.uid === 'e2e-sink-map:i1').item.mods.some(m => m.modId === 'teeming'));
+    const afterMap = await A.eval(() => window.__foe.store.get().character.backpack.entries.find(e => e.item.uid === 'e2e-sink-map:i1').item);
+    for (const kept of beforeMap.mods.slice(1)) assert(afterMap.mods.some(m => JSON.stringify(m) === JSON.stringify(kept)), 'reroll changed an unselected mod');
+    assert(afterMap.quality === 7 && afterMap.rarity === 'rare' && afterMap.mods.length === 3, 'reroll changed the map structure');
+    await A.page.locator('[data-service="bench:bounty"]').click();
+    await A.waitFor('Bounty commission', () => window.__foe.store.get().character.backpack.entries.find(e => e.item.uid === 'e2e-sink-map:i1').item.bounty === true);
+    await A.page.mouse.move(10, 10);
+    await shot('bounty-map');
+  });
   await step('rune stash slots and Atlas boss sources are visible', async () => {
     await closePanels(A);
     await openStashTab(A, 'currency');
@@ -2043,8 +2083,24 @@ async function craftingScenario({ A, port }) {
       await shot(`crafting-source-${rune.split(' ')[0]}`);
     }
   });
+  if (ECONOMY_ONLY) await step('the Map Device shows and spends the territory fee once and guarantees The Hunted', async () => {
+    await A.page.getByRole('button', { name: /^Glass Sepulchre,/ }).click();
+    await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+    await A.page.locator('.fe-grid[data-drop="backpack"] .fe-item[data-uid="e2e-sink-map:i1"]').click({ modifiers: ['Control'] });
+    await A.waitFor('Bounty in device', () => window.__foe.store.get().character.mapDevice?.uid === 'e2e-sink-map:i1');
+    const text = await A.page.locator('.fe-device').innerText();
+    assert(text.includes('Territory fee: 1 Scrap'), 'missing upfront fee');
+    assert(text.includes('The Hunted 100%'), 'Bounty encounter odds are not guaranteed');
+    const before = await A.eval(() => window.__foe.store.get().character.currencyStash.scrap);
+    await shot('territory-fee');
+    await A.page.locator('.fe-device__activate').click();
+    await A.waitFor('paid portal', () => window.__foe.store.get().hud?.portal?.tier === 5 && !window.__foe.store.get().character.mapDevice);
+    const after = await A.eval(() => window.__foe.store.get().character.currencyStash.scrap);
+    assert(after === before - 1, 'wrong territory payment');
+  });
   await step('crafted advanced gear and rune counts survive a real server restart', async () => {
     const before = await A.eval(() => structuredClone(window.__foe.store.get().character.equipment.mainHand));
+    const scrapBefore = await A.eval(() => window.__foe.store.get().character.currencyStash.scrap);
     outage = true;
     await stopGameServer();
     await startGameServer(port);
@@ -2053,6 +2109,7 @@ async function craftingScenario({ A, port }) {
     const after = await A.eval(() => ({ item: window.__foe.store.get().character.equipment.mainHand, stash: window.__foe.store.get().character.currencyStash }));
     assert(JSON.stringify(after.item) === JSON.stringify(before), 'crafted item changed on restart');
     assert(after.stash.prefixRune === 1 && after.stash.suffixRune === 1, 'rune count changed on restart');
+    assert(after.stash.scrap === scrapBefore, 'Scrap changed on restart or territory was charged twice');
   });
 }
 

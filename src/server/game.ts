@@ -26,7 +26,7 @@ import type { Rng } from '../contracts/rng';
 import { createRng, hashString } from '../core/rng';
 import type { AtlasAreaId } from '../contracts/atlas';
 import { ATLAS_RARE_DOOR_CHANCE, ATLAS_START, findAtlasArea } from '../data/progression/atlas';
-import { discoverAfterBoss, newAtlas } from '../game/progression/atlas';
+import { discoverAfterBoss, newAtlas, paidTerritoryFee } from '../game/progression/atlas';
 import { PORTALS_PER_MAP, PROTOCOL_VERSION } from '../contracts/net';
 import type { Command, PartyInfo, PartyMemberInfo, PortalInfo, RunSummaryInfo, ServerMessage } from '../contracts/net';
 import { SIM_HZ } from '../contracts/sim';
@@ -896,7 +896,7 @@ export class Game implements InstanceHost {
   private refundMap(map: MapInstance): void {
     const item = map.sourceItem;
     if (!item) return;
-    if (this.refundMapItem(map.ownerId, item, map.mapKey, () => this.db.deleteOpenMap(map.mapKey), !!findAtlasArea(map.setup.atlasAreaId)?.sealed)) map.sourceItem = null;
+    if (this.refundMapItem(map.ownerId, item, map.mapKey, () => this.db.deleteOpenMap(map.mapKey), !!findAtlasArea(map.setup.atlasAreaId)?.sealed, map.setup.entranceScrap)) map.sourceItem = null;
   }
 
   /**
@@ -904,9 +904,11 @@ export class Game implements InstanceHost {
    * with `alsoWrite` (the deletion of the map's row). All or nothing: when the write fails (logged) the
    * character is unchanged and false is returned.
    */
-  private refundMapItem(ownerId: string, item: MapItem, mapKey: string, alsoWrite: () => void, refundKey = false): boolean {
-    return this.returnToOwner(ownerId, item, { what: 'map refund', done: 'map refunded' }, { map: mapKey }, alsoWrite,
-      refundKey ? [{ kind: 'currency', currencyId: 'reliquaryKey', count: 1, uid: `refund-key:${mapKey}` }] : []);
+  private refundMapItem(ownerId: string, item: MapItem, mapKey: string, alsoWrite: () => void, refundKey = false, entranceScrap = 0): boolean {
+    const extra: Item[] = refundKey ? [{ kind: 'currency', currencyId: 'reliquaryKey', count: 1, uid: `refund-key:${mapKey}` }] : [];
+    const fee = paidTerritoryFee(entranceScrap);
+    if (fee) extra.push({ kind: 'currency', currencyId: 'scrap', count: fee, uid: `refund-scrap:${mapKey}` });
+    return this.returnToOwner(ownerId, item, { what: 'map refund', done: 'map refunded' }, { map: mapKey }, alsoWrite, extra);
   }
 
   /**
@@ -1546,7 +1548,7 @@ export class Game implements InstanceHost {
     if (!setup || !owner || this.instances.activeMapOf(row.ownerId)) {
       // The run cannot come back: the map item goes back to its owner, if it is still a valid map.
       const item = restoreRunSetup(isRecord(parsed) ? (parsed.sourceMap ?? parsed.map) : null, 0)?.map ?? null;
-      if (owner && item) this.refundMapItem(row.ownerId, item, row.mapId, () => this.db.deleteOpenMap(row.mapId), isRecord(parsed) && parsed.atlasAreaId === 'sealedReliquary');
+      if (owner && item) this.refundMapItem(row.ownerId, item, row.mapId, () => this.db.deleteOpenMap(row.mapId), isRecord(parsed) && parsed.atlasAreaId === 'sealedReliquary', isRecord(parsed) ? paidTerritoryFee(parsed.entranceScrap) : 0);
       else {
         this.db.deleteOpenMap(row.mapId);
         this.log.error('open map could not be restored', { map: row.mapId, owner: row.ownerName });

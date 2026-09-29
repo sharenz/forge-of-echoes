@@ -1021,12 +1021,14 @@ export class GameSession {
     const uid = this.benchTarget();
     if (!uid) return;
     const ch = this.character.display;
-    const recipe = ch ? safe(() => this.rules.benchRecipes(ch, uid).find((r) => r.id === recipeId) ?? null, null) : null;
+    const recipe = ch ? safe(() => [...this.rules.benchRecipes(ch, uid), ...this.rules.benchServices(ch, uid)].find((r) => r.id === recipeId) ?? null, null) : null;
     if (recipe && !recipe.available) {
       this.commandFailed(recipe.reason ?? 'That recipe cannot be used on this item right now.');
       return;
     }
-    this.craftCommand({ c: 'benchCraft', targetUid: uid, recipeId }, uid);
+    const service = ch ? this.rules.benchServices(ch, uid).find(s => s.id === recipeId) : null;
+    this.craftCommand({ c: 'benchCraft', targetUid: uid, recipeId,
+      ...(service ? { expectedScrap: service.cost[0].count } : {}) }, uid);
   }
 
   /** Remove the bench item's crafted affix (free and deterministic: predicted). */

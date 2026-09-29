@@ -452,7 +452,7 @@ describe('stability, scars and Finished', () => {
     expect(it.history).toContain('Finished at 0 Stability');
     expect(['finished', 'scar']).toContain(out.kind);
     expect(out.message).toMatch(/Finished$/);
-    expect(craftingTargetError(out.character, 'scrap', T)).toBe('This item is Finished and can no longer be crafted.');
+    expect(craftingTargetError(out.character, 'scrap', T)).toBe('This item is Finished. Repair Stability at the bench to continue.');
     expect(describeEquipment(it).headerLines).toContain('Finished');
   });
 });

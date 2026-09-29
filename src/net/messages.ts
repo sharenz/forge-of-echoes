@@ -292,8 +292,9 @@ function command(v: unknown): Command {
       return { c, uid: token(o.uid, 'uid') };
     }
     case 'benchCraft': {
-      const o = shape(v, c, ['c', 'targetUid', 'recipeId']);
-      return { c, targetUid: token(o.targetUid, 'targetUid'), recipeId: token(o.recipeId, 'recipeId') };
+      const o = shape(v, c, ['c', 'targetUid', 'recipeId'], ['expectedScrap']);
+      return { c, targetUid: token(o.targetUid, 'targetUid'), recipeId: token(o.recipeId, 'recipeId'),
+        ...(o.expectedScrap !== undefined ? { expectedScrap: int(o.expectedScrap, 'expectedScrap', 0, Number.MAX_SAFE_INTEGER) } : {}) };
     }
     case 'benchClear': {
       const o = shape(v, c, ['c', 'targetUid']);
