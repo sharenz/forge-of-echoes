@@ -121,7 +121,7 @@ Player modifiers on skills (resolved by the rules into the sim's numbers, so too
 
 ## 5. Items
 
-**Bases** (`src/contracts/content.ts` ids). The item level of drops = monster level. Every base has one implicit (Glassbone Wand and Ashen Robe have two). Base properties scale gently with item level: `floor(base + perLevel·ilvl)`, and the item's own flat / % lines of that stat fold into the property.
+**Bases** (`src/contracts/content.ts` ids). The item level of drops = monster level. Every base has one or two implicits. Base properties scale gently with item level: `floor(base + perLevel·ilvl)`, and the item's own flat / % lines of that stat fold into the property.
 
 | Base | Class / size | Level | Implicit | Base property | Stability | Material note |
 |---|---|---|---|---|---|---|
@@ -147,6 +147,23 @@ Player modifiers on skills (resolved by the rules into the sim's numbers, so too
 | Rime Band | ring 1×1 | 1 | +15–20% cold resistance | – | 7 | – |
 | Storm Loop | ring 1×1 | 1 | +15–20% lightning resistance | – | 7 | – |
 | Void Signet | ring 1×1 | 16 | +10–14% void resistance | – | 7 | – |
+
+**Advanced bases:** first drop in Tier 8 (item level 46; Tier 7 is 40). Rook also offers them when gambling at
+or above their level requirement. All ten use the existing class footprints and affix pools; existing bases
+keep their stats and material identities. Area class preferences also apply to these bases.
+
+| Base | Class | Level | Implicit | Base property | Stability | Material note |
+|---|---|---|---|---|---|---|
+| Emberheart Wand | wand | 42 | 18–24% increased fire damage | 3 + 0.11·ilvl added spell damage | 9 | Fire affixes ×2 |
+| Stormglass Sceptre | sceptre | 46 | 24–30% increased spell damage | 4 + 0.14·ilvl added spell damage | 8 | Lightning affixes ×2 |
+| Echoing Focus | focus | 42 | 10–14% increased cast speed, +20–28 max focus | – | 9 | Speed affixes ×2 |
+| Bastion Helm | helmet | 42 | +25–35 max life | 30 + 0.85·ilvl armour | 10 | Defence affixes ×2 |
+| Duskweave Robe | chest | 46 | +45–60 evasion, +25–35 max focus | 35 + 1.3·ilvl evasion | 9 | Void affixes ×2 |
+| Forgemaster Gloves | gloves | 42 | 7–10% increased cast speed | 20 + 0.65·ilvl armour | 10 | Longer crafting budget |
+| Wayfarer Greaves | boots | 42 | 10–14% increased move speed | 14 + 0.45·ilvl armour and evasion | 9 | Speed affixes ×2 |
+| Ironweave Girdle | belt | 46 | +30–42 max life | – | 10 | Life affixes ×2 |
+| Prismatic Amulet | amulet | 42 | +12–16 to all attributes | – | 8 | Resistance affixes ×2 |
+| Dusksteel Ring | ring | 46 | +18–24% void resistance, +18–24 max focus | – | 8 | Void affixes ×2 |
 
 **Rarity:** normal 0 affixes; magic 1–2 (≤1 prefix, ≤1 suffix; 1 or 2 at 50/50); rare 3–6 (≤3 prefixes, ≤3 suffixes; 3: 25% · 4: 40% · 5: 25% · 6: 10%); unique fixed.
 
@@ -211,8 +228,17 @@ Luck affixes (item quantity / rarity) are personal: they raise only their wearer
 | Forge Solvent | remove | 1 | Removes the **lowest-tier** unsealed, unfractured affix (ties random). With 0 affixes left, the item becomes normal. |
 | Binding Seal | preserve | 0 | **Choose an affix:** it is sealed for the next operation, then the seal breaks. One seal at a time. |
 | Fracture Core | transform | 3 | **Choose an affix:** it becomes permanently fractured, immune to everything. One fracture per item. |
+| Prefix Rune | shape | 3 | Reforges all unsealed, unfractured prefixes, keeping their count and every suffix. Keeps rarity and name. |
+| Suffix Rune | shape | 3 | Reforges all unsealed, unfractured suffixes, keeping their count and every prefix. Keeps rarity and name. |
 
-Currencies stack to 40 (Fracture Core and Void Needle to 20). Map currencies cost no stability.
+Currencies stack to 40 (Fracture Core, Void Needle, Reliquary Key and both Runes to 20). Map currencies cost no stability.
+
+**Rune sources:** the Glass Sepulchre boss has a 25% chance to drop one Prefix Rune on Tier 3+ maps;
+the Ember Vault boss has a 25% chance to drop one Suffix Rune on Tier 3 maps (the area's ceiling).
+These are extra independent rolls per living player, unaffected by quantity/rarity. Runes do not appear in
+ordinary currency rolls, chests or merchant offers. Both are tradeable and have Crafting Stash slots.
+Runes use normal scar rules and break seals after the operation. A rune with no eligible target affix is
+rejected without spending the rune, Stability or RNG. Previews show preserved affixes and exact family/tier odds.
 
 Tooltips and the craft preview show exact odds, for example "Adds one of 5 fire affixes: Blazing 34%, Smouldering 28%, …", filtered by item class, free prefix/suffix room and item level.
 

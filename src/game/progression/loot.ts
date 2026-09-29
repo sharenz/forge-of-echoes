@@ -287,6 +287,9 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
     for (let i = 0; i < BOSS_LOOT.currency; i++) out.push(makeCurrency(ctx, rng));
     if (rng.chance(Math.min(1, BOSS_LOOT.uniqueChance * mapM))) out.push(makeEquipment(ctx, rng, 'unique', origin));
     if (ctx.area?.sealed) out.push(makeEquipment(ctx, rng, 'unique', origin));
+    for (const drop of ctx.area?.ingredientDrops ?? []) {
+      if (ctx.tier >= drop.minTier && rng.chance(drop.chance)) out.push(currencyStack(drop.currencyId, 1, randomUid(rng), true));
+    }
     if (ctx.area && !ctx.area.sealed) {
       const chance = ctx.area.id === 'emberVault' ? RELIQUARY_KEY_CHANCE.vault
         : ctx.tier < RELIQUARY_KEY_CHANCE.elsewhereMinTier ? 0

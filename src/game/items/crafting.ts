@@ -123,6 +123,14 @@ function kindCounts(item: EquipmentItem): Record<AffixKind, number> {
   return { prefix: st.prefix, suffix: st.suffix };
 }
 
+function runePlan(item: EquipmentItem, base: BaseDef, currencyId: CurrencyId) {
+  const kind: AffixKind = currencyId === 'prefixRune' ? 'prefix' : 'suffix';
+  const kept = item.affixes.filter(a => isProtected(a) || getAffix(a.affixId)?.kind !== kind);
+  const pool = affixCandidates(base, item.itemLevel).filter(c => c.affix.kind === kind);
+  const limits = item.rarity === 'magic' ? AFFIX_LIMITS.magic : AFFIX_LIMITS.rare;
+  return { kind, kept, pool, limits, count: item.affixes.length - kept.length };
+}
+
 // ---------------------------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------------------------
@@ -203,6 +211,14 @@ export function equipmentCraftError(item: EquipmentItem, currencyId: CurrencyId,
         const room = eligibleCandidates(affixCandidates(base, item.itemLevel), affixState(kept), AFFIX_LIMITS.rare);
         if (!room.length || count >= 6) return 'Nothing to reforge: every affix is protected and there is no room for more.';
       }
+      return null;
+    }
+    case 'prefixRune':
+    case 'suffixRune': {
+      const { kind, kept, pool, limits, count } = runePlan(item, base, currencyId);
+      if (!count) return `No unsealed, unfractured ${kind} to reforge.`;
+      const candidates = eligibleCandidates(pool, affixState(kept), limits);
+      if (new Set(candidates.map(c => c.affix.group)).size < count) return `Not enough ${kind} families can roll at this item level.`;
       return null;
     }
     case 'essenceEmber':
@@ -299,6 +315,13 @@ interface OpResult {
 
 function performOp(item: EquipmentItem, base: BaseDef, def: CurrencyDef, rng: Rng, affixIndex?: number): OpResult {
   switch (def.id) {
+    case 'prefixRune':
+    case 'suffixRune': {
+      const { kind, kept, pool, limits, count } = runePlan(item, base, def.id);
+      const added = rollNewAffixes(rng, pool, kept, limits, count);
+      return { item: { ...item, affixes: sortAffixes([...kept, ...added]) },
+        line: `${def.name} reforged ${count} ${kind}${count === 1 ? '' : 'es'}, preserving the other side` };
+    }
     case 'kindling': {
       const count = rollCount(rng, MAGIC_AFFIX_COUNTS);
       const added = rollNewAffixes(rng, affixCandidates(base, item.itemLevel), [], AFFIX_LIMITS.magic, count);
@@ -601,6 +624,19 @@ export function equipmentCraftPreview(item: EquipmentItem, currencyId: CurrencyI
   let inclusionExact = true;
 
   switch (currencyId) {
+    case 'prefixRune':
+    case 'suffixRune': {
+      const { kind, kept, pool, limits, count } = runePlan(item, base, currencyId);
+      const odds = inclusionOdds(pool, kept, limits, [{ count, chance: 1 }]);
+      const entries = inclusionEntries(odds.odds);
+      inclusion = entries.map(({ label, chance }) => ({ label, chance }));
+      inclusionExact = odds.exact;
+      lines.push(`Reforges ${count} ${kind}${count === 1 ? '' : 'es'}; the affix count and rarity stay the same.`);
+      if (kept.length) lines.push(`Preserves ${joinWords(kept.map(previewLabel))}. Seals break after this craft.`);
+      if (entries.length) lines.push(inclusionLine(entries, odds.exact));
+      lines.push(...tierOddsLines(byInclusion(pool, entries), item.itemLevel, TIER_NAMES_TOP));
+      break;
+    }
     case 'kindling': {
       const counts = countChances(MAGIC_AFFIX_COUNTS);
       outcomes = counts.map((c) => ({ label: `${c.count} affix${c.count === 1 ? '' : 'es'}`, chance: c.chance }));

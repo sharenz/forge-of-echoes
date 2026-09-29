@@ -51,6 +51,7 @@ export function AtlasView({ progress, selected, tier, onSelect, onBack }: {
         <strong class="ui-type-body">{area.name} · maps up to Tier {atlasTierCeiling(area)}</strong>
         <p class="ui-type-secondary">{area.description}</p>
         <p class="ui-type-caption">{mapBaseImplicitText(area.baseId)} {preferences.length > 0 && `Drop weighting: ${preferences.join(' · ')}.`}</p>
+        {area.ingredientDrops?.map(d => <p key={d.currencyId} class="ui-type-caption">Boss ingredient: {CURRENCIES[d.currencyId].name} · {d.chance * 100}% chance on Tier {d.minTier}{atlasTierCeiling(area) > d.minTier ? '+' : ''} maps.</p>)}
         {!fits && <p class="fe-atlas__error ui-type-secondary">Your Tier {tier} map needs an area with a higher limit.</p>}
       </div>
       <div class="fe-atlas__actions">

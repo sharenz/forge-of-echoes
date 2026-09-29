@@ -237,9 +237,9 @@ describe('base picking', () => {
       expect(BASES[id].levelRequirement).toBeLessThanOrEqual(5);
     }
     for (let i = 0; i < 200; i++) {
-      expect(pickRandomBase(rng, { classes: ['wand'], weights: { ashwoodWand: 0, glassboneWand: 0 } })).toBe('ironrootWand');
+      expect(pickRandomBase(rng, { itemLevel: 40, classes: ['wand'], weights: { ashwoodWand: 0, glassboneWand: 0 } })).toBe('ironrootWand');
     }
-    expect(pickRandomBase(rng, { classes: ['ring'], weights: { emberRing: 0, rimeBand: 0, stormLoop: 0, voidSignet: 0 } })).toBeNull();
+    expect(pickRandomBase(rng, { itemLevel: 40, classes: ['ring'], weights: { emberRing: 0, rimeBand: 0, stormLoop: 0, voidSignet: 0 } })).toBeNull();
   });
 
   it('is uniform by default', () => {
@@ -251,7 +251,7 @@ describe('base picking', () => {
       const id = pickRandomBase(rng)!;
       counts.set(id, (counts.get(id) ?? 0) + 1);
     }
-    for (const id of BASE_IDS) expect(Math.abs((counts.get(id) ?? 0) / N - 1 / 22)).toBeLessThan(0.008);
+    for (const id of BASE_IDS) expect(Math.abs((counts.get(id) ?? 0) / N - 1 / BASE_IDS.length)).toBeLessThan(0.008);
   });
 
   it('boosts classes via class weights', () => {

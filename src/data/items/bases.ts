@@ -1,4 +1,4 @@
-// The 22 equipment bases (GAME_SPEC §5). Every base has one implicit line (a few have two), a grid
+// Equipment bases (GAME_SPEC §5). Every base has one implicit line (a few have two), a grid
 // footprint by class, a stability budget and, for some, a crafting material that bends the rules.
 import type { ModifierMode, StatId } from '../../contracts/items';
 import type { BaseId, EquipSlot, ItemClass } from '../../contracts/content';
@@ -269,5 +269,66 @@ export const BASES: Record<BaseId, BaseDef> = {
     materialNote: DELICATE,
     implicits: [imp('voidRes', 'flat', 10, 14)],
     properties: [],
+  }),
+
+  // --- advanced bases: first available from Tier 8 (monster/item level 46) -----------------------
+  emberheartWand: base('emberheartWand', {
+    name: 'Emberheart Wand', itemClass: 'wand', levelRequirement: 42, maxStability: 9,
+    materialNote: 'Emberheart: fire affixes are twice as likely.',
+    implicits: [imp('fireDamage', 'increased', 18, 24)], properties: [spell(3, 0.11)],
+    material: { name: 'Emberheart', tagWeights: { fire: 2 } },
+  }),
+  stormglassSceptre: base('stormglassSceptre', {
+    name: 'Stormglass Sceptre', itemClass: 'sceptre', levelRequirement: 46, maxStability: 8,
+    materialNote: 'Stormglass: lightning affixes are twice as likely.',
+    implicits: [imp('spellDamage', 'increased', 24, 30)], properties: [spell(4, 0.14)],
+    material: { name: 'Stormglass', tagWeights: { lightning: 2 } },
+  }),
+  echoingFocus: base('echoingFocus', {
+    name: 'Echoing Focus', itemClass: 'focus', levelRequirement: 42, maxStability: 9,
+    materialNote: 'Echo crystal: speed affixes are twice as likely.',
+    implicits: [imp('castSpeed', 'increased', 10, 14), imp('maxFocus', 'flat', 20, 28)], properties: [],
+    material: { name: 'Echo crystal', tagWeights: { speed: 2 } },
+  }),
+  bastionHelm: base('bastionHelm', {
+    name: 'Bastion Helm', itemClass: 'helmet', levelRequirement: 42, maxStability: 10,
+    materialNote: 'Bastion plate: defence affixes are twice as likely.',
+    implicits: [imp('maxLife', 'flat', 25, 35)], properties: [armour(30, 0.85)],
+    material: { name: 'Bastion plate', tagWeights: { defense: 2 } },
+  }),
+  duskweaveRobe: base('duskweaveRobe', {
+    name: 'Duskweave Robe', itemClass: 'chest', levelRequirement: 46, maxStability: 9,
+    materialNote: 'Duskweave: void affixes are twice as likely.',
+    implicits: [imp('evasion', 'flat', 45, 60), imp('maxFocus', 'flat', 25, 35)], properties: [evasion(35, 1.3)],
+    material: { name: 'Duskweave', tagWeights: { void: 2 } },
+  }),
+  forgemasterGloves: base('forgemasterGloves', {
+    name: 'Forgemaster Gloves', itemClass: 'gloves', levelRequirement: 42, maxStability: 10,
+    materialNote: 'Forgemaster steel: 10 Stability for longer crafting projects.',
+    implicits: [imp('castSpeed', 'increased', 7, 10)], properties: [armour(20, 0.65)],
+  }),
+  wayfarerGreaves: base('wayfarerGreaves', {
+    name: 'Wayfarer Greaves', itemClass: 'boots', levelRequirement: 42, maxStability: 9,
+    materialNote: 'Wayfarer leather: speed affixes are twice as likely.',
+    implicits: [imp('moveSpeed', 'increased', 10, 14)], properties: [armour(14, 0.45), evasion(14, 0.45)],
+    material: { name: 'Wayfarer leather', tagWeights: { speed: 2 } },
+  }),
+  ironweaveGirdle: base('ironweaveGirdle', {
+    name: 'Ironweave Girdle', itemClass: 'belt', levelRequirement: 46, maxStability: 10,
+    materialNote: 'Ironweave: life affixes are twice as likely.',
+    implicits: [imp('maxLife', 'flat', 30, 42)], properties: [],
+    material: { name: 'Ironweave', tagWeights: { life: 2 } },
+  }),
+  prismaticAmulet: base('prismaticAmulet', {
+    name: 'Prismatic Amulet', itemClass: 'amulet', levelRequirement: 42, maxStability: 8,
+    materialNote: 'Prismatic crystal: resistance affixes are twice as likely.',
+    implicits: [{ stats: ['str', 'dex', 'int'], mode: 'flat', min: 12, max: 16, text: '{+v} to all Attributes' }], properties: [],
+    material: { name: 'Prismatic crystal', tagWeights: { resistance: 2 } },
+  }),
+  dusksteelRing: base('dusksteelRing', {
+    name: 'Dusksteel Ring', itemClass: 'ring', levelRequirement: 46, maxStability: 8,
+    materialNote: 'Dusksteel: void affixes are twice as likely.',
+    implicits: [imp('voidRes', 'flat', 18, 24), imp('maxFocus', 'flat', 18, 24)], properties: [],
+    material: { name: 'Dusksteel', tagWeights: { void: 2 } },
   }),
 };

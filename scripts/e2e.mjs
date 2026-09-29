@@ -3,7 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5|qol|account|atlas|events] [--smoke 30] [--lieutenant]
+//                        [--only wave5|qol|account|atlas|events|crafting] [--smoke 30] [--lieutenant]
 //
 // --prod tests the production bundle instead of the Vite dev server: `vite build` (with VITE_FOE_DEBUG=1, so the
 // window.__foe hooks this script drives are compiled in) into a temp dir, served by the game server itself
@@ -71,6 +71,7 @@ const QOL_ONLY = opt('only', 'all') === 'qol';
 const ACCOUNT_ONLY = opt('only', 'all') === 'account';
 const ATLAS_ONLY = opt('only', 'all') === 'atlas';
 const EVENTS_ONLY = opt('only', 'all') === 'events';
+const CRAFTING_ONLY = opt('only', 'all') === 'crafting';
 /** Seconds of fighting in each new map type (longer while its family has not shown two kinds yet). */
 const SMOKE_SECONDS = Number(opt('smoke', '30'));
 /** --lieutenant: keep fighting each new map type until its lieutenant (wave 3) is on the field. */
@@ -1928,6 +1929,133 @@ async function atlasScenario({ A, port }) {
   });
 }
 
+async function craftingScenario({ A, port }) {
+  const shot = async name => {
+    await settlePanels(A);
+    await A.page.waitForFunction(() => [...document.querySelectorAll('.fe-tooltip-layer')].every(e => getComputedStyle(e).opacity === '1'));
+    await A.shot(`${name}-${VW}x${VH}`);
+  };
+  await step('prepare advanced gear and runes in the disposable database', async () => {
+    outage = true;
+    await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const { tsImport } = await import('tsx/esm/api');
+    const { ATLAS_AREA_IDS } = await tsImport('../src/contracts/atlas.ts', import.meta.url);
+    const { BASES } = await tsImport('../src/data/items/index.ts', import.meta.url);
+    const { buildEquipment, generateEquipment, addToBackpack } = await tsImport('../src/game/items/index.ts', import.meta.url);
+    const { createRng } = await tsImport('../src/core/rng.ts', import.meta.url);
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const row = db.prepare('SELECT account_id, data FROM account_storage').get();
+    const shared = JSON.parse(row.data);
+    shared.atlas = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 12 };
+    shared.currencyStash = { prefixRune: 2, suffixRune: 2 };
+    db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), row.account_id);
+    const character = db.prepare('SELECT id, data FROM characters').get();
+    let saved = JSON.parse(character.data);
+    saved.level = 46;
+    saved.backpack.entries = [];
+    saved.equipment.mainHand = buildEquipment({ uid: 'e2e-rune-project', baseId: 'emberheartWand', itemLevel: 46,
+      rarity: 'rare', name: 'Ember Testament', affixes: [
+        { affixId: 'fireDamage', tier: 6 }, { affixId: 'spellDamage', tier: 6 },
+        { affixId: 'castSpeed', tier: 6 }, { affixId: 'critChance', tier: 6 },
+      ] }, createRng(1));
+    for (const base of Object.values(BASES).filter(b => b.levelRequirement >= 42)) {
+      if (base.id === 'emberheartWand') continue;
+      const result = addToBackpack(saved, generateEquipment(base.id, 46, 'normal', createRng(base.name.length), { uid: `e2e-${base.id}` }));
+      assert(result.ok, `cannot place ${base.id}`);
+      saved = result.value;
+    }
+    saved.mapDevice = { kind: 'map', uid: 'e2e-source-map', baseId: 'ashenForge', tier: 3, rarity: 'normal', mods: [], quality: 0, corrupted: false };
+    db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(saved), character.id);
+    db.close();
+    await startGameServer(port);
+    await A.waitFor('advanced project after restart', () => {
+      const s = window.__foe.store.get();
+      return s.connection === 'online' && s.character?.equipment.mainHand?.uid === 'e2e-rune-project';
+    }, undefined, 30_000);
+    outage = false;
+    await A.page.keyboard.press('i');
+    await A.page.waitForSelector('.fe-grid[data-drop="backpack"]');
+    await settlePanels(A);
+    await A.page.mouse.move(10, 10);
+    await shot('crafting-advanced-bases');
+  });
+  await step('both rune previews and bench clicks preserve the opposite affixes', async () => {
+    await closePanels(A);
+    const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'anvil', 8), 'the anvil');
+    await clickWorld(A, at, 'the anvil');
+    await A.page.waitForSelector('.fe-bench');
+    await A.page.locator('[data-drop="equip"] .fe-item[data-uid="e2e-rune-project"]').click({ modifiers: ['Control'] });
+    await A.waitFor('project on bench', () => window.__foe.store.get().benchItemUid === 'e2e-rune-project');
+    for (const [id, label, kept] of [
+      ['prefixRune', 'Prefix Rune', ['castSpeed', 'critChance']],
+      ['suffixRune', 'Suffix Rune', null],
+    ]) {
+      const before = await A.eval(() => structuredClone(window.__foe.store.get().character.equipment.mainHand));
+      const keptIds = kept ?? before.affixes.filter(a => !['castSpeed', 'critChance'].includes(a.affixId)).map(a => a.affixId);
+      const button = A.page.getByRole('button', { name: label, exact: true });
+      await button.hover();
+      await A.page.waitForSelector('.fe-curtip');
+      await shot(`crafting-${id}-preview`);
+      await button.click();
+      await A.waitFor(`${id} consumed from shared stash`, (id) => window.__foe.store.get().character.currencyStash[id] === 1, id);
+      const after = await A.eval(() => window.__foe.store.get().character.equipment.mainHand);
+      assert(after.stability === before.stability - 3, 'rune paid the wrong stability');
+      assert(after.affixes.length === before.affixes.length, 'rune changed affix count');
+      assert(after.name === before.name && after.rarity === before.rarity, 'rune changed item identity');
+      for (const id of keptIds) assert(JSON.stringify(after.affixes.find(a => a.affixId === id)) === JSON.stringify(before.affixes.find(a => a.affixId === id)), `rune changed preserved ${id}`);
+      await A.page.mouse.move(10, 10);
+      await sleep(350);
+    }
+    await shot('crafting-runes-applied');
+  });
+  await step('rune stash slots and Atlas boss sources are visible', async () => {
+    await closePanels(A);
+    await openStashTab(A, 'currency');
+    for (const id of ['prefixRune', 'suffixRune']) assert(await A.page.locator(`.fe-cslot[data-currency="${id}"]`).count() === 1, `missing ${id} slot`);
+    await A.page.mouse.move(10, 10);
+    await shot('crafting-rune-stash');
+    const bindingSlot = A.page.locator('.fe-cslot[data-currency="fractureCore"]');
+    await bindingSlot.scrollIntoViewIfNeeded();
+    const bindingBox = await bindingSlot.boundingBox();
+    assert(bindingBox && bindingBox.y > 0 && bindingBox.y + bindingBox.height < VH - 90, 'lower crafting currencies are unreachable');
+    const blockedSlots = await A.eval(() => [...document.querySelectorAll('.fe-cstash .fe-cslot')].filter(el => {
+      const r = el.getBoundingClientRect();
+      return !el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+    }).map(el => el.dataset.currency));
+    assert(blockedSlots.length === 0, `currency controls are covered: ${blockedSlots.join(', ')}`);
+    await shot('crafting-stash-binding');
+    await closePanels(A);
+    let at = await propOnScreen(A, 'mapDevice');
+    for (let i = 0; i < 30 && at && (at.y < 90 || at.y > VH - 170); i++) {
+      const key = at.y < 90 ? 'w' : 's';
+      await A.page.keyboard.down(key); await sleep(180); await A.page.keyboard.up(key); await sleep(120);
+      at = await propOnScreen(A, 'mapDevice');
+    }
+    assert(at && at.y >= 60 && at.y <= VH - 140, 'map device is not on screen');
+    await A.page.mouse.click(at.x, at.y);
+    await A.page.waitForSelector('.fe-device');
+    await A.page.locator('.fe-device__destination').click();
+    for (const [area, rune] of [['Glass Sepulchre', 'Prefix Rune'], ['Ember Vault', 'Suffix Rune']]) {
+      await A.page.getByRole('button', { name: new RegExp(`^${area},`) }).click();
+      const detail = await A.page.locator('.fe-atlas__detail').innerText();
+      assert(detail.includes(rune) && detail.includes('25%'), 'missing ingredient source');
+      await shot(`crafting-source-${rune.split(' ')[0]}`);
+    }
+  });
+  await step('crafted advanced gear and rune counts survive a real server restart', async () => {
+    const before = await A.eval(() => structuredClone(window.__foe.store.get().character.equipment.mainHand));
+    outage = true;
+    await stopGameServer();
+    await startGameServer(port);
+    await A.waitFor('reconnected with crafted item', () => window.__foe.store.get().connection === 'online', undefined, 30_000);
+    outage = false;
+    const after = await A.eval(() => ({ item: window.__foe.store.get().character.equipment.mainHand, stash: window.__foe.store.get().character.currencyStash }));
+    assert(JSON.stringify(after.item) === JSON.stringify(before), 'crafted item changed on restart');
+    assert(after.stash.prefixRune === 1 && after.stash.suffixRune === 1, 'rune count changed on restart');
+  });
+}
+
 async function eventsScenario({ A, port }) {
   const eventShot = async (name) => {
     await A.shot(name);
@@ -2044,7 +2172,8 @@ async function main() {
   });
   if (ATLAS_ONLY) await atlasScenario({ A, port });
   if (EVENTS_ONLY) await eventsScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY) {
+  if (CRAFTING_ONLY) await craftingScenario({ A, port });
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -2053,7 +2182,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

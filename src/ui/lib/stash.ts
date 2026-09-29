@@ -61,7 +61,7 @@ export interface CurrencyShelf {
 /** The fixed layout of the two Crafting Stash tabs (every currency has exactly one slot). */
 export const CURRENCY_SHELVES: Readonly<Record<'currency' | 'mapCurrency', readonly CurrencyShelf[]>> = {
   currency: [
-    { title: 'Shaping', ids: ['kindling', 'scrap', 'reforge'] },
+    { title: 'Shaping', ids: ['kindling', 'scrap', 'reforge', 'prefixRune', 'suffixRune'] },
     { title: 'Essences', ids: ['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift'] },
     { title: 'Refining & binding', ids: ['catalyst', 'solvent', 'seal', 'fractureCore'] },
   ],
@@ -76,6 +76,8 @@ export const CURRENCY_SHORT: Readonly<Record<CurrencyId, string>> = {
   kindling: 'Kindling',
   scrap: 'Scrap',
   reforge: 'Reforge',
+  prefixRune: 'Prefix',
+  suffixRune: 'Suffix',
   essenceEmber: 'Ember',
   essenceRime: 'Rime',
   essenceStorm: 'Storm',

@@ -18,6 +18,8 @@ const SPEC_STABILITY: Record<BaseId, number> = {
   ritualCirclet: 8, ironVisor: 9, ashenRobe: 8, rivetedCoat: 9, silkWraps: 8, graspingGauntlets: 9,
   pathfinderBoots: 8, ashenSandals: 8, chainBelt: 8, runedSash: 8, cinderPendant: 7, boneTalisman: 7,
   emberRing: 7, rimeBand: 7, stormLoop: 7, voidSignet: 7,
+  emberheartWand: 9, stormglassSceptre: 8, echoingFocus: 9, bastionHelm: 10, duskweaveRobe: 9,
+  forgemasterGloves: 10, wayfarerGreaves: 9, ironweaveGirdle: 10, prismaticAmulet: 8, dusksteelRing: 8,
 };
 
 const SPEC_SIZE: Record<ItemClass, [number, number]> = {
@@ -31,7 +33,7 @@ function lineHasTemplate(line: ModLineDef): boolean {
 }
 
 describe('bases', () => {
-  it('defines all 22 bases with the spec stability, class footprint and slots', () => {
+  it('defines all 32 bases with the spec stability, class footprint and slots', () => {
     expect(Object.keys(BASES).sort()).toEqual([...BASE_IDS].sort());
     for (const id of BASE_IDS) {
       const b = BASES[id];
@@ -177,7 +179,7 @@ describe('currencies', () => {
     }
     for (const id of CURRENCY_IDS) {
       const c = CURRENCIES[id];
-      const rare = id === 'fractureCore' || id === 'voidNeedle' || id === 'reliquaryKey';
+      const rare = id === 'fractureCore' || id === 'voidNeedle' || id === 'reliquaryKey' || id === 'prefixRune' || id === 'suffixRune';
       expect(c.maxStack, id).toBe(rare ? 20 : 40);
       expect(c.needsAffixChoice, id).toBe(id === 'catalyst' || id === 'seal' || id === 'fractureCore');
       expect(c.description, id).toMatch(/^[A-Z][a-z]+s\b/);
@@ -241,8 +243,8 @@ describe('uniques, scars, flasks, names', () => {
   });
 
   it('exposes plain ContentInfo records', () => {
-    expect(Object.keys(BASE_INFO)).toHaveLength(22);
-    expect(Object.keys(CURRENCY_INFO)).toHaveLength(17);
+    expect(Object.keys(BASE_INFO)).toHaveLength(32);
+    expect(Object.keys(CURRENCY_INFO)).toHaveLength(19);
     expect(Object.keys(FLASK_INFO)).toHaveLength(2);
     expect(Object.keys(UNIQUE_INFO)).toHaveLength(4);
     expect(BASE_INFO.ashwoodWand).toEqual({

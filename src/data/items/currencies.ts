@@ -86,6 +86,16 @@ export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
     maxStack: RARE_CURRENCY_STACK,
     dropTier: 'rare',
   }),
+  prefixRune: currency('prefixRune', {
+    name: 'Prefix Rune',
+    description: 'Reforges the unsealed, unfractured prefixes, preserving their count and every suffix. Found from the Glass Sepulchre boss on Tier 3+ maps (25% chance).',
+    family: 'shape', stabilityCost: 3, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  suffixRune: currency('suffixRune', {
+    name: 'Suffix Rune',
+    description: 'Reforges the unsealed, unfractured suffixes, preserving their count and every prefix. Found from the Ember Vault boss on Tier 3 maps (25% chance).',
+    family: 'shape', stabilityCost: 3, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
   mapDust: currency('mapDust', {
     name: 'Map Dust',
     description: 'Turns a Normal map Magic with 1–2 mods, or rerolls the mods of a Magic or Rare map.',

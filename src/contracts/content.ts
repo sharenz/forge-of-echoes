@@ -29,6 +29,9 @@ export const BASE_IDS = [
   // jewellery
   'cinderPendant', 'boneTalisman',
   'emberRing', 'rimeBand', 'stormLoop', 'voidSignet',
+  // Advanced bases: unlocked by Tier 8 item levels (42+).
+  'emberheartWand', 'stormglassSceptre', 'echoingFocus', 'bastionHelm', 'duskweaveRobe',
+  'forgemasterGloves', 'wayfarerGreaves', 'ironweaveGirdle', 'prismaticAmulet', 'dusksteelRing',
 ] as const;
 export type BaseId = (typeof BASE_IDS)[number];
 
@@ -50,6 +53,8 @@ export const EQUIPMENT_CURRENCY_IDS = [
   'solvent',        // Remove: remove the lowest-tier unsealed, unfractured affix
   'seal',           // Preserve: seal one chosen affix for the next operation
   'fractureCore',   // Transform: fracture one chosen affix permanently (immune to all crafting)
+  'prefixRune',     // Reforge prefixes while preserving suffixes
+  'suffixRune',     // Reforge suffixes while preserving prefixes
 ] as const;
 export const MAP_CURRENCY_IDS = [
   'mapDust',        // normal → magic, or reroll a magic/rare map's mods

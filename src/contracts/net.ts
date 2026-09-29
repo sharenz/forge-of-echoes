@@ -17,7 +17,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 6: account-wide storage, character item-ID namespaces and preserved legacy stash tabs.
 // 7: account Atlas, area selection, entrance keys and revised map progression rewards.
 // 8: hidden map-event plans and replicated encounter progress (snapshot 6).
-export const PROTOCOL_VERSION = 8;
+// 9: Prefix/Suffix Runes, area ingredient sources and advanced equipment bases.
+export const PROTOCOL_VERSION = 9;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;

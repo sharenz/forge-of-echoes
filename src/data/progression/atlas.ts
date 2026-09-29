@@ -17,6 +17,8 @@ export interface AtlasAreaDef {
   description: string;
   /** Additional weights within drop tables, not more total drops. */
   currencyWeights?: Partial<Record<CurrencyId, number>>;
+  /** Exclusive extra boss ingredients, rolled per living player. */
+  ingredientDrops?: readonly { currencyId: CurrencyId; chance: number; minTier: number }[];
   classWeights?: Partial<Record<ItemClass, number>>;
   /** A sealed destination is revealed by the rare-door roll, never by ordinary neighbour discovery. */
   sealed?: boolean;
@@ -57,6 +59,7 @@ export const ATLAS_AREAS: readonly AtlasAreaDef[] = [
     neighbours: ['emberRoad'], x: 41, y: 6, deadEnd: true, arenaScale: 0.8,
     description: 'A dead end for targeted crafting supplies. Its tier limit matches Ember Road.',
     currencyWeights: { essenceEmber: 2, seal: 3 },
+    ingredientDrops: [{ currencyId: 'suffixRune', chance: 0.25, minTier: 3 }],
   },
   {
     id: 'furnaceYard', name: 'Furnace Yard', type: 'forge', baseId: 'ashenForge', depth: 2,
@@ -69,6 +72,7 @@ export const ATLAS_AREAS: readonly AtlasAreaDef[] = [
     neighbours: ['boneApproach', 'furnaceYard'], x: 44, y: 56,
     description: 'Jewellery and crafting Solvents, with a passage toward the furnaces.',
     classWeights: { ring: 2, amulet: 2 }, currencyWeights: { solvent: 2 }, arenaScale: 0.85,
+    ingredientDrops: [{ currencyId: 'prefixRune', chance: 0.25, minTier: 3 }],
   },
   {
     id: 'ironMarch', name: 'Iron March', type: 'arena', baseId: 'ironColiseum', depth: 2,

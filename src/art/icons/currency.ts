@@ -454,6 +454,21 @@ function reliquaryKey(): Frame {
   return f;
 }
 
+/** Matched stone tablets; the luminous bracket identifies which half is reforged. */
+function affixRune(prefix: boolean): Frame {
+  const f = newIcon();
+  const s = new Sculpt();
+  s.poly([[9, 3], [24, 5], [26, 24], [20, 29], [6, 26], [5, 10]], style(RAMPS.basalt, 0.6), 2);
+  s.render(f.c, f.e);
+  line(f, 9, 6, 22, 8, C.metalLight);
+  line(f, 8, 25, 20, 27, C.metal);
+  glyph(f, prefix ? ['#####..', '##.....', '##.##..', '##.....', '#####..']
+    : ['..#####', '.....##', '..##.##', '.....##', '..#####'], 16, 17,
+    prefix ? C.goldHi : C.voidGlow, C.ink);
+  gem(f, prefix ? 10 : 22, 9, 1.5, 1.5, prefix ? RAMPS.gold : RAMPS.void);
+  return f;
+}
+
 export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
   'icon/currency/kindling': () => finishIcon(kindling(), C.hot),
   'icon/currency/scrap': () => finishIcon(scrap()),
@@ -467,6 +482,8 @@ export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
   'icon/currency/solvent': () => finishIcon(solvent()),
   'icon/currency/seal': () => finishIcon(seal()),
   'icon/currency/fractureCore': () => finishIcon(fractureCore(), C.lightning),
+  'icon/currency/prefixRune': () => finishIcon(affixRune(true), C.goldHi),
+  'icon/currency/suffixRune': () => finishIcon(affixRune(false), C.voidGlow),
   'icon/currency/mapDust': () => finishIcon(mapDust(), C.ice),
   'icon/currency/threatGlyph': () => finishIcon(threatGlyph()),
   'icon/currency/rewardInk': () => finishIcon(rewardInk(), C.goldHi),

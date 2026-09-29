@@ -39,6 +39,14 @@ export const ICON_FOOTPRINT: Readonly<Record<string, readonly [number, number]>>
   'icon/base/ashenSandals': [2, 2],
   'icon/base/chainBelt': [2, 1],
   'icon/base/runedSash': [2, 1],
+  'icon/base/emberheartWand': [1, 3],
+  'icon/base/stormglassSceptre': [2, 3],
+  'icon/base/echoingFocus': [2, 2],
+  'icon/base/bastionHelm': [2, 2],
+  'icon/base/duskweaveRobe': [2, 3],
+  'icon/base/forgemasterGloves': [2, 2],
+  'icon/base/wayfarerGreaves': [2, 2],
+  'icon/base/ironweaveGirdle': [2, 1],
   'icon/unique/thePatientSpark': [1, 3],
   'icon/unique/cinderwalkers': [2, 2],
 };
@@ -200,7 +208,7 @@ function ironrootWand(): Frame {
 // Sceptre (2x3)
 // ---------------------------------------------------------------------------
 
-function emberSceptre(): Frame {
+function emberSceptre(storm = false): Frame {
   const f = newIcon(2, 3);
   const s = new Sculpt();
   const b: Pt = [22, 88];
@@ -217,7 +225,7 @@ function emberSceptre(): Frame {
       if (d < 1) px(f, x, y, d > 0.85 ? C.goldDark : C.coal);
     }
   }
-  bigGem(f, 42, 24, 6, 6, EMBER);
+  bigGem(f, 42, 24, 6, 6, storm ? STORM : EMBER);
   // gold bands up the haft
   for (const k of [0.18, 0.45, 0.72, 0.95]) {
     const x = b[0] + (t[0] - b[0]) * k;
@@ -229,7 +237,12 @@ function emberSceptre(): Frame {
     line2(f, 42 + (x - 42) * 0.62, 24 + (y - 24) * 0.62, x, y, C.gold, C.ochre);
     px(f, x, y - 1, C.goldHi);
   }
-  flame(f, 42, 17, 9, 2);
+  if (storm) {
+    line(f, 43, 7, 38, 16, C.lightning);
+    line(f, 38, 16, 43, 15, C.lightning);
+    line(f, 43, 15, 39, 24, C.storm);
+    for (const y of [45, 57, 69]) bigGem(f, 39 - (y - 34) / 3, y, 2, 3, STORM);
+  } else flame(f, 42, 17, 9, 2);
   sparkle(f, 55, 6, C.hot, 1);
   sparkle(f, 29, 30, C.goldHi, 1);
   return f;
@@ -667,6 +680,101 @@ function ring(band: Ramp, stone: Ramp, extra?: (f: Frame) => void): Frame {
   return f;
 }
 
+// Advanced bases keep the class silhouette, with their own material and focal details.
+function emberheartWand(): Frame {
+  return wand({ shaft: ASHWOOD, grip: C.goldDark, gripDark: C.woodDeep, twist: true,
+    tip: (f, x, y) => {
+      bigGem(f, x, y, 6, 8, EMBER);
+      ringBand(f, x, y, 9, 4, 2, RAMPS.gold);
+      line(f, x - 5, y - 8, x - 8, y + 7, C.ochre);
+      line(f, x + 5, y - 8, x + 8, y + 7, C.goldHi);
+      sparkle(f, x, y - 9, C.hot, 1);
+    },
+  });
+}
+
+function echoingFocus(): Frame {
+  const f = newIcon(2, 2);
+  ringBand(f, 32, 34, 23, 15, 3, RAMPS.metal);
+  bigGem(f, 32, 30, 9, 19, FROST);
+  for (const [x, y] of [[15, 24], [49, 40]] as const) bigGem(f, x, y, 4, 8, STORM);
+  line(f, 24, 51, 40, 51, C.metalLight);
+  sparkle(f, 31, 8, C.ice, 2);
+  return f;
+}
+
+function bastionHelm(): Frame {
+  const f = ironVisor();
+  const s = new Sculpt();
+  s.poly([[25, 11], [32, 4], [39, 11], [35, 28], [29, 28]], style(RAMPS.gold), 2);
+  s.render(f.c, f.e);
+  bigGem(f, 32, 19, 3, 5, EMBER);
+  for (const x of [20, 44]) lineOn(f, x, 36, x, 49, C.goldHi);
+  return f;
+}
+
+function duskweaveRobe(): Frame {
+  const f = ashenRobe();
+  for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) {
+    const i = ASHCLOTH.indexOf(f.c.get(x, y));
+    if (i >= 1) px(f, x, y, VOID[Math.min(4, i - 1)]);
+  }
+  for (const x of [25, 39]) {
+    lineOn(f, x, 27, x, 79, C.voidLight);
+    for (const y of [43, 59, 75]) {
+      lineOn(f, x - 3, y, x, y - 4, C.voidGlow);
+      lineOn(f, x, y - 4, x + 3, y, C.voidLight);
+    }
+  }
+  bigGem(f, 32, 33, 3, 4, VOID);
+  return f;
+}
+
+function forgemasterGloves(): Frame {
+  const f = graspingGauntlets();
+  for (const [x, y] of [[24, 26], [41, 40]] as const) {
+    lineOn(f, x - 9, y, x + 8, y, C.goldHi);
+    lineOn(f, x - 9, y + 5, x + 8, y + 5, C.ochre);
+    bigGem(f, x, y + 2, 3, 4, EMBER);
+  }
+  return f;
+}
+
+function wayfarerGreaves(): Frame {
+  const f = pathfinderBoots();
+  for (const [x, y] of [[25, 22], [43, 34]] as const) {
+    for (let i = 0; i < 3; i++) lineOn(f, x - 7, y + i * 4, x + 5, y + i * 4 - 2, C.metalHi);
+    bigGem(f, x, y + 4, 2, 3, FROST);
+  }
+  return f;
+}
+
+function ironweaveGirdle(): Frame {
+  const f = chainBelt();
+  for (const x of [12, 22, 42, 52]) {
+    line(f, x - 3, 12, x + 3, 20, C.metalLight);
+    line(f, x + 3, 12, x - 3, 20, C.metal);
+  }
+  bigGem(f, 32, 16, 6, 6, EMBER);
+  return f;
+}
+
+function prismaticAmulet(): Frame {
+  const f = pendant(FROST, RAMPS.gold);
+  gem(f, 10, 19, 2.5, 3, EMBER);
+  gem(f, 22, 19, 2.5, 3, STORM);
+  gem(f, 16, 25, 2, 2.5, VOID);
+  return f;
+}
+
+function dusksteelRing(): Frame {
+  return ring(RAMPS.metal, VOID, f => {
+    gem(f, 9, 17, 2, 2, FROST);
+    gem(f, 23, 17, 2, 2, FROST);
+    lineOn(f, 11, 24, 21, 24, C.voidGlow);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Uniques: richer, rule-breaking versions of their bases
 // ---------------------------------------------------------------------------
@@ -766,6 +874,16 @@ export const EQUIPMENT_ICONS: Record<string, () => PixelImage> = {
       C.storm,
     ),
   'icon/base/voidSignet': () => finishIcon(ring([C.ink, C.voidDeep, C.voidDark, C.metal, C.metalLight], VOID), C.voidGlow),
+  'icon/base/emberheartWand': () => finishIcon(emberheartWand()),
+  'icon/base/stormglassSceptre': () => finishIcon(emberSceptre(true), C.lightning),
+  'icon/base/echoingFocus': () => finishIcon(echoingFocus()),
+  'icon/base/bastionHelm': () => finishIcon(bastionHelm()),
+  'icon/base/duskweaveRobe': () => finishIcon(duskweaveRobe()),
+  'icon/base/forgemasterGloves': () => finishIcon(forgemasterGloves()),
+  'icon/base/wayfarerGreaves': () => finishIcon(wayfarerGreaves()),
+  'icon/base/ironweaveGirdle': () => finishIcon(ironweaveGirdle()),
+  'icon/base/prismaticAmulet': () => finishIcon(prismaticAmulet()),
+  'icon/base/dusksteelRing': () => finishIcon(dusksteelRing()),
   'icon/unique/thePatientSpark': () => finishIcon(thePatientSpark(), C.hot, 0.5),
   'icon/unique/cinderwalkers': () => finishIcon(cinderwalkers(), C.hot, 0.5),
   'icon/unique/echoOfTheMatriarch': () => finishIcon(echoOfTheMatriarch(), C.hot, 0.5),
