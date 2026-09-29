@@ -4,10 +4,14 @@ Maintained at the owner's request. Ask "what's next" and it is read from here; i
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
 Last reprioritised: 2026-09-29.
 
+**Current order:** fix the known UI layout problems → fix stash quick-move → show monster pack modifiers →
+account-wide storage → Atlas vertical slice → events and crafting progression → more map content.
+Priorities follow current usability problems, then progression dependencies. Wave-3 boss reuse is later content work.
+
 **Vision (owner):** two progressions. Character progression exists so you can run harder maps; **map
 progression is the real game progression.** Hobby project played with friends (no trust/legal/scale concerns).
 
-## TOP PRIORITY: balance overhaul (owner, 2026-09-29; before all P1 work)
+## Completed: balance overhaul (2026-09-29)
 
 Owner's problem: the game is too easy, so there is no fun and no incentive to progress. After ~5 maps a level-13
 character had crafted every item the way they wanted. Requirements from the owner:
@@ -62,30 +66,27 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
 - Production backup: `/var/lib/forge/backups/pre-phase2-2026-09-29T19-00-57.502Z.db` (integrity check passed).
   Live health reports protocol 3; public JavaScript/CSS match the tested build. Live T1 remains level 4.
 
-## P0: next
+## P0: usability and combat readability (do these next, in order)
 
-1. **Reuse wave-3 bosses to expand the map roster** (owner, 2026-09-29). Remove the wave-3 lieutenant encounter
-   from every existing map. Promote those three encounters into final bosses of three new maps, aiming to grow
-   the roster from 3 to 6 maps. Reuse the existing boss mechanics; give each new map its own theme, packs and
-   implicit. Rebalance wave 3, encounter rewards and map completion time after the split. This is queued work,
-   not part of the current phase-2 balance tuning.
-2. **UI polish after the font bump.** "Intelligence" label collides with its `+` button in the character panel;
-   party row metadata ("Ashen Forge T3 / 6/8 portals") wraps unevenly. Then review the panels not yet checked at
-   the new sizes (stash, merchant, crafting bench, map device, trade, menu, tooltips, smaller viewports).
-3. **Monster pack modifiers on hover** (owner). When you hover a magic or rare pack, show its modifiers (top
-   centre suggested). Spec data: magic packs share one mod (Swift, Stout, Fierce); a rare leader has 2 of
-   Juggernaut, Frenzied, Ember-touched, Warded (`GAME_SPEC.md` §8). Needs the mods in the client snapshot and
-   a hover hit-test on monsters; uses the shared UI type scale.
-4. **Stash quick-move to the special tabs** (owner). With a normal stash tab selected, Ctrl/Cmd-click on a map (or a
+1. **Fix known UI layout problems after the font bump.** "Intelligence" collides with its `+` button in the
+   character panel; party row metadata ("Ashen Forge T3 / 6/8 portals") wraps unevenly. Verify these fixes at
+   normal and small viewports, then check the remaining panels for clipping or blocked controls. Keep this
+   pass limited to concrete layout defects so it does not delay progression work.
+2. **Stash quick-move to the special tabs** (owner). With a normal stash tab selected, Ctrl/Cmd-click on a map (or a
    currency) in the inventory should file it straight into the Map Stash / Crafting Stash, instead of into the open
    normal tab, so nothing has to be sorted by hand. `GAME_SPEC.md` §12 already says maps and currency "file
    themselves" on Ctrl-click, but per the owner it doesn't work this way while a normal tab is open. Also check
    Ctrl-click from a normal tab back out, and flasks/equipment (which stay in normal tabs).
-5. **Adjustable skill slots** (owner). A loadout row already exists in the skills panel (click skill, click slot,
-   right-click clear). Waiting for the owner to say what is missing: key rebinding, slot 0 restricted to basic,
-   swapping from the bar in-game, or a bug.
+3. **Monster pack modifiers on hover** (owner). When you hover a magic or rare pack, show its modifiers (top
+   centre suggested). Spec data: magic packs share one mod (Swift, Stout, Fierce); a rare leader has 2 of
+   Juggernaut, Frenzied, Ember-touched, Warded (`GAME_SPEC.md` §8). Needs the mods in the client snapshot and
+   a hover hit-test on monsters; uses the shared UI type scale.
 
 ## P1: the spine (build in this order; each step playable and testable)
+
+Prioritise persistent map progression and reasons to craft. The Atlas can start with the current three map
+bases; expanding the map roster is not a prerequisite. Continue collecting balance feedback during this work;
+reopen tuning for a specific problem rather than starting another general balance pass.
 
 1. **Account-wide storage.** Stash and atlas progress move from per-character to per-account (owner decision).
    Prerequisite for the atlas. `GAME_SPEC.md` currently says character-specific stash.
@@ -104,11 +105,16 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
    with the item's crafting history (designer: flat cost breaks scars); hard currencies as the value store
    (Reforging Ember / Tempering Catalyst / Fracture Core); Scrap sinks (territory/bounty fees, map rerolls).
    Watch the Scrap balance for a week before the Exchange.
-7. **Rest of the content:** remaining events (Blackout, Vaultbreakers, Second Crown, Wound), remaining ingredients
+7. **Reuse wave-3 bosses to expand the map roster** (owner, 2026-09-29). Remove the wave-3 lieutenant encounter
+   from every existing map. Promote those three encounters into final bosses of three new maps, aiming to grow
+   the roster from 3 to 6 maps. Reuse the existing boss mechanics; give each new map its own theme, packs and
+   implicit. Rebalance wave 3, encounter rewards and map completion time after the split. Schedule this after
+   the Atlas, first events, crafting ingredients and economy sinks are playable.
+8. **Rest of the content:** remaining events (Blackout, Vaultbreakers, Second Crown, Wound), remaining ingredients
    (Scar Balm, Anneal, Graft, Transmute, Compass; event-only Echo Shard, Twin Ink, Void Splinter, Crown Fragment),
    remaining dead ends and rare barrier areas, keystone bosses with their own unique pools (needs many more
    uniques; only 4 exist).
-8. **Map tree v0** (15 nodes, map-only effects). Biggest scope trap: only once events and ingredients are proven.
+9. **Map tree v0** (15 nodes, map-only effects). Biggest scope trap: only once events and ingredients are proven.
 
 ## P2: character depth
 
@@ -137,6 +143,12 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
   so it can ship with its own skills and tree section. Open (to discuss when it's time): skill list and identity,
   weapons/armour/bases (needs melee bases and stats such as strength scaling), resource (Focus vs a rage-style
   meter), and how the map/wave combat suits melee (positioning, hordes). Needs its own art and animations.
+
+## Needs clarification before scheduling
+
+- **Adjustable skill slots** (owner). A loadout row already exists in the skills panel (click skill, click slot,
+  right-click clear). Clarify what is missing: key rebinding, slot 0 restricted to basic, swapping from the bar
+  in-game, or a bug. This does not block the ordered work above.
 
 ## Ideas (unrefined)
 
