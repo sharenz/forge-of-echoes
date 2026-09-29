@@ -1,0 +1,177 @@
+// Runs: the map device readout, opening a map (RunSetup), the sim RunConfig of an instance (a hideout
+// or a map — players join it separately through SimRun.addPlayer), and one player's live runtime
+// (stats, skills, loadout, flasks).
+import type { MapSummaryLine, Result, RunSetup } from '../../contracts/game';
+import type { CharacterSave, MapItem } from '../../contracts/items';
+import type { MonsterScaling, PlayerRuntime, RunConfig, RunHooks, WaveConfig } from '../../contracts/sim';
+import { createRng, hashString, hashU32 } from '../../core/rng';
+import { HIDEOUT_ARENA_RADIUS, HIDEOUT_SEED, WAVES, findMapBase } from '../../data/progression';
+import { flaskRuntimes } from './character';
+import { buildMapSummary, clampTier, mapLuck, mapPlayerModifiers, mapTitle, monsterLevelForTier, monsterScaling, waveConfig } from './maps';
+import { buildPlayerModel } from './model';
+import { normalizeMap } from './save';
+import { normalizeLoadout, playerSkills } from './skills';
+import { computeCombat } from './stats';
+import { clean, fail, ok } from './util';
+
+/**
+ * Map device readout: monster level, the map's own luck, waves, dangers and rewards. Map-side only —
+ * the same lines as RunSetup.summary once the map is opened. A player's personal luck (map + own gear)
+ * is lootLuck(setup, ch); the character is part of the contract signature but does not change the lines.
+ */
+export function mapSummary(_ch: CharacterSave, map: MapItem): MapSummaryLine[] {
+  return buildMapSummary(map);
+}
+
+function snapshotMap(map: MapItem): MapItem {
+  const { isNew: _n, ...rest } = map;
+  return { ...rest, mods: rest.mods.map((m) => ({ ...m })) };
+}
+
+/** The run parameters of `map` (an already snapshotted map) with `seed`: map-side luck only. */
+function setupFor(map: MapItem, seed: number): RunSetup {
+  const luck = mapLuck(map, null);
+  return {
+    map,
+    seed: seed >>> 0,
+    monsterLevel: monsterLevelForTier(map.tier),
+    itemQuantity: clean(luck.quantity.value),
+    itemRarity: clean(luck.rarity.value),
+    summary: buildMapSummary(map),
+  };
+}
+
+/**
+ * Consume the map in the device and produce the run parameters: seed from the character rng, and the
+ * map-side luck (no gear — every player adds their own through lootLuck). Pure, so the UI may call it
+ * as a preview.
+ */
+export function openMap(ch: CharacterSave): Result<{ character: CharacterSave; setup: RunSetup }> {
+  const map = ch.mapDevice;
+  if (!map) return fail('Place a map in the Map Device first.');
+  if (!findMapBase(map.baseId)) return fail('This map can no longer be opened.');
+  const rng = createRng(ch.rngState >>> 0);
+  const seed = Math.floor(rng.next() * 0x100000000) >>> 0;
+  const setup = setupFor(snapshotMap(map), seed);
+  return ok({ character: { ...ch, mapDevice: null, rngState: rng.state() }, setup });
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** JSON text parsed (null when it is not valid JSON); anything else passes through. */
+function parsedJson(raw: unknown): unknown {
+  if (typeof raw !== 'string') return raw;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rebuild an open map's RunSetup after a server restart (GAME_SPEC §11 "Restart safety") from what the
+ * server persisted: the map (`setup.map`) — or the whole RunSetup, whose `map` is then used; either as
+ * a value or as the JSON text of a database column — plus the run's seed. Pure and total: never throws,
+ * and returns null for anything that is not a restorable map (a corrupted row, a map base that no
+ * longer exists, a non-finite seed), so one bad row cannot stop the server from starting. The map is normalised exactly like a saved one (unknown mods dropped,
+ * tier / quality clamped, rarity recomputed), and monster level, luck and summary are recomputed with
+ * the CURRENT rules, so balance changes shipped by the deploy apply to the restored run. Persist
+ * `setup.map` and `setup.seed` (never a client's redacted setup, whose seed is 0).
+ */
+export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
+  if (typeof seed !== 'number' || !Number.isFinite(seed)) return null;
+  const value = parsedJson(raw);
+  const source = isRecord(value) && value.kind !== 'map' && isRecord(value.map) ? value.map : value;
+  if (!isRecord(source) || source.kind !== 'map') return null;
+  const uid = typeof source.uid === 'string' && source.uid.length > 0 && source.uid.length <= 64 ? source.uid : 'restored-map';
+  const map = normalizeMap(source, uid);
+  if (!map || !findMapBase(map.baseId)) return null;
+  return setupFor(snapshotMap(map), Math.floor(seed));
+}
+
+/**
+ * One player's resolved stats, skills, loadout and flasks for an instance (setup null = hideout). A
+ * map's player penalties (Exhausting, Hexed, Unravelling) apply inside it — exactly what
+ * deriveStats(ch, setup) shows. Push it again (SimRun.updatePlayer) after a level-up, gear or flask change.
+ */
+export function playerRuntime(ch: CharacterSave, setup: RunSetup | null): PlayerRuntime {
+  const model = buildPlayerModel(ch, setup ? mapPlayerModifiers(setup.map) : []);
+  const { combat } = computeCombat(model);
+  return {
+    stats: combat,
+    skills: playerSkills(ch, model),
+    loadout: normalizeLoadout(ch),
+    flasks: flaskRuntimes(ch, combat.flaskEffect),
+  };
+}
+
+/** The hideout has only the training dummy: neutral scaling, no packs, no experience. */
+function hideoutScaling(): MonsterScaling {
+  return {
+    level: 1,
+    lifeMultiplier: 1,
+    damageMultiplier: 1,
+    speedMultiplier: 1,
+    countMultiplier: 1,
+    magicPackChance: 0,
+    rarePackChance: 0,
+    resistBonus: 0,
+    xpMultiplier: 0,
+    extraProjectiles: 0,
+    hazards: false,
+  };
+}
+
+const HIDEOUT_WAVES: WaveConfig = {
+  count: 0,
+  baseMonsters: 0,
+  monstersPerWave: 0,
+  waveDuration: WAVES.waveDuration,
+  tellDuration: WAVES.tellDuration,
+  lieutenantWave: 0,
+  bossWave: 0,
+};
+
+/**
+ * Seed of one character's hideout instance (its decor layout), for RunConfig.seed. buildRunConfig(null,
+ * hooks) has no owner, so it uses HIDEOUT_SEED; the server sets `config.seed = hideoutSeed(ownerId)`
+ * before createRun so every hideout looks like its owner's (stable across restarts).
+ */
+export function hideoutSeed(ownerCharacterId: string): number {
+  return hashU32((HIDEOUT_SEED ^ hashString(String(ownerCharacterId))) >>> 0);
+}
+
+/**
+ * The sim config of an instance: the hideout when `setup` is null, otherwise the map described by the
+ * setup (seed, theme, arena, monster scaling, waves). Players are not part of it: each one joins with
+ * SimRun.addPlayer({ id, name, level, runtime: playerRuntime(ch, setup) }). Hideouts all start from
+ * HIDEOUT_SEED; the server overwrites `seed` with hideoutSeed(owner) before createRun.
+ */
+export function buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConfig {
+  if (!setup) {
+    return {
+      mode: 'hideout',
+      seed: HIDEOUT_SEED,
+      theme: 'hideout',
+      mapName: 'Hideout',
+      tier: 0,
+      arenaRadius: HIDEOUT_ARENA_RADIUS,
+      monsters: hideoutScaling(),
+      waves: { ...HIDEOUT_WAVES },
+      hooks,
+    };
+  }
+  const map = setup.map;
+  const base = findMapBase(map.baseId);
+  return {
+    mode: 'map',
+    seed: setup.seed >>> 0,
+    theme: base?.theme ?? 'ashenForge',
+    mapName: mapTitle(map),
+    tier: clampTier(map.tier),
+    arenaRadius: base?.arenaRadius ?? 900,
+    monsters: monsterScaling(map),
+    waves: waveConfig(map),
+    hooks,
+  };
+}

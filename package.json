@@ -1,71 +1,40 @@
 {
   "name": "forge-of-echoes",
-  "version": "0.1.0",
   "private": true,
-  "bin": {
-    "crafty-cli": "./scripts/crafty-cli/index.mjs",
-    "crafty-assets": "./scripts/crafty-assets/index.mjs"
-  },
-  "engines": {
-    "node": ">=22.13.0"
-  },
+  "version": "0.2.0",
+  "type": "module",
   "scripts": {
-    "dev": "npm run db:up && concurrently --kill-others --names web,game-server --prefix-colors cyan,magenta \"npm:dev:web\" \"npm:dev:server\"",
-    "dev:web": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
-    "dev:server": "TSX_TSCONFIG_PATH=tsconfig.json tsx watch server/index.ts",
-    "server:start": "TSX_TSCONFIG_PATH=tsconfig.json tsx server/index.ts",
-    "db:up": "docker compose up -d --wait postgres",
-    "db:down": "docker compose down",
-    "assets": "node scripts/crafty-assets/index.mjs",
-    "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
-    "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "node --test tests/crafty-cli.test.mjs tests/crafty-assets.test.mjs && node --import tsx --test --test-concurrency=1 tests/game-engine.test.ts tests/server-engine/*.test.ts tests/perf/*.test.ts tests/multiplayer/*.test.ts && npm run build && node --test tests/rendered-html.test.mjs",
-    "test:perf": "node --import tsx --test --test-concurrency=1 tests/perf/*.test.ts",
-    "test:multiplayer": "node --import tsx --test --test-concurrency=1 tests/multiplayer/*.test.ts",
-    "test:multiplayer:db": "node --import tsx --test --test-concurrency=1 tests/multiplayer-db/*.test.ts",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "typecheck": "tsc --noEmit"
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
+    "dev:server": "tsx watch --clear-screen=false src/server/main.ts",
+    "server": "tsx src/server/main.ts",
+    "build": "tsc --noEmit && vite build",
+    "start": "NODE_ENV=production tsx src/server/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "node scripts/e2e.mjs",
+    "shot": "node scripts/shot.mjs",
+    "deploy:setup": "bash scripts/deploy/setup-prod.sh",
+    "deploy": "bash scripts/deploy/deploy.sh"
   },
   "dependencies": {
-    "@colyseus/sdk": "^0.17.43",
-    "colyseus": "^0.17.10",
-    "express": "^5.2.1",
-    "pg": "^8.23.0",
-    "phaser": "^4.2.1",
-    "react": "19.2.6",
-    "react-dom": "19.2.6",
-    "zod": "^4.4.3"
+    "@fontsource/alegreya-sans": "^5.3.0",
+    "@fontsource/cinzel": "^5.3.0",
+    "preact": "^10.29.8",
+    "ws": "^8.22.0",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
-    "@cloudflare/workers-types": "^4.20260702.1",
-    "@colyseus/testing": "^0.17.11",
-    "@eslint/js": "9.39.4",
-    "@next/eslint-plugin-next": "16.2.6",
-    "@remix-run/node-fetch-server": "^0.14.1",
-    "@tailwindcss/postcss": "4.2.1",
-    "@types/express": "^5.0.6",
-    "@types/node": "22.19.19",
-    "@types/pg": "^8.23.1",
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.2",
-    "@vitejs/plugin-rsc": "0.5.26",
-    "concurrently": "^10.0.5",
-    "eslint": "9.39.4",
-    "eslint-plugin-jsx-a11y": "6.10.2",
-    "eslint-plugin-react": "7.37.5",
-    "eslint-plugin-react-hooks": "7.1.1",
-    "globals": "16.4.0",
-    "react-server-dom-webpack": "19.2.6",
-    "supabase": "^2.115.0",
-    "tailwindcss": "4.2.1",
-    "tsx": "^4.23.12",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.59.3",
-    "vinext": "1.0.0-beta.2",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^26.6.3",
+    "@types/ws": "^8.18.1",
+    "playwright": "^1.63.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
   },
-  "type": "module"
+  "engines": {
+    "node": ">=22.13"
+  }
 }

@@ -1,105 +1,113 @@
-# Forge of Echoes server architecture
+# Forge of Echoes v2 — Architecture
 
-## Authority boundary
+This is an online browser game built from scratch in TypeScript. There are **no game-engine libraries**:
+- The **server** is Node 22 with `ws` for WebSockets, `node:http` and `node:sqlite`. It is authoritative and runs the rules and the simulation.
+- The **client** is Vite, WebGL2, WebAudio and Preact, which is used only for the DOM UI.
 
-The browser is an input and presentation adapter. It may request movement, attacks,
-inventory commands, party commands, trades, and map entry, but it never creates an item,
-decides damage, advances progression, or mutates a persisted profile.
+## Module map
 
-The server has two deliberately different kinds of state:
+```
+src/
+  contracts/   FROZEN shared interfaces (orchestrator-owned). Everything talks through these.
+  core/        rng (mulberry32, forkable, serializable), modifier resolver, small math helpers
+  data/        content tables: bases, affixes, uniques, scars, currencies, skills, maps, loot, merchant
+  game/        pure rules → `export const rules: GameRulesApi` (src/game/index.ts)
+  sim/         deterministic 60 Hz world → `export function createRun(config): SimRun` (src/sim/index.ts)
+  render/      WebGL2 renderer → `export function createRenderer(canvas): Renderer`
+  art/         procedural pixel art → `export function generateArt(): ArtBundle`
+  audio/       procedural WebAudio → `export function createAudio(): AudioEngine`
+  ui/          Preact DOM UI → `export function mountUi(root, store): () => void`
+  present/     WorldView + events → renderer/audio → `export function createPresenter(renderer, art, audio): Presenter`
+  net/         shared protocol code: binary snapshot codec (server encodes) + ClientWorld (client decodes,
+               interpolates, predicts) → `createSnapshotEncoder()`, `createClientWorld()`
+  server/      Node game server: HTTP auth API, WebSocket sessions, SQLite persistence, hideout/map instances
+               hosting SimRuns, parties, portals, command handling via rules  (entry: src/server/main.ts)
+  client/      browser app: connection, UiStore implementation, input → InputMessage, loop, presenter wiring
+  main.ts      client boot (imports src/client)
+dev/           per-module sandbox pages (dev/render.html, dev/art.html, dev/ui.html, dev/audio.html, dev/sim.html)
+tests/         vitest suites (tests/<module>/*.test.ts)
+scripts/       shot.mjs (headless screenshots), e2e.mjs
+```
 
-1. **Durable realm state** lives in PostgreSQL. Accounts, characters, items, trades,
-   parties, party membership, connection leases, expeditions, portal uses, room claims,
-   and recovery checkpoints must survive a Node process restart.
-2. **Live simulation state** lives in the Colyseus process that owns a room. Positions,
-   monsters, projectiles, cooldown clocks, and the 20 Hz world are latency-sensitive and
-   are not written to PostgreSQL every tick.
+## Dependency rules
 
-This is not an offline/online split. Solo play is a private one-member party and follows
-the same server-authoritative path as four-player co-op.
+- `contracts` imports nothing but other contracts.
+- `core` → contracts only.
+- `data` and `game` → contracts, core. No DOM.
+- `sim` → contracts, core. No DOM, no items. It never imports `game`.
+- `art` → contracts, core. DOM only lazily inside `icon()` and `portrait()`.
+- `render` → contracts. It's DOM/WebGL.
+- `audio` → contracts. It's WebAudio.
+- `ui` → contracts (+ preact). It gets rules and art through the `UiStore`. It never imports sim, render or present.
+- `present` → contracts, core. It never imports game or ui.
+- `net` → contracts, core, and `sim` (only for the shared `movePlayer`). No DOM.
+- `server` → contracts, core, game, sim, net. Node only; it never imports render, art, audio, ui, present or client.
+- `client` → contracts, core, game (for display-only rules), net, render, art, audio, ui, present. It never imports server.
 
-## Ports and adapters
+## Timing
 
-Rooms and HTTP routes depend on asynchronous domain ports, never on process-local maps or
-PostgreSQL calls directly:
+- The server sim runs at a fixed **60 Hz** (`SIM_DT`) per instance, with at most 5 catch-up steps.
+- The server sends snapshots at 30 Hz.
+- The client renders remote entities about 100 ms behind the server, interpolating between snapshots, and predicts the local player at 60 Hz input ticks.
+- All sim timers are in ticks or sim seconds, never wall-clock time.
 
-- `PlayerRepository` owns character/profile/item persistence.
-- `TradeRepository` owns transactional trades and item locks.
-- `PartyCoordinator` owns party lifecycle, membership, leadership, discovery, and presence
-  leases.
-- `ExpeditionCoordinator` owns map opening, the party's active expedition, six one-use
-  portals, room ownership leases, supersession, and crash recovery metadata.
+## Determinism
 
-The production and local-development adapters for coordination are PostgreSQL-backed.
-Fast in-memory adapters are permitted only as test doubles and must pass the same contract
-tests as PostgreSQL.
+`game` and `sim` must never call `Math.random()`, `Date.now()` or `performance.now()`. Randomness comes from these sources:
+- The **sim** uses `createRng(config.seed)`, with separate `fork()` streams for combat and loot. The loot stream is passed to `hooks.rollKillLoot`.
+- The **rules** use `CharacterSave.rngState`, advanced and stored back after each operation.
+- **Presentation** (particles, shake, UI) may use `Math.random()`.
 
-All ports are asynchronous even when a test double could answer synchronously. That keeps
-room and API code independent from whether a future implementation uses PostgreSQL, Redis,
-or another network service.
+The sim exposes `digest()`. The same seed and intents must give the same digest.
 
-## Transactional invariants
+## Data flow in a map (online)
 
-Coordination exposes semantic commands rather than load/mutate/save CRUD. PostgreSQL rows,
-constraints, conditional updates, and transactions enforce these invariants:
+**Client**
+1. Keyboard and mouse input becomes an `InputMessage` (60 Hz ticks with a seq number).
+2. `clientWorld.predict(input)` moves the local player at once, and the message goes to the server.
 
-- one character belongs to at most one party;
-- a party has at most four members;
-- only the leader can open a map;
-- consuming the map item, incrementing the profile revision, creating the expedition,
-  creating six portals, and making it active is one transaction;
-- a portal index can be consumed once, by one eligible party member;
-- a map ticket can claim one authoritative room;
-- a stale process cannot overwrite a newer room owner or party revision.
+**Server**
+1. Queued input → `sim.setIntent(playerId, intent)`.
+2. `sim.step()` runs at 60 Hz.
+3. The outcomes are drained:
 
-In-process locks and timers may optimize work, but they are never the source of truth.
+   | Outcome | Server action |
+   |---|---|
+   | xp | `rules.grantXp` for every player; on a level-up, `sim.updatePlayer` |
+   | pickup `(playerId, token)` | `rules.addToBackpack` for that player |
+   | portal | Move the player to another instance |
 
-## Leases and restart behavior
+4. Every 2 ticks, `encoder.encode(view, viewerId, ackSeq)` per client produces a binary frame. The AOI-filtered events for that client are sent as JSON.
+5. A changed `CharacterSave` is pushed to its owner (debounced).
 
-Connections and room ownership use renewable leases with explicit expiry timestamps.
-Leases are preferable to permanent `connected` flags because a killed process cannot run
-cleanup code. A live room renews its leases; any coordinator instance can reap expired
-leases and transfer leadership or remove an abandoned party safely.
+**Client, on each snapshot and frame**
+1. `clientWorld.pushSnapshot()` stores it.
+2. `alpha = clientWorld.update(now)`.
+3. `presenter.frame({ world: clientWorld.view, localPlayerId, alpha, events })` draws and plays sound.
+4. The HUD is sent to the UiStore at about 15 Hz.
 
-The initial crash policy is intentionally conservative:
+**Loot (instanced)**
+1. The sim calls `hooks.rollKillLoot(ctx, playerIds, lootRng)`.
+2. For each player, the server calls `rules.rollKillLoot(setup, ctx, lootRng, thatCharacter)` → `Item[]`.
+3. It stores each item under a token and returns `rules.dropSpec(item, token, playerId)[]`.
 
-- every successful pickup is already committed and is never rolled back on death or crash;
-- after a room-owner lease expires, party discovery stops advertising the stale room ID and
-  another process may claim the same signed expedition ticket;
-- the recovered room rebuilds its transient world from wave one while preserving the map,
-  party, expiry, and already-consumed portals;
-- a fenced stale room cannot renew or clear the newer room owner's expedition.
+Belt flasks have no item uid. The rules address belt slot `i` as the synthetic uid `belt:<i>`; see `src/game/items` for `beltUid` and `parseBeltUid`.
 
-Exact wave, monster, ground-drop, and mid-projectile restoration is outside the first recovery
-contract. The schema reserves expedition checkpoint data for that later increment. Before
-completion rewards become durable rather than world drops, their grant must also receive an
-idempotency key. Both additions extend the expedition port without moving authority back into
-room memory.
+## Conventions
 
-## Scale-out path
+- TypeScript `strict`. Don't use `any` in public signatures.
+- Hot paths (sim, net, render, present, server tick) use no per-frame allocation where avoidable: SoA typed arrays, pooled particles, and reused buffers.
+- UI typography follows the 12/14/17/25 scale (see `AGENTS.md`).
+- **Contracts are frozen.** If you believe a contract must change, don't edit it: work around it locally and report it.
+- Each module ships a `dev/<module>.html` sandbox so it can be screenshotted in isolation:
 
-The first production topology is one Node/Colyseus process plus PostgreSQL, but the authority
-boundary is multi-process safe. Scaling happens in stages:
+  ```
+  node scripts/shot.mjs /dev/<module>.html --out .shots/<name>.png
+  ```
 
-1. run multiple Colyseus workers on a larger VM;
-2. add Colyseus distributed discovery/routing and a worker registry;
-3. route a room consistently to its lease owner;
-4. add Redis only when measured discovery, fan-out, or high-frequency presence traffic
-   justifies it.
+  Then look at the PNG with the Read tool.
+- Tests live under `tests/<module>/`. Run a single module with:
 
-PostgreSQL remains the durable source of truth. Redis, when introduced, is an acceleration
-and notification layer; losing Redis must not create items, duplicate portals, or forget an
-active expedition.
-
-## Testing standard
-
-Every durable coordinator needs both behavior tests and PostgreSQL integration tests. The
-minimum concurrency/recovery suite proves:
-
-- two coordinator instances cannot admit a fifth member;
-- concurrent joins cannot place one character in two parties;
-- concurrent consumers cannot use one portal twice;
-- two rooms cannot claim one ticket;
-- state created by adapter instance A is readable by a fresh adapter instance B;
-- expired presence and room leases are recoverable after simulated process death;
-- a failed map-open transaction neither consumes the map nor creates an expedition.
+  ```
+  npx vitest run tests/<module>
+  ```

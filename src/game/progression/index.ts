@@ -1,0 +1,150 @@
+// =============================================================================================
+// Progression rules — stats, skills, maps, loot, merchant, save and run config. Internal API for
+// src/game; `rules: GameRulesApi` is assembled in src/game/index.ts from this module and src/game/items.
+// Pure functions; no DOM, no Math.random / Date.now (randomness: CharacterSave.rngState or a passed Rng).
+// =============================================================================================
+//
+// INTEGRATION NOTES
+//   • createCharacter(name, seed) leaves createdAt / updatedAt at 0 — the rules never read the clock,
+//     so the app stamps them (and updatedAt on save). Character ids derive from (name, seed): pass a
+//     fresh, server-random seed per character (parseSave also de-duplicates ids). New names go through
+//     validateCharacterName first (3–16 chars, ASCII, unique server-wide is the server's check);
+//     sanitizeName is the lenient stored form used for old saves.
+//   • RNG SECRECY: rngState must never reach a client, and the server reseeds it from its own entropy
+//     before applyCurrency / buyOffer / openMap — see src/game/online.ts (withServerEntropy,
+//     redactForClient, redactSetupForClient). Display rules (tooltips, previews, sheet, lootLuck) never
+//     read rngState or RunSetup.seed.
+//   • Numbers shown in the UI and used by the sim come from the same resolution: playerRuntime() and
+//     skillSheet() both call resolveSkill(). After a level-up, equip change or flask use during a run,
+//     push playerRuntime(ch, setup) through sim.updatePlayer (with the sim's `level` on a level-up).
+//   • ONLINE INSTANCES. buildRunConfig(setup, hooks) describes an instance only (setup null = hideout,
+//     seed HIDEOUT_SEED — the server sets RunConfig.seed = hideoutSeed(ownerId)). Every player joins it
+//     with sim.addPlayer({ id, name: ch.name, level: ch.level, runtime: playerRuntime(ch, setup) }).
+//   • RESTARTS. restoreRunSetup(persistedMap, seed) rebuilds an open map's RunSetup after a deploy (pure,
+//     null on a bad row, recomputed with the current rules): persist setup.map + setup.seed, not the
+//     client's redacted setup.
+//   • Party scaling lives in the sim (living players n: life ×(1 + 0.5·(n−1)), wave budget
+//     ×(1 + 0.25·(n−1)), magic/rare packs ×(1 + 0.1·(n−1))). The rules explain it: a static
+//     "Party Scaling" line ends every map readout, and partyScalingLines(n) gives the live numbers for a
+//     HUD tooltip. PARTY_SCALING (src/data/progression/maps.ts) mirrors src/sim/constants.ts (tested).
+//   • Run log: applyRunEnd once per player per map instance (own kills, own time inside; 'failed' =
+//     closed uncleared with every portal spent, 'abandoned' = closed uncleared otherwise), and
+//     recordDeath(ch) on every playerDied outcome (a player can die several times in one map).
+//   • Map penalties (Exhausting focus regen, Hexed resistances, Unravelling) apply through
+//     playerRuntime(ch, setup) and deriveStats(ch, setup) — pass the map's RunSetup for the in-map
+//     character sheet; its `combat` is exactly what the sim gets. deriveRunStats is a deprecated alias.
+//   • Skill numbers: SkillSheet.dps is the contract's single-target estimate (label it "single target").
+//     Two more honest numbers are in SkillSheet.lines and the sheet's Skills section: the damage of one
+//     cast if every flame / bolt / strike lands ("206 damage per cast if all 12 flames hit"), and — for
+//     Focus-hungry skills — the DPS your Focus regeneration sustains. The Skills section headlines the
+//     sustained DPS, plus "· N per cast" for multi-hit skills. resolveSkill() returns all of them
+//     (dps, hits, perCast, focusSustain, sustainedDps); a Nova echo counts twice.
+//   • Early tiers are eased (EARLY_TIER_EASING in src/data/progression/maps.ts): Tier 1 monsters have 65%
+//     less life and 40% less damage, tapering fast (T2 35/15, T3 25/10, T4 10/0) so Tiers 2–4 keep
+//     pushing back. It appears in the map readout as "65% less from Tier 1 easing". Balance is guarded by
+//     tests/game-progression/balance.test.ts (real rules + the multiplayer sim + bots; a solo Tier 1 and
+//     the death / re-entry paths always run, the full suite with BALANCE=1): re-run it after changing
+//     skills, class numbers, tier scaling or the sim's monsters.
+//   • LUCK IS PERSONAL, LOOT IS INSTANCED. RunSetup.itemQuantity / itemRarity (and mapSummary /
+//     RunSetup.summary, labelled "Map Item Quantity" / "Map Item Rarity", like the map tooltip's
+//     properties) are MAP-SIDE only: tier, quality, implicit and mods (100 = base). A player's personal
+//     luck is lootLuck(setup, ch) = map-side + that player's gear (HudRun.itemQuantity / itemRarity);
+//     lootLuckLines(setup, ch) gives the two lines with every source ("Item Quantity in this Map"), and
+//     deriveStats(ch, setup) leads its Luck section with them (then "Item Quantity from Gear" …).
+//     Server loot hooks, per kill: for each playerId → rules.rollKillLoot(setup, ctx, rng, thatCh) →
+//     rules.dropSpec(item, token, playerId); same for rollChestLoot (every player present gets their own
+//     chest). Iterate players in a fixed order (the sim's ids) so a seed replays the same drops. The roll
+//     applies monster rarity (magic ×1.5 Q ×2 R, rare ×4 Q ×3 R; lieutenant and boss like rares) and the
+//     Echo wave's double quantity on top; summoned minions (KillLootContext.summoned) never drop.
+//     Uniques only drop when wearable at the item level (a Tier 1 boss can only give The Patient Spark);
+//     the gamble likewise only offers uniques the character can wear.
+//   • Echo corruption: WaveConfig.count = 7 with bossWave 6 — a bonus wave after the Matriarch
+//     (the sim clears the map when wave 7 is cleared). Kills in wave ≥ 7 drop double loot.
+//   • dropSpec autoPickup: currency, flasks and maps true; equipment false (clicked, GAME_SPEC §12); anything
+//     a player dropped on the floor (playerDropped, owner 0 = public) false.
+//   • dropSpec labels are ASCII (the in-world pixel font covers ASCII only): "Forge Scrap x3",
+//     "Howling Crucible (T4)". iconId identifies the exact currency (e.g. icon/currency/voidNeedle) so
+//     the presenter can give rare currency a beam.
+//   • Map tooltips: tone follows rarity ('map' for Normal). Each map mod contributes one TooltipLine per
+//     effect (danger lines negative: true); affixName is the mod name; corrupted mods use kind
+//     'corrupted'. Maps have no affix choice.
+//   • Merchant offer ids: "map-t1-<base>", "map-t2-<base>", "flask-life", "flask-focus",
+//     "currency-kindling", "currency-mapDust", "gamble-<itemClass>" (only classes with a base at the
+//     player's level). Preview items carry uid "offer:<id>"; buyOffer mints a real one.
+//   • compareWithEquipped: `delta` is signed so that positive = improvement (Damage Taken and cooldowns
+//     are inverted); percentages are in percentage points. Lines, in order: resources and defences;
+//     offence (Spell Power, Fire/Cold/Lightning Skill Damage, Cast Speed, Critical Strike Chance and
+//     Multiplier, Projectile Speed, Area of Effect, Skill Duration, Cooldown Recovery, Additional
+//     Projectiles / Pierce, Ignite / Chill / Shock Chance); per loadout skill "<Skill> DPS" (sustained),
+//     "<Skill> Damage per Cast" (multi-hit skills), Cooldown, Projectiles; then utility, luck and
+//     attributes. Only changed numbers are listed.
+//   • The Map readout has an "Experience" line (1.28x per tier above 1) and map tooltips an "Experience"
+//     property.
+//   • deriveStats sections: Attributes, Resources, Defence, Offence, Skills (loadout DPS), Luck,
+//     Utility, and Unique Effects when a unique grants a flag.
+//
+// API
+//   character: createCharacter, validateCharacterName, xpToNext, grantXp, allocateAttribute, consumeFlask, applyRunEnd,
+//              recordDeath, flaskRuntimes, sanitizeName
+//   stats:     deriveStats(ch, setup?), deriveRunStats (deprecated alias), deriveFromModel, computeCombat, compareWithEquipped,
+//              breakdownLines / sourceLine (breakdown text)
+//   model:     buildPlayerModel(ch, extra?) → PlayerModel (all modifiers, attributes, flags)
+//   skills:    SKILL_INFO, resolveSkill(model, id, rank), estimateLines, isMultiHit, playerSkills, canRankUpSkill, rankUpSkill,
+//              setLoadoutSlot, normalizeLoadout, skillSheetFor, skillRank
+//   maps:      MAP_BASE_INFO, describeMap, mapTitle, mapModifiers, monsterScaling, experienceMultiplier, waveConfig, mapLuck,
+//              buildMapSummary, createMapItem, rollMapWithRarity, mapCraftError / mapCraftPreview / craftMap,
+//              partyScaling(n), partyScalingLines(n)
+//   runs:      mapSummary(ch, map), openMap, restoreRunSetup(map, seed), buildRunConfig(setup, hooks),
+//              playerRuntime(ch, setup), hideoutSeed(ownerId)
+//   luck:      lootLuck(setup, looter), lootLuckLines(setup, looter), gearLuck(ch)
+//   loot:      rollKillLoot(setup, ctx, rng, looter), rollChestLoot(setup, rng, looter),
+//              dropSpec(item, token, owner, playerDropped?) (autoPickup: equipment and player-dropped items false),
+//              dropLabel, categoryChances, killLuck, equipmentRarityOdds, rollEquipmentRarity
+//   merchant:  merchantOffers, buyOffer, gambleOdds(class, m, level?), currencyOnHand
+//   save:      newSave, parseSave, serializeSave, normalizeSave, normalizeCharacter, normalizeItem
+//   dispatch:  describeItem, craftingTargetError, craftPreview, applyCurrency
+// =============================================================================================
+import type { MapBaseInfo } from '../../contracts/game';
+import type { MapBaseId } from '../../contracts/content';
+import { MAP_BASE_IDS } from '../../contracts/content';
+import { MAP_BASES } from '../../data/progression';
+import { mapBaseImplicitText } from './maps';
+
+/** MapBaseInfo for the UI (implicit text generated from the implicit effects). */
+export const MAP_BASE_INFO: Record<MapBaseId, MapBaseInfo> = Object.fromEntries(
+  MAP_BASE_IDS.map((id) => {
+    const b = MAP_BASES[id];
+    return [id, { id: b.id, name: b.name, theme: b.theme, implicit: mapBaseImplicitText(id), description: b.description }];
+  }),
+) as Record<MapBaseId, MapBaseInfo>;
+
+export {
+  allocateAttribute, applyRunEnd, attributeLabel, consumeFlask, createCharacter, flaskRuntimes, grantXp, recordDeath, sanitizeName,
+  validateCharacterName, xpToNext,
+} from './character';
+export { breakdownLines, compareWithEquipped, computeCombat, deriveFromModel, deriveRunStats, deriveStats, sourceLine } from './stats';
+export { buildPlayerModel, spellPowerAt } from './model';
+export type { PlayerModel } from './model';
+export {
+  BASIC_SKILL, SKILL_INFO, canRankUpSkill, estimateLines, isMultiHit, normalizeLoadout, playerSkills, rankUpSkill, resolveSkill,
+  setLoadoutSlot, skillRank, skillSheetFor,
+} from './skills';
+export type { ResolvedSkill } from './skills';
+export {
+  buildMapSummary, craftMap, createMapItem, dangerModCount, describeMap, echoWaveIndex, effectText, experienceMultiplier, hasEchoWave,
+  mapBaseImplicitText, mapCraftError, mapCraftPreview, mapLuck, mapModifiers, mapPlayerModifiers, mapTitle,
+  monsterLevelForTier, monsterScaling, partyScaling, partyScalingLines, rarityForDangerCount, rollMapWithRarity, voidOutcomes,
+  waveConfig,
+} from './maps';
+export type { GearLuck, MapCraftResult, MapModifier } from './maps';
+export { buildRunConfig, hideoutSeed, mapSummary, openMap, playerRuntime, restoreRunSetup } from './runs';
+export { gearLuck, lootLuck, lootLuckLines } from './luck';
+export type { Luck } from './luck';
+export {
+  categoryChances, currencyWeightsFor, dropLabel, dropSpec, equipmentRarityOdds, killLuck, rollChestLoot, rollEquipmentRarity,
+  rollKillLoot,
+} from './loot';
+export type { KillLuck } from './loot';
+export { buyOffer, currencyOnHand, gambleOdds, merchantOffers } from './merchant';
+export { newSave, normalizeCharacter, normalizeItem, normalizeSave, parseSave, serializeSave } from './save';
+export { applyCurrency, craftPreview, craftingTargetError, describeItem } from './dispatch';

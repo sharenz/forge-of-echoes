@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coliseum Bestiary</title>
+    <style>
+      :root {
+        --ink: #0d0b0e;
+        --coal: #1a1619;
+        --iron: #3b3438;
+        --stone: #7d7278;
+        --bone: #cbbfa8;
+        --gold: #e0b04a;
+        --font-ui-caption: 12px;
+        --font-ui-secondary: 14px;
+        --font-ui-body: 17px;
+        --font-ui-title: 25px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 20px 24px 60px;
+        background: var(--ink);
+        color: var(--bone);
+        font-family: 'Alegreya Sans', system-ui, sans-serif;
+        font-size: var(--font-ui-secondary);
+      }
+      h1 { font-family: 'Cinzel', Georgia, serif; font-size: var(--font-ui-title); margin: 0 0 6px; color: var(--gold); }
+      h2 { font-family: 'Cinzel', Georgia, serif; font-size: var(--font-ui-body); margin: 22px 0 8px; border-bottom: 1px solid var(--iron); padding-bottom: 4px; }
+      .meta { font-size: var(--font-ui-caption); color: var(--stone); }
+      .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+      .card { background: #161215; border: 1px solid #2c2428; padding: 6px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+      canvas { image-rendering: pixelated; display: block; }
+      .label { font-size: var(--font-ui-caption); color: var(--bone); }
+      .sub { font-size: var(--font-ui-caption); color: var(--stone); }
+      .error { color: #e8662a; font-size: var(--font-ui-body); white-space: pre-wrap; }
+      table.metrics { border-collapse: collapse; font-size: var(--font-ui-caption); font-variant-numeric: tabular-nums; }
+      table.metrics th, table.metrics td { padding: 2px 10px 2px 0; text-align: left; border-bottom: 1px solid #2c2428; }
+      table.metrics th { color: var(--stone); font-weight: 400; }
+      table.metrics td.bad { color: #e8662a; }
+    </style>
+  </head>
+  <body>
+    <h1>Iron Coliseum · bestiary art</h1>
+    <div class="meta" id="stats"></div>
+    <main id="app"></main>
+    <script type="module">
+      // ?view=lineup,strips,scene,mirror,metrics (default all)  ?kind=pitHound,...  ?scale=4  ?lit=1  ?t=0.4  ?bg=plain|sand
+      import { generateArt } from '/src/art/index.ts';
+      import { coliseumSprites } from '/src/art/bestiary/coliseum.ts';
+      import { COLISEUM_MONSTERS, NEW_REQUIRED_SPRITES } from '/src/contracts/bestiary.ts';
+
+      const app = document.getElementById('app');
+      const params = new URLSearchParams(location.search);
+      const view = (params.get('view') ?? 'lineup,metrics,strips,scene,mirror').split(',');
+      const show = (v) => view.includes(v);
+      const lit = params.get('lit') === '1';
+      const bgMode = params.get('bg') ?? 'sand';
+      const art = generateArt();
+      const t0 = performance.now();
+      let mine = [];
+      try { mine = coliseumSprites(); } catch (e) { app.innerHTML = `<div class="error">${e.stack}</div>`; throw e; }
+      const ms = performance.now() - t0;
+      const all = [...art.sprites, ...mine];
+      const byId = (id) => all.find((s) => s.id === id);
+      const kinds = params.get('kind')?.split(',') ?? [...COLISEUM_MONSTERS];
+      const need = NEW_REQUIRED_SPRITES.filter((id) => COLISEUM_MONSTERS.some((m) => id.startsWith(`monster/${m}/`)));
+      const missing = need.filter((id) => !mine.some((s) => s.id === id));
+      const extra = mine.filter((s) => !need.includes(s.id)).map((s) => s.id);
+      document.getElementById('stats').textContent =
+        `${mine.length} sprites · ${mine.reduce((n, s) => n + s.frames.length, 0)} frames · ${ms.toFixed(0)} ms · missing: ${missing.length ? missing.join(', ') : 'none'}${extra.length ? ` · extra: ${extra.join(', ')}` : ''}`;
+      console.log('[shot] coliseum', mine.length, 'sprites, missing', missing.length);
+
+      const floor = byId('tile/ironColiseum/floor');
+      const hash = (x, y, s) => {
+        let h = (Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(s + 1, 982451653)) >>> 0;
+        h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+        return (h ^ (h >>> 13)) >>> 0;
+      };
+
+      // ---- raw compositing (1x buffers) -----------------------------------------------------------------
+      function makeBuf(w, h, bg) {
+        const buf = { w, h, c: new Float32Array(w * h * 3), e: new Float32Array(w * h * 3) };
+        if (bg === 'sand') {
+          for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+            const tx = Math.floor(x / 16), ty = Math.floor(y / 16);
+            const fr = floor.frames[hash(tx, ty, 2) % floor.frames.length];
+            const si = ((y % 16) * 16 + (x % 16)) * 4, di = (y * w + x) * 3;
+            buf.c[di] = fr.data[si]; buf.c[di + 1] = fr.data[si + 1]; buf.c[di + 2] = fr.data[si + 2];
+          }
+        } else {
+          for (let i = 0; i < w * h; i++) { buf.c[i * 3] = 26; buf.c[i * 3 + 1] = 22; buf.c[i * 3 + 2] = 25; }
+        }
+        return buf;
+      }
+      function blit(buf, s, f, x0, y0, flip = false) {
+        const img = s.frames[f], em = s.emissive?.[f];
+        for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) {
+          const tx = x0 + x, ty = y0 + y;
+          if (tx < 0 || ty < 0 || tx >= buf.w || ty >= buf.h) continue;
+          const sx = flip ? img.width - 1 - x : x;
+          const si = (y * img.width + sx) * 4;
+          const a = img.data[si + 3] / 255;
+          if (a <= 0) continue;
+          const di = (ty * buf.w + tx) * 3;
+          for (let k = 0; k < 3; k++) buf.c[di + k] = img.data[si + k] * a + buf.c[di + k] * (1 - a);
+          const ea = em ? em.data[si + 3] / 255 : 0;
+          for (let k = 0; k < 3; k++) buf.e[di + k] = Math.max(buf.e[di + k] * (1 - a), em ? em.data[si + k] * ea : 0);
+        }
+      }
+      function shadow(buf, x, y, w) {
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -w / 2; dx <= w / 2; dx++) {
+          if ((dx / (w / 2)) ** 2 + (dy / 2.4) ** 2 > 1) continue;
+          const tx = Math.round(x + dx), ty = Math.round(y + dy - 1);
+          if (tx < 0 || ty < 0 || tx >= buf.w || ty >= buf.h) continue;
+          const di = (ty * buf.w + tx) * 3;
+          for (let k = 0; k < 3; k++) buf.c[di + k] *= 0.55;
+        }
+      }
+      function present(buf, scale, lights = []) {
+        const cv = document.createElement('canvas');
+        cv.width = buf.w; cv.height = buf.h;
+        cv.style.width = `${buf.w * scale}px`; cv.style.height = `${buf.h * scale}px`;
+        const out = cv.getContext('2d').createImageData(buf.w, buf.h);
+        let bloom = null;
+        if (lit) {
+          bloom = new Float32Array(buf.w * buf.h * 3);
+          const R = 3;
+          for (let y = 0; y < buf.h; y++) for (let x = 0; x < buf.w; x++) {
+            let r = 0, g = 0, b = 0, n = 0;
+            for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+              const tx = x + dx, ty = y + dy;
+              if (tx < 0 || ty < 0 || tx >= buf.w || ty >= buf.h) continue;
+              const i = (ty * buf.w + tx) * 3;
+              r += buf.e[i]; g += buf.e[i + 1]; b += buf.e[i + 2]; n++;
+            }
+            const o = (y * buf.w + x) * 3;
+            bloom[o] = r / n; bloom[o + 1] = g / n; bloom[o + 2] = b / n;
+          }
+        }
+        for (let y = 0; y < buf.h; y++) for (let x = 0; x < buf.w; x++) {
+          const i = (y * buf.w + x) * 3;
+          let r = buf.c[i], g = buf.c[i + 1], b = buf.c[i + 2];
+          if (lit) {
+            let lr = 0.22, lg = 0.2, lb = 0.24;
+            for (const L of lights) {
+              const d = Math.hypot(x - L.x, (y - L.y) * 1.3) / L.r;
+              if (d >= 1) continue;
+              const k = (1 - d) * (1 - d) * 1.4 * L.k;
+              lr += k; lg += k * 0.62; lb += k * 0.32;
+            }
+            const e = Math.max(buf.e[i], buf.e[i + 1], buf.e[i + 2]) / 255;
+            r = r * Math.min(1.3, lr) * (1 - e) + buf.e[i] + bloom[i] * 0.9;
+            g = g * Math.min(1.3, lg) * (1 - e) + buf.e[i + 1] + bloom[i + 1] * 0.9;
+            b = b * Math.min(1.3, lb) * (1 - e) + buf.e[i + 2] + bloom[i + 2] * 0.9;
+          }
+          const o = (y * buf.w + x) * 4;
+          out.data[o] = r; out.data[o + 1] = g; out.data[o + 2] = b; out.data[o + 3] = 255;
+        }
+        cv.getContext('2d').putImageData(out, 0, 0);
+        return cv;
+      }
+      function card(canvas, label, sub) {
+        const d = document.createElement('div');
+        d.className = 'card';
+        d.append(canvas);
+        const l = document.createElement('div'); l.className = 'label'; l.textContent = label; d.append(l);
+        if (sub) { const s = document.createElement('div'); s.className = 'sub'; s.textContent = sub; d.append(s); }
+        return d;
+      }
+      function section(title) {
+        const h = document.createElement('h2'); h.textContent = title; app.append(h);
+        const r = document.createElement('div'); r.className = 'row'; app.append(r);
+        return r;
+      }
+
+      // ---- lineup: reference roster and the coliseum family on one baseline -------------------------------
+      if (show('lineup')) {
+        const g = section('Lineup at gameplay scale (feet on one baseline) · reference roster | coliseum family');
+        const ids = [
+          'sorceress/idle/east', 'monster/ashling/idle', 'monster/emberSkitter/idle', 'monster/cinderSpitter/idle', 'monster/riftStalker/idle',
+          'monster/ironhideBrute/idle', 'monster/ashboundHerald/idle', 'monster/cinderMatriarch/idle', null,
+          ...kinds.map((k) => `monster/${k}/idle`),
+        ];
+        const gap = 4;
+        let W = 8;
+        const items = [];
+        for (const id of ids) {
+          if (id === null) { W += 10; items.push(null); continue; }
+          const s = byId(id);
+          if (!s) continue;
+          const b = bbox(s, 0);
+          items.push({ s, x: W - b.x0 + s.anchorX, b });
+          W += b.x1 - b.x0 + 1 + gap;
+        }
+        const H = 88, base = 80;
+        for (const sc of [3]) {
+          const buf = makeBuf(W + 4, H, bgMode);
+          let sepX = 0;
+          for (const it of items) {
+            if (!it) continue;
+            shadow(buf, it.x, base, Math.max(8, it.s.width * 0.55));
+            blit(buf, it.s, 0, Math.round(it.x - it.s.anchorX), base - it.s.anchorY);
+          }
+          g.append(card(present(buf, sc, items.filter(Boolean).map((it) => ({ x: it.x, y: base - 20, r: 60, k: 0.8 }))), `${sc}×`));
+        }
+      }
+      function bbox(s, f) {
+        const img = s.frames[f];
+        let x0 = img.width, x1 = -1;
+        for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) if (img.data[(y * img.width + x) * 4 + 3] > 0) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+        return { x0, x1 };
+      }
+
+      // ---- metrics: glow pixels, border contact and ground row per frame -------------------------------------
+      if (show('metrics')) {
+        const h = document.createElement('h2');
+        h.textContent = 'Frame checks · glow px per frame · opaque px on the worst border · lowest row vs anchorY';
+        app.append(h);
+        const tbl = document.createElement('table');
+        tbl.className = 'metrics';
+        tbl.innerHTML = '<tr><th>sprite</th><th>size · anchor</th><th>glow px</th><th>max border px</th><th>lowest row − anchorY</th></tr>';
+        for (const s of mine) {
+          if (!kinds.some((k) => s.id.startsWith(`monster/${k}/`))) continue;
+          const glow = [], edge = [], low = [];
+          s.frames.forEach((img, fi) => {
+            let g = 0, L = 0, R = 0, T = 0, b = -1;
+            for (let y = 0; y < s.height; y++) for (let x = 0; x < s.width; x++) {
+              const i = (y * s.width + x) * 4;
+              if (img.data[i + 3] > 40) { if (x === 0) L++; if (x === s.width - 1) R++; if (y === 0) T++; b = Math.max(b, y); }
+              if (s.emissive && s.emissive[fi].data[i + 3] > 0) g++;
+            }
+            glow.push(g); edge.push(Math.max(L, R, T)); low.push(b - s.anchorY);
+          });
+          const tr = document.createElement('tr');
+          const cell = (text, bad = false) => { const td = document.createElement('td'); td.textContent = text; if (bad) td.className = 'bad'; tr.append(td); };
+          cell(s.id);
+          cell(`${s.width}×${s.height} · (${s.anchorX}, ${s.anchorY})`);
+          cell(glow.join(' '));
+          cell(edge.join(' '), edge.some((v) => v > 2));
+          cell(low.join(' '), low.some((v) => v > 0));
+          tbl.append(tr);
+        }
+        app.append(tbl);
+      }
+
+      // ---- strips: every frame of every animation ------------------------------------------------------------
+      if (show('strips')) {
+        for (const k of kinds) {
+          const sprites = mine.filter((s) => s.id.startsWith(`monster/${k}/`));
+          if (!sprites.length) continue;
+          const big = sprites[0].width > 56;
+          const scale = Number(params.get('scale') ?? (big ? 3 : sprites[0].width > 40 ? 4 : 5));
+          const g = section(`${k} · ${sprites[0].width}×${sprites[0].height} · anchor (${sprites[0].anchorX}, ${sprites[0].anchorY})`);
+          for (const s of sprites) {
+            const n = s.frames.length;
+            const buf = makeBuf(n * (s.width + 2), s.height, bgMode);
+            for (let i = 0; i < n; i++) {
+              blit(buf, s, i, i * (s.width + 2), 0);
+              // anchor tick
+              const ax = i * (s.width + 2) + s.anchorX, ay = s.anchorY;
+              if (params.get('anchor') === '1' && ay < s.height) { const di = (ay * buf.w + ax) * 3; buf.c[di] = 80; buf.c[di + 1] = 140; buf.c[di + 2] = 255; }
+            }
+            g.append(card(present(buf, scale, [{ x: buf.w / 2, y: s.height / 2, r: 400, k: 0.6 }]), s.id.split('/')[2], `${n}f @${s.fps}${s.loop ? ' loop' : ''}${s.emissive ? ' · glow' : ''}`));
+          }
+        }
+      }
+
+      // ---- mirror check ---------------------------------------------------------------------------------------
+      if (show('mirror')) {
+        const g = section('Mirror check · east (solid) vs west (ghost) mirrored about the anchor');
+        for (const k of kinds) {
+          const s = byId(`monster/${k}/idle`);
+          if (!s) continue;
+          const sc = s.width > 56 ? 2 : 4;
+          const c = document.createElement('canvas');
+          c.width = s.width * sc; c.height = s.height * sc;
+          const ctx = c.getContext('2d');
+          ctx.imageSmoothingEnabled = false;
+          const tmp = document.createElement('canvas');
+          tmp.width = s.width; tmp.height = s.height;
+          const id = tmp.getContext('2d').createImageData(s.width, s.height);
+          id.data.set(s.frames[0].data);
+          tmp.getContext('2d').putImageData(id, 0, 0);
+          ctx.globalAlpha = 0.35;
+          ctx.save(); ctx.translate(2 * s.anchorX * sc, 0); ctx.scale(-1, 1); ctx.drawImage(tmp, 0, 0, s.width * sc, s.height * sc); ctx.restore();
+          ctx.globalAlpha = 1;
+          ctx.drawImage(tmp, 0, 0, s.width * sc, s.height * sc);
+          ctx.fillStyle = 'rgba(122,162,255,0.8)';
+          ctx.fillRect(s.anchorX * sc - 1, 0, 2, c.height);
+          g.append(card(c, k));
+        }
+      }
+
+      // ---- gameplay scene --------------------------------------------------------------------------------------
+      if (show('scene')) {
+        const g = section('Gameplay scene · 400×225 at 1×, shown 3×');
+        const VW = 400, VH = 225;
+        const t = Number(params.get('t') ?? 0.35);
+        let seed = 7;
+        const rnd = () => ((seed = hash(seed, 11, 5)) % 10000) / 10000;
+        const actors = [];
+        const add = (id, x, y, o = {}) => actors.push({ id, x, y, flip: false, phase: rnd() * 10, light: 0, ...o });
+        const px = 200, py = 122;
+        add('sorceress/run/east', px, py, { light: 1 });
+        const ring = (id, n, r0, r1) => {
+          for (let i = 0; i < n; i++) {
+            const a = rnd() * Math.PI * 2, r = r0 + rnd() * (r1 - r0);
+            const x = px + Math.cos(a) * r * 1.5, y = py + Math.sin(a) * r;
+            if (x < 8 || x > VW - 8 || y < 30 || y > VH - 4) continue;
+            add(id, x, y, { flip: x > px });
+          }
+        };
+        ring('monster/pitHound/move', 16, 36, 110);
+        ring('monster/chainThrall/move', 10, 40, 110);
+        ring('monster/tarSlinger/idle', 4, 70, 110);
+        ring('monster/ironCrossbowman/windup', 5, 80, 120);
+        add('monster/shieldbearer/move', px - 60, py - 50);
+        add('monster/shieldbearer/block', px + 60, py + 30, { flip: true });
+        add('monster/chainmaster/whirl', px - 130, py + 40);
+        add('monster/varkus/idle', px + 130, py - 10, { flip: true });
+        add('prop/brazier', 330, 60, { light: 1.2, prop: true });
+        add('prop/brazier', 60, 200, { light: 1.2, prop: true });
+        const buf = makeBuf(VW, VH, 'sand');
+        const sorted = actors.filter((a) => byId(a.id)).sort((a, b) => a.y - b.y);
+        for (const a of sorted) if (!a.prop) shadow(buf, a.x, a.y, Math.max(8, byId(a.id).width * 0.55));
+        for (const a of sorted) {
+          const s = byId(a.id);
+          const f = s.loop ? Math.floor((t + a.phase) * s.fps) % s.frames.length : Math.min(s.frames.length - 1, Math.floor((t + a.phase) * s.fps) % (s.frames.length + 4));
+          const ax = a.flip ? s.width - s.anchorX : s.anchorX;
+          blit(buf, s, f, Math.round(a.x - ax), Math.round(a.y - s.anchorY), a.flip);
+        }
+        const lights = sorted.filter((a) => a.light > 0).map((a) => ({ x: a.x, y: a.y - byId(a.id).height * 0.6, r: 34 + 70 * a.light, k: a.light }));
+        g.append(card(present(buf, Number(params.get('zoom') ?? 3), lights), `ironColiseum · t=${t}`));
+      }
+    </script>
+  </body>
+</html>

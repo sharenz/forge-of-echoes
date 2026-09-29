@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sim Debug View</title>
+    <style>
+      :root {
+        --ink: #0d0b0e;
+        --coal: #1a1619;
+        --bone: #cbbfa8;
+        --ember: #e8662a;
+      }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: var(--ink);
+        overflow: hidden;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      }
+      canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+      #help {
+        position: fixed; right: 12px; bottom: 10px; color: #8d8375; font-size: 12px; line-height: 1.5;
+        background: rgba(13, 11, 14, 0.72); padding: 8px 10px; border: 1px solid #2a2326; border-radius: 4px;
+        pointer-events: none; white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="help">WASD move · mouse aim · LMB basic (player 1)
+LMB on a ground item: walk into reach + pick up (WASD cancels)
+G drop a public item at player 1's feet · X expire the oldest floor item
+Space Q E R F skills · 1–4 flasks
+B bot for player 1 · P pause · [ ] speed
+O hideout portal (8 → 7 → … → 0) · J join a bot · K kill player 1 · V view boxes
+drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocked
+?players=1..4 ?late=s (players 2+ join late) ?full=1 (inventories full)
+?seed ?mode=hideout ?theme ?gear=strong|fair|weak
+?skip=s ?until=boss2&amp;after=s ?view=2000
+?bot=0 ?hazards=1 ?life= ?dmg= ?views=1</div>
+    <script type="module">
+      // Canvas2D debug visualiser for the deterministic multiplayer sim. Circles and colours only:
+      // this is for checking behaviour (spacing, telegraphs, projectiles, waves, party play), not for
+      // looks. Player 1 can be driven by hand; every other player is a bot. Players leave through the
+      // return portal exactly as the server would move them home (removePlayer).
+      import { createRunInternal } from '/src/sim/run.ts';
+      import { SIM_DT, MONSTER_ANIM, AILMENT_BIT, ELITE_BIT, PROJECTILE_KINDS } from '/src/contracts/sim.ts';
+      import { MONSTER_KINDS } from '/src/contracts/content.ts';
+      import { PICKUP_REACH } from '/src/contracts/sim.ts';
+      import { PORTAL_DWELL, PORTAL_ENTER_RADIUS, VIEW_HALF_H, VIEW_HALF_W } from '/src/sim/constants.ts';
+      // Walk this deep into reach before asking, like a real client (input is still queued on the server).
+      import { PICKUP_APPROACH } from '/src/sim/movement.ts';
+      import { createBot } from '/tests/sim/bot.ts';
+      import {
+        makeConfig, makeHooks, makeJoin, makeSkill, makeStats, strongStats, strongSkills, fairStats, fairSkills, STRONG_LOADOUT, makeFlasks, TIER5,
+        floorSpec, rulesAutoPickup,
+      } from '/tests/sim/fixtures.ts';
+
+      const qs = new URLSearchParams(location.search);
+      const mode = qs.get('mode') === 'hideout' ? 'hideout' : 'map';
+      const seed = Number(qs.get('seed') ?? 7);
+      const theme = qs.get('theme') ?? (mode === 'hideout' ? 'hideout' : 'ashenForge');
+      // strong: overgeared (the flow tests) · fair: geared for tier 5, the waves hurt · weak: a fresh level 1.
+      const gear = qs.get('weak') === '1' ? 'weak' : (qs.get('gear') ?? 'strong');
+      const weak = gear === 'weak';
+      const partySize = Math.max(1, Math.min(4, Number(qs.get('players') ?? 1)));
+      const late = Number(qs.get('late') ?? 0);
+      let botOn = qs.get('bot') !== '0';
+      // Each living player's camera box (streams must arrive outside all of them).
+      let showViews = qs.get('views') === '1';
+      let speed = Number(qs.get('speed') ?? 1);
+      const skip = Number(qs.get('skip') ?? 0);
+      // World units visible vertically (420 ≈ the game's camera; larger = zoomed-out overview).
+      const viewSpan = Number(qs.get('view') ?? 420);
+      // Fast-forward (with the bots) until a moment: herald | boss | boss2 | boss3 | cleared, then +after seconds.
+      const until = qs.get('until');
+      const after = Number(qs.get('after') ?? 0);
+
+      const NAMES = ['Ysolde', 'Maren', 'Ashka', 'Veyla'];
+      const PLAYER_COL = ['#e8662a', '#7fc6e8', '#b9a6ff', '#9fd67a'];
+      // Loot as the rules shape it: equipment is clicked, currency / flasks / maps are walked over.
+      const inventoriesFull = qs.get('full') === '1';
+      const { hooks } = makeHooks({ dropChance: 0.1, autoPickup: rulesAutoPickup, full: () => inventoriesFull });
+      const config = makeConfig({
+        mode, seed, theme,
+        arenaRadius: mode === 'hideout' ? 300 : theme === 'ironColiseum' ? 650 : 900,
+        scaling: {
+          ...(weak ? {} : TIER5),
+          hazards: qs.get('hazards') === '1',
+          ...(qs.has('life') ? { lifeMultiplier: Number(qs.get('life')) } : {}),
+          ...(qs.has('dmg') ? { damageMultiplier: Number(qs.get('dmg')) } : {}),
+        },
+        hooks,
+      });
+      const kit = () => ({
+        stats: weak ? makeStats() : gear === 'fair' ? fairStats() : strongStats(),
+        skills: weak ? [makeSkill('emberLance', 1), makeSkill('emberNova', 1)] : gear === 'fair' ? fairSkills() : strongSkills(),
+        loadout: weak ? ['emberLance', 'emberNova', null, null, null, null] : STRONG_LOADOUT,
+        flasks: makeFlasks(),
+      });
+      const { run, world } = createRunInternal(config);
+      // Handle for scripted debugging / screenshots (e.g. `simDebug.world.playerById[1].x = …`).
+      window.simDebug = { run, world, config };
+      const bots = new Map();
+      let nextId = 1;
+      function join() {
+        if (run.view.players.length >= 4) return;
+        const id = nextId++;
+        run.addPlayer(makeJoin(id, { ...kit(), name: NAMES[(id - 1) % 4], level: weak ? 1 : 24 }));
+        bots.set(id, createBot());
+      }
+      join();
+      if (late <= 0) for (let k = 1; k < partySize; k++) join();
+      let lateJoined = late <= 0;
+      const colourOf = (id) => PLAYER_COL[(id - 1) % PLAYER_COL.length];
+      const exited = [];
+
+      const canvas = document.getElementById('c');
+      const ctx = canvas.getContext('2d');
+      let W = 0, H = 0, dpr = 1;
+      function resize() {
+        dpr = window.devicePixelRatio || 1;
+        W = canvas.clientWidth; H = canvas.clientHeight;
+        canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      // --- input -----------------------------------------------------------------------------------
+      const keys = new Set();
+      const mouse = { x: W / 2, y: H / 2, down: false };
+      let flaskPress = -1;
+      let paused = false;
+      let portalCount = 9;
+      addEventListener('keydown', (e) => {
+        const k = e.key.toLowerCase();
+        keys.add(k === ' ' ? 'space' : k);
+        if (k === 'b') botOn = !botOn;
+        if (k === 'p') paused = !paused;
+        if (k === '[') speed = Math.max(0.25, speed / 2);
+        if (k === ']') speed = Math.min(16, speed * 2);
+        if (k === 'o') { portalCount = portalCount <= 0 ? 8 : portalCount - 1; run.setPortal(portalCount); }
+        if (k === 'j') join();
+        if (k === 'v') showViews = !showViews;
+        if (k === 'k') { const p = world.playerById[1]; if (p && !p.dead) { p.invulnTime = 0; p.life = 0.001; } }
+        if (k === 'g') dropPublicItem();
+        if (k === 'x') expireOldestFloorItem();
+        if (k >= '1' && k <= '4') flaskPress = Number(k) - 1;
+        if (k === ' ') e.preventDefault();
+      });
+      addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k === ' ' ? 'space' : k); });
+      canvas.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+      canvas.addEventListener('mousedown', () => {
+        // A click on a ground item takes priority over the basic attack (as in the game).
+        const d = dropUnderCursor();
+        if (d) { pickTarget = d.id; return; }
+        mouse.down = true;
+      });
+      addEventListener('mouseup', () => { mouse.down = false; });
+
+      const cam = { x: 0, y: 0, zoom: 1 };
+      const toWorld = (sx, sy) => ({ x: (sx - W / 2) / cam.zoom + cam.x, y: (sy - H / 2) / cam.zoom + cam.y });
+
+      // --- ground items: public floor drops (G), click pickup with walk-into-reach ------------------
+      const FLOOR_ITEMS = [
+        { label: 'Ember Ring', tone: 'magic', sprite: 'equipment' },
+        { label: 'Grave Coil', tone: 'rare', sprite: 'equipment' },
+        { label: 'Cinderwalkers', tone: 'unique', sprite: 'equipment' },
+        { label: 'Forge Scrap ×12', tone: 'currency', sprite: 'currency' },
+        { label: 'Ashen Forge (T3)', tone: 'map', sprite: 'map' },
+      ];
+      let floorToken = 1_000_000;
+      let floorCount = 0;
+      /** Drop id player 1 is walking to (click pickup), or -1. */
+      let pickTarget = -1;
+      function dropPublicItem() {
+        const p = world.playerById[1];
+        if (!p || p.dead) return;
+        const it = FLOOR_ITEMS[floorCount++ % FLOOR_ITEMS.length];
+        const id = run.spawnDrop(floorSpec(floorToken++, { ...it, owner: 0, autoPickup: false }), p.x, p.y);
+        toast(`dropped ${it.label} (#${id}) — public`, '#cbbfa8');
+      }
+      function expireOldestFloorItem() {
+        const d = run.view.drops.find((q) => q.spec.owner === 0);
+        if (!d) return;
+        run.removeDrop(d.id);
+        toast(`${d.spec.label} crumbled to dust (expired)`, '#8d8375');
+      }
+      /** Player 1 can see their own drops and public ones; the one nearest the cursor (sprite or label). */
+      function dropUnderCursor() {
+        const c = toWorld(mouse.x, mouse.y);
+        let best = null, bd = 9;
+        for (const d of run.view.drops) {
+          if (d.spec.owner !== 0 && d.spec.owner !== 1) continue;
+          const dSprite = Math.hypot(c.x - d.x, c.y - (d.y - d.z));
+          const dLabel = Math.hypot((c.x - d.x) * 0.25, c.y - (d.y - 9));
+          const dist = Math.min(dSprite, dLabel);
+          if (dist < bd) { bd = dist; best = d; }
+        }
+        return best;
+      }
+      const RESULT_TEXT = { ok: 'picked up', tooFar: 'too far away', notYours: 'not yours', full: 'inventory full', missing: 'already gone' };
+      /** Try a click pickup for `id` now; returns the result. */
+      function clickPickup(id, playerId) {
+        const d = run.view.drops.find((q) => q.id === id);
+        const r = run.requestPickup(playerId, id);
+        if (playerId === 1 || r === 'ok') toast(`${nameOf(playerId)}: ${d ? d.spec.label : '#' + id} — ${RESULT_TEXT[r]}`, r === 'ok' ? '#9fd67a' : '#ff7a6a');
+        return r;
+      }
+      /** Player 1's click-pickup walk: steer into reach, then ask once. Returns a move vector or null. */
+      function pickupSteer(p) {
+        if (pickTarget < 0) return null;
+        const d = run.view.drops.find((q) => q.id === pickTarget);
+        if (!d || p.dead) { pickTarget = -1; return null; }
+        const dx = d.x - p.x, dy = d.y - p.y, dist = Math.hypot(dx, dy);
+        if (dist <= PICKUP_APPROACH) {
+          clickPickup(pickTarget, 1);
+          pickTarget = -1;
+          return null;
+        }
+        return { x: dx / dist, y: dy / dist };
+      }
+      /** Bots "click" their own and public click-only items once they are in reach (a real client walks there). */
+      function botPickups() {
+        for (const p of run.view.players) {
+          if (p.dead || (p.id === 1 && !botOn)) continue;
+          for (const d of run.view.drops) {
+            if ((d.spec.owner !== 0 && d.spec.owner !== p.id) || d.spec.autoPickup || d.blocked) continue;
+            if (Math.hypot(d.x - p.x, d.y - p.y) <= PICKUP_APPROACH) clickPickup(d.id, p.id);
+          }
+        }
+      }
+      const toasts = [];
+      function toast(text, col) { toasts.push({ text, col, t: 3 }); if (toasts.length > 5) toasts.shift(); }
+
+      function humanIntent() {
+        const aim = toWorld(mouse.x, mouse.y);
+        let mx = (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
+        let my = (keys.has('s') || keys.has('arrowdown') ? 1 : 0) - (keys.has('w') || keys.has('arrowup') ? 1 : 0);
+        if (mx !== 0 || my !== 0) pickTarget = -1; // WASD cancels the walk
+        const me = world.playerById[1];
+        const steer = me ? pickupSteer(me) : null;
+        if (steer) { mx = steer.x; my = steer.y; }
+        const intent = {
+          moveX: mx, moveY: my, aimX: aim.x, aimY: aim.y,
+          held: [mouse.down, keys.has('space'), keys.has('q'), keys.has('e'), keys.has('r'), keys.has('f')],
+          flask: flaskPress,
+        };
+        flaskPress = -1;
+        return intent;
+      }
+
+      /** The player the camera follows: player 1 while present and alive, else the first living one. */
+      function focusPlayer() {
+        const ps = run.view.players;
+        return ps.find((p) => p.id === 1 && !p.dead) ?? ps.find((p) => !p.dead) ?? ps[0] ?? null;
+      }
+
+      // --- transient visuals from events ------------------------------------------------------------
+      const fx = [];
+      const DMG_COL = { physical: '#d8d2c4', fire: '#ff9a3c', cold: '#7fc6e8', lightning: '#efe9ff', void: '#c07bff' };
+      const TONE_COL = { normal: '#d8d2c4', magic: '#7aa2ff', rare: '#f2d15c', unique: '#e8772e', currency: '#c9b58a', map: '#d0d0dc', flask: '#e06060' };
+      let eventsThisSecond = 0, eventRate = 0;
+      function absorb(events) {
+        eventsThisSecond += events.length;
+        for (const e of events) {
+          switch (e.t) {
+            case 'hit':
+              if (fx.length < 600) fx.push({ k: 'num', x: e.x, y: e.y - 10, t: 0, life: 0.62, text: String(Math.max(1, Math.round(e.amount))), col: e.target === 'player' ? '#ff5050' : DMG_COL[e.damageType], crit: e.crit });
+              break;
+            case 'chain': fx.push({ k: 'chain', pts: e.points, t: 0, life: 0.22 }); break;
+            case 'nova': fx.push({ k: 'ring', x: e.x, y: e.y, r: e.radius, t: 0, life: 0.35, col: colourOf(e.playerId) }); break;
+            case 'dash': fx.push({ k: 'line', x1: e.fromX, y1: e.fromY, x2: e.toX, y2: e.toY, t: 0, life: 0.3, col: '#c07bff' }); break;
+            case 'ward': fx.push({ k: 'ring', x: e.x, y: e.y, r: 44, t: 0, life: 0.4, col: '#ffe7a8' }); break;
+            case 'areaResolve': fx.push({ k: 'burst', x: e.x, y: e.y, r: e.radius, t: 0, life: 0.3, col: '#ff6a3c' }); break;
+            case 'death': fx.push({ k: 'burst', x: e.x, y: e.y, r: e.rarity >= 3 ? 40 : 10, t: 0, life: 0.35, col: '#6b5f58' }); break;
+            case 'bossPhase': fx.push({ k: 'flash', t: 0, life: 0.25 }); banner(`BOSS PHASE ${e.phase}`); break;
+            case 'waveTell': banner(`WAVE ${e.wave}${e.boss ? ' — THE MATRIARCH' : e.lieutenant ? ' — HERALD' : ''}  ${e.families.join(' · ')}`); break;
+            case 'cleared': banner('MAP CLEARED'); break;
+            case 'playerDeath': banner(`${nameOf(e.playerId)} HAS FALLEN`); break;
+            case 'playerJoin': fx.push({ k: 'ring', x: e.x, y: e.y, r: 26, t: 0, life: 0.5, col: colourOf(e.playerId) }); break;
+          }
+        }
+      }
+      const nameOf = (id) => world.playerById[id]?.name ?? `#${id}`;
+      let bannerText = '', bannerTime = 0;
+      function banner(t) { bannerText = t; bannerTime = 3; }
+
+      // --- drawing helpers --------------------------------------------------------------------------
+      const KIND_COL = {
+        ashling: '#9b7d6a', emberSkitter: '#e8662a', cinderSpitter: '#b8862f', riftStalker: '#7b3fa0',
+        ironhideBrute: '#5a5057', ashboundHerald: '#c07bff', cinderMatriarch: '#ff5a2a', trainingDummy: '#cbbfa8',
+      };
+      const RAR_COL = ['', '#7aa2ff', '#f2d15c', '#c07bff', '#ff7a3a'];
+      const PROJ_COL = { emberLance: '#ffb060', novaFlame: '#ff8a3c', flameWave: '#ff6a2a', rimeShard: '#bfe8ff', cinderSpit: '#ffcf5a', heraldOrb: '#c07bff', matriarchOrb: '#ff4a4a' };
+      const PROP_COL = {
+        mapDevice: '#7b3fa0', stash: '#7a3b24', merchant: '#b8862f', portal: '#c07bff', returnPortal: '#7fc6e8', chest: '#e0b04a',
+        pillar: '#5a5057', brazier: '#e8662a', standingStone: '#3b3438', rubble: '#4a3f3a', bones: '#cbbfa8', crystal: '#7fc6e8',
+        banner: '#5a1a2a', anvil: '#3b3438', ruinWall: '#2a2326',
+      };
+      const AREA_COL = {
+        slamWarning: '#ff4a2a', leapWarning: '#b05aff', eruptionWarning: '#ff7a1a', meteorWarning: '#ff3a1a',
+        firePool: '#e8662a', fireTrail: '#ff9a3c', heraldAura: '#c07bff',
+      };
+      const lerp = (a, b, t) => a + (b - a) * t;
+      function circle(x, y, r, fill, stroke, lw = 1) {
+        ctx.beginPath(); ctx.arc(x, y, Math.max(0.5, r), 0, Math.PI * 2);
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw / cam.zoom; ctx.stroke(); }
+      }
+
+      function draw(alpha, dtReal) {
+        const v = run.view;
+        const focus = focusPlayer();
+        const fx0 = focus ? lerp(focus.prevX, focus.x, alpha) : cam.x;
+        const fy0 = focus ? lerp(focus.prevY, focus.y, alpha) : cam.y;
+        cam.zoom = H / viewSpan;
+        cam.x = lerp(cam.x, fx0, 0.2); cam.y = lerp(cam.y, fy0, 0.2);
+
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.fillStyle = '#07060a';
+        ctx.fillRect(0, 0, W, H);
+        ctx.setTransform(dpr * cam.zoom, 0, 0, dpr * cam.zoom, dpr * (W / 2 - cam.x * cam.zoom), dpr * (H / 2 - cam.y * cam.zoom));
+
+        // arena floor + faint grid
+        circle(0, 0, v.arenaRadius, v.theme === 'rimedOssuary' ? '#141820' : v.theme === 'ironColiseum' ? '#1c1814' : '#1a1416', '#3b3438', 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 1 / cam.zoom;
+        ctx.beginPath();
+        for (let g = -v.arenaRadius; g <= v.arenaRadius; g += 64) { ctx.moveTo(g, -v.arenaRadius); ctx.lineTo(g, v.arenaRadius); ctx.moveTo(-v.arenaRadius, g); ctx.lineTo(v.arenaRadius, g); }
+        ctx.stroke();
+
+        // areas
+        for (const a of v.areas) {
+          const col = AREA_COL[a.kind];
+          if (a.kind === 'heraldAura') { circle(a.x, a.y, a.radius, 'rgba(192,123,255,0.06)', 'rgba(192,123,255,0.35)', 1); continue; }
+          if (a.kind === 'firePool' || a.kind === 'fireTrail') {
+            ctx.globalAlpha = 0.35 * (1 - a.age / a.duration) + 0.15;
+            circle(a.x, a.y, a.radius, col); ctx.globalAlpha = 1; continue;
+          }
+          const f = Math.min(1, a.age / a.duration);
+          ctx.globalAlpha = 0.18; circle(a.x, a.y, a.radius, col); ctx.globalAlpha = 0.45;
+          circle(a.x, a.y, a.radius * f, col); ctx.globalAlpha = 1;
+          circle(a.x, a.y, a.radius, null, col, 1.5);
+        }
+
+        // props
+        ctx.textAlign = 'center';
+        for (const pr of v.props) {
+          const col = PROP_COL[pr.kind] ?? '#555';
+          const r = pr.radius > 0 ? pr.radius : pr.kind === 'ruinWall' ? 12 : 6;
+          if (pr.kind === 'portal' || pr.kind === 'returnPortal') {
+            if (pr.state <= 0) continue; // closed / hidden
+            const t = v.time * 3;
+            circle(pr.x, pr.y, 14 + Math.sin(t) * 1.5, 'rgba(120,80,200,0.25)', col, 2);
+            circle(pr.x, pr.y, 8, null, col, 1);
+            // The walk-in radius, and every player standing in it filling up towards entry.
+            ctx.setLineDash([3 / cam.zoom, 3 / cam.zoom]);
+            circle(pr.x, pr.y, PORTAL_ENTER_RADIUS, null, 'rgba(232,220,192,0.35)', 1);
+            ctx.setLineDash([]);
+            for (const q of world.players) {
+              if (q.portalDwellId !== pr.id || q.portalDwell <= 0) continue;
+              ctx.strokeStyle = colourOf(q.id); ctx.lineWidth = 3 / cam.zoom;
+              ctx.beginPath(); ctx.arc(pr.x, pr.y, 19, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, q.portalDwell / PORTAL_DWELL)); ctx.stroke();
+            }
+            if (pr.kind === 'portal') {
+              ctx.font = `bold ${12 / cam.zoom * 1.2}px ui-monospace, monospace`;
+              ctx.fillStyle = '#e8dcc0'; ctx.fillText(`${pr.state}`, pr.x, pr.y - 20);
+            }
+            if (pr.interactive) circle(pr.x, pr.y, 22, null, '#e0b04a', 1); // clickable (usePortal)
+            continue;
+          }
+          if (pr.kind === 'chest') { ctx.fillStyle = pr.state ? '#6b5a30' : col; ctx.fillRect(pr.x - 9, pr.y - 7, 18, 14); continue; }
+          if (pr.kind === 'brazier') { circle(pr.x, pr.y, 22, 'rgba(232,102,42,0.08)'); }
+          if (pr.kind === 'crystal') { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(pr.x, pr.y - r * 1.4); ctx.lineTo(pr.x + r, pr.y); ctx.lineTo(pr.x, pr.y + r * 0.8); ctx.lineTo(pr.x - r, pr.y); ctx.fill(); continue; }
+          circle(pr.x, pr.y, r, col, pr.interactive ? '#e0b04a' : null, 1.5);
+          if (pr.interactive) {
+            const name = { mapDevice: 'Map Device', stash: 'Stash', merchant: 'Rook', anvil: 'Crafting Bench' }[pr.kind];
+            if (name) {
+              ctx.font = `${9 / cam.zoom * 1.1}px ui-monospace, monospace`;
+              ctx.fillStyle = '#e0b04a'; ctx.fillText(name, pr.x, pr.y - r - 5);
+            }
+          }
+        }
+
+        // motes
+        const mo = v.motes;
+        ctx.fillStyle = '#9fe0ff';
+        for (let i = 0; i < mo.capacity; i++) {
+          if (!mo.alive[i]) continue;
+          const x = lerp(mo.prevX[i], mo.x[i], alpha), y = lerp(mo.prevY[i], mo.y[i], alpha);
+          const r = 1.2 + mo.size[i] * 0.9;
+          ctx.fillRect(x - r, y - r, r * 2, r * 2);
+        }
+
+        // drops (instanced: a ring in the owner's colour, public ones grey; ● walk-over, ■ click;
+        // labels for what player 1 can see: their own and public items, the hovered one highlighted)
+        ctx.font = `${10 / cam.zoom * 1.1}px ui-monospace, monospace`;
+        const hovered = dropUnderCursor();
+        const me1 = v.players.find((q) => q.id === 1);
+        if (me1 && !me1.dead && (pickTarget >= 0 || hovered)) {
+          ctx.setLineDash([2 / cam.zoom, 4 / cam.zoom]);
+          circle(me1.x, me1.y, PICKUP_REACH, null, 'rgba(232,220,192,0.3)', 1);
+          ctx.setLineDash([]);
+        }
+        for (const d of v.drops) {
+          const x = lerp(d.prevX, d.x, alpha), y = lerp(d.prevY, d.y, alpha);
+          const col = TONE_COL[d.spec.tone] ?? '#fff';
+          const ring = d.blocked ? '#ff3030' : d.spec.owner === 0 ? '#9a948a' : colourOf(d.spec.owner);
+          circle(x, y, 2.5, 'rgba(0,0,0,0.5)');
+          if (d.spec.autoPickup) circle(x, y - d.z, 3, col, ring, 1);
+          else {
+            ctx.fillStyle = col; ctx.fillRect(x - 3, y - d.z - 3, 6, 6);
+            ctx.strokeStyle = ring; ctx.lineWidth = 1 / cam.zoom; ctx.strokeRect(x - 3, y - d.z - 3, 6, 6);
+          }
+          const visible = d.spec.owner === 1 || d.spec.owner === 0;
+          if (d.z < 1 && visible) {
+            const hot = hovered && hovered.id === d.id || pickTarget === d.id;
+            const text = d.spec.owner === 0 ? `${d.spec.label} · ground` : d.spec.label;
+            if (hot) {
+              const tw = ctx.measureText(text).width;
+              ctx.fillStyle = 'rgba(232,220,192,0.18)'; ctx.fillRect(x - tw / 2 - 2, y - 16, tw + 4, 11);
+            }
+            ctx.fillStyle = hot ? '#ffe7a8' : col; ctx.fillText(text, x, y - 7);
+          }
+        }
+
+        // monsters
+        const m = v.monsters;
+        for (let i = 0; i < m.capacity; i++) {
+          if (!m.alive[i]) continue;
+          const kind = MONSTER_KINDS[m.kind[i]];
+          const x = lerp(m.prevX[i], m.x[i], alpha), y = lerp(m.prevY[i], m.y[i], alpha);
+          let r = m.radius[i];
+          const anim = m.anim[i];
+          if (anim === MONSTER_ANIM.spawn) { ctx.globalAlpha = Math.min(1, m.animTime[i] / 0.5); r *= 0.5 + 0.5 * Math.min(1, m.animTime[i] / 0.5); }
+          const lift = anim === MONSTER_ANIM.leap ? Math.sin(Math.min(1, m.animTime[i] / 0.25) * Math.PI) * 16 : 0;
+          circle(x, y, r * 0.9, 'rgba(0,0,0,0.35)');
+          let col = KIND_COL[kind];
+          if (m.hitFlash[i] > 0.5) col = '#ffffff';
+          const rar = m.rarity[i];
+          circle(x, y - lift, r, col, rar ? RAR_COL[rar] : null, rar >= 3 ? 3 : 2);
+          if (anim === MONSTER_ANIM.windup) circle(x, y - lift, r + 3 + Math.sin(m.animTime[i] * 30), null, '#ffdd55', 1.5);
+          // eyes (facing)
+          ctx.fillStyle = '#ffd08a';
+          ctx.fillRect(x + m.facing[i] * r * 0.45 - 0.8, y - lift - r * 0.3, 1.6, 1.6);
+          const ail = m.ailments[i];
+          if (ail & AILMENT_BIT.burning) circle(x - r * 0.6, y - r - 3, 1.4, '#ff7a1a');
+          if (ail & AILMENT_BIT.chilled) circle(x, y - r - 3, 1.4, '#9fe0ff');
+          if (ail & AILMENT_BIT.shocked) circle(x + r * 0.6, y - r - 3, 1.4, '#efe9ff');
+          if (ail & AILMENT_BIT.empowered) circle(x, y, r + 2, null, 'rgba(192,123,255,0.8)', 1);
+          if (ail & AILMENT_BIT.shielded) circle(x, y, r + 4, null, 'rgba(127,198,232,0.9)', 1);
+          if (m.mods[i] & ELITE_BIT.emberTouched) circle(x, y, r + 1.5, null, 'rgba(255,120,40,0.9)', 1);
+          ctx.globalAlpha = 1;
+          if (rar >= 1 || m.life[i] < m.maxLife[i]) {
+            const f = Math.max(0, m.life[i] / m.maxLife[i]);
+            const bw = Math.max(10, r * 2);
+            ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - bw / 2, y - lift - r - 7, bw, 2);
+            ctx.fillStyle = rar >= 3 ? '#ff7a3a' : '#c0392b'; ctx.fillRect(x - bw / 2, y - lift - r - 7, bw * f, 2);
+          }
+        }
+
+        // projectiles (with a short trail)
+        const pj = v.projectiles;
+        for (let i = 0; i < pj.capacity; i++) {
+          if (!pj.alive[i]) continue;
+          const kind = PROJECTILE_KINDS[pj.kind[i]];
+          const x = lerp(pj.prevX[i], pj.x[i], alpha), y = lerp(pj.prevY[i], pj.y[i], alpha);
+          const col = PROJ_COL[kind];
+          const flight = pj.life[i];
+          if (flight > 0) {
+            // A lob: fixed flight time; height 4h·u(1−u); it only bursts where it lands.
+            const age = pj.age[i] + alpha * SIM_DT;
+            const u = Math.min(1, age / flight);
+            const left = Math.max(0, flight - age);
+            const lx = x + pj.vx[i] * left, ly = y + pj.vy[i] * left;
+            ctx.globalAlpha = 0.25 + 0.5 * u; circle(lx, ly, 12 * (0.4 + 0.6 * u), null, '#ffcf5a', 1); ctx.globalAlpha = 1;
+            circle(x, y, 2.5, 'rgba(0,0,0,0.45)');
+            circle(x, y - 4 * 34 * u * (1 - u), pj.radius[i], col, '#ffffff', 1);
+            continue;
+          }
+          const sp = Math.hypot(pj.vx[i], pj.vy[i]) || 1;
+          const tl = Math.min(18, sp * 0.04);
+          ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.lineWidth = Math.max(1, pj.radius[i]) / 1.2;
+          ctx.beginPath(); ctx.moveTo(x - pj.vx[i] / sp * tl, y - pj.vy[i] / sp * tl); ctx.lineTo(x, y); ctx.stroke();
+          ctx.globalAlpha = 1;
+          circle(x, y, pj.radius[i], col, pj.hostile[i] ? '#ffffff' : null, 1);
+        }
+
+        // players (corpses first, the living on top), each with a name plate and life bar
+        const order = v.players.slice().sort((a, b) => Number(b.dead) - Number(a.dead));
+        if (showViews) {
+          ctx.setLineDash([6 / cam.zoom, 5 / cam.zoom]);
+          for (const p of order) {
+            if (p.dead) continue;
+            ctx.strokeStyle = colourOf(p.id); ctx.globalAlpha = 0.45; ctx.lineWidth = 1.5 / cam.zoom;
+            ctx.strokeRect(p.x - VIEW_HALF_W, p.y - VIEW_HALF_H, VIEW_HALF_W * 2, VIEW_HALF_H * 2);
+          }
+          ctx.setLineDash([]); ctx.globalAlpha = 1;
+        }
+        for (const p of order) {
+          const px = lerp(p.prevX, p.x, alpha), py = lerp(p.prevY, p.y, alpha);
+          const pc = colourOf(p.id);
+          if (p.wardTime > 0) circle(px, py, 40, 'rgba(255,200,120,0.07)', 'rgba(255,200,120,0.5)', 1);
+          if (p.dead) {
+            ctx.globalAlpha = 0.6;
+            circle(px, py + 2, 8, '#2a2326', pc, 1.5);
+            ctx.strokeStyle = pc; ctx.lineWidth = 1.5 / cam.zoom;
+            ctx.beginPath(); ctx.moveTo(px - 4, py - 2); ctx.lineTo(px + 4, py + 6); ctx.moveTo(px + 4, py - 2); ctx.lineTo(px - 4, py + 6); ctx.stroke();
+            ctx.globalAlpha = 1;
+          } else {
+            circle(px, py, 7, p.hitFlash > 0.5 ? '#ffffff' : '#7a1e22', p.invulnTime > 0 ? '#c07bff' : pc, 2);
+            const aa = Math.atan2(p.aimY - py, p.aimX - px);
+            ctx.strokeStyle = '#ffe7a8'; ctx.lineWidth = 1.5 / cam.zoom;
+            ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(aa) * 12, py + Math.sin(aa) * 12); ctx.stroke();
+            if (p.castSkill) {
+              ctx.strokeStyle = '#ffb060'; ctx.lineWidth = 2 / cam.zoom;
+              ctx.beginPath(); ctx.arc(px, py, 11, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p.castProgress); ctx.stroke();
+            }
+            const s = world.playerById[p.id]?.stats;
+            if (s) circle(px, py, s.pickupRadius, null, 'rgba(159,224,255,0.07)', 1);
+          }
+          ctx.font = `${10 / cam.zoom * 1.1}px ui-monospace, monospace`;
+          ctx.fillStyle = pc; ctx.fillText(`${p.name} ${p.level}`, px, py - 17);
+          const f = Math.max(0, p.life / p.maxLife);
+          ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(px - 10, py - 13, 20, 2.2);
+          ctx.fillStyle = '#c0392b'; ctx.fillRect(px - 10, py - 13, 20 * f, 2.2);
+        }
+
+        // transient fx
+        for (let k = fx.length - 1; k >= 0; k--) {
+          const f = fx[k];
+          f.t += dtReal;
+          if (f.t >= f.life) { fx.splice(k, 1); continue; }
+          const u = f.t / f.life;
+          ctx.globalAlpha = 1 - u;
+          if (f.k === 'num') {
+            const s = (f.crit ? 14 : 10) * (1 + 0.18 * Math.min(1, u * 3)) / cam.zoom * 1.2;
+            ctx.font = `bold ${s}px ui-monospace, monospace`;
+            ctx.fillStyle = f.col; ctx.fillText(f.text, f.x, f.y - 30 * (1 - (1 - u) ** 3));
+          } else if (f.k === 'chain') {
+            ctx.strokeStyle = '#e8e2ff'; ctx.lineWidth = 2 / cam.zoom; ctx.beginPath();
+            for (let j = 0; j < f.pts.length; j += 2) { const jx = f.pts[j] + (j > 0 && j < f.pts.length - 2 ? Math.sin(f.t * 90 + j) * 3 : 0); if (j === 0) ctx.moveTo(jx, f.pts[j + 1]); else ctx.lineTo(jx, f.pts[j + 1]); }
+            ctx.stroke();
+          } else if (f.k === 'ring') circle(f.x, f.y, f.r * (0.3 + 0.7 * u), null, f.col, 2);
+          else if (f.k === 'line') { ctx.strokeStyle = f.col; ctx.lineWidth = 3 / cam.zoom; ctx.beginPath(); ctx.moveTo(f.x1, f.y1); ctx.lineTo(f.x2, f.y2); ctx.stroke(); }
+          else if (f.k === 'burst') circle(f.x, f.y, f.r * (0.6 + 0.6 * u), f.col);
+          ctx.globalAlpha = 1;
+        }
+
+        // --- HUD overlay (screen space) ---
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const flash = fx.find((f) => f.k === 'flash');
+        if (flash) { ctx.fillStyle = `rgba(255,120,60,${0.25 * (1 - flash.t / flash.life)})`; ctx.fillRect(0, 0, W, H); }
+        const r = v.run;
+        ctx.font = '14px ui-monospace, Menlo, monospace'; ctx.textAlign = 'left';
+        const lines = [
+          `${config.mapName}  seed ${seed}  ${mode}  gear ${gear}  phase ${r.phase === 'failed' ? 'PARTY DOWN (frozen)' : r.phase.toUpperCase()}  wave ${r.wave}/${r.waveCount}  ${r.waveTime.toFixed(1)}s/${r.waveDuration}s`,
+          `alive ${r.monstersAlive}  kills ${r.kills}  proj ${v.projectiles.count}  motes ${v.motes.count}  drops ${v.drops.length}  areas ${v.areas.length}  party ${r.playersAlive}/${v.players.length} alive${exited.length ? `  home: ${exited.join(', ')}` : ''}`,
+          `fps ${fpsShown.toFixed(0)}  sim ${msPerTick.toFixed(3)} ms/tick (p99 ${p99.toFixed(3)})  ×${speed}  events/s ${eventRate}  p1 bot ${botOn ? 'ON' : 'off'}${paused ? '  PAUSED' : ''}  t=${r.elapsed.toFixed(1)}s`,
+        ];
+        ctx.fillStyle = 'rgba(13,11,14,0.75)'; ctx.fillRect(8, 8, 820, lines.length * 18 + 10);
+        ctx.fillStyle = '#cbbfa8';
+        lines.forEach((l, k) => ctx.fillText(l, 16, 26 + k * 18));
+        const bar = (x, y, w, h, f, col, label) => {
+          ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(x, y, w, h);
+          ctx.fillStyle = col; ctx.fillRect(x, y, w * Math.max(0, Math.min(1, f)), h);
+          ctx.fillStyle = '#e8dcc0'; ctx.fillText(label, x + 6, y + h - 5);
+        };
+        // party frames
+        v.players.forEach((p, k) => {
+          const y = 80 + k * 50;
+          ctx.fillStyle = 'rgba(13,11,14,0.75)'; ctx.fillRect(8, y - 4, 232, 46);
+          ctx.fillStyle = colourOf(p.id);
+          ctx.fillText(`${p.name}  lv ${p.level}  #${p.id}${p.dead ? '  FALLEN' : ''}`, 16, y + 10);
+          bar(16, y + 16, 104, 18, p.life / p.maxLife, '#9e2a2b', `${p.life.toFixed(0)}`);
+          bar(128, y + 16, 104, 18, p.focus / p.maxFocus, '#4a7bd6', `${p.focus.toFixed(0)}`);
+        });
+        // player 1's skill slots
+        const p1 = v.players.find((p) => p.id === 1);
+        if (p1) {
+          bar(16, H - 58, 260, 20, p1.life / p1.maxLife, '#9e2a2b', `life ${p1.life.toFixed(0)}/${p1.maxLife.toFixed(0)}`);
+          bar(16, H - 34, 260, 20, p1.focus / p1.maxFocus, '#4a7bd6', `focus ${p1.focus.toFixed(0)}/${p1.maxFocus.toFixed(0)}`);
+          p1.slots.forEach((s, k) => {
+            const x = 290 + k * 64, y = H - 58;
+            ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(x, y, 58, 44);
+            if (s.skillId) {
+              ctx.fillStyle = s.usable ? '#cbbfa8' : '#6b6259';
+              ctx.fillText(s.skillId.slice(0, 7), x + 3, y + 16);
+              ctx.fillText(`${s.charges}/${s.maxCharges}${s.cooldown > 0 ? ' ' + s.cooldown.toFixed(1) : ''}`, x + 3, y + 36);
+            }
+          });
+        }
+        if (r.boss || r.lieutenant) {
+          const b = r.boss ?? r.lieutenant;
+          const bw = Math.min(520, W - 40);
+          bar((W - bw) / 2, 70, bw, 20, b.life / b.maxLife, '#c0392b', `${b.name}${r.boss ? '  phase ' + r.boss.phase : ''}  ${b.life.toFixed(0)}`);
+        }
+        // pickup / floor toasts (newest at the bottom)
+        ctx.font = '14px ui-monospace, Menlo, monospace'; ctx.textAlign = 'right';
+        for (let k = toasts.length - 1; k >= 0; k--) {
+          const tt = toasts[k];
+          tt.t -= dtReal;
+          if (tt.t <= 0) { toasts.splice(k, 1); continue; }
+        }
+        toasts.forEach((tt, k) => {
+          ctx.globalAlpha = Math.min(1, tt.t);
+          ctx.fillStyle = 'rgba(13,11,14,0.75)'; ctx.fillRect(W - 520, 12 + k * 22, 508, 20);
+          ctx.fillStyle = tt.col; ctx.fillText(tt.text, W - 18, 27 + k * 22);
+        });
+        ctx.globalAlpha = 1; ctx.textAlign = 'left';
+        if (bannerTime > 0) {
+          bannerTime -= dtReal;
+          ctx.font = 'bold 25px ui-monospace, Menlo, monospace'; ctx.textAlign = 'center';
+          ctx.globalAlpha = Math.min(1, bannerTime);
+          ctx.fillStyle = '#ffe7a8'; ctx.fillText(bannerText, W / 2, H * 0.28);
+          ctx.globalAlpha = 1; ctx.textAlign = 'left';
+        }
+      }
+
+      // --- loop ---------------------------------------------------------------------------------------
+      let acc = 0, last = performance.now(), fpsShown = 60, msPerTick = 0, p99 = 0;
+      const tickTimes = [];
+      let secondTimer = 0;
+      function stepOnce() {
+        if (!lateJoined && run.view.run.elapsed >= late) {
+          lateJoined = true;
+          for (let k = 1; k < partySize; k++) join();
+        }
+        for (const p of run.view.players) {
+          const intent = p.id === 1 && !botOn ? humanIntent() : bots.get(p.id).intent(run.view, p.id);
+          run.setIntent(p.id, intent);
+        }
+        botPickups();
+        const t0 = performance.now();
+        run.step();
+        const dt = performance.now() - t0;
+        tickTimes.push(dt);
+        if (tickTimes.length > 600) tickTimes.shift();
+        absorb(run.drainEvents());
+        for (const o of run.drainOutcomes()) {
+          if (o.t === 'returnPortal') {
+            // As the server does: the player goes home.
+            banner(`${nameOf(o.playerId)} WENT HOME`);
+            exited.push(nameOf(o.playerId));
+            run.removePlayer(o.playerId);
+            bots.delete(o.playerId);
+          }
+          if (o.t === 'enterPortal') banner(`${nameOf(o.playerId)} ENTERED THE PORTAL`);
+        }
+      }
+      const reached = () => {
+        const r = run.view.run;
+        switch (until) {
+          case 'herald': return r.lieutenant !== null;
+          case 'boss': return r.boss !== null;
+          case 'boss2': return (r.boss?.phase ?? 0) >= 2;
+          case 'boss3': return (r.boss?.phase ?? 0) >= 3;
+          case 'cleared': return r.phase === 'cleared';
+          default: return true;
+        }
+      };
+      const wasBot = botOn;
+      if (skip > 0 || until) {
+        botOn = true;
+        const n = Math.round(skip / SIM_DT);
+        for (let k = 0; k < n; k++) stepOnce();
+        for (let k = 0; k < 60 * 60 * 15 && !reached() && run.view.run.playersAlive > 0; k++) stepOnce();
+        for (let k = 0; k < Math.round(after / SIM_DT); k++) stepOnce();
+        fx.length = 0;
+        bannerTime = 0;
+        const f = focusPlayer();
+        if (f) { cam.x = f.x; cam.y = f.y; }
+        botOn = wasBot;
+      }
+      function frame(now) {
+        const dtReal = Math.min(0.1, (now - last) / 1000);
+        last = now;
+        fpsShown = lerp(fpsShown, 1 / Math.max(1e-3, dtReal), 0.05);
+        if (!paused) {
+          acc += dtReal * speed;
+          let steps = 0;
+          while (acc >= SIM_DT && steps < 5 * Math.max(1, speed)) { stepOnce(); acc -= SIM_DT; steps++; }
+          if (acc > SIM_DT * 5) acc = 0;
+        }
+        secondTimer += dtReal;
+        if (secondTimer >= 1) {
+          secondTimer = 0; eventRate = eventsThisSecond; eventsThisSecond = 0;
+          const sorted = tickTimes.slice().sort((a, b) => a - b);
+          msPerTick = sorted.reduce((a, b) => a + b, 0) / Math.max(1, sorted.length);
+          p99 = sorted[Math.floor(sorted.length * 0.99)] ?? 0;
+        }
+        draw(paused ? 1 : Math.min(1, acc / SIM_DT), dtReal);
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+      window.__sim = { run, world, join, cam, toScreen: (x, y) => ({ x: (x - cam.x) * cam.zoom + W / 2, y: (y - cam.y) * cam.zoom + H / 2 }) };
+    </script>
+  </body>
+</html>
