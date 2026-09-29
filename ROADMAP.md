@@ -6,13 +6,24 @@ Last reprioritised: 2026-09-29.
 
 **Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
 verify the resulting game and deploy it to production. QoL (P0.1–4), account storage, Atlas, the first events,
-Prefix/Suffix Runes, advanced bases and economy sinks (P1.1–6) are done and deployed. Expanded maps,
-remaining content and the map tree (P1.7–9) remain part of this delivery until individually completed and verified.
+Prefix/Suffix Runes, advanced bases, economy sinks and the six-map roster (P1.1–7) are done and deployed.
+Remaining content and the map tree (P1.8–9) remain part of this delivery until individually completed and verified.
 
-**Current order:** expanded map roster → remaining events/ingredients/areas → map tree.
-Priorities follow current usability problems, then progression dependencies. Wave-3 boss reuse is later content work.
+**Current order:** remaining events/ingredients/areas → map tree.
+Priorities follow current usability problems, then progression dependencies.
 
-**Latest release: Done — `20260929-222322-301c1b2` (2026-09-30).** Scrap economy services (P1.6):
+**Latest release: Done — `20260929-230651-931a5af` (2026-09-30).** Six map types (P1.7): Cinder Chapel,
+Choral Crypt and Chainworks promote the Herald, Chorister and Chainmaster into final bosses. Wave 3 now has
+ordinary packs on every map; its guaranteed rewards move to the completion chest. Original final-boss tuning
+is unchanged. New floor art, layouts, implicits, pack compositions, map icons and Atlas encounter labels are included.
+Build/typecheck, all rules/simulation/balance checks and all 133 server tests pass. Complete boss/chest flows
+pass in Chromium at 1024×600 and 1280×720; a compact Atlas card overlap was fixed and verified at both sizes.
+Live protocol 11 and exact public JS/CSS matches are verified. Production-copy audits before and after preserve
+all 457 physical items across 4 accounts / 7 characters, with unique IDs, idempotent reload and healthy integrity.
+Post-drain backup: `/var/lib/forge/backups/pre-release-20260929-230651-931a5af.db`.
+P1.8–9 remain in the active delivery.
+
+**Previous release: Done — `20260929-222322-301c1b2` (2026-09-30).** Scrap economy services (P1.6):
 repair one Stability with escalating lifetime prices, selectively replace one map danger/reward pair, and
 commission a guaranteed Hunted encounter. T1–T3 territory entry stays free; deeper tiers charge 1–4 Scrap
 once, refunded with an unrestorable expedition. Prices, odds and effects are shown before payment;
@@ -210,11 +221,16 @@ reopen tuning for a specific problem rather than starting another general balanc
    the owner and refunded atomically with server-unrestorable maps/keys. Exact prices/odds, stale-price refusal,
    trade locks and browser/restart checks pass. Hard crafting currencies retain their scarce drop sources.
    Watch the Scrap balance for a week before the Exchange.
-7. **Reuse wave-3 bosses to expand the map roster** (owner, 2026-09-29). Remove the wave-3 lieutenant encounter
-   from every existing map. Promote those three encounters into final bosses of three new maps, aiming to grow
-   the roster from 3 to 6 maps. Reuse the existing boss mechanics; give each new map its own theme, packs and
-   implicit. Rebalance wave 3, encounter rewards and map completion time after the split. Schedule this after
-   the Atlas, first events, crafting ingredients and economy sinks are playable.
+7. **Reuse wave-3 bosses to expand the map roster — Done, deployed as `20260929-230651-931a5af`.**
+   Six maps with one final boss each: Cinder Chapel / Ashbound Herald, Choral Crypt / Bone Chorister and
+   Chainworks / The Chainmaster join the original three. All wave-3 lieutenant encounters are removed;
+   their guaranteed equipment, currencies and map chance move to the completion chest. Each new map has
+   its own art, layout, family selection and implicit. Ember Vault, Glass Sepulchre and Iron March use the
+   new encounters, and the Atlas names each destination's boss. Original final bosses retain their tuning.
+   The full Tier 1–3 balance ladder, fresh-character and party checks pass; average fresh T1 clears span
+   6.1–7.9 minutes across the six maps. A bot pursuit bug around pillars was fixed without changing combat rules.
+   All three new maps complete through their bosses and chests in both browser sizes; live assets and
+   before/after inventory audits are verified.
 8. **Rest of the content:** remaining events (Blackout, Vaultbreakers, Second Crown, Wound), remaining ingredients
    (Scar Balm, Anneal, Graft, Transmute, Compass; event-only Echo Shard, Twin Ink, Void Splinter, Crown Fragment),
    remaining dead ends and rare barrier areas, keystone bosses with their own unique pools (needs many more
@@ -283,8 +299,8 @@ decide"), informed by an ARPG-designer agent review. Owner can overrule any of t
   Sketches: Sealed Reliquary (boss twin, unique + Crown Fragment), Gilded Vault (3 Vaultbreaker carriers, 3x
   currency), Black Pit (Blackout + Wound, Twin Ink), Hunting Ground (3 Hunted rares, 3 chosen-class rare bases),
   Rift Nexus (chain of 3 Echo Rifts, event-only ingredients). Parallel rewards; they never unlock tiers.
-- **Content reality:** 12 areas of about 6 types, built from 3 rosters x arena size/layout x event table x drop
-  table x mod pool.
+- **Content reality:** 12 areas of about 6 types, built from 6 map themes sharing 3 monster families, with
+  distinct arena layouts, implicits, event tables and drop preferences.
 - **Other decisions:** no carry bonus for the map owner; keystone bosses drop their own uniques; events are not
   shown before entry; stash is account-wide.
 - **Top failure modes to watch:** the community solves one best route; areas feel alike on shared rosters; players
