@@ -356,7 +356,25 @@ const COLISEUM: FloorStyle = {
   seed: 53,
 };
 
+// Sister maps have their own masonry and inlays; all keep the shared tile ports.
+const CHAPEL: FloorStyle = { ...HIDEOUT, base: 1.7, seed: 71,
+  net: { ports: { x: [4, 12], y: [8] }, junctions: [1, 2], jitter: 0.3, gap: 7, stub: [3, 4], worn: 0.1 } };
+const CRYPT: FloorStyle = { ...OSSUARY, seed: 83, grain: 0.15, over: undefined,
+  ramp: [C.ossDeep, C.ossDark, C.ossMid, C.voidMid, C.ossPale, C.ossFrost],
+  net: { ports: { x: [8], y: [4, 12] }, junctions: [1, 2], jitter: 0.3, gap: 7, stub: [3, 4], worn: 0.15 } };
+const WORKS: FloorStyle = { ...FORGE, ramp: RAMPS.metal, base: 2, seed: 97,
+  net: { ports: { x: [4, 12], y: [4, 12] }, junctions: [1, 2], jitter: 0, gap: 6, stub: [3, 3], worn: 0 },
+  joint: () => C.metalDeep,
+  over: (f, x, y, v) => {
+    if ((x === 3 || x === 13) && (y === 3 || y === 13)) f.c.set(x, y, C.metalLight);
+    if (x > 3 && x < 13 && y > 3 && y < 13 && wangNoise(x, y, 4, 733, v) > 0.66) f.c.set(x, y, C.rustDark);
+  },
+};
+
 const floors = {
+  cinderChapel: (v: number) => floorTile(CHAPEL, v),
+  choralCrypt: (v: number) => floorTile(CRYPT, v),
+  chainworks: (v: number) => floorTile(WORKS, v),
   hideout: (v: number) => floorTile(HIDEOUT, v),
   ashenForge: (v: number) => floorTile(FORGE, v),
   rimedOssuary: (v: number) => floorTile(OSSUARY, v),
@@ -819,6 +837,34 @@ function edgeTile(floor: (v: number) => Frame, theme: string, v: number, dark: C
   return f;
 }
 
+/** Small ritual inlays, choir staves and hauling chains, separate from the original floor decals. */
+function sisterDetail(theme: 'chapel' | 'crypt' | 'works', v: number): Frame {
+  const f = new Frame(TILE, TILE);
+  const shift = v % 3 - 1;
+  if (theme === 'chapel') {
+    // Broken diamond altar mosaics and spilled candle wax.
+    const points: Pt[] = [[8, 2 + shift], [13, 8], [8, 13 - shift], [3, 8], [8, 2 + shift]];
+    for (let i = 1; i < points.length; i++) lineCells(...points[i - 1], ...points[i], (x, y) => {
+      if (hash2(x, y, v + 51) > 0.2) groove(f, x, y, C.flagDeep, C.ochre);
+    });
+    f.c.set(7 + shift, 7, C.bone); f.c.set(7 + shift, 8, C.parchment);
+  } else if (theme === 'crypt') {
+    for (let y = 4; y <= 12; y += 2) lineCells(3, y, 12, y + shift, (x, yy) => groove(f, x, yy, C.ossDeep, C.ossLight));
+    // A bone note hanging from each carved stave.
+    for (let k = 0; k < 3; k++) { const x = 4 + k * 3; const y = 5 + (v + k) % 5;
+      f.c.set(x, y, C.bone); f.c.set(x + 1, y, C.ashGrey); f.c.set(x + 1, y - 1, C.bone);
+    }
+  } else {
+    for (let k = 0; k < 3; k++) {
+      const x = 3 + k * 4, y = 4 + k * 3 + shift;
+      lineCells(x, y, x + 3, y, (xx, yy) => f.c.set(xx, yy, C.metalLight));
+      lineCells(x, y + 2, x + 3, y + 2, (xx, yy) => f.c.set(xx, yy, C.rust));
+      f.c.set(x, y + 1, C.metalMid); f.c.set(x + 3, y + 1, C.metalDark);
+    }
+  }
+  return f;
+}
+
 export function tileSprites(): SpriteDef[] {
   const out: SpriteDef[] = [];
   const spec = { anchorX: 0, anchorY: 0, fps: 0, loop: false };
@@ -827,6 +873,9 @@ export function tileSprites(): SpriteDef[] {
     ['ashenForge', floors.ashenForge, forgeDetail, C.ink, C.basaltDeep],
     ['rimedOssuary', floors.rimedOssuary, ossuaryDetail, C.ossDeep, C.ossDark],
     ['ironColiseum', floors.ironColiseum, coliseumDetail, C.metalDeep, C.sandDeep],
+    ['cinderChapel', floors.cinderChapel, v => sisterDetail('chapel', v), C.flagDeep, C.flagDark],
+    ['choralCrypt', floors.choralCrypt, v => sisterDetail('crypt', v), C.ossDeep, C.ossDark],
+    ['chainworks', floors.chainworks, v => sisterDetail('works', v), C.metalDeep, C.rustDeep],
   ];
   const range = [...Array(VARIANTS).keys()];
   for (const [theme, floor, detail, dark, face] of themes) {

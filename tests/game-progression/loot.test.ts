@@ -218,7 +218,7 @@ describe('guaranteed drops', () => {
   it('completion chest: equipment ≥ magic, currency, a flask and a same-tier map with 25% chance of +1', () => {
     const rng = createRng(13);
     const currencyCounts = new Set<number>();
-    let upgrades = 0;
+    let upgrades = 0, bonusMaps = 0;
     for (let i = 0; i < 500; i++) {
       const items = rules.rollChestLoot(setup, rng, NAKED);
       const eq = items.filter((x): x is EquipmentItem => x.kind === 'equipment');
@@ -230,15 +230,18 @@ describe('guaranteed drops', () => {
       currencyCounts.add(cur);
       expect(items.filter((x) => x.kind === 'flask')).toHaveLength(1);
       const maps = items.filter((x): x is MapItem => x.kind === 'map');
-      expect(maps).toHaveLength(1);
+      expect(maps.length).toBeGreaterThanOrEqual(1);
+      expect(maps.length).toBeLessThanOrEqual(2);
       expect([4, 5]).toContain(maps[0].tier);
       if (maps[0].tier === 5) upgrades++;
+      if (maps.length === 2) bonusMaps++;
       expect(maps[0].quality).toBeGreaterThan(0);
     }
     expect([...currencyCounts].sort()).toEqual(
       Array.from({ length: CHEST_LOOT.currency.max - CHEST_LOOT.currency.min + 1 }, (_, i) => CHEST_LOOT.currency.min + i),
     );
     expectRate(upgrades, 500, 0.25);
+    expectRate(bonusMaps, 500, CHEST_LOOT.extraMapChance);
     const top = setupFor(map('ashenForge', 15));
     expect(rules.rollChestLoot(top, createRng(1), NAKED).find((x) => x.kind === 'map')!.tier).toBe(15);
   });
@@ -416,7 +419,8 @@ describe('instanced loot', () => {
     for (const items of chest.values()) {
       expect(items.filter((x) => x.kind === 'equipment')).toHaveLength(CHEST_LOOT.equipment);
       const maps = items.filter((x): x is MapItem => x.kind === 'map');
-      expect(maps).toHaveLength(1);
+      expect(maps.length).toBeGreaterThanOrEqual(1);
+      expect(maps.length).toBeLessThanOrEqual(2);
       expect([5, 6]).toContain(maps[0].tier);
     }
     const uids = [...chest.values()].flat().map((i) => i.uid);

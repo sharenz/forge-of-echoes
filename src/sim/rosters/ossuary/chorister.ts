@@ -1,4 +1,4 @@
-// The Bone Chorister (Rimed Ossuary lieutenant, wave 3): a robed singer that keeps its distance, hastes the
+// The Bone Chorister (Choral Crypt final boss): a robed singer that keeps its distance, hastes the
 // dead around it, sends Choir Waves (expanding frost rings you walk through at the gaps) and raises Bone
 // Thralls from the fallen.
 import { commanderBrain } from '../kit';

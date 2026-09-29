@@ -44,6 +44,8 @@ export interface Colour {
 export type ColourKey = 'rimedOssuary' | 'ironColiseum' | null;
 
 export function colourKey(theme: Theme | null | undefined): ColourKey {
+  if (theme === 'choralCrypt') return 'rimedOssuary';
+  if (theme === 'chainworks') return 'ironColiseum';
   return theme === 'rimedOssuary' || theme === 'ironColiseum' ? theme : null;
 }
 

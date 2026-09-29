@@ -181,7 +181,7 @@ describe('Map Stash grouping', () => {
 
   it('sections a tier by base in content order, best maps first', () => {
     const t3 = groups[2];
-    expect(t3.sections.map((s) => s.baseId)).toEqual(MAP_BASE_IDS.filter((b) => b !== 'ironColiseum'));
+    expect(t3.sections.map((s) => s.baseId)).toEqual(MAP_BASE_IDS.filter((id) => id === 'ashenForge' || id === 'rimedOssuary'));
     const forge = t3.sections[0].maps;
     expect(forge.map((m) => [m.rarity, m.mods.length])).toEqual([
       ['rare', 5],

@@ -19,7 +19,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 8: hidden map-event plans and replicated encounter progress (snapshot 6).
 // 9: Prefix/Suffix Runes, area ingredient sources and advanced equipment bases.
 // 10: durable crafting history, Scrap services, Bounty maps and refundable territory fees.
-export const PROTOCOL_VERSION = 10;
+// 11: six map themes, promoted final bosses, no wave-3 lieutenant and transferred completion rewards.
+export const PROTOCOL_VERSION = 11;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;

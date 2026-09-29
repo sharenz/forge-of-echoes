@@ -4,6 +4,7 @@
 // Generation must work in Node (vitest) — produce raw RGBA buffers, not canvases. Only `icon()`/`portrait()`
 // (DOM data URLs) may touch `document`, lazily.
 import { NEW_REQUIRED_SPRITES } from './bestiary';
+import { THEMES } from './content';
 
 /** Raw RGBA image (straight alpha), row-major, width*height*4 bytes. */
 export interface PixelImage {
@@ -64,7 +65,7 @@ export const REQUIRED_SPRITES: readonly string[] = [
   'fx/spark', 'fx/ember', 'fx/smoke', 'fx/ash', 'fx/frost', 'fx/bolt', 'fx/ring', 'fx/sigil', 'fx/slash',
   'fx/glow', 'fx/shadow', 'fx/ward', 'fx/beam', 'fx/mote', 'fx/impact', 'fx/levelUp', 'fx/scorch', 'fx/blood',
   // world tiles (16x16, several variant frames each) per theme
-  ...['hideout', 'ashenForge', 'rimedOssuary', 'ironColiseum'].flatMap((t) => [
+  ...THEMES.flatMap((t) => [
     `tile/${t}/floor`, `tile/${t}/detail`, `tile/${t}/edge`,
   ]),
   // props (bottom-centre anchored)

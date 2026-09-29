@@ -864,7 +864,7 @@
   background: radial-gradient(ellipse at 15% 35%, #45302388, transparent 65%),
     radial-gradient(ellipse at 75% 70%, #27374399, transparent 70%), #111315;
 }
-.fe-atlas__world { position: relative; width: 100%; min-width: 920px; height: 100%; min-height: 300px; }
+.fe-atlas__world { position: relative; width: 100%; min-width: 920px; height: 100%; min-height: 380px; }
 .fe-atlas__routes { position: absolute; inset: 0; width: 100%; height: 100%; }
 .fe-atlas__routes line { stroke: #46423b; stroke-width: 0.3; stroke-dasharray: 1 1; }
 .fe-atlas__routes .fe-atlas__route--open { stroke: #b8884d; stroke-width: 0.5; stroke-dasharray: none; }

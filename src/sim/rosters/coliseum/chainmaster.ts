@@ -1,4 +1,4 @@
-// The Chainmaster (Iron Coliseum lieutenant, wave 3; GAME_SPEC §14).
+// The Chainmaster (Chainworks final boss; GAME_SPEC §14).
 //
 //   Hook     every CHAINMASTER.hookEvery s: aims at the FARTHEST living player within hookMax who is at least
 //            hookMin away. The cast shows a locked aim line (chargeLine variant 0) from his fist for its whole

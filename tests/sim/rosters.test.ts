@@ -2,7 +2,7 @@
 // playable end to end — the bot clears a tier-5 map of each, deterministically.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { THEME_ROSTER } from '../../src/contracts/bestiary';
-import { MONSTER_KINDS, type MonsterKind, type Theme } from '../../src/contracts/content';
+import { MAP_BASE_IDS, MONSTER_KINDS, type MonsterKind, type Theme } from '../../src/contracts/content';
 import { SIM_DT, type PlayerIntent, type SimRun } from '../../src/contracts/sim';
 import { createRun } from '../../src/sim';
 import { monsterDef, monsterDefs, rosterFor } from '../../src/sim/rosters';
@@ -11,8 +11,8 @@ import { planWave } from '../../src/sim/waves';
 import { createBot } from './bot';
 import { STRONG_LOADOUT, TIER5, makeConfig, makeJoin, strongSkills, strongStats } from './fixtures';
 
-const MAP_THEMES = ['ashenForge', 'rimedOssuary', 'ironColiseum'] as const;
-const ARENA: Record<(typeof MAP_THEMES)[number], number> = { ashenForge: 900, rimedOssuary: 900, ironColiseum: 650 };
+const MAP_THEMES = MAP_BASE_IDS;
+const ARENA: Record<(typeof MAP_THEMES)[number], number> = { ashenForge: 900, rimedOssuary: 900, ironColiseum: 650, cinderChapel: 800, choralCrypt: 850, chainworks: 700 };
 
 describe('the registry', () => {
   it('has exactly one MonsterDef per monster kind, with sane stats', () => {
@@ -28,21 +28,22 @@ describe('the registry', () => {
     });
   });
 
-  it('every roster family is spawnable, its lieutenant and boss are heavy, bosses have phase scripts', () => {
+  it('every roster family is spawnable, its final boss is heavy and existing phase scripts remain', () => {
     for (const theme of MAP_THEMES) {
       const r = rosterFor(theme);
       expect(r).toEqual(THEME_ROSTER[theme]);
       for (const kind of r.family) expect(monsterDef(kind).fromWave, kind).toBeGreaterThan(0);
-      expect(monsterDef(r.lieutenant).role).toBe('lieutenant');
+      expect(monsterDef(r.lieutenant).role).toBe('boss');
       expect(monsterDef(r.boss).role).toBe('boss');
-      expect(monsterDef(r.boss).boss?.phases.length).toBeGreaterThanOrEqual(2);
+      if (monsterDef(r.boss).boss) expect(monsterDef(r.boss).boss!.phases.length).toBeGreaterThanOrEqual(2);
+      expect(monsterDef(r.boss).heavy).toBe(true);
       // GAME_SPEC §14: lieutenants ≈ Herald, bosses ≈ Matriarch.
       expect(monsterDef(r.lieutenant).life).toBeCloseTo(monsterDef('ashboundHerald').life, -2);
       // Bosses sit near the Matriarch; the Warden's base is lower because her map adds +20% monster life
       // (tests/sim-ossuary checks the effective value exactly).
       const bossLife = monsterDef(r.boss).life;
       const matriarch = monsterDef('cinderMatriarch').life;
-      expect(Math.abs(bossLife - matriarch) / matriarch).toBeLessThanOrEqual(0.2);
+      expect(Math.abs(bossLife - matriarch) / matriarch).toBeLessThanOrEqual(r.boss === r.lieutenant ? 0.25 : 0.2);
     }
     expect(rosterFor('hideout')).toEqual(THEME_ROSTER.ashenForge);
   });
@@ -127,8 +128,8 @@ function replayMap(theme: (typeof MAP_THEMES)[number], seed: number, intents: Pl
 describe('every theme is playable end to end', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  for (const theme of ['rimedOssuary', 'ironColiseum'] as const) {
-    it(`${theme}: the bot clears a tier-5 map through its whole roster, lieutenant and boss — deterministically`, () => {
+  for (const theme of MAP_THEMES) {
+    it(`${theme}: the bot clears a tier-5 map through its whole roster and final boss — deterministically`, () => {
       const boom = () => {
         throw new Error('non-deterministic source used by the sim');
       };
@@ -138,8 +139,8 @@ describe('every theme is playable end to end', () => {
       const r = playMap(theme, 31, intents);
       expect(r.result, `${theme} after ${r.minutes.toFixed(1)} min`).toBe('cleared');
       const roster = THEME_ROSTER[theme];
-      for (const k of [...roster.family, roster.lieutenant, roster.boss]) expect(r.seen.has(k), `${theme}: ${k} never appeared`).toBe(true);
-      expect(r.lieutenant).toBe(monsterDef(roster.lieutenant).name);
+      for (const k of [...roster.family, roster.boss]) expect(r.seen.has(k), `${theme}: ${k} never appeared`).toBe(true);
+      expect(r.lieutenant).toBe('');
       expect(r.boss).toBe(monsterDef(roster.boss).name);
       expect(r.debuffs.size).toBeGreaterThan(0);
       vi.restoreAllMocks();

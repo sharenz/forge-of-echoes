@@ -330,7 +330,7 @@ function times(mult: number): string {
   return `${oneDecimal(mult)}x`;
 }
 
-/** Waves: 6 with the lieutenant on 3 and the boss on 6; an Echo corruption adds a 7th after the boss. */
+/** Six waves, only a final boss on 6; an Echo corruption adds a seventh after the boss. */
 export function waveConfig(map: MapItem): WaveConfig {
   return {
     count: WAVES.count + (hasEchoWave(map) ? 1 : 0),
@@ -472,7 +472,7 @@ export function buildMapSummary(map: MapItem): MapSummaryLine[] {
   const waveLines = [
     `Each wave lasts up to ${WAVES.waveDuration} seconds; unfinished waves stack`,
     `Monsters: ${rosterText(map.baseId)}`,
-    `Wave ${waves.lieutenantWave}: ${bosses.lieutenant.sentence}`,
+    ...(waves.lieutenantWave > 0 ? [`Wave ${waves.lieutenantWave}: ${bosses.lieutenant.sentence}`] : []),
     `Wave ${waves.bossWave}: ${bosses.boss.sentence}`,
   ];
   if (hasEchoWave(map)) waveLines.push(`Wave ${echoWaveIndex(map)}: the Echo wave, double loot`);

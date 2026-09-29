@@ -1,4 +1,4 @@
-// Tier 1–3 across the three map types (GAME_SPEC §7, §13, §14), on demand:
+// Tier 1–3 across all six map types (GAME_SPEC §7, §13, §14), on demand:
 //
 //   BALANCE=1 npx vitest run tests/game-progression/balance-ladder.test.ts      (about ten minutes)
 //
@@ -7,7 +7,7 @@
 // type. Tier 1 is played by a new character. So each map type is measured against identical characters, "on level"
 // for the tier by construction, and the ramp per tier can be compared across map types:
 //   • every map is cleared (through the portals), and on-level maps cost at most two deaths;
-//   • clear times per tier within ±30% of that tier's mean over the three map types;
+//   • clear times per tier within ±30% of that tier's mean over all six map types;
 //   • lowest-life margins comparable (mean lowest life per map type within 0.25 of each other, every type below 0.85);
 //   • boss fights (from the boss's arrival to its fall, the final wave's horde included) take 30–240 s at the median
 //     per map type, and none drags past seven minutes (the first map's Matriarch is the slowest for the bot);

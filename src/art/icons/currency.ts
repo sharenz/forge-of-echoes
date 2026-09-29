@@ -441,6 +441,31 @@ const MAP_COLISEUM: MapTheme = {
   },
 };
 
+const MAP_CHAPEL: MapTheme = { ...MAP_FORGE,
+  seal: [C.voidDeep, C.voidDark, C.voidMid, C.voidLight, C.voidHi],
+  emblem: f => {
+    line(f, 10, 21, 10, 14, C.gold); line(f, 20, 21, 20, 14, C.gold);
+    line(f, 10, 14, 15, 9, C.goldHi); line(f, 15, 9, 20, 14, C.goldHi);
+    line(f, 11, 21, 19, 21, C.metalLight); gem(f, 15, 16, 2, 3, RAMPS.void);
+  },
+};
+const MAP_CRYPT: MapTheme = { ...MAP_OSSUARY,
+  ribbon: [C.voidMid, C.voidLight],
+  emblem: f => {
+    for (let y = 12; y <= 20; y += 4) line(f, 9, y, 21, y, C.ossDark);
+    for (let k = 0; k < 3; k++) { const x = 11 + k * 4; line(f, x, 11, x, 19 - k, C.bone); gem(f, x - 1, 20 - k, 1, 1, RAMPS.bone); }
+  },
+};
+const MAP_WORKS: MapTheme = { ...MAP_COLISEUM,
+  paper: [C.metalDark, C.metalMid, C.metalLight, C.metalHi],
+  emblem: f => {
+    for (let k = 0; k < 3; k++) { const x = 9 + 4 * k, y = 11 + 3 * k;
+      line(f, x, y, x + 4, y, C.goldHi); line(f, x, y + 3, x + 4, y + 3, C.rustLight);
+      line(f, x, y, x, y + 3, C.gold); line(f, x + 4, y, x + 4, y + 3, C.rust);
+    }
+  },
+};
+
 function reliquaryKey(): Frame {
   const f = newIcon();
   const s = new Sculpt();
@@ -494,4 +519,7 @@ export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
   'icon/map/ashenForge': () => finishIcon(mapIcon(MAP_FORGE), C.hot),
   'icon/map/rimedOssuary': () => finishIcon(mapIcon(MAP_OSSUARY), C.ice),
   'icon/map/ironColiseum': () => finishIcon(mapIcon(MAP_COLISEUM)),
+  'icon/map/cinderChapel': () => finishIcon(mapIcon(MAP_CHAPEL), C.voidHi),
+  'icon/map/choralCrypt': () => finishIcon(mapIcon(MAP_CRYPT), C.ice),
+  'icon/map/chainworks': () => finishIcon(mapIcon(MAP_WORKS)),
 };

@@ -110,17 +110,30 @@ export const DEBUFFS: Record<PlayerDebuff, DebuffDef> = {
  * map mod's eruptions (any base) add Burning; the readout adds that itself.
  */
 export const MAP_AFFLICTIONS: Record<MapBaseId, readonly { debuff: PlayerDebuff; sources: readonly string[] }[]> = {
-  ashenForge: [
-    { debuff: 'burning', sources: ['Cinder Spitter lobs', 'the Matriarch’s orbs', 'fire pools'] },
+  cinderChapel: [
+    { debuff: 'burning', sources: ['Cinder Spitter lobs'] },
     { debuff: 'withered', sources: ['Rift Stalker leaps', 'the Herald’s void orbs'] },
   ],
+  choralCrypt: [
+    { debuff: 'chilled', sources: ['Rimeshades', 'Glacial Wisps', 'the Choir Wave'] },
+    { debuff: 'rooted', sources: ['Frost Weaver web shots'] },
+    { debuff: 'frozen', sources: ['Glacial Wisps bursting at point blank'] },
+  ],
+  chainworks: [
+    { debuff: 'bleeding', sources: ['Pit Hound bites', 'crossbow bolts', 'the Chainmaster’s whirling chains'] },
+    { debuff: 'rooted', sources: ['chain hooks', 'tar pools'] },
+  ],
+  ashenForge: [
+    { debuff: 'burning', sources: ['Cinder Spitter lobs', 'the Matriarch’s orbs', 'fire pools'] },
+    { debuff: 'withered', sources: ['Rift Stalker leaps'] },
+  ],
   rimedOssuary: [
-    { debuff: 'chilled', sources: ['Rimeshades', 'Glacial Wisps', 'frost slams', 'the Choir Wave', 'the Warden’s frost'] },
+    { debuff: 'chilled', sources: ['Rimeshades', 'Glacial Wisps', 'frost slams', 'the Warden’s frost'] },
     { debuff: 'rooted', sources: ['Frost Weaver web shots'] },
     { debuff: 'frozen', sources: ['Glacial Wisps bursting at point blank', 'the Warden’s Ice Prison'] },
   ],
   ironColiseum: [
-    { debuff: 'bleeding', sources: ['Pit Hound bites', 'crossbow bolts', 'the Chainmaster’s whirling chains', 'Varkus'] },
+    { debuff: 'bleeding', sources: ['Pit Hound bites', 'crossbow bolts', 'Varkus'] },
     { debuff: 'rooted', sources: ['chain hooks', 'tar pools'] },
   ],
 };

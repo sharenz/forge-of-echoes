@@ -517,7 +517,7 @@ export function describePlay(r: PlayResult): string {
   const m = r.setup.map;
   return `${m.baseId} T${m.tier}: ${r.result} in ${Math.round(r.seconds)}s, wave ${r.wave}, L${r.levelStart}->L${r.levelEnd}, `
     + `kills ${r.kills}, boss ${Math.round(r.bossLife * 100)}%${r.bossSeconds >= 0 ? ` (fight ${Math.round(r.bossSeconds)}s)` : ''}, `
-    + `herald ${r.heraldKilled ? 'dead' : 'alive'}${r.lieutenantSeconds >= 0 ? ` (fight ${Math.round(r.lieutenantSeconds)}s)` : ''}, `
+    + (r.lieutenantSeconds >= 0 ? `lieutenant fight ${Math.round(r.lieutenantSeconds)}s, ` : '')
     + `peak ${r.peakAlive} alive, lowest life ${Math.round(r.minLife * 100)}%, flasks ${r.flasksDrunk}, `
     + `deaths ${r.deaths}, re-entries ${r.reentries}, portals ${r.portalsUsed}/${PORTALS_PER_MAP}, pickups ${r.pickups}`
     + (r.reentries > 0 ? ` (${r.pickupsAfterReentry} after re-entering)` : '');

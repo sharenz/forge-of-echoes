@@ -15,7 +15,7 @@ export const BALANCE_SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 /** At least this many of BALANCE_SEEDS must clear per theme (3 in 4). */
 export const BALANCE_MIN_CLEARS = 9;
 
-const ARENA: Record<MapTheme, number> = { ashenForge: 900, rimedOssuary: 900, ironColiseum: 650 };
+const ARENA: Record<MapTheme, number> = { ashenForge: 900, rimedOssuary: 900, ironColiseum: 650, cinderChapel: 800, choralCrypt: 850, chainworks: 700 };
 /** A map that isn't over after this long is stuck (a softlock, e.g. a boss wedged out of reach). */
 const LIMIT_MINUTES = 20;
 

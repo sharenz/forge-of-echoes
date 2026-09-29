@@ -44,7 +44,7 @@ describe('Tier 1 Rimed Ossuary', () => {
 });
 
 describe('Tier 5 Rimed Ossuary', () => {
-  it('the fair character clears it through the whole roster, the Chorister and the Warden', () => {
+  it('the fair character clears it through the wave family and the Warden', () => {
     const results = [3, 4].map((seed) => {
       const r = playOssuary(seed, fairPlayer(), { ...TIER5 });
       console.info(summary(`T5 fair seed ${seed}`, r));
@@ -52,8 +52,8 @@ describe('Tier 5 Rimed Ossuary', () => {
     });
     for (const r of results) {
       expect(r.result, summary('T5', r)).toBe('cleared');
-      for (const k of OSSUARY_MONSTERS) expect(r.seen.has(k), `${k} never appeared`).toBe(true);
-      expect(r.lieutenant).toBe(monsterDef('boneChorister').name);
+      for (const k of OSSUARY_MONSTERS.filter(k => k !== 'boneChorister')) expect(r.seen.has(k), `${k} never appeared`).toBe(true);
+      expect(r.lieutenant).toBe('');
       expect(r.boss).toBe(monsterDef('hollowWarden').name);
       expect(r.debuffs.get('chilled') ?? 0).toBeGreaterThan(0);
       expect(r.unfair).toEqual([]);

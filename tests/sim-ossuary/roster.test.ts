@@ -63,7 +63,7 @@ describe('the Rimed Ossuary roster', () => {
     expect(def('ossuaryGolem').hitReduction).toBeGreaterThan(0.2);
     expect(def('ossuaryGolem').hitReduction).toBeLessThanOrEqual(def('ironhideBrute').hitReduction!);
     expect(def('boneChorister').heavy).toBe(true);
-    expect(def('boneChorister').role).toBe('lieutenant');
+    expect(def('boneChorister').role).toBe('boss');
     expect(def('hollowWarden').heavy).toBe(true);
     expect(def('hollowWarden').role).toBe('boss');
     expect(def('hollowWarden').boss?.phases).toEqual([0.66, 0.33]);
@@ -90,7 +90,7 @@ describe('the Rimed Ossuary roster', () => {
     const w6 = planWave(world, 6);
     const count = (k: MonsterKind) => w6.packs.reduce((n, pk) => n + pk.members.filter((m) => m === k).length, 0);
     expect(count('boneThrall')).toBeGreaterThan(count('ossuaryGolem'));
-    expect(planWave(world, 3).lieutenant).toBe(true);
+    expect(planWave(world, 3).lieutenant).toBe(false);
     expect(planWave(world, 6).boss).toBe(true);
   });
 });

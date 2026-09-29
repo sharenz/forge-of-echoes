@@ -33,7 +33,7 @@ describe('Tier 1: a new character with the starting kit', () => {
       expect(r.flasksDrunk).toBeGreaterThan(0);
       // …and the first map levels her well past level 1.
       expect(r.levelEnd).toBeGreaterThanOrEqual(4);
-      expect(r.heraldKilled).toBe(true);
+      expect(r.heraldKilled).toBe(false);
     }
   }, 120_000);
 });
@@ -79,8 +79,8 @@ describe('Tier 5', () => {
       const r = playT5(seed, 'strong');
       expect(r.result, `seed ${seed} after ${r.minutes.toFixed(1)} min`).toBe('cleared');
       const roster = THEME_ROSTER.ironColiseum;
-      for (const k of [...roster.family, roster.lieutenant, roster.boss]) expect(r.seen.has(k), `seed ${seed}: ${k} never appeared`).toBe(true);
-      expect(r.lieutenant).toBe(monsterDef('chainmaster').name);
+      for (const k of [...roster.family, roster.boss]) expect(r.seen.has(k), `seed ${seed}: ${k} never appeared`).toBe(true);
+      expect(r.lieutenant).toBe('');
       expect(r.boss).toBe(monsterDef('varkus').name);
     }
   }, 60_000);

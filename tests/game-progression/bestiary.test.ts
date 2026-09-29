@@ -16,6 +16,9 @@ import { craftMap, mapBosses, monsterSentenceName } from '../../src/game/progres
 import { bareCharacter, kill, map, setupFor } from './fixtures';
 
 const BOSSES: Record<MapBaseId, { boss: string; sentence: string; lieutenant: string }> = {
+  cinderChapel: { boss: 'Ashbound Herald', sentence: 'the Ashbound Herald', lieutenant: 'the Ashbound Herald' },
+  choralCrypt: { boss: 'Bone Chorister', sentence: 'the Bone Chorister', lieutenant: 'the Bone Chorister' },
+  chainworks: { boss: 'The Chainmaster', sentence: 'The Chainmaster', lieutenant: 'The Chainmaster' },
   ashenForge: { boss: 'Cinder Matriarch', sentence: 'the Cinder Matriarch', lieutenant: 'the Ashbound Herald' },
   rimedOssuary: { boss: 'The Hollow Warden', sentence: 'The Hollow Warden', lieutenant: 'the Bone Chorister' },
   ironColiseum: { boss: 'Varkus, the Iron Champion', sentence: 'Varkus, the Iron Champion', lieutenant: 'The Chainmaster' },
@@ -64,7 +67,6 @@ describe('map text names the boss', () => {
     expect(waves.breakdown).toEqual([
       'Each wave lasts up to 60 seconds; unfinished waves stack',
       'Monsters: Bone Thralls, Rimeshades, Frost Weavers, Glacial Wisps and Ossuary Golems',
-      'Wave 3: the Bone Chorister',
       'Wave 6: The Hollow Warden',
     ]);
     expect(ossuary.find((l) => l.label === 'Boss')).toEqual({
@@ -80,21 +82,18 @@ describe('map text names the boss', () => {
     const coliseum = lines('ironColiseum');
     expect(coliseum.find((l) => l.label === 'Waves')!.breakdown.slice(1)).toEqual([
       'Monsters: Pit Hounds, Chain Thralls, Iron Crossbowmen, Shieldbearers and Tar Slingers',
-      'Wave 3: The Chainmaster',
       'Wave 6: Varkus, the Iron Champion',
     ]);
     expect(coliseum.find((l) => l.label === 'Afflictions')!.value).toBe('Bleeding, Rooted');
-    expect(coliseum.find((l) => l.label === 'Afflictions')!.breakdown[0]).toBe('Bleeding (from Pit Hound bites, crossbow bolts, the '
-      + 'Chainmaster’s whirling chains and Varkus): Physical damage over 4 seconds, doubled while you move; stacks up to 3 times. '
+    expect(coliseum.find((l) => l.label === 'Afflictions')!.breakdown[0]).toBe('Bleeding (from Pit Hound bites, crossbow bolts and Varkus): Physical damage over 4 seconds, doubled while you move; stacks up to 3 times. '
       + 'Counter: a Life Flask removes it; standing still avoids the doubling');
     expect(coliseum.find((l) => l.label === 'Afflictions')!.breakdown[1]).toMatch(/^Rooted \(from chain hooks and tar pools\): .* Counter: Rift Step breaks it$/);
 
     const forge = lines('ashenForge');
-    expect(forge.find((l) => l.label === 'Waves')!.breakdown.slice(2)).toEqual(['Wave 3: the Ashbound Herald', 'Wave 6: the Cinder Matriarch']);
+    expect(forge.find((l) => l.label === 'Waves')!.breakdown.slice(2)).toEqual(['Wave 6: the Cinder Matriarch']);
     expect(forge.find((l) => l.label === 'Afflictions')!.value).toBe('Burning, Withered');
     // The Herald's void orbs wither too (sim PROJECTILE_RIDERS.heraldOrb), and the source reads before the effect.
-    expect(forge.find((l) => l.label === 'Afflictions')!.breakdown[1]).toBe('Withered (from Rift Stalker leaps and the Herald’s void '
-      + 'orbs): 12% lower resistances per stack for 4 seconds; stacks up to 3 times. Counter: a Focus Flask removes it');
+    expect(forge.find((l) => l.label === 'Afflictions')!.breakdown[1]).toBe('Withered (from Rift Stalker leaps): 12% lower resistances per stack for 4 seconds; stacks up to 3 times. Counter: a Focus Flask removes it');
     // The readout order the UI relies on: Waves, Experience, then the boss and afflictions.
     const labels = forge.map((l) => l.label);
     expect(labels.slice(labels.indexOf('Waves'), labels.indexOf('Waves') + 4)).toEqual(['Waves', 'Experience', 'Boss', 'Afflictions']);
@@ -154,7 +153,7 @@ describe('map text names the boss', () => {
 // tables don't carry. When a roster gains or loses a debuff, update MAP_AFFLICTIONS (and this table if the
 // sim grows a new kind of follow-up).
 describe('the Afflictions readout matches what the sim\'s rosters apply', () => {
-  const ROSTER_DIR: Record<MapBaseId, string> = { ashenForge: 'ashenForge', rimedOssuary: 'ossuary', ironColiseum: 'coliseum' };
+  const ROSTER_DIR: Record<MapBaseId, string> = { ashenForge: 'ashenForge', rimedOssuary: 'ossuary', ironColiseum: 'coliseum', cinderChapel: 'ashenForge', choralCrypt: 'ossuary', chainworks: 'coliseum' };
   /** Debuffs a kind leads to beyond its rider: a hook's pull ends rooted, tar globs leave a tar pool, a wisp freezes at point blank. */
   const FOLLOW_UPS: Partial<Record<ProjectileKind | AreaKind, readonly PlayerDebuff[]>> = {
     chainHook: ['rooted'],

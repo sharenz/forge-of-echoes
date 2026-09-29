@@ -71,10 +71,10 @@ export const FLASK_IDS = ['lifeFlask', 'focusFlask'] as const;
 export type FlaskId = (typeof FLASK_IDS)[number];
 
 /** Map bases. Icon id is `icon/map/<id>`. Each base has its own visual theme. */
-export const MAP_BASE_IDS = ['ashenForge', 'rimedOssuary', 'ironColiseum'] as const;
+export const MAP_BASE_IDS = ['ashenForge', 'rimedOssuary', 'ironColiseum', 'cinderChapel', 'choralCrypt', 'chainworks'] as const;
 export type MapBaseId = (typeof MAP_BASE_IDS)[number];
 
-export const THEMES = ['hideout', 'ashenForge', 'rimedOssuary', 'ironColiseum'] as const;
+export const THEMES = ['hideout', ...MAP_BASE_IDS] as const;
 export type Theme = (typeof THEMES)[number];
 
 /** Sorceress skills. Icon id is `icon/skill/<id>`. `emberLance` is the innate basic attack. */
@@ -87,7 +87,7 @@ export const MONSTER_KINDS = [
   'cinderSpitter',   // artillery: keeps distance, lobs fire spit
   'riftStalker',     // hunter: telegraphed leap onto the player
   'ironhideBrute',   // bruiser: slow, armoured, heavy telegraphed slam
-  'ashboundHerald',  // lieutenant (wave 3): shields/empowers nearby monsters, summons ashlings
+  'ashboundHerald',  // Cinder Chapel boss: shields/empowers nearby monsters, summons ashlings
   'cinderMatriarch', // boss (final wave): multi-phase, telegraphed attacks
   'trainingDummy',   // hideout only: never dies, shows damage numbers
   // Rimed Ossuary roster (GAME_SPEC §14) — appended so existing wire indices stay stable

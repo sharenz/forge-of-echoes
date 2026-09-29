@@ -51,7 +51,7 @@ function enterThemedMap(p: LocalPlayer, clock: Clock, theme: 'rimedOssuary' | 'i
   const map = p.session.record.ch.backpack.entries.map((e) => e.item).find((i): i is MapItem => i.kind === 'map' && i.baseId === theme);
   if (!map) throw new Error(`no ${theme} map`);
   expect(p.command({ c: 'moveItem', uid: map.uid, to: { kind: 'mapDevice' } }).ok).toBe(true);
-  const areaId = theme === 'rimedOssuary' ? 'boneApproach' : 'ironMarch';
+  const areaId = theme === 'rimedOssuary' ? 'boneApproach' : 'championsApproach';
   const ch = p.session.record.ch;
   p.server.game.setCharacter(p.session, { ...ch, atlas: { ...ch.atlas!, discovered: [...ch.atlas!.discovered, areaId] } });
   expect(p.command({ c: 'activateMapDevice', areaId }).ok).toBe(true);
@@ -125,7 +125,7 @@ describe('the new rosters on the server', () => {
       };
       const from = p.mark();
       const bot = createBot();
-      // Play through the lieutenant's wave (3) into wave 4.
+      // Play through wave 3 into wave 4.
       for (let t = 0; t < 60 * 150; t++) {
         if (p.session.instance !== map || map.isDead(p.session)) break;
         p.intent(bot.intent(map.run.view, p.playerId));
@@ -133,7 +133,7 @@ describe('the new rosters on the server', () => {
         if (map.run.view.run.wave >= 4) break;
       }
       // The map's own family came, fought and died — nothing from another roster — and every kill the sim
-      // credited to the player is on their run. (A lieutenant kill is certain only in the cleared run below.)
+      // credited to the player is on their run.
       expect(kills.length).toBeGreaterThan(0);
       for (const k of kills) expect(kinds.has(k.kind), k.kind).toBe(true);
       expect(new Set(kills.filter((k) => roster.family.some((f) => f === k.kind)).map((k) => k.kind)).size).toBeGreaterThanOrEqual(3);
@@ -145,8 +145,8 @@ describe('the new rosters on the server', () => {
       const died = events.filter((e): e is Extract<SimEvent, { t: 'death' }> => e.t === 'death').map((e) => e.kind);
       expect(died.length).toBeGreaterThan(0);
       for (const kind of died) expect(kinds.has(kind), kind).toBe(true);
-      // The wave-3 tell announced the lieutenant (run-wide cue, always delivered).
-      expect(events).toContainEqual(expect.objectContaining({ t: 'waveTell', wave: 3, lieutenant: true }));
+      // Wave 3 announces its ordinary packs without a lieutenant.
+      expect(events).toContainEqual(expect.objectContaining({ t: 'waveTell', wave: 3, lieutenant: false }));
       // Snapshots with the new kinds decode for the viewer.
       expect(p.decodeLast()).not.toBeNull();
 
@@ -224,7 +224,7 @@ describe('the new rosters on the server', () => {
       // The roster's own lieutenant and boss fell to her, and nothing from another roster came.
       const kinds = new Set<string>([...roster.family, roster.lieutenant, roster.boss]);
       for (const k of kills) expect(kinds.has(k.kind), k.kind).toBe(true);
-      expect(kills.filter((k) => k.isLieutenant)).toEqual([expect.objectContaining({ kind: roster.lieutenant, playerId: p.playerId })]);
+      expect(kills.filter((k) => k.isLieutenant)).toEqual([]);
       expect(kills.filter((k) => k.isBoss)).toEqual([expect.objectContaining({ kind: roster.boss, playerId: p.playerId })]);
       const events = eventsOf(p.all('events', from));
       expect(events).toContainEqual(expect.objectContaining({ t: 'bossSpawn' }));

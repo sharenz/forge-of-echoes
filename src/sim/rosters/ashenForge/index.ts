@@ -1,5 +1,5 @@
 // Ashen Forge roster (GAME_SPEC §8, §14): Ashling, Ember Skitter, Cinder Spitter, Rift Stalker, Ironhide
-// Brute, the Ashbound Herald (lieutenant) and the Cinder Matriarch (boss).
+// Brute, the Ashbound Herald (Cinder Chapel boss) and the Cinder Matriarch (boss).
 //
 // Debuffs (GAME_SPEC §13–§14): the spitter's lob, the Matriarch's orbs and every fire pool / eruption set
 // players Burning; Rift Stalker leaps and the Herald's void orbs Wither. Those riders are the defaults of
@@ -48,21 +48,16 @@ export function ashenForgeRoster(): MonsterDef[] {
       brain: brainBrute,
     },
     {
-      // Lieutenants (all three rosters share 850 life): a 25–60 s fight for a character on level for the tier
-      // (balance pass, tests/game-progression/balance-ladder.test.ts), so it rarely survives into the next
-      // waves — the Herald keeps summoning while it lives.
-      kind: 'ashboundHerald', name: 'Ashbound Herald', role: 'lieutenant',
-      radius: 14, life: 1800, speed: 50, damage: 16, xp: 150, damageType: 'void', resist: [0.15, 0.25, 0.15, 0.15, 0.15], knockback: 0,
+      // Promoted Cinder Chapel commander: existing casts and escorts, now a final encounter.
+      kind: 'ashboundHerald', name: 'Ashbound Herald', role: 'boss',
+      radius: 14, life: 3600, speed: 50, damage: 24, xp: 1000, damageType: 'void', resist: [0.15, 0.25, 0.15, 0.15, 0.15], knockback: 0,
       fromWave: 0, weight: 0, weightGrowth: 0,
       heavy: true,
       brain: brainHerald,
       onSpawn: onHeraldSpawn,
     },
     {
-      // Bosses (all three share 1300 life, × tier, easing, the final wave's +40% and party size): the boss wave's
-      // horde included, a character on level for the tier fells her in 45–95 s at the median (alone, 20–35 s).
-      // Her own fire resistance is low (the map's +10% to all resistances brings her to Varkus's 15%): the
-      // Sorceress is a fire caster and the fight must not drag for it.
+      // Existing Ashen Forge final boss; the map split preserves her approved tuning.
       kind: 'cinderMatriarch', name: 'Cinder Matriarch', role: 'boss',
       radius: 24, life: 4800, speed: 42, damage: 26, xp: 1000, damageType: 'fire', resist: [0.2, 0.05, 0.15, 0.15, 0.15], knockback: 0,
       fromWave: 0, weight: 0, weightGrowth: 0,

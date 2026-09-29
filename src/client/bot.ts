@@ -276,6 +276,8 @@ export class Autopilot {
       fx -= (p.x / pr) * k;
       fy -= (p.y / pr) * k;
     }
+    // Static obstacle repulsion must not trigger combat kiting toward a distant target.
+    const combatThreat = Math.hypot(fx, fy);
     fx += avoid.x;
     fy += avoid.y;
     const threat = Math.hypot(fx, fy);
@@ -311,7 +313,7 @@ export class Autopilot {
       if (drop) {
         moveToward(drop.x, drop.y);
         clickIfInReach(drop);
-      } else if (rd > 170 && threat < 0.3) moveToward(m.x[ref], m.y[ref], 140);
+      } else if (rd > 170 && combatThreat < 0.3) moveToward(m.x[ref], m.y[ref], 140);
       else {
         // Kite: flee the threat field while circling the nearest monster.
         const tx = (-dy / rd) * this.orbit;

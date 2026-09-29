@@ -149,6 +149,18 @@ interface DecorEntry {
 
 const DECOR: Record<Theme, readonly DecorEntry[]> = {
   hideout: [],
+  cinderChapel: [
+    { kind: 'ruinWall', weight: 2, radius: 12 }, { kind: 'pillar', weight: 3, radius: 10 },
+    { kind: 'brazier', weight: 3, radius: 7 }, { kind: 'bones', weight: 2, radius: 0 },
+  ],
+  choralCrypt: [
+    { kind: 'bones', weight: 6, radius: 0 }, { kind: 'standingStone', weight: 3, radius: 9 },
+    { kind: 'crystal', weight: 2, radius: 8 }, { kind: 'rubble', weight: 2, radius: 0 },
+  ],
+  chainworks: [
+    { kind: 'pillar', weight: 3, radius: 10 }, { kind: 'brazier', weight: 2, radius: 7 },
+    { kind: 'banner', weight: 3, radius: 0 }, { kind: 'rubble', weight: 4, radius: 0 },
+  ],
   ashenForge: [
     { kind: 'pillar', weight: 3, radius: 10 },
     { kind: 'standingStone', weight: 3, radius: 9 },
@@ -194,7 +206,28 @@ export function layoutMap(w: World): void {
   const table = DECOR[theme].length > 0 ? DECOR[theme] : DECOR.ashenForge;
 
   // Theme set pieces first, so random scatter flows around them.
-  if (theme === 'ironColiseum') {
+  if (theme === 'cinderChapel') {
+    // Two ruined aisles, with wide passages and a clear arrival area.
+    for (const side of [-1, 1]) for (let row = -2; row <= 2; row++) {
+      const x = side * R * 0.3, y = row * R * 0.23;
+      addProp(w, 'pillar', x, y, 10, { variant: (row + 2) % 4 });
+      addProp(w, 'brazier', x + side * 35, y + 25, 7, { variant: (row + 2) % 4 });
+    }
+  } else if (theme === 'choralCrypt') {
+    // A choir of standing tombstones around a broad, open nave.
+    for (let k = 0; k < 10; k++) {
+      const a = k / 10 * TAU, x = Math.cos(a) * R * 0.55, y = Math.sin(a) * R * 0.55;
+      addProp(w, 'standingStone', x, y, 9, { variant: k % 4 });
+      addProp(w, 'bones', x + 18, y + 15, 0, { variant: k % 4 });
+    }
+  } else if (theme === 'chainworks') {
+    // Parallel hauling lines, punctuated by torch-lit work stations.
+    for (const side of [-1, 1]) for (let row = -2; row <= 2; row++) {
+      const x = row * R * 0.23, y = side * R * 0.38;
+      addProp(w, row % 2 === 0 ? 'pillar' : 'brazier', x, y, row % 2 === 0 ? 10 : 7, { variant: (row + 2) % 4 });
+      addProp(w, 'banner', x, y + side * 25, 0, { variant: (row + 2) % 4 });
+    }
+  } else if (theme === 'ironColiseum') {
     // An inner colonnade of pillars alternating with torches.
     const n = 12;
     for (let k = 0; k < n; k++) {

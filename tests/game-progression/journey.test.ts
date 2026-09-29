@@ -82,13 +82,13 @@ describe('journey through the core loop', () => {
     }
     // Summoned minions never drop.
     expect(cfg.hooks.rollKillLoot({ kind: 'ashling', summoned: true, rarity: 'normal', isLieutenant: false, isBoss: false, wave: 3, x: 0, y: 0 }, ids, loot)).toEqual([]);
-    drops.push(...cfg.hooks.rollKillLoot({ kind: 'ashboundHerald', summoned: false, rarity: 'normal', isLieutenant: true, isBoss: false, wave: 3, x: 0, y: 0 }, ids, loot));
     drops.push(...cfg.hooks.rollKillLoot({ kind: 'cinderMatriarch', summoned: false, rarity: 'normal', isLieutenant: false, isBoss: true, wave: 6, x: 0, y: 0 }, ids, loot));
     // Everyone present gets their own completion chest, with a same-tier map or a one-tier upgrade.
     const chest = cfg.hooks.rollChestLoot(ids, loot);
     for (const id of ids) {
       const maps = chest.filter((d) => d.owner === id && d.tone === 'map');
-      expect(maps).toHaveLength(1);
+      expect(maps.length).toBeGreaterThanOrEqual(1);
+      expect(maps.length).toBeLessThanOrEqual(2);
       expect([setup.map.tier, setup.map.tier + 1].some((tier) => maps[0].label.endsWith(`(T${tier})`))).toBe(true);
     }
     drops.unshift(...chest); // picked up first below

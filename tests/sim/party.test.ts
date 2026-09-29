@@ -461,7 +461,7 @@ describe('a full party', () => {
     expect(exited.sort()).toEqual([1, 2, 3, 4]);
     expect(outcomesOf(outcomes, 'waveStart').map((o) => o.wave)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(outcomesOf(outcomes, 'kill').filter((k) => k.isBoss)).toHaveLength(1);
-    expect(outcomesOf(outcomes, 'kill').filter((k) => k.isLieutenant)).toHaveLength(1);
+    expect(outcomesOf(outcomes, 'kill').filter((k) => k.isLieutenant)).toHaveLength(0);
     // The Matriarch was scaled for four (×2.5 life).
     expect(bossLife).toBeGreaterThan(monsterDef('cinderMatriarch').life * TIER5.lifeMultiplier! * 2.4);
     // Everyone pulled their weight (kill credit is spread over the party).

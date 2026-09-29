@@ -50,13 +50,14 @@ interface Audit {
 
 /**
  * A fair bot plays a tier-5 Iron Coliseum (with `splitting`, every monster volley has an extra projectile);
- * every tick is audited (assertions fail inside).
+ * every tick is audited (assertions fail inside). Extra life guarantees the full attack audit;
+ * ordinary-life survival is measured separately by balance-ironColiseum.test.ts.
  */
 function audit(seed: number, splitting = false): Audit {
   const { run, world } = createRunInternal(
     makeConfig({ theme: 'ironColiseum', seed, arenaRadius: 650, scaling: { ...TIER5, extraProjectiles: splitting ? 1 : 0 } }),
   );
-  run.addPlayer(makeJoin(1, { stats: fairStats(), skills: fairSkills(), loadout: STRONG_LOADOUT }));
+  run.addPlayer(makeJoin(1, { stats: { ...fairStats(), maxLife: 1e6 }, skills: fairSkills(), loadout: STRONG_LOADOUT }));
   const bot = createBot();
   const m = world.monsters;
   const pr = world.projectiles;
@@ -200,7 +201,7 @@ describe('Iron Coliseum fairness over whole maps', () => {
     expect(all.get('chainThrall')?.has('hook')).toBe(true);
     expect(all.get('tarSlinger')?.has('tar')).toBe(true);
     expect(all.get('shieldbearer')?.has('bash')).toBe(true);
-    expect(all.get('chainmaster')?.has('hook')).toBe(true);
+    expect(all.has('chainmaster')).toBe(false); // now the Chainworks final boss
     // His cleave ('slam') needs a player inside its 76-unit reach: this kiting bot fells him in about 20 s without
     // ever letting him that close, so it is optional here (varkus.test.ts drives the cleave and its telegraph).
     for (const cue of ['charge', 'mark', 'leap', 'whirl', 'spikes', 'summon']) expect(all.get('varkus')?.has(cue), `varkus '${cue}'`).toBe(true);

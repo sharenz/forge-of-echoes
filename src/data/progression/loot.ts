@@ -89,8 +89,11 @@ export const BOSS_LOOT = {
 } as const;
 
 export const CHEST_LOOT = {
-  equipment: 1,
-  currency: { min: 2, max: 3 },
+  // The removed wave-3 encounter's guarantees now arrive with successful completion.
+  equipment: 2,
+  lastRareChance: 0.3,
+  currency: { min: 4, max: 5 },
+  extraMapChance: 0.5,
   flasks: 1,
   /** One map at the current tier, with this chance of +1 tier (capped at the top tier). */
   mapTierUpgradeChance: 0.25,

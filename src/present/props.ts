@@ -266,7 +266,7 @@ export class PropPainter {
           break;
         }
         case 'standingStone':
-          pen.light(x, y - 20, 30, f.theme === 'rimedOssuary' ? CRYSTAL : PORTAL_EMBER, 0.28, 0.2);
+          pen.light(x, y - 20, 30, (f.theme === 'rimedOssuary' || f.theme === 'choralCrypt') ? CRYSTAL : PORTAL_EMBER, 0.28, 0.2);
           break;
         case 'anvil':
           this.anvil(pen, f, p.id, x, y, vis, hovered, phase);

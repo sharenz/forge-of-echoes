@@ -12,6 +12,9 @@ export const THEME_ROSTER = {
   ashenForge: { family: ['ashling', 'emberSkitter', 'cinderSpitter', 'riftStalker', 'ironhideBrute'], lieutenant: 'ashboundHerald', boss: 'cinderMatriarch' },
   rimedOssuary: { family: ['boneThrall', 'rimeshade', 'frostWeaver', 'glacialWisp', 'ossuaryGolem'], lieutenant: 'boneChorister', boss: 'hollowWarden' },
   ironColiseum: { family: ['pitHound', 'chainThrall', 'ironCrossbowman', 'shieldbearer', 'tarSlinger'], lieutenant: 'chainmaster', boss: 'varkus' },
+  cinderChapel: { family: ['ashling', 'cinderSpitter', 'riftStalker'], lieutenant: 'ashboundHerald', boss: 'ashboundHerald' },
+  choralCrypt: { family: ['boneThrall', 'rimeshade', 'frostWeaver', 'glacialWisp'], lieutenant: 'boneChorister', boss: 'boneChorister' },
+  chainworks: { family: ['pitHound', 'chainThrall', 'ironCrossbowman', 'tarSlinger'], lieutenant: 'chainmaster', boss: 'chainmaster' },
 } as const;
 
 export const PLAYER_DEBUFFS = ['chilled', 'frozen', 'rooted', 'burning', 'bleeding', 'shocked', 'withered'] as const;

@@ -57,7 +57,7 @@ export const WAVES = {
   monstersPerWave: 18,
   waveDuration: 60,
   tellDuration: 3,
-  lieutenantWave: 3,
+  lieutenantWave: 0,
   bossWave: 6,
 } as const;
 
@@ -124,6 +124,36 @@ function roster(theme: keyof typeof THEME_ROSTER): Pick<MapBaseDef, 'family' | '
 }
 
 export const MAP_BASES: Record<MapBaseId, MapBaseDef> = {
+  cinderChapel: {
+    id: 'cinderChapel', name: 'Cinder Chapel', theme: 'cinderChapel',
+    description: 'A charcoal chapel of broken aisles and ember-lit altars. The Ashbound Herald guards its last rite with void orbs and an empowering host.',
+    arenaRadius: 800, ...roster('cinderChapel'),
+    implicitEffects: [
+      { stat: 'packRarity', mode: 'increased', value: 25, fixed: true },
+      more('essenceDropChance', 100),
+    ],
+    dropWeight: 100,
+  },
+  choralCrypt: {
+    id: 'choralCrypt', name: 'Choral Crypt', theme: 'choralCrypt',
+    description: 'Violet stone and bone-lined choirs beneath a silent cathedral. The Bone Chorister raises the fallen and sings expanding rings of frost.',
+    arenaRadius: 850, ...roster('choralCrypt'),
+    implicitEffects: [
+      { stat: 'monsterSpeed', mode: 'increased', value: 10, fixed: true },
+      { stat: 'itemRarity', mode: 'increased', value: 25, fixed: true },
+    ],
+    dropWeight: 100,
+  },
+  chainworks: {
+    id: 'chainworks', name: 'Chainworks', theme: 'chainworks', arenaNote: 'Compact factory floor',
+    description: 'Rusted grates and abandoned hauling lines in a cramped iron works. The Chainmaster drags intruders into his whirling chains.',
+    arenaRadius: 700, ...roster('chainworks'),
+    implicitEffects: [
+      { stat: 'monsterCount', mode: 'increased', value: 15, fixed: true },
+      { stat: 'itemQuantity', mode: 'increased', value: 10, fixed: true },
+    ],
+    dropWeight: 100,
+  },
   ashenForge: {
     id: 'ashenForge',
     name: 'Ashen Forge',
@@ -212,7 +242,7 @@ export const CORRUPTED_MODS: readonly MapModDef[] = [
   mod('seethingHorde', 'Seething Horde', 'corrupted', [inc('monsterCount', 60)], [inc('itemQuantity', 35)]),
   {
     ...mod('matriarchsWrath', "Matriarch's Wrath", 'corrupted', [inc('monsterDamage', 40)], [inc('itemRarity', 50)]),
-    nameByBase: { ashenForge: "Matriarch's Wrath", rimedOssuary: "The Warden's Wrath", ironColiseum: "Varkus's Wrath" },
+    nameByBase: { ashenForge: "Matriarch's Wrath", rimedOssuary: "The Warden's Wrath", ironColiseum: "Varkus's Wrath", cinderChapel: "The Herald's Wrath", choralCrypt: "The Chorister's Wrath", chainworks: "The Chainmaster's Wrath" },
   },
   mod('bloodbound', 'Bloodbound', 'corrupted', [{ stat: 'monsterLife', mode: 'more', value: 40 }],
     [inc('itemQuantity', 25), inc('itemRarity', 25)]),

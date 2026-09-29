@@ -309,7 +309,8 @@ describe('bestiary cohesion with the Ashen Forge roster', () => {
     const tall = (k: string): number => heightAboveAnchor(get(`monster/${k}/idle`), get(`monster/${k}/idle`).frames[0]);
     const family = Math.max(...rosters.flatMap((r) => r.family.map(tall)));
     const lts = rosters.map((r) => tall(r.lieutenant));
-    const bosses = rosters.map((r) => tall(r.boss));
+    // Promoted commanders retain their existing silhouettes. The three original champions remain taller.
+    const bosses = rosters.filter(r => r.boss !== r.lieutenant).map((r) => tall(r.boss));
     expect(family, 'tallest family member vs shortest lieutenant').toBeLessThan(Math.min(...lts));
     expect(Math.max(...lts), 'tallest lieutenant vs shortest boss').toBeLessThan(Math.min(...bosses));
     // bosses within 15% of each other in height; lieutenants within 30% (the Chorister's halo stands proud)

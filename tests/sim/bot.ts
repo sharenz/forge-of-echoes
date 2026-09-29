@@ -291,6 +291,9 @@ export function createBot(opts: BotOptions = {}): Bot {
         fx -= (p.x / pr) * k;
         fy -= (p.y / pr) * k;
       }
+      // Props need steering around, not combat kiting. Counting their repulsion as danger
+      // can strand the bot between pillars while its only enemy stands far away.
+      const combatThreat = Math.hypot(fx, fy);
       fx += ox;
       fy += oy;
       const threat = Math.hypot(fx, fy);
@@ -313,7 +316,7 @@ export function createBot(opts: BotOptions = {}): Bot {
         const dy = m.y[nearest] - p.y;
         const drop = collectDrops && threat < 0.25 && nd > 200 ? nearestDrop(260) : null;
         if (drop) moveToward(drop.x, drop.y);
-        else if (nd > 170 && threat < 0.3) moveToward(m.x[nearest], m.y[nearest], 140);
+        else if (nd > 170 && combatThreat < 0.3) moveToward(m.x[nearest], m.y[nearest], 140);
         else {
           // Kite: flee the threat field while orbiting the nearest monster.
           const tx = (-dy / nd) * orbit;

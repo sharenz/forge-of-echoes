@@ -7,7 +7,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 
 | Question | Decision |
 |---|---|
-| Waves per map | **6.** A lieutenant on wave 3 and a boss on wave 6, both from the map type's own roster (§14): Ashbound Herald / Cinder Matriarch (Ashen Forge), Bone Chorister / The Hollow Warden (Rimed Ossuary), The Chainmaster / Varkus, the Iron Champion (Iron Coliseum). Killing the boss clears the map; the remaining monsters crumble to ash and every player debuff is lifted. |
+| Waves per map | **6.** No wave-3 lieutenant; one final boss on wave 6 from the map type’s roster (§14). The former lieutenants now lead Cinder Chapel, Choral Crypt and Chainworks. Killing the boss clears the map; the remaining monsters crumble to ash and every player debuff is lifted. |
 | Flask belt | **4 slots**, keys `1`–`4`. |
 | Fifth damage type | **void** (purple). |
 | Damage types | **Mechanical.** Monster and player resistances exist (capped at 75%). Ailments: fire → **ignite** (burning DoT), cold → **chill** (30% slow), lightning → **shock** (+20% damage taken). |
@@ -55,7 +55,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 3. **Enter the portal → map run:**
    - A 3 s "Tell" preview announces each wave's families, then the wave spawns.
    - Waves last 60 s or until cleared. They can stack.
-   - The lieutenant arrives on wave 3 and the boss on wave 6. Killing the boss clears the map.
+   - Wave 3 is a normal combat wave; the only named boss arrives on wave 6. Killing the boss clears the map.
    - On clear: a chest spawns and a return portal opens. Kill XP has already been awarded.
 4. **Return:** a run summary appears (kills, XP, items found, best drop). Then craft, equip, allocate points and repeat.
 
@@ -333,9 +333,19 @@ Reward-only mods (Reward Ink):
 - **Cartographer's:** maps 3× as likely
 - **Essence-laden:** essences 3× as likely
 
+**Expanded map roster.** All six bases drop and Rook supplies their free T1 maps. Atlas destinations supply the playable theme: Ember Vault uses Cinder Chapel, Glass Sepulchre uses Choral Crypt, and Iron March uses Chainworks. Other routes retain their original themes and bosses. The Atlas shows the theme and boss before activation.
+
+| New map | Wave family | Final boss | Implicit / arena |
+|---|---|---|---|
+| Cinder Chapel | Ashlings, Cinder Spitters, Rift Stalkers | Ashbound Herald | +25% magic/rare pack chance; essences twice as likely; radius 800 |
+| Choral Crypt | Bone Thralls, Rimeshades, Frost Weavers, Glacial Wisps | Bone Chorister | +10% monster speed; +25% item rarity; radius 850 |
+| Chainworks | Pit Hounds, Chain Thralls, Iron Crossbowmen, Tar Slingers | The Chainmaster | +15% monster count; +10% item quantity; radius 700 |
+
+The new maps have separate floor tiles, decals, lighting, landmark layouts and map emblems. They reuse existing monster art and attack telegraphs. Area-specific arena scales and targeted drop weights still apply.
+
 **Map drops:**
 - The completion chest guarantees one map: 75% at the current tier, 25% one tier higher, capped at Tier 15.
-- Random map drops are same tier 60%, one lower 25%, one higher 15% (within 1–15). Their rarity mirrors equipment (normal 70 · magic 22·m · rare 1.6·m^1.3); all three bases are equally likely.
+- Random map drops are same tier 60%, one lower 25%, one higher 15% (within 1–15). Their rarity mirrors equipment (normal 70 · magic 22·m · rare 1.6·m^1.3); all six bases are equally likely.
 - The merchant always sells T1 (free) and T2 (4 Scrap).
 - **Atlas territory fee:** paid once by the map owner on activation, from inventory/stash Scrap. T1–T3 free;
   T4–T6 cost 1; T7–T9 cost 2; T10–T12 cost 3; T13–T15 cost 4. The device shows the fee before activation.
@@ -423,12 +433,12 @@ dummies use their own tuning and do not receive these rarity multipliers.
 | Cinder Spitter | artillery | 7 | 18 | 40 | 8 | 5 | 2 | Keeps 140–220 away; spits every 2.4 s (projectile speed 150, visible arc). |
 | Rift Stalker | hunter | 8 | 40 | 60 | 14 | 8 | 3 | Every 4 s: a 0.6 s landing telegraph (radius 26), then a leap. |
 | Ironhide Brute | bruiser | 12 | 120 | 34 | 22 | 14 | 4 | 0.9 s windup slam telegraph (radius 42). 40% physical reduction. |
-| **Ashbound Herald** | lieutenant, wave 3 | 14 | 1800 | 50 | 16 | 150 | – | **Aura** (radius 110): allies +30% speed and damage. Keeps 90–140 from the player. Every 6 s summons 6 ashlings. Every 3 s fires 5 void orbs in a spread (they wither). |
+| **Ashbound Herald** | Cinder Chapel boss | 14 | 3600 | 50 | 24 | 1000 | – | **Aura** (radius 110): allies +30% speed and damage. Keeps 90–140 from the player. Every 6 s summons 6 ashlings. Every 3 s fires 5 void orbs in a spread (they wither). |
 | **Cinder Matriarch** | boss, wave 6 | 24 | 4800 | 42 | 26 | 1000 | – | 3 phases at 100/66/33% life. **Orb spiral** (all phases, 0.5× damage per orb). **Slam** (telegraph radius 70, 1.8×). **Meteor rain** (phase 2+: 6–10 telegraphs, 1.2×, then fire pools). **Charge** (phase 3: telegraphed line). Phase 2+ summons skitters. Phase changes are marked by a roar and a short flash. |
 
 This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are in §14. All life and damage values are then multiplied by `MonsterScaling`.
 
-**Balance pass (implemented).** The lieutenant and boss lives above are the result of the cross-theme balance pass (they were 1200 and 7000). With the final wave's horde on the field, boss fights take about 45–95 s solo from Tier 1 to Tier 6 (18–34 s against the boss alone), and a new character clears Tier 1 of every map type (`tests/game-progression/balance-*.test.ts`).
+**Map split (implemented).** Wave 3 retains its ordinary pack budget without a named encounter. Original final-boss tuning is unchanged; the promoted commanders have 3600 life and 24 damage. The removed encounter’s guaranteed loot moves to the completion chest. Fresh-character, ladder and isolated-boss probes measure clear time and pressure after this change.
 
 **Contact damage:**
 - Each monster type has an attack cooldown.
@@ -459,9 +469,8 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 - unique 0.2·m^1.5
 
 **Guaranteed drops** (for every player present, on top of the ordinary roll; m = that player's personal rarity / 100):
-- **Lieutenant:** 1 equipment (≥ magic, ≥ rare 30% of the time), 2 currency, map 50%.
 - **Boss:** 2 equipment (1 guaranteed rare, 1 ≥ magic), 3 currency, and an 8%×m chance of a unique.
-- **Completion chest:** 1 equipment (≥ magic), 2–3 currency, 1 flask, and **1 map** (75% current tier, 25% tier+1; quality 4–12, capped at Tier 15).
+- **Completion chest:** 2 equipment (both ≥ magic; the last ≥ rare 30% of the time), 4–5 currency, 1 flask, and **1 progression map** (75% current tier, 25% tier+1; quality 4–12, capped at Tier 15). A 50% roll adds a second map using normal map-drop tier/quality rules. These additions transfer the removed wave-3 lieutenant’s guarantees to successful completion.
 
 **Making luck *felt* (presentation):**
 - Drop beams by tone:
@@ -733,15 +742,15 @@ Monsters and bosses apply debuffs to players. Each debuff has a clear visual on 
 
 **Readability:** a debuff never comes from an invisible source. Every root and freeze comes from a projectile you can see or a telegraph you can read. Each debuff has an overlay on the player (frost rime, an ice block, bone / web / chain / tar bindings, flames, blood drips, sparks, a void haze), an icon with a timer and stack count above the HUD's skill bar (hover for its effect and counterplay), a sound when it lands and a cleanse flash when it's removed. The map device readout lists each map type's **Afflictions**: which debuffs its monsters inflict, from what, and the counter.
 
-## 14. Bestiary: a family, lieutenant and boss per map type
+## 14. Bestiary: a family and final boss per map type
 
-Each map base has its own theme, monster family, lieutenant (wave 3) and boss (final wave). The sim picks the roster from `RunConfig.theme`.
+Each of six map bases has its own theme, wave family and final boss. Wave 3 has no lieutenant. The sim picks the roster from `RunConfig.theme`. The three former lieutenants retain their attack patterns, gain 3600 base life / 24 damage / 1000 XP, and grant full final-boss rewards when defeated on wave 6.
 
 ### Ashen Forge (fire): existing roster
 
-The roster (Ashling, Ember Skitter, Cinder Spitter, Rift Stalker, Ironhide Brute, **Ashbound Herald**, **Cinder Matriarch**) now applies these debuffs:
+The roster (Ashling, Ember Skitter, Cinder Spitter, Rift Stalker, Ironhide Brute, **Cinder Matriarch**) now applies these debuffs:
 - Burning from Cinder Spitter lobs, Matriarch orbs, fire pools and Volcanic eruptions.
-- Withered from Rift Stalker leaps and the Herald's void orbs.
+- Withered from Rift Stalker leaps. The Herald’s void orbs now appear in Cinder Chapel.
 
 ### Rimed Ossuary (cold, bone)
 
@@ -752,7 +761,7 @@ The roster (Ashling, Ember Skitter, Cinder Spitter, Rift Stalker, Ironhide Brute
 | **Frost Weaver** | artillery | A spindly bone spider. Keeps its distance and fires a slow **web shot** that roots on hit. Visible, and it can be dodged. |
 | **Glacial Wisp** | fast | A floating ice shard that rushes you, pulses for 0.7 s (telegraph ring), then bursts: chills everyone in the radius, and freezes them if they're within point blank at the burst. |
 | **Ossuary Golem** | bruiser | Big bone-and-ice construct. Telegraphed frost slam that chills. |
-| **Bone Chorister** (lieutenant) | – | Robed singer that keeps 100–165 away. Its aura (radius 110) makes allies +25% faster. Every 9 s it raises Bone Thralls from up to 4 nearby corpses (topped up from the ground to at least 2), never while 160+ monsters are alive. Every 4 s a **Choir Wave**: 2 expanding frost rings with 3 gaps each that you walk through (chill on touch). |
+| **Bone Chorister** (Choral Crypt boss) | – | Robed singer that keeps 100–165 away. Its aura (radius 110) makes allies +25% faster. Every 9 s it raises Bone Thralls from up to 4 nearby corpses (topped up from the ground to at least 2), never while 160+ monsters are alive. Every 4 s a **Choir Wave**: 2 expanding frost rings with 3 gaps each that you walk through (chill on touch). |
 | **The Hollow Warden** (boss) | – | Crowned rime-lich with a frozen lantern. See below. |
 
 The Hollow Warden's attacks:
@@ -771,7 +780,7 @@ The Hollow Warden's attacks:
 | **Iron Crossbowman** | artillery | Aims (a 0.6 s laser-line telegraph), then fires a fast bolt that causes Bleeding. |
 | **Shieldbearer** | bruiser | Tower shield. **Blocks player projectiles from the front** (a 120° arc), so you have to flank it. Shield bash knockback. |
 | **Tar Slinger** | support | Lobs tar that leaves a **tar pool**: slows 50% while you stand in it, and roots on first contact. |
-| **The Chainmaster** (lieutenant) | – | Whirls chains (a telegraphed spinning ring), hooks the farthest player and pulls them in, and summons Chain Thralls. |
+| **The Chainmaster** (Chainworks boss) | – | Whirls chains (a telegraphed spinning ring), hooks the farthest player and pulls them in, and summons Chain Thralls. |
 | **Varkus, the Iron Champion** (boss) | – | Gladiator with a greatsword and a shield. See below. |
 
 Varkus's attacks:
@@ -793,10 +802,10 @@ The new monsters use the same scaling, packs, magic and rare mods, XP and loot r
 | Frost Weaver | 18 | 40 | 7 | 5 | Iron Crossbowman | 20 | 40 | 6 | 5 |
 | Glacial Wisp | 12 | 82 | 8 | 3 | Shieldbearer | 100 | 32 | 18 | 14 |
 | Ossuary Golem | 114 | 32 | 22 | 14 | Tar Slinger | 24 | 38 | 7 | 6 |
-| **Bone Chorister** | 1800 | 36 | 16 | 150 | **The Chainmaster** | 1800 | 40 | 16 | 150 |
+| **Bone Chorister** | 3600 | 36 | 24 | 1000 | **The Chainmaster** | 3600 | 40 | 24 | 1000 |
 | **The Hollow Warden** | 4000 | 60 | 26 | 1000 | **Varkus, the Iron Champion** | 4800 | 46 | 26 | 1000 |
 
-Lieutenants match the Herald (850) and bosses the Matriarch (1300) after the balance pass (§8). The three map types clear in about the same time at every tier (within ±7% of each other in the balance ladder); the Coliseum hits a little harder, since its physical damage ignores the elemental resistances characters stack.
+The three promoted commanders use 3600 life / 24 damage; the original Matriarch and Varkus retain 4800 / 26, and the Warden 4000 / 26 before her map’s +20% life. The original three bosses retain their phase scripts; the commanders reuse their continuous cast, summon and aura cycles.
 
 ### Later
 

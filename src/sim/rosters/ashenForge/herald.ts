@@ -1,4 +1,4 @@
-// The Ashbound Herald (Ashen Forge lieutenant, wave 3).
+// The Ashbound Herald (Cinder Chapel final boss).
 import { DT, HERALD_AURA_RADIUS } from '../../constants';
 import {
   DAMAGE_INDEX, MONSTER_ANIM as ANIM, MSTATE, PROJ, TAU, empowerMult, extraProjectiles, faceTarget, fieldFull, fireHostile, moveAlong,

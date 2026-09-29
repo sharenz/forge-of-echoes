@@ -164,7 +164,7 @@ export function makeScaling(o: Partial<MonsterScaling> = {}): MonsterScaling {
 }
 
 export function makeWaves(o: Partial<WaveConfig> = {}): WaveConfig {
-  return { count: 6, baseMonsters: 40, monstersPerWave: 18, waveDuration: 60, tellDuration: 3, lieutenantWave: 3, bossWave: 6, ...o };
+  return { count: 6, baseMonsters: 40, monstersPerWave: 18, waveDuration: 60, tellDuration: 3, lieutenantWave: 0, bossWave: 6, ...o };
 }
 
 export interface KillRoll {
@@ -292,6 +292,7 @@ export interface ConfigOptions {
 
 const MAP_NAMES: Record<Theme, string> = {
   hideout: 'Hideout', ashenForge: 'Ashen Forge', rimedOssuary: 'Rimed Ossuary', ironColiseum: 'Iron Coliseum',
+  cinderChapel: 'Cinder Chapel', choralCrypt: 'Choral Crypt', chainworks: 'Chainworks',
 };
 
 export function makeConfig(o: ConfigOptions = {}): RunConfig {

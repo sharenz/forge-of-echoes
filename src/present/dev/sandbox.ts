@@ -3,7 +3,7 @@
 // rendered through the presenter with the real renderer, art and audio. Player 1 is the local player.
 //
 // Query params:
-//   ?theme=ashenForge|rimedOssuary|ironColiseum|hideout   zone look (hideout = your courtyard with its portal)
+//   ?theme=<map base>|hideout   zone look (all six map bases; hideout = your courtyard with its portal)
 //   ?players=1..4        party size (bots)
 //   ?wave=N              fast-forward (with short waves) until wave N has started
 //   ?boss=1              fast-forward to the boss wave
@@ -46,7 +46,7 @@
 //                          party        the whole party in a row beside the local player (debuff comparisons)
 //                          areas        every bestiary area of the theme, part-way through its telegraph
 //                          projectiles  every bestiary projectile in flight (a chain hook with its chain, a tar lob)
-import type { Theme } from '../../contracts/content';
+import { THEMES, type Theme } from '../../contracts/content';
 import { SNAPSHOT_EVERY, type ZoneInfo } from '../../contracts/net';
 import type { RunSetup } from '../../contracts/game';
 import type { CharacterSave, Item, MapItem } from '../../contracts/items';
@@ -98,7 +98,6 @@ declare global {
 }
 
 const qs = new URLSearchParams(location.search);
-const THEMES: Theme[] = ['hideout', 'ashenForge', 'rimedOssuary', 'ironColiseum'];
 const theme = (THEMES.includes(qs.get('theme') as Theme) ? qs.get('theme') : 'ashenForge') as Theme;
 const hideout = theme === 'hideout';
 const partySize = Math.max(1, Math.min(4, Number(qs.get('players') ?? 1) || 1));

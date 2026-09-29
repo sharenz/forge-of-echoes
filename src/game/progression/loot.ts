@@ -309,12 +309,16 @@ export function rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave |
   const m = lootLuck(setup, looter).itemRarity / 100;
   const origin = `Found in the reward chest of ${ctx.place}`;
   const out: Item[] = [];
-  for (let i = 0; i < CHEST_LOOT.equipment; i++) out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, m, 'magic'), origin));
+  for (let i = 0; i < CHEST_LOOT.equipment; i++) {
+    const min = i === CHEST_LOOT.equipment - 1 && rng.chance(CHEST_LOOT.lastRareChance) ? 'rare' : 'magic';
+    out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, m, min), origin));
+  }
   const currency = rng.int(CHEST_LOOT.currency.min, CHEST_LOOT.currency.max);
   for (let i = 0; i < currency; i++) out.push(makeCurrency(ctx, rng));
   for (let i = 0; i < CHEST_LOOT.flasks; i++) out.push(makeFlask(rng));
   const tier = Math.min(MAX_MAP_TIER, ctx.tier + (rng.chance(CHEST_LOOT.mapTierUpgradeChance) ? 1 : 0));
   out.push(makeMap(rng, tier, m, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max)));
+  if (rng.chance(CHEST_LOOT.extraMapChance)) out.push(makeRandomMap(ctx, rng, m));
   return out;
 }
 

@@ -55,7 +55,7 @@ export const ATLAS_AREAS: readonly AtlasAreaDef[] = [
     classWeights: { ring: 2, amulet: 2 },
   },
   {
-    id: 'emberVault', name: 'Ember Vault', type: 'vault', baseId: 'ashenForge', depth: 2, tierCeiling: 3,
+    id: 'emberVault', name: 'Ember Vault', type: 'vault', baseId: 'cinderChapel', depth: 2, tierCeiling: 3,
     neighbours: ['emberRoad'], x: 41, y: 6, deadEnd: true, arenaScale: 0.8,
     description: 'A dead end for targeted crafting supplies. Its tier limit matches Ember Road.',
     currencyWeights: { essenceEmber: 2, seal: 3 },
@@ -68,16 +68,16 @@ export const ATLAS_AREAS: readonly AtlasAreaDef[] = [
     classWeights: { wand: 2, sceptre: 2, focus: 2 }, currencyWeights: { catalyst: 2 }, arenaScale: 1.1,
   },
   {
-    id: 'glassSepulchre', name: 'Glass Sepulchre', type: 'crypt', baseId: 'rimedOssuary', depth: 2,
+    id: 'glassSepulchre', name: 'Glass Sepulchre', type: 'crypt', baseId: 'choralCrypt', depth: 2,
     neighbours: ['boneApproach', 'furnaceYard'], x: 44, y: 56,
     description: 'Jewellery and crafting Solvents, with a passage toward the furnaces.',
     classWeights: { ring: 2, amulet: 2 }, currencyWeights: { solvent: 2 }, arenaScale: 0.85,
     ingredientDrops: [{ currencyId: 'prefixRune', chance: 0.25, minTier: 3 }],
   },
   {
-    id: 'ironMarch', name: 'Iron March', type: 'arena', baseId: 'ironColiseum', depth: 2,
+    id: 'ironMarch', name: 'Iron March', type: 'arena', baseId: 'chainworks', depth: 2,
     neighbours: ['boneApproach', 'championsApproach'], x: 44, y: 84,
-    description: 'Armour bases with extra Stability; Fracture Cores are favoured.',
+    description: 'The Chainmaster’s factory favours armour and Fracture Cores, with more monsters and more drops.',
     classWeights: { helmet: 2, chest: 2, gloves: 2, boots: 2 }, currencyWeights: { fractureCore: 3 },
   },
   {

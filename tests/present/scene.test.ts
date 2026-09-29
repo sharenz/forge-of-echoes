@@ -3,7 +3,7 @@
 // and danger convergence (meteor showers bunched on one spot never sum into a white blob over the player).
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ArtBundle, SpriteDef } from '../../src/contracts/art';
-import { MONSTER_KINDS } from '../../src/contracts/content';
+import { MAP_BASE_IDS, MONSTER_KINDS } from '../../src/contracts/content';
 import type { PresentInput } from '../../src/contracts/present';
 import { RARITY_CODE, type AreaView, type PropView, type SimEvent, type WorldView } from '../../src/contracts/sim';
 import { generateSprites } from '../../src/art';
@@ -186,7 +186,7 @@ describe('retired XP orbs', () => {
 });
 
 describe('readability', () => {
-  const MAPS = ['ashenForge', 'rimedOssuary', 'ironColiseum'] as const;
+  const MAPS = MAP_BASE_IDS;
   const lum = (c: readonly number[]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 
   /** src/render: actors ('world' sprites) receive 2.5× the frame ambient in total (the actor lift). */

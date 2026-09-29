@@ -134,8 +134,8 @@ describe('Void Needle', () => {
 
   it('adds an Echo wave: 7 waves with the boss on 6', () => {
     const echo: MapItem = { ...map(), corrupted: true, mods: [{ modId: 'echo', value: 100, corrupted: true }] };
-    expect(waveConfig(echo)).toMatchObject({ count: 7, bossWave: 6, lieutenantWave: 3 });
-    expect(waveConfig(map())).toMatchObject({ count: 6, bossWave: 6, lieutenantWave: 3, baseMonsters: 40, monstersPerWave: 18, waveDuration: 60, tellDuration: 3 });
+    expect(waveConfig(echo)).toMatchObject({ count: 7, bossWave: 6, lieutenantWave: 0 });
+    expect(waveConfig(map())).toMatchObject({ count: 6, bossWave: 6, lieutenantWave: 0, baseMonsters: 40, monstersPerWave: 18, waveDuration: 60, tellDuration: 3 });
   });
 });
 

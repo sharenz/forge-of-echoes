@@ -11,7 +11,7 @@ import { ofType, pv, stepN, stepWith, walkIntent } from './helpers';
 const sturdy = () => makeStats({ maxLife: 1e9, evasion: 0 });
 
 describe('full map with the bot', () => {
-  it('clears 6 waves: herald on 3, matriarch on 6, chest, loot, return portal', () => {
+  it('clears 6 waves: no wave-3 boss, matriarch on 6, chest, loot, return portal', () => {
     const { hooks, log } = makeHooks({ dropChance: 0.1 });
     const { run } = makeSolo({ seed: 11, stats: strongStats(), skills: strongSkills(), loadout: STRONG_LOADOUT, scaling: TIER5, hooks });
     const bot = createBot();
@@ -35,19 +35,19 @@ describe('full map with the bot', () => {
     const kinds = outcomes.map((o) => o.t);
     expect(kinds).not.toContain('playerDied');
     expect(outcomes.filter((o) => o.t === 'waveStart').map((o) => (o.t === 'waveStart' ? o.wave : 0))).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(lieutenantWave).toBe(3);
+    expect(lieutenantWave).toBe(0);
     expect(bossWave).toBe(6);
 
     const tells = ofType(events, 'waveTell');
     expect(tells.map((e) => e.wave)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(tells[2].lieutenant).toBe(true);
+    expect(tells.every(tell => !tell.lieutenant)).toBe(true);
     expect(tells[5].boss).toBe(true);
     expect(tells[0].families).toContain('ashling');
     expect(ofType(events, 'bossSpawn')).toHaveLength(1);
     expect(ofType(events, 'bossPhase').map((e) => e.phase)).toEqual([2, 3]);
 
     const kills = outcomes.filter((o): o is Extract<SimOutcome, { t: 'kill' }> => o.t === 'kill');
-    expect(kills.filter((k) => k.isLieutenant)).toHaveLength(1);
+    expect(kills.filter((k) => k.isLieutenant)).toHaveLength(0);
     expect(kills.filter((k) => k.isBoss)).toHaveLength(1);
     expect(kills.length).toBeGreaterThan(300);
     // Ordering of the finale.

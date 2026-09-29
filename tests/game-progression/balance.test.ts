@@ -58,11 +58,16 @@ describe('balance smoke (always on)', () => {
     expect(r.minLife, describePlay(r)).toBeLessThan(0.5);
   }, 90_000);
 
+  it('the bot reaches the distant boss across the seed-2 pillar cluster instead of kiting static props forever', () => {
+    const r = freshTier1(2, { reenterAfter: REENTER, maxMinutes: 15 });
+    expectFirstMap(r);
+    expect(r.bossLife, describePlay(r)).toBe(0);
+  }, 90_000);
+
   it('a player who dies walks back in through a portal and keeps looting', () => {
-    // One and a half times the monster damage: she dies several times but the map is still winnable (the melee cap
-    // keeps a swarm from one-shotting her, and every re-entry brings her back at full life). Twice the damage already
-    // spends all 8 portals on a Tier 1 boss.
-    const r = freshTier1(SEEDS[0], { reenterAfter: REENTER, maxMinutes: 25, tweakConfig: (c) => { c.monsters.damageMultiplier *= 1.5; } });
+    // Force the death/re-entry path at 1.8× damage after removing the wave-3 boss.
+    // This is a portal regression probe, separate from the unmodified first-map balance check.
+    const r = freshTier1(SEEDS[0], { reenterAfter: REENTER, maxMinutes: 25, tweakConfig: (c) => { c.monsters.damageMultiplier *= 1.8; } });
     expect(r.deaths, describePlay(r)).toBeGreaterThan(0);
     expect(r.reentries).toBe(r.deaths);
     expect(r.portalsUsed).toBe(1 + r.reentries);

@@ -10,7 +10,7 @@ const TICKS = 3000;
 
 /**
  * Golden digests of the long-standing paths (bot play through waves, packs, elites, hazards, skills,
- * loot scatter, the Herald, the Matriarch and the clear). The replay tests below only compare the
+ * loot scatter, the Matriarch and the clear). The replay tests below only compare the
  * code with itself; these catch any drift of the old behaviour. Nothing but src/sim, src/core/rng and
  * the frozen contracts feeds them (the fixtures and the bot are local), so they only move when the
  * sim's behaviour does. A DELIBERATE behaviour change updates them — say so in the change; an
@@ -37,11 +37,12 @@ const TICKS = 3000;
  *    213161676 in 17553 ticks. 4242 is unchanged (its 3000 ticks end before the Herald arrives).
  */
 /** record(4242): digests after ticks 1000, 2000 and 3000. */
-// Re-pinned for stronger magic/rare monsters: rarity now multiplies life and damage before pack mods.
-const GOLDEN_4242 = [3208589199, 586601874, 1198223135];
+// Re-pinned 2026-09-30 for the bot's pillar-navigation fix: static props no longer stop pursuit.
+const GOLDEN_4242 = [3862589358, 962656964, 3095429188];
 /** The whole tier-5 map at seed 9001 (the bot clears it and takes the return portal): its final digest and length. */
-// Re-pinned 2026-09-29 for stronger magic/rare monsters; named boss damage is unchanged.
-const GOLDEN_9001 = { digest: 915999914, ticks: 15850 };
+// Re-pinned 2026-09-30 after removing the wave-3 lieutenant and fixing bot pursuit around pillars.
+// The complete intent recording still replays to identical intermediate and final digests below.
+const GOLDEN_9001 = { digest: 329571751, ticks: 18075 };
 const strong = { stats: strongStats(), skills: strongSkills(), loadout: STRONG_LOADOUT };
 
 function soloRun(seed: number, extra: Partial<ConfigOptions> = {}): SimRun {
@@ -96,7 +97,7 @@ describe('determinism', () => {
     expect([a.digests[9], a.digests[19], a.digests[29]]).toEqual(GOLDEN_4242);
   });
 
-  it('a whole tier-5 map (elites, hazards, extra projectiles, herald, boss, clear) replays exactly', () => {
+  it('a whole tier-5 map (elites, hazards, extra projectiles, boss, clear) replays exactly', () => {
     const cfg = () =>
       makeConfig({ seed: 9001, scaling: { ...TIER5, magicPackChance: 0.4, rarePackChance: 0.2, hazards: true, extraProjectiles: 1 } });
     const run = createRun(cfg());
@@ -120,7 +121,7 @@ describe('determinism', () => {
     }
     // The run really covered the whole map.
     expect(done).toBe(true);
-    expect([...seen].sort()).toEqual(['bossPhase', 'cleared', 'herald', 'waveStart']);
+    expect([...seen].sort()).toEqual(['bossPhase', 'cleared', 'waveStart']);
     expect(run.view.run.phase).toBe('cleared');
 
     const again = createRun(cfg());

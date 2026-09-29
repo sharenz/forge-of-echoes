@@ -116,7 +116,7 @@ describe('buildRunConfig', () => {
     expect(cfg).toMatchObject({ mode: 'map', theme: 'ironColiseum', tier: 2, arenaRadius: 650, seed: setup.seed, mapName: 'Volcanic Iron Coliseum' });
     expect(cfg.monsters).toMatchObject({ level: 10, hazards: true });
     expect(cfg.monsters.countMultiplier).toBeCloseTo(1.25, 10);
-    expect(cfg.waves).toEqual({ count: 6, baseMonsters: 40, monstersPerWave: 18, waveDuration: 60, tellDuration: 3, lieutenantWave: 3, bossWave: 6 });
+    expect(cfg.waves).toEqual({ count: 6, baseMonsters: 40, monstersPerWave: 18, waveDuration: 60, tellDuration: 3, lieutenantWave: 0, bossWave: 6 });
   });
 });
 

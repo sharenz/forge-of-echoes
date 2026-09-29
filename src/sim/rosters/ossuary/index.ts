@@ -16,7 +16,7 @@
 //                   walking into it and it catches you; stop, turn or sidestep while it flies and it misses.
 //   Ossuary Golem   bruiser (wave 4+): armoured (35% less damage from hits); a 1 s frost slam telegraph
 //                   (frostNovaWarning) in front of it that Chills.
-//   Bone Chorister  lieutenant: haste aura (allies +25% speed); every 4 s a Choir Wave — two expanding
+//   Bone Chorister  Choral Crypt boss: haste aura (allies +25% speed); every 4 s a Choir Wave — two expanding
 //                   frost rings with three gaps each, the second ring's gaps turned a little further (stand
 //                   where both overlap; Chilled on touch); raises Bone Thralls from corpses, or the ground,
 //                   every 9 s (never onto a saturated field: SUMMON_FIELD_CAP).
@@ -92,15 +92,15 @@ export function ossuaryRoster(): MonsterDef[] {
       }),
     },
     {
-      kind: 'boneChorister', name: 'Bone Chorister', role: 'lieutenant',
-      radius: 14, life: 1800, speed: 36, damage: 16, xp: 150, damageType: 'cold', resist: [0.15, 0.1, 0.3, 0.15, 0.15], knockback: 0,
+      kind: 'boneChorister', name: 'Bone Chorister', role: 'boss',
+      radius: 14, life: 3600, speed: 36, damage: 24, xp: 1000, damageType: 'cold', resist: [0.15, 0.1, 0.3, 0.15, 0.15], knockback: 0,
       fromWave: 0, weight: 0, weightGrowth: 0,
       heavy: true,
       brain: brainChorister,
       onSpawn: onChoristerSpawn,
     },
     {
-      // The bosses' 1300 life, less the Ossuary's +20% monster life (MAP_BASES implicit): in her own map she has
+      // The champions' 4800 life, less the Ossuary's +20% monster life (MAP_BASES implicit): in her own map she has
       // about the Matriarch's and Varkus's life. A rime-lich, she burns (−10% fire, like her family).
       kind: 'hollowWarden', name: 'The Hollow Warden', role: 'boss',
       radius: 22, life: 4000, speed: 60, damage: 26, xp: 1000, damageType: 'cold', resist: [0.2, -0.1, 0.35, 0.15, 0.2], knockback: 0,

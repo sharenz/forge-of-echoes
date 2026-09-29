@@ -3,7 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5|qol|account|atlas|events|crafting|economy] [--smoke 30] [--lieutenant]
+//                        [--only wave5|qol|account|atlas|events|crafting|economy|maps] [--smoke 30]
 //
 // --prod tests the production bundle instead of the Vite dev server: `vite build` (with VITE_FOE_DEBUG=1, so the
 // window.__foe hooks this script drives are compiled in) into a temp dir, served by the game server itself
@@ -45,7 +45,6 @@
 //      stack caps, root sources); no errors. A fall before the checks are done goes back in through the portal. Then
 //      home. No debug fast path is needed: every wave draws from the map's own family (thralls from wave 2); the
 //      tables and constants these checks use are loaded from src/contracts and src/sim (tsx), never copied.
-//      --lieutenant fights on until wave 3's lieutenant shows up.
 // Asserts throughout: no page errors, console errors or unexpected console warnings (a malformed server message is a
 // warning), each client only ever sees its own loot or public drops (in snapshots AND drop/pickup events), portal
 // counts, zones and run summaries. Prints PASS/FAIL per step and exits 0 / 1.
@@ -71,12 +70,11 @@ const QOL_ONLY = opt('only', 'all') === 'qol';
 const ACCOUNT_ONLY = opt('only', 'all') === 'account';
 const ATLAS_ONLY = opt('only', 'all') === 'atlas';
 const EVENTS_ONLY = opt('only', 'all') === 'events';
+const MAPS_ONLY = opt('only', 'all') === 'maps';
 const ECONOMY_ONLY = opt('only', 'all') === 'economy';
 const CRAFTING_ONLY = opt('only', 'all') === 'crafting' || ECONOMY_ONLY;
 /** Seconds of fighting in each new map type (longer while its family has not shown two kinds yet). */
 const SMOKE_SECONDS = Number(opt('smoke', '30'));
-/** --lieutenant: keep fighting each new map type until its lieutenant (wave 3) is on the field. */
-const WANT_LIEUTENANT = flag('lieutenant');
 const PROD = flag('prod');
 const [VW, VH] = opt('size', '1024x600').split('x').map(Number);
 const SHOTS = join(root, '.shots');
@@ -1678,9 +1676,9 @@ async function wave5Scenario({ A }) {
       await A.eval((bait) => window.__foe.bot.enable({ returnPortal: false, collect: true, skills: false, bait }), check.bait);
       const allowed = new Set([...roster.family, roster.lieutenant, roster.boss]);
       const met = (rec) => check.require.every((id) => rec.hudDebuffs[id]) && rec.holds.length > 0;
-      const shots = { debuff: null, hold: null, lieutenant: false, fight: false };
+      const shots = { debuff: null, hold: null, fight: false };
       let deaths = 0;
-      const limit = SMOKE_SECONDS + BAIT_BUDGET_SECONDS + (WANT_LIEUTENANT ? 240 : 0);
+      const limit = SMOKE_SECONDS + BAIT_BUDGET_SECONDS;
       const started = Date.now();
       let sec = 0;
       let rec = null;
@@ -1696,10 +1694,6 @@ async function wave5Scenario({ A }) {
         if (!shots.hold && rec.debuffNow && /rooted|frozen/.test(rec.debuffNow)) {
           shots.hold = rec.debuffNow;
           await A.shot(`w5-07-hold-${tag}-A`);
-        }
-        if (!shots.lieutenant && rec.monsters[roster.lieutenant]) {
-          shots.lieutenant = true;
-          await A.shot(`w5-08-lieutenant-${tag}-A`);
         }
         if (!shots.fight && sec >= 6) {
           shots.fight = true;
@@ -1722,7 +1716,7 @@ async function wave5Scenario({ A }) {
           await A.waitFor('the map again', () => window.__foe.store.get().zone === 'map', undefined, 30_000);
           continue;
         }
-        const done = !baiting && sec >= SMOKE_SECONDS && family.length >= 2 && (!WANT_LIEUTENANT || shots.lieutenant);
+        const done = !baiting && sec >= SMOKE_SECONDS && family.length >= 2;
         if (done || sec >= limit) break;
       }
       await A.shot(`w5-09-end-${tag}-A`);
@@ -1879,7 +1873,7 @@ async function atlasScenario({ A, port }) {
     await A.page.locator('.fe-device__destination').click();
     assert(await A.page.locator('.fe-atlas__node--known').count() === 1, 'fresh Atlas has extra revealed areas');
     assert(await A.page.locator('.fe-atlas__node:disabled').count() === 11, 'fog areas are not disabled');
-    await A.shot('atlas-fresh');
+    await A.shot(`atlas-fresh-${VW}x${VH}`);
   });
   await step('explored Atlas handles tier limits and an item from another theme', async () => {
     // Seed only the harness's disposable database while its server is stopped. Backend tests exercise
@@ -1912,16 +1906,23 @@ async function atlasScenario({ A, port }) {
     await A.page.getByRole('button', { name: /^Cinder Crossing,/ }).click();
     assert(await A.page.getByRole('button', { name: 'Use this area', exact: true }).isDisabled(), 'Tier 3 should not fit the starting area');
     await A.page.getByRole('button', { name: /^Bone Approach,/ }).click();
-    await A.shot('atlas-explored');
+    const overlaps = await A.eval(() => {
+      const nodes = [...document.querySelectorAll('.fe-atlas__node')].map(n => ({ name: n.textContent, r: n.getBoundingClientRect() }));
+      return nodes.flatMap((a, i) => nodes.slice(i + 1).filter(b =>
+        a.r.left < b.r.right && a.r.right > b.r.left && a.r.top < b.r.bottom && a.r.bottom > b.r.top
+      ).map(b => `${a.name} / ${b.name}`));
+    });
+    assert(overlaps.length === 0, `Atlas area cards overlap: ${overlaps.join('; ')}`);
+    await A.shot(`atlas-explored-${VW}x${VH}`);
     await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
     assert((await A.page.locator('.fe-device__destination').innerText()).includes('Bone Approach'), 'area choice was not retained');
-    await A.shot('atlas-device');
+    await A.shot(`atlas-device-${VW}x${VH}`);
   });
   await step('the Sealed Reliquary consumes one key and opens the selected area', async () => {
     await A.page.locator('.fe-device__destination').click();
     await A.page.getByRole('button', { name: /^Sealed Reliquary,/ }).click();
     await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
-    await A.shot('atlas-sealed');
+    await A.shot(`atlas-sealed-${VW}x${VH}`);
     await A.page.locator('.fe-device__activate').click();
     await A.waitFor('sealed area portal and key spent', () => {
       const s = window.__foe.store.get();
@@ -2183,6 +2184,102 @@ async function eventsScenario({ A, port }) {
   }
 }
 
+async function expandedMapsScenario({ A, port }) {
+  await step('prepare three new map types and a strong character in the disposable database', async () => {
+    outage = true;
+    await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const { tsImport } = await import('tsx/esm/api');
+    const { ATLAS_AREA_IDS } = await tsImport('../src/contracts/atlas.ts', import.meta.url);
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const storage = db.prepare('SELECT account_id, data FROM account_storage').get();
+    const shared = JSON.parse(storage.data);
+    shared.atlas = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 12 };
+    shared.mapStash = ['cinderChapel', 'choralCrypt', 'chainworks'].map(baseId => ({
+      kind: 'map', uid: `e2e-${baseId.toLowerCase()}:i1`, baseId, tier: 1, rarity: 'normal', mods: [], quality: 0, corrupted: false,
+    }));
+    db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), storage.account_id);
+    const row = db.prepare('SELECT id, data FROM characters').get();
+    const ch = JSON.parse(row.data);
+    ch.level = 50;
+    ch.allocated = { str: 100, dex: 50, int: 100 };
+    for (const id of Object.keys(ch.skillRanks)) ch.skillRanks[id] = 20;
+    ch.loadout = ['emberLance', 'emberNova', 'arcChain', 'flameWave', 'cinderWard', 'riftStep'];
+    ch.backpack.entries = [];
+    ch.mapDevice = null;
+    db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(ch), row.id);
+    db.close();
+    await startGameServer(port);
+    await A.waitFor('new maps after reconnect', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.mapStash?.length === 3, undefined, 30_000);
+    outage = false;
+  });
+  for (const [theme, area, boss] of [
+    ['cinderChapel', 'Ember Vault', 'Ashbound Herald'],
+    ['choralCrypt', 'Glass Sepulchre', 'Bone Chorister'],
+    ['chainworks', 'Iron March', 'The Chainmaster'],
+  ]) {
+    await step(`${theme}: select its Atlas encounter and open it from the Map Stash`, async () => {
+      await closePanels(A);
+      const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'mapDevice', 10), 'the map device');
+      await clickWorld(A, at, 'the map device');
+      await A.page.waitForSelector('.fe-device');
+      await A.page.locator('.fe-device__destination').click();
+      await A.page.getByRole('button', { name: new RegExp(`^${area},`) }).click();
+      assert((await A.page.locator('.fe-atlas__detail').innerText()).includes(boss), 'Atlas does not name this encounter');
+      await A.page.mouse.move(10, 10);
+      await settlePanels(A);
+      await A.shot(`new-maps-${theme}-atlas-${VW}x${VH}`);
+      await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+      const uid = `e2e-${theme.toLowerCase()}:i1`;
+      const row = A.page.locator(`.fe-mstash--device .fe-maprow[data-uid="${uid}"]`);
+      if (await row.count() === 0) await A.page.locator('.fe-mstash--device button[aria-label^="Tier 1:"]').click();
+      await row.click();
+      await A.waitFor('new map in device', uid => window.__foe.store.get().character.mapDevice?.uid === uid, uid);
+      await A.page.locator('.fe-device__activate').click();
+      const confirm = A.page.locator('.fe-dialog__actions button:has-text("Activate")');
+      if (await confirm.isVisible().catch(() => false)) await confirm.click();
+      await A.waitFor('new map portal', area => window.__foe.store.get().hud?.portal?.mapName === area, area);
+      await closePanels(A);
+      await clickPortal(A);
+      await A.waitFor('inside new theme', theme => window.__foe.world?.view.theme === theme, theme);
+      await A.page.mouse.move(10, 10);
+      await sleep(1600); // Let the zone fade and first world snapshot settle before the art check.
+      await A.shot(`new-maps-${theme}-arrival-${VW}x${VH}`);
+    });
+    await step(`${theme}: no wave-3 lieutenant, correct final boss, completion chest and rewards`, async () => {
+      await A.eval(() => {
+        window.__mapAudit = { wave3: false, lieutenant: false, boss: '' };
+        window.__mapAuditTimer = setInterval(() => {
+          const run = window.__foe.world.view.run;
+          window.__mapAudit.wave3 ||= run.wave === 3;
+          window.__mapAudit.lieutenant ||= !!run.lieutenant;
+          window.__mapAudit.boss ||= run.boss?.name ?? '';
+        }, 16);
+        window.__foe.bot.enable({ returnPortal: false, collect: true });
+      });
+      await A.waitFor('final boss reached', () => !!window.__mapAudit.boss, undefined, 480_000);
+      assert(await A.eval(boss => window.__mapAudit.boss === boss, boss), 'wrong final boss');
+      await sleep(800); // The spawn flash obscures the boss on its first rendered frame.
+      await A.shot(`new-maps-${theme}-boss-${VW}x${VH}`);
+      await A.waitFor('completion chest opened', () => window.__foe.world.view.props.some(p => p.kind === 'chest' && p.state === 1), undefined, 180_000);
+      const audit = await A.eval(() => {
+        clearInterval(window.__mapAuditTimer);
+        window.__foe.bot.disable();
+        return { ...window.__mapAudit, phase: window.__foe.world.view.run.phase, drops: window.__foe.world.view.drops.length,
+          items: window.__foe.store.get().character.backpack.entries.length };
+      });
+      assert(audit.wave3 && !audit.lieutenant, 'wave 3 was absent or spawned a lieutenant');
+      assert(audit.phase === 'cleared' && audit.drops + audit.items > 0, 'completion/rewards missing');
+      await sleep(1800);
+      await A.shot(`new-maps-${theme}-cleared-${VW}x${VH}`);
+      const left = await A.eval(() => window.__foe.send({ c: 'leaveMap' }));
+      assert(left.ok, left.error);
+      await A.waitFor('home after completion', () => window.__foe.store.get().hud?.zone === 'hideout');
+      await closePanels(A);
+    });
+  }
+}
+
 async function main() {
   const port = await freePort();
   if (PROD) {
@@ -2227,10 +2324,11 @@ async function main() {
     await registerAndPlay(A, base, `e2e_a_${suffix}`, 'emberpass-A1', nameA);
     return nameA;
   });
+  if (MAPS_ONLY) await expandedMapsScenario({ A, port });
   if (ATLAS_ONLY) await atlasScenario({ A, port });
   if (EVENTS_ONLY) await eventsScenario({ A, port });
   if (CRAFTING_ONLY) await craftingScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY) {
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -2239,7 +2337,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

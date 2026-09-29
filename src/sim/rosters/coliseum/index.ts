@@ -13,7 +13,7 @@
 //   Tar Slinger       support          lobs tar where its target is heading; the tarPool slows 50% and roots
 //                                      ('tar') on first contact. No carpets: at most TAR.maxNear pools (lying,
 //                                      in flight or being loaded) round one player.
-//   The Chainmaster   lieutenant       hooks the farthest player along an aim line and drags them in, whirls
+//   The Chainmaster   Chainworks boss       hooks the farthest player along an aim line and drags them in, whirls
 //                                      his chains (a telegraphed ring, then bleeding blades), summons Chain
 //                                      Thralls (chainmaster.ts).
 //   Varkus            boss, 3 phases   cleave, charge, Execution Mark + leap (all phases), whirlwind (2+),
@@ -101,8 +101,8 @@ export function coliseumRoster(): MonsterDef[] {
       brain: tarSlingerBrain(),
     },
     {
-      kind: 'chainmaster', name: 'The Chainmaster', role: 'lieutenant',
-      radius: 14, life: 1800, speed: 40, damage: 16, xp: 150, damageType: 'physical', resist: [0.2, 0.15, 0.15, 0.15, 0.15], knockback: 0,
+      kind: 'chainmaster', name: 'The Chainmaster', role: 'boss',
+      radius: 14, life: 3600, speed: 40, damage: 24, xp: 1000, damageType: 'physical', resist: [0.2, 0.15, 0.15, 0.15, 0.15], knockback: 0,
       fromWave: 0, weight: 0, weightGrowth: 0,
       heavy: true,
       brain: chainmasterBrain(),

@@ -65,7 +65,7 @@ export function meanFloorShade(look: ThemeLook): number {
   return ((look.mottle[0] + look.mottle[1]) / 2) * look.floor;
 }
 
-export const THEME_LOOKS: Record<Theme, ThemeLook> = {
+const BASE_LOOKS: Record<'hideout' | 'ashenForge' | 'rimedOssuary' | 'ironColiseum', ThemeLook> = {
   hideout: {
     ambient: [0.29, 0.24, 0.235],
     clear: [0.018, 0.012, 0.016],
@@ -188,5 +188,32 @@ export const THEME_LOOKS: Record<Theme, ThemeLook> = {
     monsterRim: [0.34, 0.27, 0.2],
     mottle: [0.8, 1],
     sigil: C.ember,
+  },
+};
+
+
+export const THEME_LOOKS: Record<Theme, ThemeLook> = {
+  ...BASE_LOOKS,
+  cinderChapel: {
+    ...BASE_LOOKS.hideout,
+    ambient: [0.38, 0.29, 0.3], clear: [0.021, 0.009, 0.015],
+    pools: [[0.65, 0.2, 0.12], [0.45, 0.2, 0.4]], poolIntensity: 0.3,
+    abyssGlow: [0.45, 0.15, 0.3], abyssGlowIntensity: 0.5,
+    airRate: 8, airSprite: 'fx/ash', airGravity: -3, floor: 0.85,
+    monsterRim: [0.32, 0.25, 0.29], sigil: C.ember,
+  },
+  choralCrypt: {
+    ...BASE_LOOKS.rimedOssuary,
+    ambient: [0.32, 0.29, 0.37], clear: [0.018, 0.009, 0.027],
+    pools: [[0.42, 0.23, 0.58], [0.25, 0.38, 0.5]],
+    abyssGlow: [0.4, 0.2, 0.6], airRate: 14, airGravity: -2,
+    floor: 0.86, monsterRim: [0.31, 0.27, 0.36], sigil: C.frost,
+  },
+  chainworks: {
+    ...BASE_LOOKS.ironColiseum,
+    ambient: [0.36, 0.29, 0.24], clear: [0.018, 0.015, 0.013],
+    pools: [[0.64, 0.35, 0.14], [0.4, 0.35, 0.24]],
+    abyssGlow: [0.5, 0.22, 0.07], airRate: 12, airGravity: 3,
+    floor: 0.86, monsterRim: [0.32, 0.29, 0.24],
   },
 };
