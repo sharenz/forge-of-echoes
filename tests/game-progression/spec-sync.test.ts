@@ -6,6 +6,14 @@ import { describe, expect, it } from 'vitest';
 import { AFFIXES, BENCH_BEST_TIER, BENCH_MAX_CRAFTED, BENCH_STABILITY_COST, UNIQUES } from '../../src/data/items';
 import { PICKUP_REACH } from '../../src/contracts/sim';
 import { CHARACTER_NAME_MAX, CHARACTER_NAME_MIN, EARLY_TIER_EASING, PARTY_SCALING } from '../../src/data/progression';
+import { THEME_ROSTER } from '../../src/contracts/bestiary';
+import { CURRENCY_STASH_MAX, MAP_STASH_CAPACITY } from '../../src/contracts/items';
+import {
+  BLEED_DURATION, BLEED_FRACTION, BLEED_MAX_STACKS, BURN_DURATION, BURN_FRACTION, FREEZE_DURATION, FREEZE_IMMUNITY, PLAYER_CHILL_DURATION,
+  PLAYER_CHILL_SLOW, PLAYER_SHOCK_BONUS, PLAYER_SHOCK_DURATION, PULL_MAX_DISTANCE, ROOT_DURATION, ROOT_GRACE, WITHER_DURATION,
+  WITHER_MAX_STACKS, WITHER_RES_PER_STACK,
+} from '../../src/sim/constants';
+import { monsterDef } from '../../src/sim/rosters';
 
 const SPEC = readFileSync(new URL('../../GAME_SPEC.md', import.meta.url), 'utf8');
 
@@ -57,5 +65,47 @@ describe('GAME_SPEC matches the implemented numbers', () => {
       `+${PARTY_SCALING.monsterLife}% monster life, +${PARTY_SCALING.waveBudget}% monsters per wave, +${PARTY_SCALING.packRarity}% magic and rare pack chance`,
     );
     expect(section(3)).toContain(`| Name | ${CHARACTER_NAME_MIN}–${CHARACTER_NAME_MAX} characters`);
+  });
+
+  it('§12 special stash capacities', () => {
+    const s12 = section(12);
+    expect(s12).toContain(`**Map Stash.** Holds up to ${MAP_STASH_CAPACITY} maps.`);
+    expect(s12).toContain(`Each slot holds up to ${CURRENCY_STASH_MAX.toLocaleString('en-US')} of its currency.`);
+  });
+
+  it('§13 debuff numbers', () => {
+    const s13 = section(13);
+    const pct = (f: number) => Math.round(f * 100);
+    expect(s13).toContain(`−${pct(PLAYER_CHILL_SLOW)}% move and cast speed, ${PLAYER_CHILL_DURATION} s.`);
+    expect(s13).toContain(`${FREEZE_DURATION} s, then **${FREEZE_IMMUNITY} s immunity**`);
+    expect(s13).toContain(`can still cast, ${ROOT_DURATION} s.`);
+    expect(s13).toContain(`for **${ROOT_GRACE} s** after a root ends`);
+    expect(s13).toContain(`Fire damage over ${BURN_DURATION} s (${pct(BURN_FRACTION)}% of the triggering hit)`);
+    expect(s13).toContain(`${pct(BLEED_FRACTION)}% of the hit over ${BLEED_DURATION} s; **×2 while moving**; stacks up to ${BLEED_MAX_STACKS}`);
+    expect(s13).toContain(`+${pct(PLAYER_SHOCK_BONUS)}% damage taken, ${PLAYER_SHOCK_DURATION} s`);
+    expect(s13).toContain(
+      `−${pct(WITHER_RES_PER_STACK)}% to all non-physical resistances per stack, ${WITHER_DURATION} s (one shared timer); stacks up to ${WITHER_MAX_STACKS}`,
+    );
+    expect(s13).toContain(`at most ${PULL_MAX_DISTANCE} units`);
+  });
+
+  it('§8 and §14 roster stats: every family member, lieutenant and boss', () => {
+    const s8 = section(8);
+    const s14 = section(14);
+    // §8: the Ashen Forge table, one row per kind: | Name | role | radius | life | speed | damage | xp | …
+    for (const kind of [...THEME_ROSTER.ashenForge.family, THEME_ROSTER.ashenForge.lieutenant, THEME_ROSTER.ashenForge.boss]) {
+      const d = monsterDef(kind);
+      const row = new RegExp(`\\| \\**${d.name}\\** \\| [^|]+ \\| ${d.radius} \\| ${d.life} \\| ${d.speed} \\| ${d.damage} \\| ${d.xp} \\|`);
+      expect(s8, kind).toMatch(row);
+    }
+    // §14: the Ossuary / Coliseum table: | Name | life | speed | damage | xp | (twice per row).
+    for (const theme of ['rimedOssuary', 'ironColiseum'] as const) {
+      const r = THEME_ROSTER[theme];
+      for (const kind of [...r.family, r.lieutenant, r.boss]) {
+        const d = monsterDef(kind);
+        const cells = `${d.name}${kind === r.lieutenant || kind === r.boss ? '**' : ''} | ${d.life} | ${d.speed} | ${d.damage} | ${d.xp} |`;
+        expect(s14, kind).toContain(cells);
+      }
+    }
   });
 });

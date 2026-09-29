@@ -1,7 +1,7 @@
 // Items changing hands (GAME_SPEC §12 Trading) and items handed back without loss (stowItem).
 import { describe, expect, it } from 'vitest';
 import type { CharacterSave, EquipmentItem, Item } from '../../src/contracts/items';
-import { MAX_STASH_TABS } from '../../src/contracts/items';
+import { MAP_STASH_CAPACITY, MAX_STASH_TABS } from '../../src/contracts/items';
 import { TRADE_MAX_ITEMS } from '../../src/contracts/net';
 import { allItems, beltUid, findItem, stowItem, tradeItems, tradeOfferError } from '../../src/game/items';
 import { currency, equip, expectErr, expectOk, flask, makeCharacter, map, withBackpack } from './fixtures';
@@ -146,7 +146,7 @@ describe('stowItem', () => {
     expect(out.character.mapDevice?.uid).toBe('back');
   });
 
-  it('falls back to the backpack, then the stash, then a new Recovered tab', () => {
+  it('falls back to the backpack, the Map Stash, then the stash, then a new Recovered tab', () => {
     const occupied: CharacterSave = { ...makeCharacter(), mapDevice: map('in-device') };
     const bag = expectOk(stowItem(occupied, map('back')));
     expect(bag).toMatchObject({ where: 'backpack', text: 'your backpack' });
@@ -154,6 +154,11 @@ describe('stowItem', () => {
 
     let full = occupied;
     for (let y = 0; y < 5; y++) for (let x = 0; x < 12; x++) full = withBackpack(full, [[map(`b${x}-${y}`), x, y]]);
+    const filed = expectOk(stowItem(full, map('back')));
+    expect(filed).toMatchObject({ where: 'mapStash', tab: null, text: 'your Map Stash' });
+    expect(findItem(filed.character, 'back')?.location).toEqual({ kind: 'mapStash' });
+
+    full = { ...full, mapStash: Array.from({ length: MAP_STASH_CAPACITY }, (_, i) => map(`ms${i}`)) };
     const stash = expectOk(stowItem(full, map('back')));
     expect(stash).toMatchObject({ where: 'stash', tab: 0, text: 'your stash (tab "Tab 1")' });
     expect(findItem(stash.character, 'back')?.location).toMatchObject({ kind: 'stash', tab: 0 });

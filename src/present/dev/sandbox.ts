@@ -30,6 +30,22 @@
 //                        player (AOI culling, instanced drops), delivered after ?lat=MS (default 40) one-way latency
 //                        to a ClientWorld (interpolation + local prediction) and the EventTimeline, exactly like the
 //                        game client. Default: the presenter reads SimRun.view directly.
+//   ?debuffs=SPEC        force player debuffs through the sim's own rules (src/sim/debuffs.ts applyDebuff: real
+//                        'debuff' events, pops and sounds), after the fast-forward:
+//                          1            cycle every debuff (and every root source / stack count) on the local player,
+//                                       one at a time, ?every=S seconds each (default 2.4)
+//                          a,b:n,…      keep these on the local player (re-applied before they run out), e.g.
+//                                       chilled · frozen · rooted:web · bleeding:3 · withered:2 · burning · shocked
+//                          party        a different set on each party member (use with ?players=4)
+//                          party:A|B|…  these sets on the party members in join order (each set a,b:n,… as above)
+//                        Combine with ?idle=1 (and ?freeze=1 for stills). Frozen / rooted players can't move.
+//   ?stage=KIND          set a scene around the local player after the fast-forward (for stills, add ?freeze=1):
+//                          lineup       the theme's family in a row, a magic and a rare leader (frame: ?zoom=2)
+//                          commanders   the theme's lieutenant and boss side by side
+//                          boss         the theme's boss alone, close beside the local player (· lieutenant: the same)
+//                          party        the whole party in a row beside the local player (debuff comparisons)
+//                          areas        every bestiary area of the theme, part-way through its telegraph
+//                          projectiles  every bestiary projectile in flight (a chain hook with its chain, a tar lob)
 import type { Theme } from '../../contracts/content';
 import { SNAPSHOT_EVERY, type ZoneInfo } from '../../contracts/net';
 import type { RunSetup } from '../../contracts/game';
@@ -47,6 +63,15 @@ import {
   createClientWorld, createEventTimeline, createSnapshotEncoder, inputFromIntent, type NetClientWorld,
 } from '../../net';
 import { createRun, type SimPlayerUpdate } from '../../sim';
+import { applyDebuff, writeDebuffViews } from '../../sim/debuffs';
+import { worldOf } from '../../sim/run';
+import { spawnMonster } from '../../sim/spawn';
+import { spawnArea } from '../../sim/areas';
+import { TAR_POOL_RADIUS } from '../../sim/constants';
+import { PROJ, projSpec, spawnProjectile } from '../../sim/projectiles';
+import { NEW_PROJECTILE_KINDS, PLAYER_DEBUFFS, THEME_ROSTER, type PlayerDebuff } from '../../contracts/bestiary';
+import { ELITE_BIT } from '../../contracts/sim';
+import type { RootSource } from '../../contracts/sim';
 import { createBot, type Bot } from '../../../tests/sim/bot';
 import { createRng } from '../../core/rng';
 import { createPresenter, isDropVisible, pickInteractiveProp } from '../index';
@@ -95,6 +120,8 @@ const localId = Math.max(1, Math.min(partySize, Number(qs.get('local') ?? 1) || 
 const dropsDemo = qs.get('drops') === 'demo';
 const hoverDropArg = qs.get('hoverDrop');
 const netMode = qs.get('net') === '1';
+const debuffArg = qs.get('debuffs');
+const debuffEvery = Math.max(0.5, Number(qs.get('every') ?? 2.4) || 2.4);
 const latencyMs = Math.max(0, Number(qs.get('lat') ?? 40) || 0);
 const NAMES = ['Ysolde', 'Maren', 'Ashka', 'Veyla'];
 const LOADOUTS: (string | null)[][] = [
@@ -467,6 +494,111 @@ if (netMode) {
   presenter.reset(net.world.view, localId);
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Forced debuffs (?debuffs=…): applied through the sim's own debuff rules on its player state
+// ---------------------------------------------------------------------------------------------------------------
+
+interface DebuffPick {
+  id: PlayerDebuff;
+  stacks: number;
+  source?: RootSource;
+}
+
+/** "rooted:web", "bleeding:3", "chilled" → a pick. */
+function parsePick(token: string): DebuffPick | null {
+  const [id, arg] = token.trim().split(':');
+  if (!(PLAYER_DEBUFFS as readonly string[]).includes(id)) return null;
+  const n = Number(arg);
+  return {
+    id: id as PlayerDebuff,
+    stacks: Number.isFinite(n) && n > 0 ? Math.min(3, Math.floor(n)) : 1,
+    source: id === 'rooted' && arg && !Number.isFinite(n) ? (arg as RootSource) : undefined,
+  };
+}
+
+/** The showcase cycle for ?debuffs=1: every debuff, every root source, every stack count. */
+const DEBUFF_CYCLE: DebuffPick[][] = [
+  [{ id: 'chilled', stacks: 1 }], [{ id: 'frozen', stacks: 1 }],
+  [{ id: 'rooted', stacks: 1, source: 'bone' }], [{ id: 'rooted', stacks: 1, source: 'web' }],
+  [{ id: 'rooted', stacks: 1, source: 'chain' }], [{ id: 'rooted', stacks: 1, source: 'tar' }],
+  [{ id: 'burning', stacks: 1 }], [{ id: 'bleeding', stacks: 1 }], [{ id: 'bleeding', stacks: 2 }], [{ id: 'bleeding', stacks: 3 }],
+  [{ id: 'shocked', stacks: 1 }], [{ id: 'withered', stacks: 1 }], [{ id: 'withered', stacks: 2 }], [{ id: 'withered', stacks: 3 }],
+];
+/** ?debuffs=party: one set per party member (compare them side by side). */
+const DEBUFF_PARTY: DebuffPick[][] = [
+  [{ id: 'chilled', stacks: 1 }, { id: 'bleeding', stacks: 2 }],
+  [{ id: 'rooted', stacks: 1, source: 'web' }, { id: 'burning', stacks: 1 }],
+  [{ id: 'frozen', stacks: 1 }],
+  [{ id: 'withered', stacks: 3 }, { id: 'shocked', stacks: 1 }],
+];
+/** Forced debuffs last this long (re-applied before they run out while the sim runs). */
+const FORCED_DURATION = 60;
+
+function applyPicks(id: number, picks: readonly DebuffPick[]): void {
+  const w = worldOf(run);
+  const p = w?.players.find((q) => q.id === id);
+  if (!w || !p || p.dead) return;
+  // Forced picks ignore the freeze immunity and the root grace (a dev showcase re-applies them on purpose).
+  p.debuffs.freezeImmune = 0;
+  p.debuffs.rootImmune = 0;
+  for (const pick of picks) {
+    const n = pick.id === 'bleeding' || pick.id === 'withered' ? pick.stacks : 1;
+    // Burning and bleeding need a hit that dealt damage; keep it small so the bots live.
+    for (let k = 0; k < n; k++) applyDebuff(w, p, pick.id, 2, pick.source, FORCED_DURATION);
+  }
+  writeDebuffViews(p);
+}
+
+function clearForced(id: number): void {
+  // Let a new showcase entry start clean: the sim's own cleanse path (as a flask / death would).
+  const w = worldOf(run);
+  const p = w?.players.find((q) => q.id === id);
+  if (!w || !p) return;
+  const d = p.debuffs;
+  d.remaining.fill(0);
+  d.bleedRemaining.fill(0);
+  d.freezeImmune = 0;
+  d.rootImmune = 0;
+  writeDebuffViews(p);
+}
+
+let statsNote = '';
+let debuffClock = 0;
+let debuffStep = -1;
+function forceDebuffs(dt: number): void {
+  if (!debuffArg) return;
+  // (The first animation frame's timestamp can precede the script's own clock: never step backwards.)
+  debuffClock += Math.max(0, dt);
+  if (debuffArg === '1') {
+    const step = Math.floor(debuffClock / debuffEvery) % DEBUFF_CYCLE.length;
+    if (step !== debuffStep) {
+      debuffStep = step;
+      clearForced(localId);
+      applyPicks(localId, DEBUFF_CYCLE[step]);
+      statsNote = `debuff: ${DEBUFF_CYCLE[step].map((p) => `${p.id}${p.source ? `:${p.source}` : p.stacks > 1 ? `:${p.stacks}` : ''}`).join(', ')}`;
+    }
+    return;
+  }
+  const parseSet = (spec: string): DebuffPick[] => spec.split(',').map(parsePick).filter((x): x is DebuffPick => x !== null);
+  const custom = debuffArg.startsWith('party:') ? debuffArg.slice(6).split('|').map(parseSet) : null;
+  const sets: [number, DebuffPick[]][] = debuffArg === 'party'
+    ? run.view.players.map((p, k) => [p.id, DEBUFF_PARTY[k % DEBUFF_PARTY.length]])
+    : custom
+      ? run.view.players.map((p, k) => [p.id, custom[k] ?? []])
+      : [[localId, parseSet(debuffArg)]];
+  for (const [id, picks] of sets) {
+    const view = run.view.players.find((p) => p.id === id);
+    if (!view || view.dead) continue;
+    // (Re-)apply whatever is missing or about to run out.
+    const due = picks.filter((pick) => {
+      const d = view.debuffs.find((x) => x.id === pick.id);
+      return !d || d.remaining < 1 || d.stacks < pick.stacks;
+    });
+    if (due.length > 0) applyPicks(id, due);
+  }
+}
+
+
 /**
  * Loot around the local player: to the right her own loot (chest rolls: equipment waiting for a click, plus
  * currency, flasks and maps), to the left public drops (items "a player dropped": owner 0, never auto-collected),
@@ -545,6 +677,7 @@ function hoverProp(world: WorldView): number {
 function tick(now: number): void {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  if (!freeze) forceDebuffs(dt);
   if (!freeze) {
     acc += dt;
     let steps = 0;
@@ -602,9 +735,119 @@ function tick(now: number): void {
       (net
         ? `\nnet · ${latencyMs} ms · delay ${net.world.interpDelayMs.toFixed(0)} ms · ${(net.bytes / Math.max(1, net.snapshots)).toFixed(0)} B/snapshot`
         : '') +
-      (pickupNote ? `\n${pickupNote}` : '');
+      (pickupNote ? `\n${pickupNote}` : '') +
+      (statsNote ? `\n${statsNote}` : '');
   }
   requestAnimationFrame(tick);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Staged scenes (?stage=…) for stills
+// ---------------------------------------------------------------------------------------------------------------
+
+function stage(kind: string): void {
+  const w = worldOf(run);
+  const me = run.view.players.find((p) => p.id === localId);
+  if (!w || !me || hideout) return;
+  const roster = THEME_ROSTER[theme as keyof typeof THEME_ROSTER] ?? THEME_ROSTER.ashenForge;
+  const cx = me.x;
+  const cy = me.y;
+  if (kind === 'lineup') {
+    // Clear the floor first: only the lineup stands (and the local player keeps no debuffs from the fight).
+    const m = w.monsters;
+    for (let i = 0; i < m.capacity; i++) if (m.alive[i]) m.release(i);
+    // Framed for ?zoom=2 (a 320×180 view): the family on a row, a magic and a rare leader below.
+    const fam = roster.family;
+    fam.forEach((k, n) => spawnMonster(w, k, cx - 128 + n * 62, cy - 22, { animate: false }));
+    spawnMonster(w, fam[0], cx - 110, cy + 60, { animate: false, rarity: 'magic', mods: ELITE_BIT.swift });
+    spawnMonster(w, fam[1], cx + 110, cy + 60, { animate: false, rarity: 'rare', mods: ELITE_BIT.juggernaut | ELITE_BIT.frenzied });
+  } else if (kind === 'party') {
+    const m = w.monsters;
+    for (let i = 0; i < m.capacity; i++) if (m.alive[i]) m.release(i);
+    // The camera follows the local player: put her second from the left so the whole row is in view.
+    let slot = 1;
+    w.players.forEach((p) => {
+      const x = cx + (p.id === localId ? 0 : slot++ === 1 ? -32 : (slot - 2) * 32);
+      p.x = p.prevX = p.view.x = p.view.prevX = x;
+      p.y = p.prevY = p.view.y = p.view.prevY = cy;
+    });
+  } else if (kind === 'boss' || kind === 'lieutenant') {
+    const m = w.monsters;
+    for (let i = 0; i < m.capacity; i++) if (m.alive[i]) m.release(i);
+    const k = kind === 'boss' ? roster.boss : roster.lieutenant;
+    spawnMonster(w, k, cx + 50, cy + 20, { animate: false, boss: kind === 'boss', lieutenant: kind === 'lieutenant' });
+  } else if (kind === 'commanders') {
+    const m = w.monsters;
+    for (let i = 0; i < m.capacity; i++) if (m.alive[i]) m.release(i);
+    spawnMonster(w, roster.lieutenant, cx - 90, cy + 40, { animate: false, lieutenant: true });
+    spawnMonster(w, roster.boss, cx + 80, cy + 60, { animate: false, boss: true });
+  } else if (kind === 'areas') {
+    const put = (k: Parameters<typeof spawnArea>[1], x: number, y: number, r: number, dur: number, age: number, opts: Parameters<typeof spawnArea>[6] = {}): void => {
+      const a = spawnArea(w, k, cx + x, cy + y, r, dur, { debuff: null, ...opts });
+      a.age = age;
+    };
+    if (theme === 'rimedOssuary') {
+      put('frostNovaWarning', -200, -80, 70, 1.1, 0.7);
+      put('frostNovaWarning', -80, 110, 44, 1, 0.5);
+      for (let k = 0; k < 7; k++) put('glacialSpike', 60 + k * 26, -120, 17, 0.8 + k * 0.07, 0.62, { angle: 0 });
+      put('icePrison', 0, 0, 46 * (1 - 0.8 * 0.55), 1.8, 1.8 * 0.55, { target: localId, endRadius: 46 * 0.2 });
+      put('blizzard', 200, 70, 52, 9, 3, { angle: 0.3 });
+      put('choirWave', -240, 60, 130, 3.6, 1, { variant: 1, angle: 0.4 });
+      put('wispBurst', 90, 100, 40, 0.7, 0.45);
+    } else {
+      put('tarPool', -200, -90, TAR_POOL_RADIUS, 6, 2);
+      put('tarPool', -150, -50, TAR_POOL_RADIUS, 6, 0.5);
+      put('chargeLine', -260, 20, 300, 0.6, 0.35, { angle: -0.35, variant: 0 });
+      // Varkus's lane mid-cast (the fill two thirds along) and one whose dash is running (full, hot, steady).
+      put('chargeLine', -60, 120, 260, 1.7, 0.6, { angle: 0, variant: 2 });
+      put('chargeLine', 30, -158, 240, 1.7, 1.2, { angle: 0, variant: 2 });
+      put('executionMark', 0, 0, 36, 3, 2.5);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        put('arenaSpikes', 150 + Math.cos(a) * 36, -80 + Math.sin(a) * 36, 12, 1.2, 0.8);
+      }
+      put('whirlwind', 180, 90, 64, 0.9, 0.5, { variant: 0 });
+      put('whirlwind', -120, -130, 58, 3, 1, { variant: 1 });
+    }
+  } else if (kind === 'projectiles') {
+    const shoot = (k: (typeof NEW_PROJECTILE_KINDS)[number], x: number, y: number, angle: number, speed: number, age: number, flight = 0): void => {
+      projSpec.kind = PROJ[k];
+      projSpec.hostile = true;
+      projSpec.x = cx + x;
+      projSpec.y = cy + y;
+      projSpec.angle = angle;
+      projSpec.speed = speed;
+      projSpec.range = 600;
+      projSpec.radius = 5;
+      projSpec.damage = 0;
+      const i = spawnProjectile(w, projSpec, flight);
+      if (i < 0) return;
+      w.projectiles.age[i] = age;
+      w.projectiles.prevX[i] = w.projectiles.x[i] - Math.cos(angle) * speed / 60;
+      w.projectiles.prevY[i] = w.projectiles.y[i] - Math.sin(angle) * speed / 60;
+    };
+    // Framed for ?zoom=2 (a 320×180 view).
+    shoot('webShot', -125, -60, 0.2, 120, 0.5);
+    shoot('frostShard', -125, -25, 0.1, 170, 0.5);
+    shoot('boneShard', -125, 10, 0, 160, 0.5);
+    shoot('crossbowBolt', 60, -65, Math.PI, 460, 0.2);
+    // The chain hook with its thrower standing behind the launch point (the chain hangs from his fist).
+    const hookAng = Math.PI + 0.3;
+    const hookAge = 0.2;
+    shoot('chainHook', 40, 20, hookAng, 320, hookAge);
+    const lx = 40 - Math.cos(hookAng) * 320 * hookAge;
+    const ly = 20 - Math.sin(hookAng) * 320 * hookAge;
+    spawnMonster(w, 'chainThrall', cx + lx - Math.cos(hookAng) * 12, cy + ly - Math.sin(hookAng) * 12, { animate: false });
+    // A tar lob half-way down: its marker is the pool it will leave.
+    shoot('tarGlob', -20, 60, Math.PI + 0.2, 110, 0.6, 1.2);
+  }
+}
+if (qs.get('stage')) stage(qs.get('stage')!);
+
+if (debuffArg) {
+  forceDebuffs(0);
+  // Stills (?freeze=1): the sim never steps again, so hand the pops to the first frame directly.
+  if (freeze) for (const e of run.drainEvents()) pending.push(e);
 }
 
 window.__present = {

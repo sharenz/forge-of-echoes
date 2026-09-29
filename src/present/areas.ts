@@ -17,13 +17,20 @@
 // and piled-up fire pools share their additive glow. Coincident telegraphs (centre and radius within 12) share one
 // fill and progress ring (1/(1+n)² each: the first drawn, i.e. the oldest, which resolves first, shows in full), and
 // identical danger rims (within 3) one rim's brightness. Every distinct circle keeps its full outline.
+//
+// The Rimed Ossuary and Iron Coliseum kinds (novas, spikes, the ice prison, blizzards, choir rings, wisp bursts, tar,
+// charge and aim lines, the execution mark, arena spikes, whirlwinds) are drawn by bestiary-areas.ts through the same
+// telegraph and light budgets.
 import type { RGB } from '../contracts/render';
 import type { AreaView } from '../contracts/sim';
+import { BestiaryAreaPainter, type AreaAppear } from './bestiary-areas';
 import { C } from './colors';
 import { CHARGE_MAX_RADIUS, LIGHT_CAPS, type FrameCtx } from './context';
 import { Proximity } from './heat';
+import type { Effects } from './fx';
 import { clamp01, easeInCubic, TAU } from './math';
 import type { Pen } from './pen';
+import type { SpriteTable } from './sprites';
 
 const SLAM: RGB = [1, 0.16, 0.1];
 const LEAP: RGB = [1, 0.38, 0.14];
@@ -71,10 +78,26 @@ export class AreaPainter {
   private readonly fills = new Proximity(SHAPE_SLOTS, FILL_NEAR);
   private readonly rims = new Proximity(SHAPE_SLOTS, RIM_NEAR);
   private readonly pools = new Proximity(SHAPE_SLOTS, POOL_NEAR);
+  private readonly bestiary: BestiaryAreaPainter | null;
+
+  constructor(table?: SpriteTable, fx?: Effects) {
+    this.bestiary = table ? new BestiaryAreaPainter(this, table, fx ?? null) : null;
+  }
+
+  /** Zone change: forget per-area memory (storm drift, announced telegraphs). */
+  reset(): void {
+    this.bestiary?.reset();
+  }
+
+  /** Announce new execution marks and ice prisons (the presenter's event visuals give them their beat). */
+  set onAppear(fn: AreaAppear | null) {
+    if (this.bestiary) this.bestiary.onAppear = fn;
+  }
 
   draw(pen: Pen, f: FrameCtx): void {
     const areas = f.world.areas;
     const v = f.view;
+    this.bestiary?.beginFrame();
     this.groundLights.reset();
     this.rockLights.reset();
     this.fills.reset();
@@ -113,6 +136,8 @@ export class AreaPainter {
         case 'heraldAura':
           this.aura(pen, f, ar);
           break;
+        default:
+          this.bestiary?.draw(pen, f, ar);
       }
     }
   }
@@ -143,109 +168,26 @@ export class AreaPainter {
   }
 
   private drawLane(pen: Pen, f: FrameCtx, n: number): void {
-    const r = pen.r;
     const areas = f.world.areas;
     const first = areas[this.lane[0]];
     const last = areas[this.lane[n - 1]];
     const rad = first.radius;
-    let dx = last.x - first.x;
-    let dy = last.y - first.y;
-    const span = Math.hypot(dx, dy);
+    const span = Math.hypot(last.x - first.x, last.y - first.y);
     if (n < 2 || span < 1) {
       // The last segment left under her feet.
       this.telegraph(pen, f, first, LANE, 1);
       return;
     }
-    dx /= span;
-    dy /= span;
-    const nx = -dy;
-    const ny = dx;
-    // The damage area is the union of the segment circles: a band between the first and last centre with round
-    // ends (thick lines get round caps of half their width, which is exactly that shape).
-    const x0 = first.x;
-    const y0 = first.y;
-    const x1 = last.x;
-    const y1 = last.y;
-    const v = f.view;
-    const cx = (x0 + x1) / 2;
-    const cy = (y0 + y1) / 2;
-    const reach = span / 2 + rad;
-    if (cx + reach < v.x0 - 40 || cx - reach > v.x1 + 40 || cy + reach < v.y0 - 40 || cy - reach > v.y1 + 40) return;
     // Wind-up progress: her charge starts as the first segment comes due.
     const p = first.duration > 0 ? clamp01(first.age / first.duration) : 1;
-    const late = p > 0.75 ? 0.5 + 0.5 * Math.sin(f.time * 40) : 1;
-
-    const fill = pen.shape(LANE, 0.1 + 0.05 * p, 'decal');
-    fill.emissive = 0.45;
-    fill.thickness = rad * 2;
-    r.line(x0, y0, x1, y1, fill);
-    if (p > 0.02) {
-      const sweep = pen.shape(LANE, 0.12 + 0.1 * p, 'decal');
-      sweep.emissive = 0.7;
-      sweep.thickness = rad * 2;
-      r.line(x0, y0, x0 + dx * span * p, y0 + dy * span * p, sweep);
-    }
-
-    // Hard rims on 'fx' so bodies never hide the edge of the lane: two sides and a half-circle at each end.
-    const rim = pen.shape(LANE, 0.75 + 0.25 * late, 'fx');
-    rim.additive = true;
-    rim.emissive = 1;
-    rim.thickness = 1;
-    const ox = nx * rad;
-    const oy = ny * rad;
-    r.line(x0 + ox, y0 + oy, x1 + ox, y1 + oy, rim);
-    r.line(x0 - ox, y0 - oy, x1 - ox, y1 - oy, rim);
-    this.halfRing(pen, x1, y1, dx, dy, rad, rim.alpha ?? 1);
-    this.halfRing(pen, x0, y0, -dx, -dy, rad, rim.alpha ?? 1);
-
-    // Chevrons streaming along the charge direction: which way she comes, and that it is coming now.
-    const step = 30;
-    const len = span + rad;
-    const count = Math.max(1, Math.floor(len / step));
-    const arm = Math.min(12, rad * 0.5);
-    const chev = pen.shape(LANE_HOT, 0, 'fx');
-    chev.additive = true;
-    chev.emissive = 1;
-    chev.thickness = 1;
-    for (let c = 0; c < count; c++) {
-      const s = -rad * 0.5 + (c + 0.5) * (len / count);
-      const wave = Math.max(0, Math.sin(f.time * 9 - s * 0.07));
-      chev.alpha = (0.2 + 0.6 * wave * wave) * (0.4 + 0.6 * p);
-      const tx = x0 + dx * (s + arm * 0.5);
-      const ty = y0 + dy * (s + arm * 0.5);
-      const bx = tx - dx * arm;
-      const by = ty - dy * arm;
-      r.line(bx + nx * arm, by + ny * arm, tx, ty, chev);
-      r.line(bx - nx * arm, by - ny * arm, tx, ty, chev);
-    }
-    if (f.lights.area < LIGHT_CAPS.area) {
-      f.lights.area++;
-      pen.light(cx, cy, reach, LANE, 0.2 + 0.3 * p, 0.1);
-    }
+    laneBand(pen, f, first.x, first.y, last.x, last.y, rad, p, LANE, LANE_HOT);
   }
 
-  /** The outward half of a lane-rim circle of radius `rad` at (x, y), facing (dx, dy). */
-  private halfRing(pen: Pen, x: number, y: number, dx: number, dy: number, rad: number, alpha: number): void {
-    const r = pen.r;
-    const o = pen.shape(LANE, alpha, 'fx');
-    o.additive = true;
-    o.emissive = 1;
-    o.thickness = 1;
-    const a0 = Math.atan2(dy, dx) - Math.PI / 2;
-    const n = 8;
-    let px = x + Math.cos(a0) * rad;
-    let py = y + Math.sin(a0) * rad;
-    for (let k = 1; k <= n; k++) {
-      const a = a0 + (Math.PI * k) / n;
-      const qx = x + Math.cos(a) * rad;
-      const qy = y + Math.sin(a) * rad;
-      r.line(px, py, qx, qy, o);
-      px = qx;
-      py = qy;
-    }
-  }
-
-  private telegraph(pen: Pen, f: FrameCtx, a: AreaView, col: RGB, thickness: number): void {
+  /**
+   * A round danger telegraph: translucent fill and a sweep on 'decal', the growing progress ring and the rim
+   * (optionally in its own colour) on 'fx'; coincident telegraphs share one fill's glow (see the header).
+   */
+  telegraph(pen: Pen, f: FrameCtx, a: AreaView, col: RGB, thickness: number, rimCol: RGB = col, lightK = 1): void {
     const r = pen.r;
     const p = a.duration > 0 ? clamp01(a.age / a.duration) : 1;
     // Blink faster as it comes due.
@@ -269,16 +211,16 @@ export class AreaPainter {
     grow.emissive = 0.8;
     grow.thickness = 1;
     r.ring(a.x, a.y, Math.max(1, a.radius * p), grow);
-    const rim = pen.shape(col, (0.75 + 0.25 * late) * rimShare, 'fx');
+    const rim = pen.shape(rimCol, (0.75 + 0.25 * late) * rimShare, 'fx');
     rim.additive = true;
     rim.emissive = 1;
     rim.thickness = thickness;
     r.ring(a.x, a.y, a.radius, rim);
-    this.groundLight(pen, f, a.x, a.y, a.radius * 1.3 + 12, col, 0.18 + 0.35 * p, 0.1);
+    if (lightK > 0) this.groundLight(pen, f, a.x, a.y, a.radius * 1.3 + 12, col, (0.18 + 0.35 * p) * lightK, 0.1);
   }
 
   /** A ground danger light through the per-frame proximity budget and the area light cap. */
-  private groundLight(pen: Pen, f: FrameCtx, x: number, y: number, radius: number, col: RGB, intensity: number, flicker: number): void {
+  groundLight(pen: Pen, f: FrameCtx, x: number, y: number, radius: number, col: RGB, intensity: number, flicker: number): void {
     if (f.lights.area >= LIGHT_CAPS.area) return;
     const granted = grantLight(intensity, this.groundLights.sum(x, y), GROUND_LIGHT);
     if (!(granted > 0.01)) return;
@@ -438,5 +380,103 @@ export class AreaPainter {
       b.spread = 0.3;
       pen.emit();
     }
+  }
+}
+
+/**
+ * A charge lane: the union of discs of radius `rad` along (x0, y0) → (x1, y1) — a band with round ends — filling
+ * with progress `p` (0..1), hard rims on 'fx' so bodies never hide its edge, and chevrons streaming along the charge
+ * direction (which way it comes, and that it is coming now). Used by the Matriarch's segment lanes and the
+ * bestiary's chargeLine lanes (Varkus).
+ */
+export function laneBand(
+  pen: Pen, f: FrameCtx, x0: number, y0: number, x1: number, y1: number, rad: number, p: number, col: RGB, hot: RGB, lightK = 1,
+  steady = false,
+): void {
+  const r = pen.r;
+  let dx = x1 - x0;
+  let dy = y1 - y0;
+  const span = Math.hypot(dx, dy);
+  if (span < 1) return;
+  dx /= span;
+  dy /= span;
+  const nx = -dy;
+  const ny = dx;
+  const v = f.view;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const reach = span / 2 + rad;
+  if (cx + reach < v.x0 - 40 || cx - reach > v.x1 + 40 || cy + reach < v.y0 - 40 || cy - reach > v.y1 + 40) return;
+  // The last quarter blinks (it is coming); a `steady` lane (the charge already running) burns without blinking.
+  const late = p > 0.75 && !steady ? 0.5 + 0.5 * Math.sin(f.time * 40) : 1;
+
+  const fill = pen.shape(col, 0.1 + 0.05 * p, 'decal');
+  fill.emissive = 0.45;
+  fill.thickness = rad * 2;
+  r.line(x0, y0, x1, y1, fill);
+  if (p > 0.02) {
+    const sweep = pen.shape(col, 0.12 + 0.1 * p, 'decal');
+    sweep.emissive = 0.7;
+    sweep.thickness = rad * 2;
+    r.line(x0, y0, x0 + dx * span * p, y0 + dy * span * p, sweep);
+  }
+
+  // Hard rims on 'fx' so bodies never hide the edge of the lane: two sides and a half-circle at each end.
+  const rimAlpha = 0.75 + 0.25 * late;
+  const rim = pen.shape(col, rimAlpha, 'fx');
+  rim.additive = true;
+  rim.emissive = 1;
+  rim.thickness = 1;
+  const ox = nx * rad;
+  const oy = ny * rad;
+  r.line(x0 + ox, y0 + oy, x1 + ox, y1 + oy, rim);
+  r.line(x0 - ox, y0 - oy, x1 - ox, y1 - oy, rim);
+  halfRing(pen, x1, y1, dx, dy, rad, col, rimAlpha);
+  halfRing(pen, x0, y0, -dx, -dy, rad, col, rimAlpha);
+
+  // Chevrons streaming along the charge direction: which way it comes, and that it is coming now.
+  const step = 30;
+  const len = span + rad;
+  const count = Math.max(1, Math.floor(len / step));
+  const arm = Math.min(12, rad * 0.5);
+  const chev = pen.shape(hot, 0, 'fx');
+  chev.additive = true;
+  chev.emissive = 1;
+  chev.thickness = 1;
+  for (let c = 0; c < count; c++) {
+    const s = -rad * 0.5 + (c + 0.5) * (len / count);
+    const wave = Math.max(0, Math.sin(f.time * 9 - s * 0.07));
+    chev.alpha = (0.2 + 0.6 * wave * wave) * (0.4 + 0.6 * p);
+    const tx = x0 + dx * (s + arm * 0.5);
+    const ty = y0 + dy * (s + arm * 0.5);
+    const bx = tx - dx * arm;
+    const by = ty - dy * arm;
+    r.line(bx + nx * arm, by + ny * arm, tx, ty, chev);
+    r.line(bx - nx * arm, by - ny * arm, tx, ty, chev);
+  }
+  if (f.lights.area < LIGHT_CAPS.area && lightK > 0) {
+    f.lights.area++;
+    pen.light(cx, cy, reach, col, (0.2 + 0.3 * p) * lightK, 0.1);
+  }
+}
+
+/** The outward half of a lane-rim circle of radius `rad` at (x, y), facing (dx, dy). */
+function halfRing(pen: Pen, x: number, y: number, dx: number, dy: number, rad: number, col: RGB, alpha: number): void {
+  const r = pen.r;
+  const o = pen.shape(col, alpha, 'fx');
+  o.additive = true;
+  o.emissive = 1;
+  o.thickness = 1;
+  const a0 = Math.atan2(dy, dx) - Math.PI / 2;
+  const n = 8;
+  let px = x + Math.cos(a0) * rad;
+  let py = y + Math.sin(a0) * rad;
+  for (let k = 1; k <= n; k++) {
+    const a = a0 + (Math.PI * k) / n;
+    const qx = x + Math.cos(a) * rad;
+    const qy = y + Math.sin(a) * rad;
+    r.line(px, py, qx, qy, o);
+    px = qx;
+    py = qy;
   }
 }

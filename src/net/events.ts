@@ -4,7 +4,10 @@
 //
 // Events that belong to something the ClientWorld shows on the live timeline (or in the predicted present) are
 // released immediately instead, so they stay in sync with what they decorate:
-//   • the local player's own feedback — her casts, blinks, wards, flasks, getting hit, her death;
+//   • the local player's own feedback — her casts, blinks, wards, flasks, getting hit, her death, debuffs landing on
+//     her, being cleansed and being yanked by a hook (her debuff list and her position are live/predicted: the root
+//     sound plays as the prediction stops her, and the chain as ClientWorld.noteEvents replays the drag, which starts
+//     her visible yank toward the hook in the same frame);
 //   • pickups of drops she can see — her own loot and public drops, whoever picked them up (a picked-up drop
 //     vanishes from the view as soon as the newest snapshot lacks it, so its sparkle plays right then);
 //   • telegraph resolution — areas are drawn from the newest snapshot, so the slam/meteor/eruption explosion plays
@@ -39,6 +42,9 @@ export function isImmediateEvent(e: SimEvent, local: number): boolean {
     case 'flask':
     case 'notEnoughFocus':
     case 'playerDeath':
+    case 'debuff':
+    case 'cleanse':
+    case 'pull':
       return e.playerId === local;
     case 'hit':
     case 'evade':

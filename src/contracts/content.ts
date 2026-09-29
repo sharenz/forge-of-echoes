@@ -84,6 +84,10 @@ export const MONSTER_KINDS = [
   'ashboundHerald',  // lieutenant (wave 3): shields/empowers nearby monsters, summons ashlings
   'cinderMatriarch', // boss (final wave): multi-phase, telegraphed attacks
   'trainingDummy',   // hideout only: never dies, shows damage numbers
+  // Rimed Ossuary roster (GAME_SPEC §14) — appended so existing wire indices stay stable
+  'boneThrall', 'rimeshade', 'frostWeaver', 'glacialWisp', 'ossuaryGolem', 'boneChorister', 'hollowWarden',
+  // Iron Coliseum roster
+  'pitHound', 'chainThrall', 'ironCrossbowman', 'shieldbearer', 'tarSlinger', 'chainmaster', 'varkus',
 ] as const;
 export type MonsterKind = (typeof MONSTER_KINDS)[number];
 

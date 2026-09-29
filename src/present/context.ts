@@ -75,6 +75,13 @@ export interface FrameCtx {
   hoverDropId: number;
 }
 
+/** The player with `id` in a world view, or null (an indexed scan: no closure on the hot path). */
+export function playerById(world: WorldView, id: number): PlayerView | null {
+  const ps = world.players;
+  for (let i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i];
+  return null;
+}
+
 export function createFrameCtx(world: WorldView): FrameCtx {
   return {
     time: 0,

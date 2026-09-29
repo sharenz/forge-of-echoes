@@ -23,6 +23,8 @@ export function makeCharacter(overrides: Partial<CharacterSave> = {}): Character
     equipment: {},
     backpack: { w: BACKPACK_SIZE.w, h: BACKPACK_SIZE.h, entries: [] },
     stash: [{ name: 'Tab 1', grid: { w: STASH_TAB_SIZE.w, h: STASH_TAB_SIZE.h, entries: [] } }],
+    currencyStash: {},
+    mapStash: [],
     belt: Array.from({ length: BELT_SLOTS }, () => null),
     mapDevice: null,
     rngState: 12345,

@@ -32,4 +32,19 @@ describe('capEvents', () => {
     capEvents(events, 1, 1);
     expect(events.map((e) => e.t)).toEqual(['waveStart', 'waveStart']);
   });
+
+  it("the local player's debuff, cleanse and pull cues survive a trimmed frame; an ally's may go", () => {
+    const events: SimEvent[] = [
+      { t: 'debuff', playerId: 1, debuff: 'rooted', stacks: 1, x: 0, y: 0 },
+      { t: 'debuff', playerId: 2, debuff: 'chilled', stacks: 1, x: 5, y: 0 },
+      hit(2, 1),
+      { t: 'pull', playerId: 1, fromX: 0, fromY: 0, toX: -40, toY: 0 },
+      { t: 'cleanse', playerId: 1, debuffs: ['bleeding', 'burning'], x: 0, y: 0 },
+      { t: 'blocked', x: 3, y: 3 },
+      hit(2, 2),
+    ];
+    capEvents(events, 4, 1);
+    expect(events.map((e) => e.t)).toEqual(['debuff', 'pull', 'cleanse', 'hit']);
+    expect(events[0]).toMatchObject({ playerId: 1, debuff: 'rooted' });
+  });
 });

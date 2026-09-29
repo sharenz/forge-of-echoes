@@ -6,12 +6,13 @@
 // receiver's uids unique (another character's "i…" uids overlap this one's; see src/game/items/ids.ts).
 import type { Result } from '../../contracts/game';
 import type { CharacterSave, Item } from '../../contracts/items';
-import { MAX_STASH_TABS } from '../../contracts/items';
+import { MAP_STASH_CAPACITY, MAX_STASH_TABS } from '../../contracts/items';
 import { TRADE_MAX_ITEMS } from '../../contracts/net';
 import {
   addToBackpack, autoPlace, claimIncomingUid, createStashTab, findItem, itemSize, removeItemAt, withGrid,
 } from './inventory';
 import { itemLabel } from './describe';
+import { currencyStashCount, currencyStashRoom, mapStashOf, withCurrencyStashCount, withMapStash } from './special-stash';
 
 const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 const fail = <T>(error: string): Result<T> => ({ ok: false, error });
@@ -104,7 +105,7 @@ export function tradeItems(
 export interface Stowed {
   character: CharacterSave;
   /** Where the item went. */
-  where: 'mapDevice' | 'backpack' | 'stash';
+  where: 'mapDevice' | 'backpack' | 'stash' | 'mapStash' | 'currencyStash';
   /** Stash tab index when `where` is 'stash'. */
   tab: number | null;
   /** Player-facing place for a toast: "your Map Device", "your backpack", 'your stash (tab "Maps")'. */
@@ -113,7 +114,8 @@ export interface Stowed {
 
 /**
  * Give an item back to its owner without ever losing it: a map goes into an empty Map Device first,
- * then anything goes to the backpack (stacking), then the first stash tab with room, then a new
+ * then anything goes to the backpack (stacking), then a map to the Map Stash and currency to its
+ * Crafting Stash slot (when the whole stack fits), then the first stash tab with room, then a new
  * "Recovered" tab while the stash has fewer than MAX_STASH_TABS. Fails only when all of that is full.
  * The uid is kept when free on the character (re-minted otherwise). For server-side refunds, e.g. the
  * map of a run that could not be restored after a restart.
@@ -128,7 +130,15 @@ export function stowItem(ch: CharacterSave, item: Item): Result<Stowed> {
   const bag = addToBackpack(ch, item, { refillBelt: false });
   if (bag.ok) return ok({ character: bag.value, where: 'backpack', tab: null, text: 'your backpack' });
 
+  if (item.kind === 'currency' && item.count > 0 && currencyStashRoom(ch, item.currencyId) >= item.count) {
+    const character = withCurrencyStashCount(ch, item.currencyId, currencyStashCount(ch, item.currencyId) + item.count);
+    return ok({ character, where: 'currencyStash', tab: null, text: 'your Crafting Stash' });
+  }
   const claimed = claimIncomingUid(ch, item);
+  if (claimed.item.kind === 'map' && mapStashOf(claimed.ch).length < MAP_STASH_CAPACITY) {
+    const character = withMapStash(claimed.ch, [...mapStashOf(claimed.ch), claimed.item]);
+    return ok({ character, where: 'mapStash', tab: null, text: 'your Map Stash' });
+  }
   for (let t = 0; t < claimed.ch.stash.length; t++) {
     const grid = autoPlace(claimed.ch.stash[t].grid, claimed.item);
     if (grid) {

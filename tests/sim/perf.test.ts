@@ -1,6 +1,8 @@
 // Steady-state load in a real map (themed props, edge ring, the wave director running) with a full
-// party of 4: 800 live monsters hunting the players (a mix of every regular archetype, so spitters
-// lob, stalkers leap and brutes slam) plus 600 live projectiles. Reports avg / p99.
+// party of 4: 800 live monsters hunting the players (a mix of every regular kind of all three rosters,
+// so spitters lob, stalkers leap, brutes slam, weavers web, wisps pulse, crossbowmen aim, shields
+// block, ghosts drift through the crowd, tar slingers lob) plus 600 live projectiles (hostile ones of
+// every monster kind, riders included). Reports avg / p99.
 import { describe, expect, it } from 'vitest';
 import { PROJECTILE_KINDS, type PlayerIntent } from '../../src/contracts/sim';
 import { createRunInternal } from '../../src/sim/run';
@@ -14,7 +16,13 @@ import { hold } from './helpers';
 const MONSTERS = 800;
 const PROJECTILES = 600;
 const PLAYERS = 4;
-const MIX: MonsterKind[] = ['ashling', 'ashling', 'ashling', 'emberSkitter', 'emberSkitter', 'cinderSpitter', 'riftStalker', 'ironhideBrute'];
+const MIX: MonsterKind[] = [
+  'ashling', 'ashling', 'emberSkitter', 'cinderSpitter', 'riftStalker', 'ironhideBrute',
+  'boneThrall', 'boneThrall', 'rimeshade', 'frostWeaver', 'glacialWisp', 'ossuaryGolem',
+  'pitHound', 'pitHound', 'chainThrall', 'ironCrossbowman', 'shieldbearer', 'tarSlinger',
+];
+/** Hostile projectile kinds (flat ones; lobs come from the spitters and slingers themselves). */
+const HOSTILE = ['cinderSpit', 'heraldOrb', 'matriarchOrb', 'webShot', 'frostShard', 'crossbowBolt', 'chainHook', 'boneShard'] as const;
 
 function topUp(w: World, k: number): void {
   const m = w.monsters;
@@ -31,7 +39,7 @@ function topUp(w: World, k: number): void {
   while (pr.count < PROJECTILES) {
     const p = w.players[n++ % w.players.length];
     const hostile = rng.next() < 0.25;
-    s.kind = hostile ? 4 : rng.int(0, 3);
+    s.kind = hostile ? PROJECTILE_KINDS.indexOf(HOSTILE[rng.int(0, HOSTILE.length - 1)]) : rng.int(0, 3);
     s.hostile = hostile;
     s.owner = p.id;
     const a = rng.range(0, Math.PI * 2);
@@ -53,7 +61,7 @@ function topUp(w: World, k: number): void {
 }
 
 describe('performance', () => {
-  it(`${MONSTERS} monsters + ${PROJECTILES} projectiles with ${PLAYERS} players in a map: avg < 3 ms per tick`, () => {
+  it(`${MONSTERS} monsters (every roster) + ${PROJECTILES} projectiles with ${PLAYERS} players in a map: avg < 3 ms per tick`, () => {
     const { run, world } = createRunInternal(
       makeConfig({ mode: 'map', theme: 'ashenForge', arenaRadius: 900, scaling: { hazards: true, extraProjectiles: 1 } }),
     );

@@ -1,6 +1,6 @@
-// CONTRACT (additive, wave 5) — new monster families per map base, player debuffs, and the sprite/sound ids they need.
-// These ids will be merged into content.ts MONSTER_KINDS / sim.ts PROJECTILE_KINDS & AREA_KINDS / art.ts REQUIRED_SPRITES /
-// audio.ts SFX_IDS when the behaviour wave lands; art and audio are produced first against this file (GAME_SPEC §13–§14).
+// FROZEN CONTRACT — per-map-type monster rosters, player debuffs, and the sprite/sound ids they need (GAME_SPEC §13–§14).
+// These ids are merged into content.ts MONSTER_KINDS, sim.ts PROJECTILE_KINDS / AREA_KINDS, art.ts REQUIRED_SPRITES and
+// audio.ts SFX_IDS (all appended, so existing wire indices stay stable).
 
 export const OSSUARY_MONSTERS = ['boneThrall', 'rimeshade', 'frostWeaver', 'glacialWisp', 'ossuaryGolem', 'boneChorister', 'hollowWarden'] as const;
 export const COLISEUM_MONSTERS = ['pitHound', 'chainThrall', 'ironCrossbowman', 'shieldbearer', 'tarSlinger', 'chainmaster', 'varkus'] as const;

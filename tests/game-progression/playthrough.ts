@@ -21,7 +21,7 @@
 //     (run.requestPickup).
 // Skill / attribute points are spent by a simple, sensible policy. Used by the balance suite
 // (tests/game-progression/balance.test.ts).
-import type { Attribute, SkillId } from '../../src/contracts/content';
+import { MONSTER_KINDS, type Attribute, type MonsterKind, type SkillId } from '../../src/contracts/content';
 import type { RunSetup } from '../../src/contracts/game';
 import type { CharacterSave, Item, MapItem } from '../../src/contracts/items';
 import { PORTALS_PER_MAP } from '../../src/contracts/net';
@@ -31,7 +31,12 @@ import {
 } from '../../src/contracts/sim';
 import { rules } from '../../src/game';
 import { createMapItem } from '../../src/game/progression';
-import { createRun, type SimPlayerUpdate } from '../../src/sim';
+import type { SimPlayerUpdate } from '../../src/sim';
+// run.ts first: it loads the sim's core modules (they import each other in a cycle) in the right order.
+import { createRunInternal } from '../../src/sim/run';
+import { killMonster } from '../../src/sim/combat';
+import { MFLAG } from '../../src/sim/stores';
+import type { World } from '../../src/sim/world';
 import { createBot } from '../sim/bot';
 
 /** How a player spends points. Skill steps are taken in order (a skill listed twice is ranked twice). */
@@ -101,6 +106,13 @@ export interface PlayOptions {
   reenterAfter?: number;
   /** Probe: every tick's events and the view after the step (diagnostics only). */
   onStep?: (events: readonly SimEvent[], view: WorldView, tick: number) => void;
+  /**
+   * Probe: fight the lieutenant or the boss without the horde. The tick it arrives, every other monster
+   * crumbles (uncredited: no loot, no XP) and the wave's stream is dropped; its own escorts and summons still
+   * come. 'lieutenant' also holds the wave clock (nothing else arrives) and ends the run when it falls (the
+   * result is then 'timeout'; read `lieutenantSeconds`).
+   */
+  isolate?: 'boss' | 'lieutenant';
 }
 
 export interface PlayResult {
@@ -113,7 +125,14 @@ export interface PlayResult {
   levelEnd: number;
   /** Boss life fraction at the end (1 = never damaged / never spawned, 0 = dead). */
   bossLife: number;
+  /** Seconds from the boss's arrival to its fall (−1: it never fell). */
+  bossSeconds: number;
   heraldKilled: boolean;
+  /** Seconds from the lieutenant's arrival to its fall (−1: it never fell). */
+  lieutenantSeconds: number;
+  /** Monsters alive when the boss arrived (−1: it never did), and how many of each kind. */
+  aliveAtBoss: number;
+  kindsAtBoss: Partial<Record<MonsterKind, number>>;
   /** Most monsters alive at once. */
   peakAlive: number;
   /** This player's lowest life as a fraction of maximum life during the run. */
@@ -213,7 +232,7 @@ export function playParty(starts: readonly CharacterSave[], map: MapItem, opts: 
   };
   const cfg = rules.buildRunConfig(setup, hooks);
   opts.tweakConfig?.(cfg);
-  const run = createRun(cfg);
+  const { run, world } = createRunInternal(cfg);
   let portalsUsed = 0;
   for (const m of members) {
     run.addPlayer(joinOf(m, setup));
@@ -254,6 +273,11 @@ export function playParty(starts: readonly CharacterSave[], map: MapItem, opts: 
   let heraldKilled = false;
   let peakAlive = 0;
   let bossLife = 1;
+  let bossAt = -1;
+  let lieutenantAt = -1;
+  let lieutenantFellAt = -1;
+  let aliveAtBoss = -1;
+  const kindsAtBoss: Partial<Record<MonsterKind, number>> = {};
   let t = 0;
   for (; t < maxTicks; t++) {
     for (const m of members) {
@@ -262,6 +286,22 @@ export function playParty(starts: readonly CharacterSave[], map: MapItem, opts: 
       run.setIntent(m.id, m.bot.intent(botView(m), m.id));
     }
     run.step();
+    const d = world.director;
+    if (lieutenantAt < 0 && d.lieutenantId >= 0) {
+      lieutenantAt = t;
+      if (opts.isolate === 'lieutenant') isolateMonster(world, d.lieutenantId);
+    }
+    if (bossAt < 0 && d.bossId >= 0) {
+      bossAt = t;
+      aliveAtBoss = world.monsters.count;
+      countKinds(world, kindsAtBoss);
+      if (opts.isolate === 'boss') isolateMonster(world, d.bossId);
+    }
+    // Isolating the lieutenant: the wave clock holds while it lives (no next wave, no stream).
+    if (opts.isolate === 'lieutenant' && lieutenantAt >= 0) {
+      d.waveTime = 0;
+      d.stream.remaining = 0;
+    }
     const events = run.drainEvents();
     opts.onStep?.(events, run.view, t);
     for (const o of run.drainOutcomes()) {
@@ -286,7 +326,10 @@ export function playParty(starts: readonly CharacterSave[], map: MapItem, opts: 
           break;
         }
         case 'kill':
-          if (o.isLieutenant) heraldKilled = true;
+          if (o.isLieutenant) {
+            heraldKilled = true;
+            if (lieutenantFellAt < 0) lieutenantFellAt = t;
+          }
           break;
         case 'cleared':
           clearedAt = t;
@@ -330,6 +373,7 @@ export function playParty(starts: readonly CharacterSave[], map: MapItem, opts: 
     }
     if (v.run.boss) bossLife = v.run.boss.life / v.run.boss.maxLife;
     if (members.every((m) => m.returned)) break;
+    if (opts.isolate === 'lieutenant' && lieutenantFellAt >= 0) break;
     // Party down with no way back in: the run is lost.
     const canReturn = reenterTicks >= 0 && portalsUsed < PORTALS_PER_MAP;
     if (clearedAt < 0 && members.every((m) => !m.inside || m.dead) && !canReturn) {
@@ -360,7 +404,11 @@ export function playParty(starts: readonly CharacterSave[], map: MapItem, opts: 
       levelStart: m.levelStart,
       levelEnd: ch.level,
       bossLife: result === 'cleared' ? 0 : bossLife,
+      bossSeconds: bossAt >= 0 && clearedAt >= 0 ? (clearedAt - bossAt) * SIM_DT : -1,
       heraldKilled,
+      lieutenantSeconds: lieutenantAt >= 0 && lieutenantFellAt >= 0 ? (lieutenantFellAt - lieutenantAt) * SIM_DT : -1,
+      aliveAtBoss,
+      kindsAtBoss,
       peakAlive,
       minLife: m.minLife,
       flasksDrunk: m.flasksDrunk,
@@ -373,6 +421,29 @@ export function playParty(starts: readonly CharacterSave[], map: MapItem, opts: 
       setup,
     };
   });
+}
+
+/** PlayOptions.isolate: everything but monster `id` crumbles (uncredited) and the wave's stream is dropped. */
+function isolateMonster(w: World, id: number): void {
+  const m = w.monsters;
+  const keep = m.slotOf(id);
+  for (let i = 0; i < m.hwm; i++) {
+    if (!m.alive[i] || i === keep) continue;
+    // A lieutenant still up when the boss arrives goes too: the boss is fought alone.
+    if ((m.flags[i] & MFLAG.boss) !== 0) continue;
+    killMonster(w, i, 0, false);
+  }
+  w.director.stream.remaining = 0;
+}
+
+/** Living monsters by kind. */
+function countKinds(w: World, out: Partial<Record<MonsterKind, number>>): void {
+  const m = w.monsters;
+  for (let i = 0; i < m.hwm; i++) {
+    if (!m.alive[i]) continue;
+    const k = MONSTER_KINDS[m.kind[i]];
+    out[k] = (out[k] ?? 0) + 1;
+  }
 }
 
 /**
@@ -445,7 +516,8 @@ export function mapInBag(ch: CharacterSave, pred: (m: MapItem) => boolean = () =
 export function describePlay(r: PlayResult): string {
   const m = r.setup.map;
   return `${m.baseId} T${m.tier}: ${r.result} in ${Math.round(r.seconds)}s, wave ${r.wave}, L${r.levelStart}->L${r.levelEnd}, `
-    + `kills ${r.kills}, boss ${Math.round(r.bossLife * 100)}%, herald ${r.heraldKilled ? 'dead' : 'alive'}, `
+    + `kills ${r.kills}, boss ${Math.round(r.bossLife * 100)}%${r.bossSeconds >= 0 ? ` (fight ${Math.round(r.bossSeconds)}s)` : ''}, `
+    + `herald ${r.heraldKilled ? 'dead' : 'alive'}${r.lieutenantSeconds >= 0 ? ` (fight ${Math.round(r.lieutenantSeconds)}s)` : ''}, `
     + `peak ${r.peakAlive} alive, lowest life ${Math.round(r.minLife * 100)}%, flasks ${r.flasksDrunk}, `
     + `deaths ${r.deaths}, re-entries ${r.reentries}, portals ${r.portalsUsed}/${PORTALS_PER_MAP}, pickups ${r.pickups}`
     + (r.reentries > 0 ? ` (${r.pickupsAfterReentry} after re-entering)` : '');

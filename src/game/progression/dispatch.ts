@@ -1,12 +1,16 @@
 // Top-level item dispatchers: tooltips for every item kind, and crafting that routes map currencies on
 // maps to the map rules and everything else to the Workbench (src/game/items).
+//
+// Crafting straight from the Crafting Stash: the currency uid may be a slot ("cstash:<id>"). findItem
+// finds it as a CurrencyStack view (location currencyStash), and paying one (setStackCount) takes it from
+// the slot, so every path below works on it unchanged. Targets may be in the Map Stash too.
 import type { CraftOutcome, Result } from '../../contracts/game';
 import type { CharacterSave, CurrencyStack, Item, ItemDescription, MapItem } from '../../contracts/items';
 import { createRng } from '../../core/rng';
 import { isMapCurrency } from '../../data/items';
 import {
   applyEquipmentCurrency, craftPreview as equipmentCraftPreviewFor, craftingTargetError as equipmentTargetError,
-  describeCurrency, describeEquipment, describeFlask, findItem, replaceItemAt, setStackCount,
+  describeCurrency, describeEquipment, describeFlask, findItem, mapStashIndex, replaceItemAt, setStackCount,
 } from '../items';
 import type { FoundItem } from '../items';
 import { craftMap, describeMap, mapCraftError, mapCraftPreview } from './maps';
@@ -26,7 +30,10 @@ export function describeItem(item: Item, ch?: CharacterSave): ItemDescription {
       return describeFlask(item, { characterLevel: ch.level, flaskEffect });
     }
     case 'map':
-      return describeMap(item, { inDevice: !!ch && ch.mapDevice?.uid === item.uid });
+      return describeMap(item, {
+        inDevice: !!ch && ch.mapDevice?.uid === item.uid,
+        inMapStash: !!ch && mapStashIndex(ch, item.uid) >= 0,
+      });
   }
 }
 

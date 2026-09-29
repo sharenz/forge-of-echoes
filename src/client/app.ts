@@ -4,7 +4,8 @@
 //
 //   input ticks (60 Hz accumulator) → session.inputTick → prediction + wire
 //   alpha = world.update(now) → events due at the render tick → presenter.frame(...)
-//   HUD → UiState at ~15 Hz; music by zone / boss; intensity from wave pressure
+//   HUD (debuffs included) → UiState at ~15 Hz; music by zone / boss, coloured by the map's theme on every zone
+//   change (src/audio setMusicTheme); intensity from wave pressure
 //
 // World clicks (world-pick.ts resolveWorldClick): a ground item under the cursor (Presenter.dropAt) is picked up —
 // walking there first when out of reach — before anything else; then open portals (usePortal) and hideout objects
@@ -21,6 +22,7 @@
 // behind the disconnected screen.
 import type { ArtBundle } from '../contracts/art';
 import type { AudioEngine, MusicId, SfxId } from '../contracts/audio';
+import type { Theme } from '../contracts/content';
 import type { GameRulesApi } from '../contracts/game';
 import type { CharacterSave, Settings } from '../contracts/items';
 import type { ServerMessage, TradeInfo, ZoneInfo } from '../contracts/net';
@@ -30,7 +32,7 @@ import { SIM_DT } from '../contracts/sim';
 import type { SimEvent } from '../contracts/sim';
 import type { UiActions, UiState, UiStore } from '../contracts/ui';
 import { generateArt } from '../art';
-import { createAudio } from '../audio';
+import { createAudio, setMusicTheme } from '../audio';
 import { rules as sharedRules, withItemLocks } from '../game';
 import { createPresenter, pickInteractiveProp } from '../present';
 import { createRenderer } from '../render';
@@ -42,14 +44,15 @@ import type { ClientStats, DebugTarget } from './debug';
 import { DomInput } from './dom-input';
 import { MAX_FRAME_EVENTS, capEvents } from './event-budget';
 import { loadoutKeyLabels, localPlayer } from './hud';
-import { approach, intensityFor, musicFor } from './music';
+import { approach, intensityFor, musicFor, musicThemeFor } from './music';
 import { ReloadGuard } from './reload-guard';
 import { GameSession } from './session';
 import {
   RESUME_CHARACTER_KEY, SETTINGS_KEY, TOKEN_KEY, browserStorage, parseSettings, readKey, tabStorage, writeKey,
 } from './settings';
 import {
-  closePanel, dismissToast, initialUiState, leaveGameState, openPanel, togglePanel, withServerUpdating, withoutRunSummary,
+  clampStashTab, closePanel, dismissToast, initialUiState, leaveGameState, openPanel, togglePanel, withServerUpdating,
+  withoutRunSummary,
 } from './state';
 import { createStateBox, type StateBox } from './store';
 import { findDrop } from './autowalk';
@@ -162,6 +165,8 @@ export class ClientApp {
   /** Loadout keycap labels from the keyboard layout (null = the default Q E R F). */
   private keyLabels: readonly string[] | null = null;
   private music: MusicId | null | undefined = undefined;
+  /** The map theme colouring the 'map' / 'boss' music (undefined = never set). */
+  private musicTheme: Theme | null | undefined = undefined;
   private intensity = 0;
   private fadeSince = 0;
   private fading = false;
@@ -533,10 +538,18 @@ export class ClientApp {
     this.reconnectingSince = 0;
     this.awaitingZone = false;
     this.input.releaseAll();
+    this.applyMusicTheme(null);
     // The last world frame stays on the canvas: cover it until the next zone fades in.
     this.fading = false;
     this.el.fade.classList.add('foe-fade--on');
     this.box.update((s) => leaveGameState(s));
+  }
+
+  /** Colour the map / boss music for a map base (src/audio setMusicTheme); null = the plain forge tracks. */
+  private applyMusicTheme(theme: Theme | null): void {
+    if (theme === this.musicTheme) return;
+    this.musicTheme = theme;
+    setMusicTheme(this.audio, theme);
   }
 
   private toCharacterSelect(): void {
@@ -652,6 +665,8 @@ export class ClientApp {
   private onZoneEntered(zone: ZoneInfo, resumed: boolean): void {
     this.reachedGame = true;
     this.reconnectingSince = 0;
+    // Before the frame loop switches the track: the map music starts in the new map's colour.
+    this.applyMusicTheme(musicThemeFor(zone));
     if (this.awaitingZone) {
       this.awaitingZone = false;
       const status = this.connection.status;
@@ -921,10 +936,16 @@ export class ClientApp {
       openPanel: (p) => this.box.update((s) => openPanel(s, p)),
       closePanel: (p) => this.box.update((s) => closePanel(s, p)),
       closeAllPanels: () => this.box.update((s) => (s.openPanels.length ? { ...s, openPanels: [] } : s)),
-      setStashTab: (tab) => this.box.update((s) => (s.stashTab === tab ? s : { ...s, stashTab: tab })),
+      setStashTab: (tab) =>
+        this.box.update((s) => {
+          // A special tab, or a normal tab the displayed character has (addStashTab shows the new tab at once).
+          const next = clampStashTab(tab, s.character ? s.character.stash.length : Number.MAX_SAFE_INTEGER);
+          return s.stashTab === next ? s : { ...s, stashTab: next };
+        }),
+      depositAllCurrency: () => inGame((g) => g.depositAllCurrency(), undefined),
 
-      moveItem: (uid, to) => inGame((g) => g.moveItem(uid, to), false),
-      quickMove: (uid) => inGame((g) => g.quickMove(uid), undefined),
+      moveItem: (uid, to, count) => inGame((g) => g.moveItem(uid, to, count), false),
+      quickMove: (uid, count) => inGame((g) => g.quickMove(uid, count), undefined),
       discardItem: (uid) => inGame((g) => g.discardItem(uid), undefined),
       armCurrency: (uid) => inGame((g) => g.armCurrency(uid), undefined),
       disarm: () => inGame((g) => g.disarm(), undefined),

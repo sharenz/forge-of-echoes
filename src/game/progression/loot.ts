@@ -17,14 +17,14 @@
 // Summoned minions (and the training dummy) never drop anything.
 import type { RunSetup } from '../../contracts/game';
 import type { CharacterSave, CurrencyStack, EquipmentItem, FlaskStack, Item, MapItem, Rarity } from '../../contracts/items';
-import type { CurrencyId, MapBaseId, MonsterKind } from '../../contracts/content';
+import type { CurrencyId, MapBaseId } from '../../contracts/content';
 import { MAP_BASE_IDS, iconIdForBase, iconIdForCurrency, iconIdForFlask, iconIdForMap, iconIdForUnique } from '../../contracts/content';
 import type { DropSpec, DropSprite, DropTone, KillLootContext } from '../../contracts/sim';
 import type { Rng } from '../../contracts/rng';
 import {
   BOSS_LOOT, CATEGORY_CHANCE, CATEGORY_ORDER, CHEST_LOOT, CHEST_MAP_QUALITY, CURRENCY_DROPS, DROPPED_MAP_QUALITY,
   ECHO_WAVE_QUANTITY_MORE, ELITE_LOOT_MULTIPLIER, EQUIPMENT_RARITY_WEIGHTS, FLASK_DROPS, LIEUTENANT_LOOT, MAP_BASES,
-  MAP_DROP_TIER_OFFSETS, MAP_RARITY_WEIGHTS, MAX_MAP_TIER, MIN_MAP_TIER, MONSTER_LOOT_MULTIPLIERS, MONSTER_NAMES,
+  MAP_DROP_TIER_OFFSETS, MAP_RARITY_WEIGHTS, MAX_MAP_TIER, MIN_MAP_TIER, MONSTER_LOOT_MULTIPLIERS,
 } from '../../data/progression';
 import type { CurrencyDropDef, LootCategory, RarityWeightDef } from '../../data/progression';
 import { ARMOUR_CLASSES, findCurrency, findFlask, getBase } from '../../data/items';
@@ -33,7 +33,9 @@ import {
 } from '../items';
 import type { Luck } from './luck';
 import { lootLuck } from './luck';
-import { clampTier, echoWaveIndex, mapBaseName, mapDropMultipliers, mapTitle, rollMapWithRarity } from './maps';
+import {
+  clampTier, echoWaveIndex, mapBaseName, mapDropMultipliers, mapTitle, monsterName, monsterSentenceName, rollMapWithRarity,
+} from './maps';
 import { asciiLabel, rollCountTable } from './util';
 
 // ---------------------------------------------------------------------------------------------
@@ -190,13 +192,9 @@ function rollCategory(cat: LootCategory, ctx: LootContext, rng: Rng, m: number, 
 // Kill & chest loot
 // ---------------------------------------------------------------------------------------------
 
-function monsterName(kind: MonsterKind): string {
-  return MONSTER_NAMES[kind] ?? 'a monster';
-}
-
 function killOrigin(ctx: LootContext, kill: KillLootContext, echo: boolean): string {
   const where = echo ? `the Echo wave of ${ctx.place}` : ctx.place;
-  if (kill.isBoss || kill.isLieutenant) return `Dropped by the ${monsterName(kill.kind)} in ${where}`;
+  if (kill.isBoss || kill.isLieutenant) return `Dropped by ${monsterSentenceName(kill.kind)} in ${where}`;
   if (kill.rarity === 'rare' || kill.rarity === 'magic') return `Dropped by a ${kill.rarity} ${monsterName(kill.kind)} in ${where}`;
   return `Dropped in ${where}`;
 }

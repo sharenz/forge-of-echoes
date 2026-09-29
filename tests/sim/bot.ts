@@ -3,7 +3,11 @@
 // casts its loadout sensibly, drinks flasks, then opens the chest, collects its own (instanced)
 // loot and takes the return portal. Several bots can play the same instance as a party.
 // Shared by the sim tests and dev/sim.html.
-import { RARITY_CODE, type PlayerIntent, type WorldView } from '../../src/contracts/sim';
+import { MONSTER_KINDS } from '../../src/contracts/content';
+import { RARITY_CODE, type AreaView, type PlayerIntent, type WorldView } from '../../src/contracts/sim';
+import {
+  CHARGE_LINE_HALF_WIDTH, CHOIR_RING_HALF_WIDTH, areaAngle, areaVariant, choirGapAngles, inChoirGap,
+} from '../../src/sim/area-geometry';
 
 export interface BotOptions {
   /** Walk to (non-blocked) drops when safe and after the clear. Default true. */
@@ -17,7 +21,48 @@ export interface Bot {
   intent(view: WorldView, playerId?: number): PlayerIntent;
 }
 
-const HURTFUL_AREAS = new Set(['slamWarning', 'leapWarning', 'eruptionWarning', 'meteorWarning', 'firePool']);
+const SHIELDBEARER = MONSTER_KINDS.indexOf('shieldbearer');
+
+const HURTFUL_AREAS = new Set([
+  'slamWarning', 'leapWarning', 'eruptionWarning', 'meteorWarning', 'firePool',
+  // Rimed Ossuary / Iron Coliseum discs (a whirlwind telegraph too: it becomes the real thing).
+  'frostNovaWarning', 'glacialSpike', 'icePrison', 'blizzard', 'wispBurst', 'tarPool', 'executionMark', 'arenaSpikes', 'whirlwind',
+]);
+
+/** Push away from a chargeLine's lane (perpendicular), or null when clear of it. */
+function lanePush(a: AreaView, x: number, y: number): { x: number; y: number; w: number } | null {
+  const ang = areaAngle(a);
+  const ux = Math.cos(ang);
+  const uy = Math.sin(ang);
+  const rx = x - a.x;
+  const ry = y - a.y;
+  const along = rx * ux + ry * uy;
+  if (along < -16 || along > a.radius + 16) return null;
+  const side = rx * -uy + ry * ux;
+  const clear = CHARGE_LINE_HALF_WIDTH[areaVariant(a)] + 22;
+  if (Math.abs(side) >= clear) return null;
+  const s = side >= 0 ? 1 : -1;
+  return { x: -uy * s, y: ux * s, w: 4 * (1 - Math.abs(side) / clear) + 1 };
+}
+
+/** Steer along a choir ring toward its nearest gap while the band is about to reach us, or null. */
+function ringPush(a: AreaView, x: number, y: number): { x: number; y: number; w: number } | null {
+  const dx = x - a.x;
+  const dy = y - a.y;
+  const d = Math.hypot(dx, dy);
+  if (d < 1 || d < a.radius - CHOIR_RING_HALF_WIDTH - 10 || d > a.radius + 60) return null;
+  const at = Math.atan2(dy, dx);
+  if (inChoirGap(a, at)) return { x: 0, y: 0, w: 0 };
+  // Signed angular distance to the nearest gap: walk around the ring that way.
+  let bd = Infinity;
+  for (const g of choirGapAngles(a)) {
+    let diff = g - at;
+    diff -= Math.round(diff / (Math.PI * 2)) * Math.PI * 2;
+    if (Math.abs(diff) < Math.abs(bd)) bd = diff;
+  }
+  const s = bd >= 0 ? 1 : -1;
+  return { x: (-dy / d) * s, y: (dx / d) * s, w: 3 };
+}
 
 export function createBot(opts: BotOptions = {}): Bot {
   const collectDrops = opts.collectDrops ?? true;
@@ -26,6 +71,14 @@ export function createBot(opts: BotOptions = {}): Bot {
   let lastX = 0;
   let lastY = 0;
   let stuck = 0;
+  // After the clear: progress toward the current goal (chest, drop, portal) and the back-off when there is none.
+  let goalX = Number.NaN;
+  let goalY = Number.NaN;
+  let bestGoalD = Infinity;
+  let noProgress = 0;
+  let escape = 0;
+  let escX = 0;
+  let escY = 0;
 
   return {
     intent(view: WorldView, playerId = view.players[0]?.id ?? 0): PlayerIntent {
@@ -119,12 +172,38 @@ export function createBot(opts: BotOptions = {}): Bot {
       };
 
       if (view.run.phase === 'cleared') {
+        // Wedged on the way (no step closer for 2 s — e.g. the chest landed beside a standing stone and left a gap
+        // too narrow to pass, and the side-step only slides along it): back off diagonally for a second, then walk
+        // on from there (the other diagonal next time).
+        if (escape > 0) {
+          escape--;
+          out.moveX = escX;
+          out.moveY = escY;
+          return out;
+        }
         const chest = view.props.find((pp) => pp.kind === 'chest' && pp.state === 0);
         const drop = collectDrops ? nearestDrop(1e9) : null;
         const portal = view.props.find((pp) => pp.kind === 'returnPortal' && pp.state === 1);
-        if (chest) moveToward(chest.x, chest.y);
-        else if (drop) moveToward(drop.x, drop.y);
-        else if (portal && usePortal) moveToward(portal.x, portal.y);
+        const goal = chest ?? drop ?? (portal && usePortal ? portal : null);
+        if (!goal) return out;
+        const gd = Math.hypot(goal.x - p.x, goal.y - p.y);
+        if (goal.x !== goalX || goal.y !== goalY) {
+          goalX = goal.x;
+          goalY = goal.y;
+          bestGoalD = gd;
+          noProgress = 0;
+        } else if (gd < bestGoalD - 1) {
+          bestGoalD = gd;
+          noProgress = 0;
+        } else if (++noProgress > 120) {
+          noProgress = 0;
+          orbit = -orbit;
+          escape = 60;
+          const a = Math.atan2(p.y - goal.y, p.x - goal.x) + orbit;
+          escX = Math.cos(a);
+          escY = Math.sin(a);
+        }
+        moveToward(goal.x, goal.y);
         return out;
       }
 
@@ -138,6 +217,9 @@ export function createBot(opts: BotOptions = {}): Bot {
       let bd = Infinity;
       let crowd60 = 0;
       let crowd120 = 0;
+      // A shieldbearer turned toward her soaks every bolt: aim past it at something else when there is one.
+      let aimAlt = -1;
+      let aimAltD = Infinity;
       for (let i = 0; i < m.capacity; i++) {
         if (!m.alive[i]) continue;
         const dx = m.x[i] - p.x;
@@ -146,6 +228,10 @@ export function createBot(opts: BotOptions = {}): Bot {
         if (d < nd) {
           nd = d;
           nearest = i;
+        }
+        if (d < aimAltD && !(m.kind[i] === SHIELDBEARER && m.facing[i] * dx < 0)) {
+          aimAltD = d;
+          aimAlt = i;
         }
         if ((m.rarity[i] === RARITY_CODE.boss || m.rarity[i] === RARITY_CODE.lieutenant) && d < bd) {
           bd = d;
@@ -177,6 +263,15 @@ export function createBot(opts: BotOptions = {}): Bot {
       }
       let inDanger = false;
       for (const a of view.areas) {
+        if (a.kind === 'chargeLine' || a.kind === 'choirWave') {
+          const push = a.kind === 'chargeLine' ? lanePush(a, p.x, p.y) : ringPush(a, p.x, p.y);
+          if (push && push.w > 0) {
+            inDanger = true;
+            fx += push.x * push.w;
+            fy += push.y * push.w;
+          }
+          continue;
+        }
         if (!HURTFUL_AREAS.has(a.kind)) continue;
         const dx = p.x - a.x;
         const dy = p.y - a.y;
@@ -200,8 +295,9 @@ export function createBot(opts: BotOptions = {}): Bot {
       fy += oy;
       const threat = Math.hypot(fx, fy);
 
-      // Aim: the boss/lieutenant when reasonably close, else the nearest monster.
-      const target = boss >= 0 && bd < 320 ? boss : nearest;
+      // Aim: the boss/lieutenant when reasonably close, else the nearest monster (unless its shield faces her).
+      const shielded = nearest >= 0 && m.kind[nearest] === SHIELDBEARER && aimAlt >= 0 && aimAltD < 330;
+      const target = boss >= 0 && bd < 320 ? boss : shielded ? aimAlt : nearest;
       if (target >= 0) {
         out.aimX = m.x[target];
         out.aimY = m.y[target];
@@ -236,6 +332,7 @@ export function createBot(opts: BotOptions = {}): Bot {
       }
 
       // Skills.
+      const rooted = p.debuffs.some((d) => d.id === 'rooted');
       out.held[0] = nd < 330;
       for (let s = 1; s < p.slots.length; s++) {
         const slot = p.slots[s];
@@ -257,7 +354,8 @@ export function createBot(opts: BotOptions = {}): Bot {
             out.held[s] = p.wardTime <= 0 && (crowd60 >= 2 || bd < 200);
             break;
           case 'riftStep':
-            if ((inDanger || crowd60 >= 5 || p.life < p.maxLife * 0.35) && threat > 0.5) {
+            // Rift Step also breaks a root (GAME_SPEC §13): blink out when held in danger.
+            if ((inDanger || crowd60 >= 5 || p.life < p.maxLife * 0.35 || (rooted && (crowd60 >= 2 || nd < 120))) && threat > 0.5) {
               out.held[s] = true;
               out.aimX = p.x + (fx / threat) * 120;
               out.aimY = p.y + (fy / threat) * 120;

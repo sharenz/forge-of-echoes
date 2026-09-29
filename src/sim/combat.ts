@@ -1,17 +1,21 @@
 // Damage resolution for both sides, ailments and kill credit.
-import { DAMAGE_TYPES, type DamageType } from '../contracts/content';
-import { MONSTER_ANIM, type MonsterRarity, type SimEvent } from '../contracts/sim';
+import type { PlayerDebuff } from '../contracts/bestiary';
+import { DAMAGE_TYPES, type DamageType, type MonsterKind } from '../contracts/content';
+import { MONSTER_ANIM, type MonsterRarity, type RootSource, type SimEvent } from '../contracts/sim';
 import { ELITE, KIND_BY_INDEX, KIND_INDEX } from './archetypes';
 import { removeOwnedAreas, spawnArea } from './areas';
 import {
-  ARMOURED_HIT_REDUCTION, CHILL_DURATION, EVASION_CAP, HIT_ANIM, IGNITE_DURATION, IGNITE_EVENT_INTERVAL, IGNITE_FRACTION,
-  KNOCKBACK_MAX, KNOCKBACK_MIN, MELEE_CAP_FRACTION, MELEE_CAP_WINDOW_TICKS, RESIST_CAP, ROLL_MAX, ROLL_MIN,
+  CHILL_DURATION, EVASION_CAP, HIT_ANIM, IGNITE_DURATION, IGNITE_EVENT_INTERVAL, IGNITE_FRACTION,
+  CORPSE_LIFETIME, CORPSE_MEMORY, KNOCKBACK_MAX, KNOCKBACK_MIN, MELEE_CAP_FRACTION, MELEE_CAP_WINDOW_TICKS, RESIST_CAP, ROLL_MAX,
+  ROLL_MIN,
   SHOCK_BONUS, SHOCK_DURATION, WARD_REDUCTION_CAP, WARDED_REDUCTION,
 } from './constants';
+import { applyDebuff, cleanseAll, clearDebuffs, effectiveResist, isActive, shockMult } from './debuffs';
 import { rollKillLoot } from './hooks';
 import { spawnDrops, spawnMotes } from './loot';
 import { DAMAGE_INDEX, damageTypeAt } from './math';
 import { refreshLiving } from './player';
+import { monsterDefs } from './rosters';
 import { MFLAG } from './stores';
 import type { PlayerState, World } from './world';
 
@@ -22,7 +26,6 @@ export const DT_LIGHTNING = DAMAGE_INDEX.lightning;
 export const DT_VOID = DAMAGE_INDEX.void;
 
 const DUMMY = KIND_INDEX.trainingDummy;
-const BRUTE = KIND_INDEX.ironhideBrute;
 
 const RARITY_NAMES: readonly MonsterRarity[] = ['normal', 'magic', 'rare', 'normal', 'normal'];
 
@@ -35,10 +38,10 @@ export function isHittable(w: World, i: number): boolean {
 /**
  * Player damage on monster slot `i`. `amount` is the average hit (the skill's resolved damage);
  * this rolls ×0.8–1.2, then crit, then the target's resistance, shock, Warded and (for `hit`s on
- * an Ironhide Brute) armour. `dir` pushes the target back (knockback 2–4 units, scaled by `knock`
+ * an armoured monster such as the Ironhide Brute) armour. `dir` pushes the target back (knockback 2–4 units, scaled by `knock`
  * and the monster's susceptibility; the pending push never exceeds the 4-unit cap however many
  * hits land at once). `hit` = false marks burning damage (ward embers, fire trails), which armour
- * does not reduce. `source` is the player id credited with the damage (0 = nobody). Returns true
+ * (MonsterDef.hitReduction) does not reduce. `source` is the player id credited with the damage (0 = nobody). Returns true
  * when this call killed the monster (it received the kill credit).
  */
 export function damageMonster(
@@ -59,7 +62,7 @@ export function damageMonster(
   const resisted = dmg * (1 - Math.min(RESIST_CAP, m.res[i * 5 + dtype]));
   if (ailmentChance > 0) applyAilment(w, i, resisted, dtype, ailmentChance, source);
   dmg = resisted * takenMult(w, i);
-  if (hit && m.kind[i] === BRUTE) dmg *= 1 - ARMOURED_HIT_REDUCTION;
+  if (hit && m.hitReduction[i] > 0) dmg *= 1 - m.hitReduction[i];
   if (knock > 0 && m.knockback[i] > 0) {
     const l = Math.hypot(dirX, dirY);
     if (l > 1e-6) {
@@ -223,6 +226,7 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
   const isLieutenant = (flags & MFLAG.lieutenant) !== 0;
   const summoned = (flags & MFLAG.summoned) !== 0;
   const rarity = RARITY_NAMES[m.rarity[i]];
+  const def = monsterDefs()[m.kind[i]];
   w.events.push({ t: 'death', kind, rarity: m.rarity[i], x, y, facing: m.facing[i], damageType: damageTypeAt(dtype) });
 
   const pk = m.pack[i];
@@ -232,12 +236,18 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
     if (pack.alive <= 0) pack.active = false;
   }
   removeOwnedAreas(w, m.id[i]);
+  if (w.memory.size > 0) w.memory.delete(m.id[i]);
   m.release(i);
+  recordCorpse(w, kind, x, y);
   if (isBoss) {
     w.director.bossDefeated = true;
     w.director.bossDeathX = x;
     w.director.bossDeathY = y;
+    // The map is won (the director clears it next tick, after the players' own update): lift the
+    // survivors' debuffs now, so no burn or bleed ticks in between.
+    for (const p of w.living) cleanseAll(w, p);
   }
+  def.onDeath?.(w, x, y, credited);
 
   if (credited) {
     w.kills++;
@@ -266,38 +276,72 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
 export type PlayerHitKind = 'melee' | 'projectile' | 'area' | 'dot';
 
 /**
- * Damage one player. Order: invulnerability → evasion (attacks only) → roll → armour (physical)
- * → resistance → damageTaken → Cinder Ward → melee window cap (per player). Returns the damage dealt.
+ * Damage one player, optionally with a debuff rider. Order: invulnerability → evasion (attacks only:
+ * an evaded hit carries no debuff either) → roll → armour (physical) → resistance (withered lowers
+ * it) → damageTaken → shocked → Cinder Ward → melee window cap (per player). A hit that connects
+ * applies `debuff` (with the damage dealt, which burning and bleeding scale with; `source` for
+ * roots) — also a zero-damage hit such as a web shot, or one the melee cap absorbed. A hit that kills
+ * applies nothing. Returns the damage dealt (0 when it didn't connect).
  */
-export function damagePlayer(w: World, p: PlayerState, amount: number, dtype: number, kind: PlayerHitKind): number {
-  if (p.dead || !(amount > 0) || p.invulnTime > 0) return 0;
+export function damagePlayer(
+  w: World, p: PlayerState, amount: number, dtype: number, kind: PlayerHitKind, debuff: PlayerDebuff | null = null,
+  source?: RootSource,
+): number {
+  const r = hitPlayer(w, p, amount, dtype, kind, debuff, source);
+  return r > 0 ? r : 0;
+}
+
+/**
+ * damagePlayer that also tells whether the hit connected: −1 when it didn't (dead, invulnerable,
+ * evaded, or nothing to deal), else the damage dealt (0 for a zero-damage hit carrying a debuff).
+ * Follow-ups such as a knockback or a chain hook's pull go on a connecting hit only.
+ *
+ * Fairness guard (GAME_SPEC §13: every root and freeze comes from a projectile you can see or a
+ * telegraph you can read): a 'melee' hit never carries 'frozen' or 'rooted' — the rider is dropped.
+ */
+export function hitPlayer(
+  w: World, p: PlayerState, amount: number, dtype: number, kind: PlayerHitKind, debuff: PlayerDebuff | null = null,
+  source?: RootSource,
+): number {
+  if (p.dead || p.invulnTime > 0) return -1;
+  if (kind === 'melee' && (debuff === 'frozen' || debuff === 'rooted')) debuff = null;
+  const damaging = amount > 0;
+  if (!damaging && !debuff) return -1;
   const s = p.stats;
   const rng = w.combatRng;
   if ((kind === 'melee' || kind === 'projectile') && s.evasion > 0 && rng.next() < Math.min(EVASION_CAP, s.evasion)) {
     w.events.push({ t: 'evade', playerId: p.id, x: p.x, y: p.y, target: 'player' });
-    return 0;
+    return -1;
   }
-  let dmg = kind === 'dot' ? amount : amount * rng.range(ROLL_MIN, ROLL_MAX);
-  if (dtype === DT_PHYSICAL && s.armor > 0) dmg *= 1 - s.armor / (s.armor + 10 * dmg);
+  let dmg = 0;
   const type: DamageType = DAMAGE_TYPES[dtype];
-  const res = Math.min(RESIST_CAP, s.resist[type] ?? 0);
-  dmg *= 1 - res;
-  if (Number.isFinite(s.damageTaken) && s.damageTaken >= 0) dmg *= s.damageTaken;
-  if (p.ward.time > 0) dmg *= 1 - Math.min(WARD_REDUCTION_CAP, Math.max(0, p.ward.reduction));
-  if (kind === 'melee') {
-    const allowed = MELEE_CAP_FRACTION * s.maxLife - p.meleeSum;
-    dmg = Math.min(dmg, Math.max(0, allowed));
-    p.meleeWindow[w.tick % MELEE_CAP_WINDOW_TICKS] += dmg;
-    p.meleeSum += dmg;
+  if (damaging) {
+    dmg = kind === 'dot' ? amount : amount * rng.range(ROLL_MIN, ROLL_MAX);
+    if (dtype === DT_PHYSICAL && s.armor > 0) dmg *= 1 - s.armor / (s.armor + 10 * dmg);
+    dmg *= 1 - effectiveResist(p, type);
+    if (Number.isFinite(s.damageTaken) && s.damageTaken >= 0) dmg *= s.damageTaken;
+    if (isActive(p, 'shocked')) dmg *= shockMult(p);
+    if (p.ward.time > 0) dmg *= 1 - Math.min(WARD_REDUCTION_CAP, Math.max(0, p.ward.reduction));
+    if (kind === 'melee') {
+      const allowed = MELEE_CAP_FRACTION * s.maxLife - p.meleeSum;
+      dmg = Math.min(dmg, Math.max(0, allowed));
+      p.meleeWindow[w.tick % MELEE_CAP_WINDOW_TICKS] += dmg;
+      p.meleeSum += dmg;
+    }
   }
-  if (dmg <= 0) return 0;
-  p.life -= dmg;
-  p.hitFlash = 1;
-  if (!p.cast && p.dashTime <= 0) p.hitTime = HIT_ANIM;
-  w.events.push({
-    t: 'hit', playerId: p.id, x: p.x, y: p.y, amount: dmg, damageType: type, crit: false, target: 'player', killed: p.life <= 0,
-  });
-  if (p.life <= 0) killPlayer(w, p);
+  if (dmg > 0) {
+    p.life -= dmg;
+    p.hitFlash = 1;
+    if (!p.cast && p.dashTime <= 0) p.hitTime = HIT_ANIM;
+    w.events.push({
+      t: 'hit', playerId: p.id, x: p.x, y: p.y, amount: dmg, damageType: type, crit: false, target: 'player', killed: p.life <= 0,
+    });
+    if (p.life <= 0) {
+      killPlayer(w, p);
+      return dmg;
+    }
+  }
+  if (debuff) applyDebuff(w, p, debuff, dmg, source);
   return dmg;
 }
 
@@ -319,7 +363,51 @@ export function killPlayer(w: World, p: PlayerState): void {
   p.portalDwell = 0;
   p.portalDwellId = 0;
   for (const f of p.flasks) if (f) f.active = 0;
+  clearDebuffs(w, p);
   refreshLiving(w);
   w.events.push({ t: 'playerDeath', playerId: p.id, x: p.x, y: p.y });
   w.outcomes.push({ t: 'playerDied', playerId: p.id });
+}
+
+/** Remember a death for corpse-raising (a fixed ring: the oldest entry is overwritten). */
+function recordCorpse(w: World, kind: MonsterKind, x: number, y: number): void {
+  const list = w.corpses;
+  if (list.length < CORPSE_MEMORY) {
+    list.push({ kind, x, y, time: w.time, used: false });
+    return;
+  }
+  const c = list[w.corpseCursor];
+  w.corpseCursor = (w.corpseCursor + 1) % CORPSE_MEMORY;
+  c.kind = kind;
+  c.x = x;
+  c.y = y;
+  c.time = w.time;
+  c.used = false;
+}
+
+/**
+ * Take (mark used) up to `max` unused corpses within `radius` of (x, y) that died at most
+ * CORPSE_LIFETIME ago — of `kind` only when given — nearest first, and return where they lie (for
+ * raising). Summoned minions leave corpses too.
+ */
+export function takeCorpses(w: World, x: number, y: number, radius: number, max: number, kind?: MonsterKind): { x: number; y: number }[] {
+  const found: { k: number; d2: number }[] = [];
+  const r2 = radius * radius;
+  const list = w.corpses;
+  for (let k = 0; k < list.length; k++) {
+    const c = list[k];
+    if (c.used || w.time - c.time > CORPSE_LIFETIME || (kind !== undefined && c.kind !== kind)) continue;
+    const dx = c.x - x;
+    const dy = c.y - y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 <= r2) found.push({ k, d2 });
+  }
+  found.sort((a, b) => a.d2 - b.d2 || a.k - b.k);
+  const out: { x: number; y: number }[] = [];
+  for (let n = 0; n < found.length && n < max; n++) {
+    const c = list[found[n].k];
+    c.used = true;
+    out.push({ x: c.x, y: c.y });
+  }
+  return out;
 }

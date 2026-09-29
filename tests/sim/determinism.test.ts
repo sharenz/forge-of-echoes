@@ -10,16 +10,37 @@ const TICKS = 3000;
 
 /**
  * Golden digests of the long-standing paths (bot play through waves, packs, elites, hazards, skills,
- * loot scatter, the Herald, the Matriarch and the clear), pinned when click pickups and floor items
- * were added. The replay tests below only compare the code with itself; these catch any drift of
- * the old behaviour. Nothing but src/sim, src/core/rng and the frozen contracts feeds them (the
- * fixtures and the bot are local), so they only move when the sim's behaviour does. A DELIBERATE
- * behaviour change updates them — say so in the change; an accidental one is a bug.
+ * loot scatter, the Herald, the Matriarch and the clear). The replay tests below only compare the
+ * code with itself; these catch any drift of the old behaviour. Nothing but src/sim, src/core/rng and
+ * the frozen contracts feeds them (the fixtures and the bot are local), so they only move when the
+ * sim's behaviour does. A DELIBERATE behaviour change updates them — say so in the change; an
+ * accidental one is a bug.
+ *
+ * History:
+ *  - pinned when click pickups and floor items were added: 4242 → [2176940347, 1429865467, 547817646],
+ *    9001 → 2785589049 in 17574 ticks.
+ *  - the roster move (Ashen Forge onto src/sim/rosters) reproduced those exactly (checked before
+ *    anything else changed).
+ *  - re-pinned deliberately for player debuffs (GAME_SPEC §13): spitter lobs, Matriarch orbs, fire
+ *    pools and eruptions now set players burning, Rift Stalker leaps and Herald orbs wither; area ids
+ *    carry a heading/variant (area-geometry.ts); the digest now covers each player's debuff timers.
+ *    The 9001 map still ends on the same tick.
+ *  - 9001 re-pinned deliberately for the prop slide (ai.ts integrate: a hunting heavy body that walks
+ *    into props without headway for 0.25 s slides around them). One Ironhide Brute, chasing the bot
+ *    during the boss fight, walked head-on into a brazier and used to grind against it; it now steps
+ *    along its surface after 0.25 s (tick 14743), and the fight plays out differently from there: previously
+ *    483987865 in 17574 ticks. 4242 is unchanged (no slide fires there). Lifting debuffs on the clear
+ *    changes neither.
+ *  - 9001 re-pinned deliberately for the cross-theme balance pass (numbers only: Matriarch and Herald
+ *    life 7000 → 1300 and 1200 → 850, Matriarch orb/slam/meteor multipliers, the Herald's speed and
+ *    distance band, ROOT_GRACE). The boss now falls much sooner, so the map ends earlier: previously
+ *    213161676 in 17553 ticks. 4242 is unchanged (its 3000 ticks end before the Herald arrives).
  */
 /** record(4242): digests after ticks 1000, 2000 and 3000. */
-const GOLDEN_4242 = [2176940347, 1429865467, 547817646];
+const GOLDEN_4242 = [1370587382, 1412034228, 381017223];
 /** The whole tier-5 map at seed 9001 (the bot clears it and takes the return portal): its final digest and length. */
-const GOLDEN_9001 = { digest: 2785589049, ticks: 17574 };
+// Re-pinned 2026-09-29: bosses/lieutenants retuned to real fights (Matriarch 4800, Herald 1800, Herald field cap).
+const GOLDEN_9001 = { digest: 1184275088, ticks: 18197 };
 const strong = { stats: strongStats(), skills: strongSkills(), loadout: STRONG_LOADOUT };
 
 function soloRun(seed: number, extra: Partial<ConfigOptions> = {}): SimRun {

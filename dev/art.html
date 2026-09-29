@@ -79,7 +79,7 @@
       <span class="meta" id="coverage"></span>
     </header>
     <nav class="meta">
-      Views (<code>?view=</code>): <a href="?view=lineup">lineup</a> · <a href="?view=scene&amp;scene=all">scene</a> ·
+      Views (<code>?view=</code>): <a href="?view=lineup">lineup</a> · <a href="?view=hideout">hideout</a> · <a href="?view=scene&amp;scene=all">scene</a> ·
       <a href="?view=sorceress">sorceress</a> · <a href="?view=mirror">mirror</a> · <a href="?view=monsters">monsters</a> ·
       <a href="?view=ossuary">ossuary</a> · <a href="?view=coliseum">coliseum</a> · <a href="?view=proj">proj</a> ·
       <a href="?view=fx">fx</a> · <a href="?view=bfx">bfx</a> · <a href="?view=debuffs">debuffs</a> · <a href="?view=props">props</a> ·
@@ -88,8 +88,10 @@
     </nav>
     <main id="app"></main>
     <script type="module">
-      // Views: ?view=all (default) or a comma list of: lineup, scene, sorceress, mirror, monsters, ossuary, coliseum, proj,
-      // fx, bfx, debuffs, props, drops, tiles, icons, portrait.
+      // Views: ?view=all (default) or a comma list of: lineup, hideout, scene, sorceress, mirror, monsters, ossuary, coliseum,
+      // proj, fx, bfx, debuffs, props, drops, tiles, icons, portrait.
+      //   hideout  the hideout stations (stash, Crafting Bench, map device, Rook, brazier, chest) beside the sorceress at
+      //            game scale on the hideout floor. ?hscale=3  ?llook=plain,dark,pool  ?lf=<frame>
       //   scene    ?scene=ashenForge|hideout|rimedOssuary|ironColiseum|all  ?lit=1  ?zoom=3 — each theme uses its own roster
       //   lineup   cohesion check: every roster + the sorceress on one baseline on each floor, 1× art shown at ?lscale=3.
       //            ?lanim=idle|move|windup|attack|corpse  ?lf=<frame> freezes (default animates)  ?lfloor=rimedOssuary,…
@@ -256,9 +258,9 @@
         // props along the ruined rim and scattered
         const props = {
           hideout: [['prop/brazier', 60, 70], ['prop/standingStone', 330, 64], ['prop/banner', 250, 50], ['prop/rubble', 120, 200], ['prop/bones', 300, 190]],
-          ashenForge: [['prop/brazier', 70, 72], ['prop/pillar', 330, 70], ['prop/rubble', 120, 205], ['prop/anvil', 280, 205], ['prop/bones', 30, 150]],
+          ashenForge: [['prop/brazier', 70, 72], ['prop/pillar', 330, 70], ['prop/rubble', 120, 205], ['prop/brazier', 280, 205], ['prop/bones', 30, 150]],
           rimedOssuary: [['prop/crystal', 60, 80], ['prop/pillar', 330, 70], ['prop/bones', 120, 205], ['prop/crystal', 290, 210], ['prop/standingStone', 30, 170]],
-          ironColiseum: [['prop/ruinWall', 90, 56], ['prop/brazier', 330, 72], ['prop/anvil', 120, 205], ['prop/rubble', 290, 208], ['prop/banner', 30, 150]],
+          ironColiseum: [['prop/ruinWall', 90, 56], ['prop/brazier', 330, 72], ['prop/pillar', 120, 205], ['prop/rubble', 290, 208], ['prop/banner', 30, 150]],
         }[theme];
         for (const [id, x, y] of props) add(id, x, y, { light: id === 'prop/brazier' ? 1.2 : id === 'prop/crystal' ? 0.6 : 0, prop: true });
         const card = document.createElement('div');
@@ -491,10 +493,48 @@
           }
         }
       }
+      // Hideout furniture at game scale: the sorceress beside every hideout station (stash, Crafting Bench, map
+      // device, Rook, a brazier, the reward chest) on the hideout floor. ?hscale=3 · ?llook=… · ?lf= as for the lineup.
+      if (show('hideout')) {
+        let LOOKS = LOOK_FALLBACK;
+        try { LOOKS = (await import('/src/present/themes.ts')).THEME_LOOKS; } catch (e) { console.warn('theme looks unavailable, using the fallback table', e); }
+        const hscale = Number(params.get('hscale') ?? 3);
+        const looks = params.get('llook')?.split(',') ?? ['plain', 'dark', 'pool'];
+        const lf = params.has('lf') ? Number(params.get('lf')) : null;
+        const row = [
+          ['sorceress', 'sorceress/idle/south'], ['stash', 'prop/stash'], ['Crafting Bench', 'prop/anvil'], ['sorceress', 'sorceress/idle/east'],
+          ['map device', 'prop/mapDevice'], ['Rook', 'prop/merchant'], ['brazier', 'prop/brazier'], ['chest', 'prop/chest'],
+        ];
+        const GAP = 8, MARGIN = 8, LABEL = 12;
+        const up = Math.max(...row.map(([, id]) => extents(byId(id)).up));
+        const placed = [];
+        let x = MARGIN;
+        for (const [k, id] of row) {
+          const s = byId(id);
+          const e = extents(s);
+          x += e.left;
+          placed.push({ k, s, x, y: MARGIN + up, i: placed.length, prop: id.startsWith('prop/') });
+          x += e.right + GAP;
+        }
+        const VW = x - GAP + MARGIN, VH = MARGIN + up + LABEL + 12;
+        const g = section(`Hideout furniture at game scale · 1× art at ${hscale}× · looks: ${looks.join(', ')}`);
+        for (const look of looks) {
+          const card = document.createElement('div');
+          card.className = 'card lineup';
+          const c = document.createElement('canvas');
+          c.width = VW * hscale; c.height = VH * hscale;
+          const label = document.createElement('div');
+          label.className = 'label';
+          label.textContent = `hideout floor · ${look === 'plain' ? 'plain albedo' : look === 'dark' ? 'game look, outside the light (ambient only)' : 'game look, inside a light pool'}`;
+          card.append(c, label);
+          g.append(card);
+          lineups.push({ theme: 'hideout', look: LOOKS.hideout ?? LOOK_FALLBACK.hideout, mode: look, canvas: c, VW, VH, placed, scale: hscale, lf });
+        }
+      }
       function renderLineup(L, t) {
         const { VW, VH, placed, look, mode } = L;
         const alb = new Float32Array(VW * VH * 3); // albedo
-        const kind = new Uint8Array(VW * VH); // 0 floor, 1 sorceress, 2 monster
+        const kind = new Uint8Array(VW * VH); // 0 floor, 1 sorceress, 2 monster, 3 prop (lift + sky rim, no monster rim)
         const emis = new Float32Array(VW * VH * 3);
         const ea = new Float32Array(VW * VH);
         const floor = byId(`tile/${L.theme}/floor`), detail = byId(`tile/${L.theme}/detail`);
@@ -532,7 +572,7 @@
         for (const p of placed) {
           const s = p.s;
           const f = L.lf !== null ? Math.min(L.lf, s.frames.length - 1) : frameAt(s, t, p.i * 0.37);
-          put(s.frames[f], s.emissive?.[f], Math.round(p.x - s.anchorX), Math.round(p.y - s.anchorY), p.k === 'sorceress' ? 1 : 2);
+          put(s.frames[f], s.emissive?.[f], Math.round(p.x - s.anchorX), Math.round(p.y - s.anchorY), p.prop ? 3 : p.k === 'sorceress' ? 1 : 2);
         }
         const out = new Uint8ClampedArray(VW * VH * 4);
         if (mode === 'plain') {

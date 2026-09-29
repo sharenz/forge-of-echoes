@@ -12,6 +12,12 @@ import { generateSprites } from '../../src/art';
 import { createPresenter } from '../../src/present';
 import { RecordingAudio, RecordingRenderer } from './helpers';
 
+/** Every monster kind but the dummy, the lieutenants and the bosses. */
+const REGULAR_KINDS = MONSTER_KINDS.map((_, k) => k).filter((k) => {
+  const kind = MONSTER_KINDS[k];
+  return !['trainingDummy', 'ashboundHerald', 'cinderMatriarch', 'boneChorister', 'hollowWarden', 'chainmaster', 'varkus'].includes(kind);
+});
+
 let sprites: SpriteDef[];
 beforeAll(() => {
   sprites = generateSprites();
@@ -25,7 +31,7 @@ function player(id: number, x: number, y: number, over: Partial<PlayerView> = {}
   return {
     id, name: `P${id}`, level: 10, x, y, prevX: x - 1, prevY: y, vx: 60, vy: 0, facing: 'east', aimX: x + 50, aimY: y,
     anim: 'run', animTime: 0.3, castSkill: null, castProgress: 0, life: 80, maxLife: 100, focus: 50, maxFocus: 70,
-    wardTime: 0, wardDuration: 0, invulnTime: 0, hitFlash: 0, dead: false, slots: [], flasks: [], ...over,
+    wardTime: 0, wardDuration: 0, invulnTime: 0, hitFlash: 0, dead: false, debuffs: [], slots: [], flasks: [], ...over,
   };
 }
 
@@ -43,7 +49,8 @@ function denseWorld(): WorldView {
     const r = 30 + Math.sqrt(i) * 9;
     mon.alive[i] = 1;
     mon.id[i] = (1 << 16) | i;
-    mon.kind[i] = i % 6;
+    // Every roster's regular kinds (the lieutenants and bosses are placed below).
+    mon.kind[i] = REGULAR_KINDS[i % REGULAR_KINDS.length];
     mon.rarity[i] = i % 97 === 0 ? RARITY_CODE.rare : i % 13 === 0 ? RARITY_CODE.magic : RARITY_CODE.normal;
     mon.x[i] = Math.cos(a) * r;
     mon.y[i] = Math.sin(a) * r;
@@ -81,7 +88,7 @@ function denseWorld(): WorldView {
     proj.vx[i] = 300;
     proj.vy[i] = 40;
     proj.age[i] = 0.3;
-    proj.life[i] = PROJECTILE_KINDS[proj.kind[i]] === 'cinderSpit' ? 1.1 : 0;
+    proj.life[i] = PROJECTILE_KINDS[proj.kind[i]] === 'cinderSpit' ? 1.1 : PROJECTILE_KINDS[proj.kind[i]] === 'tarGlob' ? 1.2 : 0;
   }
   const T = 1024;
   const motes = {

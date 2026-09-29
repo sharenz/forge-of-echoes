@@ -34,6 +34,9 @@ class SlotPool {
   }
 }
 
+/** ProjectileStore.src of a projectile no monster fired. */
+export const NO_SOURCE = 0xffffffff;
+
 export const MSTATE = {
   chase: 0,
   windup: 1,
@@ -57,6 +60,14 @@ export const MFLAG = {
   heavy: 64,
   /** Summoned by the Herald/Matriarch: no loot, reduced XP (stalling a boss is not a farm). */
   summoned: 128,
+  /** Ghost (MonsterDef.ghost): no crowding — drifts through other monsters and props, never slows a player. */
+  ghost: 256,
+  /**
+   * Guarding (MonsterDef.block): player projectiles arriving within the block arc around `aim` are
+   * blocked ('blocked' event, projectile consumed). Set at spawn for blockers; brains clear it while the
+   * shield is down (e.g. mid-bash) and set it again.
+   */
+  guard: 512,
 } as const;
 
 /** Lower a store's high-water mark past the dead slots at its top (after releasing slot `slot`). */
@@ -129,6 +140,17 @@ export class MonsterStore implements MonsterStoreView {
   readonly shockTime: Float32Array;
   /** Herald aura remaining (empowered while > 0). */
   readonly empowerTime: Float32Array;
+  /** Haste aura remaining (HASTE_BONUS faster while > 0; speed only). */
+  readonly hasteTime: Float32Array;
+  /**
+   * Prop wedging (ai.ts integrate): > 0 seconds a heavy body has been walking into props without
+   * progress; < 0 seconds it has been clear of props since its last slide.
+   */
+  readonly stuckTime: Float32Array;
+  /** Prop slide: seconds left, signed by the side it slides to (0 = not sliding). */
+  readonly slide: Float32Array;
+  /** The side (±1) this body slides around props to until it has been clear of them a while (0 = none yet). */
+  readonly slideSide: Int8Array;
   /** Immunity to player ground effects (fire trail) — at most one trail tick per interval. */
   readonly groundCd: Float32Array;
   /** Generic ability timers (meaning depends on kind). */
@@ -139,13 +161,20 @@ export class MonsterStore implements MonsterStoreView {
   /** 0..1: how much knockback affects this monster. */
   readonly knockback: Float32Array;
   readonly pack: Int32Array;
-  readonly flags: Uint8Array;
+  /** MFLAG bits. */
+  readonly flags: Uint16Array;
   readonly wave: Uint8Array;
+  /** DAMAGE_TYPES index of the monster's own attacks (from its MonsterDef). */
+  readonly dtype: Uint8Array;
+  /** Share of hit damage an armoured monster ignores (MonsterDef.hitReduction; burning ignores it). */
+  readonly hitReduction: Float64Array;
+  /** Facing angle in radians (blockers: the centre of the shield arc; kept by the core, see ai.ts). */
+  readonly aim: Float32Array;
   /** Resistances, 5 per monster in DAMAGE_TYPES order (resistBonus already included). */
   readonly res: Float32Array;
 
   private readonly pool: SlotPool;
-  private readonly zeroed: (Float32Array | Uint8Array | Int8Array | Int32Array)[];
+  private readonly zeroed: (Float32Array | Float64Array | Uint8Array | Uint16Array | Int8Array | Int32Array)[];
 
   constructor(capacity: number) {
     this.capacity = capacity;
@@ -172,10 +201,12 @@ export class MonsterStore implements MonsterStoreView {
     this.offsetAngle = f(); this.phase = f(); this.spawnTime = f(); this.xp = f();
     this.igniteDps = f(); this.igniteTime = f(); this.igniteAccum = f(); this.igniteEventTimer = f();
     this.chillTime = f(); this.shockTime = f(); this.empowerTime = f(); this.groundCd = f();
+    this.hasteTime = f(); this.stuckTime = f(); this.slide = f(); this.slideSide = new Int8Array(capacity);
     this.timerA = f(); this.timerB = f(); this.timerC = f(); this.timerD = f();
     this.knockback = f();
     this.pack = new Int32Array(capacity);
-    this.mods = u8(); this.flags = u8(); this.wave = u8();
+    this.mods = u8(); this.flags = new Uint16Array(capacity); this.wave = u8();
+    this.dtype = u8(); this.hitReduction = new Float64Array(capacity); this.aim = f();
     this.res = new Float32Array(capacity * 5);
     this.zeroed = [
       this.kind, this.rarity, this.x, this.y, this.prevX, this.prevY, this.radius, this.facing, this.anim, this.animTime,
@@ -183,8 +214,10 @@ export class MonsterStore implements MonsterStoreView {
       this.kbX, this.kbY, this.sepX, this.sepY,
       this.speed, this.damage, this.attackCd, this.state, this.stateTime, this.tx, this.ty, this.sx, this.sy,
       this.offsetAngle, this.phase, this.spawnTime, this.xp, this.igniteDps, this.igniteTime, this.igniteAccum,
-      this.igniteEventTimer, this.chillTime, this.shockTime, this.empowerTime, this.groundCd,
+      this.igniteEventTimer, this.chillTime, this.shockTime, this.empowerTime, this.groundCd, this.hasteTime, this.stuckTime,
+      this.slide, this.slideSide,
       this.timerA, this.timerB, this.timerC, this.timerD, this.knockback, this.mods, this.flags, this.wave,
+      this.dtype, this.hitReduction, this.aim,
     ];
   }
 
@@ -256,12 +289,30 @@ export class ProjectileStore implements ProjectileStoreView {
   /** Valid entries in the hit ring (≤ PROJECTILE_HIT_SLOTS). */
   readonly hitCount: Uint8Array;
   readonly hitCursor: Uint8Array;
+  /** Monster id that fired a hostile projectile (NO_SOURCE for player projectiles or unknown). */
+  readonly src: Uint32Array;
+  /** Hostile rider: 0 = none, else 1 + PLAYER_DEBUFFS index (applied to a player it connects with). */
+  readonly debuff: Uint8Array;
+  /** ROOT_SOURCES index for a 'rooted' rider. */
+  readonly rootSrc: Uint8Array;
+  /** 0 = none, else 1 + index into the projectile effect registry (effects.ts). */
+  readonly effect: Uint8Array;
+  /** Lobs: landing splash radius (0 = SPIT_SPLASH_RADIUS). */
+  readonly splash: Float32Array;
+  /** Chain hooks: pull distance (0 = CHAIN_PULL_DISTANCE). */
+  readonly pull: Float32Array;
   private readonly pool: SlotPool;
 
   constructor(capacity: number) {
     this.capacity = capacity;
     this.pool = new SlotPool(capacity);
     const f = () => new Float32Array(capacity);
+    this.src = new Uint32Array(capacity);
+    this.debuff = new Uint8Array(capacity);
+    this.rootSrc = new Uint8Array(capacity);
+    this.effect = new Uint8Array(capacity);
+    this.splash = f();
+    this.pull = f();
     this.alive = new Uint8Array(capacity);
     this.id = new Uint32Array(capacity);
     this.kind = new Uint8Array(capacity);

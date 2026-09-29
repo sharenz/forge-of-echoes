@@ -6,6 +6,7 @@
 import type { SfxId } from '../contracts/audio';
 import type { SkillId } from '../contracts/content';
 import type { GameRulesApi, MerchantOffer, Result, RunSetup } from '../contracts/game';
+import { CURRENCY_STASH_MAX } from '../contracts/items';
 import type { CharacterSave, Item, ItemLocation } from '../contracts/items';
 import { TRADE_ACCEPT_LOCK_MS, TRADE_MAX_ITEMS } from '../contracts/net';
 import type { ClientMessage, Command, InputMessage, PortalInfo, ServerMessage, TradeInfo, ZoneInfo } from '../contracts/net';
@@ -22,8 +23,8 @@ import { buildHud, localPlayer, type TellInfo } from './hud';
 import { shouldSendInput, toInputMessage, type InputSample } from './input';
 import { CharacterSync } from './optimistic';
 import {
-  addInvite, addTradeRequest, closePanel, pushChat, pushToast, removeInvite, removeTradeRequest, withCharacter, withParty,
-  withRunSummary, withServerClockOffset, withTrade, withZone,
+  addInvite, addTradeRequest, closePanel, pushChat, pushToast, removeInvite, removeTradeRequest, visibleLeftPanel,
+  withCharacter, withParty, withRunSummary, withServerClockOffset, withTrade, withZone,
 } from './state';
 import type { StateBox } from './store';
 
@@ -48,6 +49,16 @@ const CLOCK_RTT_OUTLIER = 2;
 const CLOCK_UI_STEP_MS = 20;
 /** The server's 'trade' result text for a completed swap (it also sends its own "Trade with … completed." toast). */
 const TRADE_COMPLETED_RE = /^trade completed/i;
+/** The server's refusal for stash use outside a hideout (special tabs included), said locally before sending. */
+export const STASH_HIDEOUT_ERROR = 'The stash can only be used in a hideout.';
+/** A partial-stack amount that is not a whole number of items (the wire allows 1..CURRENCY_STASH_MAX). */
+const BAD_COUNT_ERROR = 'That amount cannot be moved.';
+
+/** `count` for moveItem / quickMove: absent (the whole stack) or a whole number the wire accepts. */
+export function validMoveCount(count: number | undefined): boolean {
+  return count === undefined || (Number.isInteger(count) && count >= 1 && count <= CURRENCY_STASH_MAX);
+}
+
 /** Snapshots decoded in a row (≈ 3 s at 30 Hz) before the world counts as readable (the app's ReloadGuard). */
 export const WORLD_READABLE_SNAPSHOTS = 90;
 /** After a reconnect's 'welcome': the longest wait for the server's re-sent party and invites (ms). */
@@ -297,6 +308,9 @@ export class GameSession {
         break;
       case 'events':
         if (!this.zone) break;
+        // The replica learns her own chain-hook drags ('pull') from these — also while nothing is drawn, or the
+        // prediction would fight the server's drag until the next snapshot corrects it.
+        this.world.noteEvents(msg.tick, msg.events);
         if (this.eventsSuspended) this.trackTell(msg.events, 0);
         else this.timeline.push(msg.tick, msg.events);
         break;
@@ -713,7 +727,13 @@ export class GameSession {
    */
   command(
     cmd: Command,
-    opts: { predict?: (ch: CharacterSave) => Result<CharacterSave>; onOk?: (r: CommandResult) => void; quiet?: boolean } = {},
+    opts: {
+      predict?: (ch: CharacterSave) => Result<CharacterSave>;
+      /** The prediction is on screen (feedback that belongs with the visual, e.g. its sound). */
+      onPredicted?: (next: CharacterSave) => void;
+      onOk?: (r: CommandResult) => void;
+      quiet?: boolean;
+    } = {},
   ): Promise<CommandResult> {
     let predicted = false;
     if (opts.predict) {
@@ -727,6 +747,7 @@ export class GameSession {
         this.character.predict(r.value);
         predicted = true;
         this.applyCharacter();
+        opts.onPredicted?.(r.value);
       }
     }
     const { id, result } = this.commands.issue(cmd, this.deps.now());
@@ -748,23 +769,95 @@ export class GameSession {
 
   // --- items -----------------------------------------------------------------------------------
 
-  moveItem(uid: string, to: ItemLocation): boolean {
+  /**
+   * Move an item (drag and drop). `count` moves part of a stack: a split, or a withdrawal from a Crafting Stash slot
+   * ("cstash:<id>"); without it the rules move the whole stack (a slot gives a full backpack stack). Checked with the
+   * local rules first — an impossible move is refused here without a round trip — then shown at once. A move that
+   * changes nothing (a slot dropped back on its own Crafting Stash page, a Map Stash map on the Map Stash) is done
+   * here: true, nothing sent.
+   */
+  moveItem(uid: string, to: ItemLocation, count?: number): boolean {
     const ch = this.character.base;
     if (!ch) return false;
-    const check = safe(() => this.rules.moveItem(ch, uid, to), { ok: false as const, error: 'That item cannot go there.' });
+    if (!validMoveCount(count)) {
+      this.commandFailed(BAD_COUNT_ERROR);
+      return false;
+    }
+    const check = safe(() => this.rules.moveItem(ch, uid, to, count), { ok: false as const, error: 'That item cannot go there.' });
     if (!check.ok) {
       this.commandFailed(check.error);
       return false;
     }
+    if (check.value === ch) return true;
     if (to.kind === 'equipment' || to.kind === 'belt') this.deps.sound('equip');
-    void this.command({ c: 'moveItem', uid, to }, { predict: (base) => this.rules.moveItem(base, uid, to), quiet: false });
+    const cmd: Command = count === undefined ? { c: 'moveItem', uid, to } : { c: 'moveItem', uid, to, count };
+    void this.command(cmd, {
+      predict: (base) => (base === ch ? check : this.rules.moveItem(base, uid, to, count)),
+      quiet: false,
+    });
     return true;
   }
 
-  quickMove(uid: string): void {
+  /**
+   * Ctrl-click. With the stash open (a hideout) the open tab is the destination — a normal tab, or a special one: the
+   * Map Stash files a backpack map, either Crafting Stash tab files a backpack currency stack into its slot. A Map
+   * Stash map or a Crafting Stash slot goes to the backpack; `count` (Shift+Ctrl-click: 1) withdraws that many from a
+   * slot instead of a full stack. Without the stash: equip / unequip, load the belt, or the map device. A click the
+   * rules answer with "nothing changes" sends nothing.
+   */
+  quickMove(uid: string, count?: number): void {
+    if (!validMoveCount(count)) {
+      this.commandFailed(BAD_COUNT_ERROR);
+      return;
+    }
+    const stashTab = this.quickMoveTab();
+    const cmd: Command = count === undefined ? { c: 'quickMove', uid, stashTab } : { c: 'quickMove', uid, stashTab, count };
+    const ctx = count === undefined ? { stashTab } : { stashTab, count };
+    const ch = this.character.base;
+    const local = ch ? safe(() => this.rules.quickMove(ch, uid, ctx), null) : null;
+    if (local?.ok && local.value === ch) return;
+    void this.command(cmd, { predict: (base) => (base === ch && local ? local : this.rules.quickMove(base, uid, ctx)) });
+  }
+
+  /**
+   * The stash tab a Ctrl-click files into: the open tab while the stash is the panel the player sees on the left
+   * (only in a hideout), else none — never a tab hidden behind another left panel for the moment before the UI
+   * closes it.
+   */
+  quickMoveTab(): UiState['stashTab'] | null {
     const s = this.state;
-    const stashTab = s.openPanels.includes('stash') && s.zone === 'hideout' ? s.stashTab : null;
-    void this.command({ c: 'quickMove', uid, stashTab }, { predict: (base) => this.rules.quickMove(base, uid, { stashTab }) });
+    return s.zone === 'hideout' && visibleLeftPanel(s.openPanels) === 'stash' ? s.stashTab : null;
+  }
+
+  /**
+   * "Deposit all" on the Crafting Stash tabs: every currency stack in the backpack files into its slot. Shown at once
+   * with its sound; the server's answer ("Stored N currency in the Crafting Stash." and what stayed behind) becomes
+   * the toast — 'good' when the backpack is clear of currency, 'info' when some stayed (a full slot, a stack in the
+   * trade offer).
+   */
+  depositAllCurrency(): void {
+    if (this.state.zone !== 'hideout') {
+      this.commandFailed(STASH_HIDEOUT_ERROR);
+      return;
+    }
+    const sentWith = this.character.authoritative;
+    let predicted: CharacterSave | null = null;
+    void this.command({ c: 'depositAllCurrency' }, {
+      predict: (base) => this.rules.depositAllCurrency(base),
+      onPredicted: (next) => {
+        predicted = next;
+        this.deps.sound('pickupCurrency');
+      },
+      onOk: (r) => {
+        if (!predicted) this.deps.sound('pickupCurrency');
+        // The server's push (it comes before the answer) says what stayed; without it yet, the lock-aware
+        // prediction does — the same rules the server ran.
+        const server = this.character.authoritative;
+        const after = server !== sentWith ? server : predicted;
+        const left = !!after?.backpack.entries.some((e) => e.item.kind === 'currency');
+        this.toast(r.message ?? 'Your currency is in the Crafting Stash.', left ? 'info' : 'good');
+      },
+    });
   }
 
   discardItem(uid: string): void {
@@ -875,12 +968,13 @@ export class GameSession {
 
   /**
    * Drop an item on the floor at your feet (a public drop: anyone nearby may pick it up). Shown gone at once where
-   * the server allows it (backpack, equipment, belt; the stash in a hideout); the server's refusal brings it back.
+   * the server allows it (backpack, equipment, belt; the stash and the Map Stash in a hideout); the server's refusal
+   * brings it back. A Crafting Stash slot is refused here (it is not an item).
    */
   dropItem(uid: string): void {
     const ch = this.character.display;
     const found = ch ? safe(() => this.rules.findItem(ch, uid), null) : null;
-    if (!found) return;
+    if (!ch || !found) return;
     const zone = this.zone;
     const me = zone ? localPlayer(this.world.view, zone.localPlayerId) : null;
     if (me?.dead) {
@@ -888,7 +982,17 @@ export class GameSession {
       return;
     }
     const where = found.location.kind;
-    const predictable = where === 'backpack' || where === 'equipment' || where === 'belt' || (where === 'stash' && zone?.kind === 'hideout');
+    if (where === 'currencyStash') {
+      // A Crafting Stash slot is not an item: the rules (and the server) say to take the currency out first.
+      const r = safe(() => this.rules.discardItem(ch, uid), null);
+      if (!r || !r.ok) {
+        this.commandFailed(r && !r.ok ? r.error : 'Take currency out of the Crafting Stash first.');
+        return;
+      }
+    }
+    const inHideout = zone?.kind === 'hideout';
+    const predictable =
+      where === 'backpack' || where === 'equipment' || where === 'belt' || ((where === 'stash' || where === 'mapStash') && inHideout);
     void this.command({ c: 'dropItem', uid }, predictable ? { predict: (base) => this.rules.discardItem(base, uid) } : {});
   }
 

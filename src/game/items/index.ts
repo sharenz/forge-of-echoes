@@ -38,6 +38,31 @@
 //   flaskEffect: 1 + flaskEffect% / 100 }); it recognises belt uids itself (header "Belt Charges",
 //   hint "Press <i+1> during a map to drink.").
 //
+//   SPECIAL STASH TABS (GAME_SPEC §12, end; src/game/items/special-stash.ts). Every character has a
+//   Crafting Stash (CharacterSave.currencyStash: one slot per currency, ≤ CURRENCY_STASH_MAX each; the UI
+//   shows equipment currencies as tab 'currency' and map currencies as tab 'mapCurrency', slot order
+//   CRAFTING_STASH_EQUIPMENT_SLOTS / CRAFTING_STASH_MAP_SLOTS) and a Map Stash (CharacterSave.mapStash,
+//   ≤ MAP_STASH_CAPACITY maps in deposit order; the UI groups them by tier and base).
+//   A slot is the synthetic uid `cstash:${id}` (currencyStashUid(id); parseCurrencyStashUid(uid) → id | null):
+//     findItem(ch, 'cstash:scrap')          → { item: CurrencyStack (count = the slot), location: { kind: 'currencyStash' } }
+//                                              (null while the slot is empty; currencyStashItem(ch, id) builds the
+//                                              view of any slot, count 0 included, for the UI to render / describe)
+//     describeItem(slotView, ch)            → headerLines ['Crafting Stash 1,234 / 5,000'], withdraw hints
+//     moveItem(ch, stackUid, { kind: 'currencyStash' }, count?)  deposit (anything that does not fit stays)
+//     moveItem(ch, 'cstash:scrap', backpack/stash cell, count?)   withdraw min(count ?? 40, 40, held): into the
+//                                              cell, onto a matching stack there, else anywhere in that grid; a grid
+//                                              without a free cell takes what its matching stacks still hold room for
+//     quickMove(ch, stackUid, { stashTab: 'currency' | 'mapCurrency' }) deposit · quickMove(ch, 'cstash:scrap',
+//       { stashTab, count: 1 }) withdraw one (Shift+Ctrl-click) or a full stack to the backpack
+//     depositAllCurrency(ch)                every backpack currency stack into its slot
+//     applyCurrency / craftPreview / craftingTargetError(ch, 'cstash:scrap', targetUid)  craft straight from a
+//       slot (one is taken from the slot); targets may sit in the Map Stash too
+//   Maps: moveItem(ch, mapUid, { kind: 'mapStash' }) / quickMove(…, { stashTab: 'maps' }) deposit; a Map Stash
+//   map moves to a grid cell or { kind: 'mapDevice' } (the device's old map is filed into the Map Stash),
+//   and quickMove sends it to the backpack; with the Map Stash open, quickMove files the Map Device's map
+//   into it. `count` splits ordinary stacks too (moveItem onto an empty cell or a matching stack; quickMove
+//   to the other container). Rook and the Crafting Bench also pay from the Crafting Stash (after the backpack).
+//
 //   PICKUPS: addToBackpack(ch, item) refills matching belt slots with flask pickups first
 //   (CONCEPTS §10) — rules.addToBackpack can pass straight through. `{ refillBelt: false }` opts out.
 //
@@ -123,20 +148,24 @@
 //       property), prefixes first: tier = best tier the item level unlocks capped at T4, label with the
 //       tier's range ("+(32–40) to maximum Life"), cost (Scrap by tier + the matching essence, or extra
 //       Scrap for affixes no essence can add), available / precise reason. [] for non-equipment.
-//   applyBenchRecipe(ch, targetUid, recipeId) → Result<CraftOutcome>   pays from BACKPACK stacks, adds
+//   applyBenchRecipe(ch, targetUid, recipeId) → Result<CraftOutcome>   pays from BACKPACK stacks (then the
+//       Crafting Stash; never normal stash tabs), adds
 //       { crafted: true } rolled with the character rng (the server reseeds it: see src/game/online.ts),
 //       -1 Stability without a scar roll, Normal → Magic, history "Bench: added Hale (T4)". It never
 //       changes rarity otherwise (a Magic item keeps ≤1 prefix / ≤1 suffix) and leaves seals in place.
 //   clearCraftedAffix(ch, targetUid) → Result<CraftOutcome>   free; 0 affixes left → Normal
 //   helpers: findBenchRecipe(id) · benchTier(def, ilvl) · benchCost(def, tier) · benchEssence(def) ·
 //     benchItemError(item) · benchAffixError(item, base, def) · craftedAffixIndex(item) ·
-//     backpackCurrency(ch, id)
+//     backpackCurrency(ch, id) · benchCurrency(ch, id) (backpack + Crafting Stash: what the bench can spend)
 //
 // INVENTORY
-//   itemSize(item) · findItem(ch, uid) → { item, location } | null · allItems(ch)
+//   itemSize(item) · findItem(ch, uid) → { item, location } | null · allItems(ch) (Map Stash included)
 //   canEquip(ch, item, slot) → { ok, reason? }
-//   moveItem(ch, uid, to: ItemLocation) → Result<CharacterSave>
-//   quickMove(ch, uid, { stashTab }) → Result<CharacterSave>
+//   moveItem(ch, uid, to: ItemLocation, count?) → Result<CharacterSave>
+//   quickMove(ch, uid, { stashTab: number | 'currency' | 'mapCurrency' | 'maps' | null, count? }) → Result<CharacterSave>
+//   depositAllCurrency(ch) → Result<CharacterSave>
+//   special stash: currencyStashItem(ch, id) · currencyStashCount / currencyStashRoom · currencyStashTab(id) ·
+//     mapStashOf(ch) · specialStashTab(value) · CRAFTING_STASH_EQUIPMENT_SLOTS / CRAFTING_STASH_MAP_SLOTS
 //   addToBackpack(ch, item, { refillBelt? = true }) → Result<CharacterSave>   (atomic; re-mints
 //     clashing uids)
 //   discardItem(ch, uid) · addStashTab(ch) · renameStashTab(ch, tab, name) · clearNewFlags(ch)
@@ -159,8 +188,13 @@
 
 export { BASE_INFO, CURRENCY_INFO, FLASK_INFO, UNIQUE_INFO } from './content';
 export {
-  BELT_UID_PREFIX, adoptUid, beltUid, heldUids, mintUid, parseBeltUid, randomUid, withCharacterRng,
+  BELT_UID_PREFIX, CURRENCY_STASH_UID_PREFIX, adoptUid, beltUid, currencyStashUid, heldUids, isReservedUid, mintUid, parseBeltUid,
+  parseCurrencyStashUid, randomUid, withCharacterRng,
 } from './ids';
+export {
+  CRAFTING_STASH_EQUIPMENT_SLOTS, CRAFTING_STASH_MAP_SLOTS, currencyStashCount, currencyStashItem, currencyStashRoom,
+  currencyStashTab, mapStashIndex, mapStashOf, specialStashTab, withCurrencyStashCount, withMapStash,
+} from './special-stash';
 export {
   baseWeights, buildEquipment, clampItemLevel, currencyStack, flaskStack, generateEquipment, generateUnique,
   pickRandomBase, pickRandomUnique, rollRareName, uniqueIdsFor, uniqueLevelRequirement, uniqueModId,
@@ -182,7 +216,7 @@ export {
 } from './crafting';
 export type { CraftPreviewData, EquipmentCraftResult, EquipmentCurrencyId, OddsEntry } from './crafting';
 export {
-  applyBenchRecipe, backpackCurrency, benchAffixError, benchCost, benchEssence, benchItemError, benchRecipes, benchTier,
+  applyBenchRecipe, backpackCurrency, benchAffixError, benchCost, benchCurrency, benchEssence, benchItemError, benchRecipes, benchTier,
   clearCraftedAffix, craftedAffixIndex, findBenchRecipe,
 } from './bench';
 export type { BenchPrice } from './bench';
@@ -192,16 +226,17 @@ export {
 export type { AffixCandidate, CountChance, InclusionOdds, PoolOptions } from './affix-pool';
 export {
   SLOT_LABEL, addStashTab, addToBackpack, allItems, autoPlace, beltItem, beltSlots, canEquip, canPlace, canStack,
-  claimIncomingUid, clearNewFlags, createGrid, createStashTab, discardItem, findFreeSpot, findItem, gridOf, isStackable, itemSize,
+  claimIncomingUid, clearNewFlags, createGrid, createStashTab, depositAllCurrency, discardItem, findFreeSpot, findItem, gridOf,
+  isStackable, itemSize,
   maxStackSize, moveItem, overlappingEntries, placeItem, quickMove, removeFromGrid, removeItemAt, renameStashTab,
   replaceInGrid, replaceItemAt, setStackCount, withGrid,
 } from './inventory';
-export type { AddOptions, FoundItem, GridRef } from './inventory';
+export type { AddOptions, FoundItem, GridRef, QuickMoveContext } from './inventory';
 export { maskLocked, sameJson, unmaskLocked } from './locks';
 export type { LockMask } from './locks';
 export { stowItem, tradeItems, tradeOfferError } from './transfer';
 export type { Stowed } from './transfer';
 export {
-  EN_DASH, MINUS, distributeSteps, distributeTenths, formatChance, formatDistribution, formatLine, formatNumber, formatRange,
-  formatRangeLine, formatSigned, formatSpan,
+  EN_DASH, MINUS, distributeSteps, distributeTenths, formatChance, formatCount, formatDistribution, formatLine, formatNumber, formatRange,
+  formatRangeLine, formatSigned, formatSpan, joinWords,
 } from './format';

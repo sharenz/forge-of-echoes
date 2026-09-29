@@ -12,7 +12,9 @@ src/
   core/        rng (mulberry32, forkable, serializable), modifier resolver, small math helpers
   data/        content tables: bases, affixes, uniques, scars, currencies, skills, maps, loot, merchant
   game/        pure rules → `export const rules: GameRulesApi` (src/game/index.ts)
-  sim/         deterministic 60 Hz world → `export function createRun(config): SimRun` (src/sim/index.ts)
+  sim/         deterministic 60 Hz world → `export function createRun(config): SimRun` (src/sim/index.ts);
+               sim/rosters/<theme>/ holds each map type's monster family, lieutenant and boss (guide: rosters/index.ts),
+               sim/debuffs.ts the player debuffs
   render/      WebGL2 renderer → `export function createRenderer(canvas): Renderer`
   art/         procedural pixel art → `export function generateArt(): ArtBundle`
   audio/       procedural WebAudio → `export function createAudio(): AudioEngine`
@@ -39,8 +41,8 @@ scripts/       shot.mjs (headless screenshots), e2e.mjs
 - `render` → contracts. It's DOM/WebGL.
 - `audio` → contracts. It's WebAudio.
 - `ui` → contracts (+ preact). It gets rules and art through the `UiStore`. It never imports sim, render or present.
-- `present` → contracts, core. It never imports game or ui.
-- `net` → contracts, core, and `sim` (only for the shared `movePlayer`). No DOM.
+- `present` → contracts, core, and `sim/area-geometry` (contracts-only helpers that decode an area's heading and variant, which `AreaView` has no fields for). It never imports game or ui.
+- `net` → contracts, core, and `sim` only for prediction: `sim/movement` (the shared `movePlayer` and debuff / tar slows) and `sim/constants`. No DOM.
 - `server` → contracts, core, game, sim, net. Node only; it never imports render, art, audio, ui, present or client.
 - `client` → contracts, core, game (for display-only rules), net, render, art, audio, ui, present. It never imports server.
 

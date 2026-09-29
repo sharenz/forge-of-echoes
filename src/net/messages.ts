@@ -2,14 +2,22 @@
 //   Server: parseClientMessage(raw) → the only way a client frame becomes a typed ClientMessage. Exact shapes only:
 //           unknown keys, wrong types, out-of-range numbers, oversized strings or unknown commands are rejected with
 //           a short player-facing reason (the server turns it into a toast / closes abusive sockets).
-//   Client: parseServerMessage(raw) → shape-checks server frames before the app trusts them.
-import { ATTRIBUTES, EQUIP_SLOTS, SKILL_IDS, THEMES } from '../contracts/content';
+//   Client: parseServerMessage(raw) → shape-checks server frames before the app trusts them. Cosmetic events are
+//           checked per event: a known type (SIM_EVENT_TYPES) and, wherever the presenter/HUD index art, name or
+//           sound tables with a field, a known value (debuff ids, monster attack kinds, monster / projectile / area
+//           kinds, skill ids). A malformed event is dropped from its batch on its own (a NaN coordinate arrives as
+//           null): the rest of the batch still plays, and a server running a newer roster than this bundle costs
+//           only the events this bundle could not draw.
+import { PLAYER_DEBUFFS } from '../contracts/bestiary';
+import { ATTRIBUTES, EQUIP_SLOTS, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
 import {
-  BACKPACK_SIZE, BELT_SLOTS, LOADOUT_SLOTS, MAX_STASH_TABS, STASH_TAB_SIZE,
+  BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_SLOTS, MAX_STASH_TABS, STASH_TAB_SIZE,
 } from '../contracts/items';
-import type { ItemLocation } from '../contracts/items';
+import type { ItemLocation, SpecialStashTab } from '../contracts/items';
 import { TRADE_MAX_ITEMS } from '../contracts/net';
 import type { ClientMessage, Command, ServerMessage } from '../contracts/net';
+import { AREA_KINDS, PROJECTILE_KINDS } from '../contracts/sim';
+import type { SimEvent } from '../contracts/sim';
 import { HELD_MASK_ALL } from './input';
 import { PROP_KIND_CODES } from './protocol';
 
@@ -22,7 +30,10 @@ export const MAX_SERVER_MESSAGE_LENGTH = 4 * 1024 * 1024;
 export const MAX_CHAT_LENGTH = 240;
 export const MAX_STASH_TAB_NAME_LENGTH = 24;
 export const MAX_CHARACTER_NAME_LENGTH = 16;
-/** Item uids ("i1f", "d3k9…", "belt:2"), offer / recipe / invite / request / trade ids, character ids. */
+/**
+ * Item uids ("i1f", "d3k9…", synthetic "belt:2" / "cstash:essenceEmber"), offer / recipe / invite / request / trade
+ * ids, character ids.
+ */
 const TOKEN_RE = /^[A-Za-z0-9_:.\-]{1,64}$/;
 /** Drop ids are sim-assigned integers (u32 on the wire). */
 const MAX_DROP_ID = 0xffffffff;
@@ -30,6 +41,31 @@ const MAX_DROP_ID = 0xffffffff;
 const CONTROL_RE = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]');
 
 type Obj = Record<string, unknown>;
+
+/** The special stash tabs a quickMove may target (GAME_SPEC §12). */
+export const SPECIAL_STASH_TABS = ['maps', 'currency', 'mapCurrency'] as const satisfies readonly SpecialStashTab[];
+
+/** Every cosmetic SimEvent type (the compile-time check below fails when the contract gains one). */
+export const SIM_EVENT_TYPES = [
+  'cast', 'nova', 'dash', 'ward', 'chain', 'hit', 'evade', 'projectileEnd', 'death', 'monsterAttack', 'debuff',
+  'cleanse', 'blocked', 'pull', 'monsterSpawn', 'ailment', 'areaResolve', 'dropSpawn', 'pickup', 'mote', 'flask',
+  'waveTell', 'waveStart', 'bossSpawn', 'bossPhase', 'cleared', 'chestOpen', 'portal', 'playerDeath', 'playerJoin',
+  'notEnoughFocus',
+] as const satisfies readonly SimEvent['t'][];
+
+type MonsterAttack = Extract<SimEvent, { t: 'monsterAttack' }>['attack'];
+export const MONSTER_ATTACKS = [
+  'melee', 'spit', 'leap', 'slam', 'summon', 'orb', 'meteor', 'charge', 'web', 'hook', 'aim', 'bolt', 'tar', 'nova',
+  'spikes', 'prison', 'blizzard', 'whirl', 'mark', 'sing', 'pulse', 'burst', 'bash',
+] as const satisfies readonly MonsterAttack[];
+
+type Covers<Union extends string, Table extends readonly string[]> = [Union] extends [Table[number]] ? true : never;
+const COVERAGE: [
+  Covers<SpecialStashTab, typeof SPECIAL_STASH_TABS>,
+  Covers<SimEvent['t'], typeof SIM_EVENT_TYPES>,
+  Covers<MonsterAttack, typeof MONSTER_ATTACKS>,
+] = [true, true, true];
+void COVERAGE;
 
 class Reject extends Error {}
 
@@ -134,9 +170,27 @@ function itemLocation(v: unknown): ItemLocation {
     case 'mapDevice':
       shape(v, 'location', ['kind']);
       return { kind: 'mapDevice' };
+    case 'currencyStash':
+      shape(v, 'location', ['kind']);
+      return { kind: 'currencyStash' };
+    case 'mapStash':
+      shape(v, 'location', ['kind']);
+      return { kind: 'mapStash' };
     default:
       return fail('location: unknown kind');
   }
+}
+
+/** A partial-stack count (splits, single withdrawals from the Crafting Stash). */
+function stackCount(v: unknown): number {
+  return int(v, 'count', 1, CURRENCY_STASH_MAX);
+}
+
+/** quickMove's stash context: an open normal tab, a special tab, or none. */
+function quickMoveTab(v: unknown): number | SpecialStashTab | null {
+  if (v === null) return null;
+  if (typeof v === 'string') return oneOf(v, 'stashTab', SPECIAL_STASH_TABS);
+  return int(v, 'stashTab', 0, MAX_STASH_TABS - 1);
 }
 
 function command(v: unknown): Command {
@@ -144,12 +198,16 @@ function command(v: unknown): Command {
   const c = v.c;
   switch (c) {
     case 'moveItem': {
-      const o = shape(v, c, ['c', 'uid', 'to']);
-      return { c, uid: token(o.uid, 'uid'), to: itemLocation(o.to) };
+      const o = shape(v, c, ['c', 'uid', 'to'], ['count']);
+      const cmd: Extract<Command, { c: 'moveItem' }> = { c, uid: token(o.uid, 'uid'), to: itemLocation(o.to) };
+      if (o.count !== undefined) cmd.count = stackCount(o.count);
+      return cmd;
     }
     case 'quickMove': {
-      const o = shape(v, c, ['c', 'uid', 'stashTab']);
-      return { c, uid: token(o.uid, 'uid'), stashTab: nullable(o.stashTab, (t) => int(t, 'stashTab', 0, MAX_STASH_TABS - 1)) };
+      const o = shape(v, c, ['c', 'uid', 'stashTab'], ['count']);
+      const cmd: Extract<Command, { c: 'quickMove' }> = { c, uid: token(o.uid, 'uid'), stashTab: quickMoveTab(o.stashTab) };
+      if (o.count !== undefined) cmd.count = stackCount(o.count);
+      return cmd;
     }
     case 'discardItem': {
       const o = shape(v, c, ['c', 'uid']);
@@ -166,6 +224,7 @@ function command(v: unknown): Command {
       return cmd;
     }
     case 'addStashTab':
+    case 'depositAllCurrency':
     case 'clearNewFlags':
     case 'activateMapDevice':
     case 'merchantOffers':
@@ -455,6 +514,74 @@ function tradeInfo(v: unknown): void {
   num(o.acceptLockedUntil, 'trade.acceptLockedUntil', -1e15, 1e15);
 }
 
+/**
+ * One cosmetic event: a known type, plus every field the presenter and HUD look up in art/name/sound tables (debuff
+ * ids → fx/debuff/<id>, icon/debuff/<id>; monster kinds → sprites, names, death sounds; projectile kinds → looks;
+ * area kinds → resolve bursts; monster attack kinds and skill ids → sounds), and the player id and coordinates of the
+ * events the HUD and the local prediction act on ('debuff', 'cleanse', 'pull'). Other coordinates and amounts are the
+ * server's own numbers and are not re-checked here (30 batches a second).
+ */
+function simEvent(e: unknown): void {
+  if (!isObj(e)) fail('events: malformed event');
+  switch (oneOf(e.t, 'event', SIM_EVENT_TYPES)) {
+    case 'cast':
+    case 'nova':
+      oneOf(e.skill, `${e.t}.skill`, SKILL_IDS);
+      break;
+    case 'hit':
+      if (e.kind !== undefined) oneOf(e.kind, 'hit.kind', MONSTER_KINDS);
+      break;
+    case 'death':
+      oneOf(e.kind, 'death.kind', MONSTER_KINDS);
+      break;
+    case 'monsterSpawn':
+      oneOf(e.kind, 'monsterSpawn.kind', MONSTER_KINDS);
+      break;
+    case 'projectileEnd':
+      oneOf(e.kind, 'projectileEnd.kind', PROJECTILE_KINDS);
+      break;
+    case 'areaResolve':
+      oneOf(e.kind, 'areaResolve.kind', AREA_KINDS);
+      break;
+    case 'waveTell':
+      for (const f of arr(e.families, 'waveTell.families', MONSTER_KINDS.length * 4)) oneOf(f, 'waveTell.families[]', MONSTER_KINDS);
+      break;
+    case 'debuff':
+      int(e.playerId, 'debuff.playerId', 0, 255);
+      oneOf(e.debuff, 'debuff.debuff', PLAYER_DEBUFFS);
+      int(e.stacks, 'debuff.stacks', 0, 255);
+      break;
+    case 'cleanse':
+      int(e.playerId, 'cleanse.playerId', 0, 255);
+      for (const d of arr(e.debuffs, 'cleanse.debuffs', PLAYER_DEBUFFS.length * 4)) oneOf(d, 'cleanse.debuffs[]', PLAYER_DEBUFFS);
+      break;
+    case 'pull':
+      int(e.playerId, 'pull.playerId', 0, 255);
+      for (const k of ['fromX', 'fromY', 'toX', 'toY'] as const) num(e[k], `pull.${k}`, -1e6, 1e6);
+      break;
+    case 'blocked':
+      num(e.x, 'blocked.x', -1e6, 1e6);
+      num(e.y, 'blocked.y', -1e6, 1e6);
+      break;
+    case 'monsterAttack':
+      oneOf(e.kind, 'monsterAttack.kind', MONSTER_KINDS);
+      oneOf(e.attack, 'monsterAttack.attack', MONSTER_ATTACKS);
+      break;
+    default:
+      break;
+  }
+}
+
+function validEvent(e: unknown): boolean {
+  try {
+    simEvent(e);
+    return true;
+  } catch (err) {
+    if (err instanceof Reject) return false;
+    throw err;
+  }
+}
+
 /** Validate an already-parsed JSON value as a ServerMessage (top-level and key nested shapes). */
 export function validateServerMessage(v: unknown): ParseResult<ServerMessage> {
   try {
@@ -487,9 +614,10 @@ export function validateServerMessage(v: unknown): ParseResult<ServerMessage> {
       case 'events': {
         const o = shape(v, 'events', ['t', 'tick', 'events']);
         int(o.tick, 'tick', 0, 0xffffffff);
-        for (const e of arr(o.events, 'events', 20_000)) {
-          if (!isObj(e) || typeof e.t !== 'string') fail('events: malformed event');
-        }
+        const list = arr(o.events, 'events', 20_000);
+        let kept = 0;
+        for (let k = 0; k < list.length; k++) if (validEvent(list[k])) list[kept++] = list[k];
+        list.length = kept;
         break;
       }
       case 'result': {

@@ -45,6 +45,10 @@ export function sameLocation(a: ItemLocation, b: ItemLocation): boolean {
       return b.kind === 'belt' && a.index === b.index;
     case 'mapDevice':
       return b.kind === 'mapDevice';
+    case 'currencyStash':
+      return b.kind === 'currencyStash';
+    case 'mapStash':
+      return b.kind === 'mapStash';
   }
 }
 
@@ -60,5 +64,9 @@ export function locationKey(loc: ItemLocation): string {
       return `belt:${loc.index}`;
     case 'mapDevice':
       return 'mapDevice';
+    case 'currencyStash':
+      return 'currencyStash';
+    case 'mapStash':
+      return 'mapStash';
   }
 }

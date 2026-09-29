@@ -63,7 +63,8 @@
 //     code 4004 (GAME_SPEC §11 drain) and back to null once online; the screen always says the character, party
 //     and open maps are kept.
 //   • Stash search is UI-local (Local.search): it applies while the stash is the visible left panel and marks
-//     matching stash and backpack items (lib/search.ts over rules.describeItem).
+//     matching stash and backpack items, Map Stash maps and filled Crafting Stash slots (lib/search.ts over
+//     rules.describeItem).
 //   • Right-click on a currency calls actions.armCurrency(uid) only when state.craftingAllowed; left-click on
 //     a target calls actions.applyArmed(uid) only when rules.craftingTargetError is null. For Seal / Catalyst
 //     / Fracture Core the store sets `affixChoice`; the popover calls actions.chooseAffix(i) where i indexes
@@ -72,6 +73,31 @@
 //     Activating while your own portal still has entries asks for confirmation first.
 //   • HUD map mods: HudRun.modLines are coloured danger / reward by matching them against
 //     describeItem(state.run.map).affixes, so keep `state.run` set while in a map.
+//   • Special stash tabs (GAME_SPEC §12): state.stashTab may be 'maps' | 'currency' | 'mapCurrency' (after the normal
+//     tabs; setStashTab(tab)). Pass it on as quickMove's ctx.stashTab so a Ctrl-click in the backpack files the item
+//     in the open special tab. The UI calls:
+//       moveItem(uid, { kind: 'currencyStash' })  a currency dropped on either Crafting Stash tab (button or page)
+//       moveItem(uid, { kind: 'mapStash' })       a map dropped on the Map Stash tab / page / the device's picker
+//       moveItem('cstash:<id>', backpack cell)    a slot dragged out (no count: the rules take a full stack)
+//       moveItem(mapUid, { kind: 'mapDevice' })   click / Ctrl-click / drag in the map device's Map Stash picker
+//       quickMove('cstash:<id>')                  Ctrl-click a slot: a stack;  quickMove('cstash:<id>', 1): Shift+Ctrl
+//       quickMove(mapUid)                         Ctrl-click a Map Stash map (to the backpack)
+//       armCurrency('cstash:<id>')                right-click a slot; applyArmed(target) then crafts from the slot, so
+//                                                 armCurrency must accept slot uids (rules.findItem resolves them).
+//                                                 The UI disarms by itself once the armed slot is empty.
+//       depositAllCurrency()                      the "Deposit all" button on the Crafting Stash tabs
+//     The crafting bench palette also offers Crafting Stash currency (uid cstash:<id> when the backpack has none),
+//     and Rook's / the inventory's Forge Scrap wallet counts the backpack, stash tabs and the Crafting Stash (what
+//     the rules let you spend). A slot dragged onto the world is refused in the UI (the rules refuse it too).
+//   • Debuffs: HudState.debuffs drives the bar above the command deck (icon/debuff/<id>, radial timer from
+//     remaining / duration, stacks). Send `remaining` in seconds at the HUD rate; a jump up in `remaining` or
+//     `stacks` is read as a re-application (the icon pops). Empty while dead. The deck slot that answers an
+//     active debuff (Rift Step for a root, the Life flask for burning / bleeding, the Focus flask for withered)
+//     glows meanwhile.
+//   • Bestiary names: the Tell banner names the lieutenant / boss of state.run.map.baseId (THEME_ROSTER) and lists
+//     the debuffs the wave can bring. HudRun.boss / lieutenant `name` may be a display name or a MonsterKind id;
+//     the bars show the full title ("hollowWarden" / "Hollow Warden" → "The Hollow Warden", "Varkus" →
+//     "Varkus, the Iron Champion"; src/ui/lib/content.ts).
 //   • CSS: tokens, layout geometry and the 12/14/17/25 type scale live in src/ui/styles/tokens.css (the only
 //     font sizes).
 import '@fontsource/cinzel/latin-600.css';
@@ -88,6 +114,8 @@ import './styles/items.css';
 import './styles/panels.css';
 import './styles/bench.css';
 import './styles/trade.css';
+import './styles/stash.css';
+import './styles/debuffs.css';
 
 import { h, render } from 'preact';
 import type { MountUi, UiStore } from '../contracts/ui';

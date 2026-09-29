@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AILMENT_BIT, SIM_DT } from '../../src/contracts/sim';
+import { spawnArea } from '../../src/sim/areas';
 import { idleIntent, makeSkill, makeStats } from './fixtures';
 import { hold, makeArena, ofType, placeMonster, pv, stepN, stepWith } from './helpers';
 
@@ -244,11 +245,9 @@ describe('cinder ward', () => {
     const warded = setup(true);
     expect(pv(warded.run).wardTime).toBeGreaterThan(0);
     // Identical burning ground under both players (DoT: no roll, no evasion) — only the ward differs.
+    // (No burning rider here: this measures the ward's reduction of the ground's own tick.)
     for (const w of [plain.world, warded.world]) {
-      w.areas.push({
-        id: 999, kind: 'firePool', x: 0, y: 0, radius: 30, age: 0, duration: 1, damage: 100, dtype: 1, hurts: 'player',
-        tickInterval: 0.5, tickTimer: 0, owner: -1, source: 0, follow: -1, poolDuration: 0, poolDamage: 0, dead: false,
-      });
+      spawnArea(w, 'firePool', 0, 0, 30, 1, { damage: 100, dtype: 1, hurts: 'player', tickInterval: 0.5, firstTick: 0, debuff: null });
     }
     const before = [plain.player.life, warded.player.life];
     stepWith(plain.run, idleIntent());

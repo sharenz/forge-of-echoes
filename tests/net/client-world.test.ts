@@ -556,3 +556,125 @@ describe('ClientWorld timelines under stress', () => {
     expect(new Set(fading.map((f) => f.toFixed(3))).size).toBeGreaterThan(8);
   });
 });
+
+describe('ClientWorld moving areas (bestiary telegraphs)', () => {
+  it('keeps a whirlwind on the monster it follows (render timeline) while its age stays live', () => {
+    const h = new NetHarness({ latencyMs: 35 }, {
+      tick(hh, t) {
+        const x = 40 + t * 1.5;
+        putMonster(hh.view, { slot: 3, gen: 1, kind: 21, rarity: 4, x, y: 30, radius: 14, life: 900, maxLife: 9000 });
+        hh.view.areas.length = 0;
+        if (t >= 60) hh.view.areas.push(makeArea({ id: 4242, kind: 'whirlwind', x, y: 30, radius: 44, age: (t - 60) * SIM_DT, duration: 30 }));
+      },
+    });
+    let checked = 0;
+    let maxErr = 0;
+    h.run(4000, undefined, (hh) => {
+      const a = hh.client.view.areas.find((ar) => ar.id === 4242);
+      const m = hh.client.view.monsters;
+      if (!a || !m.alive[3] || hh.client.stats().extrapolating) return;
+      if (hh.client.renderTick < 64) return; // born after the render bracket: holds its first spot
+      const mx = lerp(m.prevX[3], m.x[3], hh.lastAlpha);
+      const my = lerp(m.prevY[3], m.y[3], hh.lastAlpha);
+      maxErr = Math.max(maxErr, Math.hypot(a.x - mx, a.y - my));
+      // Age: live clock (the newest tick), not the render time.
+      expect(a.age).toBeGreaterThan((hh.client.renderTick - 60) * SIM_DT);
+      checked++;
+    });
+    expect(checked).toBeGreaterThan(300);
+    expect(maxErr).toBeLessThan(0.05);
+  });
+
+  it('holds a new moving area at its first-seen spot until the render time reaches it, then moves on smoothly', () => {
+    const h = new NetHarness({ latencyMs: 40 }, {
+      tick(hh, t) {
+        hh.view.areas.length = 0;
+        if (t >= 100) hh.view.areas.push(makeArea({ id: 88, kind: 'blizzard', x: -200 + (t - 100) * 0.8, y: 50, radius: 60, age: (t - 100) * SIM_DT, duration: 20 }));
+      },
+    });
+    const xs: number[] = [];
+    let firstFrameRender = -1;
+    h.run(4000, undefined, (hh) => {
+      const a = hh.client.view.areas.find((ar) => ar.id === 88);
+      if (!a) return;
+      if (firstFrameRender < 0) firstFrameRender = hh.client.renderTick;
+      xs.push(a.x);
+      if (hh.client.renderTick < 100) expect(a.x).toBe(xs[0]); // not moving before its birth on the render timeline
+    });
+    expect(firstFrameRender).toBeLessThan(100); // shown at once (live), ahead of the render timeline
+    expect(xs[0]).toBeCloseTo(-200, 0);
+    // Smooth afterwards: steps of ≈ 0.8 units per tick at 144 Hz (no 30 Hz jumps), never backwards.
+    for (let k = 1; k < xs.length; k++) {
+      expect(xs[k]).toBeGreaterThanOrEqual(xs[k - 1] - 1e-6);
+      expect(xs[k] - xs[k - 1]).toBeLessThan(0.8 * 2.5);
+    }
+  });
+
+  it('grows and shrinks radii smoothly on the live clock (choir waves, ice prisons)', () => {
+    const h = new NetHarness({ latencyMs: 30 }, {
+      tick(hh, t) {
+        hh.view.areas.length = 0;
+        if (t >= 60 && t < 240) hh.view.areas.push(makeArea({ id: 7, kind: 'choirWave', x: 0, y: 0, radius: 10 + (t - 60) * 2, age: (t - 60) * SIM_DT, duration: 3 }));
+        if (t >= 60 && t < 180) hh.view.areas.push(makeArea({ id: 8, kind: 'icePrison', x: 90, y: 0, radius: 80 - (t - 60) * 0.5, age: (t - 60) * SIM_DT, duration: 2 }));
+      },
+    });
+    let checked = 0;
+    let maxStep = 0;
+    let lastR = -1;
+    h.run(4200, undefined, (hh) => {
+      const wave = hh.client.view.areas.find((ar) => ar.id === 7);
+      const prison = hh.client.view.areas.find((ar) => ar.id === 8);
+      const live = hh.client.liveTick(hh.now);
+      if (wave && live > 70 && live < 230) {
+        expect(Math.abs(wave.radius - (10 + (live - 60) * 2))).toBeLessThan(2.5); // within ~1 tick of the truth
+        if (lastR >= 0) maxStep = Math.max(maxStep, wave.radius - lastR);
+        lastR = wave.radius;
+        checked++;
+      }
+      if (prison && live > 70 && live < 170) expect(Math.abs(prison.radius - (80 - (live - 60) * 0.5))).toBeLessThan(1);
+    });
+    expect(checked).toBeGreaterThan(200);
+    // 2 units per tick at 144 Hz ≈ 0.83 per frame; snapshot steps would be 4 units.
+    expect(maxStep).toBeLessThan(2);
+  });
+
+  it('draws an execution mark that follows the local player at her on-screen position, and in place once it locks', () => {
+    const h = new NetHarness({ latencyMs: 45, moveSpeed: 130 }, {
+      tick(hh, t) {
+        hh.view.areas.length = 0;
+        if (t >= 120 && t < 300) {
+          const locked = t >= 250;
+          const at = locked ? lockAt : { x: hh.player.x, y: hh.player.y };
+          if (!locked) lockAt = at;
+          hh.view.areas.push(makeArea({ id: 31, kind: 'executionMark', x: at.x, y: at.y, radius: 36, age: (t - 120) * SIM_DT, duration: 3 }));
+        }
+      },
+    });
+    let lockAt = { x: 0, y: 0 };
+    let following = 0;
+    let lockedFrames = 0;
+    let earlyLockFrames = 0;
+    h.run(6000, (seq) => ({ moveX: Math.cos(seq * 0.03), moveY: Math.sin(seq * 0.03) }), (hh) => {
+      const a = hh.client.view.areas.find((ar) => ar.id === 31);
+      const me = hh.client.view.players.find((p) => p.id === 1);
+      if (!a || !me) return;
+      const live = hh.client.latestTick;
+      if (live > 130 && live < 245) {
+        expect(a.x).toBe(me.x);
+        expect(a.y).toBe(me.y);
+        following++;
+      }
+      // From the first snapshot that shows it standing still (252: 250 and 252 both at the tick-249 spot) it is drawn
+      // exactly where it will strike — never slid back along the render timeline, which still shows it moving.
+      if (live >= 252) {
+        expect(Math.abs(a.x - lockAt.x)).toBeLessThanOrEqual(1 / 32);
+        expect(Math.abs(a.y - lockAt.y)).toBeLessThanOrEqual(1 / 32);
+        if (hh.client.renderTick < 250) earlyLockFrames++;
+        lockedFrames++;
+      }
+    });
+    expect(following).toBeGreaterThan(200);
+    expect(lockedFrames).toBeGreaterThan(40);
+    expect(earlyLockFrames).toBeGreaterThan(3); // the frames the old render-timeline placement got wrong
+  });
+});

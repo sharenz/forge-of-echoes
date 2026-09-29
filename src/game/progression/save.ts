@@ -2,11 +2,20 @@
 // save, and every character is migrated and normalised field by field: unknown ids are dropped, numbers
 // clamped, affix tiers/values repaired, rarities made consistent with their affixes, grid entries that
 // overlap or fall outside a container re-placed (backpack, then stash), and duplicate uids re-minted.
+// The special stash tabs (GAME_SPEC §12) normalise too: a save from before them gets an empty Crafting
+// Stash ({}) and Map Stash ([]); slot counts are clamped to CURRENCY_STASH_MAX, and maps beyond
+// MAP_STASH_CAPACITY (or anything in the Map Stash that is not a map) are re-homed like any overflow.
+// Re-homing tries the backpack, the item's special tab (a currency's Crafting Stash slot, the Map Stash),
+// every stash tab and new "Recovered" tabs up to MAX_STASH_TABS. Only an item that fits none of those is
+// lost — which takes a corrupted save holding far more than a character can — and
+// normalizeCharacterReport returns such items so the caller can log them.
 import type {
   BeltSlot, CharacterSave, CharacterStatsLog, CurrencyStack, EquipmentItem, FlaskStack, GridContainer, Item, MapItem,
   Rarity, RolledAffix, RolledMapMod, RolledScar, SaveGame, Settings, StashTab,
 } from '../../contracts/items';
-import { BACKPACK_SIZE, BELT_SLOTS, MAX_STASH_TABS, STASH_TAB_SIZE } from '../../contracts/items';
+import {
+  BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, MAP_STASH_CAPACITY, MAX_STASH_TABS, STASH_TAB_SIZE,
+} from '../../contracts/items';
 import type { CurrencyId, EquipSlot, FlaskId, MapBaseId, SkillId, UniqueId } from '../../contracts/content';
 import { CURRENCY_IDS, EQUIP_SLOTS, FLASK_IDS, MAP_BASE_IDS, SKILL_IDS } from '../../contracts/content';
 import { createRng, hashString } from '../../core/rng';
@@ -20,7 +29,7 @@ import {
   SAVE_VERSION, getMapMod,
 } from '../../data/progression';
 import {
-  autoPlace, canPlace, clampItemLevel, createGrid, createStashTab, placeItem, rollRareName, sortAffixes, uniqueModId,
+  autoPlace, canPlace, clampItemLevel, createGrid, createStashTab, isReservedUid, placeItem, rollRareName, sortAffixes, uniqueModId,
 } from '../items';
 import { sanitizeName, xpToNext } from './character';
 import { clampTier, rarityForDangerCount, sortMapMods } from './maps';
@@ -283,10 +292,10 @@ interface UidMinter {
   next: number;
 }
 
-/** Keep a valid unique uid, otherwise mint a fresh "i…" one. */
+/** Keep a valid unique uid (never a synthetic belt / Crafting Stash / offer uid), otherwise mint a fresh "i…" one. */
 function claimUid(m: UidMinter, raw: unknown): string {
   const uid = str(raw);
-  if (uid && uid.length <= 64 && !uid.startsWith('belt:') && !uid.startsWith('offer:') && !m.used.has(uid)) {
+  if (!isReservedUid(uid) && !m.used.has(uid)) {
     m.used.add(uid);
     return uid;
   }
@@ -309,6 +318,7 @@ function highestMinted(raw: Json): number {
   if (isObj(raw.backpack)) arr(raw.backpack.entries).forEach((e) => isObj(e) && visit(e.item));
   for (const tab of arr(raw.stash)) if (isObj(tab) && isObj(tab.grid)) arr(tab.grid.entries).forEach((e) => isObj(e) && visit(e.item));
   visit(raw.mapDevice);
+  arr(raw.mapStash).forEach(visit);
   return max;
 }
 
@@ -346,6 +356,18 @@ function normalizeStats(raw: unknown): CharacterStatsLog {
   };
 }
 
+/** Crafting Stash counts: known currencies only, whole numbers clamped to 0..CURRENCY_STASH_MAX; empty slots dropped. */
+function normalizeCurrencyStash(raw: unknown): Partial<Record<CurrencyId, number>> {
+  const r = isObj(raw) ? raw : {};
+  const out: Partial<Record<CurrencyId, number>> = {};
+  for (const id of CURRENCY_IDS) {
+    if (!Object.prototype.hasOwnProperty.call(r, id)) continue;
+    const n = intIn(r[id], 0, CURRENCY_STASH_MAX, 0);
+    if (n > 0) out[id] = n;
+  }
+  return out;
+}
+
 function normalizeBelt(raw: unknown): (BeltSlot | null)[] {
   const src = arr(raw);
   const out: (BeltSlot | null)[] = [];
@@ -360,6 +382,18 @@ function normalizeBelt(raw: unknown): (BeltSlot | null)[] {
 
 /** Normalise one character; null when the value is not a character at all. */
 export function normalizeCharacter(raw: unknown): CharacterSave | null {
+  return normalizeCharacterReport(raw)?.character ?? null;
+}
+
+/** What normalising a character did beyond the character itself. */
+export interface NormalizeReport {
+  character: CharacterSave;
+  /** Items that lost their place and fit nowhere (only a corrupted save can hold that many); empty normally. */
+  lost: Item[];
+}
+
+/** normalizeCharacter, also returning the items it could not re-home (null when the value is not a character). */
+export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
   if (!isObj(raw)) return null;
   const name = sanitizeName(raw.name);
   const level = intIn(raw.level, 1, LEVEL_CAP, 1);
@@ -404,30 +438,60 @@ export function normalizeCharacter(raw: unknown): CharacterSave | null {
     else if (item) overflow.push(item);
   }
 
-  // Re-home everything that lost its place: backpack, then stash tabs, then a recovery tab.
+  const mapStash: MapItem[] = [];
+  for (const r of arr(raw.mapStash)) {
+    if (!isObj(r)) continue;
+    const item = normalizeItem(r, claimUid(minter, r.uid));
+    if (item?.kind === 'map' && mapStash.length < MAP_STASH_CAPACITY) mapStash.push(item);
+    else if (item) overflow.push(item);
+  }
+
+  // Re-home everything that lost its place: the backpack, then its special tab (a currency's Crafting Stash
+  // slot, as far as it has room; the Map Stash), then the stash tabs, then new recovery tabs.
+  const currencyStash = normalizeCurrencyStash(raw.currencyStash);
   let bp = backpack;
+  const lost: Item[] = [];
+  const intoStashTabs = (item: Item): boolean => {
+    for (let t = 0; t < stash.length; t++) {
+      const g = autoPlace(stash[t].grid, item);
+      if (g) {
+        stash[t] = { ...stash[t], grid: g };
+        return true;
+      }
+    }
+    return false;
+  };
   for (const item of overflow) {
     const intoBackpack = autoPlace(bp, item);
     if (intoBackpack) {
       bp = intoBackpack;
       continue;
     }
-    let placed = false;
-    for (let t = 0; t < stash.length && !placed; t++) {
-      const g = autoPlace(stash[t].grid, item);
+    let rest: Item = item;
+    if (rest.kind === 'map' && mapStash.length < MAP_STASH_CAPACITY) {
+      mapStash.push(rest);
+      continue;
+    }
+    if (rest.kind === 'currency') {
+      const have = currencyStash[rest.currencyId] ?? 0;
+      const n = Math.min(rest.count, CURRENCY_STASH_MAX - have);
+      if (n > 0) currencyStash[rest.currencyId] = have + n;
+      if (n >= rest.count) continue;
+      rest = { ...rest, count: rest.count - n };
+    }
+    if (intoStashTabs(rest)) continue;
+    if (stash.length < MAX_STASH_TABS) {
+      const tab = createStashTab('Recovered');
+      const g = autoPlace(tab.grid, rest);
       if (g) {
-        stash[t] = { ...stash[t], grid: g };
-        placed = true;
+        stash.push({ ...tab, grid: g });
+        continue;
       }
     }
-    if (!placed && stash.length < MAX_STASH_TABS) {
-      const tab = createStashTab('Recovered');
-      const g = autoPlace(tab.grid, item);
-      if (g) stash.push({ ...tab, grid: g });
-    }
+    lost.push(rest);
   }
 
-  return {
+  const character: CharacterSave = {
     id,
     name,
     classId: 'sorceress',
@@ -445,6 +509,8 @@ export function normalizeCharacter(raw: unknown): CharacterSave | null {
     equipment,
     backpack: bp,
     stash,
+    currencyStash,
+    mapStash,
     belt: normalizeBelt(raw.belt),
     mapDevice,
     rngState: typeof raw.rngState === 'number' && Number.isFinite(raw.rngState) ? raw.rngState >>> 0 : hashString(id),
@@ -453,4 +519,5 @@ export function normalizeCharacter(raw: unknown): CharacterSave | null {
     createdAt: Math.max(0, finite(raw.createdAt, 0)),
     updatedAt: Math.max(0, finite(raw.updatedAt, 0)),
   };
+  return { character, lost };
 }

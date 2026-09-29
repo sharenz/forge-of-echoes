@@ -1,14 +1,54 @@
 // Projectiles: straight movers with swept segment-vs-circle collision (no tunnelling), sorted
 // multi-hits per tick for pierce, and a per-projectile hit ring so a piercing bolt never hits
-// the same monster twice. Lobbed projectiles (cinder spit) instead fly over everything for a
-// fixed flight time and burst where they land.
-import { PROJECTILE_KINDS, type ProjectileKind } from '../contracts/sim';
-import { damageMonster, damagePlayer, isHittable } from './combat';
-import { DT, PLAYER_RADIUS, SPIT_SPLASH_RADIUS } from './constants';
+// the same monster twice. Lobbed projectiles (cinder spit, tar globs: ProjectileStore.life > 0)
+// instead fly over everything for a fixed flight time and burst where they land.
+//
+// Hostile projectiles carry a debuff rider (PROJECTILE_RIDERS by kind; setProjectileDebuff overrides
+// it per shot) applied to the player they connect with (evaded / invulnerable = no rider), plus the
+// kind's built-in follow-up and an optional registered effect (effects.ts):
+//   chainHook   on a connecting hit: pulls the player CHAIN_PULL_DISTANCE (setProjectilePull) toward the
+//               monster that threw it (or its launch point) and roots them ('pull' event) — pullPlayer.
+//   tarGlob     a lob; where it lands it leaves a tarPool (TAR_POOL_RADIUS, TAR_POOL_DURATION).
+//   (the rest)  just their rider: webShot roots (web), frostShard chills, crossbowBolt bleeds,
+//               cinderSpit / matriarchOrb burn, heraldOrb withers, boneShard nothing.
+//
+// Frontal shields: a player projectile meeting a guarding blocker (MonsterDef.block, MFLAG.guard)
+// travelling INTO its front — within ±arc/2 of `m.aim` — is blocked: no damage, 'blocked' event at
+// the contact point, and the projectile is consumed (even a piercing one). From the side or behind it
+// hits normally.
+import { PLAYER_DEBUFFS, type PlayerDebuff } from '../contracts/bestiary';
+import { PROJECTILE_KINDS, type ProjectileKind, type RootSource } from '../contracts/sim';
+import { spawnArea } from './areas';
+import { damageMonster, hitPlayer, isHittable } from './combat';
+import { CHAIN_PULL_DISTANCE, DT, PLAYER_RADIUS, SPIT_SPLASH_RADIUS, TAR_POOL_DURATION, TAR_POOL_RADIUS } from './constants';
+import { ROOT_SOURCES } from './debuffs';
+import { projectileEffect } from './effects';
 import { sweepCircle } from './math';
+import { pullPlayer } from './player';
+import { monsterDefs } from './rosters';
+import { MFLAG, NO_SOURCE } from './stores';
 import type { PlayerState, World } from './world';
 
 export const PROJ = Object.fromEntries(PROJECTILE_KINDS.map((k, i) => [k, i])) as Record<ProjectileKind, number>;
+
+/** Debuff each hostile kind applies to the player it connects with (setProjectileDebuff overrides it). */
+export const PROJECTILE_RIDERS: Readonly<Partial<Record<ProjectileKind, { debuff: PlayerDebuff; source?: RootSource }>>> = {
+  cinderSpit: { debuff: 'burning' },
+  matriarchOrb: { debuff: 'burning' },
+  heraldOrb: { debuff: 'withered' },
+  webShot: { debuff: 'rooted', source: 'web' },
+  frostShard: { debuff: 'chilled' },
+  crossbowBolt: { debuff: 'bleeding' },
+};
+
+const RIDER_CODE: Uint8Array = new Uint8Array(PROJECTILE_KINDS.length);
+const RIDER_SOURCE: Uint8Array = new Uint8Array(PROJECTILE_KINDS.length);
+for (let k = 0; k < PROJECTILE_KINDS.length; k++) {
+  const r = PROJECTILE_RIDERS[PROJECTILE_KINDS[k]];
+  if (!r) continue;
+  RIDER_CODE[k] = PLAYER_DEBUFFS.indexOf(r.debuff) + 1;
+  RIDER_SOURCE[k] = Math.max(0, ROOT_SOURCES.indexOf(r.source ?? 'bone'));
+}
 
 export interface ProjectileSpec {
   kind: number;
@@ -36,7 +76,10 @@ export const projSpec: ProjectileSpec = {
   damage: 0, dtype: 0, critChance: 0, critMult: 1.5, ailmentChance: 0, pierce: 0, owner: 0,
 };
 
-/** Spawn a projectile. `flight` > 0 makes it a lob that lands (and only then hits) after that many seconds. */
+/**
+ * Spawn a projectile. `flight` > 0 makes it a lob that lands (and only then hits) after that many
+ * seconds. A hostile one gets its kind's default rider. Returns the slot (-1 when the store is full).
+ */
 export function spawnProjectile(w: World, s: ProjectileSpec, flight = 0): number {
   const pr = w.projectiles;
   const i = pr.alloc();
@@ -59,13 +102,108 @@ export function spawnProjectile(w: World, s: ProjectileSpec, flight = 0): number
   pr.ailmentChance[i] = s.ailmentChance;
   pr.pierce[i] = s.pierce;
   pr.range[i] = s.range;
+  pr.src[i] = NO_SOURCE;
+  pr.debuff[i] = s.hostile ? RIDER_CODE[s.kind] ?? 0 : 0;
+  pr.rootSrc[i] = s.hostile ? RIDER_SOURCE[s.kind] ?? 0 : 0;
+  pr.effect[i] = 0;
+  pr.splash[i] = 0;
+  pr.pull[i] = 0;
   return i;
+}
+
+/** Override a hostile projectile's debuff rider (null = none). */
+export function setProjectileDebuff(w: World, slot: number, debuff: PlayerDebuff | null, source: RootSource = 'bone'): void {
+  if (slot < 0) return;
+  w.projectiles.debuff[slot] = debuff ? PLAYER_DEBUFFS.indexOf(debuff) + 1 : 0;
+  w.projectiles.rootSrc[slot] = Math.max(0, ROOT_SOURCES.indexOf(source));
+}
+
+/** Attach a registered projectile effect (effects.ts) to a projectile. */
+export function setProjectileEffect(w: World, slot: number, handle: number): void {
+  if (slot >= 0) w.projectiles.effect[slot] = handle;
+}
+
+/** A chain hook's pull distance (default CHAIN_PULL_DISTANCE). */
+export function setProjectilePull(w: World, slot: number, distance: number): void {
+  if (slot >= 0) w.projectiles.pull[slot] = Math.max(0, distance);
+}
+
+/** A lob's landing splash radius (default SPIT_SPLASH_RADIUS). */
+export function setProjectileSplash(w: World, slot: number, radius: number): void {
+  if (slot >= 0) w.projectiles.splash[slot] = Math.max(0, radius);
+}
+
+function riderOf(w: World, i: number): PlayerDebuff | null {
+  const code = w.projectiles.debuff[i];
+  return code > 0 ? PLAYER_DEBUFFS[code - 1] : null;
 }
 
 function endProjectile(w: World, i: number): void {
   const pr = w.projectiles;
   if (w.events.lowOpen) w.events.low({ t: 'projectileEnd', kind: PROJECTILE_KINDS[pr.kind[i]], x: pr.x[i], y: pr.y[i] });
   pr.release(i);
+}
+
+/** cos(arc / 2) of each kind's frontal shield (−2 = no shield), built on first use. */
+let blockCos: Float64Array | null = null;
+
+function blockCosOf(kind: number): number {
+  if (!blockCos) {
+    const defs = monsterDefs();
+    blockCos = new Float64Array(defs.length).fill(-2);
+    for (let k = 0; k < defs.length; k++) {
+      const b = defs[k].block;
+      if (b) blockCos[k] = Math.cos(Math.max(0, Math.min(Math.PI, b.arc / 2)));
+    }
+  }
+  return blockCos[kind];
+}
+
+/** Whether a guarding blocker `j` stops a projectile travelling along (vx, vy): it arrives in its front arc. */
+function blocks(w: World, j: number, vx: number, vy: number): boolean {
+  const m = w.monsters;
+  if ((m.flags[j] & MFLAG.guard) === 0) return false;
+  const c = blockCosOf(m.kind[j]);
+  if (c < -1) return false;
+  const vl = Math.sqrt(vx * vx + vy * vy);
+  if (vl < 1e-6) return false;
+  // The projectile comes from the direction opposite its velocity.
+  const a = m.aim[j];
+  return (-vx * Math.cos(a) - vy * Math.sin(a)) / vl >= c;
+}
+
+/** A hostile projectile connected with a player: rider, built-in follow-up, registered effect. */
+function hostileHit(w: World, i: number, p: PlayerState): void {
+  const pr = w.projectiles;
+  const r = hitPlayer(w, p, pr.damage[i], pr.dtype[i], 'projectile', riderOf(w, i), ROOT_SOURCES[pr.rootSrc[i]]);
+  if (r < 0 || p.dead) return;
+  if (pr.kind[i] === PROJ.chainHook) {
+    // Toward the thrower if it still stands, else toward where the hook was thrown from.
+    const slot = pr.src[i] !== NO_SOURCE ? w.monsters.slotOf(pr.src[i]) : -1;
+    const ox = slot >= 0 ? w.monsters.x[slot] : pr.x[i] - pr.vx[i] * pr.age[i];
+    const oy = slot >= 0 ? w.monsters.y[slot] : pr.y[i] - pr.vy[i] * pr.age[i];
+    pullPlayer(w, p, ox, oy, pr.pull[i] > 0 ? pr.pull[i] : CHAIN_PULL_DISTANCE, 'chain');
+  }
+  const fx = pr.effect[i] > 0 ? projectileEffect(pr.effect[i]) : undefined;
+  fx?.onHit?.(w, i, p);
+}
+
+/** A lob landed at (x, y): splash every living player inside, then the kind's landing follow-up. */
+function land(w: World, i: number, x: number, y: number): void {
+  const pr = w.projectiles;
+  if (pr.hostile[i]) {
+    const living = w.living;
+    const r = (pr.splash[i] > 0 ? pr.splash[i] : SPIT_SPLASH_RADIUS) + PLAYER_RADIUS;
+    for (let k = 0; k < living.length; k++) {
+      const p = living[k];
+      const dx = p.x - x;
+      const dy = p.y - y;
+      if (dx * dx + dy * dy <= r * r) hostileHit(w, i, p);
+    }
+    if (pr.kind[i] === PROJ.tarGlob) spawnArea(w, 'tarPool', x, y, TAR_POOL_RADIUS, TAR_POOL_DURATION);
+  }
+  const fx = pr.effect[i] > 0 ? projectileEffect(pr.effect[i]) : undefined;
+  fx?.onLand?.(w, i, x, y);
 }
 
 export function updateProjectiles(w: World): void {
@@ -96,16 +234,9 @@ export function updateProjectiles(w: World): void {
       // slack absorbs the Float32 age accumulation). The splash hurts every player inside it.
       if (pr.age[i] >= flight - DT * 0.5) {
         ended = true;
-        if (pr.hostile[i]) {
-          const living = w.living;
-          const r = SPIT_SPLASH_RADIUS + PLAYER_RADIUS;
-          for (let k = 0; k < living.length; k++) {
-            const p = living[k];
-            const dx = p.x - bx;
-            const dy = p.y - by;
-            if (dx * dx + dy * dy <= r * r) damagePlayer(w, p, pr.damage[i], pr.dtype[i], 'projectile');
-          }
-        }
+        pr.x[i] = bx;
+        pr.y[i] = by;
+        land(w, i, bx, by);
       }
     } else if (pr.hostile[i]) {
       // A flat hostile shot stops on the first living, vulnerable player along its path.
@@ -124,7 +255,9 @@ export function updateProjectiles(w: World): void {
       if (first) {
         endT = firstT;
         ended = true;
-        damagePlayer(w, first, pr.damage[i], pr.dtype[i], 'projectile');
+        pr.x[i] = ax + (bx - ax) * endT;
+        pr.y[i] = ay + (by - ay) * endT;
+        hostileHit(w, i, first);
       }
     } else {
       const pad = rad + w.grid.maxRadius;
@@ -151,6 +284,13 @@ export function updateProjectiles(w: World): void {
       for (let k = 0; k < hits; k++) {
         const j = hitSlot[k];
         if (!m.alive[j]) continue;
+        if (m.flags[j] & MFLAG.guard && blocks(w, j, vx, vy)) {
+          // Caught on the shield: consumed, whatever its pierce.
+          endT = hitT[k];
+          ended = true;
+          w.events.push({ t: 'blocked', x: ax + (bx - ax) * endT, y: ay + (by - ay) * endT });
+          break;
+        }
         pr.recordHit(i, m.id[j]);
         damageMonster(w, j, pr.damage[i], pr.dtype[i], pr.critChance[i], pr.critMult[i], pr.ailmentChance[i], vx, vy, 1, true, pr.owner[i]);
         const pierce = pr.pierce[i];
@@ -163,12 +303,17 @@ export function updateProjectiles(w: World): void {
       }
     }
 
+    if (!pr.alive[i]) continue; // an effect removed it
     const nx = ax + (bx - ax) * endT;
     const ny = ay + (by - ay) * endT;
     pr.x[i] = nx;
     pr.y[i] = ny;
     pr.range[i] -= Math.sqrt(vx * vx + vy * vy) * DT * endT;
-    if (ended || (flight <= 0 && pr.range[i] <= 0) || nx * nx + ny * ny > outR2) endProjectile(w, i);
+    if (ended) endProjectile(w, i);
+    else if ((flight <= 0 && pr.range[i] <= 0) || nx * nx + ny * ny > outR2) {
+      if (pr.effect[i] > 0) projectileEffect(pr.effect[i])?.onExpire?.(w, i);
+      if (pr.alive[i]) endProjectile(w, i);
+    }
   }
 }
 

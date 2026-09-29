@@ -89,8 +89,11 @@ describe('full map with the bot', () => {
       minLife = Math.min(minLife, pv(run).life);
     }
     expect(end).toBe('returnPortal');
-    // The horde got to her: she dipped well below full and needed her flasks.
-    expect(minLife).toBeLessThan(0.85 * stats.maxLife);
+    // The horde got to her: she dipped below full and needed her flasks. The bar is the balance suite's "not a
+    // stroll" line (tests/game-progression/balance-themes.test.ts: lowest life under 90%). It was 85% before the
+    // cross-theme balance pass shortened the boss fights (Matriarch life 7000 → 1300); this seed now bottoms out
+    // at about 88% in the boss wave, and the Tier 1–6 ladder (balance-ladder.test.ts) guards the margins per theme.
+    expect(minLife).toBeLessThan(0.9 * stats.maxLife);
     expect(minLife).toBeGreaterThan(0);
     expect(flasks).toBeGreaterThan(0);
   }, 120_000);

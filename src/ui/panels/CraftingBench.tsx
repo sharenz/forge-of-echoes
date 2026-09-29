@@ -9,11 +9,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { CURRENCY_IDS, iconIdForCurrency, type CurrencyId } from '../../contracts/content';
 import type { BenchRecipe } from '../../contracts/game';
-import type { CharacterSave, Item, ItemDescription, ItemLocation, TooltipLine } from '../../contracts/items';
+import { currencyStashUid, type CharacterSave, type Item, type ItemDescription, type ItemLocation, type TooltipLine } from '../../contracts/items';
 import { Button, PixelIcon, cx } from '../components/common';
 import { AnvilGlyph } from '../items/ItemTooltip';
 import { CRAFT_PENDING_MS } from '../lib/crafting';
 import { SLOT_LABELS, TONE_LABEL } from '../lib/content';
+import { formatInt } from '../lib/format';
+import { stashCount } from '../lib/stash';
 import { itemIconId, itemTone } from '../lib/items';
 import { useLocal } from '../local';
 import {
@@ -41,6 +43,10 @@ function whereText(loc: ItemLocation, ch: CharacterSave): string {
       return 'On your flask belt';
     case 'mapDevice':
       return 'In the map device';
+    case 'currencyStash':
+      return 'In your Crafting Stash';
+    case 'mapStash':
+      return 'In your Map Stash';
   }
 }
 
@@ -302,23 +308,43 @@ function Mods({
   );
 }
 
+interface Carried {
+  /** The stack a palette click applies: the largest backpack stack, else the Crafting Stash slot (`cstash:<id>`). */
+  uid: string;
+  /** Everything the bench can spend: backpack + Crafting Stash (the rules pay in that order). */
+  count: number;
+  largest: number;
+  /** Of which in the Crafting Stash. */
+  stash: number;
+}
+
 function useCarried(ch: CharacterSave | null, lockedUids: ReadonlySet<string>) {
   return useMemo(() => {
-    const out = new Map<CurrencyId, { uid: string; count: number; largest: number }>();
+    const out = new Map<CurrencyId, Carried>();
     if (!ch) return out;
     for (const e of ch.backpack.entries) {
       const it = e.item;
       if (it.kind !== 'currency' || lockedUids.has(it.uid)) continue;
       const cur = out.get(it.currencyId);
-      if (!cur) out.set(it.currencyId, { uid: it.uid, count: it.count, largest: it.count });
+      if (!cur) out.set(it.currencyId, { uid: it.uid, count: it.count, largest: it.count, stash: 0 });
       else {
-        // The palette shows the total carried and applies from the largest stack.
+        // The palette shows the total and applies from the largest stack.
         cur.count += it.count;
         if (it.count > cur.largest) {
           cur.largest = it.count;
           cur.uid = it.uid;
         }
       }
+    }
+    // Crafting straight from the Crafting Stash (GAME_SPEC §12): its slot counts too, and is used once the bags are empty.
+    for (const id of CURRENCY_IDS) {
+      const n = stashCount(ch, id);
+      if (n <= 0) continue;
+      const cur = out.get(id);
+      if (cur) {
+        cur.count += n;
+        cur.stash = n;
+      } else out.set(id, { uid: currencyStashUid(id), count: n, largest: 0, stash: n });
     }
     return out;
   }, [ch, lockedUids]);
@@ -334,7 +360,7 @@ function CostChips({ cost, carried }: { cost: BenchRecipe['cost']; carried: Map<
           <span
             key={c.currencyId}
             class={cx('fe-recipe__price', have < c.count && 'fe-recipe__price--short')}
-            title={`${c.count} ${store.rules.content.currencies[c.currencyId]?.name ?? c.currencyId} (you carry ${have})`}
+            title={`${c.count} ${store.rules.content.currencies[c.currencyId]?.name ?? c.currencyId} (you have ${formatInt(have)}, with the Crafting Stash)`}
           >
             <PixelIcon id={iconIdForCurrency(c.currencyId)} width={20} height={20} />
             {c.count}
@@ -480,7 +506,7 @@ function Palette({
 }: {
   ch: CharacterSave;
   uid: string | null;
-  carried: Map<CurrencyId, { uid: string; count: number }>;
+  carried: Map<CurrencyId, Carried>;
   allowed: boolean;
   /** The bench item is offered in the trade. */
   locked: boolean;
@@ -540,7 +566,10 @@ function Palette({
                 <div>
                   <div class="fe-curtip__name">{info?.name ?? id}</div>
                   <div class="fe-curtip__meta">
-                    {stack.count} carried{info && info.stabilityCost > 0 ? ` · costs ${info.stabilityCost} Stability` : ''}
+                    {stack.stash > 0
+                      ? `${formatInt(stack.count - stack.stash)} carried, ${formatInt(stack.stash)} in the Crafting Stash`
+                      : `${stack.count} carried`}
+                    {info && info.stabilityCost > 0 ? ` · costs ${info.stabilityCost} Stability` : ''}
                   </div>
                 </div>
               </div>
@@ -577,7 +606,7 @@ function Palette({
         <span class="fe-palette__hint">{uid ? 'Click to apply to the bench item' : 'Place an item to use your currency'}</span>
       </div>
       {ids.length === 0 ? (
-        <p class="fe-bench__note">You carry no currency.</p>
+        <p class="fe-bench__note">You have no currency in your backpack or Crafting Stash.</p>
       ) : (
         <div
           ref={gridRef}
@@ -612,7 +641,7 @@ function Palette({
                 }}
               >
                 <PixelIcon id={iconIdForCurrency(id)} class="fe-cur__icon" width="72%" height="72%" />
-                <span class="fe-cur__count">{stack.count}</span>
+                <span class="fe-cur__count">{stack.count >= 10000 ? `${Math.floor(stack.count / 1000)}k` : formatInt(stack.count)}</span>
               </button>
             );
           })}

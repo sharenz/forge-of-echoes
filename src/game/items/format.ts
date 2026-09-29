@@ -14,6 +14,12 @@ export function formatNumber(v: number): string {
   return a.toFixed(1).replace(/\.0$/, '');
 }
 
+/** A whole count with thousands separators: "5,000", "1,234", "40" (locale-independent). */
+export function formatCount(n: number): string {
+  const v = Number.isFinite(n) ? Math.floor(Math.abs(n)) : 0;
+  return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 /** "+24" / "−8". */
 export function formatSigned(v: number): string {
   return (v < 0 ? MINUS : '+') + formatNumber(v);

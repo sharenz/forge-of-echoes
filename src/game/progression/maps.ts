@@ -11,20 +11,21 @@ import type { MapSummaryLine } from '../../contracts/game';
 import type {
   ItemDescription, MapItem, ModifierMode, Rarity, RolledMapMod, StatModifier, TooltipLine,
 } from '../../contracts/items';
-import type { CurrencyId, MapBaseId } from '../../contracts/content';
+import type { CurrencyId, MapBaseId, MonsterKind } from '../../contracts/content';
 import { MAP_BASE_IDS, iconIdForMap } from '../../contracts/content';
 import type { MonsterScaling, WaveConfig } from '../../contracts/sim';
 import type { Rng } from '../../contracts/rng';
 import { resolveStatBreakdown } from '../../core/modifiers';
 import { hashString } from '../../core/rng';
 import {
-  BASE_MAGIC_PACK_CHANCE, BASE_RARE_PACK_CHANCE, CORRUPTED_MODS, DANGER_MODS, EARLY_TIER_EASING, ECHO_MOD, MAP_BASES, MAP_DANGER_LIMITS,
-  MAP_DUST_COUNTS, MAP_NAME_FIRST, MAP_NAME_SECOND, MAX_DANGER_MODS, MAX_MAP_TIER, MAX_REWARD_MODS, MIN_MAP_TIER,
-  MOD_VALUE_ROLL, MONSTER_LEVEL, PARTY_SCALING, REWARD_MODS, TIER_SCALING, VOID_NEEDLE_OUTCOMES, WAVES, findMapBase, getMapMod,
+  BASE_MAGIC_PACK_CHANCE, BASE_RARE_PACK_CHANCE, CORRUPTED_MODS, DANGER_MODS, DEBUFFS, EARLY_TIER_EASING, ECHO_MOD, HAZARD_AFFLICTION, MAP_AFFLICTIONS,
+  MAP_BASES, MAP_DANGER_LIMITS, MAP_DUST_COUNTS, MAP_NAME_FIRST, MAP_NAME_SECOND, MAX_DANGER_MODS, MAX_MAP_TIER, MAX_REWARD_MODS,
+  MIN_MAP_TIER, MOD_VALUE_ROLL, MONSTER_LEVEL, MONSTER_NAMES, MONSTER_PLURALS, MONSTER_SENTENCE_NAMES, PARTY_SCALING, REWARD_MODS,
+  TIER_SCALING, VOID_NEEDLE_OUTCOMES, WAVES, findMapBase, getMapMod,
 } from '../../data/progression';
 import type { MapEffectDef, MapModDef, MapStat, VoidOutcomeId } from '../../data/progression';
-import { findCurrency } from '../../data/items';
-import { formatChance, formatDistribution, formatNumber, formatSigned } from '../items';
+import { findCurrency, ownEntry } from '../../data/items';
+import { formatChance, formatDistribution, formatNumber, formatSigned, joinWords } from '../items';
 import { MAX_PARTY_SIZE } from '../../contracts/net';
 import { clamp, finite, oneDecimal, percent, resolveModes, rollCountTable, signedPercent, stableIndex } from './util';
 
@@ -51,6 +52,35 @@ export function monsterLevelForTier(tier: number): number {
 
 export function mapBaseName(baseId: MapBaseId | string): string {
   return findMapBase(baseId)?.name ?? 'Unknown Map';
+}
+
+/** A monster's display name ("The Hollow Warden", "Bone Thrall"). */
+export function monsterName(kind: MonsterKind): string {
+  return MONSTER_NAMES[kind] ?? 'a monster';
+}
+
+/** How a sentence names a monster: "the Cinder Matriarch", "The Hollow Warden", "Varkus, the Iron Champion". */
+export function monsterSentenceName(kind: MonsterKind): string {
+  return MONSTER_SENTENCE_NAMES[kind] ?? `the ${monsterName(kind)}`;
+}
+
+/** The lieutenant (wave 3) and boss (final wave) of a map base, by kind and name (GAME_SPEC §14). */
+export function mapBosses(baseId: MapBaseId | string): {
+  lieutenant: { kind: MonsterKind; name: string; sentence: string };
+  boss: { kind: MonsterKind; name: string; sentence: string };
+} {
+  const base = findMapBase(baseId) ?? MAP_BASES.ashenForge;
+  const entry = (kind: MonsterKind) => ({ kind, name: monsterName(kind), sentence: monsterSentenceName(kind) });
+  return { lieutenant: entry(base.lieutenant), boss: entry(base.boss) };
+}
+
+/**
+ * A map mod's name on a map of `baseId` (GAME_SPEC §7): a mod named after the map's boss follows the base ("The
+ * Warden's Wrath" on a Rimed Ossuary, "Varkus's Wrath" on an Iron Coliseum); any other mod, or no base, keeps its
+ * own name. Only the name changes: the id a saved map stores is the same on every base.
+ */
+export function mapModName(def: MapModDef, baseId?: MapBaseId | string): string {
+  return (def.nameByBase ? ownEntry<string>(def.nameByBase, baseId) : undefined) ?? def.name;
 }
 
 /** Rolled mod value range at a tier (percent of the nominal magnitude). */
@@ -156,7 +186,7 @@ export function mapTitle(map: MapItem): string {
   if (map.rarity === 'magic') {
     const first = modsOfKind(map, 'danger')[0];
     const def = first ? getMapMod(first.modId) : undefined;
-    return def ? `${def.name} ${baseName}` : baseName;
+    return def ? `${mapModName(def, map.baseId)} ${baseName}` : baseName;
   }
   return baseName;
 }
@@ -176,7 +206,7 @@ const MAP_STAT_TEXT: Record<MapStat, Templates> = {
   packRarity: { increased: '{v}% {inc} chance of Magic and Rare packs' },
   monsterResist: { flat: 'Monsters have {+v}% to all Resistances' },
   monsterProjectiles: { flat: 'Monsters fire {v} additional Projectile{s}' },
-  hazards: { flat: 'Volcanic eruptions burst around you' },
+  hazards: { flat: 'Volcanic eruptions burst around you and set you Burning' },
   playerFocusRegen: { increased: 'Players have {v}% {inc} Focus Regeneration' },
   playerResist: { flat: 'Players have {+v}% to all Resistances' },
   itemQuantity: { increased: '{v}% {inc} Quantity of Items found' },
@@ -186,13 +216,18 @@ const MAP_STAT_TEXT: Record<MapStat, Templates> = {
   emberEssenceChance: { more: 'Ember Essences are {x} times as likely to drop' },
   rimeEssenceChance: { more: 'Rime Essences are {x} times as likely to drop' },
   armourStability: { flat: 'Armour bases drop with {+v} Stability' },
-  echoWave: { flat: 'An Echo wave follows the Matriarch: a 7th wave with double loot' },
+  echoWave: { flat: 'An Echo wave follows {boss}: a 7th wave with double loot' },
 };
 
-export function effectText(stat: MapStat, mode: ModifierMode, value: number): string {
+/**
+ * Player-facing text of one map effect. `boss` names the map's boss where a line mentions it (the Echo
+ * wave): "the Cinder Matriarch", "The Hollow Warden"; default "the boss".
+ */
+export function effectText(stat: MapStat, mode: ModifierMode, value: number, boss = 'the boss'): string {
   const template = MAP_STAT_TEXT[stat][mode] ?? `{+v} ${stat}`;
-  return template.replace(/\{(\+v|v|inc|more|x|s)\}/g, (_m, key: string) => {
+  return template.replace(/\{(\+v|v|inc|more|x|s|boss)\}/g, (_m, key: string) => {
     switch (key) {
+      case 'boss': return boss;
       case '+v': return formatSigned(value);
       case 'v': return formatNumber(value);
       case 'inc': return value < 0 ? 'reduced' : 'increased';
@@ -250,7 +285,7 @@ export function mapModifiers(map: MapItem): MapModifier[] {
     const def = getMapMod(rolled.modId);
     if (!def) continue;
     for (const e of [...def.danger, ...def.reward]) {
-      out.push({ stat: e.stat, mode: e.mode, value: effectMagnitude(e, rolled.value), source: def.name });
+      out.push({ stat: e.stat, mode: e.mode, value: effectMagnitude(e, rolled.value), source: mapModName(def, map.baseId) });
     }
   }
   return out;
@@ -431,10 +466,12 @@ export function buildMapSummary(map: MapItem): MapSummaryLine[] {
   out.push(luckLine('Map Item Rarity', luck.rarity, MAP_ONLY_NOTE('Item Rarity')));
 
   const waves = waveConfig(map);
+  const bosses = mapBosses(map.baseId);
   const waveLines = [
     `Each wave lasts up to ${WAVES.waveDuration} seconds; unfinished waves stack`,
-    `Wave ${waves.lieutenantWave}: the Ashbound Herald`,
-    `Wave ${waves.bossWave}: the Cinder Matriarch`,
+    `Monsters: ${rosterText(map.baseId)}`,
+    `Wave ${waves.lieutenantWave}: ${bosses.lieutenant.sentence}`,
+    `Wave ${waves.bossWave}: ${bosses.boss.sentence}`,
   ];
   if (hasEchoWave(map)) waveLines.push(`Wave ${echoWaveIndex(map)}: the Echo wave, double loot`);
   out.push({ label: 'Waves', value: String(waves.count), breakdown: waveLines });
@@ -448,6 +485,9 @@ export function buildMapSummary(map: MapItem): MapSummaryLine[] {
       'Magic monsters give 2x the experience, rare monsters 6x',
     ],
   });
+  out.push({ label: 'Boss', value: bosses.boss.name, breakdown: [`Wave ${waves.bossWave}: killing ${bosses.boss.sentence} clears the map`] });
+  const afflictions = afflictionLine(map.baseId, ofStat(mods, 'hazards').length > 0);
+  if (afflictions) out.push(afflictions);
 
   const push = (line: MapSummaryLine | null) => { if (line) out.push(line); };
   push(scalingLine('Monster Life', mods, 'monsterLife', true));
@@ -476,7 +516,12 @@ export function buildMapSummary(map: MapItem): MapSummaryLine[] {
   }
   const hazards = ofStat(mods, 'hazards');
   if (hazards.length) {
-    out.push({ label: 'Hazards', value: 'Eruptions', breakdown: hazards.map((m) => `Telegraphed fire eruptions (${m.source})`) });
+    const burn = DEBUFFS[HAZARD_AFFLICTION.debuff];
+    out.push({
+      label: 'Hazards',
+      value: 'Eruptions',
+      breakdown: hazards.map((m) => `Telegraphed fire eruptions that set you ${burn.name}; ${burn.counterplay} (${m.source})`),
+    });
   }
   const regen = ofStat(mods, 'playerFocusRegen');
   if (regen.length) {
@@ -505,6 +550,40 @@ export function buildMapSummary(map: MapItem): MapSummaryLine[] {
   }
   out.push(partySummaryLine());
   return out;
+}
+
+/** "Bone Thralls, Rimeshades, Frost Weavers, Glacial Wisps and Ossuary Golems". */
+function rosterText(baseId: MapBaseId): string {
+  const base = findMapBase(baseId);
+  const names = (base?.family ?? []).map((k) => MONSTER_PLURALS[k] ?? monsterName(k));
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * The debuffs this map can inflict (GAME_SPEC §13), each with its sources and counterplay: its roster's
+ * (MAP_AFFLICTIONS), plus Burning from the Volcanic mod's eruptions when the map has hazards.
+ */
+function afflictionLine(baseId: MapBaseId, hazards: boolean): MapSummaryLine | null {
+  const roster = Object.prototype.hasOwnProperty.call(MAP_AFFLICTIONS, baseId) ? MAP_AFFLICTIONS[baseId] : [];
+  const list = roster.map((a) => ({ debuff: a.debuff, sources: [...a.sources] }));
+  if (hazards) {
+    const burning = list.find((a) => a.debuff === HAZARD_AFFLICTION.debuff);
+    if (burning) burning.sources.push(HAZARD_AFFLICTION.source);
+    else list.push({ debuff: HAZARD_AFFLICTION.debuff, sources: [HAZARD_AFFLICTION.source] });
+  }
+  if (!list.length) return null;
+  return {
+    label: 'Afflictions',
+    value: list.map((a) => DEBUFFS[a.debuff].name).join(', '),
+    breakdown: [
+      ...list.map((a) => {
+        const d = DEBUFFS[a.debuff];
+        return `${d.name} (from ${joinWords(a.sources)}): ${d.effect}. Counter: ${d.counterplay}`;
+      }),
+      'Cinder Ward halves every debuff duration while it is active',
+    ],
+  };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -564,7 +643,7 @@ export function partyScalingLines(players: number): MapSummaryLine[] {
 // Tooltip
 // ---------------------------------------------------------------------------------------------
 
-function modLines(rolled: RolledMapMod, tier: number): TooltipLine[] {
+function modLines(rolled: RolledMapMod, tier: number, boss: string, baseId: MapBaseId | string): TooltipLine[] {
   const def = getMapMod(rolled.modId);
   if (!def) return [];
   const range = modValueRange(tier);
@@ -573,7 +652,7 @@ function modLines(rolled: RolledMapMod, tier: number): TooltipLine[] {
   const tags = [def.kind === 'danger' ? 'Danger' : def.kind === 'reward' ? 'Reward' : 'Corrupted'];
   const push = (e: MapEffectDef) => {
     const v = effectMagnitude(e, rolled.value);
-    const line: TooltipLine = { text: effectText(e.stat, e.mode, v), kind, affixName: def.name, tags };
+    const line: TooltipLine = { text: effectText(e.stat, e.mode, v, boss), kind, affixName: mapModName(def, baseId), tags };
     if (!e.fixed && def.kind !== 'echo') {
       const lo = effectMagnitude(e, range.min);
       const hi = effectMagnitude(e, range.max);
@@ -590,6 +669,8 @@ function modLines(rolled: RolledMapMod, tier: number): TooltipLine[] {
 export interface MapDescribeOptions {
   /** Map sits in the map device. */
   inDevice?: boolean;
+  /** Map sits in the Map Stash. */
+  inMapStash?: boolean;
 }
 
 /** Tooltip for a map. Tone follows rarity (Normal maps use the silver map tone). */
@@ -605,6 +686,7 @@ export function describeMap(map: MapItem, opts: MapDescribeOptions = {}): ItemDe
     { label: 'Map Item Quantity', value: signedPercent(luck.quantity.value - 100) },
     { label: 'Map Item Rarity', value: signedPercent(luck.rarity.value - 100) },
     { label: 'Waves', value: String(waveConfig(map).count) },
+    { label: 'Boss', value: mapBosses(map.baseId).boss.name },
     { label: 'Experience', value: times(experienceMultiplier(tier)) },
   ];
   if (map.quality > 0) properties.push({ label: 'Quality', value: `+${map.quality}%` });
@@ -615,13 +697,15 @@ export function describeMap(map: MapItem, opts: MapDescribeOptions = {}): ItemDe
       ...(base.arenaNote ? [{ text: base.arenaNote, kind: 'implicit' as const }] : []),
     ]
     : [];
-  const affixes = map.mods.flatMap((m) => modLines(m, tier));
+  const affixes = map.mods.flatMap((m) => modLines(m, tier, mapBosses(map.baseId).boss.sentence, map.baseId));
 
   const headerLines = [`Tier ${tier} Map`];
   if (map.corrupted) headerLines.push('Corrupted');
   let hint = opts.inDevice
     ? 'Activate the Map Device to open a portal.'
-    : 'Place it in the Map Device in your hideout, then activate the device.';
+    : opts.inMapStash
+      ? 'Drag it to the Map Device or your backpack; Ctrl+click takes it to your backpack.'
+      : 'Place it in the Map Device in your hideout, then activate the device.';
   if (map.corrupted) hint += ' Corrupted: map currency no longer works on it.';
 
   const desc: ItemDescription = {
@@ -681,7 +765,8 @@ export function mapCraftError(map: MapItem, currencyId: CurrencyId): string | nu
       return null;
     case 'rewardInk': {
       if (rewardModCount(map) >= MAX_REWARD_MODS) {
-        const current = getMapMod(modsOfKind(map, 'reward')[0]?.modId ?? '')?.name ?? 'a reward mod';
+        const def = getMapMod(modsOfKind(map, 'reward')[0]?.modId ?? '');
+        const current = def ? mapModName(def, map.baseId) : 'a reward mod';
         return `This map already carries ${current}. Reward Ink adds at most one reward mod.`;
       }
       return null;
@@ -712,8 +797,8 @@ export function inclusionChances(pool: readonly MapModDef[], count: number): Map
   return out;
 }
 
-function pickOddsLine(prefix: string, pool: readonly MapModDef[]): string {
-  const parts = formatDistribution(pool.map((m) => ({ label: m.name, chance: m.weight })));
+function pickOddsLine(prefix: string, pool: readonly MapModDef[], baseId: MapBaseId | string): string {
+  const parts = formatDistribution(pool.map((m) => ({ label: mapModName(m, baseId), chance: m.weight })));
   return `${prefix}: ${parts.join(' · ')}`;
 }
 
@@ -722,7 +807,7 @@ function countOddsText(table: readonly { count: number; weight: number }[]): str
   return parts.join(' · ');
 }
 
-function inclusionLine(pool: readonly MapModDef[], counts: readonly { count: number; weight: number }[]): string {
+function inclusionLine(pool: readonly MapModDef[], counts: readonly { count: number; weight: number }[], baseId: MapBaseId | string): string {
   const total = counts.reduce((s, c) => s + c.weight, 0);
   const acc = new Map<string, number>();
   for (const c of counts) {
@@ -730,7 +815,7 @@ function inclusionLine(pool: readonly MapModDef[], counts: readonly { count: num
     for (const [id, p] of odds) acc.set(id, (acc.get(id) ?? 0) + (p * c.weight) / total);
   }
   const parts = pool
-    .map((m) => ({ name: m.name, p: acc.get(m.id) ?? 0 }))
+    .map((m) => ({ name: mapModName(m, baseId), p: acc.get(m.id) ?? 0 }))
     .sort((a, b) => b.p - a.p)
     .map((e) => `${e.name} ${formatChance(e.p)}`);
   return `Chance for each mod: ${parts.join(' · ')}`;
@@ -746,19 +831,20 @@ export function mapCraftPreview(map: MapItem, currencyId: CurrencyId): string[] 
     case 'mapDust': {
       if (danger === 0) {
         lines.push(`Awakens a Magic map with ${countOddsText(MAP_DUST_COUNTS.magic)}.`);
-        lines.push(inclusionLine(DANGER_MODS, MAP_DUST_COUNTS.magic));
+        lines.push(inclusionLine(DANGER_MODS, MAP_DUST_COUNTS.magic, map.baseId));
       } else {
         const band = map.rarity === 'rare' ? 'rare' : 'magic';
         lines.push(`Rerolls all ${danger} danger mod${danger === 1 ? '' : 's'}: ${countOddsText(MAP_DUST_COUNTS[band])}. The map stays ${band === 'rare' ? 'Rare' : 'Magic'}.`);
-        lines.push(inclusionLine(DANGER_MODS, MAP_DUST_COUNTS[band]));
+        lines.push(inclusionLine(DANGER_MODS, MAP_DUST_COUNTS[band], map.baseId));
       }
       const reward = modsOfKind(map, 'reward')[0];
-      if (reward) lines.push(`The reward mod ${getMapMod(reward.modId)?.name ?? ''} is kept.`);
+      const rewardDef = reward ? getMapMod(reward.modId) : undefined;
+      if (rewardDef) lines.push(`The reward mod ${mapModName(rewardDef, map.baseId)} is kept.`);
       break;
     }
     case 'threatGlyph': {
       const pool = eligibleDanger(map);
-      lines.push(pickOddsLine(`Adds one of ${pool.length} danger mods`, pool));
+      lines.push(pickOddsLine(`Adds one of ${pool.length} danger mods`, pool, map.baseId));
       if (rarityForDangerCount(danger + 1) !== map.rarity) {
         lines.push(`The map becomes ${rarityForDangerCount(danger + 1) === 'rare' ? 'Rare' : 'Magic'}.`);
       }
@@ -766,13 +852,13 @@ export function mapCraftPreview(map: MapItem, currencyId: CurrencyId): string[] 
       break;
     }
     case 'rewardInk':
-      lines.push(pickOddsLine(`Inscribes one of ${REWARD_MODS.length} reward mods`, REWARD_MODS));
+      lines.push(pickOddsLine(`Inscribes one of ${REWARD_MODS.length} reward mods`, REWARD_MODS, map.baseId));
       lines.push('Reward mods add no danger and do not change the map’s rarity.');
       break;
     case 'voidNeedle': {
       const outcomes = voidOutcomes(map);
       lines.push(`Corrupts the map: ${formatDistribution(outcomes.map((o) => ({ label: o.label, chance: o.weight }))).join(' · ')}`);
-      lines.push(pickOddsLine('Corrupted mods', CORRUPTED_MODS));
+      lines.push(pickOddsLine('Corrupted mods', CORRUPTED_MODS, map.baseId));
       lines.push('A corrupted map can no longer be modified.');
       break;
     }
@@ -786,8 +872,11 @@ export interface MapCraftResult {
   kind: 'success' | 'corrupted';
 }
 
-function names(mods: readonly RolledMapMod[]): string {
-  const list = mods.map((m) => getMapMod(m.modId)?.name ?? 'a mod');
+function names(mods: readonly RolledMapMod[], baseId: MapBaseId | string): string {
+  const list = mods.map((m) => {
+    const def = getMapMod(m.modId);
+    return def ? mapModName(def, baseId) : 'a mod';
+  });
   if (list.length <= 1) return list.join('');
   return `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
 }
@@ -811,20 +900,20 @@ export function craftMap(map: MapItem, currencyId: CurrencyId, rng: Rng): MapCra
       const rolled = rollDangerMods(rng, count, tier);
       const next = withMods(map, [...keep, ...rolled]);
       const verb = dangerModCount(map) === 0 ? 'awakened' : 'rerolled the danger mods into';
-      return { map: next, message: `Map Dust ${verb} ${names(rolled)}`, kind: 'success' };
+      return { map: next, message: `Map Dust ${verb} ${names(rolled, map.baseId)}`, kind: 'success' };
     }
     case 'threatGlyph': {
       const pick = rng.weighted(eligibleDanger(map), (m) => m.weight)!;
       const added: RolledMapMod = { modId: pick.id, value: rollModValue(rng, tier) };
       const next = withMods(map, [...map.mods, added]);
-      let message = `Threat Glyph added ${pick.name}`;
+      let message = `Threat Glyph added ${mapModName(pick, map.baseId)}`;
       if (next.rarity !== map.rarity) message += ` · the map is now ${next.rarity === 'rare' ? 'Rare' : 'Magic'}`;
       return { map: next, message, kind: 'success' };
     }
     case 'rewardInk': {
       const pick = rng.weighted(REWARD_MODS, (m) => m.weight)!;
       const next = withMods(map, [...map.mods, { modId: pick.id, value: rollModValue(rng, tier) }]);
-      return { map: next, message: `Reward Ink inscribed ${pick.name}`, kind: 'success' };
+      return { map: next, message: `Reward Ink inscribed ${mapModName(pick, map.baseId)}`, kind: 'success' };
     }
     case 'voidNeedle': {
       const outcome = rng.weighted(voidOutcomes(map), (o) => o.weight)!.id;
@@ -834,7 +923,7 @@ export function craftMap(map: MapItem, currencyId: CurrencyId, rng: Rng): MapCra
         case 'corruptedMod': {
           const pick = rng.weighted(CORRUPTED_MODS, (m) => m.weight)!;
           next = withMods(map, [...map.mods, { modId: pick.id, value: rollModValue(rng, tier), corrupted: true }]);
-          message = `Void Needle corrupted the map with ${pick.name}`;
+          message = `Void Needle corrupted the map with ${mapModName(pick, map.baseId)}`;
           break;
         }
         case 'tierUp':
@@ -844,12 +933,12 @@ export function craftMap(map: MapItem, currencyId: CurrencyId, rng: Rng): MapCra
         case 'rareFour': {
           const rolled = rollDangerMods(rng, MAX_DANGER_MODS, tier).map((m) => ({ ...m, corrupted: true }));
           next = withMods(map, [...keep, ...rolled]);
-          message = `Void Needle corrupted the map into a Rare with ${names(rolled)}`;
+          message = `Void Needle corrupted the map into a Rare with ${names(rolled, map.baseId)}`;
           break;
         }
         case 'echoWave':
           next = withMods(map, [...map.mods, { modId: ECHO_MOD.id, value: 100, corrupted: true }]);
-          message = 'Void Needle corrupted the map: an Echo wave will follow the Matriarch';
+          message = `Void Needle corrupted the map: an Echo wave will follow ${mapBosses(map.baseId).boss.sentence}`;
           break;
         default:
           message = 'Void Needle corrupted the map. Nothing else changed';

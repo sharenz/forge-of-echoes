@@ -1,9 +1,19 @@
 // Music selection and energy. Pure: the app calls these every frame and forwards changes to the AudioEngine.
 import type { MusicId } from '../contracts/audio';
+import type { Theme } from '../contracts/content';
 import type { RunView } from '../contracts/sim';
 import type { Screen } from '../contracts/ui';
 
-/** Title theme outside the game, the zone's track inside, the boss track while the Matriarch lives. */
+/**
+ * The colour of the 'map' / 'boss' music (src/audio setMusicTheme): the map base's theme inside a map (icy bells for
+ * the Rimed Ossuary, war drums for the Iron Coliseum), the plain forge tracks everywhere else. A reconnect keeps
+ * the zone, so it keeps its colour too.
+ */
+export function musicThemeFor(zone: { kind: 'hideout' | 'map'; theme: Theme } | null): Theme | null {
+  return zone && zone.kind === 'map' ? zone.theme : null;
+}
+
+/** Title theme outside the game, the zone's track inside, the boss track while the map's boss lives. */
 export function musicFor(screen: Screen, zone: 'hideout' | 'map' | null, run: RunView | null): MusicId | null {
   if (screen !== 'game' || !zone) return screen === 'loading' ? null : 'title';
   if (zone === 'hideout') return 'hideout';

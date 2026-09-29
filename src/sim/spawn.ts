@@ -1,13 +1,12 @@
-// Monster and pack creation. All life/damage/speed numbers flow from the archetype table through
-// MonsterScaling, per-wave growth and elite modifiers.
+// Monster and pack creation. All life/damage/speed numbers flow from the kind's MonsterDef (rosters/)
+// through MonsterScaling, per-wave growth, elite modifiers and the party size.
 import type { MonsterKind } from '../contracts/content';
 import { MONSTER_ANIM, RARITY_CODE, type MonsterRarity } from '../contracts/sim';
-import {
-  ARCHETYPES, KIND_INDEX, RARITY_XP, eliteDamageMult, eliteLifeMult, eliteSpeedMult,
-} from './archetypes';
+import { KIND_INDEX, RARITY_XP, eliteDamageMult, eliteLifeMult, eliteSpeedMult } from './archetypes';
 import { PARTY_LIFE_PER_PLAYER, SPAWN_ANIM_TIME, WAVE_DAMAGE_GROWTH, WAVE_LIFE_GROWTH } from './constants';
-import { GOLDEN_ANGLE, TAU } from './math';
+import { DAMAGE_INDEX, GOLDEN_ANGLE, TAU } from './math';
 import { nearestLiving } from './player';
+import { monsterDefs } from './rosters';
 import { MFLAG } from './stores';
 import type { Pack, World } from './world';
 
@@ -37,7 +36,8 @@ export function spawnMonster(w: World, kind: MonsterKind, x: number, y: number, 
   const m = w.monsters;
   const i = m.alloc();
   if (i < 0) return -1;
-  const a = ARCHETYPES[kind];
+  const kindIndex = KIND_INDEX[kind];
+  const a = monsterDefs()[kindIndex];
   const s = w.config.monsters;
   const rarity = opts.rarity ?? 'normal';
   const mods = opts.mods ?? 0;
@@ -49,7 +49,7 @@ export function spawnMonster(w: World, kind: MonsterKind, x: number, y: number, 
   const rng = w.worldRng;
   const animate = opts.animate ?? true;
 
-  m.kind[i] = KIND_INDEX[kind];
+  m.kind[i] = kindIndex;
   m.rarity[i] = opts.boss ? RARITY_CODE.boss : opts.lieutenant ? RARITY_CODE.lieutenant : RARITY_CODE[rarity];
   m.x[i] = x;
   m.y[i] = y;
@@ -71,8 +71,13 @@ export function spawnMonster(w: World, kind: MonsterKind, x: number, y: number, 
   m.xp[i] = isDummy ? 0 : a.xp * RARITY_XP[rarity] * Math.max(0, s.xpMultiplier);
   m.knockback[i] = a.knockback;
   m.mods[i] = mods;
-  const heavy = opts.boss || opts.lieutenant || kind === 'ironhideBrute' || kind === 'cinderMatriarch' || kind === 'ashboundHerald';
-  m.flags[i] = (opts.lieutenant ? MFLAG.lieutenant : 0) | (opts.boss ? MFLAG.boss : 0) | (isDummy ? MFLAG.unpushable : 0) | (heavy ? MFLAG.heavy : 0);
+  m.dtype[i] = DAMAGE_INDEX[a.damageType];
+  m.hitReduction[i] = a.hitReduction ?? 0;
+  m.aim[i] = near ? Math.atan2(near.y - y, near.x - x) : 0;
+  const heavy = opts.boss || opts.lieutenant || a.heavy === true;
+  m.flags[i] =
+    (opts.lieutenant ? MFLAG.lieutenant : 0) | (opts.boss ? MFLAG.boss : 0) | (isDummy ? MFLAG.unpushable : 0) | (heavy ? MFLAG.heavy : 0) |
+    (a.ghost ? MFLAG.ghost : 0) | (a.block ? MFLAG.guard : 0);
   m.wave[i] = Math.min(255, wave);
   for (let k = 0; k < 5; k++) m.res[i * 5 + k] = a.resist[k] + (isDummy ? 0 : s.resistBonus);
   if (opts.pack !== undefined && opts.pack >= 0) {

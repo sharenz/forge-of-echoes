@@ -1,28 +1,36 @@
-// Stash search state shared by the stash panel (tab counts) and every grid item (glow / dim). The query text lives
-// in Local (local.search); it applies while the stash is the visible left panel. Matching runs once per
-// (character, query) for all items and is memoised, so each ItemView only looks its uid up.
-import type { CharacterSave, Item } from '../../contracts/items';
+// Stash search state shared by the stash panel (tab counts) and every item it can light up: grid items, Map Stash rows
+// and Crafting Stash slots (glow / dim). The query text lives in Local (local.search); it applies while the stash is
+// the visible left panel. Matching runs once per (character, query) for all items and is memoised, so each view only
+// looks its uid up.
+import { CURRENCY_IDS, type CurrencyId } from '../../contracts/content';
+import type { CharacterSave, Item, SpecialStashTab } from '../../contracts/items';
 import type { UiStore } from '../../contracts/ui';
 import { useLocal } from '../local';
 import { isSearchActive, matchesSearch, parseSearchQuery, searchDoc, type SearchDoc } from '../lib/search';
 import { visiblePanels } from '../lib/panels';
+import { currencyTabOf, slotStack, stashCount } from '../lib/stash';
 import { useSignal, useStore, useUi } from '../store';
 import { safe } from './hooks';
 
 export interface SearchResult {
   /** A non-empty query is applied (the stash is open). */
   active: boolean;
-  /** Uids of matching backpack and stash items. */
+  /** Uids of matching backpack and stash items, Map Stash maps and Crafting Stash slots (`cstash:<id>`). */
   matches: ReadonlySet<string>;
   /** Matches per stash tab (same order as character.stash). */
   tabCounts: number[];
+  /** Matches per special tab (maps; filled Crafting Stash slots). */
+  special: Readonly<Record<SpecialStashTab, number>>;
   backpackCount: number;
 }
 
-const INACTIVE: SearchResult = { active: false, matches: new Set(), tabCounts: [], backpackCount: 0 };
+const NO_SPECIAL: Readonly<Record<SpecialStashTab, number>> = { maps: 0, currency: 0, mapCurrency: 0 };
+const INACTIVE: SearchResult = { active: false, matches: new Set(), tabCounts: [], special: NO_SPECIAL, backpackCount: 0 };
 
 /** Items never change in place (the rules return new objects), so a description-derived doc is cached per object. */
 const docs = new WeakMap<Item, SearchDoc>();
+/** A Crafting Stash slot's doc depends only on its currency (the count is not searchable). */
+const slotDocs = new WeakMap<UiStore, Map<CurrencyId, SearchDoc | null>>();
 
 function docFor(store: UiStore, item: Item, ch: CharacterSave): SearchDoc | null {
   const hit = docs.get(item);
@@ -34,9 +42,20 @@ function docFor(store: UiStore, item: Item, ch: CharacterSave): SearchDoc | null
   return doc;
 }
 
+function slotDoc(store: UiStore, id: CurrencyId, ch: CharacterSave): SearchDoc | null {
+  let cache = slotDocs.get(store);
+  if (!cache) slotDocs.set(store, (cache = new Map()));
+  if (cache.has(id)) return cache.get(id) ?? null;
+  const item = slotStack(id, 1);
+  const desc = safe(() => store.rules.describeItem(item, ch), null);
+  const doc = desc ? searchDoc(item, desc) : null;
+  cache.set(id, doc);
+  return doc;
+}
+
 let memo: { store: UiStore; ch: CharacterSave; query: string; result: SearchResult } | null = null;
 
-/** Match `query` against the backpack and every stash tab (memoised on the last character + query). */
+/** Match `query` against the backpack, every stash tab and the special tabs (memoised on the last character + query). */
 export function computeSearch(store: UiStore, ch: CharacterSave | null, query: string): SearchResult {
   if (!ch) return INACTIVE;
   if (memo && memo.store === store && memo.ch === ch && memo.query === query) return memo.result;
@@ -53,10 +72,26 @@ export function computeSearch(store: UiStore, ch: CharacterSave | null, query: s
     let backpackCount = 0;
     for (const e of ch.backpack.entries) if (test(e.item)) backpackCount += 1;
     const tabCounts = ch.stash.map((t) => t.grid.entries.reduce((n, e) => n + (test(e.item) ? 1 : 0), 0));
-    result = { active: true, matches, tabCounts, backpackCount };
+    const special = { maps: 0, currency: 0, mapCurrency: 0 };
+    for (const m of ch.mapStash ?? []) if (test(m)) special.maps += 1;
+    // Only filled slots are items; an empty (ghosted) slot never lights up.
+    for (const id of CURRENCY_IDS) {
+      if (stashCount(ch, id) <= 0) continue;
+      const doc = slotDoc(store, id, ch);
+      if (doc && matchesSearch(q, doc)) {
+        matches.add(slotStack(id, 0).uid);
+        special[currencyTabOf(id)] += 1;
+      }
+    }
+    result = { active: true, matches, tabCounts, special, backpackCount };
   }
   memo = { store, ch, query, result };
   return result;
+}
+
+/** Total matches over every tab (normal and special), without the backpack. */
+export function stashMatchCount(r: SearchResult): number {
+  return r.tabCounts.reduce((a, b) => a + b, 0) + r.special.maps + r.special.currency + r.special.mapCurrency;
 }
 
 /** The applied search (inactive unless the stash is the visible left panel and the query has a term). */

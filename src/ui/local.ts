@@ -1,5 +1,5 @@
-// UI-local state that never leaves the browser: tooltips, drag & drop, confirmation dialogs, cursor hints and the
-// stash search query.
+// UI-local state that never leaves the browser: tooltips, drag & drop, confirmation dialogs, cursor hints, the
+// stash search query and the expanded Map Stash tier.
 // One instance per mountUi() call, shared through LocalContext.
 import { createContext } from 'preact';
 import type { ComponentChildren } from 'preact';
@@ -26,7 +26,8 @@ export type TooltipSpec =
   | { kind: 'preview'; item: Item; note?: string; compare?: boolean; label?: string }
   | { kind: 'skill'; skillId: SkillId }
   | { kind: 'text'; title?: string; lines: string[]; tone?: 'info' | 'bad' | 'good' }
-  | { kind: 'custom'; render: () => ComponentChildren };
+  /** Anything else; `owner` lets the element that opened it close it again (e.g. when it unmounts). */
+  | { kind: 'custom'; render: () => ComponentChildren; owner?: string };
 
 export interface TooltipState {
   spec: TooltipSpec;
@@ -92,6 +93,8 @@ export interface Local {
   hint: Signal<CursorHint | null>;
   /** Stash search box text (kept while the stash is closed; applied only while it is open). */
   search: Signal<string>;
+  /** The Map Stash tier the player expanded (shared by the stash tab and the map device's picker); null = auto. */
+  mapTier: Signal<number | null>;
   /** performance.now() when the UI last opened the chat (keys typed before the field has focus go to it). */
   chatOpenedAt: number;
   showTooltip(spec: TooltipSpec, el: Element, placement?: 'side' | 'above'): void;
@@ -111,6 +114,7 @@ export function createLocal(): Local {
     dialog: signal<DialogSpec | null>(null),
     hint,
     search: signal(''),
+    mapTier: signal<number | null>(null),
     chatOpenedAt: -Infinity,
     showTooltip(spec, el, placement = 'side') {
       const r = el.getBoundingClientRect();

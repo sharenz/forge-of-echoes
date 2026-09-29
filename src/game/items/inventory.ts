@@ -1,19 +1,26 @@
 // Inventory rules: grid placement & stacking, locating items, equip rules, drag moves with swap
-// semantics, Ctrl-click quick moves, the flask belt, the map device and stash tabs.
+// semantics, Ctrl-click quick moves, the flask belt, the map device, stash tabs and the special stash
+// tabs (the Crafting Stash and the Map Stash; containers in ./special-stash).
 //
 // Every function is pure: it returns a new CharacterSave (untouched containers keep their identity,
 // which lets the UI memoise) or a Result error with a player-facing reason.
 import type {
-  BeltSlot, CharacterSave, CurrencyStack, FlaskStack, GridContainer, GridEntry, Item, ItemLocation, StashTab,
+  BeltSlot, CharacterSave, CurrencyStack, FlaskStack, GridContainer, GridEntry, Item, ItemLocation, MapItem, SpecialStashTab,
+  StashTab,
 } from '../../contracts/items';
-import { BELT_SLOTS, MAX_STASH_TABS, STASH_TAB_SIZE } from '../../contracts/items';
-import type { EquipSlot } from '../../contracts/content';
+import { BELT_SLOTS, CURRENCY_STASH_MAX, MAP_STASH_CAPACITY, MAX_STASH_TABS, STASH_TAB_SIZE } from '../../contracts/items';
+import type { CurrencyId, EquipSlot } from '../../contracts/content';
 import type { Result } from '../../contracts/game';
 import {
   BELT_SLOT_CAPACITY, FLASK_STACK, STASH_TAB_NAME_MAX, findBase, findCurrency,
 } from '../../data/items';
-import { BELT_UID_PREFIX, adoptUid, beltUid, heldUids, mintUid, parseBeltUid } from './ids';
+import { formatCount, joinWords } from './format';
+import { adoptUid, beltUid, heldUids, isReservedUid, mintUid, parseBeltUid, parseCurrencyStashUid } from './ids';
 import { equipmentLevelRequirement, itemDisplayName } from './modifiers';
+import {
+  currencyStashCount, currencyStashItem, currencyStashRoom, mapStashIndex, mapStashOf, specialStashTab, withCurrencyStashCount,
+  withMapStash,
+} from './special-stash';
 
 export type GridRef = { kind: 'backpack' } | { kind: 'stash'; tab: number };
 
@@ -251,9 +258,11 @@ export function beltItem(ch: CharacterSave, index: number): FlaskStack | null {
 }
 
 /**
- * Locate an item by uid across backpack, stash tabs, equipment, belt slots and the map device. Uids come
- * from the network: anything that is not a string finds nothing (so every command built on this fails
- * with "That item no longer exists." instead of throwing).
+ * Locate an item by uid across backpack, stash tabs, equipment, belt slots, the map device, the Map Stash
+ * and the Crafting Stash. Uids come from the network: anything that is not a string finds nothing (so
+ * every command built on this fails with "That item no longer exists." instead of throwing).
+ * A Crafting Stash slot ("cstash:<id>") is found as a CurrencyStack view with the slot's count at
+ * { kind: 'currencyStash' } while it holds at least one (currencyStashItem builds the view of an empty one).
  */
 export function findItem(ch: CharacterSave, uid: string): FoundItem | null {
   if (typeof uid !== 'string') return null;
@@ -261,6 +270,11 @@ export function findItem(ch: CharacterSave, uid: string): FoundItem | null {
   if (beltIndex !== null) {
     const item = beltItem(ch, beltIndex);
     return item ? { item, location: { kind: 'belt', index: beltIndex } } : null;
+  }
+  const slot = parseCurrencyStashUid(uid);
+  if (slot !== null) {
+    const item = currencyStashItem(ch, slot);
+    return item.count > 0 ? { item, location: { kind: 'currencyStash' } } : null;
   }
   for (const e of ch.backpack.entries) {
     if (e.item.uid === uid) return { item: e.item, location: { kind: 'backpack', x: e.x, y: e.y } };
@@ -274,10 +288,14 @@ export function findItem(ch: CharacterSave, uid: string): FoundItem | null {
     if (item && item.uid === uid) return { item, location: { kind: 'equipment', slot } };
   }
   if (ch.mapDevice && ch.mapDevice.uid === uid) return { item: ch.mapDevice, location: { kind: 'mapDevice' } };
+  for (const m of mapStashOf(ch)) if (m.uid === uid) return { item: m, location: { kind: 'mapStash' } };
   return null;
 }
 
-/** Every real item the character owns (belt charges excluded — they have no uid of their own). */
+/**
+ * Every real item the character owns, Map Stash included (belt charges and Crafting Stash slots
+ * excluded — they have no uid of their own).
+ */
 export function allItems(ch: CharacterSave): FoundItem[] {
   const out: FoundItem[] = [];
   for (const e of ch.backpack.entries) out.push({ item: e.item, location: { kind: 'backpack', x: e.x, y: e.y } });
@@ -288,10 +306,14 @@ export function allItems(ch: CharacterSave): FoundItem[] {
     if (item) out.push({ item, location: { kind: 'equipment', slot } });
   }
   if (ch.mapDevice) out.push({ item: ch.mapDevice, location: { kind: 'mapDevice' } });
+  for (const m of mapStashOf(ch)) out.push({ item: m, location: { kind: 'mapStash' } });
   return out;
 }
 
-/** Replace an item in place (same uid, same location). Used by crafting. */
+/**
+ * Replace an item in place (same uid, same location). Used by crafting. A Crafting Stash slot takes the
+ * stack's count (0 empties it); a Map Stash map keeps its place in the list.
+ */
 export function replaceItemAt(ch: CharacterSave, location: ItemLocation, item: Item): CharacterSave {
   const ref = gridRefOf(location);
   if (ref) {
@@ -307,10 +329,20 @@ export function replaceItemAt(ch: CharacterSave, location: ItemLocation, item: I
     belt[location.index] = { flaskId: item.flaskId, count: item.count };
     return { ...ch, belt };
   }
+  if (location.kind === 'currencyStash' && item.kind === 'currency') {
+    return withCurrencyStashCount(ch, item.currencyId, item.count);
+  }
+  if (location.kind === 'mapStash' && item.kind === 'map') {
+    const i = mapStashIndex(ch, item.uid);
+    if (i < 0) return ch;
+    const maps = mapStashOf(ch).slice();
+    maps[i] = item;
+    return withMapStash(ch, maps);
+  }
   return ch;
 }
 
-/** Remove whatever sits at a location (belt slots are cleared entirely). */
+/** Remove whatever sits at a location (belt slots are cleared entirely, a Crafting Stash slot emptied). */
 export function removeItemAt(ch: CharacterSave, location: ItemLocation, uid: string): CharacterSave {
   const ref = gridRefOf(location);
   if (ref) {
@@ -327,7 +359,16 @@ export function removeItemAt(ch: CharacterSave, location: ItemLocation, uid: str
     belt[location.index] = null;
     return { ...ch, belt };
   }
-  return { ...ch, mapDevice: null };
+  if (location.kind === 'currencyStash') {
+    const id = parseCurrencyStashUid(uid);
+    return id ? withCurrencyStashCount(ch, id, 0) : ch;
+  }
+  if (location.kind === 'mapStash') {
+    const i = mapStashIndex(ch, uid);
+    return i < 0 ? ch : withMapStash(ch, mapStashOf(ch).filter((_, j) => j !== i));
+  }
+  if (location.kind === 'mapDevice') return ch.mapDevice ? { ...ch, mapDevice: null } : ch;
+  return ch;
 }
 
 /** Set a stack's count in place, removing it at 0. */
@@ -363,6 +404,35 @@ export function canEquip(ch: CharacterSave, item: Item, slot: EquipSlot): { ok: 
 // ---------------------------------------------------------------------------------------------
 // Moves
 // ---------------------------------------------------------------------------------------------
+
+/** Refusal for a malformed `count` (it arrives from the network). */
+const INVALID_COUNT = 'Choose how many to move: a whole number of at least 1.';
+
+/**
+ * A move's optional `count` as sent over the network: undefined (or null) = the whole stack / the default
+ * amount, a whole number ≥ 1 = that many (fractions are floored), anything else = null (invalid).
+ */
+function parseCount(count: unknown): number | undefined | null {
+  if (count === undefined || count === null) return undefined;
+  if (typeof count !== 'number' || !Number.isFinite(count)) return null;
+  const n = Math.floor(count);
+  return n >= 1 ? n : null;
+}
+
+function currencyName(id: CurrencyId): string {
+  return findCurrency(id)?.name ?? 'that currency';
+}
+
+/** "Your backpack is full." / "This stash tab is full." */
+function fullMessage(ref: GridRef): string {
+  return ref.kind === 'backpack' ? 'Your backpack is full.' : 'This stash tab is full.';
+}
+
+/** Why an item uid finds nothing: an empty Crafting Stash slot says so, anything else no longer exists. */
+function missingItemError(uid: string): string {
+  const slot = parseCurrencyStashUid(uid);
+  return slot ? `Your Crafting Stash holds no ${currencyName(slot)}.` : 'That item no longer exists.';
+}
 
 /** Take an item out of its location. Belt slots keep their flask assignment with 0 charges. */
 function detach(ch: CharacterSave, found: FoundItem): CharacterSave {
@@ -400,6 +470,14 @@ function reattach(ch: CharacterSave, loc: ItemLocation, item: Item): CharacterSa
     return { ...ch, belt };
   }
   if (loc.kind === 'mapDevice') return item.kind === 'map' ? { ...ch, mapDevice: item } : null;
+  if (loc.kind === 'mapStash') {
+    const maps = mapStashOf(ch);
+    return item.kind === 'map' && maps.length < MAP_STASH_CAPACITY ? withMapStash(ch, [...maps, item]) : null;
+  }
+  if (loc.kind === 'currencyStash') {
+    if (item.kind !== 'currency' || currencyStashRoom(ch, item.currencyId) < item.count) return null;
+    return withCurrencyStashCount(ch, item.currencyId, currencyStashCount(ch, item.currencyId) + item.count);
+  }
   return null;
 }
 
@@ -410,19 +488,163 @@ function materialize(ch: CharacterSave, found: FoundItem): { ch: CharacterSave; 
   return { ch: minted.character, item: { ...found.item, uid: minted.uid } };
 }
 
-function validStashTab(ch: CharacterSave, tab: number): boolean {
-  return Number.isInteger(tab) && tab >= 0 && tab < ch.stash.length;
+function validStashTab(ch: CharacterSave, tab: unknown): tab is number {
+  return typeof tab === 'number' && Number.isInteger(tab) && tab >= 0 && tab < ch.stash.length;
 }
 
-function moveToGrid(ch: CharacterSave, found: FoundItem, ref: GridRef, x: number, y: number): Result<CharacterSave> {
+/**
+ * Split `n` (less than the whole stack) off a grid or belt stack onto a grid cell: into an empty cell as
+ * a new stack (fresh uid), or merged into a matching stack there as far as it has room. The rest stays.
+ */
+function splitToGrid(
+  ch: CharacterSave, found: FoundItem & { item: CurrencyStack | FlaskStack }, ref: GridRef, x: number, y: number, n: number,
+): Result<CharacterSave> {
+  const grid = gridOf(ch, ref)!;
+  const blockers = overlappingEntries(grid, x, y, 1, 1);
+  if (blockers.length === 0) {
+    const minted = mintUid(ch);
+    const part = { ...stripNew(found.item), uid: minted.uid, count: n };
+    const reduced = setStackCount(minted.character, found, found.item.count - n);
+    return ok(withGrid(reduced, ref, placeItem(gridOf(reduced, ref)!, part, x, y)!));
+  }
+  const blocker = blockers[0];
+  if (blockers.length === 1 && canStack(blocker.item, found.item)) {
+    const stack = blocker.item as CurrencyStack | FlaskStack;
+    const room = maxStackSize(stack) - stack.count;
+    if (room <= 0) return fail('That stack is full.');
+    const m = Math.min(room, n);
+    const reduced = setStackCount(ch, found, found.item.count - m);
+    return ok(withGrid(reduced, ref, replaceInGrid(gridOf(reduced, ref)!, withCount(stack, stack.count + m), blocker)));
+  }
+  return fail('Something is in the way.');
+}
+
+/**
+ * How much of a stack (at most one full stack) a grid can take without displacing anything: the room left
+ * on its matching stacks, plus a full stack when a cell is free.
+ */
+function stackRoomIn(grid: GridContainer, stack: CurrencyStack): number {
+  const max = maxStackSize(stack);
+  let room = 0;
+  for (const e of grid.entries) {
+    if (canStack(e.item, stack)) room += Math.max(0, max - (e.item as CurrencyStack).count);
+  }
+  return findFreeSpot(grid, 1, 1) ? room + max : room;
+}
+
+/**
+ * Withdraw from a Crafting Stash slot: min(count ?? a full stack, the stack size, what the slot holds) as a
+ * new stack (fresh uid) or topped onto a matching stack. With a cell: into that cell when it is free, onto a
+ * matching stack there as far as it has room, otherwise anywhere in that grid (a withdrawal never displaces
+ * anything). Without one: anywhere in the backpack, topping up matching stacks first. When the grid has no
+ * free cell, as much as its matching stacks can still take (a full backpack with a 30 / 40 stack takes 10);
+ * only a grid with no room at all refuses.
+ */
+function withdrawCurrency(
+  ch: CharacterSave, id: CurrencyId, count: number | undefined, dest: { ref: GridRef; x: number; y: number } | null,
+): Result<CharacterSave> {
+  const have = currencyStashCount(ch, id);
+  if (have <= 0) return fail(`Your Crafting Stash holds no ${currencyName(id)}.`);
+  const max = findCurrency(id)?.maxStack ?? 1;
+  const n = Math.min(count ?? max, max, have);
+  const ref: GridRef = dest?.ref ?? { kind: 'backpack' };
+  const grid = gridOf(ch, ref);
+  if (!grid) return fail('That stash tab does not exist.');
+  const take = (c: CharacterSave, g: GridContainer, taken: number) =>
+    ok(withCurrencyStashCount(withGrid(c, ref, g), id, have - taken));
+  const minted = mintUid(ch);
+  const stack: CurrencyStack = { kind: 'currency', uid: minted.uid, currencyId: id, count: n };
+  if (dest) {
+    if (!inBounds(grid, dest.x, dest.y, 1, 1)) return fail('It does not fit there.');
+    const blockers = overlappingEntries(grid, dest.x, dest.y, 1, 1);
+    if (!blockers.length) return take(minted.character, placeItem(grid, stack, dest.x, dest.y)!, n);
+    const blocker = blockers[0];
+    if (canStack(blocker.item, stack)) {
+      const onCell = blocker.item as CurrencyStack;
+      const room = maxStackSize(onCell) - onCell.count;
+      if (room > 0) {
+        const m = Math.min(room, n);
+        return take(ch, replaceInGrid(grid, withCount(onCell, onCell.count + m), blocker), m);
+      }
+    }
+  }
+  const fits = Math.min(n, stackRoomIn(grid, stack));
+  if (fits <= 0) return fail(fullMessage(ref));
+  const placed = autoPlace(grid, fits === n ? stack : withCount(stack, fits));
+  if (!placed) return fail(fullMessage(ref));
+  // Only a withdrawal that opened a new stack used the minted uid.
+  const opened = placed.entries.some((e) => e.item.uid === minted.uid);
+  return take(opened ? minted.character : ch, placed, fits);
+}
+
+/**
+ * Withdraw a map from the Map Stash into a grid: into the given cell when it is free, otherwise anywhere
+ * in that grid (never displacing anything); without a cell, anywhere in the backpack.
+ */
+function withdrawMap(ch: CharacterSave, map: MapItem, dest: { ref: GridRef; x: number; y: number } | null): Result<CharacterSave> {
+  const i = mapStashIndex(ch, map.uid);
+  if (i < 0) return fail('That item no longer exists.');
+  const ref: GridRef = dest?.ref ?? { kind: 'backpack' };
+  const rest = withMapStash(ch, mapStashOf(ch).filter((_, j) => j !== i));
+  const grid = gridOf(rest, ref);
+  if (!grid) return fail('That stash tab does not exist.');
+  if (dest) {
+    if (!inBounds(grid, dest.x, dest.y, 1, 1)) return fail('It does not fit there.');
+    const exact = placeItem(grid, map, dest.x, dest.y);
+    if (exact) return ok(withGrid(rest, ref, exact));
+  }
+  const placed = autoPlace(grid, map);
+  return placed ? ok(withGrid(rest, ref, placed)) : fail(fullMessage(ref));
+}
+
+/**
+ * File currency into its Crafting Stash slot, wherever it comes from (a backpack or stash tab stack):
+ * `count` of it (default the whole stack), as far as the slot has room — the rest stays where it was.
+ * A full slot refuses with the reason.
+ */
+function moveToCurrencyStash(ch: CharacterSave, found: FoundItem, count: number | undefined): Result<CharacterSave> {
+  if (found.item.kind !== 'currency') return fail('Only currency can be stored in the Crafting Stash.');
+  if (found.location.kind === 'currencyStash') return ok(ch);
+  const stack = found.item;
+  const id = stack.currencyId;
+  const room = currencyStashRoom(ch, id);
+  if (room <= 0) {
+    return fail(`Your Crafting Stash is full of ${currencyName(id)}: a slot holds at most ${formatCount(CURRENCY_STASH_MAX)}.`);
+  }
+  const n = Math.min(count ?? stack.count, stack.count, room);
+  const have = currencyStashCount(ch, id);
+  return ok(withCurrencyStashCount(setStackCount(ch, found, stack.count - n), id, have + n));
+}
+
+/** File a map (from the backpack, a stash tab or the Map Device) into the Map Stash. */
+function moveToMapStash(ch: CharacterSave, found: FoundItem): Result<CharacterSave> {
+  if (found.item.kind !== 'map') return fail('Only maps can be stored in the Map Stash.');
+  if (found.location.kind === 'mapStash') return ok(ch);
+  if (mapStashOf(ch).length >= MAP_STASH_CAPACITY) {
+    return fail(`Your Map Stash is full: it holds at most ${formatCount(MAP_STASH_CAPACITY)} maps.`);
+  }
+  const detached = detach(ch, found);
+  return ok(withMapStash(detached, [...mapStashOf(detached), found.item]));
+}
+
+function moveToGrid(
+  ch: CharacterSave, found: FoundItem, ref: GridRef, x: number, y: number, count?: number,
+): Result<CharacterSave> {
   const target = gridOf(ch, ref);
   if (!target) return fail('That stash tab does not exist.');
+  const src = found.location;
+  if (src.kind === 'currencyStash' && found.item.kind === 'currency') {
+    return withdrawCurrency(ch, found.item.currencyId, count, { ref, x, y });
+  }
+  if (src.kind === 'mapStash' && found.item.kind === 'map') return withdrawMap(ch, found.item, { ref, x, y });
   const { w, h } = itemSize(found.item);
   if (!inBounds(target, x, y, w, h)) return fail('It does not fit there.');
-  const src = found.location;
   const srcRef = gridRefOf(src);
   if (srcRef && sameGrid(srcRef, ref) && 'x' in src && src.x === x && src.y === y) return ok(ch);
   if (src.kind === 'belt' && found.item.kind === 'flask' && found.item.count === 0) return fail('That belt slot is empty.');
+  if (count !== undefined && isStackable(found.item) && count < found.item.count) {
+    return splitToGrid(ch, found as FoundItem & { item: CurrencyStack | FlaskStack }, ref, x, y, count);
+  }
 
   const detached = detach(ch, found);
   const { ch: c1, item: moving } = materialize(detached, found);
@@ -478,7 +700,8 @@ function moveToEquipment(ch: CharacterSave, found: FoundItem, slot: EquipSlot): 
   return ok(c3);
 }
 
-function moveToBelt(ch: CharacterSave, found: FoundItem, index: number): Result<CharacterSave> {
+/** Load flasks into a belt slot; from a grid stack at most `limit` charges (default: as many as fit). */
+function moveToBelt(ch: CharacterSave, found: FoundItem, index: number, limit?: number): Result<CharacterSave> {
   if (!Number.isInteger(index) || index < 0 || index >= BELT_SLOTS) return fail('That belt slot does not exist.');
   if (found.item.kind !== 'flask') return fail('Only flasks fit on the belt.');
   const flask = found.item;
@@ -501,10 +724,11 @@ function moveToBelt(ch: CharacterSave, found: FoundItem, index: number): Result<
   }
 
   // From a grid stack.
+  const available = Math.min(flask.count, limit ?? flask.count);
   const matching = slot && (slot.flaskId === flask.flaskId || slot.count === 0);
   if (!slot || matching) {
     const current = slot && slot.flaskId === flask.flaskId ? slot.count : 0;
-    const n = Math.min(BELT_SLOT_CAPACITY - current, flask.count);
+    const n = Math.min(BELT_SLOT_CAPACITY - current, available);
     if (n <= 0) return fail('That belt slot is full.');
     const belt = beltSlots(ch);
     belt[index] = { flaskId: flask.flaskId, count: current + n };
@@ -512,7 +736,7 @@ function moveToBelt(ch: CharacterSave, found: FoundItem, index: number): Result<
   }
 
   // Different flask with charges: load the new one, send the old charges back to the grid.
-  const n = Math.min(BELT_SLOT_CAPACITY, flask.count);
+  const n = Math.min(BELT_SLOT_CAPACITY, available);
   const belt = beltSlots(ch);
   belt[index] = { flaskId: flask.flaskId, count: n };
   const c1 = setStackCount({ ...ch, belt }, found, flask.count - n);
@@ -535,6 +759,7 @@ function moveToMapDevice(ch: CharacterSave, found: FoundItem): Result<CharacterS
   const c1 = detach(ch, found);
   const c2: CharacterSave = { ...c1, mapDevice: found.item };
   if (!occupant) return ok(c2);
+  // The map it replaces goes back where the new one came from (a map from the Map Stash swaps into it).
   const c3 = reattach(c2, found.location, occupant);
   return c3 ? ok(c3) : fail('There is no room for the map in the device.');
 }
@@ -542,30 +767,47 @@ function moveToMapDevice(ch: CharacterSave, found: FoundItem): Result<CharacterS
 /**
  * Move an item to a location: grid ↔ grid (merging stacks, or swapping with a single blocking item
  * that fits back where the moved item came from), equip / unequip / swap, belt load / unload
- * (≤ 5 charges per slot; unloading keeps the slot's flask assignment), and the map device (maps only).
+ * (≤ 5 charges per slot; unloading keeps the slot's flask assignment), the map device (maps only), and
+ * the special stash tabs:
+ *   → { kind: 'currencyStash' }  files a currency stack into its slot (up to CURRENCY_STASH_MAX; what does
+ *                                not fit stays where it was; a full slot refuses)
+ *   → { kind: 'mapStash' }       files a map (up to MAP_STASH_CAPACITY) from a grid or the map device
+ *   "cstash:<id>" → a grid cell  withdraws min(count ?? a full stack, stack size, held) (see withdrawCurrency)
+ *   a Map Stash map → a grid cell / the map device (swapping the device's map into the Map Stash)
+ * `count` (optional, a whole number ≥ 1) splits a grid or belt stack onto a grid cell (an empty cell or a
+ * matching stack), limits a deposit or the charges loaded into the belt, and sets how many a Crafting Stash
+ * withdrawal takes. Items that are not stacks ignore it.
  */
-export function moveItem(ch: CharacterSave, uid: string, to: ItemLocation): Result<CharacterSave> {
+export function moveItem(ch: CharacterSave, uid: string, to: ItemLocation, count?: number): Result<CharacterSave> {
+  const n = parseCount(count);
+  if (n === null) return fail(INVALID_COUNT);
   const found = findItem(ch, uid);
-  if (!found) return fail('That item no longer exists.');
+  if (!found) return fail(missingItemError(uid));
   if (!isLocation(to)) return fail('Invalid destination.');
   switch (to.kind) {
     case 'backpack':
-      return moveToGrid(ch, found, { kind: 'backpack' }, to.x, to.y);
+      return moveToGrid(ch, found, { kind: 'backpack' }, to.x, to.y, n);
     case 'stash':
       if (!validStashTab(ch, to.tab)) return fail('That stash tab does not exist.');
-      return moveToGrid(ch, found, { kind: 'stash', tab: to.tab }, to.x, to.y);
+      return moveToGrid(ch, found, { kind: 'stash', tab: to.tab }, to.x, to.y, n);
     case 'equipment':
       return moveToEquipment(ch, found, to.slot);
     case 'belt':
-      return moveToBelt(ch, found, to.index);
+      return moveToBelt(ch, found, to.index, n);
     case 'mapDevice':
       return moveToMapDevice(ch, found);
+    case 'currencyStash':
+      return moveToCurrencyStash(ch, found, n);
+    case 'mapStash':
+      return moveToMapStash(ch, found);
     default:
       return fail('Invalid destination.');
   }
 }
 
-const LOCATION_KINDS: ReadonlySet<string> = new Set<ItemLocation['kind']>(['backpack', 'stash', 'equipment', 'belt', 'mapDevice']);
+const LOCATION_KINDS: ReadonlySet<string> = new Set<ItemLocation['kind']>([
+  'backpack', 'stash', 'equipment', 'belt', 'mapDevice', 'currencyStash', 'mapStash',
+]);
 
 /**
  * Shape check of a destination that arrived over the network. Numbers are checked downstream (bounds,
@@ -585,15 +827,27 @@ function isLocation(to: unknown): to is ItemLocation {
   }
 }
 
-/** Move an item into any free space of a grid (stacking), removing it from its source. */
-function transferToGrid(ch: CharacterSave, found: FoundItem, ref: GridRef, fullMessage: string): Result<CharacterSave> {
+/**
+ * Move an item into any free space of a grid (stacking), removing it from its source. With `count` below
+ * a stack's size only that many move (as a new stack with a fresh uid, or topping up matching stacks).
+ */
+function transferToGrid(
+  ch: CharacterSave, found: FoundItem, ref: GridRef, fullMsg: string, count?: number,
+): Result<CharacterSave> {
   if (found.location.kind === 'belt' && found.item.kind === 'flask' && found.item.count === 0) {
     return fail('That belt slot is empty.');
+  }
+  if (count !== undefined && isStackable(found.item) && count < found.item.count) {
+    const minted = mintUid(ch);
+    const part = { ...stripNew(found.item), uid: minted.uid, count };
+    const reduced = setStackCount(minted.character, found, found.item.count - count);
+    const grid = autoPlace(gridOf(reduced, ref)!, part);
+    return grid ? ok(withGrid(reduced, ref, grid)) : fail(fullMsg);
   }
   const detached = detach(ch, found);
   const { ch: c1, item } = materialize(detached, found);
   const grid = autoPlace(gridOf(c1, ref)!, item);
-  return grid ? ok(withGrid(c1, ref, grid)) : fail(fullMessage);
+  return grid ? ok(withGrid(c1, ref, grid)) : fail(fullMsg);
 }
 
 /** Best slot for Ctrl-click equip: an empty compatible slot, else the first compatible one. */
@@ -624,21 +878,48 @@ function loadIntoBelt(ch: CharacterSave, found: FoundItem & { item: FlaskStack }
   return ok(setStackCount({ ...ch, belt }, found, left));
 }
 
+/** Quick-move context: the open stash tab (a normal tab index, a special tab, or none) and an amount. */
+export interface QuickMoveContext {
+  stashTab: number | SpecialStashTab | null;
+  count?: number;
+}
+
 /**
- * Ctrl-click. Backpack → open stash tab (when a tab is open); otherwise equipment equips into the best
- * slot, flasks load into the belt and maps go into the map device. Stash → backpack; equipped item,
- * belt charges and the device's map → backpack.
+ * Ctrl-click.
+ *   Backpack item, with the open stash tab:
+ *     a normal tab       → into that tab (stacking)
+ *     'currency' | 'mapCurrency' → a currency stack files into its Crafting Stash slot (either Crafting
+ *                          Stash tab takes every currency); anything else is refused
+ *     'maps'             → a map files into the Map Stash; anything else is refused
+ *     none               → equipment equips into the best slot, flasks load into the belt, maps go into
+ *                          the map device
+ *   Stash tab item, equipped item, belt charges → the backpack.
+ *   The device's map → the Map Stash while it is open ('maps'), otherwise the backpack.
+ *   Crafting Stash slot ("cstash:<id>") → the backpack: a full stack (up to the stack size) or `count`
+ *     (Shift+Ctrl-click sends 1), topping up matching stacks first.
+ *   Map Stash map → the backpack (to reach the open Map Device, the UI moves it with moveItem).
+ * `count` below a stack's size moves only that many (a split) wherever a stack moves.
  */
-export function quickMove(ch: CharacterSave, uid: string, ctx: { stashTab: number | null }): Result<CharacterSave> {
+export function quickMove(ch: CharacterSave, uid: string, ctx: QuickMoveContext): Result<CharacterSave> {
+  const context: Partial<Record<keyof QuickMoveContext, unknown>> = ctx && typeof ctx === 'object' ? ctx : {};
+  const count = parseCount(context.count);
+  if (count === null) return fail(INVALID_COUNT);
   const found = findItem(ch, uid);
-  if (!found) return fail('That item no longer exists.');
-  const stashTab = ctx && typeof ctx === 'object' ? ctx.stashTab ?? null : null;
+  if (!found) return fail(missingItemError(uid));
+  const tab = context.stashTab ?? null;
+  const special = specialStashTab(tab);
   const backpack: GridRef = { kind: 'backpack' };
   switch (found.location.kind) {
+    case 'currencyStash':
+      return found.item.kind === 'currency' ? withdrawCurrency(ch, found.item.currencyId, count, null) : fail(missingItemError(uid));
+    case 'mapStash':
+      return found.item.kind === 'map' ? withdrawMap(ch, found.item, null) : fail(missingItemError(uid));
     case 'backpack': {
-      if (stashTab !== null) {
-        if (!validStashTab(ch, stashTab)) return fail('That stash tab does not exist.');
-        return transferToGrid(ch, found, { kind: 'stash', tab: stashTab }, 'This stash tab is full.');
+      if (special === 'maps') return moveToMapStash(ch, found);
+      if (special) return moveToCurrencyStash(ch, found, count);
+      if (tab !== null) {
+        if (!validStashTab(ch, tab)) return fail('That stash tab does not exist.');
+        return transferToGrid(ch, found, { kind: 'stash', tab }, 'This stash tab is full.', count);
       }
       const item = found.item;
       if (item.kind === 'equipment') {
@@ -650,13 +931,58 @@ export function quickMove(ch: CharacterSave, uid: string, ctx: { stashTab: numbe
       if (item.kind === 'map') return moveToMapDevice(ch, found);
       return fail('Open the stash to quick-move this item.');
     }
+    case 'mapDevice':
+      if (special === 'maps') return moveToMapStash(ch, found);
+      return transferToGrid(ch, found, backpack, 'Your backpack is full.', count);
     case 'stash':
-      return transferToGrid(ch, found, backpack, 'Your backpack is full.');
     case 'equipment':
     case 'belt':
-    case 'mapDevice':
-      return transferToGrid(ch, found, backpack, 'Your backpack is full.');
+      return transferToGrid(ch, found, backpack, 'Your backpack is full.', count);
   }
+}
+
+/**
+ * "Deposit all": every currency stack in the backpack files into its Crafting Stash slot, leftmost
+ * stacks first. What a full slot cannot take stays in the backpack. Fails (changing nothing) when the
+ * backpack holds no currency, or when every slot it would go to is full.
+ */
+export function depositAllCurrency(ch: CharacterSave): Result<CharacterSave> {
+  const entries = ch.backpack.entries;
+  const order = entries
+    .map((e, i) => ({ e, i }))
+    .filter(({ e }) => e.item.kind === 'currency' && e.item.count > 0)
+    .sort((a, b) => a.e.x - b.e.x || a.e.y - b.e.y);
+  if (!order.length) return fail('There is no currency in your backpack.');
+  const held = new Map<CurrencyId, number>();
+  const kept = new Map<number, number>();
+  const full: string[] = [];
+  let moved = 0;
+  for (const { e, i } of order) {
+    const stack = e.item as CurrencyStack;
+    const id = stack.currencyId;
+    const have = held.get(id) ?? currencyStashCount(ch, id);
+    const n = Math.min(stack.count, CURRENCY_STASH_MAX - have);
+    if (n <= 0) {
+      const name = currencyName(id);
+      if (!full.includes(name)) full.push(name);
+      continue;
+    }
+    held.set(id, have + n);
+    kept.set(i, stack.count - n);
+    moved += n;
+  }
+  if (moved === 0) {
+    return fail(`Your Crafting Stash is full of ${joinWords(full)}: a slot holds at most ${formatCount(CURRENCY_STASH_MAX)}.`);
+  }
+  const nextEntries: GridEntry[] = [];
+  entries.forEach((e, i) => {
+    const left = kept.get(i);
+    if (left === undefined) nextEntries.push(e);
+    else if (left > 0) nextEntries.push({ ...e, item: withCount(e.item as CurrencyStack, left) });
+  });
+  let next: CharacterSave = { ...ch, backpack: { ...ch.backpack, entries: nextEntries } };
+  for (const [id, count] of held) next = withCurrencyStashCount(next, id, count);
+  return ok(next);
 }
 
 export interface AddOptions {
@@ -675,10 +1001,9 @@ export interface AddOptions {
  */
 export function claimIncomingUid(ch: CharacterSave, item: Item): { ch: CharacterSave; item: Item } {
   const uid = item.uid;
-  // Synthetic uids (belt slots, merchant previews) and malformed ones never become an item's uid.
-  const usable = typeof uid === 'string' && uid.length > 0 && uid.length <= 64
-    && !uid.startsWith(BELT_UID_PREFIX) && !uid.startsWith('offer:');
-  if (usable && !heldUids(ch).has(uid)) return { ch: adoptUid(ch, uid), item };
+  // Synthetic uids (belt slots, Crafting Stash slots, merchant previews) and malformed ones never become
+  // an item's uid.
+  if (!isReservedUid(uid) && !heldUids(ch).has(uid)) return { ch: adoptUid(ch, uid), item };
   const minted = mintUid(ch);
   return { ch: minted.character, item: { ...item, uid: minted.uid } };
 }
@@ -712,10 +1037,14 @@ export function addToBackpack(ch: CharacterSave, item: Item, opts: AddOptions = 
   return grid ? ok({ ...c, backpack: grid }) : fail('Your backpack is full.');
 }
 
-/** Destroy an item (a belt uid clears that slot's assignment and charges). */
+/**
+ * Destroy an item (a belt uid clears that slot's assignment and charges; a Map Stash map goes too). A
+ * Crafting Stash slot is never discarded (or dropped on the floor) as a whole: take a stack out first.
+ */
 export function discardItem(ch: CharacterSave, uid: string): Result<CharacterSave> {
   const found = findItem(ch, uid);
-  if (!found) return fail('That item no longer exists.');
+  if (!found) return fail(missingItemError(uid));
+  if (found.location.kind === 'currencyStash') return fail('Take currency out of the Crafting Stash first.');
   return ok(removeItemAt(ch, found.location, uid));
 }
 
@@ -761,12 +1090,13 @@ function clearGrid(grid: GridContainer): GridContainer {
   return { ...grid, entries: grid.entries.map((e) => (e.item.isNew ? { ...e, item: stripNew(e.item) } : e)) };
 }
 
-/** Remove every "new" badge (backpack, stash, equipment, map device). */
+/** Remove every "new" badge (backpack, stash, equipment, map device, Map Stash). */
 export function clearNewFlags(ch: CharacterSave): CharacterSave {
   const equipment: CharacterSave['equipment'] = {};
   for (const [slot, item] of Object.entries(ch.equipment) as [EquipSlot, CharacterSave['equipment'][EquipSlot]][]) {
     if (item) equipment[slot] = stripNew(item);
   }
+  const maps = mapStashOf(ch);
   return {
     ...ch,
     backpack: clearGrid(ch.backpack),
@@ -776,6 +1106,7 @@ export function clearNewFlags(ch: CharacterSave): CharacterSave {
     }),
     equipment,
     mapDevice: ch.mapDevice ? stripNew(ch.mapDevice) : null,
+    mapStash: maps.some((m) => m.isNew) ? maps.map(stripNew) : Array.isArray(ch.mapStash) ? ch.mapStash : [],
   };
 }
 

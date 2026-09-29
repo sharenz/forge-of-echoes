@@ -45,7 +45,7 @@ export function makePlayer(id: number, over: Partial<PlayerView> = {}): PlayerVi
   return {
     id, name: `Player${id}`, level: 1, x: 0, y: 0, prevX: 0, prevY: 0, vx: 0, vy: 0, facing: 'south',
     aimX: 0, aimY: 40, anim: 'idle', animTime: 0, castSkill: null, castProgress: 0, life: 80, maxLife: 80,
-    focus: 70, maxFocus: 70, wardTime: 0, wardDuration: 0, invulnTime: 0, hitFlash: 0, dead: false, slots, flasks,
+    focus: 70, maxFocus: 70, wardTime: 0, wardDuration: 0, invulnTime: 0, hitFlash: 0, dead: false, debuffs: [], slots, flasks,
     ...over,
   };
 }

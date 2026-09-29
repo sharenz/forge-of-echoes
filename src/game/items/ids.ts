@@ -4,6 +4,8 @@
 //   "i<base36>"      minted from CharacterSave.nextUid (hideout operations, merchant, starting kit)
 //   "d<base36x2>"    random uid from a run's loot rng (items created without a CharacterSave)
 //   "belt:<index>"   synthetic uid of a belt slot's flask charges (see beltItem / findItem)
+//   "cstash:<id>"    synthetic uid of a Crafting Stash slot (currencyStashUid / parseCurrencyStashUid;
+//                    see src/game/items/special-stash.ts)
 //
 // UIDS ARE UNIQUE PER CHARACTER, NOT PER SERVER. Every character mints "i0", "i1", … from its own
 // counter, so an item that arrives from another character (a trade, a public drop someone else threw
@@ -12,22 +14,35 @@
 //   • mintUid never hands out a uid the character already holds (it skips taken ones), and
 //   • addToBackpack keeps a foreign uid only when it is free, and then moves nextUid past it
 //     (adoptUid), so later mints do not even have to skip it; a taken uid is re-minted.
+import type { CurrencyId } from '../../contracts/content';
+import { CURRENCY_IDS } from '../../contracts/content';
 import type { CharacterSave } from '../../contracts/items';
+import { currencyStashUid } from '../../contracts/items';
 import type { Rng } from '../../contracts/rng';
 import { createRng } from '../../core/rng';
 
 export const BELT_UID_PREFIX = 'belt:';
+/** Prefix of the synthetic Crafting Stash slot uids ("cstash:scrap"); see currencyStashUid (contracts). */
+export const CURRENCY_STASH_UID_PREFIX = 'cstash:';
+/** Prefix of merchant preview uids ("offer:map-t1-ashenForge"): never a held item's uid. */
+export const OFFER_UID_PREFIX = 'offer:';
+
+export { currencyStashUid };
 
 /** "i<base36>" — the shape of a minted uid. At most 10 digits, so the counter stays an exact integer. */
 const MINTED_UID = /^i([0-9a-z]{1,10})$/;
 
-/** Every uid the character holds: backpack, stash tabs, equipment and the map device (belt uids are synthetic). */
+/**
+ * Every uid the character holds: backpack, stash tabs, equipment, the map device and the Map Stash
+ * (belt and Crafting Stash uids are synthetic).
+ */
 export function heldUids(ch: CharacterSave): Set<string> {
   const out = new Set<string>();
   for (const e of ch.backpack.entries) out.add(e.item.uid);
   for (const tab of ch.stash) for (const e of tab.grid.entries) out.add(e.item.uid);
   for (const item of Object.values(ch.equipment)) if (item) out.add(item.uid);
   if (ch.mapDevice) out.add(ch.mapDevice.uid);
+  if (Array.isArray(ch.mapStash)) for (const m of ch.mapStash) out.add(m.uid);
   return out;
 }
 
@@ -81,6 +96,27 @@ export function parseBeltUid(uid: string): number | null {
   if (typeof uid !== 'string') return null;
   const m = BELT_UID.exec(uid);
   return m ? Number(m[1]) : null;
+}
+
+const CURRENCY_ID_SET: ReadonlySet<string> = new Set<string>(CURRENCY_IDS);
+
+/**
+ * Currency id of a synthetic Crafting Stash slot uid ("cstash:scrap" → 'scrap'), or null — also for
+ * anything that is not a string, and for an unknown id ("cstash:constructor" is not a slot).
+ */
+export function parseCurrencyStashUid(uid: unknown): CurrencyId | null {
+  if (typeof uid !== 'string' || !uid.startsWith(CURRENCY_STASH_UID_PREFIX)) return null;
+  const id = uid.slice(CURRENCY_STASH_UID_PREFIX.length);
+  return CURRENCY_ID_SET.has(id) ? (id as CurrencyId) : null;
+}
+
+/**
+ * True for uids that can never be a real item's own uid: belt slots, Crafting Stash slots and merchant
+ * previews (and anything malformed). Items arriving with one are re-minted.
+ */
+export function isReservedUid(uid: unknown): boolean {
+  return typeof uid !== 'string' || uid.length === 0 || uid.length > 64 || uid.startsWith(BELT_UID_PREFIX)
+    || uid.startsWith(CURRENCY_STASH_UID_PREFIX) || uid.startsWith(OFFER_UID_PREFIX);
 }
 
 /**

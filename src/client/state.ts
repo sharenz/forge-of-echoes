@@ -1,7 +1,7 @@
 // UiState and the pure reducers that fold server messages and client events into it. The store (store.ts)
 // owns identity and notification; everything here is (state, input) → new state, covered by tests/client.
 import type { DerivedStats, RunSetup } from '../contracts/game';
-import type { CharacterSave, Settings } from '../contracts/items';
+import type { CharacterSave, Settings, SpecialStashTab } from '../contracts/items';
 import type { PartyInfo, PartyInvite, RunSummaryInfo, TradeInfo, TradeRequestInfo, ZoneInfo } from '../contracts/net';
 import type { ChatLine, Panel, Toast, UiState } from '../contracts/ui';
 import { provisionalHud } from './hud';
@@ -16,6 +16,8 @@ export const MAX_INVITES = 4;
 export const MAX_TRADE_REQUESTS = 4;
 /** The disconnected screen's headline while the server restarts for an update (close 4004, GAME_SPEC §11). */
 export const SERVER_UPDATING_TEXT = 'Server updating — reconnecting…';
+/** The special stash tabs (GAME_SPEC §12), shown after the normal tabs; every character has all three. */
+export const SPECIAL_STASH_TABS: readonly SpecialStashTab[] = ['maps', 'currency', 'mapCurrency'];
 /** Panels tied to a hideout object: they close whenever the player changes zone. */
 export const ZONE_PANELS: readonly Panel[] = ['stash', 'mapDevice', 'merchant', 'craftingBench'];
 
@@ -116,6 +118,17 @@ export function withParty(s: UiState, party: PartyInfo | null): UiState {
 }
 
 /**
+ * The stash tab to keep showing for a character with `tabs` normal tabs: a special tab (Map Stash, the two Crafting
+ * Stash tabs — every character has them) stays as it is; a normal tab index past the last tab (or garbage) falls back
+ * to the nearest tab that exists.
+ */
+export function clampStashTab(tab: UiState['stashTab'], tabs: number): UiState['stashTab'] {
+  if (typeof tab === 'string') return (SPECIAL_STASH_TABS as readonly string[]).includes(tab) ? tab : 0;
+  if (!Number.isInteger(tab) || tab < 0) return 0;
+  return Math.min(tab, Math.max(0, tabs - 1));
+}
+
+/**
  * A new authoritative (or optimistic) character. `hasItem` answers whether a uid still exists on it, so an armed
  * currency stack that was used up disarms itself and an item that left (dropped, traded, discarded) leaves the
  * crafting bench. A higher level than before bumps levelUpCount (UI burst).
@@ -127,7 +140,7 @@ export function withCharacter(s: UiState, ch: CharacterSave, derived: DerivedSta
   if (armed && !hasItem(armed.uid)) armed = null;
   if (affixChoice && (!hasItem(affixChoice.currencyUid) || !hasItem(affixChoice.targetUid))) affixChoice = null;
   const benchItemUid = s.benchItemUid && !hasItem(s.benchItemUid) ? null : s.benchItemUid;
-  const stashTab = Math.min(s.stashTab, Math.max(0, ch.stash.length - 1));
+  const stashTab = clampStashTab(s.stashTab, ch.stash.length);
   return {
     ...s,
     character: ch,
@@ -223,6 +236,19 @@ export function withoutRunSummary(s: UiState): UiState {
 export function withServerUpdating(s: UiState): UiState {
   if (s.screen === 'disconnected' && s.error === SERVER_UPDATING_TEXT && !s.busy && !s.paused) return s;
   return { ...s, screen: 'disconnected', error: SERVER_UPDATING_TEXT, busy: false, paused: false };
+}
+
+/**
+ * The left-side panel the player actually sees: the newest one opened (the UI's visiblePanels rule, src/ui/lib/
+ * panels.ts — the inventory docks right, the menu and help are modals, every other panel shares the left side). The
+ * UI closes the older left panels a render later, so openPanels may briefly list one hidden behind another.
+ */
+export function visibleLeftPanel(open: readonly Panel[]): Panel | null {
+  for (let i = open.length - 1; i >= 0; i--) {
+    const p = open[i];
+    if (p !== 'inventory' && p !== 'menu' && p !== 'help') return p;
+  }
+  return null;
 }
 
 /** Open/close panels keeping order (the newest is last; the UI resolves sides and fix-ups). */

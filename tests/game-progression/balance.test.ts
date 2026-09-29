@@ -50,8 +50,11 @@ describe('balance smoke (always on)', () => {
   }, 60_000);
 
   it('a player who dies walks back in through a portal and keeps looting', () => {
-    // Triple monster damage: she dies several times but the map is still winnable.
-    const r = freshTier1(SEEDS[0], { reenterAfter: 12, tweakConfig: (c) => { c.monsters.damageMultiplier *= 3; } });
+    // Five times the monster damage: she dies a few times but the map is still winnable (the melee cap — 35% of
+    // her life per 0.5 s — keeps a swarm from one-shotting her, and every re-entry brings her back at full life).
+    // (Ten times, the multiplier before the boss-fight pass, spends all 8 portals on a Tier 1 boss that is now a
+    // real fight.)
+    const r = freshTier1(SEEDS[0], { reenterAfter: 12, tweakConfig: (c) => { c.monsters.damageMultiplier *= 5; } });
     expect(r.deaths, describePlay(r)).toBeGreaterThan(0);
     expect(r.reentries).toBe(r.deaths);
     expect(r.portalsUsed).toBe(1 + r.reentries);
@@ -64,7 +67,11 @@ describe('balance smoke (always on)', () => {
   }, 60_000);
 
   it('the map is lost once all 8 portals are spent and everyone inside is down', () => {
-    const r = freshTier1(SEEDS[0], { reenterAfter: 12, tweakConfig: (c) => { c.monsters.damageMultiplier *= 6; } });
+    // Monsters with 6× damage and 10× life: she can't win, and falls again after every re-entry until the portals
+    // are gone. (Damage alone doesn't do it reliably: the melee cap and a short Tier 1 boss let her win on a late portal.)
+    const r = freshTier1(SEEDS[0], {
+      reenterAfter: 12, tweakConfig: (c) => { c.monsters.damageMultiplier *= 6; c.monsters.lifeMultiplier *= 10; },
+    });
     expect(r.result, describePlay(r)).toBe('failed');
     expect(r.portalsUsed).toBe(PORTALS_PER_MAP);
     expect(r.reentries).toBe(PORTALS_PER_MAP - 1);

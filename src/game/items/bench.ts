@@ -4,7 +4,8 @@
 //   price         Forge Scrap by that tier's item-level requirement + one essence whose tags match the affix
 //                 (Ember fire · Rime cold · Storm lightning · Vital life/defence/resistance · Swift speed);
 //                 affixes no essence can add pay extra Scrap instead, luck affixes 2.5× that
-//                 (BENCH_LUCK_PRICE_MULTIPLIER). Paid from BACKPACK stacks only.
+//                 (BENCH_LUCK_PRICE_MULTIPLIER). Paid from BACKPACK stacks first, then the Crafting Stash
+//                 (never from normal stash tabs).
 //   craft         validate → roll the value inside the tier (character rng) → Normal becomes Magic →
 //                 -1 Stability (never a scar roll; seals stay untouched: the bench changes no existing
 //                 affix) → history "Bench: added Hale (T4)" → Finished at 0 → pay → store the rng state
@@ -33,6 +34,7 @@ import { appendHistory } from './crafting';
 import { capitalize, formatLine, formatRangeLine, joinWords } from './format';
 import { findItem, replaceItemAt, setStackCount } from './inventory';
 import type { FoundItem } from './inventory';
+import { currencyStashItem } from './special-stash';
 
 const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 const fail = <T>(error: string): Result<T> => ({ ok: false, error });
@@ -106,9 +108,22 @@ function backpackStacks(ch: CharacterSave, id: CurrencyId): (FoundItem & { item:
     .sort((a, b) => a.item.count - b.item.count || a.location.x - b.location.x || a.location.y - b.location.y);
 }
 
-/** How many of a currency the character carries in the backpack (the bench pays from there only). */
+/** How many of a currency the character carries in the backpack. */
 export function backpackCurrency(ch: CharacterSave, id: CurrencyId): number {
   return backpackStacks(ch, id).reduce((s, f) => s + f.item.count, 0);
+}
+
+/** What the bench can pay with: backpack stacks (smallest first), then the currency's Crafting Stash slot. */
+function payableStacks(ch: CharacterSave, id: CurrencyId): (FoundItem & { item: CurrencyStack })[] {
+  const stacks = backpackStacks(ch, id);
+  const slot = currencyStashItem(ch, id);
+  if (slot.count > 0) stacks.push({ item: slot, location: { kind: 'currencyStash' } });
+  return stacks;
+}
+
+/** How many of a currency the bench can spend: the backpack plus the Crafting Stash. */
+export function benchCurrency(ch: CharacterSave, id: CurrencyId): number {
+  return payableStacks(ch, id).reduce((s, f) => s + f.item.count, 0);
 }
 
 function currencyName(id: CurrencyId, count: number): string {
@@ -116,22 +131,22 @@ function currencyName(id: CurrencyId, count: number): string {
   return `${count} ${name}`;
 }
 
-/** Why the backpack cannot pay `price` ("… 5 Forge Scrap (you have 3) …"); null when it can. */
+/** Why the backpack and Crafting Stash cannot pay `price` ("… 5 Forge Scrap (you have 3) …"); null when they can. */
 function affordError(ch: CharacterSave, price: BenchPrice): string | null {
   const missing = price
-    .map((p) => ({ p, have: backpackCurrency(ch, p.currencyId) }))
+    .map((p) => ({ p, have: benchCurrency(ch, p.currencyId) }))
     .filter(({ p, have }) => have < p.count)
     .map(({ p, have }) => `${currencyName(p.currencyId, p.count)} (you have ${have})`);
-  return missing.length ? `Not enough currency in your backpack: needs ${joinWords(missing)}.` : null;
+  return missing.length ? `Not enough currency in your backpack or Crafting Stash: needs ${joinWords(missing)}.` : null;
 }
 
-/** Take `price` out of backpack stacks. Assumes affordError(ch, price) is null. */
-function payFromBackpack(ch: CharacterSave, price: BenchPrice): CharacterSave {
+/** Take `price` out of backpack stacks, then the Crafting Stash. Assumes affordError(ch, price) is null. */
+function payPrice(ch: CharacterSave, price: BenchPrice): CharacterSave {
   let next = ch;
   for (const p of price) {
     let left = p.count;
     while (left > 0) {
-      const stack = backpackStacks(next, p.currencyId)[0];
+      const stack = payableStacks(next, p.currencyId)[0];
       if (!stack) break;
       const take = Math.min(left, stack.item.count);
       next = setStackCount(next, stack, stack.item.count - take);
@@ -278,9 +293,9 @@ export function benchRecipes(ch: CharacterSave, targetUid: string): BenchRecipe[
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Apply a bench recipe: pays from the backpack, adds the affix (crafted: true, value rolled inside the
- * bench tier with the character rng), costs 1 Stability without a scar roll, Normal → Magic, and appends
- * "Bench: added <affix> (T<n>)" to the item's history. Nothing changes on failure.
+ * Apply a bench recipe: pays from the backpack (then the Crafting Stash), adds the affix (crafted: true,
+ * value rolled inside the bench tier with the character rng), costs 1 Stability without a scar roll,
+ * Normal → Magic, and appends "Bench: added <affix> (T<n>)" to the item's history. Nothing changes on failure.
  */
 export function applyBenchRecipe(ch: CharacterSave, targetUid: string, recipeId: string): Result<CraftOutcome> {
   const recipe = findBenchRecipe(recipeId);
@@ -314,7 +329,7 @@ export function applyBenchRecipe(ch: CharacterSave, targetUid: string, recipeId:
     history: appendHistory(t.item.history, lines),
   };
 
-  let next = payFromBackpack(replaceItemAt(ch, t.location, item), cost);
+  let next = payPrice(replaceItemAt(ch, t.location, item), cost);
   next = {
     ...next,
     rngState: rng.state(),

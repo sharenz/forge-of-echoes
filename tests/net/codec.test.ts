@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
+import { NEW_AREA_KINDS, NEW_MONSTER_KINDS, NEW_PROJECTILE_KINDS, PLAYER_DEBUFFS } from '../../src/contracts/bestiary';
+import { MONSTER_KINDS } from '../../src/contracts/content';
 import { AOI_HALF_HEIGHT, AOI_HALF_WIDTH } from '../../src/contracts/net';
-import { AILMENT_BIT, ELITE_BIT, MONSTER_ANIM, RARITY_CODE } from '../../src/contracts/sim';
+import { AILMENT_BIT, AREA_KINDS, ELITE_BIT, MONSTER_ANIM, PROJECTILE_KINDS, RARITY_CODE } from '../../src/contracts/sim';
+import type { PlayerDebuffView, RootSource } from '../../src/contracts/sim';
 import {
-  AOI_MARGIN, MAX_WIRE_DROPS, MAX_WIRE_PUBLIC_DROPS, SNAPSHOT_VERSION, SnapshotDecodeError, createSnapshotEncoder,
+  AOI_MARGIN, CLIENT_MONSTER_CAPACITY, CLIENT_PROJECTILE_CAPACITY, MAX_WIRE_AREAS, MAX_WIRE_DROPS,
+  MAX_WIRE_GROUND_AREAS, MAX_WIRE_PUBLIC_DROPS, SNAPSHOT_VERSION, Snapshot, SnapshotDecodeError, createSnapshotEncoder,
   decodeSnapshot,
 } from '../../src/net';
+import { ByteReader, StringInterner } from '../../src/net/bytes';
+import { AREA_TIER, MAX_WIRE_KINDS, MAX_WIRE_SLOT, ROOT_SOURCE_CODES } from '../../src/net/protocol';
+import type { AreaView } from '../../src/contracts/sim';
 import {
-  fillSlots, makeArea, makeDrop, makePlayer, makeProp, makeView, putMonster, putMote, putProjectile, setTick,
+  fillSlots, makeArea, makeDrop, makeMonsterStore, makePlayer, makeProjectileStore, makeProp, makeView, putMonster,
+  putMote, putProjectile, setTick,
 } from './fixtures';
 
 const Q = 1 / 16; // position quantum
@@ -255,15 +263,16 @@ describe('snapshot codec', () => {
 
   it('pins the drop record layout: owner byte, then tone | sprite << 3 | blocked (bit 5) | autoPickup (bit 6)', () => {
     // Fixed layout up to the first drop record when the viewer is absent and the run has no boss/lieutenant:
-    // header 23 B · run 23 B · players 1 · monsters 2 · projectiles 2 · motes 2 · areas 1 · drop count 1 → record at 55.
+    // header 23 B · run 23 B · players 1 · monsters 2 · projectiles 2 · motes 2 · areas 2 · drop count 1 → record at 56.
     const flagsOf = (drop: ReturnType<typeof makeDrop>) => {
       const v = makeView();
       v.drops.push(drop);
       const bytes = new Uint8Array(createSnapshotEncoder().encode(v, 1, 0));
       expect(bytes[0]).toBe(SNAPSHOT_VERSION);
-      expect(bytes[54]).toBe(1); // one drop
-      expect(bytes[55 + 8]).toBe(drop.spec.owner);
-      return bytes[55 + 9];
+      expect(bytes[53] | (bytes[54] << 8)).toBe(0); // no areas (u16 count)
+      expect(bytes[55]).toBe(1); // one drop
+      expect(bytes[56 + 8]).toBe(drop.spec.owner);
+      return bytes[56 + 9];
     };
     const own = { ...makeDrop({ owner: 1, autoPickup: true }), blocked: true };
     own.spec.tone = 'rare'; // code 2
@@ -275,18 +284,20 @@ describe('snapshot codec', () => {
     expect(flagsOf(ground)).toBe(4 | (1 << 3));
   });
 
-  it('stamps version 3 and rejects version-2 snapshots, so a stale pre-pickup bundle reloads instead of limping on', () => {
-    // Version 3 = public drops (owner 0) + the autoPickup bit. A version-2 client has no click pickup: if it kept
-    // decoding it could never pick up equipment. Its decoder rejects every v3 snapshot, and after
-    // MAX_SNAPSHOT_FAILURES the client reloads into the new bundle.
-    expect(SNAPSHOT_VERSION).toBe(3);
+  it('stamps version 5 and rejects older snapshots, so a stale bundle reloads instead of limping on', () => {
+    // Version 5 = u16 area count (areas chosen by priority). A version-4 decoder would read the count's high byte as
+    // the first area record; it rejects every v5 snapshot instead, and after MAX_SNAPSHOT_FAILURES the client reloads
+    // into the new bundle. (Version 4 brought the packed monster/projectile heads and the player debuffs.)
+    expect(SNAPSHOT_VERSION).toBe(5);
     const v = richWorld();
     const buf = new Uint8Array(createSnapshotEncoder().encode(v, 1, 1));
-    expect(buf[0]).toBe(3);
-    const old = buf.slice();
-    old[0] = 2;
-    expect(() => decodeSnapshot(old)).toThrow(SnapshotDecodeError);
-    expect(() => decodeSnapshot(old)).toThrow('snapshot version 2 != 3');
+    expect(buf[0]).toBe(5);
+    for (const version of [3, 4]) {
+      const old = buf.slice();
+      old[0] = version;
+      expect(() => decodeSnapshot(old)).toThrow(SnapshotDecodeError);
+      expect(() => decodeSnapshot(old)).toThrow(`snapshot version ${version} != 5`);
+    }
   });
 
   it('writes the viewer\'s own drops before public ones, so a floor full of dumped items never hides her loot', () => {
@@ -566,5 +577,326 @@ describe('snapshot codec', () => {
         expect(e).toBeInstanceOf(SnapshotDecodeError);
       }
     }
+  });
+});
+
+describe('snapshot codec: bestiary rosters and player debuffs', () => {
+  it('keeps every enum table inside its wire field, with room to grow', () => {
+    expect(MONSTER_KINDS.length).toBe(22);
+    expect(MONSTER_KINDS.length).toBeLessThanOrEqual(MAX_WIRE_KINDS);
+    expect(PROJECTILE_KINDS.length).toBeLessThanOrEqual(MAX_WIRE_KINDS);
+    expect(AREA_KINDS.length).toBeLessThanOrEqual(256); // u8
+    expect(PLAYER_DEBUFFS.length).toBeLessThanOrEqual(16); // 4 bits
+    expect(ROOT_SOURCE_CODES.length + 1).toBeLessThanOrEqual(16); // 4 bits, 0 = none
+    // Every slot the ClientWorld can show fits the 12-bit wire slot (and the sim's 2048-slot stores do too).
+    expect(CLIENT_MONSTER_CAPACITY).toBe(MAX_WIRE_SLOT + 1);
+    expect(CLIENT_PROJECTILE_CAPACITY).toBe(MAX_WIRE_SLOT + 1);
+    // The new ids were appended: the old wire indices did not move.
+    expect(MONSTER_KINDS.indexOf('trainingDummy')).toBe(7);
+    expect(MONSTER_KINDS.slice(8)).toEqual([...NEW_MONSTER_KINDS]);
+    expect(PROJECTILE_KINDS.slice(7)).toEqual([...NEW_PROJECTILE_KINDS]);
+    expect(AREA_KINDS.slice(7)).toEqual([...NEW_AREA_KINDS]);
+  });
+
+  it('round-trips every monster kind, rarity and facing, and every projectile kind with each flag', () => {
+    const v = makeView({ theme: 'rimedOssuary', monsters: makeMonsterStore(MAX_WIRE_SLOT + 1) });
+    setTick(v, 777);
+    v.players.push(makePlayer(1));
+    MONSTER_KINDS.forEach((_, kind) => {
+      putMonster(v, {
+        slot: 100 + kind, gen: 200 + kind, kind, rarity: kind % 5, x: kind * 7 - 70, y: kind * -3,
+        facing: kind % 2 ? 1 : -1, anim: kind % 6, animTime: kind / 60, life: 30 + kind, maxLife: 60 + kind,
+        hitFlash: (kind % 16) / 15, ailments: kind % 3 === 0 ? AILMENT_BIT.chilled : 0, mods: kind % 4 === 0 ? ELITE_BIT.warded : 0,
+      });
+    });
+    // Extremes of the packed head: the last wire slot and a full generation byte.
+    putMonster(v, { slot: MAX_WIRE_SLOT, gen: 0xff, kind: MONSTER_KINDS.length - 1, rarity: RARITY_CODE.boss, x: 1, y: 1, life: 900, maxLife: 9000 });
+    PROJECTILE_KINDS.forEach((_, kind) => {
+      for (const variant of [0, 1, 2]) {
+        putProjectile(v, {
+          slot: 10 + kind * 3 + variant, gen: kind * 3 + variant, kind, hostile: variant !== 0, x: kind * 5, y: variant * 9,
+          vx: -300 + kind * 40, vy: 55, radius: 2 + variant, age: variant === 2 ? 300 / 60 : (kind + 1) / 60,
+          life: variant === 1 ? 1.25 : 0,
+        });
+      }
+    });
+    const s = decodeSnapshot(createSnapshotEncoder().encode(v, 1, 0));
+    expect(s.theme).toBe('rimedOssuary');
+
+    const m = s.monsters;
+    expect(m.n).toBe(MONSTER_KINDS.length + 1);
+    const byId = new Map<number, number>();
+    for (let i = 0; i < m.n; i++) byId.set(m.id[i], i);
+    MONSTER_KINDS.forEach((_, kind) => {
+      const j = byId.get((((200 + kind) & 0xff) << 16) | (100 + kind))!;
+      expect(j).toBeDefined();
+      expect(m.kind[j]).toBe(kind);
+      expect(m.rarity[j]).toBe(kind % 5);
+      expect(m.facing[j]).toBe(kind % 2 ? 1 : -1);
+      expect(m.anim[j]).toBe(kind % 6);
+      expect(m.animTime[j]).toBeCloseTo(kind / 60, 5);
+      expect(m.hitFlash[j]).toBeCloseTo((kind % 16) / 15, 5);
+      expect(m.ailments[j]).toBe(kind % 3 === 0 ? AILMENT_BIT.chilled : 0);
+      expect(m.mods[j]).toBe(kind % 4 === 0 ? ELITE_BIT.warded : 0);
+      if (kind % 5 >= RARITY_CODE.rare) {
+        expect(m.maxLife[j]).toBe(60 + kind);
+        expect(m.life[j]).toBe(30 + kind);
+      } else {
+        expect(m.maxLife[j]).toBe(1);
+        expect(m.life[j]).toBeCloseTo((30 + kind) / (60 + kind), 2);
+      }
+      expect(m.x[j]).toBeCloseTo(kind * 7 - 70, 3);
+    });
+    const edge = byId.get((0xff << 16) | MAX_WIRE_SLOT)!;
+    expect(edge).toBeDefined();
+    expect(m.kind[edge]).toBe(MONSTER_KINDS.indexOf('varkus'));
+    expect(m.rarity[edge]).toBe(RARITY_CODE.boss);
+    expect(m.maxLife[edge]).toBe(9000);
+
+    const p = s.projectiles;
+    expect(p.n).toBe(PROJECTILE_KINDS.length * 3);
+    for (let i = 0; i < p.n; i++) {
+      const slot = p.id[i] & 0xffff;
+      const kind = Math.floor((slot - 10) / 3);
+      const variant = (slot - 10) % 3;
+      expect(p.id[i] >>> 16).toBe(kind * 3 + variant);
+      expect(p.kind[i]).toBe(kind);
+      expect(p.hostile[i]).toBe(variant !== 0 ? 1 : 0);
+      expect(p.life[i]).toBeCloseTo(variant === 1 ? 1.25 : 0, 5);
+      expect(p.age[i]).toBeCloseTo(variant === 2 ? 5 : (kind + 1) / 60, 5);
+      expect(p.vx[i]).toBeCloseTo(-300 + kind * 40, 1);
+      expect(p.radius[i]).toBe(2 + variant);
+    }
+  });
+
+  it('round-trips every area kind of the new rosters (telegraphs, pools, marks)', () => {
+    const v = makeView({ theme: 'ironColiseum' });
+    v.players.push(makePlayer(1));
+    AREA_KINDS.forEach((kind, k) => v.areas.push(makeArea({ id: 5000 + k, kind, x: k * 10 - 90, y: 20, radius: 12 + k, age: k * 0.05, duration: 3 })));
+    // A charge line telegraph is long (radius = length): it stays in the AOI while any of it can be.
+    v.areas.push(makeArea({ id: 9, kind: 'chargeLine', x: AOI_HALF_WIDTH + AOI_MARGIN + 300, y: 0, radius: 420, age: 0.1, duration: 0.6 }));
+    const s = decodeSnapshot(createSnapshotEncoder().encode(v, 1, 0));
+    const got = s.areas.slice(0, s.areaCount);
+    expect(got.map((a) => a.kind)).toEqual([...AREA_KINDS, 'chargeLine']);
+    expect(got[AREA_KINDS.indexOf('icePrison')]).toMatchObject({ id: 5000 + AREA_KINDS.indexOf('icePrison'), radius: 12 + AREA_KINDS.indexOf('icePrison') });
+    expect(got[got.length - 1]).toMatchObject({ id: 9, radius: 420 });
+  });
+
+  it('never lets a carpet of tar pools crowd out a telegraph: telegraphs first, then the nearest ground', () => {
+    // The sim's area list is oldest-first: hundreds of persistent pools, then the fresh telegraphs at the end.
+    const v = makeView({ theme: 'ironColiseum' });
+    v.players.push(makePlayer(1, { x: 40, y: -30 }));
+    // The oldest area of all: the pool she stands in (it slows her; her prediction needs it).
+    v.areas.push(makeArea({ id: 1, kind: 'tarPool', x: 41, y: -29, radius: 26, age: 5.5, duration: 6 }));
+    let id = 2;
+    for (let k = 0; k < 300; k++) {
+      // A 20 × 15 grid of pools across the whole AOI (nearest ones around the viewer).
+      const gx = (k % 20) - 9.5;
+      const gy = Math.floor(k / 20) - 7;
+      v.areas.push(makeArea({ id: id++, kind: 'tarPool', x: 40 + gx * 52, y: -30 + gy * 44, radius: 26, age: 1, duration: 6 }));
+    }
+    for (let k = 0; k < 40; k++) v.areas.push(makeArea({ id: id++, kind: 'fireTrail', x: 40 + k, y: -30, radius: 14, age: 0.5, duration: 2 }));
+    v.areas.push(makeArea({ id: 70001, kind: 'chargeLine', x: 300, y: 200, radius: 380, age: 0.05, duration: 0.8 }));
+    v.areas.push(makeArea({ id: 70002, kind: 'executionMark', x: 40, y: -30, radius: 36, age: 0.1, duration: 3 }));
+    v.areas.push(makeArea({ id: 70003, kind: 'slamWarning', x: -400, y: 300, radius: 48, age: 0.2, duration: 1 }));
+    const s = decodeSnapshot(createSnapshotEncoder().encode(v, 1, 0));
+    const got = s.areas.slice(0, s.areaCount);
+    // Every telegraph arrives (they were created last) …
+    for (const tid of [70001, 70002, 70003]) expect(got.some((a) => a.id === tid)).toBe(true);
+    // … the ground fills its own budget, nearest first: every chosen pool is at least as near as every dropped one.
+    const ground = got.filter((a) => a.kind === 'tarPool' || a.kind === 'fireTrail');
+    expect(ground).toHaveLength(MAX_WIRE_GROUND_AREAS);
+    expect(got).toHaveLength(MAX_WIRE_GROUND_AREAS + 3);
+    // Hazardous ground (tar) outranks the players' own fire trails: 256 of the 301 pools fill it.
+    expect(ground.every((a) => a.kind === 'tarPool')).toBe(true);
+    const d2 = (a: Pick<AreaView, 'x' | 'y'>) => (a.x - 40) ** 2 + (a.y + 30) ** 2;
+    const sentIds = new Set(got.map((a) => a.id));
+    const sentFar = Math.max(...v.areas.filter((a) => a.kind === 'tarPool' && sentIds.has(a.id)).map(d2));
+    const droppedNear = Math.min(...v.areas.filter((a) => a.kind === 'tarPool' && !sentIds.has(a.id)).map(d2));
+    expect(sentFar).toBeLessThanOrEqual(droppedNear);
+    // The pool under her feet is always among them, and the chosen areas keep the sim's order.
+    expect(got[0].id).toBe(1);
+    expect(got.map((a) => a.id)).toEqual([...got.map((a) => a.id)].sort((a, b) => a - b));
+  });
+
+  it('sends every area when they fit, and caps a pathological telegraph flood at MAX_WIRE_AREAS (nearest kept)', () => {
+    const v = makeView();
+    v.players.push(makePlayer(1));
+    // Under both caps: all of them, including more than the old u8 limit of 255.
+    for (let k = 0; k < 400; k++) v.areas.push(makeArea({ id: 1 + k, kind: 'slamWarning', x: (k % 40) * 20 - 400, y: Math.floor(k / 40) * 30 - 150, radius: 20 }));
+    for (let k = 0; k < 100; k++) v.areas.push(makeArea({ id: 1000 + k, kind: 'firePool', x: k * 5 - 250, y: 60, radius: 30 }));
+    const enc = createSnapshotEncoder();
+    let s = decodeSnapshot(enc.encode(v, 1, 0));
+    expect(s.areaCount).toBe(500);
+    expect(s.areas.slice(0, s.areaCount).map((a) => a.id)).toEqual(v.areas.map((a) => a.id));
+    // More telegraphs than the whole budget: the nearest MAX_WIRE_AREAS, no ground at all.
+    v.areas.length = 0;
+    for (let k = 0; k < MAX_WIRE_AREAS + 76; k++) v.areas.push(makeArea({ id: 1 + k, kind: 'glacialSpike', x: 0.5 * k, y: 0, radius: 10 }));
+    v.areas.push(makeArea({ id: 99999, kind: 'tarPool', x: 1, y: 1, radius: 30 }));
+    s = decodeSnapshot(enc.encode(v, 1, 0));
+    expect(s.areaCount).toBe(MAX_WIRE_AREAS);
+    const ids = s.areas.slice(0, s.areaCount).map((a) => a.id);
+    expect(ids).toEqual(Array.from({ length: MAX_WIRE_AREAS }, (_, k) => 1 + k));
+    // Tier table: pools and trails are ground, every telegraph / moving hazard is tier 0.
+    const tierOf = (kind: (typeof AREA_KINDS)[number]) => AREA_TIER[AREA_KINDS.indexOf(kind)];
+    expect([tierOf('tarPool'), tierOf('firePool'), tierOf('fireTrail')]).toEqual([1, 1, 2]);
+    for (const kind of AREA_KINDS) if (!['tarPool', 'firePool', 'fireTrail'].includes(kind)) expect(tierOf(kind)).toBe(0);
+  });
+
+  it('never writes an entity the wire cannot address (slot past 12 bits); the client could not show it anyway', () => {
+    const v = makeView({ monsters: makeMonsterStore(8192), projectiles: makeProjectileStore(8192) });
+    v.players.push(makePlayer(1));
+    putMonster(v, { slot: MAX_WIRE_SLOT, x: 1, y: 1 });
+    putMonster(v, { slot: MAX_WIRE_SLOT + 1, x: 2, y: 2 });
+    putProjectile(v, { slot: MAX_WIRE_SLOT, x: 1, y: 1 });
+    putProjectile(v, { slot: 6000, x: 1, y: 1 });
+    const s = decodeSnapshot(createSnapshotEncoder().encode(v, 1, 0));
+    expect(Array.from(s.monsters.id.subarray(0, s.monsters.n))).toEqual([MAX_WIRE_SLOT]);
+    expect(Array.from(s.projectiles.id.subarray(0, s.projectiles.n))).toEqual([MAX_WIRE_SLOT]);
+  });
+
+  it('round-trips every player\'s debuffs: ids, stacks, root sources and millisecond timers', () => {
+    const v = makeView();
+    const sources: RootSource[] = ['bone', 'web', 'chain', 'tar'];
+    const all: PlayerDebuffView[] = PLAYER_DEBUFFS.map((id, k) => ({
+      id, remaining: 0.25 + k * 0.4567, duration: 0.8 + k, stacks: id === 'bleeding' || id === 'withered' ? 3 : 1,
+      source: id === 'rooted' ? 'tar' : null,
+    }));
+    const me = makePlayer(1, { debuffs: all });
+    const ally = makePlayer(2, { x: 40, debuffs: sources.map((source, k) => ({ id: 'rooted', remaining: 1.4 - k * 0.1, duration: 1.4, stacks: 1, source })) });
+    const clean = makePlayer(3, { x: -40 });
+    const deadAlly = makePlayer(4, { x: 80, dead: true, anim: 'death' });
+    v.players.push(me, ally, clean, deadAlly);
+    const s = decodeSnapshot(createSnapshotEncoder().encode(v, 1, 0));
+    const got = s.player(1)!.debuffs;
+    expect(got).toHaveLength(PLAYER_DEBUFFS.length);
+    got.forEach((d, k) => {
+      expect(d.id).toBe(PLAYER_DEBUFFS[k]);
+      expect(Math.abs(d.remaining - all[k].remaining)).toBeLessThanOrEqual(0.0005 + 1e-9);
+      expect(Math.abs(d.duration - all[k].duration)).toBeLessThanOrEqual(0.0005 + 1e-9);
+      expect(d.stacks).toBe(all[k].stacks);
+      expect(d.source).toBe(all[k].source);
+    });
+    // Allies carry theirs too (overlays), in the sim's order.
+    expect(s.player(2)!.full).toBe(false);
+    expect(s.player(2)!.debuffs.map((d) => d.source)).toEqual(sources);
+    expect(s.player(2)!.debuffs[3].remaining).toBeCloseTo(1.1, 3);
+    expect(s.player(3)!.debuffs).toEqual([]);
+    expect(s.player(4)!.debuffs).toEqual([]);
+  });
+
+  it('pays one byte per player plus 6 bytes per debuff, and clamps or skips what does not fit', () => {
+    const enc = createSnapshotEncoder();
+    const v = makeView();
+    const me = makePlayer(1);
+    v.players.push(me);
+    const base = enc.encode(v, 1, 0).byteLength;
+    me.debuffs.push(
+      { id: 'burning', remaining: 2.5, duration: 3, stacks: 1, source: null },
+      { id: 'bleeding', remaining: 3.9, duration: 4, stacks: 2, source: null },
+    );
+    expect(enc.encode(v, 1, 0).byteLength).toBe(base + 12);
+    // Out-of-range timers clamp; an id outside the contract table is dropped instead of corrupting the stream.
+    me.debuffs.length = 0;
+    me.debuffs.push(
+      { id: 'shocked', remaining: 99999, duration: -3, stacks: 700, source: null },
+      { id: 'mystery' as PlayerDebuffView['id'], remaining: 1, duration: 1, stacks: 1, source: null },
+      { id: 'withered', remaining: Number.NaN, duration: 4, stacks: 2, source: null },
+    );
+    const s = decodeSnapshot(enc.encode(v, 1, 0));
+    expect(s.player(1)!.debuffs.map((d) => d.id)).toEqual(['shocked', 'withered']);
+    expect(s.player(1)!.debuffs[0]).toMatchObject({ remaining: 65.535, duration: 0, stacks: 255 });
+    expect(s.player(1)!.debuffs[1].remaining).toBe(0);
+  });
+
+  it('never rounds a running debuff timer down to 0 ms (the sim still applies it on its next tick)', () => {
+    // 2 s minus 120 float ticks leaves ~2e-15 s: the sim's chill still slows the 121st tick.
+    let residue = 2;
+    for (let k = 0; k < 120; k++) residue -= 1 / 60;
+    expect(residue).toBeGreaterThan(0);
+    const v = makeView();
+    v.players.push(makePlayer(1, { debuffs: [{ id: 'chilled', remaining: residue, duration: 2, stacks: 1, source: null }] }));
+    const s = decodeSnapshot(createSnapshotEncoder().encode(v, 1, 0));
+    expect(s.player(1)!.debuffs[0].remaining).toBe(0.001);
+  });
+
+  it('decodes debuffs into pooled objects: lists shrink and grow without new allocations', () => {
+    const enc = createSnapshotEncoder();
+    const v = makeView();
+    const me = makePlayer(1);
+    v.players.push(me);
+    const snap = new Snapshot();
+    const reader = new ByteReader();
+    const interner = new StringInterner();
+    const decode = () => {
+      snap.decode(enc.encode(v, 1, 0), reader, interner);
+      return snap.player(1)!.debuffs;
+    };
+    me.debuffs = [
+      { id: 'chilled', remaining: 1, duration: 2, stacks: 1, source: null },
+      { id: 'rooted', remaining: 1, duration: 1.4, stacks: 1, source: 'web' },
+    ];
+    const list = decode();
+    const [a, b] = list;
+    me.debuffs = [];
+    expect(decode()).toBe(list);
+    expect(list).toHaveLength(0);
+    me.debuffs = [
+      { id: 'frozen', remaining: 0.5, duration: 0.8, stacks: 1, source: null },
+      { id: 'rooted', remaining: 0.9, duration: 1.4, stacks: 1, source: 'chain' },
+    ];
+    decode();
+    expect(list[0]).toBe(a);
+    expect(list[1]).toBe(b);
+    expect(list[0]).toMatchObject({ id: 'frozen', source: null });
+    expect(list[1]).toMatchObject({ id: 'rooted', source: 'chain' });
+  });
+
+  it('rejects out-of-table monster kinds, projectile kinds, debuff ids and root sources', () => {
+    const enc = createSnapshotEncoder();
+    // Find a field's byte by encoding two worlds that differ only in it.
+    const diffAt = (a: Uint8Array, b: Uint8Array) => {
+      expect(a.length).toBe(b.length);
+      const at: number[] = [];
+      for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) at.push(k);
+      return at;
+    };
+    const monsterWorld = (kind: number) => {
+      const v = makeView();
+      putMonster(v, { slot: 1, kind, x: 0, y: 0 });
+      return new Uint8Array(enc.encode(v, 1, 0));
+    };
+    const m0 = monsterWorld(0);
+    // Kind = head bits 20–25: the low 4 in byte 2 (bits 4–7), the top 2 in byte 3 (bits 0–1).
+    const [kindByte] = diffAt(m0, monsterWorld(1));
+    const badMonster = m0.slice();
+    badMonster[kindByte + 1] |= 0x03; // kind 48: past the 22-entry table
+    expect(() => decodeSnapshot(badMonster)).toThrow('monster kind 48');
+
+    const projectileWorld = (kind: number) => {
+      const v = makeView();
+      putProjectile(v, { slot: 1, kind, x: 0, y: 0 });
+      return new Uint8Array(enc.encode(v, 1, 0));
+    };
+    const p0 = projectileWorld(0);
+    const [pKindByte] = diffAt(p0, projectileWorld(1));
+    const badProjectile = p0.slice();
+    badProjectile[pKindByte + 1] |= 0x03;
+    expect(() => decodeSnapshot(badProjectile)).toThrow('projectile kind 48');
+
+    const debuffWorld = (id: PlayerDebuffView['id'], source: RootSource | null) => {
+      const v = makeView();
+      v.players.push(makePlayer(1, { debuffs: [{ id, remaining: 1, duration: 1, stacks: 1, source }] }));
+      return new Uint8Array(enc.encode(v, 1, 0));
+    };
+    const d0 = debuffWorld('chilled', null);
+    const [debuffByte] = diffAt(d0, debuffWorld('frozen', null));
+    expect(diffAt(d0, debuffWorld('chilled', 'web'))).toEqual([debuffByte]);
+    const badId = d0.slice();
+    badId[debuffByte] = 0x0f;
+    expect(() => decodeSnapshot(badId)).toThrow(/bad debuff code 15/);
+    const badSource = d0.slice();
+    badSource[debuffByte] = 0x90; // chilled | source code 9
+    expect(() => decodeSnapshot(badSource)).toThrow(/root source/);
   });
 });

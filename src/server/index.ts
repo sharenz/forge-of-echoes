@@ -108,6 +108,24 @@
 //   • Stash moves / quick-move to a stash tab / tab edits need any hideout; crafting and the crafting bench
 //     (benchCraft / benchClear) need any hideout; the merchant works in any hideout; the map device (load,
 //     unload, activate) needs the player's own hideout.
+//   • SPECIAL STASH TABS (GAME_SPEC §12) are stash tabs: the Crafting Stash ({ kind: 'currencyStash' }, slot uids
+//     "cstash:<currencyId>") and the Map Stash ({ kind: 'mapStash' }) work in any hideout and nowhere else — as a
+//     destination (moveItem `to`, quickMove stashTab 'currency' | 'mapCurrency' | 'maps', depositAllCurrency) AND
+//     as a source (withdrawing into the backpack too). Refusal: "The stash can only be used in a hideout.".
+//     moveItem / quickMove pass `count` through (splits, Shift+Ctrl single withdrawals). Every item move is also
+//     checked after the rules ran: a result that touched a stash tab outside a hideout, or the map device outside
+//     your own hideout, is refused and changes nothing (e.g. a Ctrl-clicked map with no tab open would load the
+//     device: refused in a party member's hideout or a map with "The map device is in your own hideout.").
+//     An empty slot answers "Your Crafting Stash holds no <Currency>.". applyCurrency takes a slot uid as the
+//     currency (hideout only, one use per craft). dropItem: a Map Stash map drops like a stashed item (hideout
+//     only); a slot is not an item ("Take currency out of the Crafting Stash first."). Slots and Map Stash maps
+//     can never be offered in a trade (backpack only); a stack in your offer cannot be deposited (ITEM_IN_TRADE).
+//   • depositAllCurrency answers ok with a message: "Stored N currency in the Crafting Stash." plus, when some
+//     stayed behind, " M stayed in your backpack (Scrap: slot full; in your trade offer)." — show it as a toast.
+//     It fails when there is no currency, every target slot is full, or everything left is in the trade offer.
+//   • Debuff events (GAME_SPEC §13): the viewer's own 'debuff' / 'cleanse' / 'pull' are essential (never capped;
+//     ClientWorld.noteEvents needs her own 'pull'); other players' and 'blocked' (shield blocks) arrive in view.
+//     Debuff STATE is in every snapshot (PlayerView.debuffs); the events are only cues.
 //   • Coming back from a map (respawn, leaveMap, the return portal, the map closing) a player appears just in front
 //     of (52 units south of) the open portal of the hideout they land in — the map owner's — fanned out sideways
 //     when others already stand there; with no portal open, at the usual courtyard spot.

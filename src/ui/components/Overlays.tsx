@@ -198,7 +198,19 @@ export function DragGhost() {
   if (!drag) return null;
   const t = drag.target;
   const state = !t ? 'none' : t.world && t.valid ? 'world' : t.valid || t.noop ? 'ok' : 'bad';
-  const tag = t?.bench && state === 'ok' ? 'Place on the bench' : t?.offer && state === 'ok' && !t.noop ? 'Add to your offer' : null;
+  const filing = state === 'ok' && !t?.noop ? t?.loc?.kind : null;
+  const tag =
+    t?.bench && state === 'ok'
+      ? 'Place on the bench'
+      : t?.offer && state === 'ok' && !t.noop
+        ? 'Add to your offer'
+        : filing === 'currencyStash'
+          ? 'File in the Crafting Stash'
+          : filing === 'mapStash'
+            ? 'File in the Map Stash'
+            : filing === 'mapDevice'
+              ? 'Load into the device'
+              : null;
   return (
     <div
       ref={ref}

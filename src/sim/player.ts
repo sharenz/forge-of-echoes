@@ -1,17 +1,24 @@
 // Players: joining, held-slot casting with charges/cooldowns and focus, flasks, regen, movement
 // (through the shared `movePlayer` rules), animation state, live updates from the rules, and the
 // PlayerView writer. Every function works on one PlayerState; the run steps them in join order.
+import type { PlayerDebuff } from '../contracts/bestiary';
 import type { SkillId } from '../contracts/content';
 import { BELT_SLOTS, LOADOUT_SLOTS } from '../contracts/items';
 import type {
-  FlaskRuntime, FlaskSlotView, PlayerAnim, PlayerIntent, PlayerJoin, PlayerUpdate, PlayerView, SkillRuntimeDef, SlotView,
+  FlaskRuntime, FlaskSlotView, PlayerAnim, PlayerIntent, PlayerJoin, PlayerUpdate, PlayerView, RootSource, SkillRuntimeDef, SlotView,
 } from '../contracts/sim';
+import { areaSlowAt } from './area-geometry';
 import {
   ALLY_PUSH_MAX, ALLY_PUSH_RATE, CROWD_CONE_COS, CROWD_CONTACT_PAD, CROWD_SLOW_FLOOR, CROWD_SLOW_PER_MONSTER, DT, HIT_FLASH_DECAY,
-  INSTANT_RETRIGGER, MELEE_CAP_WINDOW_TICKS, NOT_ENOUGH_FOCUS_REPEAT, PLAYER_RADIUS,
+  INSTANT_RETRIGGER, MELEE_CAP_WINDOW_TICKS, NOT_ENOUGH_FOCUS_REPEAT, PLAYER_KNOCKBACK_MAX, PLAYER_KNOCKBACK_RATE, PLAYER_RADIUS,
+  PULL_MAX_DISTANCE, PULL_TIME,
 } from './constants';
+import {
+  DebuffState, applyDebuff, castRate, cleanseDebuffs, isFrozen, moveSlowOf, restoreDebuffs, tickDebuffs, writeDebuffViews,
+  type DebuffCarry,
+} from './debuffs';
 import { clamp, dirFromVector, finiteOr } from './math';
-import { CAST_SLOW, readMove, resolvePlayerAt, slowedSpeed } from './movement';
+import { CAST_SLOW, playerSlow, readMove, resolvePlayerAt, slowedSpeed } from './movement';
 import { releaseSkill, tickFireTrail, tickPendingNovas, tickWard } from './skills';
 import { MFLAG, MSTATE } from './stores';
 import type { FlaskState, PlayerState, SkillChargeState, World } from './world';
@@ -53,8 +60,12 @@ export function storeIntent(p: PlayerState, intent: PlayerIntent): void {
  * PlayerJoin plus optional vitals (not in the frozen contract): a player re-added to an instance
  * they briefly left (e.g. after a reconnect) resumes with this life and focus instead of full
  * ones, so dropping the connection is never a free heal. Clamped to 1..maxLife and 0..maxFocus.
+ * `debuffs` does the same for debuffs (never a free cleanse): pass a copy of the entries of their
+ * last PlayerView.debuffs, taken when they left — `view.debuffs.map((d) => ({ ...d }))` (the sim
+ * reuses those objects; each carries `dps`, see SimDebuffView). They resume with their remaining
+ * times (debuffs.ts restoreDebuffs).
  */
-export type SimPlayerJoin = PlayerJoin & { life?: number; focus?: number };
+export type SimPlayerJoin = PlayerJoin & { life?: number; focus?: number; debuffs?: readonly DebuffCarry[] };
 
 /**
  * PlayerUpdate plus the character level (not in the frozen contract). The level shown on
@@ -100,12 +111,16 @@ export function createPlayer(join: SimPlayerJoin, x: number, y: number): PlayerS
     portalLatch: 0,
     portalDwellId: 0,
     portalDwell: 0,
+    debuffs: new DebuffState(),
+    kbX: 0, kbY: 0,
+    pullTime: 0, pullTotal: 0, pullFromX: 0, pullFromY: 0, pullToX: 0, pullToY: 0,
   };
   setSkills(p, rt.skills);
   for (let k = 0; k < BELT_SLOTS; k++) {
     const f = rt.flasks[k] ?? null;
     p.flasks.push(f ? makeFlask(f) : null);
   }
+  if (Array.isArray(join.debuffs)) restoreDebuffs(p, join.debuffs);
   return p;
 }
 
@@ -181,7 +196,12 @@ function useFlask(w: World, p: PlayerState, slot: number): void {
   }
   w.outcomes.push({ t: 'flaskUsed', playerId: p.id, slot });
   w.events.push({ t: 'flask', playerId: p.id, resource: rt.resource });
+  // GAME_SPEC §13: the life flask puts out burning and stanches bleeding; the focus flask lifts withered.
+  cleanseDebuffs(w, p, rt.resource === 'life' ? LIFE_FLASK_CLEANSE : FOCUS_FLASK_CLEANSE);
 }
+
+const LIFE_FLASK_CLEANSE: readonly PlayerDebuff[] = ['burning', 'bleeding'];
+const FOCUS_FLASK_CLEANSE: readonly PlayerDebuff[] = ['withered'];
 
 function tickFlasks(p: PlayerState): void {
   for (const f of p.flasks) {
@@ -223,9 +243,11 @@ function canAfford(p: PlayerState, def: SkillRuntimeDef): boolean {
 
 function updateCasting(w: World, p: PlayerState): void {
   const held = p.intent.held;
+  // Chilled casts progress at 70%; frozen, a cast holds and nothing new starts.
+  const rate = castRate(p);
   let carry = 0;
   if (p.cast) {
-    p.cast.time += DT;
+    p.cast.time += rate === 1 ? DT : DT * rate;
     if (p.cast.time >= p.cast.total) {
       const c = p.cast;
       carry = Math.min(DT, c.time - c.total);
@@ -233,7 +255,7 @@ function updateCasting(w: World, p: PlayerState): void {
       releaseSkill(w, p, c.def, p.aimX, p.aimY);
     }
   }
-  for (let o = 0; o < CAST_ORDER.length; o++) {
+  for (let o = 0; o < CAST_ORDER.length && rate > 0; o++) {
     const slot = CAST_ORDER[o];
     if (held[slot] !== true) continue;
     const id = p.loadout[slot];
@@ -311,28 +333,122 @@ export function updatePlayer(w: World, p: PlayerState): void {
   tickPendingNovas(w, p);
 
   // Movement (the shared movePlayer rules): slowed while a timed active skill is cast (never by
-  // the basic attack) and by a horde pressing in from the front — the crowd part is sim-only, the
-  // client learns it through corrections. vx/vy carry the effective speed, so the presenter's
-  // locomotion rate matches what the player actually does.
-  const dir = readMove(intent.moveX, intent.moveY);
-  const mx = dir.x;
-  const my = dir.y;
-  const ml = dir.len;
-  const castSlow = p.cast && p.cast.slot !== 0 ? CAST_SLOW : 0;
-  const crowd = ml > 0.05 ? crowdFactor(w, p, mx / ml, my / ml) : 1;
-  // Uncrowded, the slow is exactly what a predicting client passes (0 or CAST_SLOW).
-  const slow = crowd === 1 ? castSlow : 1 - (1 - castSlow) * crowd;
-  const speed = slowedSpeed(s.moveSpeed, slow);
-  p.vx = mx * speed;
-  p.vy = my * speed;
-  moveTo(w, p, p.x + p.vx * DT, p.y + p.vy * DT);
-  const moving = ml > 0.05 && speed > 0;
+  // the basic attack), by debuffs (chilled; frozen and rooted hold her still), by tar underfoot, and
+  // by a horde pressing in from the front — the crowd part is sim-only, the client learns it through
+  // corrections. vx/vy carry the effective speed, so the presenter's locomotion rate matches what the
+  // player actually does. A chain hook's drag replaces her own movement while it lasts.
+  let moving = false;
+  let mx = 0;
+  let my = 0;
+  if (p.pullTime > 0) {
+    p.pullTime = Math.max(0, p.pullTime - DT);
+    const u = p.pullTotal > 0 ? 1 - p.pullTime / p.pullTotal : 1;
+    moveTo(w, p, p.pullFromX + (p.pullToX - p.pullFromX) * u, p.pullFromY + (p.pullToY - p.pullFromY) * u);
+    p.vx = 0;
+    p.vy = 0;
+  } else {
+    const dir = readMove(intent.moveX, intent.moveY);
+    mx = dir.x;
+    my = dir.y;
+    const ml = dir.len;
+    const castSlow = p.cast && p.cast.slot !== 0 ? CAST_SLOW : 0;
+    const base = playerSlow(castSlow, moveSlowOf(p), areaSlowAt(w.areas, p.x, p.y));
+    const crowd = ml > 0.05 && base < 1 ? crowdFactor(w, p, mx / ml, my / ml) : 1;
+    // Uncrowded, the slow is exactly what a predicting client passes (see movement.ts playerSlow).
+    const slow = crowd === 1 ? base : 1 - (1 - base) * crowd;
+    const speed = slowedSpeed(s.moveSpeed, slow);
+    p.vx = mx * speed;
+    p.vy = my * speed;
+    moveTo(w, p, p.x + p.vx * DT, p.y + p.vy * DT);
+    moving = ml > 0.05 && speed > 0;
+  }
   tickFireTrail(w, p, moving);
 
-  // Facing: toward the aim while casting, else along movement.
-  if (p.cast || p.dashTime > 0) p.facing = dirFromVector(p.aimX - p.x, p.aimY - p.y, p.facing);
-  else if (moving) p.facing = dirFromVector(mx, my, p.facing);
-  setAnim(p, moving);
+  // Frozen: the pose, facing and animation clock hold.
+  if (!isFrozen(p)) {
+    // Facing: toward the aim while casting, else along movement.
+    if (p.cast || p.dashTime > 0) p.facing = dirFromVector(p.aimX - p.x, p.aimY - p.y, p.facing);
+    else if (moving) p.facing = dirFromVector(mx, my, p.facing);
+    setAnim(p, moving);
+  }
+  tickDebuffs(w, p, moving);
+}
+
+/**
+ * Knock a player back `dist` units along (dirX, dirY) over the next few ticks (pending knockback is
+ * capped at PLAYER_KNOCKBACK_MAX). Call it after a hit that connected.
+ */
+export function knockPlayer(w: World, p: PlayerState, dirX: number, dirY: number, dist: number): void {
+  if (p.dead || !(dist > 0)) return;
+  const l = Math.hypot(dirX, dirY);
+  if (l < 1e-6) return;
+  let kx = p.kbX + (dirX / l) * dist;
+  let ky = p.kbY + (dirY / l) * dist;
+  const kl = Math.hypot(kx, ky);
+  if (kl > PLAYER_KNOCKBACK_MAX) {
+    kx *= PLAYER_KNOCKBACK_MAX / kl;
+    ky *= PLAYER_KNOCKBACK_MAX / kl;
+  }
+  p.kbX = kx;
+  p.kbY = ky;
+}
+
+/**
+ * Drag a player up to `distance` units (at most PULL_MAX_DISTANCE) toward (towardX, towardY) over
+ * PULL_TIME (stopping short of the point itself, and of the first solid prop in the way — a chain
+ * never drags anyone through a pillar), then hold them: they are rooted (`source`, ROOT_DURATION from
+ * now) and emit 'pull' with the drag's real end. Their own movement is suspended while dragged; Rift
+ * Step breaks both. Call it after a hit that connected (the chain hook does: projectiles.ts). The
+ * duration is fixed because client prediction replays the drag from the 'pull' event (from → to at
+ * u = 1 − pullTime / pullTotal) with exactly that timing.
+ */
+export function pullPlayer(
+  w: World, p: PlayerState, towardX: number, towardY: number, distance: number, source: RootSource = 'chain',
+): void {
+  if (p.dead) return;
+  const dx = towardX - p.x;
+  const dy = towardY - p.y;
+  const d = Math.hypot(dx, dy);
+  const want = Number.isFinite(distance) ? Math.min(PULL_MAX_DISTANCE, Math.max(0, distance)) : 0;
+  let dist = Math.min(want, Math.max(0, d - PLAYER_RADIUS * 2));
+  if (dist > 0) dist = freeDragDistance(w, p.x, p.y, dx / d, dy / d, dist);
+  const fromX = p.x;
+  const fromY = p.y;
+  const toX = d > 1e-6 ? fromX + (dx / d) * dist : fromX;
+  const toY = d > 1e-6 ? fromY + (dy / d) * dist : fromY;
+  applyDebuff(w, p, 'rooted', 0, source);
+  if (dist <= 0) return;
+  p.pullFromX = fromX;
+  p.pullFromY = fromY;
+  p.pullToX = toX;
+  p.pullToY = toY;
+  p.pullTotal = Math.max(DT, PULL_TIME);
+  p.pullTime = p.pullTotal;
+  w.events.push({ t: 'pull', playerId: p.id, fromX, fromY, toX, toY });
+}
+
+/**
+ * How far a player at (x, y) can be dragged along the unit vector (ux, uy) before her body meets a
+ * solid prop (at most `max`). Props behind her or beside the path don't count; one she already
+ * touches in the drag's direction stops it at once.
+ */
+function freeDragDistance(w: World, x: number, y: number, ux: number, uy: number, max: number): number {
+  let best = max;
+  const props = w.props;
+  for (let k = 0; k < props.length; k++) {
+    const pr = props[k];
+    if (!pr.solid) continue;
+    const r = pr.radius + PLAYER_RADIUS;
+    const cx = pr.x - x;
+    const cy = pr.y - y;
+    const along = cx * ux + cy * uy;
+    if (along <= 0 || along - r >= best) continue;
+    const perp2 = cx * cx + cy * cy - along * along;
+    if (perp2 >= r * r) continue;
+    const hit = along - Math.sqrt(r * r - perp2);
+    if (hit < best) best = hit > 0 ? hit : 0;
+  }
+  return best;
 }
 
 /**
@@ -349,7 +465,8 @@ function crowdFactor(w: World, p: PlayerState, ux: number, uy: number): number {
     const i = cand[k];
     // Heavy/immovable bodies block (they shove the player) rather than slow; spawning and
     // airborne monsters aren't in the way yet.
-    if (!m.alive[i] || m.flags[i] & (MFLAG.unpushable | MFLAG.heavy) || m.spawnTime[i] > 0 || m.state[i] === MSTATE.leap) continue;
+    // Ghosts drift through her.
+    if (!m.alive[i] || m.flags[i] & (MFLAG.unpushable | MFLAG.heavy | MFLAG.ghost) || m.spawnTime[i] > 0 || m.state[i] === MSTATE.leap) continue;
     const dx = m.x[i] - p.x;
     const dy = m.y[i] - p.y;
     const rr = m.radius[i] + PLAYER_RADIUS + CROWD_CONTACT_PAD;
@@ -375,6 +492,17 @@ export function applyPlayerPushes(w: World): void {
   const players = w.players;
   for (let k = 0; k < players.length; k++) {
     const p = players[k];
+    if (!p.dead && (p.kbX !== 0 || p.kbY !== 0)) {
+      const sx = p.kbX * PLAYER_KNOCKBACK_RATE;
+      const sy = p.kbY * PLAYER_KNOCKBACK_RATE;
+      p.kbX -= sx;
+      p.kbY -= sy;
+      if (Math.abs(p.kbX) + Math.abs(p.kbY) < 0.05) {
+        p.kbX = 0;
+        p.kbY = 0;
+      }
+      moveTo(w, p, p.x + sx, p.y + sy);
+    }
     if (p.dead || (p.pushX === 0 && p.pushY === 0)) {
       p.pushX = 0;
       p.pushY = 0;
@@ -447,7 +575,7 @@ export function createPlayerView(id: number): PlayerView {
     id, name: '', level: 1,
     x: 0, y: 0, prevX: 0, prevY: 0, vx: 0, vy: 0, facing: 'south', aimX: 0, aimY: 0, anim: 'idle', animTime: 0,
     castSkill: null, castProgress: 0, life: 0, maxLife: 0, focus: 0, maxFocus: 0, wardTime: 0, wardDuration: 0,
-    invulnTime: 0, hitFlash: 0, dead: false, slots, flasks,
+    invulnTime: 0, hitFlash: 0, dead: false, debuffs: [], slots, flasks,
   };
 }
 
@@ -462,6 +590,7 @@ export function writePlayerView(p: PlayerState): void {
   v.focus = Math.max(0, p.focus); v.maxFocus = p.stats.maxFocus;
   v.wardTime = p.ward.time; v.wardDuration = p.ward.duration;
   v.invulnTime = p.invulnTime; v.hitFlash = p.hitFlash; v.dead = p.dead;
+  writeDebuffViews(p);
   for (let k = 0; k < LOADOUT_SLOTS; k++) {
     const sv = v.slots[k];
     const id = p.loadout[k];

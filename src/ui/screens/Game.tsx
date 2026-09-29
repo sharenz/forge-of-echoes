@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import type { Panel } from '../../contracts/ui';
 import { AffixChoicePopover } from '../items/Crafting';
 import { CommandDeck } from '../hud/CommandDeck';
+import { DebuffBar } from '../hud/Debuffs';
 import { Chat } from '../hud/Chat';
 import { DeathOverlay, LevelUpBurst, NetStats, Toasts } from '../hud/Feedback';
 import { TopHud } from '../hud/TopHud';
@@ -88,6 +89,7 @@ export function GameScreen() {
       <LevelUpBurst />
       <Chat />
       <CommandDeck />
+      <DebuffBar />
       <NetStats />
       <DeathOverlay />
       {vis.left && <LeftPanel key={vis.left} panel={vis.left} />}

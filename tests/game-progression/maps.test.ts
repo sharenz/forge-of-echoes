@@ -6,7 +6,7 @@ import { createRng } from '../../src/core/rng';
 import { partyScalingLines, rules } from '../../src/game';
 import { PARTY_SCALING, getMapMod } from '../../src/data/progression';
 import {
-  craftMap, dangerModCount, mapCraftError, mapLuck, monsterScaling, partyScaling, voidOutcomes, waveConfig,
+  craftMap, dangerModCount, mapCraftError, mapLuck, mapModName, monsterScaling, partyScaling, voidOutcomes, waveConfig,
 } from '../../src/game/progression';
 import { PARTY_BUDGET_PER_PLAYER, PARTY_ELITE_PER_PLAYER, PARTY_LIFE_PER_PLAYER } from '../../src/sim/constants';
 import { bareCharacter, currency, equip, expectErr, expectOk, map, withBackpack } from './fixtures';
@@ -356,6 +356,39 @@ describe('map tooltip', () => {
     expect(d.corrupted).toBe(true);
     expect(d.headerLines).toContain('Corrupted');
     expect(d.affixes[0]).toMatchObject({ kind: 'corrupted', affixName: 'Seething Horde', negative: true });
+  });
+
+  it("names the corrupted Wrath after the map's own boss; the saved mod id stays the same on every base", () => {
+    const names = { ashenForge: "Matriarch's Wrath", rimedOssuary: "The Warden's Wrath", ironColiseum: "Varkus's Wrath" } as const;
+    for (const [base, name] of Object.entries(names) as [keyof typeof names, string][]) {
+      const wrath: RolledMapMod = { modId: 'matriarchsWrath', value: 100, corrupted: true };
+      const m: MapItem = { ...map(base, 4), corrupted: true, mods: [wrath] };
+      // Tooltip line, readout breakdown source, and the stored id.
+      expect(rules.describeItem(m).affixes[0], base).toMatchObject({ kind: 'corrupted', affixName: name, text: '40% increased Monster Damage' });
+      expect(mapModName(getMapMod('matriarchsWrath')!, base)).toBe(name);
+      expect(rules.mapSummary(bareCharacter(), m).flatMap((l) => l.breakdown ?? []).some((b) => b.includes(name)), base).toBe(true);
+      expect(m.mods[0].modId).toBe('matriarchsWrath');
+      // A Void Needle's odds and outcome speak of this base's boss too; no other base's name leaks in.
+      const plain = map(base, 4);
+      const preview = rules.craftPreview(workshop(plain), 'needle', plain.uid).join(' ');
+      expect(preview, base).toContain(name);
+      for (const other of Object.values(names)) if (other !== name) expect(preview, base).not.toContain(other);
+    }
+    // A mod without base names, or an unknown base, keeps the mod's own name.
+    expect(mapModName(getMapMod('seethingHorde')!, 'ironColiseum')).toBe('Seething Horde');
+    expect(mapModName(getMapMod('matriarchsWrath')!, 'constructor')).toBe("Matriarch's Wrath");
+    expect(mapModName(getMapMod('matriarchsWrath')!)).toBe("Matriarch's Wrath");
+  });
+
+  it('a Void Needle that rolls the Wrath says so by the base name', () => {
+    const rng = createRng(5);
+    for (let k = 0; k < 400; k++) {
+      const out = craftMap(map('ironColiseum', 3), 'voidNeedle', rng);
+      if (!out.map.mods.some((r) => r.modId === 'matriarchsWrath')) continue;
+      expect(out.message).toBe("Void Needle corrupted the map with Varkus's Wrath");
+      return;
+    }
+    throw new Error('no Wrath in 400 Void Needles');
   });
 });
 

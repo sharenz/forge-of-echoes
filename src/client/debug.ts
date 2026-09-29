@@ -1,9 +1,11 @@
 // Debug / e2e hooks: window.__foe. Loaded lazily and only in dev builds (or builds made with VITE_FOE_DEBUG=1), so
 // a production bundle carries neither these hooks nor the autopilot (bot.ts), which could otherwise farm maps
 // from one console line.
+import type { PlayerDebuff } from '../contracts/bestiary';
 import type { Command, ServerMessage } from '../contracts/net';
+import type { RootSource, SimEvent } from '../contracts/sim';
 import type { ConnectionStatus, UiStore } from '../contracts/ui';
-import { SNAPSHOT_VERSION, type NetClientWorld } from '../net';
+import { SNAPSHOT_VERSION, decodeSnapshot, type NetClientWorld } from '../net';
 import { Autopilot, type BotOptions } from './bot';
 import type { CommandResult } from './commands';
 import type { GameSession } from './session';
@@ -58,6 +60,31 @@ export interface DropEventReport {
   foreignLabels: string[];
 }
 
+/** The local player's own debuff-related events: what landed on her, what a flask washed off, a hook's drag. */
+export type LocalDebuffSimEvent = Extract<SimEvent, { t: 'debuff' } | { t: 'cleanse' } | { t: 'pull' }>;
+
+export interface LocalDebuffEvent {
+  /** Increasing per page (poll with the last seq seen). */
+  seq: number;
+  /** Arrival, client ms (performance.now: the clock of requestAnimationFrame timestamps). */
+  at: number;
+  /** Tick of the events batch it came in (sent right after the snapshot of that tick). */
+  tick: number;
+  event: LocalDebuffSimEvent;
+}
+
+/** The local player as the newest snapshot has her: the server's word, before any prediction. */
+export interface ServerSelf {
+  tick: number;
+  x: number;
+  y: number;
+  dead: boolean;
+  debuffs: { id: PlayerDebuff; remaining: number; stacks: number; source: RootSource | null }[];
+}
+
+/** Local debuff events kept for polling (a few minutes of a busy fight). */
+const LOCAL_DEBUFF_EVENTS_KEPT = 400;
+
 export interface FoeDebug {
   store: UiStore;
   readonly world: NetClientWorld | null;
@@ -79,6 +106,10 @@ export interface FoeDebug {
    * so the replica cannot decode it — the client must reload once and, if that does not help, explain.
    */
   skewSnapshots(mode: SnapshotSkew): void;
+  /** The local player's own debuff / cleanse / pull events after `sinceSeq` (e2e: debuff fairness, hook drags). */
+  localDebuffEvents(sinceSeq?: number): LocalDebuffEvent[];
+  /** The local player's record in the newest snapshot (decoded on demand), or null. */
+  serverSelf(): ServerSelf | null;
 }
 
 function readSkew(): SnapshotSkew {
@@ -113,11 +144,18 @@ declare global {
 
 export function installDebugHooks(t: DebugTarget): FoeDebug {
   const drops: DropEventReport = { own: 0, public: 0, foreign: 0, foreignLabels: [] };
+  const debuffEvents: LocalDebuffEvent[] = [];
+  let debuffSeq = 0;
   t.setMessageTap((msg) => {
     if (msg.t !== 'events') return;
     const local = t.session()?.zone?.localPlayerId;
     if (local === undefined) return;
     for (const e of msg.events) {
+      if ((e.t === 'debuff' || e.t === 'cleanse' || e.t === 'pull') && e.playerId === local) {
+        debuffEvents.push({ seq: ++debuffSeq, at: performance.now(), tick: msg.tick, event: e });
+        if (debuffEvents.length > LOCAL_DEBUFF_EVENTS_KEPT) debuffEvents.shift();
+        continue;
+      }
       if (e.t !== 'dropSpawn' && e.t !== 'pickup') continue;
       if (e.owner === local) drops.own++;
       else if (e.owner === 0) drops.public++;
@@ -127,9 +165,34 @@ export function installDebugHooks(t: DebugTarget): FoeDebug {
       }
     }
   });
+  // The tap keeps the newest snapshot as the server sent it (serverSelf decodes it on demand) and, while skewed,
+  // hands the session a copy it cannot read.
+  let skew: SnapshotSkew = 'off';
+  let lastSnapshot: ArrayBuffer | null = null;
+  t.setSnapshotTap((data) => {
+    lastSnapshot = data;
+    return skew === 'off' ? data : skewed(data);
+  });
   const applySkew = (mode: SnapshotSkew): void => {
     writeSkew(mode);
-    t.setSnapshotTap(mode === 'off' ? null : skewed);
+    skew = mode;
+  };
+  const serverSelf = (): ServerSelf | null => {
+    if (!lastSnapshot) return null;
+    try {
+      const snap = decodeSnapshot(lastSnapshot);
+      const me = snap.viewer();
+      if (!me) return null;
+      return {
+        tick: snap.tick,
+        x: me.x,
+        y: me.y,
+        dead: me.dead,
+        debuffs: me.debuffs.map((d) => ({ id: d.id, remaining: d.remaining, stacks: d.stacks, source: d.source })),
+      };
+    } catch {
+      return null;
+    }
   };
   if (readSkew() === 'always') applySkew('always');
   const foe: FoeDebug = {
@@ -170,6 +233,8 @@ export function installDebugHooks(t: DebugTarget): FoeDebug {
       return d ? t.worldToScreen(d.x, d.y - d.z - 4) : null;
     },
     skewSnapshots: (mode) => applySkew(mode),
+    localDebuffEvents: (sinceSeq = 0) => debuffEvents.filter((e) => e.seq > sinceSeq),
+    serverSelf,
   };
   window.__foe = foe;
   return foe;

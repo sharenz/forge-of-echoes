@@ -1,9 +1,10 @@
 // Persistence: round-trips, garbage, migration and field-by-field normalisation.
 import { describe, expect, it } from 'vitest';
 import type { CharacterSave, EquipmentItem, Item, MapItem, SaveGame } from '../../src/contracts/items';
+import { CURRENCY_STASH_MAX, MAP_STASH_CAPACITY, MAX_STASH_TABS, STASH_TAB_SIZE } from '../../src/contracts/items';
 import { createRng } from '../../src/core/rng';
 import { rules } from '../../src/game';
-import { normalizeCharacter } from '../../src/game/progression';
+import { normalizeCharacter, normalizeCharacterReport } from '../../src/game/progression';
 import { SAVE_VERSION } from '../../src/data/progression';
 import { expectOk, map } from './fixtures';
 
@@ -13,6 +14,7 @@ function allUids(ch: CharacterSave): string[] {
     ...ch.stash.flatMap((t) => t.grid.entries.map((e) => e.item.uid)),
     ...Object.values(ch.equipment).map((e) => e!.uid),
     ...(ch.mapDevice ? [ch.mapDevice.uid] : []),
+    ...ch.mapStash.map((m) => m.uid),
   ];
 }
 
@@ -30,6 +32,13 @@ function livedIn(): CharacterSave {
   ch = expectOk(rules.moveItem(ch, aMap.uid, { kind: 'mapDevice' }));
   const other = ch.backpack.entries.find((e) => e.item.kind === 'map')!.item;
   ch = expectOk(rules.moveItem(ch, other.uid, { kind: 'stash', tab: 1, x: 3, y: 2 }));
+  // The special stash tabs: a deposited stack, a withdrawn one, and a filed map.
+  const scrap = ch.backpack.entries.find((e) => e.item.kind === 'currency' && e.item.currencyId === 'scrap')!.item;
+  ch = expectOk(rules.moveItem(ch, scrap.uid, { kind: 'currencyStash' }));
+  ch = expectOk(rules.quickMove(ch, 'cstash:scrap', { stashTab: 'currency', count: 2 }));
+  ch = expectOk(rules.moveItem(ch, other.uid, { kind: 'mapStash' }));
+  expect(ch.currencyStash.scrap).toBeGreaterThan(0);
+  expect(ch.mapStash).toHaveLength(1);
   return { ...ch, createdAt: 1700000000000, updatedAt: 1700000100000 };
 }
 
@@ -220,6 +229,103 @@ describe('normalizeCharacter', () => {
     expect(m.rarity).toBe('rare');
     expect(m.mods.map((x) => x.modId)).toEqual(['teeming', 'restless', 'volcanic', 'hexed', 'gilded', 'seethingHorde']);
     expect(m.corrupted).toBe(true);
+  });
+
+  it('gives a save from before the special stash tabs an empty Crafting Stash and Map Stash', () => {
+    const old = JSON.parse(JSON.stringify(rules.createCharacter('Old', 3))) as Record<string, unknown>;
+    delete old.currencyStash;
+    delete old.mapStash;
+    const ch = normalizeCharacter(old)!;
+    expect(ch.currencyStash).toEqual({});
+    expect(ch.mapStash).toEqual([]);
+    expect(normalizeCharacter({ name: 'Bare' })).toMatchObject({ currencyStash: {}, mapStash: [] });
+    const parsed = rules.parseSave(JSON.stringify({ version: 1, characters: [old], lastCharacterId: null }));
+    expect(parsed.characters[0]).toMatchObject({ currencyStash: {}, mapStash: [] });
+    for (const junk of [null, 7, 'x', [1, 2]]) {
+      expect(normalizeCharacter({ name: 'J', currencyStash: junk, mapStash: junk })).toMatchObject({ currencyStash: {}, mapStash: [] });
+    }
+  });
+
+  it('clamps Crafting Stash counts and drops unknown or empty slots', () => {
+    const ch = normalizeCharacter({
+      name: 'C',
+      currencyStash: {
+        scrap: 99999, kindling: 12.9, seal: -4, reforge: 0, voidNeedle: '7', mapDust: Number.NaN, gold: 50, constructor: 3,
+        ['__proto__' as string]: 9, fractureCore: 1,
+      },
+    })!;
+    expect(ch.currencyStash).toEqual({ scrap: CURRENCY_STASH_MAX, kindling: 12, fractureCore: 1 });
+    expect(Object.getPrototypeOf(ch.currencyStash)).toBe(Object.prototype);
+  });
+
+  it('normalises the Map Stash: repairs maps, keeps uids unique, re-homes overflow and non-maps', () => {
+    const maps = Array.from({ length: MAP_STASH_CAPACITY + 2 }, (_, i) => map('rimedOssuary', 2, { uid: `ms${i}` }));
+    const raw = {
+      name: 'M', nextUid: 2,
+      backpack: { w: 12, h: 5, entries: [{ item: map('ashenForge', 1, { uid: 'ms0' }), x: 0, y: 0 }] },
+      mapStash: [
+        ...maps,
+        { kind: 'currency', uid: 'cash', currencyId: 'scrap', count: 5 },
+        { kind: 'map', uid: 'i9', baseId: 'ironColiseum', tier: 99, rarity: 'unique', mods: [], quality: -3, corrupted: false },
+        { kind: 'map', uid: 'cstash:scrap', baseId: 'ashenForge', tier: 1, rarity: 'normal', mods: [], quality: 0, corrupted: false },
+        { kind: 'map', baseId: 'nowhere', tier: 1 },
+        'garbage',
+      ],
+    };
+    const ch = normalizeCharacter(JSON.parse(JSON.stringify(raw)))!;
+    expect(ch.mapStash).toHaveLength(MAP_STASH_CAPACITY);
+    const uids = allUids(ch);
+    expect(new Set(uids).size).toBe(uids.length);
+    expect(uids.some((u) => u.startsWith('cstash:'))).toBe(false);
+    // The backpack claimed "ms0" first, so the stash copy was re-minted; the map beyond the cap and the stray
+    // currency moved to the backpack; the corrupt map (tier 99, bad rarity) was repaired, the unknown one dropped.
+    expect(ch.mapStash[0].uid).not.toBe('ms0');
+    expect(ch.mapStash.every((m) => m.kind === 'map')).toBe(true);
+    const loose = ch.backpack.entries.map((e) => e.item);
+    expect(loose.some((i) => i.kind === 'currency' && i.count === 5)).toBe(true);
+    const repaired = [...ch.mapStash, ...loose].find((i) => i.uid === 'i9') as MapItem;
+    expect(repaired).toMatchObject({ tier: 15, rarity: 'normal', quality: 0 });
+    expect(ch.nextUid).toBeGreaterThan(9);
+  });
+
+  it('re-homes what lost its place into the special tabs and Recovered tabs, and reports only what fits nowhere', () => {
+    // Every grid full of maps, plus stray items (outside the backpack) that need a new home.
+    const fullGrid = (w: number, h: number, prefix: string) => ({
+      w, h, entries: Array.from({ length: w * h }, (_, i) => ({ item: map('ashenForge', 1, { uid: `${prefix}${i}` }), x: i % w, y: Math.floor(i / w) })),
+    });
+    const stray = (item: Item) => ({ item, x: 40, y: 40 });
+    const tabs = (n: number) => Array.from({ length: n }, (_, t) => ({ name: `T${t}`, grid: fullGrid(STASH_TAB_SIZE.w, STASH_TAB_SIZE.h, `t${t}-`) }));
+    const straysOf = [
+      stray({ kind: 'currency', uid: 'sc', currencyId: 'scrap', count: 30 }),
+      stray({ kind: 'currency', uid: 'kn', currencyId: 'kindling', count: 12 }),
+      stray(map('rimedOssuary', 4, { uid: 'm-stray' })),
+    ];
+    const raw = (tabCount: number, extra: Record<string, unknown> = {}) => JSON.parse(JSON.stringify({
+      name: 'Full', nextUid: 1,
+      backpack: { ...fullGrid(12, 5, 'b'), entries: [...fullGrid(12, 5, 'b').entries, ...straysOf] },
+      stash: tabs(tabCount),
+      ...extra,
+    }));
+
+    // Grids full: currency files into its Crafting Stash slot (as far as it has room), maps into the Map Stash.
+    const a = normalizeCharacterReport(raw(2, { currencyStash: { scrap: CURRENCY_STASH_MAX - 10 } }))!;
+    expect(a.lost).toEqual([]);
+    expect(a.character.currencyStash).toEqual({ scrap: CURRENCY_STASH_MAX, kindling: 12 });
+    expect(a.character.mapStash.map((m) => m.uid)).toEqual(['m-stray']);
+    // The 20 Forge Scrap the full slot could not take opened a Recovered tab.
+    expect(a.character.stash.map((t) => t.name)).toEqual(['T0', 'T1', 'Recovered']);
+    expect(a.character.stash[2].grid.entries.map((e) => e.item)).toEqual([{ kind: 'currency', uid: 'sc', currencyId: 'scrap', count: 20 }]);
+
+    // Everything full, every tab in use, a full Map Stash and full slots: only then is an item lost, and reported.
+    const maps = Array.from({ length: MAP_STASH_CAPACITY }, (_, i) => map('ironColiseum', 2, { uid: `ms${i}` }));
+    const b = normalizeCharacterReport(raw(MAX_STASH_TABS, { mapStash: maps, currencyStash: { scrap: CURRENCY_STASH_MAX } }))!;
+    expect(b.character.stash).toHaveLength(MAX_STASH_TABS);
+    expect(b.character.currencyStash).toEqual({ scrap: CURRENCY_STASH_MAX, kindling: 12 });
+    expect(b.lost.map((i) => i.uid).sort()).toEqual(['m-stray', 'sc']);
+    expect(normalizeCharacter(raw(MAX_STASH_TABS))).toEqual(normalizeCharacterReport(raw(MAX_STASH_TABS))!.character);
+    // A normal save loses nothing.
+    expect(normalizeCharacterReport(JSON.parse(JSON.stringify(livedIn())))!.lost).toEqual([]);
+    expect(normalizeCharacterReport('not a character')).toBeNull();
   });
 
   it('normalises uniques to their fixed mods', () => {

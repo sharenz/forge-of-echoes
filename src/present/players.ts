@@ -5,13 +5,18 @@
 // for allies, a name plate with a small life bar. The local player gets a subtle warm ground ring instead, and a
 // thin warm-white outline (flat colour: unlit, never bloomed) while she stands inside a danger telegraph or a fire
 // pool — exactly where lights, rims and blasts pile up — so her silhouette survives the brightest moments of a
-// fight and she sees at a glance that she is standing in it.
+// fight and she sees at a glance that she is standing in it (the bestiary's lanes and choir bands count by their
+// real shape: src/sim/area-geometry.ts areaContains).
+// Debuffs (debuffs.ts) ride on every player: overlays, the chilled / frozen tint on her body and, while frozen, her
+// pose held exactly where the ice caught her.
 // Party colours come from party.ts (stable per name across clients and zones), recomputed when the roster changes.
 import type { SkillId } from '../contracts/content';
 import type { AreaView, Dir4, PlayerView } from '../contracts/sim';
 import type { RGB } from '../contracts/render';
+import { areaContains } from '../sim/area-geometry';
 import { C } from './colors';
 import type { FrameCtx } from './context';
+import { findDebuff, type DebuffPainter } from './debuffs';
 import { facingFromVector, spriteDir } from './direction';
 import { approach, clamp, clamp01, hash1, TAU } from './math';
 import type { Pen } from './pen';
@@ -32,16 +37,13 @@ const DANGER_OUTLINE: RGB = [1, 0.86, 0.7];
 /** Slack (world units) around a danger area inside which her outline shows: her body, not just her feet. */
 const DANGER_SLACK = 5;
 
-/** Is (x, y) inside a telegraph or fire pool that hurts players? */
+/** Is (x, y) inside a telegraph, a hazard or a fire pool that hurts or holds players? */
 export function inPlayerDanger(areas: readonly AreaView[], x: number, y: number): boolean {
   for (let k = 0; k < areas.length; k++) {
     const a = areas[k];
     const kind = a.kind;
     if (kind === 'fireTrail' || kind === 'heraldAura') continue;
-    const dx = a.x - x;
-    const dy = a.y - y;
-    const r = a.radius + DANGER_SLACK;
-    if (dx * dx + dy * dy <= r * r) return true;
+    if (areaContains(a, x, y, DANGER_SLACK)) return true;
   }
   return false;
 }
@@ -74,6 +76,10 @@ interface PlayerState {
   lastY: number;
   speed: number;
   partyIndex: number;
+  /** Pose held while frozen (the ice caught her mid-motion). */
+  heldId: string;
+  heldFrame: number;
+  frozen: boolean;
 }
 
 export interface PlayerHooks {
@@ -90,12 +96,13 @@ export class PlayerPainter {
   /** Rendered positions of players this frame (by id) for other systems (indicators, fx anchors). */
   readonly pos = new Map<number, { x: number; y: number; tipX: number; tipY: number }>();
 
-  constructor(private readonly tips: WandTips, private readonly hooks: PlayerHooks) {}
+  constructor(private readonly tips: WandTips, private readonly hooks: PlayerHooks, private readonly debuffs: DebuffPainter | null = null) {}
 
   reset(): void {
     this.states.clear();
     this.pos.clear();
     this.roster.length = 0;
+    this.debuffs?.reset();
   }
 
   private state(p: PlayerView, x: number, y: number): PlayerState {
@@ -103,7 +110,7 @@ export class PlayerPainter {
     if (!s) {
       s = {
         id: p.id, facing: p.facing, runPhase: hash1(p.id) * 6, level: p.level, release: 0, releaseSkill: null, lastX: x, lastY: y,
-        speed: 0, partyIndex: 0,
+        speed: 0, partyIndex: 0, heldId: SPRITE_IDS.idle[0], heldFrame: 0, frozen: false,
       };
       this.states.set(p.id, s);
     }
@@ -175,9 +182,11 @@ export class PlayerPainter {
       s.level = p.level;
       if (s.release > 0) s.release = Math.max(0, s.release - dt);
 
-      // Facing: aim while casting (or just released), velocity while moving.
+      // Facing: aim while casting (or just released), velocity while moving. Frozen: held with her pose (the sim
+      // holds a cast in progress while the aim keeps following the cursor; the ice block must not mirror).
+      const frozen = !p.dead && findDebuff(p.debuffs, 'frozen') !== null;
       const casting = p.anim === 'cast' || s.release > 0 || p.anim === 'dash';
-      if (!p.dead) {
+      if (!p.dead && !frozen) {
         if (casting) s.facing = facingFromVector(p.aimX - x, p.aimY - y, s.facing);
         else if (s.speed > 8) s.facing = facingFromVector(mvx, mvy, s.facing);
       }
@@ -226,6 +235,18 @@ export class PlayerPainter {
         }
       }
 
+      // Frozen: the ice holds her exactly as it caught her (no stride, no breathing, no cast frames, no turning).
+      if (frozen) {
+        if (!s.frozen) {
+          s.heldId = id;
+          s.heldFrame = frame;
+        }
+        id = s.heldId;
+        frame = s.heldFrame;
+      }
+      s.frozen = frozen;
+      const cold = this.debuffs ? this.debuffs.update(pen, f, p, x, y) : null;
+
       // Ground: shadow and identity ring.
       const so = pen.sprite('shadow');
       so.scaleX = 1.15;
@@ -267,8 +288,9 @@ export class PlayerPainter {
         c[1] = 0.58;
         c[2] = 0.62;
         o.tint = c;
-      }
+      } else if (cold) o.tint = cold;
       r.sprite(id, frame, x, y, o);
+      this.debuffs?.draw(pen, f, p, x, y, flip, local);
 
       // Wand tip ember.
       const tip = this.tips.tip(id, frame, flip, this.tipOut);
@@ -365,6 +387,7 @@ export class PlayerPainter {
         if (!players.some((p) => p.id === id)) {
           this.states.delete(id);
           this.pos.delete(id);
+          this.debuffs?.forget(id);
         }
       }
     }

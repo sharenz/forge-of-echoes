@@ -25,6 +25,22 @@
 //     hideout. Only a click on none of them is the basic attack (and it holds until the button is released). Hover
 //     shows the hand cursor and the presenter's highlight (hoverDropId / hoverPropId); the item being walked to
 //     stays highlighted.
+//   • Special stash tabs (GAME_SPEC §12): UiState.stashTab is a normal tab index or 'maps' | 'currency' |
+//     'mapCurrency' (setStashTab validates; a character update keeps a special tab and clamps a normal one). While the
+//     stash panel is open (hideouts only) quickMove(uid, count?) sends the open tab as its stashTab, so a Ctrl-click
+//     files a backpack map into the Map Stash / a currency stack into its Crafting Stash slot, and a slot
+//     ("cstash:<id>") or a Map Stash map comes back to the backpack; `count` (Shift+Ctrl-click: 1) is a partial
+//     withdrawal. moveItem(uid, to, count?) takes { kind: 'currencyStash' | 'mapStash' } and partial stacks too. Both
+//     are checked and predicted with the local rules (a count must be a whole 1..CURRENCY_STASH_MAX).
+//     depositAllCurrency() is predicted and toasts the server's "Stored N currency…" answer (hideouts only). A slot
+//     arms like any currency (armCurrency('cstash:<id>')): crafting draws from the slot, and the armed slot disarms
+//     once it is empty. dropItem refuses a slot locally; a Map Stash map drops like a stashed item.
+//   • Debuffs (GAME_SPEC §13): HudState.debuffs is a copy of the local PlayerView.debuffs (the replica's predicted
+//     timeline) at the HUD rate — seconds, timers within their duration, one card per debuff, empty while dead and
+//     after a zone change. Every 'events' batch also goes to ClientWorld.noteEvents (her chain-hook drags), even
+//     while the page is hidden.
+//   • Music: the map's theme colours the map / boss tracks (src/audio setMusicTheme) from every zone entry
+//     (music.ts musicThemeFor; hideouts and the title play the plain tracks).
 //   • Items: dropItem(uid) → `dropItem` (shown gone at once where the server allows it). The crafting bench is a UI
 //     selection (benchItemUid, cleared when the item leaves the character); benchCraft / benchClear → commands on
 //     it (hideout only). The display rules (store.rules) lock your trade offer's items like the server

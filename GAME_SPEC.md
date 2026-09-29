@@ -7,7 +7,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 
 | Question | Decision |
 |---|---|
-| Waves per map | **6.** Lieutenant (Ashbound Herald) on wave 3, boss (Cinder Matriarch) on wave 6. Killing the boss clears the map; the remaining monsters crumble to ash. |
+| Waves per map | **6.** A lieutenant on wave 3 and a boss on wave 6, both from the map type's own roster (§14): Ashbound Herald / Cinder Matriarch (Ashen Forge), Bone Chorister / The Hollow Warden (Rimed Ossuary), The Chainmaster / Varkus, the Iron Champion (Iron Coliseum). Killing the boss clears the map; the remaining monsters crumble to ash and every player debuff is lifted. |
 | Flask belt | **4 slots**, keys `1`–`4`. |
 | Fifth damage type | **void** (purple). |
 | Damage types | **Mechanical.** Monster and player resistances exist (capped at 75%). Ailments: fire → **ignite** (burning DoT), cold → **chill** (30% slow), lightning → **shock** (+20% damage taken). |
@@ -18,7 +18,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Audio | **Procedural WebAudio** (synthesised SFX and music), no audio files. |
 | UI | DOM + Preact over the canvas, with the 12/14/17/25 type scale enforced. Fonts: Cinzel (titles) and Alegreya Sans (text). |
 | Online | **Online-only, server-authoritative** (see §11). No offline or single-player mode: solo play is a party of one on the server. |
-| Trading | None yet. |
+| Trading | Direct, atomic player-to-player trades (§12). No market yet (§15 is planned). |
 | Persistence | Server-side SQLite (`node:sqlite`). Accounts with username and password. `localStorage` holds only the session token and client settings. |
 | Pickup | **Equipment is picked up by clicking** its label or sprite; the character walks there first if it's out of reach. Currency, flasks and maps are auto-collected by walking over them. Echo motes (XP orbs) are magnetised Vampire-Survivors style. |
 | Aiming | Mouse aim. `LMB` holds the basic attack. `T` toggles auto-attack (the basic attack targets the nearest enemy near the cursor). |
@@ -37,7 +37,8 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | `I` / `C` / `K` | Inventory / character / skills |
 | `Esc` | Close the top panel, or open the menu (pauses in maps) |
 | `Alt` (hold) | Affix tiers, roll ranges and comparison with equipped items |
-| `Ctrl`/`⌘`+click | Quick-move |
+| `Ctrl`/`⌘`+click | Quick-move (a Crafting Stash slot gives a stack) |
+| `Shift`+`Ctrl`/`⌘`+click | Take exactly 1 from a Crafting Stash slot; gear or a map in the stash goes onto the Crafting Bench |
 | `RMB` on currency | Arm the currency, then `LMB` an item to apply it (`Esc`/`RMB` cancels) |
 | `T` | Toggle auto-attack |
 | Click a hideout object | Map device / stash / merchant (walk-up not required) |
@@ -49,8 +50,9 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
    - **Map Device:** the map slot, a summary panel and an "Activate" button that opens the portal.
    - **Stash:** tabs; opens alongside the inventory.
    - **Rook the merchant:** maps, flasks and gambling.
+   - **Crafting Bench:** an anvil workbench with a coal forge (§12).
    - **Training dummy:** shows your damage numbers.
-   - Braziers, an anvil and banners for atmosphere.
+   - Braziers and banners for atmosphere.
 3. **Enter the portal → map run:**
    - A 3 s "Tell" preview announces each wave's families, then the wave spawns.
    - Waves last 60 s or until cleared. They can stack.
@@ -307,10 +309,12 @@ Reward-only mods (Reward Ink):
 | Cinder Spitter | artillery | 7 | 18 | 40 | 8 | 5 | 2 | Keeps 140–220 away; spits every 2.4 s (projectile speed 150, visible arc). |
 | Rift Stalker | hunter | 8 | 40 | 60 | 14 | 8 | 3 | Every 4 s: a 0.6 s landing telegraph (radius 26), then a leap. |
 | Ironhide Brute | bruiser | 12 | 120 | 34 | 22 | 14 | 4 | 0.9 s windup slam telegraph (radius 42). 40% physical reduction. |
-| **Ashbound Herald** | lieutenant, wave 3 | 14 | 1200 | 38 | 16 | 150 | – | **Aura** (radius 110): allies +30% speed and damage. Every 6 s summons 6 ashlings. Every 3 s fires 5 orbs in a spread. |
-| **Cinder Matriarch** | boss, wave 6 | 24 | 7000 | 42 | 26 | 1000 | – | 3 phases at 100/66/33% life. **Orb spiral** (all phases). **Slam** (telegraph radius 70). **Meteor rain** (phase 2+: 6–10 telegraphs, then fire pools). **Charge** (phase 3: telegraphed line). Phase 2+ summons skitters. Phase changes are marked by a roar and a short flash. |
+| **Ashbound Herald** | lieutenant, wave 3 | 14 | 1800 | 50 | 16 | 150 | – | **Aura** (radius 110): allies +30% speed and damage. Keeps 90–140 from the player. Every 6 s summons 6 ashlings. Every 3 s fires 5 void orbs in a spread (they wither). |
+| **Cinder Matriarch** | boss, wave 6 | 24 | 4800 | 42 | 26 | 1000 | – | 3 phases at 100/66/33% life. **Orb spiral** (all phases, 0.5× damage per orb). **Slam** (telegraph radius 70, 1.8×). **Meteor rain** (phase 2+: 6–10 telegraphs, 1.2×, then fire pools). **Charge** (phase 3: telegraphed line). Phase 2+ summons skitters. Phase changes are marked by a roar and a short flash. |
 
-All life and damage values are then multiplied by `MonsterScaling`.
+This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are in §14. All life and damage values are then multiplied by `MonsterScaling`.
+
+**Balance pass (implemented).** The lieutenant and boss lives above are the result of the cross-theme balance pass (they were 1200 and 7000). With the final wave's horde on the field, boss fights take about 45–95 s solo from Tier 1 to Tier 6 (18–34 s against the boss alone), and a new character clears Tier 1 of every map type (`tests/game-progression/balance-*.test.ts`).
 
 **Contact damage:**
 - Each monster type has an attack cooldown.
@@ -544,56 +548,63 @@ The client also runs the shared rules locally, for **display only**: tooltips, c
 - **Closing:** either side can cancel. A trade also cancels on disconnect.
 - Items in an open trade stay in your backpack, but they are locked (not movable) until the trade closes.
 
-**Special stash tabs** (every character has all three, in addition to the normal tabs; they don't count towards `MAX_STASH_TABS`).
+**Special stash tabs** (every character has all three, in addition to the normal tabs; they don't count towards `MAX_STASH_TABS`). They are part of the stash: usable in any hideout (your own stash), nowhere else. They appear as three icon tabs after the normal tabs.
 
 **Map Stash.** Holds up to 400 maps.
 - Maps are shown grouped by tier (T1–T15). Each tier shows its count and expands into a list sectioned by map base.
 - Each map is shown with its icon, rarity colour, mod count and a corrupted marker, plus a full tooltip.
-- **Depositing:** drag or Ctrl-click a map from the backpack. It files itself automatically.
-- **Withdrawing:** drag to the backpack or the map device, or Ctrl-click (to the backpack; to the map device while its panel is open).
+- **Depositing:** drag or Ctrl-click a map from the backpack or a stash tab. It files itself automatically. With the Map Stash tab open, Ctrl-clicking the map in the map device files it too.
+- **Withdrawing:** drag to the backpack, a stash tab or the map device, or Ctrl-click (to the backpack; into the map device while its panel is open). The map device panel also lists the Map Stash as a picker, so a map can be loaded without opening the stash. A map already in the device goes back into the Map Stash.
+- Map currencies can be used on maps while they sit in the Map Stash.
 
-**Crafting Stash — Equipment.** One fixed, labelled slot per equipment currency: Kindling, Scrap, Reforge, the 5 Essences, Catalyst, Solvent, Seal and Fracture Core.
+**Crafting Stash — Equipment.** One fixed, labelled slot per equipment currency: Kindling, Scrap, Reforge, the 5 Essences, Catalyst, Solvent, Seal and Fracture Core. Empty slots stay visible, ghosted.
 - Each slot holds up to 5,000 of its currency.
-- **Depositing:** dropping or Ctrl-clicking any currency stack of that kind files it into its slot, wherever you drop it. A "Deposit all" button moves every currency in the backpack.
-- **Withdrawing:**
+- **Depositing:** dropping or Ctrl-clicking any currency stack files it into its slot, wherever you drop it (either Crafting Stash tab accepts every currency). What doesn't fit in a full slot stays where it was. A **"Deposit all"** button moves every currency stack in the backpack (stacks in an open trade offer stay).
+- **Withdrawing** never pushes another item out: dropped on an occupied cell, it tops up a matching stack there or lands anywhere free in that grid.
 
   | Action | Takes |
   |---|---|
-  | Drag / Ctrl-click | A full stack (up to the backpack stack size of 40) |
+  | Drag / Ctrl-click | A full stack (up to the backpack stack size of 40, 20 for Fracture Core), or as much as the backpack can still hold |
   | Shift+Ctrl-click | Exactly 1 |
 
 - **Crafting straight from the stash:** right-click a slot to arm that currency, then left-click an item in the backpack, the stash or equipment. Each use draws from the slot. This works wherever the stash works (any hideout).
+- **Paying:** the Crafting Bench takes its price from the backpack first, then from the Crafting Stash; Rook from the backpack, then the normal stash tabs, then the Crafting Stash. Items the server hands back (a public drop returned after a server update, a refunded map) go to the backpack, then the Crafting Stash (currency) or the Map Stash (maps), then the normal tabs.
+- A slot can't be dropped on the floor or discarded as a whole ("Take currency out of the Crafting Stash first.").
 
-**Crafting Stash — Maps.** The same, for map currencies: Map Dust, Threat Glyph, Reward Ink and Void Needle.
+**Crafting Stash — Maps.** The same, for map currencies: Map Dust, Threat Glyph, Reward Ink and Void Needle (a list with each currency's effect).
 
 **Model.**
-- `CharacterSave.currencyStash` (count per currency) and `CharacterSave.mapStash` (list of maps). Old saves normalise to empty.
+- `CharacterSave.currencyStash` (count per currency) and `CharacterSave.mapStash` (list of maps). Old saves normalise to empty; loading clamps counts to 0–5,000, drops unknown currencies, repairs maps and moves anything that doesn't belong (non-maps, maps past 400) to the backpack or the stash instead of losing it.
 - A currency slot is addressed by the synthetic uid `cstash:<currencyId>`, like `belt:<i>`.
 - New item locations: `currencyStash`, `mapStash`.
-- `moveItem` gains an optional `count`, for splits and single withdrawals.
-- `quickMove`'s stash context accepts `'currency' | 'maps'`.
+- `moveItem` gains an optional `count`, for splits and single withdrawals (it also splits normal stacks and limits flask charges loaded into the belt).
+- `quickMove`'s stash context accepts `'currency' | 'mapCurrency' | 'maps'`.
 - Stash search covers the special tabs too.
 
 ## 13. Player debuffs
 
 Monsters and bosses apply debuffs to players. Each debuff has a clear visual on the player, an icon with a timer in the HUD, and counterplay.
 
-| Debuff | Effect | Typical sources | Counterplay |
+| Debuff | Effect | Sources (implemented) | Counterplay |
 |---|---|---|---|
-| **Chilled** (cold) | −30% move and cast speed, 2 s. Refreshes; doesn't stack | Rimed Ossuary monsters, frost projectiles | Cold resistance shortens it |
-| **Frozen** (cold) | Can't move or act, 0.8 s, then **3 s immunity** to freeze. Only from **telegraphed** attacks | Hollow Warden's Ice Prison, Glacial Wisp detonation at point blank | Dodge the telegraph |
-| **Rooted** | Can't move, but can still cast, 1.4 s | Frost Weaver webs, Chain Thrall grapple, Chainmaster hook, tar pools | **Rift Step breaks it** |
-| **Burning** (fire) | Fire damage over 3 s (40% of the triggering hit). Re-applying refreshes the duration and keeps the strongest | Ashen Forge fire hits, fire pools, eruptions | The Life flask removes it |
-| **Bleeding** (physical) | 20% of the hit over 4 s; **×2 while moving**; stacks up to 3 | Pit Hounds, Crossbow bolts, Varkus | The Life flask removes it |
+| **Chilled** (cold) | −30% move and cast speed, 2 s. Refreshes; doesn't stack | Rimeshade touches, Glacial Wisp bursts, Ossuary Golem frost slams, the Choir Wave, the Hollow Warden's novas, spikes and blizzards | Cold resistance shortens it |
+| **Frozen** (cold) | Can't move, cast or attack (a cast in progress holds; flasks still work), 0.8 s, then **3 s immunity** to freeze: a freeze during the immunity is only a chill. Only from **telegraphed** attacks | The Hollow Warden's Ice Prison, a Glacial Wisp bursting at point blank | Dodge the telegraph (walk out of the prison, step away from the wisp); Cold resistance shortens it |
+| **Rooted** | Can't move on your own, can still cast, 1.4 s. Roots don't chain: while rooted and for **3 s** after a root ends, new roots are ignored (a chain hook still drags) | Frost Weaver web shots, chain hooks (Chain Thralls, the Chainmaster), tar pools | **Rift Step breaks it** |
+| **Burning** (fire) | Fire damage over 3 s (40% of the triggering hit). Re-applying refreshes the duration and keeps the strongest | Cinder Spitter lobs, the Matriarch's orbs, fire pools, Volcanic eruptions | The Life flask removes it; Fire resistance shortens it |
+| **Bleeding** (physical) | 20% of the hit over 4 s; **×2 while moving**; stacks up to 3 | Pit Hound bites, crossbow bolts, the Chainmaster's whirling chains, Varkus's charge and whirlwind | The Life flask removes it |
 | **Shocked** (lightning) | +20% damage taken, 2 s | (future storm family) | Lightning resistance shortens it |
-| **Withered** (void) | −12% to all resistances per stack, 4 s; stacks up to 3 | Rift Stalkers, void orbs of the Herald | The Focus flask removes it |
+| **Withered** (void) | −12% to all non-physical resistances per stack, 4 s (one shared timer); stacks up to 3 | Rift Stalker leaps, the Herald's void orbs | The Focus flask removes it |
 
 **Duration rules:**
-- Elemental durations are reduced by the matching resistance: `×(1 − res/2)`.
-- Cinder Ward halves every debuff duration while it's active.
-- Dead players lose all debuffs.
+- Durations of the elemental debuffs (chilled and frozen: cold, burning: fire, shocked: lightning) are reduced by the matching resistance: `×(1 − res/2)`. Withered, rooted and bleeding are not.
+- Cinder Ward makes every debuff run out twice as fast while it's active (its durations are halved).
+- Damage over time (burning, bleeding) was already mitigated by the hit that caused it: armour, resistances, evasion, the ward's reduction and invulnerability don't reduce it, and it can kill.
+- Dead players lose all debuffs, and every debuff is lifted when the boss falls (the map is cleared). A dropped connection keeps the character in place, debuffs and all, for the reconnect grace (20 s); a reconnect never cleanses.
+- Melee hits never freeze or root, and nothing applies a debuff to a player who is invulnerable (mid Rift Step).
 
-**Readability:** a debuff never comes from an invisible source. Every root and freeze comes from a projectile you can see or a telegraph you can read.
+**Chain hooks** drag the victim toward the thrower over 0.25 s (40 units for a Chain Thrall; the Chainmaster reels in from farther), at most 140 units, stopping at the first prop in the way. Client prediction replays the drag, so it doesn't rubber-band.
+
+**Readability:** a debuff never comes from an invisible source. Every root and freeze comes from a projectile you can see or a telegraph you can read. Each debuff has an overlay on the player (frost rime, an ice block, bone / web / chain / tar bindings, flames, blood drips, sparks, a void haze), an icon with a timer and stack count above the HUD's skill bar (hover for its effect and counterplay), a sound when it lands and a cleanse flash when it's removed. The map device readout lists each map type's **Afflictions**: which debuffs its monsters inflict, from what, and the counter.
 
 ## 14. Bestiary: a family, lieutenant and boss per map type
 
@@ -602,8 +613,8 @@ Each map base has its own theme, monster family, lieutenant (wave 3) and boss (f
 ### Ashen Forge (fire): existing roster
 
 The roster (Ashling, Ember Skitter, Cinder Spitter, Rift Stalker, Ironhide Brute, **Ashbound Herald**, **Cinder Matriarch**) now applies these debuffs:
-- Burning from Cinder Spitter lobs, Matriarch orbs and fire pools.
-- Withered from Rift Stalker leaps.
+- Burning from Cinder Spitter lobs, Matriarch orbs, fire pools and Volcanic eruptions.
+- Withered from Rift Stalker leaps and the Herald's void orbs.
 
 ### Rimed Ossuary (cold, bone)
 
@@ -614,14 +625,14 @@ The roster (Ashling, Ember Skitter, Cinder Spitter, Rift Stalker, Ironhide Brute
 | **Frost Weaver** | artillery | A spindly bone spider. Keeps its distance and fires a slow **web shot** that roots on hit. Visible, and it can be dodged. |
 | **Glacial Wisp** | fast | A floating ice shard that rushes you, pulses for 0.7 s (telegraph ring), then bursts: chills everyone in the radius, and freezes them if they're within point blank at the burst. |
 | **Ossuary Golem** | bruiser | Big bone-and-ice construct. Telegraphed frost slam that chills. |
-| **Bone Chorister** (lieutenant) | – | Robed singer. Its aura makes allies +25% faster. Every 7 s it raises Bone Thralls from nearby corpses (or from the ground). Every 4 s a **Choir Wave**: 2 expanding frost rings you walk through at the gaps (chill on touch). |
+| **Bone Chorister** (lieutenant) | – | Robed singer that keeps 100–165 away. Its aura (radius 110) makes allies +25% faster. Every 9 s it raises Bone Thralls from up to 4 nearby corpses (topped up from the ground to at least 2), never while 160+ monsters are alive. Every 4 s a **Choir Wave**: 2 expanding frost rings with 3 gaps each that you walk through (chill on touch). |
 | **The Hollow Warden** (boss) | – | Crowned rime-lich with a frozen lantern. See below. |
 
 The Hollow Warden's attacks:
-- **Frost Nova rings** (all phases): telegraphed.
+- **Frost Nova rings** (all phases): telegraphed (she channels 1.2 s), chill at the burst. Her lantern swing chills anyone in reach.
 - **Glacial Spikes** (phase 2+): lines of ice spikes erupting in sequence toward players. Chill, and heavy damage.
 - **Ice Prison** (phase 2+): a shrinking ring around a player. If they are still inside when it closes they are **Frozen**; walking out breaks it.
-- **Summons** Rimeshades.
+- **Summons** Rimeshades: 2 / 2 / 3 every 14 / 13 / 12 s by phase.
 - **Phase 3 — Blizzard:** 3 slowly drifting frost storm zones that chill anyone inside.
 
 ### Iron Coliseum (physical, bleed, arena)
@@ -637,23 +648,66 @@ The Hollow Warden's attacks:
 | **Varkus, the Iron Champion** (boss) | – | Gladiator with a greatsword and a shield. See below. |
 
 Varkus's attacks:
-- **Charge** (a telegraphed line; knockback plus Bleeding).
+- **Charge** (a telegraphed lane that stays drawn for the whole dash; he dashes exactly its length and stops at a pillar; knockback plus Bleeding).
 - **Whirlwind** (phase 2+): moves while spinning and trails bleed.
-- **Execution Mark:** marks a player, then after 3 s makes a heavy leap strike at the marked spot.
+- **Execution Mark:** marks a player (the mark follows them for 2 s, then locks), then after 3 s makes a heavy leap strike at the marked spot. No charge or whirlwind starts while a mark is pending.
 - **Crowd's Favour** (phase 3): the arena floor raises spike tiles in a pattern with telegraphs.
 - **Summons** Pit Hounds.
+- Only the charge and the whirlwind bleed; his sword, the mark and the spikes deal plain physical damage. Nothing of his starts on a rooted or frozen player, so a root never takes a dodge away.
 
 ### Scaling and loot
 
-The new monsters use the same scaling, packs, magic and rare mods, XP and loot rules as the existing ones.
+The new monsters use the same scaling, packs, magic and rare mods, XP and loot rules as the existing ones. Base numbers as implemented (before `MonsterScaling`; the Rimed Ossuary's +20% monster life comes on top, which is why its boss starts lower):
 
-| Kind | Life | Damage | XP |
-|---|---|---|---|
-| Swarmers | ≈ Ashling | ≈ Ashling | ≈ Ashling |
-| Bruisers | ≈ Ironhide Brute | ≈ Ironhide Brute | ≈ Ironhide Brute |
-| Lieutenants | ≈ Herald | ≈ Herald | ≈ Herald |
-| Bosses | ≈ Matriarch (× tier easing) | ≈ Matriarch | ≈ Matriarch |
+| Rimed Ossuary | Life | Speed | Damage | XP | Iron Coliseum | Life | Speed | Damage | XP |
+|---|---|---|---|---|---|---|---|---|---|
+| Bone Thrall | 21 | 48 | 6 | 3 | Pit Hound | 18 | 64 | 4 | 3 |
+| Rimeshade | 32 | 56 | 12 | 7 | Chain Thrall | 36 | 52 | 9 | 7 |
+| Frost Weaver | 18 | 40 | 7 | 5 | Iron Crossbowman | 20 | 40 | 6 | 5 |
+| Glacial Wisp | 12 | 82 | 8 | 3 | Shieldbearer | 100 | 32 | 18 | 14 |
+| Ossuary Golem | 114 | 32 | 22 | 14 | Tar Slinger | 24 | 38 | 7 | 6 |
+| **Bone Chorister** | 1800 | 36 | 16 | 150 | **The Chainmaster** | 1800 | 40 | 16 | 150 |
+| **The Hollow Warden** | 4000 | 60 | 26 | 1000 | **Varkus, the Iron Champion** | 4800 | 46 | 26 | 1000 |
+
+Lieutenants match the Herald (850) and bosses the Matriarch (1300) after the balance pass (§8). The three map types clear in about the same time at every tier (within ±7% of each other in the balance ladder); the Coliseum hits a little harder, since its physical damage ignores the elemental resistances characters stack.
 
 ### Later
 
 More map bases, each with its own roster, will follow the same pattern: Drowned Archive, Grave Orchard and a Storm family with the Shocked debuff.
+
+## 15. Auction house: the Echo Exchange
+
+**Status: planned — not built yet.** Nothing below exists in the game today.
+
+A server-wide market where players list items for a price and other players buy them.
+
+**Access.** Every hideout has an **Exchange Board**, a ledger desk with a notice board. Clicking it opens the **Exchange** panel. It can be used in any hideout.
+
+**Selling (listing).**
+- **Placing an item:** drag an item (or a currency or flask stack) from your backpack, a stash tab or the Crafting Stash into the "Sell" slot.
+  - Stacks can be listed partially: choose the amount.
+  - Items in an open trade or on the crafting bench can't be listed.
+- **Setting the price:** one currency type (any currency) and an amount between 1 and 5,000.
+  - The panel shows the lowest listed prices of similar items (same base or currency) as a hint.
+- **Limits:** up to **20 active listings** per character. A listing lasts **48 hours**. Listing is free.
+- **Escrow:** a listed item leaves your character and is held by the server.
+- **Cancelling** returns the item to your backpack, or to your Collection if there's no room.
+- **Expiry:** expired listings return to your **Collection**.
+
+**Buying.**
+- **Browsing:**
+  - **Search:** the same query syntax as the stash search.
+  - **Filters:** item kind (equipment, map, currency, flask), item class, rarity, minimum item level, map tier, and maximum price in a chosen currency.
+  - **Sorting:** price, newest, item level.
+  - Results are paged (50 per page). Each shows the item card with a full tooltip, Alt-compare against your equipment, the seller's name, the price and the time left.
+- **Paying:** pay from your backpack and then your Crafting Stash. The item goes into your backpack; if there's no room, the purchase fails with "Make room first."
+- **Rules:** you can't buy your own listings. If two players buy the same listing, the first wins and the second gets "Already sold."
+- **Proceeds:** the seller's currency goes into their **Collection**. If they're online they get a toast and a chat line ("Your Blazing Ashwood Wand sold for 12 Forge Scrap"). "Collect all" moves the currency into the Crafting Stash and returned items into the backpack.
+
+**Server authority and safety.**
+- Every listing, buy, cancel and collect runs in a single SQLite transaction. Items are re-minted with fresh uids on the buyer's side. Both characters are saved in the same transaction.
+- Rate limits apply to searches and to actions.
+- Listings survive restarts.
+- Tests must prove item and currency conservation across concurrent buys, cancels, expiries and restarts.
+
+**Crafting balance note.** Buying finished items can undercut crafting (see `CONCEPTS.md`). Bench-crafted affixes and fractured affixes stay allowed on listed items. If the market floods the game with top items, the first lever is a small listing fee in Scrap, so it acts as a currency sink.

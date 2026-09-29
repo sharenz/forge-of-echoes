@@ -3,6 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
+//                        [--only wave5] [--smoke 30] [--lieutenant]
 //
 // --prod tests the production bundle instead of the Vite dev server: `vite build` (with VITE_FOE_DEBUG=1, so the
 // window.__foe hooks this script drives are compiled in) into a temp dir, served by the game server itself
@@ -28,6 +29,23 @@
 //      the portal keeps working afterwards (2 → 1).
 //  13. A stale bundle after a deploy (snapshots in a newer format): one automatic reload back into the game; when the
 //      reload does not help, the page explains instead of reloading again, and "Try again" brings the player back.
+// Wave 5 (GAME_SPEC §12 special stash tabs, §13 debuffs, §14 bestiary; `--only wave5` runs just these, A alone):
+//  14. A takes a free Rimed Ossuary and Iron Coliseum map from Rook and Ctrl-clicks every map into the Map Stash tab.
+//  15. Crafting Stash: "Deposit all" (every backpack currency, conserved), Shift+Ctrl-click takes exactly 1 Scrap,
+//      Ctrl-click a full stack.
+//  16. Crafting from the Crafting Stash: right-click a slot, left-click the equipped wand (one use from the slot).
+//  17. For the Ossuary, then the Coliseum: the map device's Map Stash picker loads the map, Activate, click the portal;
+//      the autopilot baits the map's debuff dealers (bot option `bait`: it stands in reach of Frost Weavers and Glacial
+//      Wisps / Chain Thralls, Tar Slingers and Crossbowmen without shooting them or dodging their shots) until the
+//      checks have what they need, then fights on to --smoke seconds. Asserted: only that map's roster appears (its
+//      tells too); Chilled (Ossuary) / Bleeding and Rooted (Coliseum) reach the HUD; at least one root or freeze lands,
+//      and every one comes from a visible source (a web / hook / tar glob passing her, or tar / an ice prison / a wisp
+//      burst under her, sampled every frame — GAME_SPEC §13); after each chain-hook drag her prediction agrees with the
+//      server's snapshot (no rubber band); the raw replica debuffs keep the PlayerDebuffView contract (ids, timers,
+//      stack caps, root sources); no errors. A fall before the checks are done goes back in through the portal. Then
+//      home. No debug fast path is needed: every wave draws from the map's own family (thralls from wave 2); the
+//      tables and constants these checks use are loaded from src/contracts and src/sim (tsx), never copied.
+//      --lieutenant fights on until wave 3's lieutenant shows up.
 // Asserts throughout: no page errors, console errors or unexpected console warnings (a malformed server message is a
 // warning), each client only ever sees its own loot or public drops (in snapshots AND drop/pickup events), portal
 // counts, zones and run summaries. Prints PASS/FAIL per step and exits 0 / 1.
@@ -47,6 +65,12 @@ const opt = (name, def) => {
 };
 const flag = (name) => args.includes(`--${name}`);
 const FIGHT_SECONDS = Number(opt('fight', '40'));
+/** --only wave5: skip the two-player core scenario (A alone plays the special stash tabs and both new map types). */
+const WAVE5_ONLY = opt('only', 'all') === 'wave5';
+/** Seconds of fighting in each new map type (longer while its family has not shown two kinds yet). */
+const SMOKE_SECONDS = Number(opt('smoke', '30'));
+/** --lieutenant: keep fighting each new map type until its lieutenant (wave 3) is on the field. */
+const WANT_LIEUTENANT = flag('lieutenant');
 const PROD = flag('prod');
 const [VW, VH] = opt('size', '1024x600').split('x').map(Number);
 const SHOTS = join(root, '.shots');
@@ -481,54 +505,11 @@ async function clickPortal(p) {
 // The scenario
 // ---------------------------------------------------------------------------------------------------------------
 
-async function main() {
-  const port = await freePort();
-  if (PROD) {
-    await step('vite build (production bundle, e2e hooks compiled in)', async () => {
-      staticDir = await buildClient();
-      return staticDir;
-    });
-  }
-  await step('start game server', async () => {
-    await startGameServer(port);
-    return `port ${port}`;
-  });
-  let base = '';
-  if (PROD) {
-    await step('production build served by the game server', async () => {
-      base = `http://127.0.0.1:${port}`;
-      const r = await fetch(base + '/');
-      const html = await r.text();
-      assert(r.ok && /<canvas|id="ui"|<script/i.test(html), `the server did not serve the built client (${r.status})`);
-      return `${base} (${staticDir})`;
-    });
-  } else {
-    await step('start Vite dev server', async () => {
-      base = await startVite(port);
-      return base;
-    });
-  }
+// ---------------------------------------------------------------------------------------------------------------
+// The core scenario (GAME_SPEC §11–§12): two players, party, trade, maps, deaths, reconnects, a server update
+// ---------------------------------------------------------------------------------------------------------------
 
-  browser = await chromium.launch({
-    headless: !flag('headed'),
-    args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
-  });
-  const ctxA = await browser.newContext({ viewport: { width: VW, height: VH } });
-  const ctxB = await browser.newContext({ viewport: { width: VW, height: VH } });
-  const A = new Player('A', await ctxA.newPage());
-  const B = new Player('B', await ctxB.newPage());
-  const suffix = String(Date.now() % 100000);
-  const nameA = `Ashveil${suffix}`.slice(0, 16);
-  const nameB = `Mirael${suffix}`.slice(0, 16);
-
-  await step('A registers, creates a character and enters the game (real UI)', async () => {
-    await registerAndPlay(A, base, `e2e_a_${suffix}`, 'emberpass-A1', nameA);
-    return nameA;
-  });
-  await step('B registers, creates a character and enters the game (real UI)', async () => {
-    await registerAndPlay(B, base, `e2e_b_${suffix}`, 'emberpass-B1', nameB);
-    return nameB;
-  });
+async function coreScenario({ A, B, nameA, nameB, port }) {
   await sleep(1500);
   await A.shot('01-hideout-A');
 
@@ -549,8 +530,6 @@ async function main() {
     return 'emberNova on slot 1 for both';
   });
 
-  const idA = await A.state('s => s.character.id');
-  const idB = await B.state('s => s.character.id');
 
   await step('A walks up to the map device and clicks it in the world', async () => {
     let at = await propOnScreen(A, 'mapDevice');
@@ -1177,6 +1156,681 @@ async function main() {
     assert(party === 2, `A lost the party across the reloads (${party} members)`);
     return `1 reload + resume; a second failure explained (no loop); "Try again" back in the ${zone}`;
   });
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Wave 5 (GAME_SPEC §12 special stash tabs, §13 player debuffs, §14 bestiary per map type), played by A alone
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * The frozen contract tables and sim constants the wave-5 checks use, loaded from the sources themselves (through
+ * tsx, like the server), so a table that grows (they are append-only) is never mislabelled here.
+ */
+let C = null;
+async function loadContracts() {
+  if (C) return C;
+  const { tsImport } = await import('tsx/esm/api');
+  const [content, sim, bestiary, constants] = await Promise.all([
+    tsImport('../src/contracts/content.ts', import.meta.url),
+    tsImport('../src/contracts/sim.ts', import.meta.url),
+    tsImport('../src/contracts/bestiary.ts', import.meta.url),
+    tsImport('../src/sim/constants.ts', import.meta.url),
+  ]);
+  C = {
+    monsterKinds: [...content.MONSTER_KINDS],
+    projectileKinds: [...sim.PROJECTILE_KINDS],
+    rosters: bestiary.THEME_ROSTER,
+    debuffIds: [...bestiary.PLAYER_DEBUFFS],
+    stackCaps: { bleeding: constants.BLEED_MAX_STACKS, withered: constants.WITHER_MAX_STACKS },
+    playerRadius: constants.PLAYER_RADIUS,
+    pullSteps: Math.round(constants.PULL_TIME * sim.SIM_HZ),
+  };
+  return C;
+}
+
+/**
+ * What each new map type must show in its smoke (GAME_SPEC §13–§14). `bait`: the kinds the autopilot stands in
+ * reach of (bot option `bait`: it never shoots them nor dodges their shots and hazards) until every debuff in
+ * `require` has reached the HUD and a root or freeze has been checked for fairness; after that it fights normally.
+ */
+const THEME_CHECKS = {
+  rimedOssuary: { name: 'Rimed Ossuary', tag: 'ossuary', bait: ['frostWeaver', 'glacialWisp'], require: ['chilled'] },
+  ironColiseum: {
+    name: 'Iron Coliseum', tag: 'coliseum', bait: ['chainThrall', 'tarSlinger', 'ironCrossbowman', 'chainmaster'], require: ['bleeding', 'rooted'],
+  },
+};
+/** Longest a map may take to show what THEME_CHECKS asks (s; the Coliseum's thralls come from wave 2). */
+const BAIT_BUDGET_SECONDS = 170;
+/**
+ * GAME_SPEC §13 "a debuff never comes from an invisible source": what may explain a root (by its RootSource; 'bone'
+ * or unknown accepts any of them) or a freeze — a projectile (see ROOT_PROJECTILE_REACH) or ground that covers where
+ * the server says it caught her (its radius + her body).
+ */
+const ROOT_EVIDENCE = { web: ['webShot'], chain: ['chainHook'], tar: ['tarPool', 'tarGlob'] };
+const ROOT_PROJECTILES = ['webShot', 'chainHook', 'tarGlob'];
+const ROOT_AREAS = ['tarPool'];
+const FREEZE_AREAS = ['icePrison', 'wispBurst'];
+/**
+ * A root projectile explains a root when it was drawn flying at her: its drawn path — each frame's segment from the
+ * older bracketing snapshot to the newer, carried on along its velocity for PROJECTILE_TAIL_S — passes this close to
+ * where the server says it caught her (contact is its radius + hers ≈ 12 units). The tail covers the last flight the
+ * replica never shows: it draws a projectile up to the last snapshot that still has it, and a congested link gets
+ * snapshots at 15 Hz or skips one (src/server/instance.ts sendSnapshots), so that snapshot can be ~0.15 s before the
+ * hit. Sideways the path must still run through her body. The page is sampled once per animation frame, and a
+ * software-rendered headless page (≈ 12 fps, with occasional 200–300 ms frames under load) skips flight a real display
+ * shows: each segment is also carried on over the time until the next sampled frame (at most PROJECTILE_UNSEEN_MAX_S).
+ */
+const ROOT_PROJECTILE_REACH = 20;
+const PROJECTILE_TAIL_S = 0.15;
+const PROJECTILE_UNSEEN_MAX_S = 0.5;
+/** Look-back before a root / freeze (ms), and how long after it the render-delayed source may still be drawn. */
+const FAIR_BEFORE_MS = 1500;
+const FAIR_AFTER_MS = 450;
+/** After her own 'pull': when her prediction must agree with the server's snapshot (ms), and how closely (units). */
+const PULL_CHECK_MS = 300;
+const PULL_AGREE_UNITS = 12;
+
+/** The character as the SERVER last sent it (predictions aside): what the assertions trust. */
+function serverCharacter(p) {
+  return p.eval(() => {
+    const ch = window.__foe.session?.character.authoritative;
+    if (!ch) return null;
+    const currency = {};
+    const maps = [];
+    for (const e of ch.backpack.entries) {
+      if (e.item.kind === 'currency') currency[e.item.currencyId] = (currency[e.item.currencyId] ?? 0) + e.item.count;
+      if (e.item.kind === 'map') maps.push({ uid: e.item.uid, baseId: e.item.baseId, tier: e.item.tier });
+    }
+    return {
+      currency,
+      maps,
+      currencyStash: { ...ch.currencyStash },
+      mapStash: ch.mapStash.map((m) => ({ uid: m.uid, baseId: m.baseId, tier: m.tier })),
+      mapDevice: ch.mapDevice ? { uid: ch.mapDevice.uid, baseId: ch.mapDevice.baseId, tier: ch.mapDevice.tier } : null,
+      wand: ch.equipment.mainHand
+        ? { uid: ch.equipment.mainHand.uid, history: JSON.stringify(ch.equipment.mainHand.history), last: ch.equipment.mainHand.history.at(-1) ?? '', stability: ch.equipment.mainHand.stability }
+        : null,
+    };
+  });
+}
+
+/** Wait until the server's character satisfies `fn(ch, arg)` (`fn` is sent to the page as source; `arg` as JSON). */
+async function waitServer(p, desc, fn, arg, timeout = 8000) {
+  const expr = `(() => { const ch = window.__foe.session?.character.authoritative; return !!ch && (${fn.toString()})(ch, ${JSON.stringify(arg ?? null)}); })()`;
+  try {
+    await p.page.waitForFunction(expr, undefined, { timeout, polling: 100 });
+  } catch {
+    throw new Error(`${p.label}: timed out waiting for ${desc}`);
+  }
+}
+
+/** Currency per id: backpack + Crafting Stash (what a deposit / withdrawal must conserve). */
+function currencyTotals(c) {
+  const out = {};
+  for (const [id, n] of Object.entries(c.currency)) out[id] = (out[id] ?? 0) + n;
+  for (const [id, n] of Object.entries(c.currencyStash)) out[id] = (out[id] ?? 0) + (n ?? 0);
+  return out;
+}
+
+/** Walk to the stash, click it in the world and show a special tab (real UI: the tab button). */
+async function openStashTab(p, tab) {
+  const open = await p.state('s => s.openPanels.includes("stash")');
+  if (!open) {
+    await closePanels(p);
+    const at = await walkUntilOnScreen(p, () => propOnScreen(p, 'stash', 12), 'the stash');
+    await clickWorld(p, at, 'the stash');
+    await p.waitFor('the stash panel', () => window.__foe.store.get().openPanels.includes('stash'), undefined, 5000);
+  }
+  await p.page.click(`.fe-stab--${tab}`);
+  await p.waitFor(`the ${tab} tab`, (t) => window.__foe.store.get().stashTab === t, tab, 3000);
+  await p.page.waitForSelector(tab === 'maps' ? '.fe-mstash--stash' : `.fe-cstash--${tab}`, { timeout: 3000 });
+}
+
+/**
+ * In-page, every animation frame (so a 0.8 s freeze or a fast bolt is never missed between samples): what the map
+ * shows (monsters, hostile projectiles and hazards, counted once per entity), the local player's raw replica
+ * debuffs checked against the contract, the HUD's debuffs, the wave tells — and the two live checks of GAME_SPEC §13:
+ *   • fairness: every 'debuff' event rooting / freezing her (the server's position of the hit) is explained by a
+ *     root projectile passing within reach or root / freeze ground under her, drawn in the 1.5 s before it (or while
+ *     the render delay still shows it arriving);
+ *   • her chain-hook drag: 300 ms after each 'pull', once a snapshot past the drag is in, her predicted position
+ *     agrees with the server's (no rubber band).
+ * Runs in the page (serialised by Playwright): no closures over this file.
+ */
+function rosterSamplerInPage(cfg) {
+  const { monsterKinds, projectileKinds, debuffIds, stackCaps, playerRadius, pullSteps } = cfg;
+  const { rootEvidence, rootProjectiles, rootAreas, freezeAreas, projectileReach, projectileTail, unseenMax, before, after, pullCheckMs, pullAgree } = cfg;
+  if (window.__e2eRosterStop) window.__e2eRosterStop();
+  const rec = {
+    monsters: {}, projectiles: {}, areas: {}, playerDebuffs: {}, hudDebuffs: {}, tells: [], debuffNow: null,
+    rawBad: [], holds: [], pulls: [], frames: 0,
+  };
+  window.__e2eRoster = rec;
+  const seen = new Set();
+  const note = (bucket, kind, id) => {
+    const key = `${bucket}:${kind}:${id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rec[bucket][kind] = (rec[bucket][kind] ?? 0) + 1;
+  };
+  /** Frames of the last ~2.6 s: { t, projs: [kind, x, y, prevX, prevY, vx, vy][], areas: [kind, x, y, r][], root }. */
+  const ring = [];
+  const holds = [];
+  const pulls = [];
+  /** Batch ticks of her recent 'pull' events (a drag runs from its hit, at or before that tick, for pullSteps). */
+  const dragTicks = [];
+  const events = window.__foe.localDebuffEvents();
+  let evSeq = events.length ? events[events.length - 1].seq : 0;
+  const EPS = 1 / 60 + 1e-4;
+  const segDist = (px, py, ax, ay, bx, by) => {
+    const vx = bx - ax;
+    const vy = by - ay;
+    const l2 = vx * vx + vy * vy;
+    const u = l2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / l2)) : 0;
+    return Math.hypot(px - (ax + vx * u), py - (ay + vy * u));
+  };
+
+  const judgeHold = (h) => {
+    let source = null;
+    for (const fr of ring) if (fr.t >= h.at && fr.t <= h.at + after && fr.root && !source) source = fr.root;
+    const kinds = h.id === 'frozen' ? freezeAreas : source && rootEvidence[source] ? rootEvidence[source] : [...rootProjectiles, ...rootAreas];
+    // The closest any candidate came: a projectile's drawn path, or how deep she stood inside candidate ground.
+    let bestProj = null;
+    let bestArea = null;
+    let firstSeen = Infinity;
+    for (let fi = 0; fi < ring.length; fi++) {
+      const fr = ring[fi];
+      if (fr.t < h.at - before || fr.t > h.at + after) continue;
+      // Flight the page did not sample: until its next frame (a real display draws those frames).
+      const unseen = fi + 1 < ring.length ? Math.min(unseenMax, Math.max(0, (ring[fi + 1].t - fr.t) / 1000)) : 0;
+      const tail = projectileTail + unseen;
+      for (const [k, x, y, px, py, vx, vy] of fr.projs) {
+        if (!kinds.includes(k)) continue;
+        firstSeen = Math.min(firstSeen, fr.t);
+        const d = segDist(h.x, h.y, px, py, x + vx * tail, y + vy * tail);
+        if (!bestProj || d < bestProj.d) bestProj = { k, d, t: fr.t, gap: Math.round(unseen * 1000) };
+      }
+      for (const [k, x, y, r] of fr.areas) {
+        if (!kinds.includes(k)) continue;
+        firstSeen = Math.min(firstSeen, fr.t);
+        const d = Math.hypot(h.x - x, h.y - y) - (r + playerRadius);
+        if (!bestArea || d < bestArea.d) bestArea = { k, d, r };
+      }
+    }
+    let evidence = null;
+    if (bestProj && bestProj.d <= projectileReach) evidence = `${bestProj.k}'s path passed ${bestProj.d.toFixed(1)} u from her`;
+    else if (bestArea && bestArea.d <= 4) evidence = `${bestArea.k} (r ${bestArea.r.toFixed(0)}) round her`;
+    const closest = bestProj ? `${bestProj.k} ${bestProj.d.toFixed(1)} u` : bestArea ? `${bestArea.k} edge ${bestArea.d.toFixed(1)} u` : 'nothing drawn';
+    const lead = Number.isFinite(firstSeen) ? Math.round(h.at - firstSeen) : null;
+    // For a failure message: the frames round the closest approach (ms from the event, drawn segment, her position).
+    const trace = [];
+    if (bestProj && !evidence) {
+      for (const fr of ring) {
+        if (Math.abs(fr.t - bestProj.t) > 120) continue;
+        const r = Math.round;
+        for (const [k, x, y, px, py] of fr.projs) if (k === bestProj.k) trace.push(`${r(fr.t - h.at)}ms ${r(px)},${r(py)}→${r(x)},${r(y)} me ${fr.me ? `${r(fr.me[0])},${r(fr.me[1])}` : '–'}`);
+      }
+      trace.push(`next frame after ${bestProj.gap} ms`);
+    }
+    rec.holds.push({ id: h.id, source, fair: !!evidence, evidence, closest, leadMs: lead, x: Math.round(h.x), y: Math.round(h.y), trace });
+  };
+
+  const judgePull = (pl, w, now) => {
+    const self = window.__foe.serverSelf();
+    // Wait for a snapshot past the drag (the server's word on where it ended); give up after a second.
+    if (!self || self.tick < pl.tick + pullSteps + 1) {
+      if (now < pl.at + 1000) return false;
+      rec.pulls.push({ ok: false, why: `no snapshot past the drag (newest tick ${self?.tick ?? '–'}, hit ${pl.tick})` });
+      return true;
+    }
+    // Another hook of hers still dragging her on the newest snapshot: her prediction is already further along that
+    // drag (by the ticks it runs ahead), so the two positions aren't comparable yet. Wait for a snapshot past every
+    // drag; hooks chaining for 3 s leave this pull unjudged (it is not a failure: nothing was compared).
+    if (dragTicks.some((t) => t <= self.tick && self.tick < t + pullSteps + 1)) {
+      if (now < pl.at + 3000) return false;
+      rec.pulls.push({ ok: true, skipped: true });
+      return true;
+    }
+    const pp = w.predictedPosition();
+    if (!pp || self.dead) return true;
+    const st = w.stats();
+    // Held (rooted after the drag) through her whole predicted stretch: she cannot move, so both must agree exactly.
+    // Free — a root in its grace, or one that runs out within the ticks her prediction is ahead of this snapshot (a
+    // second hook during ROOT_GRACE drags without re-rooting, so the first root can end right after the drag): her
+    // unacknowledged inputs may have walked her on. Timers may run twice as fast (Cinder Ward), hence the × 2.
+    const aheadSec = ((st.pendingInputs + 2) / 60) * 2;
+    const held = self.debuffs.some((d) => (d.id === 'rooted' || d.id === 'frozen') && d.remaining > aheadSec);
+    const bound = held ? pullAgree : pullAgree + (st.pendingInputs * st.moveSpeed) / 60;
+    const dist = Math.hypot(pp.x - self.x, pp.y - self.y);
+    rec.pulls.push({
+      ok: dist <= bound, dist: +dist.toFixed(2), bound: +bound.toFixed(1), held, len: +Math.hypot(pl.toX - pl.fromX, pl.toY - pl.fromY).toFixed(1),
+      replayed: st.pulls, pending: st.pendingInputs,
+      holdLeft: +Math.max(0, ...self.debuffs.filter((d) => d.id === 'rooted' || d.id === 'frozen').map((d) => d.remaining)).toFixed(3),
+    });
+    return true;
+  };
+
+  let raf = 0;
+  const frame = () => {
+    raf = requestAnimationFrame(frame);
+    const now = performance.now();
+    const foe = window.__foe;
+    const w = foe.world;
+    const s = foe.store.get();
+    if (!w || s.zone !== 'map') {
+      ring.length = 0;
+      return;
+    }
+    rec.frames++;
+    const me = w.view.players.find((q) => q.id === w.localPlayerId);
+    const pos = w.predictedPosition() ?? me;
+    const m = w.view.monsters;
+    for (let i = 0; i < m.capacity; i++) if (m.alive[i]) note('monsters', monsterKinds[m.kind[i]] ?? `#${m.kind[i]}`, m.id[i]);
+    const fr = { t: now, projs: [], areas: [], root: null, me: pos ? [pos.x, pos.y] : null };
+    const pj = w.view.projectiles;
+    for (let i = 0; i < pj.capacity; i++) {
+      if (!pj.alive[i] || !pj.hostile[i]) continue;
+      const k = projectileKinds[pj.kind[i]] ?? `#${pj.kind[i]}`;
+      note('projectiles', k, pj.id[i]);
+      if (pos && rootProjectiles.includes(k) && Math.hypot(pj.x[i] - pos.x, pj.y[i] - pos.y) < 400) {
+        fr.projs.push([k, pj.x[i], pj.y[i], pj.prevX[i], pj.prevY[i], pj.vx[i], pj.vy[i]]);
+      }
+    }
+    for (const a of w.view.areas) {
+      note('areas', a.kind, a.id);
+      if (pos && (rootAreas.includes(a.kind) || freezeAreas.includes(a.kind)) && Math.hypot(a.x - pos.x, a.y - pos.y) < 400) {
+        fr.areas.push([a.kind, a.x, a.y, a.radius]);
+      }
+    }
+    // The raw replica, before the HUD's clamping: the contract of PlayerDebuffView.
+    for (const d of me?.debuffs ?? []) {
+      rec.playerDebuffs[d.id] = (rec.playerDebuffs[d.id] ?? 0) + 1;
+      const cap = stackCaps[d.id] ?? 1;
+      const why = !debuffIds.includes(d.id)
+        ? 'unknown id'
+        : !(d.remaining > 0 && d.remaining <= d.duration + EPS)
+          ? 'remaining outside (0, duration]'
+          : !(Number.isInteger(d.stacks) && d.stacks >= 1 && d.stacks <= cap)
+            ? `stacks outside 1..${cap}`
+            : (d.source !== null) !== (d.id === 'rooted')
+              ? 'a source on a non-root or none on a root'
+              : null;
+      if (why && rec.rawBad.length < 5) rec.rawBad.push(`${why}: ${JSON.stringify(d)}`);
+      if (d.id === 'rooted') fr.root = d.source;
+    }
+    ring.push(fr);
+    while (ring.length && ring[0].t < now - (before + after + 700)) ring.shift();
+
+    const hud = s.hud?.debuffs ?? [];
+    for (const d of hud) rec.hudDebuffs[d.id] = (rec.hudDebuffs[d.id] ?? 0) + 1;
+    rec.debuffNow = hud.length ? hud.map((d) => d.id).join('+') : null;
+    const tell = s.hud?.run?.tell;
+    if (tell && !rec.tells.some((t) => t.wave === tell.wave)) rec.tells.push({ wave: tell.wave, families: [...tell.families], lieutenant: tell.lieutenant, boss: tell.boss });
+
+    for (const e of foe.localDebuffEvents(evSeq)) {
+      evSeq = e.seq;
+      const ev = e.event;
+      if (ev.t === 'debuff' && (ev.debuff === 'rooted' || ev.debuff === 'frozen')) holds.push({ at: e.at, id: ev.debuff, x: ev.x, y: ev.y });
+      else if (ev.t === 'pull') {
+        pulls.push({ at: e.at, tick: e.tick, fromX: ev.fromX, fromY: ev.fromY, toX: ev.toX, toY: ev.toY });
+        dragTicks.push(e.tick);
+        if (dragTicks.length > 32) dragTicks.shift();
+      }
+    }
+    while (holds.length && now >= holds[0].at + after) judgeHold(holds.shift());
+    for (let k = 0; k < pulls.length; k++) {
+      if (now < pulls[k].at + pullCheckMs || !judgePull(pulls[k], w, now)) continue;
+      pulls.splice(k--, 1);
+    }
+  };
+  raf = requestAnimationFrame(frame);
+  window.__e2eRosterStop = () => cancelAnimationFrame(raf);
+}
+
+async function startRosterSampler(p) {
+  const c = await loadContracts();
+  await p.eval(rosterSamplerInPage, {
+    monsterKinds: c.monsterKinds, projectileKinds: c.projectileKinds, debuffIds: c.debuffIds, stackCaps: c.stackCaps,
+    playerRadius: c.playerRadius, pullSteps: c.pullSteps, rootEvidence: ROOT_EVIDENCE, rootProjectiles: ROOT_PROJECTILES,
+    rootAreas: ROOT_AREAS, freezeAreas: FREEZE_AREAS, projectileReach: ROOT_PROJECTILE_REACH, projectileTail: PROJECTILE_TAIL_S,
+    unseenMax: PROJECTILE_UNSEEN_MAX_S, before: FAIR_BEFORE_MS,
+    after: FAIR_AFTER_MS, pullCheckMs: PULL_CHECK_MS, pullAgree: PULL_AGREE_UNITS,
+  });
+}
+
+const rosterReport = (p) => p.eval(() => window.__e2eRoster);
+
+async function buyFromRook(p, labels) {
+  await closePanels(p);
+  const at = await walkUntilOnScreen(p, () => propOnScreen(p, 'merchant', 14), 'Rook');
+  await clickWorld(p, at, 'Rook');
+  await p.waitFor('the merchant panel', () => window.__foe.store.get().openPanels.includes('merchant'), undefined, 5000);
+  await p.page.waitForSelector('.fe-merchant .fe-offer', { timeout: 5000 });
+  const bought = [];
+  for (const label of labels) {
+    const before = (await serverCharacter(p)).maps.map((m) => m.uid);
+    const offer = p.page.locator('.fe-offer', { hasText: label }).first();
+    await offer.locator('button:has-text("Buy")').click({ timeout: 5000 });
+    await waitServer(p, `the ${label} map`, (ch, known) => ch.backpack.entries.some((e) => e.item.kind === 'map' && !known.includes(e.item.uid)), before);
+    const after = await serverCharacter(p);
+    bought.push(after.maps.find((m) => !before.includes(m.uid)));
+  }
+  await closePanels(p);
+  return bought;
+}
+
+async function wave5Scenario({ A }) {
+  const bought = {};
+
+  await step('Map Stash: A takes a free Rimed Ossuary and Iron Coliseum map from Rook, then Ctrl-clicks every map into the Map Stash', async () => {
+    const [ossuary, coliseum] = await buyFromRook(A, ['Rimed Ossuary (Tier 1)', 'Iron Coliseum (Tier 1)']);
+    assert(ossuary?.baseId === 'rimedOssuary' && coliseum?.baseId === 'ironColiseum', `Rook sold the wrong maps: ${JSON.stringify([ossuary, coliseum])}`);
+    bought.rimedOssuary = ossuary;
+    bought.ironColiseum = coliseum;
+    const before = await serverCharacter(A);
+    await openStashTab(A, 'maps');
+    for (let i = 0; i < 30; i++) {
+      const map = A.page.locator('.fe-grid[data-drop="backpack"] .fe-item[data-kind="map"]').first();
+      if ((await map.count()) === 0) break;
+      const uid = await map.getAttribute('data-uid');
+      await map.click({ modifiers: ['Control'] });
+      await waitServer(A, `map ${uid} in the Map Stash`, (ch, u) => ch.mapStash.some((m) => m.uid === u), uid);
+    }
+    const after = await serverCharacter(A);
+    assert(after.maps.length === 0, `maps left in the backpack: ${JSON.stringify(after.maps)}`);
+    const stashed = new Set(after.mapStash.map((m) => m.uid));
+    for (const m of [...before.maps, ...before.mapStash]) assert(stashed.has(m.uid), `map ${m.uid} (${m.baseId}) went missing`);
+    assert(after.mapStash.length === before.maps.length + before.mapStash.length, `map count changed: ${before.maps.length} + ${before.mapStash.length} → ${after.mapStash.length}`);
+    await A.page.waitForSelector(`.fe-mstash--stash .fe-maprow[data-uid="${ossuary.uid}"]`, { timeout: 3000 }).catch(async () => {
+      // The page shows one tier at a time (the highest by default): open Tier 1.
+      await A.page.click('.fe-mstash--stash button[aria-label^="Tier 1:"]');
+      await A.page.waitForSelector(`.fe-mstash--stash .fe-maprow[data-uid="${ossuary.uid}"]`, { timeout: 3000 });
+    });
+    await settlePanels(A);
+    await A.shot('w5-01-map-stash-A');
+    return `${after.mapStash.length} maps filed (${after.mapStash.map((m) => `${m.baseId} T${m.tier}`).join(', ')})`;
+  });
+
+  await step('Crafting Stash: "Deposit all" files every backpack currency; Shift+Ctrl-click takes exactly 1, Ctrl-click a stack', async () => {
+    await openStashTab(A, 'currency');
+    const before = await serverCharacter(A);
+    const totals = currencyTotals(before);
+    assert(Object.keys(before.currency).length > 0, 'A carries no currency to deposit');
+    await A.page.click('.fe-stash__deposit');
+    await waitServer(A, 'no currency left in the backpack', (ch) => !ch.backpack.entries.some((e) => e.item.kind === 'currency'));
+    await A.waitFor('the deposit toast', () => window.__foe.store.get().toasts.some((t) => /Crafting Stash/.test(t.text)), undefined, 5000);
+    const deposited = await serverCharacter(A);
+    const diff = holdingsDiff(totals, currencyTotals(deposited));
+    assert(diff.length === 0, `currency created or lost by Deposit all: ${diff.join('; ')}`);
+    await settlePanels(A);
+    await A.shot('w5-02-crafting-stash-A');
+
+    // Shift+Ctrl-click: exactly one Scrap.
+    const scrapSlot = deposited.currencyStash.scrap ?? 0;
+    assert(scrapSlot >= 2, `too little Scrap in the stash for the withdrawal checks (${scrapSlot})`);
+    await A.page.locator('.fe-cslot[data-currency="scrap"]').click({ modifiers: ['Shift', 'Control'] });
+    await waitServer(A, 'one Scrap in the backpack', (ch, n) => (ch.currencyStash.scrap ?? 0) === n - 1, scrapSlot);
+    const one = await serverCharacter(A);
+    assert(one.currency.scrap === 1, `Shift+Ctrl-click should take exactly 1 Scrap, the backpack has ${one.currency.scrap}`);
+
+    // Ctrl-click: a full stack (up to the backpack stack size of 40).
+    const withdrawId = ['kindling', 'essenceEmber', 'mapDust', 'threatGlyph'].find((id) => (one.currencyStash[id] ?? 0) > 0);
+    let stackNote = 'no second currency to withdraw';
+    if (withdrawId) {
+      const slot = one.currencyStash[withdrawId];
+      if (withdrawId === 'mapDust' || withdrawId === 'threatGlyph') await openStashTab(A, 'mapCurrency');
+      await A.page.locator(`.fe-cslot[data-currency="${withdrawId}"]`).click({ modifiers: ['Control'] });
+      await waitServer(A, `the ${withdrawId} stack in the backpack`, (ch, a) => (ch.currencyStash[a.id] ?? 0) === a.slot - Math.min(40, a.slot), { id: withdrawId, slot });
+      const got = (await serverCharacter(A)).currency[withdrawId];
+      assert(got === Math.min(40, slot), `Ctrl-click should take a stack of ${Math.min(40, slot)} ${withdrawId}, got ${got}`);
+      stackNote = `Ctrl-click took ${got} ${withdrawId}`;
+    }
+    await openStashTab(A, 'mapCurrency');
+    await settlePanels(A);
+    await A.shot('w5-03-map-currency-A');
+    const kinds = Object.keys(totals).length;
+    return `${kinds} currencies deposited and conserved; Shift+Ctrl-click took 1 Scrap (${scrapSlot} → ${scrapSlot - 1}); ${stackNote}`;
+  });
+
+  await step('crafting straight from the Crafting Stash: right-click a slot, left-click the equipped wand', async () => {
+    await openStashTab(A, 'currency');
+    const before = await serverCharacter(A);
+    assert(before.wand, 'A has no wand equipped');
+    // A currency the rules let A use on the wand from its slot (Scrap first), without an affix choice.
+    const pick = await A.eval((wandUid) => {
+      const { rules } = window.__foe.store;
+      const ch = window.__foe.store.get().character;
+      const order = ['scrap', 'essenceEmber', 'kindling', 'reforge', 'solvent'];
+      for (const id of order) {
+        if ((ch.currencyStash[id] ?? 0) <= 0) continue;
+        if (rules.content.currencies[id]?.needsAffixChoice) continue;
+        if (rules.craftingTargetError(ch, `cstash:${id}`, wandUid) === null) return id;
+      }
+      return null;
+    }, before.wand.uid);
+    assert(pick, `no Crafting Stash currency can be used on the wand: ${JSON.stringify(before.currencyStash)}`);
+    const slot = before.currencyStash[pick];
+    await A.page.locator(`.fe-cslot[data-currency="${pick}"]`).click({ button: 'right' });
+    await A.waitFor('the slot armed', (u) => window.__foe.store.get().armed?.uid === u, `cstash:${pick}`, 3000);
+    await settlePanels(A);
+    await A.shot('w5-04-armed-slot-A');
+    await A.page.locator(`[data-drop="equip"] .fe-item[data-uid="${before.wand.uid}"]`).first().click();
+    await waitServer(A, `one ${pick} used from the slot`, (ch, a) => (ch.currencyStash[a.id] ?? 0) === a.slot - 1, { id: pick, slot });
+    // The history is capped, so compare its lines rather than its length.
+    await waitServer(A, 'the wand crafted', (ch, h) => JSON.stringify(ch.equipment.mainHand?.history ?? []) !== h, before.wand.history);
+    const after = await serverCharacter(A);
+    assert(JSON.stringify(after.currency) === JSON.stringify(before.currency), `the craft must not touch backpack currency: ${JSON.stringify(before.currency)} → ${JSON.stringify(after.currency)}`);
+    await sleep(300);
+    await A.shot('w5-05-crafted-from-stash-A');
+    await closePanels(A);
+    return `${pick} slot ${slot} → ${slot - 1}; wand: "${after.wand.last}", stability ${before.wand.stability} → ${after.wand.stability}`;
+  });
+
+  const contracts = await loadContracts();
+  for (const theme of ['rimedOssuary', 'ironColiseum']) {
+    const check = THEME_CHECKS[theme];
+    const roster = contracts.rosters[theme];
+    const { tag } = check;
+
+    await step(`Map Stash → map device: A picks the ${check.name} map in the device's Map Stash picker and activates it`, async () => {
+      const map = bought[theme];
+      assert(map, `no ${check.name} map was bought`);
+      await closePanels(A);
+      const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'mapDevice', 10), 'the map device');
+      await clickWorld(A, at, 'the map device');
+      await A.waitFor('the map device panel', () => window.__foe.store.get().openPanels.includes('mapDevice'), undefined, 5000);
+      await A.page.waitForSelector('.fe-mstash--device', { timeout: 5000 });
+      const row = `.fe-mstash--device .fe-maprow[data-uid="${map.uid}"]`;
+      if ((await A.page.locator(row).count()) === 0) await A.page.click(`.fe-mstash--device button[aria-label^="Tier ${map.tier}:"]`);
+      await A.page.locator(row).click({ timeout: 5000 });
+      await waitServer(A, `the ${check.name} map in the device`, (ch, u) => ch.mapDevice?.uid === u && !ch.mapStash.some((m) => m.uid === u), map.uid);
+      await settlePanels(A);
+      await A.shot(`w5-06-device-${tag}-A`);
+      await A.page.click('.fe-device__activate');
+      // An earlier map's portal that still has entries asks first.
+      const confirm = A.page.locator('.fe-dialog__actions button:has-text("Activate")');
+      if (await confirm.isVisible({ timeout: 1000 }).catch(() => false)) await confirm.click();
+      await A.waitFor(`the ${check.name} portal`, (name) => {
+        const p = window.__foe.store.get().hud?.portal;
+        return !!p && p.remaining === 8 && p.mapName.includes(name);
+      }, check.name, 8000);
+      const portal = await A.state('s => s.hud.portal');
+      return `${portal.mapName} T${portal.tier}: ${portal.remaining}/${portal.total} portals`;
+    });
+
+    await step(`${check.name}: only its own roster fights; baited debuffs (${check.require.join(', ')}) land from visible sources and reach the HUD`, async () => {
+      await startRosterSampler(A);
+      await clickPortal(A);
+      await A.waitFor('the map zone', () => window.__foe.store.get().zone === 'map', undefined, 25_000);
+      await A.waitFor('the HUD run readout', () => !!window.__foe.store.get().hud?.run, undefined, 8000);
+      const run0 = await A.state('s => ({ map: s.hud.run.mapName, theme: window.__foe.session.zone.theme })');
+      assert(run0.theme === theme, `the zone should be ${theme}, got ${run0.theme}`);
+      // Baiting from the start: the autopilot stands in reach of the kinds whose debuffs the checks need (it never
+      // shoots them) and fights everything else; once they have landed it fights normally.
+      let baiting = true;
+      await A.eval((bait) => window.__foe.bot.enable({ returnPortal: false, collect: true, skills: false, bait }), check.bait);
+      const allowed = new Set([...roster.family, roster.lieutenant, roster.boss]);
+      const met = (rec) => check.require.every((id) => rec.hudDebuffs[id]) && rec.holds.length > 0;
+      const shots = { debuff: null, hold: null, lieutenant: false, fight: false };
+      let deaths = 0;
+      const limit = SMOKE_SECONDS + BAIT_BUDGET_SECONDS + (WANT_LIEUTENANT ? 240 : 0);
+      const started = Date.now();
+      let sec = 0;
+      let rec = null;
+      for (;;) {
+        await sleep(250);
+        sec = (Date.now() - started) / 1000;
+        rec = await rosterReport(A);
+        const family = roster.family.filter((k) => rec.monsters[k]);
+        if (!shots.debuff && rec.debuffNow) {
+          shots.debuff = rec.debuffNow;
+          await A.shot(`w5-07-debuff-${tag}-A`);
+        }
+        if (!shots.hold && rec.debuffNow && /rooted|frozen/.test(rec.debuffNow)) {
+          shots.hold = rec.debuffNow;
+          await A.shot(`w5-07-hold-${tag}-A`);
+        }
+        if (!shots.lieutenant && rec.monsters[roster.lieutenant]) {
+          shots.lieutenant = true;
+          await A.shot(`w5-08-lieutenant-${tag}-A`);
+        }
+        if (!shots.fight && sec >= 6) {
+          shots.fight = true;
+          await A.shot(`w5-07-fight-${tag}-A`);
+        }
+        if (baiting && met(rec)) {
+          baiting = false;
+          await A.eval(() => window.__foe.bot.enable({ bait: null, skills: true }));
+        }
+        if (await A.state('s => !!s.hud?.dead')) {
+          // A fall after the checks ends the smoke; before them, back in through the portal (the bot walks into it
+          // from the hideout) — twice at most.
+          if (!baiting || deaths >= 2) break;
+          deaths++;
+          log(`note: A fell in the ${check.name} at ${sec.toFixed(0)} s; respawning and going back in`);
+          const r = await A.eval(() => window.__foe.send({ c: 'respawn' }));
+          assert(r.ok, `respawn failed: ${r.error}`);
+          await A.waitFor('the hideout', () => window.__foe.store.get().zone === 'hideout', undefined, 10_000);
+          await A.eval(() => window.__foe.store.actions.dismissRunSummary());
+          await A.waitFor('the map again', () => window.__foe.store.get().zone === 'map', undefined, 30_000);
+          continue;
+        }
+        const done = !baiting && sec >= SMOKE_SECONDS && family.length >= 2 && (!WANT_LIEUTENANT || shots.lieutenant);
+        if (done || sec >= limit) break;
+      }
+      await A.shot(`w5-09-end-${tag}-A`);
+      const run = await A.state('s => s.hud?.run && ({ wave: s.hud.run.wave, kills: s.hud.run.kills, phase: s.hud.run.phase })');
+      const stats = await A.eval(() => {
+        const st = window.__foe.world.stats();
+        return { pulls: st.pulls, corrections: st.corrections, snaps: st.snaps };
+      });
+      await A.eval(() => window.__e2eRosterStop?.());
+
+      const seen = Object.keys(rec.monsters);
+      const foreign = seen.filter((k) => !allowed.has(k));
+      assert(foreign.length === 0, `monsters from another roster in the ${check.name}: ${foreign.join(', ')}`);
+      const family = roster.family.filter((k) => rec.monsters[k]);
+      assert(family.length >= 1, `none of the ${check.name} family showed up in ${sec.toFixed(0)} s (saw ${seen.join(', ') || 'nothing'})`);
+      for (const t of rec.tells) {
+        const off = t.families.filter((k) => !allowed.has(k));
+        assert(off.length === 0, `the wave ${t.wave} tell announces other rosters: ${off.join(', ')}`);
+      }
+      assert(rec.rawBad.length === 0, `replica debuffs out of contract: ${rec.rawBad.join('; ')}`);
+      const replica = Object.keys(rec.playerDebuffs);
+      const hud = Object.keys(rec.hudDebuffs);
+      // Whatever the replica had for a while (≥ 12 frames, 0.2 s), the HUD (15 Hz) showed.
+      const missing = replica.filter((d) => !hud.includes(d) && rec.playerDebuffs[d] >= 12);
+      assert(missing.length === 0, `debuffs on the player that never reached the HUD: ${missing.join(', ')}`);
+      const absent = check.require.filter((d) => !rec.hudDebuffs[d]);
+      assert(absent.length === 0, `${absent.join(', ')} never reached the HUD in the ${check.name} (${sec.toFixed(0)} s, HUD saw ${hud.join(', ') || 'nothing'}; baited ${check.bait.join('/')}; monsters ${seen.join(', ')})`);
+      // GAME_SPEC §13: every root and freeze from a projectile you can see or a telegraph you can read.
+      const unfair = rec.holds.filter((h) => !h.fair);
+      assert(unfair.length === 0, `roots / freezes without a visible source: ${JSON.stringify(unfair.slice(0, 4))}`);
+      assert(rec.holds.length > 0, `no root or freeze landed on A in the ${check.name} while baiting ${check.bait.join('/')} (${sec.toFixed(0)} s)`);
+      // Her chain-hook drags: the prediction agrees with the server after each one.
+      const bands = rec.pulls.filter((pl) => !pl.ok);
+      assert(bands.length === 0, `rubber band after a chain hook: ${JSON.stringify(bands.slice(0, 4))}`);
+      if (rec.holds.some((h) => h.source === 'chain')) assert(rec.pulls.length > 0, 'a chain root landed but no pull of hers was checked');
+
+      // Leave (dead: back through the death screen's respawn).
+      await A.eval(() => window.__foe.bot.disable());
+      const dead = await A.state('s => !!s.hud?.dead');
+      const r = await A.eval((d) => window.__foe.send({ c: d ? 'respawn' : 'leaveMap' }), dead);
+      assert(r.ok, `leaving the ${check.name} failed: ${r.error}`);
+      await A.waitFor('home', () => {
+        const s = window.__foe.store.get();
+        return s.zone === 'hideout' && s.isOwnHideout && !!s.hud;
+      }, undefined, 10_000);
+      await A.eval(() => window.__foe.store.actions.dismissRunSummary());
+      const list = (o) => Object.entries(o).map(([k, n]) => `${k}×${n}`).join(' ') || '–';
+      const holdText = rec.holds.map((h) => `${h.id}${h.source ? `(${h.source})` : ''} ← ${h.evidence ?? h.closest}${h.leadMs !== null ? `, drawn ${h.leadMs} ms before` : ''}`);
+      const pullText = rec.pulls.map((pl) => (pl.skipped ? 'unjudged (hooks kept dragging her)' : `${pl.len} u drag → ${pl.dist} u off (≤ ${pl.bound}${pl.held ? ', held' : ''})`));
+      return [
+        `wave ${run?.wave ?? '?'}, ${run?.kills ?? 0} kills in ${sec.toFixed(0)} s${deaths ? ` (A fell ${deaths}×)` : ''}`,
+        `monsters ${list(rec.monsters)}`,
+        `debuffs HUD ${hud.join(', ') || '–'}${shots.debuff ? ` (shot: ${shots.debuff})` : ''}`,
+        `holds ${holdText.join('; ') || '–'}`,
+        `pulls ${pullText.join('; ') || '–'} (replayed ${stats.pulls}, corrections ${stats.corrections}, snaps ${stats.snaps})`,
+        `hazards ${list(rec.areas)}`,
+        `hostile projectiles ${list(rec.projectiles)}`,
+        `tells ${rec.tells.map((t) => `w${t.wave}: ${t.families.join('/')}${t.lieutenant ? ' +lt' : ''}${t.boss ? ' +boss' : ''}`).join('; ') || '–'}`,
+      ].join(' | ');
+    });
+  }
+}
+
+async function main() {
+  const port = await freePort();
+  if (PROD) {
+    await step('vite build (production bundle, e2e hooks compiled in)', async () => {
+      staticDir = await buildClient();
+      return staticDir;
+    });
+  }
+  await step('start game server', async () => {
+    await startGameServer(port);
+    return `port ${port}`;
+  });
+  let base = '';
+  if (PROD) {
+    await step('production build served by the game server', async () => {
+      base = `http://127.0.0.1:${port}`;
+      const r = await fetch(base + '/');
+      const html = await r.text();
+      assert(r.ok && /<canvas|id="ui"|<script/i.test(html), `the server did not serve the built client (${r.status})`);
+      return `${base} (${staticDir})`;
+    });
+  } else {
+    await step('start Vite dev server', async () => {
+      base = await startVite(port);
+      return base;
+    });
+  }
+
+  browser = await chromium.launch({
+    headless: !flag('headed'),
+    args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
+  });
+  const ctxA = await browser.newContext({ viewport: { width: VW, height: VH } });
+  const ctxB = await browser.newContext({ viewport: { width: VW, height: VH } });
+  const A = new Player('A', await ctxA.newPage());
+  const B = new Player('B', await ctxB.newPage());
+  const suffix = String(Date.now() % 100000);
+  const nameA = `Ashveil${suffix}`.slice(0, 16);
+  const nameB = `Mirael${suffix}`.slice(0, 16);
+
+  await step('A registers, creates a character and enters the game (real UI)', async () => {
+    await registerAndPlay(A, base, `e2e_a_${suffix}`, 'emberpass-A1', nameA);
+    return nameA;
+  });
+  if (!WAVE5_ONLY) {
+    await step('B registers, creates a character and enters the game (real UI)', async () => {
+      await registerAndPlay(B, base, `e2e_b_${suffix}`, 'emberpass-B1', nameB);
+      return nameB;
+    });
+    await coreScenario({ A, B, nameA, nameB, port });
+  }
+  await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];
@@ -1185,9 +1839,6 @@ async function main() {
     assert(warns.length === 0, `${warns.length} warning(s):\n  ${warns.slice(0, 12).join('\n  ')}`);
     return `${A.expected + B.expected} expected messages (failed reconnect attempts during the outage, stale-snapshot warnings)`;
   });
-
-  void idA;
-  void idB;
 }
 
 let failed = false;

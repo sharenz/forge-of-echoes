@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { ClientMessage, Command, ServerMessage, TradeInfo } from '../../src/contracts/net';
 import { TRADE_MAX_ITEMS } from '../../src/contracts/net';
 import type { CurrencyStack, EquipmentItem } from '../../src/contracts/items';
+import { CURRENCY_STASH_MAX, currencyStashUid } from '../../src/contracts/items';
+import { CURRENCY_IDS, MONSTER_KINDS } from '../../src/contracts/content';
+import { NEW_AREA_KINDS, PLAYER_DEBUFFS, THEME_ROSTER } from '../../src/contracts/bestiary';
 import {
   HELD_MASK_ALL, MAX_CLIENT_MESSAGE_LENGTH, createEventTimeline, heldToMask, inputFromIntent, intentFromInput, isSlotHeld,
   maskToHeld, parseClientMessage, parseServerMessage, setSlotHeld, validateClientMessage,
 } from '../../src/net';
+import { MONSTER_ATTACKS, SIM_EVENT_TYPES } from '../../src/net/messages';
+import { AREA_KINDS, PROJECTILE_KINDS } from '../../src/contracts/sim';
 import type { SimEvent } from '../../src/contracts/sim';
 import { makeZone } from './fixtures';
 
@@ -95,8 +100,78 @@ describe('client message validation', () => {
       { c: 'tradeAccept', tradeId: 'trade-1', accept: true },
       { c: 'tradeAccept', tradeId: 'trade-1', accept: false },
       { c: 'tradeCancel', tradeId: 'trade-1' },
+      // special stash tabs (GAME_SPEC §12)
+      { c: 'moveItem', uid: 'i4', to: { kind: 'currencyStash' } },
+      { c: 'moveItem', uid: 'i5', to: { kind: 'mapStash' } },
+      { c: 'moveItem', uid: 'cstash:essenceEmber', to: { kind: 'backpack', x: 0, y: 0 }, count: 40 },
+      { c: 'moveItem', uid: 'cstash:voidNeedle', to: { kind: 'backpack', x: 3, y: 2 }, count: 1 },
+      { c: 'moveItem', uid: 'i6', to: { kind: 'backpack', x: 5, y: 1 }, count: 7 }, // split a backpack stack
+      { c: 'moveItem', uid: 'i7', to: { kind: 'mapDevice' }, count: CURRENCY_STASH_MAX },
+      { c: 'quickMove', uid: 'i1', stashTab: 'currency' },
+      { c: 'quickMove', uid: 'i1', stashTab: 'mapCurrency' },
+      { c: 'quickMove', uid: 'i1', stashTab: 'maps' },
+      { c: 'quickMove', uid: 'cstash:scrap', stashTab: 'currency', count: 1 }, // Shift+Ctrl-click: exactly one
+      { c: 'quickMove', uid: 'cstash:mapDust', stashTab: 'mapCurrency', count: 40 },
+      { c: 'quickMove', uid: 'i2', stashTab: 7, count: 3 },
+      { c: 'quickMove', uid: 'i2', stashTab: null, count: 12 },
+      { c: 'depositAllCurrency' },
+      { c: 'applyCurrency', currencyUid: 'cstash:catalyst', targetUid: 'i1f', affixIndex: 2 }, // craft from the stash
+      { c: 'applyCurrency', currencyUid: 'cstash:threatGlyph', targetUid: 'i21' },
     ];
     for (const c of commands) expect(ok(cmd(c as unknown as Record<string, unknown>))).toEqual({ t: 'cmd', id: 7, cmd: c });
+  });
+
+  it('accepts the synthetic Crafting Stash uid of every currency wherever an item uid goes', () => {
+    for (const id of CURRENCY_IDS) {
+      const uid = currencyStashUid(id);
+      expect(uid).toBe(`cstash:${id}`);
+      const commands: Command[] = [
+        { c: 'moveItem', uid, to: { kind: 'backpack', x: 11, y: 4 }, count: 1 },
+        { c: 'quickMove', uid, stashTab: 'currency' },
+        { c: 'applyCurrency', currencyUid: uid, targetUid: 'i1' },
+        { c: 'discardItem', uid },
+        { c: 'dropItem', uid },
+      ];
+      for (const c of commands) expect(ok(cmd(c as unknown as Record<string, unknown>))).toEqual({ t: 'cmd', id: 7, cmd: c });
+    }
+  });
+
+  it('rejects malformed special-stash commands', () => {
+    const bad: unknown[] = [
+      // count: a positive integer up to the Crafting Stash slot size
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash' }, count: 0 }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash' }, count: -1 }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash' }, count: 1.5 }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash' }, count: CURRENCY_STASH_MAX + 1 }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash' }, count: '3' }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash' }, count: null }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash' }, count: Number.MAX_SAFE_INTEGER }),
+      '{"t":"cmd","id":7,"cmd":{"c":"moveItem","uid":"i1","to":{"kind":"mapStash"},"count":1e999}}',
+      // the position-free locations take no position
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash', x: 0, y: 0 } }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash', currencyId: 'scrap' } }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'mapStash', tier: 5 } }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'mapstash' } }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currency' } }),
+      // quickMove: a normal tab index, one of the three special tabs, or null
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: 'stash' }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: 'Maps' }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: 'map' }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: '' }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: 8 }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: -1 }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: 1.5 }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: true }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: ['maps'] }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: 'currency', count: 0 }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: 'currency', count: 'all' }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: 'currency', count: 1, shift: true }),
+      cmd({ c: 'quickMove', uid: 'cstash:scrap scrap', stashTab: 'currency' }),
+      // depositAllCurrency takes nothing
+      cmd({ c: 'depositAllCurrency', tab: 'currency' }),
+      cmd({ c: 'depositAllCurrency', uids: ['i1'] }),
+    ];
+    for (const b of bad) expect(rejected(b)).toMatch(/\w/);
   });
 
   it('accepts Buffer / ArrayBuffer / fragment frames', () => {
@@ -203,6 +278,23 @@ describe('server message validation', () => {
       { t: 'portal', portal: { ownerCharacterId: 'c1', ownerName: 'Mira', mapName: 'Ashen Forge', tier: 3, remaining: 7, total: 8, cleared: false } },
       { t: 'portal', portal: null },
       { t: 'events', tick: 1200, events: [{ t: 'waveStart', wave: 2 }] },
+      {
+        t: 'events', tick: 1202, events: [
+          { t: 'debuff', playerId: 1, debuff: 'rooted', stacks: 1, x: 3, y: 4 },
+          { t: 'debuff', playerId: 2, debuff: 'bleeding', stacks: 3, x: -3, y: 4 },
+          { t: 'cleanse', playerId: 1, debuffs: ['burning', 'bleeding'], x: 3, y: 4 },
+          { t: 'cleanse', playerId: 3, debuffs: [], x: 0, y: 0 },
+          { t: 'blocked', x: 40.5, y: -12 },
+          { t: 'pull', playerId: 2, fromX: 100, fromY: 0, toX: 60, toY: 0 },
+          { t: 'monsterAttack', kind: 'chainThrall', x: 1, y: 2, attack: 'hook' },
+          { t: 'monsterAttack', kind: 'hollowWarden', x: 1, y: 2, attack: 'prison' },
+          { t: 'monsterSpawn', kind: 'varkus', rarity: 4, x: 0, y: -80 },
+          { t: 'death', kind: 'boneThrall', rarity: 0, x: 5, y: 5, facing: -1, damageType: 'cold' },
+          { t: 'areaResolve', kind: 'glacialSpike', x: 9, y: 9, radius: 14 },
+          { t: 'projectileEnd', kind: 'chainHook', x: 1, y: 1 },
+          { t: 'waveTell', wave: 3, families: ['pitHound', 'tarSlinger'], lieutenant: true, boss: false },
+        ],
+      },
       { t: 'result', id: 3, ok: false, error: 'Not enough room' },
       { t: 'toast', text: 'Rare drop!', tone: 'rare' },
       { t: 'party', party: { id: 'p1', leaderId: 'c1', members: [{ characterId: 'c1', name: 'Mira', level: 12, online: true, isLeader: true, zone: { kind: 'map', ownerName: 'Mira', mapName: 'Ashen Forge', tier: 3 }, activeMap: null }] } },
@@ -229,7 +321,9 @@ describe('server message validation', () => {
       { t: 'welcome', protocol: 1 },
       { t: 'zone', zone: { ...makeZone(), theme: 'moon' } },
       { t: 'zone', zone: { ...makeZone(), props: [{ id: 1, kind: 'ufo', x: 0, y: 0, radius: 0, state: 0, variant: 0, interactive: false }] } },
-      { t: 'events', tick: 1, events: [1, 2] },
+      { t: 'events', tick: 1, events: 'lots' },
+      { t: 'events', tick: -1, events: [] },
+      { t: 'events', events: [] },
       { t: 'toast', text: 'x', tone: 'loud' },
       { t: 'mystery' },
       { t: 'pong', time: 1, serverTime: 1 },
@@ -253,6 +347,130 @@ describe('server message validation', () => {
     ];
     for (const b of bad) expect(parseServerMessage(JSON.stringify(b)).ok).toBe(false);
     expect(parseServerMessage('{').ok).toBe(false);
+  });
+});
+
+/** One well-formed sample of every cosmetic event type (typed: the compiler checks each shape). */
+function everyEvent(): SimEvent[] {
+  return [
+    { t: 'cast', playerId: 1, skill: 'emberLance', x: 0, y: 0, dirX: 1, dirY: 0 },
+    { t: 'nova', playerId: 1, skill: 'emberNova', x: 0, y: 0, radius: 60 },
+    { t: 'dash', playerId: 1, fromX: 0, fromY: 0, toX: 80, toY: 0 },
+    { t: 'ward', playerId: 1, x: 0, y: 0, duration: 4 },
+    { t: 'chain', playerId: 1, points: [0, 0, 10, 10], damageType: 'lightning' },
+    { t: 'hit', playerId: 1, x: 0, y: 0, amount: 12, damageType: 'physical', crit: false, target: 'player', killed: false, kind: 'pitHound' },
+    { t: 'evade', playerId: 1, x: 0, y: 0, target: 'player' },
+    { t: 'projectileEnd', kind: 'webShot', x: 0, y: 0 },
+    { t: 'death', kind: 'ossuaryGolem', rarity: 2, x: 0, y: 0, facing: 1, damageType: 'fire' },
+    { t: 'monsterAttack', kind: 'ironCrossbowman', x: 0, y: 0, attack: 'aim' },
+    { t: 'debuff', playerId: 1, debuff: 'frozen', stacks: 1, x: 0, y: 0 },
+    { t: 'cleanse', playerId: 1, debuffs: ['bleeding'], x: 0, y: 0 },
+    { t: 'blocked', x: 0, y: 0 },
+    { t: 'pull', playerId: 1, fromX: 0, fromY: 0, toX: -40, toY: 0 },
+    { t: 'monsterSpawn', kind: 'rimeshade', rarity: 0, x: 0, y: 0 },
+    { t: 'ailment', ailment: 'chilled', x: 0, y: 0 },
+    { t: 'areaResolve', kind: 'executionMark', x: 0, y: 0, radius: 40 },
+    { t: 'dropSpawn', owner: 1, tone: 'map', x: 0, y: 0, label: 'Rimed Ossuary (Tier 4)' },
+    { t: 'pickup', owner: 1, playerId: 1, tone: 'map', x: 0, y: 0, label: 'Rimed Ossuary (Tier 4)' },
+    { t: 'mote', playerId: 1, x: 0, y: 0 },
+    { t: 'flask', playerId: 1, resource: 'life' },
+    { t: 'waveTell', wave: 6, families: ['boneThrall'], lieutenant: false, boss: true },
+    { t: 'waveStart', wave: 6 },
+    { t: 'bossSpawn', x: 0, y: 0 },
+    { t: 'bossPhase', phase: 3 },
+    { t: 'cleared', x: 0, y: 0 },
+    { t: 'chestOpen', x: 0, y: 0 },
+    { t: 'portal', playerId: 1, x: 0, y: 0, kind: 'enter' },
+    { t: 'playerDeath', playerId: 1, x: 0, y: 0 },
+    { t: 'playerJoin', playerId: 2, x: 0, y: 0 },
+    { t: 'notEnoughFocus', playerId: 1 },
+  ];
+}
+
+describe('events channel', () => {
+  it('drops a malformed event on its own and keeps the rest of the batch', () => {
+    const good: SimEvent[] = [
+      { t: 'waveStart', wave: 3 },
+      { t: 'debuff', playerId: 1, debuff: 'rooted', stacks: 1, x: 0, y: 0 },
+      { t: 'pull', playerId: 1, fromX: 10, fromY: 0, toX: 50, toY: 0 },
+    ];
+    const bad: unknown[] = [
+      1, 'x', null, [], { x: 0, y: 0 },
+      { t: 'teleport', x: 0, y: 0 }, // not a SimEvent type
+      { t: 'debuff', playerId: 1, debuff: 'petrified', stacks: 1, x: 0, y: 0 },
+      { t: 'debuff', playerId: 1, stacks: 1, x: 0, y: 0 },
+      { t: 'debuff', playerId: 1, debuff: 'chilled', stacks: -1, x: 0, y: 0 },
+      { t: 'debuff', playerId: 'me', debuff: 'chilled', stacks: 1, x: 0, y: 0 },
+      { t: 'cleanse', playerId: 1, debuffs: ['chilled', 'slimed'], x: 0, y: 0 },
+      { t: 'cleanse', playerId: 1, debuffs: 'chilled', x: 0, y: 0 },
+      { t: 'pull', playerId: 1, fromX: 0, fromY: 0, toX: 1 },
+      { t: 'pull', playerId: 1, fromX: Number.NaN, fromY: 0, toX: 1, toY: 0 }, // NaN → null in JSON
+      { t: 'blocked', x: 'left', y: 0 },
+      { t: 'monsterAttack', kind: 'varkus', x: 0, y: 0, attack: 'dance' },
+    ];
+    const mixed = [bad[0], good[0], ...bad.slice(1, 8), good[1], ...bad.slice(8), good[2]];
+    const r = parseServerMessage(JSON.stringify({ t: 'events', tick: 12, events: mixed }));
+    expect(r.ok ? r.value : r.error).toEqual({ t: 'events', tick: 12, events: good });
+  });
+
+  it('passes one of every SimEvent type, including the debuff and bestiary events', () => {
+    const events = everyEvent();
+    expect(new Set(events.map((e) => e.t))).toEqual(new Set(SIM_EVENT_TYPES));
+    const r = parseServerMessage(JSON.stringify({ t: 'events', tick: 90, events }));
+    expect(r.ok ? r.value : r.error).toEqual({ t: 'events', tick: 90, events });
+  });
+
+  it('passes every monster attack kind, debuff id, new monster kind and new area kind', () => {
+    const events: SimEvent[] = [
+      ...MONSTER_ATTACKS.map((attack): SimEvent => ({ t: 'monsterAttack', kind: 'varkus', x: 0, y: 0, attack })),
+      ...PLAYER_DEBUFFS.map((debuff): SimEvent => ({ t: 'debuff', playerId: 2, debuff, stacks: 2, x: 0, y: 0 })),
+      { t: 'cleanse', playerId: 2, debuffs: [...PLAYER_DEBUFFS], x: 0, y: 0 },
+      ...MONSTER_KINDS.map((kind): SimEvent => ({ t: 'monsterSpawn', kind, rarity: 0, x: 0, y: 0 })),
+      ...NEW_AREA_KINDS.map((kind): SimEvent => ({ t: 'areaResolve', kind, x: 0, y: 0, radius: 30 })),
+    ];
+    expect(parseServerMessage(JSON.stringify({ t: 'events', tick: 4, events })).ok).toBe(true);
+  });
+});
+
+describe('events channel: kinds the presenter looks up', () => {
+  it('drops an event whose monster / projectile / area kind or skill this bundle has no art, name or sound for', () => {
+    const good: SimEvent[] = [
+      { t: 'death', kind: 'varkus', rarity: 4, x: 0, y: 0, facing: 1, damageType: 'fire' },
+      { t: 'projectileEnd', kind: 'chainHook', x: 0, y: 0 },
+      { t: 'areaResolve', kind: 'glacialSpike', x: 0, y: 0, radius: 20 },
+    ];
+    const bad: unknown[] = [
+      { t: 'death', kind: 'dragon', rarity: 0, x: 0, y: 0, facing: 1, damageType: 'fire' },
+      { t: 'death', rarity: 0, x: 0, y: 0, facing: 1, damageType: 'fire' },
+      { t: 'monsterSpawn', kind: 'imp', rarity: 0, x: 0, y: 0 },
+      { t: 'monsterAttack', kind: 'imp', x: 0, y: 0, attack: 'melee' },
+      { t: 'monsterAttack', kind: 7, x: 0, y: 0, attack: 'melee' },
+      { t: 'hit', playerId: 1, x: 0, y: 0, amount: 3, damageType: 'fire', crit: false, target: 'player', killed: false, kind: 'imp' },
+      { t: 'waveTell', wave: 2, families: ['boneThrall', 'imp'], lieutenant: false, boss: false },
+      { t: 'waveTell', wave: 2, families: 'boneThrall', lieutenant: false, boss: false },
+      { t: 'projectileEnd', kind: 'arrow', x: 0, y: 0 },
+      { t: 'areaResolve', kind: 'lavaPit', x: 0, y: 0, radius: 20 },
+      { t: 'cast', playerId: 1, skill: 'fireball', x: 0, y: 0, dirX: 1, dirY: 0 },
+      { t: 'nova', playerId: 1, skill: 'fireball', x: 0, y: 0, radius: 60 },
+    ];
+    const mixed = [bad[0], good[0], ...bad.slice(1, 6), good[1], ...bad.slice(6), good[2]];
+    const r = parseServerMessage(JSON.stringify({ t: 'events', tick: 30, events: mixed }));
+    expect(r.ok ? r.value : r.error).toEqual({ t: 'events', tick: 30, events: good });
+  });
+
+  it('passes every monster kind (deaths, spawns, attacks, hits, wave tells), projectile kind and area kind', () => {
+    const events: SimEvent[] = [
+      ...MONSTER_KINDS.flatMap((kind): SimEvent[] => [
+        { t: 'death', kind, rarity: 0, x: 0, y: 0, facing: -1, damageType: 'cold' },
+        { t: 'monsterAttack', kind, x: 0, y: 0, attack: 'melee' },
+        { t: 'hit', playerId: 1, x: 0, y: 0, amount: 1, damageType: 'physical', crit: false, target: 'player', killed: false, kind },
+      ]),
+      ...Object.values(THEME_ROSTER).map((r): SimEvent => ({ t: 'waveTell', wave: 1, families: [...r.family], lieutenant: true, boss: true })),
+      ...PROJECTILE_KINDS.map((kind): SimEvent => ({ t: 'projectileEnd', kind, x: 0, y: 0 })),
+      ...AREA_KINDS.map((kind): SimEvent => ({ t: 'areaResolve', kind, x: 0, y: 0, radius: 10 })),
+    ];
+    const r = parseServerMessage(JSON.stringify({ t: 'events', tick: 8, events }));
+    expect(r.ok ? r.value : r.error).toEqual({ t: 'events', tick: 8, events });
   });
 });
 
@@ -335,6 +553,21 @@ describe('event timeline', () => {
     // The public drop appears on the render timeline (like monster loot), its pickups are live.
     expect(tl.drain(250)).toEqual([allyTakesPublic, iTakePublic]);
     expect(tl.drain(298)).toEqual([thrown]);
+  });
+
+  it('plays debuffs, cleanses and hook pulls on the local player at once, and everyone else\'s on the render clock', () => {
+    const tl = createEventTimeline();
+    tl.setLocalPlayer(1);
+    const myRoot: SimEvent = { t: 'debuff', playerId: 1, debuff: 'rooted', stacks: 1, x: 0, y: 0 };
+    const myCleanse: SimEvent = { t: 'cleanse', playerId: 1, debuffs: ['burning'], x: 0, y: 0 };
+    const myPull: SimEvent = { t: 'pull', playerId: 1, fromX: 0, fromY: 0, toX: 40, toY: 0 };
+    const allyBleed: SimEvent = { t: 'debuff', playerId: 2, debuff: 'bleeding', stacks: 2, x: 9, y: 0 };
+    const allyPull: SimEvent = { t: 'pull', playerId: 2, fromX: 9, fromY: 0, toX: 49, toY: 0 };
+    const blocked: SimEvent = { t: 'blocked', x: 30, y: 30 };
+    const hook: SimEvent = { t: 'monsterAttack', kind: 'chainThrall', x: 40, y: 0, attack: 'hook' };
+    tl.push(400, [hook, myRoot, allyBleed, blocked, myPull, allyPull, myCleanse]);
+    expect(tl.drain(350)).toEqual([myRoot, myPull, myCleanse]);
+    expect(tl.drain(398)).toEqual([hook, allyBleed, blocked, allyPull]);
   });
 
   it('flushes batches that a stalled render clock would hold too long, and clears on zone change', () => {

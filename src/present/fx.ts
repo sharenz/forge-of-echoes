@@ -30,6 +30,9 @@ export function numberText(n: number): string {
 }
 
 export const NUM_STYLE_PLAYER_HURT = 5;
+/** Burn / bleed ticks on a player: quieter colours, a little dimmer (they accumulate into a running total). */
+export const NUM_STYLE_PLAYER_BURN = 6;
+export const NUM_STYLE_PLAYER_BLEED = 7;
 const NUM_CAP = 180;
 const NUM_LIFE = 0.78;
 const NUM_RISE = 30;
@@ -59,6 +62,10 @@ const ALIVE = 4;
 const CRIT = 1;
 const OWN = 2;
 const PLAYER_HURT: RGB = [1, 0.32, 0.28];
+const PLAYER_BURN: RGB = [1, 0.58, 0.3];
+const PLAYER_BLEED: RGB = [0.82, 0.2, 0.2];
+/** Damage-over-time numbers draw at this share of a normal number's opacity. */
+const DOT_ALPHA = 0.75;
 
 /**
  * Floating damage numbers that never overlap on one target.
@@ -234,9 +241,11 @@ export class DamageNumbers {
       const crit = (fl & CRIT) !== 0;
       const own = (fl & OWN) !== 0;
       const t = this.fade[i] / this.lifeOf(i);
-      const alpha = (t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1) * (own ? 1 : 0.55);
       const st = this.style[i];
-      const base = st === NUM_STYLE_PLAYER_HURT ? PLAYER_HURT : crit ? DAMAGE_CRIT_COLOR[DAMAGE_TYPES[st]] : DAMAGE_COLOR[DAMAGE_TYPES[st]];
+      const dot = st === NUM_STYLE_PLAYER_BURN || st === NUM_STYLE_PLAYER_BLEED;
+      const alpha = (t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1) * (own ? 1 : 0.55) * (dot ? DOT_ALPHA : 1);
+      const base = st === NUM_STYLE_PLAYER_HURT ? PLAYER_HURT : st === NUM_STYLE_PLAYER_BURN ? PLAYER_BURN : st === NUM_STYLE_PLAYER_BLEED
+        ? PLAYER_BLEED : crit ? DAMAGE_CRIT_COLOR[DAMAGE_TYPES[st]] : DAMAGE_COLOR[DAMAGE_TYPES[st]];
       // A fresh or freshly merged number flashes towards white for a beat.
       const hot = this.pop[i] < NUM_REPOP ? 0.6 * (1 - this.pop[i] / NUM_REPOP) : 0;
       c[0] = base[0] + (1 - base[0]) * hot;
@@ -486,16 +495,20 @@ class SpriteFx {
   private readonly layerFx = new Uint8Array(SFX_CAP);
   private readonly col = new Float32Array(SFX_CAP * 3);
   private readonly fixedFrame = new Int16Array(SFX_CAP);
+  private readonly fromFrame = new Uint8Array(SFX_CAP);
+  private readonly emissive = new Float32Array(SFX_CAP);
   private next = 0;
   private readonly c: [number, number, number] = [1, 1, 1];
 
   /**
-   * Play `id` once over `life` seconds (its frames spread over the life), or hold `fixedFrame` ≥ 0 fading out
-   * (afterimages). Colour multiplies the sprite.
+   * Play `id` once over `life` seconds (its frames `from`..frames−1 spread over the life), or hold `fixedFrame` ≥ 0
+   * fading out (afterimages). Colour multiplies the sprite. `world` sprites are lit and y-sorted with the crowd
+   * (`emissive` lets their glow through, default 0.35).
    */
   spawn(
     id: string, frames: number, x: number, y: number, life: number, opts: {
       scale?: number; rotation?: number; alpha?: number; flip?: boolean; additive?: boolean; world?: boolean; color?: RGB; frame?: number;
+      from?: number; emissive?: number;
     },
   ): void {
     const i = this.next;
@@ -517,6 +530,8 @@ class SpriteFx {
     this.col[i * 3 + 1] = opts.color ? c[1] : 1;
     this.col[i * 3 + 2] = opts.color ? c[2] : 1;
     this.fixedFrame[i] = opts.frame ?? -1;
+    this.fromFrame[i] = Math.max(0, Math.min(this.frames[i] - 1, opts.from ?? 0));
+    this.emissive[i] = opts.emissive ?? 0.35;
   }
 
   update(dt: number): void {
@@ -535,7 +550,9 @@ class SpriteFx {
         continue;
       }
       const fixed = this.fixedFrame[i];
-      const frame = fixed >= 0 ? fixed : Math.min(this.frames[i] - 1, Math.floor(t * this.frames[i]));
+      const from = this.fromFrame[i];
+      const span = this.frames[i] - from;
+      const frame = fixed >= 0 ? fixed : Math.min(this.frames[i] - 1, from + Math.floor(t * span));
       const o = pen.sprite(this.layerFx[i] ? 'fx' : 'world');
       c[0] = this.col[i * 3];
       c[1] = this.col[i * 3 + 1];
@@ -547,7 +564,7 @@ class SpriteFx {
       const s = this.scale[i];
       if (s !== 1) o.scale = s;
       if (this.rot[i] !== 0) o.rotation = this.rot[i];
-      if (this.layerFx[i] === 0) o.emissive = 0.35;
+      if (this.layerFx[i] === 0) o.emissive = this.emissive[i];
       r.sprite(this.ids[i], frame, this.x[i], this.y[i], o);
     }
   }
@@ -558,10 +575,16 @@ class SpriteFx {
 }
 
 // ------------------------------------------------------------------------------------------------------------
-// Ground decals: scorch marks (cooling embers)
+// Ground decals: scorch marks (cooling embers), blood, rime patches (frost bursts) and webs
 // ------------------------------------------------------------------------------------------------------------
 
-const DECAL_CAP = 64;
+const DECAL_CAP = 96;
+
+export type DecalKind = 'scorch' | 'blood' | 'rime' | 'web';
+const DECAL_KINDS: readonly DecalKind[] = ['scorch', 'blood', 'rime', 'web'];
+const DECAL_SPRITE: Record<DecalKind, string> = { scorch: 'fx/scorch', blood: 'fx/blood', rime: 'fx/glow', web: 'fx/web' };
+const DECAL_VARIANTS: Record<DecalKind, number> = { scorch: 2, blood: 3, rime: 1, web: 2 };
+const RIME: RGB = [0.5, 0.72, 0.95];
 
 class Decals {
   private readonly x = new Float32Array(DECAL_CAP);
@@ -571,18 +594,21 @@ class Decals {
   private readonly variant = new Uint8Array(DECAL_CAP);
   private readonly scale = new Float32Array(DECAL_CAP);
   private readonly hot = new Float32Array(DECAL_CAP);
+  private readonly kind = new Uint8Array(DECAL_CAP);
   private next = 0;
 
-  spawn(x: number, y: number, scale: number, life: number, hot: number): void {
+  /** A decal of `kind` (default scorch) at (x, y); `hot` = initial ember glow of a scorch (cools over 2.5 s). */
+  spawn(x: number, y: number, scale: number, life: number, hot: number, kind: DecalKind = 'scorch'): void {
     const i = this.next;
     this.next = (this.next + 1) % DECAL_CAP;
     this.x[i] = x;
     this.y[i] = y;
     this.age[i] = 0;
     this.life[i] = life;
-    this.variant[i] = (Math.random() * 2) | 0;
+    this.variant[i] = (Math.random() * DECAL_VARIANTS[kind]) | 0;
     this.scale[i] = scale;
     this.hot[i] = hot;
+    this.kind[i] = DECAL_KINDS.indexOf(kind);
   }
 
   update(dt: number): void {
@@ -603,12 +629,26 @@ class Decals {
       const x = this.x[i];
       const y = this.y[i];
       if (x < v.x0 - 40 || x > v.x1 + 40 || y < v.y0 - 40 || y > v.y1 + 40) continue;
+      const kind = DECAL_KINDS[this.kind[i]];
       const o = pen.sprite('decal');
-      o.alpha = t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1;
+      const fade = t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1;
+      o.alpha = fade;
       o.scale = this.scale[i];
-      // Embers in the scorch cool over the first seconds.
-      o.emissive = this.hot[i] * Math.max(0, 1 - this.age[i] / 2.5);
-      r.sprite('fx/scorch', this.variant[i], x, y, o);
+      if (kind === 'rime') {
+        // A pale frost sheen where cold burst: soft, faintly self-lit so it reads on the dark tiles.
+        o.tint = RIME;
+        o.additive = true;
+        o.alpha = 0.2 * fade * Math.min(1, this.age[i] / 0.15);
+        o.emissive = 0.35;
+        o.scaleY = this.scale[i] * 0.55;
+      } else if (kind === 'web') {
+        o.alpha = fade * Math.min(1, this.age[i] / 0.08);
+        o.emissive = 0.25;
+      } else if (kind === 'scorch') {
+        // Embers in the scorch cool over the first seconds.
+        o.emissive = this.hot[i] * Math.max(0, 1 - this.age[i] / 2.5);
+      }
+      r.sprite(DECAL_SPRITE[kind], this.variant[i], x, y, o);
     }
   }
 
@@ -623,6 +663,13 @@ class Decals {
 
 const CORPSE_CAP = 220;
 const CORPSE_IDS = MONSTER_KINDS.map((k) => `monster/${k}/corpse`);
+/** What a corpse turns into, per family: ash grey (the forge), rime blue-grey (the ossuary), dust (the arena). */
+const CORPSE_END: readonly RGB[] = [[0.42, 0.4, 0.41], [0.52, 0.6, 0.72], [0.5, 0.44, 0.38]];
+const CRUMBLE: readonly (readonly [RGB, RGB, string])[] = [
+  [C.ash, C.smokeEnd, 'fx/ash'],
+  [[0.7, 0.82, 0.95], [0.25, 0.32, 0.42], 'fx/frost'],
+  [[0.55, 0.48, 0.4], [0.2, 0.17, 0.14], 'fx/smoke'],
+];
 
 class Corpses {
   private readonly x = new Float32Array(CORPSE_CAP);
@@ -634,13 +681,16 @@ class Corpses {
   private readonly dtype = new Uint8Array(CORPSE_CAP);
   private readonly fps = new Float32Array(MONSTER_KINDS.length);
   private readonly frameCount = new Uint8Array(MONSTER_KINDS.length);
+  /** Corpse family per kind (index into CORPSE_END / CRUMBLE). */
+  private readonly family = new Uint8Array(MONSTER_KINDS.length);
   private readonly ashed = new Uint8Array(CORPSE_CAP);
   private next = 0;
   private readonly tint: [number, number, number] = [1, 1, 1];
 
-  setInfo(kind: number, frames: number, fps: number): void {
+  setInfo(kind: number, frames: number, fps: number, family = 0): void {
     this.frameCount[kind] = frames;
     this.fps[kind] = fps;
+    this.family[kind] = family;
   }
 
   spawn(kind: number, x: number, y: number, flip: boolean, dtype: number, life: number): number {
@@ -665,10 +715,11 @@ class Corpses {
       this.age[i] = a;
       if (a >= life) this.life[i] = 0;
       else if (!this.ashed[i] && a > life * 0.62) {
-        // Crumbling: a puff of ash drifting up as the body turns to cinders.
+        // Crumbling: a puff of ash (rime flakes, dust) drifting up as the body turns to cinders.
         this.ashed[i] = 1;
-        const b = pen.burst(this.x[i], this.y[i] - 3, 4, C.ash, C.smokeEnd);
-        b.sprite = 'fx/ash';
+        const cr = CRUMBLE[this.family[this.kind[i]]] ?? CRUMBLE[0];
+        const b = pen.burst(this.x[i], this.y[i] - 3, 4, cr[0], cr[1]);
+        b.sprite = cr[2];
         pen.speed(3, 12);
         pen.life(0.8, 1.6);
         pen.size(1, 1.4);
@@ -697,8 +748,9 @@ class Corpses {
       const a = this.age[i];
       const t = a / life;
       const frame = Math.min(this.frameCount[k] - 1, Math.floor(a * (this.fps[k] || 8)));
-      // Fresh → charred → ash grey, then fade.
+      // Fresh → charred → ash grey (rimed over, dusty), then fade.
       const ash = clamp01((t - 0.35) / 0.35);
+      const end = CORPSE_END[this.family[k]] ?? CORPSE_END[0];
       const dt = this.dtype[i];
       let cr = 1;
       let cg = 1;
@@ -706,9 +758,9 @@ class Corpses {
       if (dt === 1) { cr = 0.62; cg = 0.5; cb = 0.46; } // fire: charred
       else if (dt === 2) { cr = 0.7; cg = 0.86; cb = 1; } // cold: frosted
       else if (dt === 4) { cr = 0.78; cg = 0.6; cb = 0.9; } // void
-      tint[0] = cr + (0.42 - cr) * ash;
-      tint[1] = cg + (0.4 - cg) * ash;
-      tint[2] = cb + (0.41 - cb) * ash;
+      tint[0] = cr + (end[0] - cr) * ash;
+      tint[1] = cg + (end[1] - cg) * ash;
+      tint[2] = cb + (end[2] - cb) * ash;
       const o = pen.sprite('decal');
       o.tint = tint;
       o.flipX = this.flip[i] === 1;

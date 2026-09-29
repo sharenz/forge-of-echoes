@@ -24,6 +24,7 @@ import {
   hideoutDummyPosition, hideoutSpawn, latchPortalsUnder, layoutHideout, layoutMap, setHideoutPortal, updatePropInteractions,
 } from './props';
 import { updateProjectiles } from './projectiles';
+import { monsterDefs, rosterFor } from './rosters';
 import { spawnMonster } from './spawn';
 import { MonsterStore, MoteStore, ProjectileStore } from './stores';
 import { createDirector, updateDirector } from './waves';
@@ -116,14 +117,15 @@ export function createWorld(config: RunConfig, capacities: StoreCapacities = def
     props,
     packs: [],
     director,
-    boss: {
-      phase: 1, spiral: 0, spiralAngle: 0, spiralDir: 1, spiralEmit: 0, spiralCd: 0, slamCd: 0, meteorCd: 0,
-      chargeCd: 0, summonCd: 0, roar: 0, chargeDirX: 0, chargeDirY: 0,
-    },
+    roster: rosterFor(config.theme),
+    boss: { phase: 1, roar: 0, state: null },
     events: new EventBuffer(),
     outcomes: [],
     view,
-    nextAreaId: 1,
+    areaSeq: 0,
+    memory: new Map(),
+    corpses: [],
+    corpseCursor: 0,
     nextDropId: 1,
     nextPropId: 1,
     kills: 0,
@@ -294,16 +296,16 @@ function syncView(w: World): void {
   r.monstersAlive = w.config.mode === 'map' ? m.count : 0;
   const bossSlot = d.bossId >= 0 ? m.slotOf(d.bossId) : -1;
   if (bossSlot >= 0) {
-    if (!r.boss) r.boss = { name: 'Cinder Matriarch', life: 0, maxLife: 0, phase: 1 };
+    if (!r.boss) r.boss = { name: monsterDefs()[m.kind[bossSlot]].name, life: 0, maxLife: 0, phase: 1 };
     r.boss.life = Math.max(0, m.life[bossSlot]);
     r.boss.maxLife = m.maxLife[bossSlot];
     r.boss.phase = w.boss.phase;
   } else r.boss = null;
-  const heraldSlot = d.heraldId >= 0 ? m.slotOf(d.heraldId) : -1;
-  if (heraldSlot >= 0) {
-    if (!r.lieutenant) r.lieutenant = { name: 'Ashbound Herald', life: 0, maxLife: 0 };
-    r.lieutenant.life = Math.max(0, m.life[heraldSlot]);
-    r.lieutenant.maxLife = m.maxLife[heraldSlot];
+  const lieutenantSlot = d.lieutenantId >= 0 ? m.slotOf(d.lieutenantId) : -1;
+  if (lieutenantSlot >= 0) {
+    if (!r.lieutenant) r.lieutenant = { name: monsterDefs()[m.kind[lieutenantSlot]].name, life: 0, maxLife: 0 };
+    r.lieutenant.life = Math.max(0, m.life[lieutenantSlot]);
+    r.lieutenant.maxLife = m.maxLife[lieutenantSlot];
   } else r.lieutenant = null;
   syncRunView(w);
 }

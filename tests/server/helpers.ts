@@ -338,14 +338,18 @@ function itemKey(item: Item): string {
 
 /**
  * Everything the given characters hold together: unique items by content (uid and "new" badge ignored),
- * currency and flask charges summed per kind (stacks merge and flasks refill belts on the way).
+ * currency and flask charges summed per kind (stacks merge and flasks refill belts on the way). The special
+ * stash tabs count too: Crafting Stash slots as currency, Map Stash maps as items.
  */
 export function holdings(...chs: CharacterSave[]): { items: string[]; stacks: Record<string, number> } {
   const items: string[] = [];
   const stacks: Record<string, number> = {};
+  const addStack = (key: string, n: number) => {
+    stacks[key] = (stacks[key] ?? 0) + n;
+  };
   const add = (item: Item) => {
-    if (item.kind === 'currency') stacks[`c:${item.currencyId}`] = (stacks[`c:${item.currencyId}`] ?? 0) + item.count;
-    else if (item.kind === 'flask') stacks[`f:${item.flaskId}`] = (stacks[`f:${item.flaskId}`] ?? 0) + item.count;
+    if (item.kind === 'currency') addStack(`c:${item.currencyId}`, item.count);
+    else if (item.kind === 'flask') addStack(`f:${item.flaskId}`, item.count);
     else items.push(itemKey(item));
   };
   for (const ch of chs) {
@@ -353,19 +357,22 @@ export function holdings(...chs: CharacterSave[]): { items: string[]; stacks: Re
     for (const tab of ch.stash) for (const e of tab.grid.entries) add(e.item);
     for (const it of Object.values(ch.equipment)) if (it) add(it);
     if (ch.mapDevice) add(ch.mapDevice);
-    for (const b of ch.belt) if (b) stacks[`f:${b.flaskId}`] = (stacks[`f:${b.flaskId}`] ?? 0) + b.count;
+    for (const b of ch.belt) if (b) addStack(`f:${b.flaskId}`, b.count);
+    for (const [id, n] of Object.entries(ch.currencyStash ?? {})) if (n) addStack(`c:${id}`, n);
+    for (const m of ch.mapStash ?? []) add(m);
   }
   items.sort();
   return { items, stacks };
 }
 
-/** Every item uid of a character (must be unique within it). */
+/** Every item uid of a character (must be unique within it; Map Stash maps included). */
 export function uidsOf(ch: CharacterSave): string[] {
   const out: string[] = [];
   for (const e of ch.backpack.entries) out.push(e.item.uid);
   for (const tab of ch.stash) for (const e of tab.grid.entries) out.push(e.item.uid);
   for (const it of Object.values(ch.equipment)) if (it) out.push(it.uid);
   if (ch.mapDevice) out.push(ch.mapDevice.uid);
+  for (const m of ch.mapStash ?? []) out.push(m.uid);
   return out;
 }
 

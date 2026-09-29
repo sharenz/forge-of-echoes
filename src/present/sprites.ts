@@ -105,3 +105,90 @@ export class WandTips {
     return out;
   }
 }
+
+/** Half-size of the window (pixels) in which hot emissive pixels count as one cluster. */
+const HOT_WINDOW = 3;
+
+/**
+ * Emissive hotspots measured from the art: for a sprite frame, the centre of its densest cluster of hot emissive
+ * pixels (≥ 60% of the frame's brightest emissive alpha) relative to the anchor — the Warden's lantern, Varkus's
+ * forge-hot shield boss, the Chainmaster's red-hot hooks. Lights hang there and follow the animation (the lantern
+ * swings). Computed lazily per sprite id and cached; a sprite without emissive pixels answers null.
+ */
+export class Hotspots {
+  private readonly defs = new Map<string, SpriteDef>();
+  private readonly spots = new Map<string, Float32Array | null>();
+
+  constructor(sprites: readonly SpriteDef[]) {
+    for (const s of sprites) this.defs.set(s.id, s);
+  }
+
+  /** Offset (dx, dy) of the hotspot of `id` frame `frame` from the anchor (flip mirrors x) into `out`, or null. */
+  at(id: string, frame: number, flip: boolean, out: { x: number; y: number }): { x: number; y: number } | null {
+    let t = this.spots.get(id);
+    if (t === undefined) {
+      t = this.measure(id);
+      this.spots.set(id, t);
+    }
+    if (!t) return null;
+    const n = t.length / 3;
+    const f = Math.max(0, Math.min(n - 1, frame | 0));
+    if (t[f * 3 + 2] === 0) return null;
+    out.x = flip ? -t[f * 3] : t[f * 3];
+    out.y = t[f * 3 + 1];
+    return out;
+  }
+
+  private measure(id: string): Float32Array | null {
+    const s = this.defs.get(id);
+    if (!s || !s.emissive) return null;
+    const out = new Float32Array(s.frames.length * 3);
+    let any = false;
+    for (let f = 0; f < s.frames.length; f++) {
+      const c = hotspot(s.emissive[f]?.data, s.width, s.height);
+      if (!c) continue;
+      out[f * 3] = c.x + 0.5 - s.anchorX;
+      out[f * 3 + 1] = c.y + 0.5 - s.anchorY;
+      out[f * 3 + 2] = 1;
+      any = true;
+    }
+    return any ? out : null;
+  }
+}
+
+/** Centre of the densest cluster of hot pixels in an emissive mask (straight RGBA), or null. Exported for tests. */
+export function hotspot(data: Uint8ClampedArray | undefined, w: number, h: number): { x: number; y: number } | null {
+  if (!data) return null;
+  let best = 0;
+  for (let i = 3; i < data.length; i += 4) if (data[i] > best) best = data[i];
+  if (best === 0) return null;
+  const cut = best * 0.6;
+  const hot = (x: number, y: number): number => (x < 0 || y < 0 || x >= w || y >= h ? 0 : data[(y * w + x) * 4 + 3] >= cut ? data[(y * w + x) * 4 + 3] : 0);
+  let bx = -1;
+  let by = -1;
+  let bestSum = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!hot(x, y)) continue;
+      let sum = 0;
+      for (let dy = -HOT_WINDOW; dy <= HOT_WINDOW; dy++) for (let dx = -HOT_WINDOW; dx <= HOT_WINDOW; dx++) sum += hot(x + dx, y + dy);
+      if (sum > bestSum) {
+        bestSum = sum;
+        bx = x;
+        by = y;
+      }
+    }
+  }
+  let sx = 0;
+  let sy = 0;
+  let sw = 0;
+  for (let dy = -HOT_WINDOW; dy <= HOT_WINDOW; dy++) {
+    for (let dx = -HOT_WINDOW; dx <= HOT_WINDOW; dx++) {
+      const a = hot(bx + dx, by + dy);
+      sx += (bx + dx) * a;
+      sy += (by + dy) * a;
+      sw += a;
+    }
+  }
+  return sw > 0 ? { x: sx / sw, y: sy / sw } : null;
+}

@@ -5,6 +5,7 @@ import { BELT_SLOTS, LOADOUT_SLOTS } from '../../contracts/items';
 import type { HudFlask, HudSlot } from '../../contracts/ui';
 import { PixelIcon, cx } from '../components/common';
 import { useLocal } from '../local';
+import { counterplay } from '../lib/debuffs';
 import { formatCooldown, formatInt, fraction } from '../lib/format';
 import { shallowEqual, useUi } from '../store';
 
@@ -61,6 +62,11 @@ function SkillSlot({ index }: { index: number }) {
   const local = useLocal();
   const slot = useUi((s) => s.hud?.slots[index] ?? null, slotEq);
   const auto = useUi((s) => index === 0 && s.settings.autoAttack);
+  // The skill that answers an active debuff (Rift Step breaks a root) glows while it lasts and is ready.
+  const counter = useUi((s) => {
+    const id = s.hud?.slots[index]?.skillId;
+    return !!id && !!s.hud?.debuffs?.length && counterplay(s.hud.debuffs).skills.includes(id);
+  });
   if (!slot) return null;
   const frac = slot.cooldownTotal > 0 ? fraction(slot.cooldown, slot.cooldownTotal) : 0;
   const cooling = slot.cooldown > 0.05 && (slot.maxCharges <= 1 || slot.charges === 0);
@@ -73,6 +79,8 @@ function SkillSlot({ index }: { index: number }) {
         cooling && 'fe-skill--cooling',
         starved && 'fe-skill--starved',
         index === 0 && 'fe-skill--basic',
+        // Only a skill you can use right now says "use me"; on cooldown or short of Focus it keeps a quiet ring.
+        counter && (cooling || !slot.usable ? 'fe-skill--counter-wait' : 'fe-skill--counter'),
       )}
       onPointerEnter={(e) => slot.skillId && local.showTooltip({ kind: 'skill', skillId: slot.skillId }, e.currentTarget, 'above')}
       onPointerLeave={() => local.hideTooltip()}
@@ -113,6 +121,11 @@ function flaskEq(a: HudFlask | null, b: HudFlask | null): boolean {
 
 function FlaskSlot({ index }: { index: number }) {
   const f = useUi((s) => s.hud?.flasks[index] ?? null, flaskEq);
+  // A flask that removes an active debuff (Life: burning, bleeding; Focus: withered) glows while it has charges.
+  const counter = useUi((s) => {
+    const fl = s.hud?.flasks[index];
+    return !!fl && fl.count > 0 && !!s.hud?.debuffs?.length && counterplay(s.hud.debuffs).flasks.includes(fl.resource);
+  });
   if (!f) {
     return (
       <div class="fe-flask fe-flask--none">
@@ -121,7 +134,15 @@ function FlaskSlot({ index }: { index: number }) {
     );
   }
   return (
-    <div class={cx('fe-flask', `fe-flask--${f.resource}`, f.active > 0 && 'fe-flask--active', f.count === 0 && 'fe-flask--dry')}>
+    <div
+      class={cx(
+        'fe-flask',
+        `fe-flask--${f.resource}`,
+        f.active > 0 && 'fe-flask--active',
+        f.count === 0 && 'fe-flask--dry',
+        counter && 'fe-flask--counter',
+      )}
+    >
       <div class="fe-flask__fill" style={{ height: `${(f.active * 100).toFixed(1)}%` }} />
       <PixelIcon id={`icon/flask/${f.flaskId}`} class="fe-flask__icon" width="var(--slot-icon)" height="var(--slot-icon)" />
       <span class="fe-flask__count">{f.count}</span>

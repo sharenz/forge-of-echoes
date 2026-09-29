@@ -1,10 +1,10 @@
 // Small helpers shared by the monster brains (regular monsters, herald, matriarch).
+import type { PlayerDebuff } from '../contracts/bestiary';
 import { MONSTER_KINDS } from '../contracts/content';
-import { MONSTER_ANIM, type MonsterAnimCode } from '../contracts/sim';
-import { ARCHETYPE_BY_INDEX } from './archetypes';
-import { damagePlayer } from './combat';
-import { ATTACKER_IMMUNITY, EMPOWER_BONUS, PLAYER_RADIUS } from './constants';
-import { DAMAGE_INDEX } from './math';
+import { MONSTER_ANIM, type MonsterAnimCode, type RootSource } from '../contracts/sim';
+import { hitPlayer } from './combat';
+import { ATTACKER_IMMUNITY, DT, EMPOWER_BONUS, PLAYER_RADIUS } from './constants';
+import { TAU } from './math';
 import { projSpec, spawnProjectile } from './projectiles';
 import { MSTATE } from './stores';
 import type { PlayerState, World } from './world';
@@ -97,29 +97,70 @@ export function wander(w: World, i: number): void {
   moveAlong(w, i, gx, gy, 0.35);
 }
 
-/** A melee strike on a player (subject to evasion, armour and that player's contact caps). */
-export function meleeHit(w: World, i: number, t: PlayerState, mult = 1): void {
+/**
+ * A melee strike on a player (subject to evasion, armour and that player's contact caps), with an
+ * optional debuff rider. Returns hitPlayer's result: −1 when it didn't connect (evaded, invulnerable,
+ * dead), else the damage dealt — follow up (knockback…) only on a connecting hit.
+ */
+export function meleeHit(
+  w: World, i: number, t: PlayerState, mult = 1, debuff: PlayerDebuff | null = null, source?: RootSource,
+): number {
   const m = w.monsters;
-  const a = ARCHETYPE_BY_INDEX[m.kind[i]];
-  damagePlayer(w, t, m.damage[i] * mult * empowerMult(w, i), DAMAGE_INDEX[a.damageType], 'melee');
+  const r = hitPlayer(w, t, m.damage[i] * mult * empowerMult(w, i), m.dtype[i], 'melee', debuff, source);
   if (w.events.lowOpen) {
     w.events.low({ t: 'monsterAttack', kind: MONSTER_KINDS[m.kind[i]], x: m.x[i], y: m.y[i], attack: 'melee' });
   }
   if (m.attackCd[i] < ATTACKER_IMMUNITY) m.attackCd[i] = ATTACKER_IMMUNITY;
+  return r;
 }
 
-/** Fire one hostile projectile from a monster (`flight` > 0: a lob that lands after that many seconds). */
+/**
+ * A monster's own scratch memory (bosses and lieutenants with more timers than timerA–D): `size`
+ * numbers, zeroed on first use, kept per run and dropped when the monster dies.
+ */
+export function memoryOf(w: World, i: number, size: number): Float64Array {
+  const id = w.monsters.id[i];
+  let mem = w.memory.get(id);
+  if (!mem || mem.length < size) {
+    const next = new Float64Array(size);
+    if (mem) next.set(mem);
+    mem = next;
+    w.memory.set(id, mem);
+  }
+  return mem;
+}
+
+/**
+ * Fire one hostile projectile from a monster (`flight` > 0: a lob that lands after that many seconds).
+ * Returns its slot (-1 when the store is full). The kind's default rider (projectiles.ts
+ * PROJECTILE_RIDERS) applies; override it with setProjectileDebuff / setProjectileEffect.
+ */
 export function fireHostile(
   w: World, i: number, kind: number, angle: number, speed: number, range: number, radius: number, damage: number, dtype: number,
   flight = 0,
-): void {
+): number {
+  const m = w.monsters;
+  const off = muzzleOffset(w, i);
+  return fireHostileFrom(
+    w, i, kind, m.x[i] + Math.cos(angle) * off, m.y[i] + Math.sin(angle) * off, angle, speed, range, radius, damage, dtype, flight,
+  );
+}
+
+/**
+ * fireHostile from an explicit point (x, y) instead of monster `i`'s muzzle — e.g. the start of an aim
+ * line drawn during the windup, so the shot flies exactly along it even if the body was shoved since.
+ * Still credited to monster `i` (a chain hook pulls toward it).
+ */
+export function fireHostileFrom(
+  w: World, i: number, kind: number, x: number, y: number, angle: number, speed: number, range: number, radius: number,
+  damage: number, dtype: number, flight = 0,
+): number {
   const m = w.monsters;
   const s = projSpec;
-  const off = muzzleOffset(w, i);
   s.kind = kind;
   s.hostile = true;
-  s.x = m.x[i] + Math.cos(angle) * off;
-  s.y = m.y[i] + Math.sin(angle) * off;
+  s.x = x;
+  s.y = y;
   s.angle = angle;
   s.speed = speed;
   s.range = range;
@@ -130,7 +171,10 @@ export function fireHostile(
   s.critMult = 1;
   s.ailmentChance = 0;
   s.pierce = 0;
-  spawnProjectile(w, s, flight);
+  s.owner = 0;
+  const slot = spawnProjectile(w, s, flight);
+  if (slot >= 0) w.projectiles.src[slot] = m.id[i];
+  return slot;
 }
 
 /** Where a monster's projectiles leave its body (distance from its centre). */
@@ -141,6 +185,23 @@ export function muzzleOffset(w: World, i: number): number {
 /** Extra projectiles granted to monster ranged attacks by map mods. */
 export function extraProjectiles(w: World): number {
   return Math.max(0, Math.floor(w.config.monsters.extraProjectiles || 0));
+}
+
+/**
+ * Turn monster `i`'s aim (m.aim, radians) toward the vector (dx, dy) by at most `rate` rad/s; its
+ * sprite faces the same way. The core does this for a guarding blocker every tick.
+ */
+export function turnToward(w: World, i: number, dx: number, dy: number, rate: number): void {
+  const m = w.monsters;
+  const want = Math.atan2(dy, dx);
+  let diff = want - m.aim[i];
+  diff -= Math.round(diff / TAU) * TAU;
+  const max = rate * DT;
+  let a = m.aim[i] + (diff > max ? max : diff < -max ? -max : diff);
+  if (a > Math.PI) a -= TAU;
+  else if (a < -Math.PI) a += TAU;
+  m.aim[i] = a;
+  m.facing[i] = Math.cos(a) >= 0 ? 1 : -1;
 }
 
 export function toChase(w: World, i: number): void {

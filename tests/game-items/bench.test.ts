@@ -12,7 +12,7 @@ import {
 } from '../../src/data/items';
 import { affixAllowedOnBase } from '../../src/game/items/affix-pool';
 import {
-  applyBenchRecipe, applyEquipmentCurrency, benchCost, benchEssence, benchRecipes, benchTier,
+  applyBenchRecipe, applyEquipmentCurrency, backpackCurrency, benchCost, benchCurrency, benchEssence, benchRecipes, benchTier,
   clearCraftedAffix, craftPreview, craftingTargetError, describeEquipment, findItem, formatRangeLine, generateUnique,
   itemModifiers,
 } from '../../src/game/items';
@@ -296,18 +296,26 @@ describe('availability and reasons', () => {
     expect(recipe(full, 'bench:coldResistance').available).toBe(true);
   });
 
-  it('checks the price against the backpack only, naming what is missing', () => {
+  it('checks the price against the backpack and the Crafting Stash, naming what is missing', () => {
     const ch = bench(item({ baseId: 'emberRing', itemLevel: 60, rarity: 'normal' }), { scrap: 3 });
     expect(reasonOf(ch, 'bench:life'))
-      .toBe('Not enough currency in your backpack: needs 9 Forge Scrap (you have 3) and 1 Vital Essence (you have 0).');
+      .toBe('Not enough currency in your backpack or Crafting Stash: needs 9 Forge Scrap (you have 3) and 1 Vital Essence (you have 0).');
     expect(benchRecipes(ch, T).some((r) => r.id === 'bench:critChance')).toBe(false); // not a ring affix
-    expect(reasonOf(ch, 'bench:itemRarity')).toBe('Not enough currency in your backpack: needs 30 Forge Scrap (you have 3).');
-    // Stashed currency does not count.
+    expect(reasonOf(ch, 'bench:itemRarity'))
+      .toBe('Not enough currency in your backpack or Crafting Stash: needs 30 Forge Scrap (you have 3).');
+    // Currency in normal stash tabs does not count.
     const stashed = { ...ch, stash: [{ name: 'Tab 1', grid: { w: 12, h: 8, entries: [
       { item: currency('scrap', 40, 'stash-scrap'), x: 0, y: 0 }, { item: currency('essenceVital', 9, 'stash-vital'), x: 1, y: 0 },
     ] } }] };
     expect(recipe(stashed, 'bench:life').available).toBe(false);
-    expect(expectErr(applyBenchRecipe(stashed, T, 'bench:life'))).toMatch(/Not enough currency in your backpack/);
+    expect(expectErr(applyBenchRecipe(stashed, T, 'bench:life'))).toMatch(/^Not enough currency in your backpack or Crafting Stash/);
+    // The Crafting Stash does: the backpack pays first, the slot covers the rest.
+    const banked = { ...ch, currencyStash: { scrap: 100, essenceVital: 2 } };
+    expect(benchCurrency(banked, 'scrap')).toBe(103);
+    expect(recipe(banked, 'bench:life').available).toBe(true);
+    const out = expectOk(applyBenchRecipe(banked, T, 'bench:life')).character;
+    expect(backpackCurrency(out, 'scrap')).toBe(0);
+    expect(out.currencyStash).toEqual({ scrap: 94, essenceVital: 1 });
   });
 
   it('rejects unknown recipes, foreign targets and affixes that do not fit the base', () => {

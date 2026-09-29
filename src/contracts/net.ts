@@ -82,8 +82,10 @@ export interface InputMessage {
 
 export type Command =
   // items & crafting (validated by the rules on the server)
-  | { c: 'moveItem'; uid: string; to: ItemLocation }
-  | { c: 'quickMove'; uid: string; stashTab: number | null }
+  | { c: 'moveItem'; uid: string; to: ItemLocation; count?: number }
+  | { c: 'quickMove'; uid: string; stashTab: number | 'currency' | 'mapCurrency' | 'maps' | null; count?: number }
+  /** Deposit every currency stack in the backpack into the Crafting Stash (hideout only). */
+  | { c: 'depositAllCurrency' }
   | { c: 'discardItem'; uid: string }
   | { c: 'applyCurrency'; currencyUid: string; targetUid: string; affixIndex?: number }
   | { c: 'addStashTab' }

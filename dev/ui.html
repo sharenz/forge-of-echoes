@@ -39,6 +39,13 @@
       //   ?bench=1|crafted (item on the crafting bench; implied by panels=craftingBench)
       //   ?trade=1|locked|waiting (a trade with Mira: she accepted / accept countdown / you wait for her)
       //   ?tradeRequest=1 (Corvin asks to trade)   ?search=life (opens the stash with that query)   ?chattext=/trade%20Mira
+      //   ?stash=maps|currency|mapCurrency|<tab index> (opens the stash on that tab)  &specialstash=0 (empty special tabs)
+      //   ?tier=<1-15> (expanded Map Stash tier)   ?debuffs=1 | ?debuffs=chilled,rooted (HUD debuff bar)
+      //   ?theme=ashenForge|rimedOssuary|ironColiseum (map roster: world, Tell banner, lieutenant and boss names)
+      //   ?tooltip=map-row|cslot|cslot-empty|tier|debuff|debuff-rooted|stab-maps|stab-currency (special tab / HUD hovers)
+      //   ?drag=deposit|withdraw|mapdeposit (drag a currency onto the Crafting Stash, a slot to the backpack, a map in)
+      //   ?device=empty (the map device starts empty: its panel opens on the Map Stash picker)
+      //   ?drag=mapload (with panels=mapDevice: drag a backpack map onto the picker, which loads it into the device)
       import { generateArt } from '/src/art/index.ts';
       import { mountUi } from '/src/ui/index.ts';
       import { createMockStore } from '/src/ui/dev/mockStore.ts';
@@ -47,10 +54,16 @@
       const flag = (k) => q.get(k) === '1' || q.get(k) === 'true';
       const list = (k) => (q.get(k) ? q.get(k).split(',').filter(Boolean) : []);
       const zone = q.get('zone') ?? 'hideout';
+      const mapTheme = q.get('theme') ?? 'ashenForge';
       const art = generateArt();
 
       // ---- fake world -------------------------------------------------------------------------------
-      const theme = zone === 'map' || zone === 'partymap' ? 'ashenForge' : 'hideout';
+      const theme = zone === 'map' || zone === 'partymap' ? mapTheme : 'hideout';
+      const WORLD_MONSTERS = {
+        ashenForge: ['monster/ashling/move', 'monster/emberSkitter/move', 'monster/cinderSpitter/idle'],
+        rimedOssuary: ['monster/boneThrall/move', 'monster/rimeshade/move', 'monster/frostWeaver/idle'],
+        ironColiseum: ['monster/pitHound/move', 'monster/chainThrall/move', 'monster/shieldbearer/idle'],
+      };
       const canvas = document.getElementById('world');
       function frameCanvas(img) {
         const c = document.createElement('canvas');
@@ -89,7 +102,9 @@
         ctx.drawImage(frameCanvas(hero.frames[0]), Math.round(w * 0.5 - hero.anchorX), Math.round(h * 0.55 - hero.anchorY));
         if (theme !== 'hideout') {
           for (let i = 0; i < 26; i++) {
-            const m = sprite(['monster/ashling/move', 'monster/emberSkitter/move', 'monster/cinderSpitter/idle'][i % 3]);
+            const kinds = WORLD_MONSTERS[theme] ?? WORLD_MONSTERS.ashenForge;
+            const m = sprite(kinds[i % 3]);
+            if (!m) continue;
             ctx.drawImage(frameCanvas(m.frames[i % m.frames.length]), Math.round(w * (0.25 + rnd() * 0.5) - m.anchorX), Math.round(h * (0.2 + rnd() * 0.3) - m.anchorY));
           }
         }
@@ -106,7 +121,11 @@
       // ---- UI -----------------------------------------------------------------------------------
       const panels = list('panels');
       if (q.get('party') === '1' && !panels.includes('party')) panels.push('party');
-      if (q.get('search') !== null && !panels.includes('stash')) panels.push('inventory', 'stash');
+      if ((q.get('search') !== null || q.get('stash') !== null) && !panels.includes('stash')) panels.push('inventory', 'stash');
+      const stashParam = q.get('stash');
+      const stashTab = stashParam === null ? null : /^\d+$/.test(stashParam) ? Number(stashParam) : stashParam;
+      const debuffParam = q.get('debuffs');
+      const debuffs = !debuffParam || debuffParam === '0' ? false : debuffParam === '1' ? true : debuffParam.split(',').filter(Boolean);
       const mode = (k) => (q.get(k) === '1' || q.get(k) === 'true' ? true : q.get(k) === '0' ? false : q.get(k) || undefined);
       const summary = q.get('summary');
       const store = createMockStore(art, {
@@ -138,9 +157,15 @@
         bench: mode('bench'),
         trade: mode('trade'),
         tradeRequest: flag('tradeRequest'),
+        stash: stashTab,
+        specialStash: q.get('specialstash') !== '0',
+        emptyDevice: q.get('device') === 'empty',
+        debuffs,
+        theme: mapTheme,
       });
       window.__store = store;
-      mountUi(document.getElementById('ui'), store);
+      const unmount = mountUi(document.getElementById('ui'), store);
+      window.__unmount = unmount;
 
       // ---- scripted hovers / drags for screenshots ---------------------------------------------------
       const hoverSel = {
@@ -160,6 +185,14 @@
         'palette-bad': '.fe-cur--off',
         'trade-theirs': '.fe-tside--theirs .fe-ttile:not(.fe-ttile--empty)',
         'trade-yours': '.fe-tside--yours .fe-ttile:not(.fe-ttile--empty)',
+        'map-row': '.fe-maprow--rare',
+        cslot: '.fe-cslot:not(.fe-cslot--empty)',
+        'cslot-empty': '.fe-cslot--empty',
+        tier: '.fe-tier--on',
+        debuff: '.fe-debuff',
+        'debuff-rooted': '.fe-debuff--rooted',
+        'stab-maps': '.fe-stab--maps',
+        'stab-currency': '.fe-stab--currency',
       };
       /** The backpack item carrying a bench-crafted affix. */
       const craftedSel = () => {
@@ -167,6 +200,11 @@
         return e ? `.fe-grid [data-uid="${e.item.uid}"]` : null;
       };
       const enter = (el) => el && el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false }));
+      // The Map Stash tier is picked first, so hovers and drags below find its rows.
+      setTimeout(() => {
+        const tier = q.get('tier');
+        if (tier) document.querySelectorAll('.fe-tier')[Number(tier) - 1]?.click();
+      }, 800);
       setTimeout(() => {
         const search = q.get('search');
         if (search !== null) {
@@ -189,8 +227,20 @@
         if (tip) enter(document.querySelector(tip === 'crafted' ? craftedSel() : hoverSel[tip] ?? tip));
         if (q.get('armed')) enter(document.querySelector('.fe-grid .fe-item--craft-valid'));
         const drag = q.get('drag');
+        /** The backpack stack of a currency (by id), for the deposit drag. */
+        const backpackCurrency = (id) => {
+          const e = store.get().character.backpack.entries.find((x) => x.item.kind === 'currency' && x.item.currencyId === id);
+          return e ? `[data-drop="backpack"] [data-uid="${e.item.uid}"]` : '[data-drop="backpack"] [data-kind="currency"]';
+        };
+        const SOURCES = {
+          equip: '.fe-grid [data-kind="equipment"][data-tone="magic"]',
+          deposit: backpackCurrency('essenceRime'),
+          mapdeposit: '[data-drop="backpack"] [data-kind="map"]',
+          mapload: '[data-drop="backpack"] [data-kind="map"]',
+          withdraw: '.fe-cslot:not(.fe-cslot--empty)',
+        };
         if (drag) {
-          const src = document.querySelector(drag === 'equip' ? '.fe-grid [data-kind="equipment"][data-tone="magic"]' : '.fe-grid [data-tone="rare"][data-kind="equipment"]');
+          const src = document.querySelector(SOURCES[drag] ?? '.fe-grid [data-tone="rare"][data-kind="equipment"]');
           const r = src.getBoundingClientRect();
           const down = { bubbles: true, clientX: r.left + 8, clientY: r.top + 8, button: 0, pointerId: 1 };
           src.dispatchEvent(new PointerEvent('pointerdown', down));
@@ -207,6 +257,10 @@
             return [r.left + r.width / 2, r.top + Math.min(r.height / 2, 40)];
           };
           if (drag === 'bench') [tx, ty] = onto('.fe-bench__socket');
+          if (drag === 'deposit') [tx, ty] = onto('.fe-cstash');
+          if (drag === 'mapdeposit') [tx, ty] = onto('.fe-stab--maps');
+          if (drag === 'mapload') [tx, ty] = onto('.fe-mstash--device .fe-mstash__list');
+          if (drag === 'withdraw') [tx, ty] = [grid.left + cell * 11.5, grid.top + cell * 4.5];
           if (drag === 'offer') [tx, ty] = onto('[data-drop="offer"]');
           if (drag === 'equip') {
             const slot = document.querySelector('[data-slot="ring2"]') ?? document.querySelector('[data-slot="helmet"]');

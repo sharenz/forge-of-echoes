@@ -1,6 +1,8 @@
 // Map Device (own hideout only): the map slot, the rules' map readout with breakdowns, the player's
 // personal luck (map + own gear, via rules.lootLuck on a preview of the run setup), portal status and the
-// ember "Activate" button. In a party member's hideout it shows THEIR open portal instead (read-only).
+// ember "Activate" button, then a picker over the Map Stash (tier tiles and map rows: click, Ctrl-click or drag a
+// map into the device; drag the device's map back onto the picker to file it). In a party member's hideout it
+// shows THEIR open portal instead (read-only).
 import { useMemo, useState } from 'preact/hooks';
 import { PORTALS_PER_MAP } from '../../contracts/net';
 import type { PortalInfo } from '../../contracts/net';
@@ -11,6 +13,7 @@ import { useLocal } from '../local';
 import { formatLuck, possessive } from '../lib/format';
 import { useStore, useUi } from '../store';
 import { PanelShell } from './PanelShell';
+import { MapStashView } from './StashSpecial';
 
 function PortalNote({ portal, own }: { portal: PortalInfo; own: boolean }) {
   const spent = portal.remaining === 0;
@@ -49,6 +52,9 @@ export function MapDevicePanel() {
   const zoneIsOwn = useUi((s) => s.hud?.zoneIsOwn ?? true);
   const [openLine, setOpenLine] = useState<string | null>(null);
   const map = ch?.mapDevice ?? null;
+  const stashed = ch?.mapStash?.length ?? 0;
+  // An empty device with maps in the stash: the picker is the way in, so it gets the room.
+  const picking = !map && stashed > 0;
 
   const readout = useMemo(() => {
     if (!ch || !map) return null;
@@ -117,11 +123,11 @@ export function MapDevicePanel() {
         </div>
       ) : (
         <>
-          <div class="fe-device__scroll fe-scrollfade">
-            <div class={cx('fe-device__circle', map && 'fe-device__circle--charged')}>
+          <div class={cx('fe-device__scroll', !picking && 'fe-scrollfade', picking && 'fe-device__scroll--picking')}>
+            <div class={cx('fe-device__circle', map && 'fe-device__circle--charged', picking && 'fe-device__circle--compact')}>
               <MapDeviceSlotView disabled={false} />
             </div>
-            {!map && (
+            {!map && !picking && (
               <p class="fe-device__empty">
                 Drag a map onto the device, or Ctrl-click one in your inventory. Activating it opens {PORTALS_PER_MAP} portals here; every
                 entry, by anyone in your party, uses one.
@@ -198,6 +204,17 @@ export function MapDevicePanel() {
                   })}
                 </div>
               </div>
+            )}
+            {stashed > 0 && (
+              <section class={cx('fe-device__stash', picking && 'fe-device__stash--grow')} aria-label="Map Stash">
+                <div class="fe-section-title">
+                  From your Map Stash
+                  <span class="fe-device__stash-hint">
+                    {map ? 'Click a map to swap it in' : `Click a map to load it · opens ${PORTALS_PER_MAP} portals`}
+                  </span>
+                </div>
+                <MapStashView mode="device" />
+              </section>
             )}
           </div>
           {/* Outside the scroll area: the open portal is what Activate would replace, so it stays in view. */}

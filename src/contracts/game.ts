@@ -234,9 +234,11 @@ export interface GameRulesApi {
   findItem(ch: CharacterSave, uid: string): { item: Item; location: ItemLocation } | null;
   canEquip(ch: CharacterSave, item: Item, slot: EquipSlot): { ok: boolean; reason?: string };
   /** Move an item (grid ↔ grid, equip/unequip, belt, map device). Merges stacks; swaps with a single blocking item when it fits back. */
-  moveItem(ch: CharacterSave, uid: string, to: ItemLocation): Result<CharacterSave>;
-  /** Ctrl-click: backpack ↔ open stash tab, or equip/unequip, or load flasks into the belt. */
-  quickMove(ch: CharacterSave, uid: string, ctx: { stashTab: number | null }): Result<CharacterSave>;
+  moveItem(ch: CharacterSave, uid: string, to: ItemLocation, count?: number): Result<CharacterSave>;
+  /** Ctrl-click: backpack ↔ open stash tab (normal or special), or equip/unequip, or load flasks into the belt. `count` withdraws a partial stack. */
+  quickMove(ch: CharacterSave, uid: string, ctx: { stashTab: number | 'currency' | 'mapCurrency' | 'maps' | null; count?: number }): Result<CharacterSave>;
+  /** Move every currency stack from the backpack into the Crafting Stash. */
+  depositAllCurrency(ch: CharacterSave): Result<CharacterSave>;
   /** Place a new item into the backpack (stacking where possible). Fails when there is no room. */
   addToBackpack(ch: CharacterSave, item: Item): Result<CharacterSave>;
   discardItem(ch: CharacterSave, uid: string): Result<CharacterSave>;

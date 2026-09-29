@@ -1,13 +1,18 @@
 // HudState (contracts/ui.ts) from the replicated world: the local PlayerView (life, focus, slots, flasks — the
-// server sends these only for the viewer), the RunView, the zone, portal info, the character (level/xp) and the
-// personal luck. Pure; rebuilt ~15 Hz by the app.
+// server sends these only for the viewer — and her debuffs, on her predicted timeline), the RunView, the zone,
+// portal info, the character (level/xp) and the personal luck. Pure; rebuilt ~15 Hz by the app.
 import { LOADOUT_KEYS, LOADOUT_SLOTS, BELT_SLOTS } from '../contracts/items';
 import type { CharacterSave } from '../contracts/items';
 import type { MonsterKind } from '../contracts/content';
 import { PORTALS_PER_MAP } from '../contracts/net';
 import type { PortalInfo, ZoneInfo } from '../contracts/net';
+import { PLAYER_DEBUFFS } from '../contracts/bestiary';
 import type { PlayerView, WorldView } from '../contracts/sim';
 import type { HudAlly, HudFlask, HudRun, HudSlot, HudState } from '../contracts/ui';
+
+type HudDebuff = HudState['debuffs'][number];
+
+const KNOWN_DEBUFFS: ReadonlySet<string> = new Set(PLAYER_DEBUFFS);
 
 /** The last wave preview announced by a 'waveTell' event. */
 export interface TellInfo {
@@ -88,6 +93,35 @@ export function hudFlasks(p: PlayerView | null): (HudFlask | null)[] {
   return out;
 }
 
+/**
+ * The local player's debuffs for the HUD bar (GAME_SPEC §13), copied out of the replica (its arrays and entries are
+ * pooled and change under us). `remaining` / `duration` in seconds; a timer that ran out, an unknown id or a dead
+ * player shows nothing. Should the same debuff arrive twice it shows once, with the longer timer and more stacks.
+ */
+export function hudDebuffs(p: PlayerView | null): HudDebuff[] {
+  const list = p && !p.dead ? p.debuffs : null;
+  if (!list || list.length === 0) return [];
+  const out: HudDebuff[] = [];
+  for (const d of list) {
+    if (!KNOWN_DEBUFFS.has(d.id)) continue;
+    const remaining = Number.isFinite(d.remaining) ? d.remaining : 0;
+    if (remaining <= 0) continue;
+    const duration = Math.max(remaining, Number.isFinite(d.duration) ? d.duration : 0);
+    const stacks = Math.max(1, Math.floor(Number.isFinite(d.stacks) ? d.stacks : 1));
+    const same = out.find((x) => x.id === d.id);
+    if (!same) {
+      out.push({ id: d.id, remaining, duration, stacks });
+      continue;
+    }
+    if (remaining > same.remaining) {
+      same.remaining = remaining;
+      same.duration = Math.max(same.duration, duration);
+    }
+    same.stacks = Math.max(same.stacks, stacks);
+  }
+  return out;
+}
+
 export function hudAllies(view: WorldView, localPlayerId: number): HudAlly[] {
   const out: HudAlly[] = [];
   for (const p of view.players) {
@@ -144,6 +178,7 @@ export function provisionalHud(prev: HudState, zone: ZoneInfo, characterId: stri
     run: null,
     portal: zone.kind === 'hideout' ? zone.portal : null,
     allies: [],
+    debuffs: [],
     dead: false,
     wardFraction: 0,
   };
@@ -177,6 +212,7 @@ export function buildHud(input: HudInput): HudState | null {
     run: hudRun(input),
     portal: input.zone.kind === 'hideout' ? input.portal : null,
     allies: hudAllies(input.view, input.localPlayerId),
+    debuffs: hudDebuffs(me),
     fps: Math.round(input.fps),
     pingMs: Math.round(input.pingMs),
     dead: me.dead,

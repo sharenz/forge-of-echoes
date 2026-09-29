@@ -80,6 +80,14 @@
 //     attributes. Only changed numbers are listed.
 //   • The Map readout has an "Experience" line (1.28x per tier above 1) and map tooltips an "Experience"
 //     property.
+//   • PER-MAP ROSTERS (GAME_SPEC §14): each map base carries its theme's family, lieutenant and boss from
+//     contracts/bestiary.ts THEME_ROSTER (MAP_BASES.*.family / lieutenant / boss), so the text always names
+//     what the sim spawns. The map tooltip has a "Boss" property and names the boss in its description;
+//     the readout's Waves line lists the monsters, wave 3's lieutenant and the boss, then a "Boss" line and an
+//     "Afflictions" line (the debuffs that map's monsters inflict, their sources and counterplay; data in
+//     src/data/progression/bestiary.ts). Item histories read "Dropped by The Hollow Warden in …".
+//   • Flask descriptions name their cleanse (Life: Burning and Bleeding; Focus: Withered); the sim applies it.
+//   • Rook pays from the backpack, stash tabs, then the Crafting Stash (currencyOnHand counts all three).
 //   • deriveStats sections: Attributes, Resources, Defence, Offence, Skills (loadout DPS), Luck,
 //     Utility, and Unique Effects when a unique grants a flag.
 //
@@ -93,7 +101,9 @@
 //              setLoadoutSlot, normalizeLoadout, skillSheetFor, skillRank
 //   maps:      MAP_BASE_INFO, describeMap, mapTitle, mapModifiers, monsterScaling, experienceMultiplier, waveConfig, mapLuck,
 //              buildMapSummary, createMapItem, rollMapWithRarity, mapCraftError / mapCraftPreview / craftMap,
-//              partyScaling(n), partyScalingLines(n)
+//              partyScaling(n), partyScalingLines(n), mapBosses(baseId) (lieutenant + boss: kind, name, sentence
+//              form), monsterName(kind), monsterSentenceName(kind), mapModName(def, baseId) (a mod's name on that
+//              base: the corrupted Wrath is named after the map's boss)
 //   runs:      mapSummary(ch, map), openMap, restoreRunSetup(map, seed), buildRunConfig(setup, hooks),
 //              playerRuntime(ch, setup), hideoutSeed(ownerId)
 //   luck:      lootLuck(setup, looter), lootLuckLines(setup, looter), gearLuck(ch)
@@ -101,7 +111,8 @@
 //              dropSpec(item, token, owner, playerDropped?) (autoPickup: equipment and player-dropped items false),
 //              dropLabel, categoryChances, killLuck, equipmentRarityOdds, rollEquipmentRarity
 //   merchant:  merchantOffers, buyOffer, gambleOdds(class, m, level?), currencyOnHand
-//   save:      newSave, parseSave, serializeSave, normalizeSave, normalizeCharacter, normalizeItem
+//   save:      newSave, parseSave, serializeSave, normalizeSave, normalizeCharacter, normalizeItem,
+//              normalizeCharacterReport (the character + the items it could not re-home, for server logs)
 //   dispatch:  describeItem, craftingTargetError, craftPreview, applyCurrency
 // =============================================================================================
 import type { MapBaseInfo } from '../../contracts/game';
@@ -132,9 +143,9 @@ export {
 export type { ResolvedSkill } from './skills';
 export {
   buildMapSummary, craftMap, createMapItem, dangerModCount, describeMap, echoWaveIndex, effectText, experienceMultiplier, hasEchoWave,
-  mapBaseImplicitText, mapCraftError, mapCraftPreview, mapLuck, mapModifiers, mapPlayerModifiers, mapTitle,
-  monsterLevelForTier, monsterScaling, partyScaling, partyScalingLines, rarityForDangerCount, rollMapWithRarity, voidOutcomes,
-  waveConfig,
+  mapBaseImplicitText, mapBosses, mapCraftError, mapCraftPreview, mapLuck, mapModName, mapModifiers, mapPlayerModifiers, mapTitle,
+  monsterLevelForTier, monsterName, monsterScaling, monsterSentenceName, partyScaling, partyScalingLines, rarityForDangerCount,
+  rollMapWithRarity, voidOutcomes, waveConfig,
 } from './maps';
 export type { GearLuck, MapCraftResult, MapModifier } from './maps';
 export { buildRunConfig, hideoutSeed, mapSummary, openMap, playerRuntime, restoreRunSetup } from './runs';
@@ -146,5 +157,6 @@ export {
 } from './loot';
 export type { KillLuck } from './loot';
 export { buyOffer, currencyOnHand, gambleOdds, merchantOffers } from './merchant';
-export { newSave, normalizeCharacter, normalizeItem, normalizeSave, parseSave, serializeSave } from './save';
+export { newSave, normalizeCharacter, normalizeCharacterReport, normalizeItem, normalizeSave, parseSave, serializeSave } from './save';
+export type { NormalizeReport } from './save';
 export { applyCurrency, craftPreview, craftingTargetError, describeItem } from './dispatch';

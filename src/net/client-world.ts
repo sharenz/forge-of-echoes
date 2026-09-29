@@ -8,11 +8,27 @@
 //    extrapolate for at most 100 ms (prev = B, current = B + velocity·100 ms, alpha = elapsed / 100 ms), then the
 //    render clock itself holds there and catches up with a gentle time warp once data flows again.
 //  • Live timeline (newest snapshot, ages advanced by the arrival clock): telegraph areas — a slam circle fills up
-//    as close to the server's real timing as the client can know, which is what the player dodges against — plus
+//    as close to the server's real timing as the client can know, which is what the player dodges against; a radius
+//    that changes (choir waves grow, ice prisons close) is extrapolated from the last two snapshots on the same
+//    clock — plus
 //    the run state, dynamic props (chests, portal counts), the disappearance of drops (picked up = gone at once, by
 //    anyone: public drops too) and the local player's HUD data (life, focus, cooldowns, flasks, cast bar).
-//  • Predicted (present): the local player's position (incl. the cast slow), locomotion anim, facing, velocity and
-//    aim. Written into both prevX and x so it ignores alpha. Her own bolts are drawn on the render timeline (so they
+//  • Moving areas (a whirlwind following its monster, a drifting blizzard, an execution mark following a player)
+//    are drawn where they were at the render time — on the monsters' and allies' timeline, so a ring stays on what
+//    it follows — while their presence, age and radius stay live. An area newer than the render bracket holds its
+//    first-seen spot until the render time reaches it (static telegraphs look exactly as before), and one that moves
+//    with the local player is drawn at her predicted position. Once such an area stops following her (an execution
+//    mark locks to be dodged), it is drawn at the newest snapshot's spot — exactly where the strike will land — never
+//    slid back along the render timeline.
+//  • Debuffs (PlayerView.debuffs): remote players' on the render timeline (the newer bracketing snapshot's list, its
+//    timers evaluated at the render time — they appear/vanish together with the delayed 'debuff'/'cleanse' events);
+//    the local player's on her predicted timeline (the newest record's timers minus the input ticks predicted since,
+//    expiring on exactly the tick the prediction lets her move again), so a root/freeze overlay and her standing
+//    still always agree. Expired entries and a dead player's are left out (the sim clears them on death).
+//  • Predicted (present): the local player's position (incl. the cast slow, roots, freezes, chill, tar pools and —
+//    once her 'pull' event is fed to noteEvents — a chain hook's drag), locomotion anim, facing, velocity and aim.
+//    Written into both prevX and x so it ignores alpha. While frozen her pose, facing and animation clock hold exactly
+//    as the server holds them (what her friends see). Her own bolts are drawn on the render timeline (so they
 //    hit the monsters where those are drawn) but shifted by her prediction offset at launch, fading out over their
 //    first 0.25 s of flight, so they leave her hand instead of the spot she stood on RTT + delay ago.
 //
@@ -23,17 +39,17 @@
 import type { InputMessage, ZoneInfo } from '../contracts/net';
 import { SIM_DT } from '../contracts/sim';
 import type {
-  AreaView, Dir4, DropView, MonsterStoreView, MoteStoreView, PlayerAnim, PlayerView, ProjectileStoreView, PropView,
-  RunView, WorldView,
+  AreaView, Dir4, DropView, MonsterStoreView, MoteStoreView, PlayerAnim, PlayerDebuffView, PlayerView,
+  ProjectileStoreView, PropView, RunView, SimEvent, WorldView,
 } from '../contracts/sim';
 import type { ClientWorld } from '../contracts/net';
 import { ByteReader, StringInterner } from './bytes';
 import { SnapshotClock } from './clock';
-import { LocalPredictor } from './prediction';
+import { CHILL_CAST_FACTOR, LocalPredictor, createPredictionEnv } from './prediction';
 import type { PredictionEnv, PredictionHints } from './prediction';
 import { DYNAMIC_PROP_KINDS } from './protocol';
 import {
-  Snapshot, createDropView, createPlayerView, createPropView, createRunView,
+  Snapshot, createDebuffView, createDropView, createPlayerView, createPropView, createRunView,
 } from './snapshot';
 import type { PlayerRecord } from './snapshot';
 
@@ -61,6 +77,15 @@ const MONSTER_TELEPORT_DIST = 160;
 const MOTE_TELEPORT_BASE = 40;
 const MOTE_MAX_SPEED = 900; // generous bound on magnetised mote speed (u/s)
 const PLAYER_TELEPORT_DIST = 64;
+/** An area moving farther than this between two snapshots is re-placed, not slid. */
+const AREA_TELEPORT_DIST = 160;
+/** Radii are extrapolated only from two snapshots at most this many ticks apart. */
+const AREA_RATE_MAX_TICKS = 8;
+/** An area centred within this distance of the local player in two snapshots, and moving, follows her. */
+const AREA_ATTACH_DIST = 6;
+/** Debuff timers below this (s) count as run out (wire values are whole milliseconds). */
+const DEBUFF_EPS = 1e-4;
+const NO_DEBUFFS: readonly PlayerDebuffView[] = [];
 
 export interface ClientWorldStats {
   snapshots: number;
@@ -72,6 +97,8 @@ export interface ClientWorldStats {
   corrections: number;
   snaps: number;
   lastCorrection: number;
+  /** Chain hook drags the local prediction replayed (her 'pull' events matched to a snapshot). */
+  pulls: number;
   /** Estimated base move speed of the local player (units/s). */
   moveSpeed: number;
   pendingInputs: number;
@@ -112,6 +139,13 @@ export interface NetClientWorld extends ClientWorld {
    * very first step and the very first cast of each skill are predicted exactly. Survives setZone.
    */
   setPredictionHints(hints: PredictionHints): void;
+  /**
+   * Feed every validated `{ t: 'events', tick, events }` batch as it arrives (alongside EventTimeline.push, also while
+   * events are not being shown). The local player's own 'pull' (a chain hook dragging her) is replayed by her
+   * prediction exactly as the sim drags her, so the yank shows at once as one smooth correction instead of a
+   * correction at every snapshot of the drag. Everything else is ignored; cheap.
+   */
+  noteEvents(tick: number, events: readonly SimEvent[]): void;
 }
 
 function createMonsterStore(capacity: number): MonsterStoreView {
@@ -200,6 +234,13 @@ function dirFromVector(dx: number, dy: number, current: Dir4): Dir4 {
   return dy >= 0 ? 'south' : 'north';
 }
 
+/** True when `p` lists debuff `id` with time left. */
+function hasDebuff(p: PlayerView, id: PlayerDebuffView['id']): boolean {
+  const list = p.debuffs;
+  for (let k = 0; k < list.length; k++) if (list[k].id === id && list[k].remaining > 0) return true;
+  return false;
+}
+
 function copyRun(src: RunView, dst: RunView, boss: NonNullable<RunView['boss']>, lieutenant: NonNullable<RunView['lieutenant']>): void {
   dst.phase = src.phase;
   dst.wave = src.wave;
@@ -269,7 +310,9 @@ export function createClientWorld(): NetClientWorld {
   const interner = new StringInterner();
   const clock = new SnapshotClock();
   const predictor = new LocalPredictor();
-  const env: PredictionEnv = { arenaRadius: 0, props };
+  const env: PredictionEnv = createPredictionEnv(props);
+  /** Debuff view objects not in any player's list right now (reused before allocating). */
+  const debuffFree: PlayerDebuffView[] = [];
 
   /** Received snapshots, ascending by tick. */
   const ordered: Snapshot[] = [];
@@ -287,6 +330,14 @@ export function createClientWorld(): NetClientWorld {
   const playerObjs = new Map<number, PlayerView>();
   const dropObjs = new Map<number, DropView>();
   const areaObjs = new Map<number, AreaView>();
+  /** Where each live area was first seen (x, y): its spot until the render time reaches its birth. */
+  const areaFirst = new Map<number, { x: number; y: number }>();
+  /** Areas seen following the local player (an execution mark): drawn at the newest spot once they stop. */
+  const areaAttached = new Set<number>();
+  /** Area id → record, per recently used snapshot (A, B, the one before the newest, the newest). */
+  const areaLookups: { serial: number; map: Map<number, AreaView> }[] = [];
+  for (let k = 0; k < 4; k++) areaLookups.push({ serial: -1, map: new Map() });
+  let areaLookupNext = 0;
   const propObjs = new Map<number, PropView>();
   const seenIds = new Set<number>();
   // The newest snapshot's drops by id (the live timeline decides when a drop is gone).
@@ -302,7 +353,7 @@ export function createClientWorld(): NetClientWorld {
 
   const stats: ClientWorldStats = {
     snapshots: 0, decodeErrors: 0, duplicates: 0, late: 0, resets: 0, extrapolating: false, corrections: 0, snaps: 0,
-    lastCorrection: 0, moveSpeed: 0, pendingInputs: 0, bufferedSnapshots: 0, interpDelayMs: 0, jitterMs: 0, lateMs: 0,
+    lastCorrection: 0, pulls: 0, moveSpeed: 0, pendingInputs: 0, bufferedSnapshots: 0, interpDelayMs: 0, jitterMs: 0, lateMs: 0,
     drift: 0, rebases: 0, holds: 0, lastSnapshotBytes: 0,
   };
 
@@ -323,6 +374,9 @@ export function createClientWorld(): NetClientWorld {
     playerObjs.clear();
     dropObjs.clear();
     areaObjs.clear();
+    areaFirst.clear();
+    areaAttached.clear();
+    for (const l of areaLookups) l.serial = -1;
     const fresh = createRunView();
     copyRun(fresh, run, runBoss, runLieutenant);
     view.tick = 0;
@@ -434,9 +488,68 @@ export function createClientWorld(): NetClientWorld {
     view.theme = s.theme;
     if (s.arenaRadius > 0) view.arenaRadius = s.arenaRadius;
     env.arenaRadius = view.arenaRadius;
+    collectPredictionAreas(s);
     const me = s.player(localPlayerId);
     if (me) predictor.reconcile(me, s.ackSeq, s.tick, env);
   }
+
+  /** Area copies handed to the prediction (tar pools slow her); pooled, refilled from each newest snapshot. */
+  const envAreaPool: Pick<AreaView, 'kind' | 'x' | 'y' | 'radius'>[] = [];
+
+  /** The newest snapshot's areas for the predictor (areas are on the live timeline, like her prediction). */
+  function collectPredictionAreas(s: Snapshot): void {
+    const list = s.areas;
+    const out = env.areas;
+    out.length = 0;
+    for (let k = 0; k < s.areaCount; k++) {
+      const src = list[k];
+      let a = envAreaPool[k];
+      if (!a) {
+        a = { kind: src.kind, x: 0, y: 0, radius: 0 };
+        envAreaPool.push(a);
+      }
+      a.kind = src.kind;
+      a.x = src.x;
+      a.y = src.y;
+      a.radius = src.radius;
+      out.push(a);
+    }
+  }
+
+  /**
+   * Copy `src` into the view list `dst`, each timer given by `left` (seconds left at the time the view shows, capped
+   * at the full duration). Debuffs with no more than `eps` left are left out (the predicted clock zeroes its own
+   * expired timers, so it passes 0: a residue the sim still counts as running keeps the overlay). Objects are pooled.
+   */
+  function writeDebuffs(
+    dst: PlayerDebuffView[], src: readonly PlayerDebuffView[], left: (d: PlayerDebuffView) => number, eps = DEBUFF_EPS,
+  ): void {
+    let n = 0;
+    for (let k = 0; k < src.length; k++) {
+      const s = src[k];
+      let remaining = left(s);
+      if (!(remaining > eps)) continue;
+      if (s.duration > 0 && remaining > s.duration) remaining = s.duration;
+      let d = n < dst.length ? dst[n] : undefined;
+      if (!d) {
+        d = debuffFree.pop() ?? createDebuffView();
+        dst[n] = d;
+      }
+      d.id = s.id;
+      d.remaining = remaining;
+      d.duration = s.duration;
+      d.stacks = s.stacks;
+      d.source = s.source;
+      n++;
+    }
+    for (let k = n; k < dst.length; k++) debuffFree.push(dst[k]);
+    dst.length = n;
+  }
+
+  /** Timer offsets for writeDebuffs (set right before each call; closures created once). */
+  let debuffShift = 0;
+  const shiftedLeft = (d: PlayerDebuffView): number => d.remaining - debuffShift;
+  const predictedLeft = (d: PlayerDebuffView): number => predictor.debuffs.left(d);
 
   // --- per-frame view writing ----------------------------------------------------------------------------
   function buildIndex(idx: SlotIndex, snap: Snapshot, ids: Uint32Array | Uint16Array, n: number): void {
@@ -737,6 +850,8 @@ export function createClientWorld(): NetClientWorld {
     o.invulnTime = b.invulnTime;
     o.hitFlash = a ? flashAt(a.hitFlash, b.hitFlash, t) : b.hitFlash;
     o.dead = b.dead;
+    debuffShift = renderSec - B.tick * SIM_DT;
+    writeDebuffs(o.debuffs, b.dead ? NO_DEBUFFS : b.debuffs, shiftedLeft);
   }
 
   function writeLocalPlayer(o: PlayerView, n: PlayerRecord, now: number, dtSec: number, liveElapsed: number): void {
@@ -749,13 +864,21 @@ export function createClientWorld(): NetClientWorld {
     o.maxFocus = n.maxFocus;
     o.dead = n.dead;
     o.castSkill = n.castSkill;
-    // Cast bar on the live clock: progress keeps filling between snapshots once the cast time is known.
+    // Cast bar on the live clock: progress keeps filling between snapshots once the cast time is known — at the
+    // record's cast rate (held while frozen, 70 % while chilled).
     const castTotal = n.castSkill !== null ? predictor.castTimeOf(n.castSkill) : 0;
-    o.castProgress = castTotal > 0 ? Math.min(0.999, n.castProgress + liveElapsed / castTotal) : n.castProgress;
+    const castRate = hasDebuff(n, 'frozen') ? 0 : hasDebuff(n, 'chilled') ? CHILL_CAST_FACTOR : 1;
+    o.castProgress = castTotal > 0 ? Math.min(0.999, n.castProgress + (liveElapsed * castRate) / castTotal) : n.castProgress;
     o.wardDuration = n.wardDuration;
     o.wardTime = Math.max(0, n.wardTime - liveElapsed);
     o.invulnTime = Math.max(0, n.invulnTime - liveElapsed);
     o.hitFlash = Math.max(0, n.hitFlash - liveElapsed * PLAYER_HIT_FLASH_DECAY);
+    if (n.dead) writeDebuffs(o.debuffs, NO_DEBUFFS, shiftedLeft);
+    else if (predictor.hasBase) writeDebuffs(o.debuffs, n.debuffs, predictedLeft, 0);
+    else {
+      debuffShift = liveElapsed;
+      writeDebuffs(o.debuffs, n.debuffs, shiftedLeft);
+    }
     for (let s = 0; s < o.slots.length; s++) {
       const src = n.slots[s];
       const dst = o.slots[s];
@@ -808,6 +931,14 @@ export function createClientWorld(): NetClientWorld {
       o.vy = n.vy;
       o.aimX = n.aimX;
       o.aimY = n.aimY;
+    }
+
+    // Frozen (at her predicted present): the sim holds her pose, facing and animation clock, and so does her screen.
+    if (!n.dead && (predicted ? predictor.debuffs.frozen : hasDebuff(n, 'frozen'))) {
+      localAnim = o.anim = n.anim;
+      localAnimTime = o.animTime = n.animTime;
+      localFacing = o.facing = n.facing;
+      return;
     }
 
     // Locomotion is predicted; actions (cast, dash, hit, death) are the server's.
@@ -931,9 +1062,34 @@ export function createClientWorld(): NetClientWorld {
     for (const id of dropObjs.keys()) if (!seenIds.has(id)) dropObjs.delete(id);
   }
 
-  function writeAreas(N: Snapshot, liveElapsed: number): void {
+  /** The area records of snapshot `s` by id (cached per decode). */
+  function areasOf(s: Snapshot): Map<number, AreaView> {
+    for (const l of areaLookups) if (l.serial === s.serial) return l.map;
+    const slot = areaLookups[areaLookupNext];
+    areaLookupNext = (areaLookupNext + 1) % areaLookups.length;
+    slot.serial = s.serial;
+    slot.map.clear();
+    const list = s.areas;
+    for (let k = 0; k < s.areaCount; k++) slot.map.set(list[k].id, list[k]);
+    return slot.map;
+  }
+
+  /**
+   * Areas: the newest snapshot's set, ages on the live clock (see the header), radii extrapolated on it, positions on
+   * the render timeline (A → B at `t`), following the local player when they move with her.
+   */
+  function writeAreas(N: Snapshot, liveElapsed: number, A: Snapshot, B: Snapshot, t: number): void {
     areas.length = 0;
     seenIds.clear();
+    const len = ordered.length;
+    const P = len > 1 ? ordered[len - 2] : null;
+    const pAreas = P && N.tick - P.tick <= AREA_RATE_MAX_TICKS ? areasOf(P) : null;
+    const rateDt = P ? (N.tick - P.tick) * SIM_DT : 0;
+    const aAreas = A !== B ? areasOf(A) : null;
+    const bAreas = areasOf(B);
+    const meN = N.player(localPlayerId);
+    const meP = P ? P.player(localPlayerId) : null;
+    const canAttach = meN !== null && meP !== null && !meN.dead && predictor.hasBase;
     const list = N.areas;
     for (let k = 0; k < N.areaCount; k++) {
       const src = list[k];
@@ -943,18 +1099,63 @@ export function createClientWorld(): NetClientWorld {
         o = { id: src.id, kind: src.kind, x: 0, y: 0, radius: 0, age: 0, duration: 0 };
         areaObjs.set(src.id, o);
       }
+      let first = areaFirst.get(src.id);
+      if (!first) {
+        first = { x: src.x, y: src.y };
+        areaFirst.set(src.id, first);
+      }
       o.id = src.id;
       o.kind = src.kind;
-      o.x = src.x;
-      o.y = src.y;
-      o.radius = src.radius;
       o.duration = src.duration;
       const age = src.age + liveElapsed;
       o.age = src.duration > 0 && age > src.duration ? src.duration : age;
+      // Radius: live, extrapolated at the rate between the last two snapshots while the area is still running.
+      const prev = pAreas ? pAreas.get(src.id) : undefined;
+      let radius = src.radius;
+      if (prev && rateDt > 0 && prev.radius !== src.radius) {
+        const run = src.duration > 0 ? Math.max(0, Math.min(liveElapsed, src.duration - src.age)) : liveElapsed;
+        radius += ((src.radius - prev.radius) / rateDt) * run;
+        if (radius < 0) radius = 0;
+      }
+      o.radius = radius;
+      // Position.
+      const nearN = canAttach && Math.hypot(src.x - meN!.x, src.y - meN!.y) <= AREA_ATTACH_DIST;
+      if (
+        nearN && prev && (prev.x !== src.x || prev.y !== src.y) &&
+        Math.hypot(prev.x - meP!.x, prev.y - meP!.y) <= AREA_ATTACH_DIST
+      ) {
+        // Following her: where she is on screen (her predicted present).
+        areaAttached.add(src.id);
+        o.x = renderPos.x;
+        o.y = renderPos.y;
+      } else if (areaAttached.has(src.id) && (!prev || (prev.x === src.x && prev.y === src.y))) {
+        // It stopped moving with her (an execution mark locked, or she stands still under it): the newest snapshot's
+        // spot is exactly where it is — and where a locked mark will strike. Never slid back along the render timeline.
+        // (Should it move on without her, it is back on the render timeline below.)
+        o.x = src.x;
+        o.y = src.y;
+      } else {
+        const b = bAreas.get(src.id);
+        if (!b) {
+          o.x = first.x;
+          o.y = first.y;
+        } else {
+          const a = aAreas ? aAreas.get(src.id) : undefined;
+          if (a && (a.x !== b.x || a.y !== b.y) && Math.hypot(b.x - a.x, b.y - a.y) <= AREA_TELEPORT_DIST) {
+            o.x = a.x + (b.x - a.x) * t;
+            o.y = a.y + (b.y - a.y) * t;
+          } else {
+            o.x = b.x;
+            o.y = b.y;
+          }
+        }
+      }
       areas.push(o);
       seenIds.add(src.id);
     }
     for (const id of areaObjs.keys()) if (!seenIds.has(id)) areaObjs.delete(id);
+    for (const id of areaFirst.keys()) if (!seenIds.has(id)) areaFirst.delete(id);
+    for (const id of areaAttached) if (!seenIds.has(id)) areaAttached.delete(id);
   }
 
   function update(now: number): number {
@@ -982,6 +1183,7 @@ export function createClientWorld(): NetClientWorld {
     stats.corrections = predictor.corrections;
     stats.snaps = predictor.snaps;
     stats.lastCorrection = predictor.lastError;
+    stats.pulls = predictor.pulls;
 
     // Bracket the render tick.
     let A: Snapshot;
@@ -1027,7 +1229,7 @@ export function createClientWorld(): NetClientWorld {
     writeProjectiles(A, B, extrap, t, renderSec, localSeen);
     writeMotes(A, B, extrap);
     writeDrops(A, B, N, extrap, alpha, renderSec);
-    writeAreas(N, liveElapsed);
+    writeAreas(N, liveElapsed, A, B, t);
     copyRun(N.run, run, runBoss, runLieutenant);
     return alpha < 0 ? 0 : alpha > 1 ? 1 : alpha;
   }
@@ -1044,6 +1246,17 @@ export function createClientWorld(): NetClientWorld {
 
   function predict(input: InputMessage): void {
     predictor.addInput(input, env);
+  }
+
+  function noteEvents(tick: number, events: readonly SimEvent[]): void {
+    if (localPlayerId === 0) return;
+    // The last drag of the batch wins (a second hook restarts the drag from where the first had put her).
+    let pull: Extract<SimEvent, { t: 'pull' }> | null = null;
+    for (let k = 0; k < events.length; k++) {
+      const e = events[k];
+      if (e.t === 'pull' && e.playerId === localPlayerId) pull = e;
+    }
+    if (pull) predictor.notePull(pull.fromX, pull.fromY, pull.toX, pull.toY, tick, env);
   }
 
   return {
@@ -1070,11 +1283,19 @@ export function createClientWorld(): NetClientWorld {
     setZone,
     pushSnapshot,
     predict,
+    noteEvents,
     update,
     setRtt(ms: number) {
       if (Number.isFinite(ms) && ms >= 0) rtt = ms;
     },
     stats() {
+      // The prediction counters are live (pushSnapshot / noteEvents / predict move them between frames).
+      stats.corrections = predictor.corrections;
+      stats.snaps = predictor.snaps;
+      stats.lastCorrection = predictor.lastError;
+      stats.pulls = predictor.pulls;
+      stats.moveSpeed = predictor.moveSpeed;
+      stats.pendingInputs = predictor.pendingCount;
       return stats;
     },
     predictedPosition() {

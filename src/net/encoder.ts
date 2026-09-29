@@ -3,18 +3,23 @@
 // it only keeps a reusable output buffer between calls.
 import { AOI_HALF_HEIGHT, AOI_HALF_WIDTH } from '../contracts/net';
 import type { SnapshotEncoder } from '../contracts/net';
-import type { DropView, PlayerView, WorldView } from '../contracts/sim';
+import type { AreaView, DropView, PlayerView, WorldView } from '../contracts/sim';
 import { ByteWriter } from './bytes';
 import {
-  AIM_SCALE, ANIM_TIME_SCALE, AOI_MARGIN, AREA_KIND_CODE, AREA_RADIUS_SCALE, DIR4_CODE, DROP_AUTO_PICKUP_BIT,
-  DROP_BLOCKED_BIT, DROP_SPRITE_CODE, DROP_TONE_CODE, DYNAMIC_PROP_KINDS, FLASK_CODE, MAX_WIRE_AREAS,
-  MAX_WIRE_DROPS, MAX_WIRE_ENTITIES, MAX_WIRE_PLAYERS, MAX_WIRE_PROPS, MAX_WIRE_PUBLIC_DROPS, MONSTER_KINDS,
-  PLAYER_ANIM_CODE, POS_SCALE, PROJ_VEL_SCALE, PROJECTILE_KINDS, PROP_KIND_CODE, RADIUS_SCALE, RUN_PHASE_CODE,
-  SKILL_CODE, SNAPSHOT_VERSION, THEME_CODE,
+  AIM_SCALE, ANIM_TIME_SCALE, AOI_MARGIN, AREA_KIND_CODE, AREA_RADIUS_SCALE, AREA_TIER, AREA_TIER_COUNT, DEBUFF_CODE,
+  DIR4_CODE, DROP_AUTO_PICKUP_BIT, DROP_BLOCKED_BIT, DROP_SPRITE_CODE, DROP_TONE_CODE, DYNAMIC_PROP_KINDS, FLASK_CODE,
+  MAX_WIRE_AREAS, MAX_WIRE_DEBUFFS, MAX_WIRE_DROPS, MAX_WIRE_ENTITIES, MAX_WIRE_GROUND_AREAS, MAX_WIRE_KINDS,
+  MAX_WIRE_PLAYERS,
+  MAX_WIRE_PROPS, MAX_WIRE_PUBLIC_DROPS, MAX_WIRE_SLOT, PLAYER_ANIM_CODE, POS_SCALE, PROJ_VEL_SCALE, PROP_KIND_CODE,
+  RADIUS_SCALE, ROOT_SOURCE_CODE, RUN_PHASE_CODE, SKILL_CODE, SNAPSHOT_VERSION, THEME_CODE, WIRE_KIND_BITS,
+  WIRE_SLOT_BITS,
 } from './protocol';
 
-// Bit-packed fields need these tables to stay small.
-if (MONSTER_KINDS.length > 8 || PROJECTILE_KINDS.length > 8) throw new Error('net: kind tables outgrew their 3-bit fields');
+// Packed record heads (see snapshot.ts): slot:12 | gen:8 | kind:6 | flags. The kind tables are append-only and must
+// stay below MAX_WIRE_KINDS (a test checks it); an index past it is never written.
+const GEN_SHIFT = WIRE_SLOT_BITS;
+const KIND_SHIFT = WIRE_SLOT_BITS + 8;
+const FLAG_SHIFT = KIND_SHIFT + WIRE_KIND_BITS;
 
 const I16_MIN = -32768;
 const I16_MAX = 32767;
@@ -33,7 +38,7 @@ function ms16(seconds: number): number {
   return clampInt(seconds * 1000, 0, 0xffff);
 }
 
-/** Candidate a comes before b: nearer, ties broken by the lower view.drops index (keeps the choice deterministic). */
+/** Candidate a comes before b: nearer, ties broken by the lower view index (keeps the choice deterministic). */
 function nearer(da: number, ia: number, db: number, ib: number): boolean {
   return da < db || (da === db && ia < ib);
 }
@@ -145,6 +150,27 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
     w.u16(ms16(p.wardDuration));
     w.u16(ms16(p.invulnTime));
     w.u8(clampInt(p.hitFlash * 255, 0, 255));
+    // Debuffs of every player (overlays on allies, the HUD row of the viewer). Unknown ids are skipped.
+    const debuffs = p.debuffs;
+    const nDebuffs = debuffs ? debuffs.length : 0;
+    const at = w.pos;
+    w.u8(0);
+    let written = 0;
+    for (let k = 0; k < nDebuffs && written < MAX_WIRE_DEBUFFS; k++) {
+      const d = debuffs[k];
+      const code = DEBUFF_CODE.get(d.id);
+      if (code === undefined) continue;
+      const src = d.source === null ? undefined : ROOT_SOURCE_CODE.get(d.source);
+      w.u8(code | ((src === undefined ? 0 : src + 1) << 4));
+      w.u8(clampInt(d.stacks, 0, 255));
+      // A running timer never rounds to 0: the sim still applies a debuff with 1e-15 s left on its next tick (float
+      // timers run out a tick late when a whole-tick duration leaves a positive residue), so the client must too.
+      const left = ms16(d.remaining);
+      w.u16(left === 0 && d.remaining > 0 ? 1 : left);
+      w.u16(ms16(d.duration));
+      written++;
+    }
+    w.patchU8(at, written);
     if (!full) return;
     w.f32(p.focus);
     w.f32(p.maxFocus);
@@ -178,9 +204,21 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
     }
   }
 
-  // Drop candidates of one pass (indices into view.drops + squared distance to the viewer), reused across encodes.
+  // Candidates of one selection pass (indices into view.drops / view.areas + squared distance to the viewer), reused
+  // across encodes.
   let candIdx = new Int32Array(256);
   let candDist = new Float64Array(256);
+
+  /** Make room for candidate number `c` (0-based). */
+  function growCandidates(c: number): void {
+    if (c < candIdx.length) return;
+    const idx = new Int32Array(Math.max(c + 1, candIdx.length * 2));
+    idx.set(candIdx);
+    candIdx = idx;
+    const dist = new Float64Array(idx.length);
+    dist.set(candDist);
+    candDist = dist;
+  }
 
   /**
    * Write up to `room` drops owned by `owner` inside the AOI; returns how many were written. When more are in the
@@ -200,14 +238,7 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
       const dx = d.x - ox;
       const dy = d.y - oy;
       if (dx > hw || dx < -hw || dy > hh || dy < -hh) continue;
-      if (c === candIdx.length) {
-        const idx = new Int32Array(c * 2);
-        idx.set(candIdx);
-        candIdx = idx;
-        const dist = new Float64Array(c * 2);
-        dist.set(candDist);
-        candDist = dist;
-      }
+      growCandidates(c);
       const d2 = dx * dx + dy * dy;
       candIdx[c] = k;
       candDist[c] = d2 === d2 ? d2 : Infinity; // a NaN position must not break the ordering
@@ -238,6 +269,78 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
       w.f32(d.age);
     }
     return c;
+  }
+
+  // Per view.areas index: 0 = not sent, 1 + tier = sent (after selection). Reused across encodes.
+  let areaMark = new Uint8Array(256);
+  const tierCount = new Int32Array(AREA_TIER_COUNT);
+
+  /**
+   * Write the AOI's areas by priority (protocol.ts AREA_TIER, MAX_WIRE_AREAS / MAX_WIRE_GROUND_AREAS): every tier-0
+   * area (telegraphs, moving hazards) before any persistent ground, the nearest ones of a tier when it has more than
+   * its room. The chosen areas are written in view order. Returns how many were written.
+   */
+  function writeAreas(areas: readonly AreaView[], ox: number, oy: number, hw: number, hh: number): number {
+    const len = areas.length;
+    if (areaMark.length < len) areaMark = new Uint8Array(Math.max(len, areaMark.length * 2));
+    const mark = areaMark;
+    tierCount.fill(0);
+    let total = 0;
+    for (let k = 0; k < len; k++) {
+      const a = areas[k];
+      const code = AREA_KIND_CODE.get(a.kind);
+      mark[k] = 0;
+      if (code === undefined) continue;
+      const dx = a.x - ox;
+      const dy = a.y - oy;
+      const r = a.radius;
+      if (dx > hw + r || dx < -hw - r || dy > hh + r || dy < -hh - r) continue;
+      const tier = AREA_TIER[code];
+      mark[k] = 1 + tier;
+      tierCount[tier]++;
+      total++;
+    }
+    if (total > MAX_WIRE_AREAS || total - tierCount[0] > MAX_WIRE_GROUND_AREAS) {
+      let room = MAX_WIRE_AREAS;
+      let groundRoom = MAX_WIRE_GROUND_AREAS;
+      for (let tier = 0; tier < AREA_TIER_COUNT; tier++) {
+        const count = tierCount[tier];
+        const cap = tier === 0 ? room : Math.min(room, groundRoom);
+        if (count > cap) {
+          // Keep the `cap` nearest of this tier (ties → lower index), unmark the rest.
+          let c = 0;
+          for (let k = 0; k < len; k++) {
+            if (mark[k] !== 1 + tier) continue;
+            growCandidates(c);
+            const dx = areas[k].x - ox;
+            const dy = areas[k].y - oy;
+            const d2 = dx * dx + dy * dy;
+            candIdx[c] = k;
+            candDist[c] = d2 === d2 ? d2 : Infinity;
+            c++;
+          }
+          if (cap > 0) selectNearest(candIdx, candDist, c, cap);
+          for (let q = cap; q < c; q++) mark[candIdx[q]] = 0;
+        }
+        const kept = count < cap ? count : cap;
+        room -= kept;
+        if (tier > 0) groundRoom -= kept;
+      }
+    }
+    let n = 0;
+    for (let k = 0; k < len; k++) {
+      if (mark[k] === 0) continue;
+      const a = areas[k];
+      w.u32(a.id);
+      w.u8(AREA_KIND_CODE.get(a.kind)!);
+      w.i16(q16((a.x - ox) * POS_SCALE));
+      w.i16(q16((a.y - oy) * POS_SCALE));
+      w.u16(clampInt(a.radius * AREA_RADIUS_SCALE, 0, 0xffff));
+      w.f32(a.age);
+      w.f32(a.duration);
+      n++;
+    }
+    return n;
   }
 
   function encode(view: WorldView, viewerId: number, ackSeq: number): ArrayBuffer {
@@ -303,16 +406,23 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
     const mEnd = storeEnd(m);
     for (let i = 0; i < mEnd && n < MAX_WIRE_ENTITIES; i++) {
       if (!m.alive[i]) continue;
+      const id = m.id[i];
+      const kind = m.kind[i];
+      if ((id & 0xffff) > MAX_WIRE_SLOT || kind >= MAX_WIRE_KINDS) continue;
       const r = m.radius[i];
       const dx = m.x[i] - ox;
       const dy = m.y[i] - oy;
       if (dx > hw + r || dx < -hw - r || dy > hh + r || dy < -hh - r) continue;
-      const id = m.id[i];
       const rarity = m.rarity[i] & 7;
+      // Rares, lieutenants and bosses (rarity ≥ RARITY_CODE.rare) carry their exact life; the decoder knows it.
       const hasMax = rarity >= 2;
-      w.u16(id & 0xffff);
-      w.u8((id >>> 16) & 0xff);
-      w.u8((m.kind[i] & 7) | (rarity << 3) | (m.facing[i] >= 0 ? 64 : 0) | (hasMax ? 128 : 0));
+      w.u32(
+        (id & 0xffff) |
+          (((id >>> 16) & 0xff) << GEN_SHIFT) |
+          (kind << KIND_SHIFT) |
+          (rarity << FLAG_SHIFT) |
+          ((m.facing[i] >= 0 ? 1 : 0) << (FLAG_SHIFT + 3)),
+      );
       w.i16(q16(dx * POS_SCALE));
       w.i16(q16(dy * POS_SCALE));
       // Most monsters carry no ailment and no elite mod: a flag bit saves those two bytes.
@@ -351,19 +461,26 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
     const prEnd = storeEnd(pr);
     for (let i = 0; i < prEnd && n < MAX_WIRE_ENTITIES; i++) {
       if (!pr.alive[i]) continue;
+      const id = pr.id[i];
+      const kind = pr.kind[i];
+      if ((id & 0xffff) > MAX_WIRE_SLOT || kind >= MAX_WIRE_KINDS) continue;
       const r = pr.radius[i];
       const dx = pr.x[i] - ox;
       const dy = pr.y[i] - oy;
       if (dx > hw + r || dx < -hw - r || dy > hh + r || dy < -hh - r) continue;
-      const id = pr.id[i];
       const lobbed = pr.life[i] > 0;
       // Ages advance in whole sim ticks: tick counts are lossless. A u8 covers 4.25 s; longer-lived projectiles
       // (the Matriarch's spiral orbs) switch to a u16.
       const ageTicks = clampInt(pr.age[i] * ANIM_TIME_SCALE, 0, 0xffff);
       const wideAge = ageTicks > 0xff;
-      w.u16(id & 0xffff);
-      w.u8((id >>> 16) & 0xff);
-      w.u8((pr.kind[i] & 7) | (pr.hostile[i] ? 8 : 0) | (lobbed ? 16 : 0) | (wideAge ? 32 : 0));
+      w.u32(
+        (id & 0xffff) |
+          (((id >>> 16) & 0xff) << GEN_SHIFT) |
+          (kind << KIND_SHIFT) |
+          ((pr.hostile[i] ? 1 : 0) << FLAG_SHIFT) |
+          ((lobbed ? 2 : 0) << FLAG_SHIFT) |
+          ((wideAge ? 4 : 0) << FLAG_SHIFT),
+      );
       w.i16(q16(dx * POS_SCALE));
       w.i16(q16(dy * POS_SCALE));
       w.i16(q16(pr.vx[i] * PROJ_VEL_SCALE));
@@ -395,29 +512,10 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
     }
     w.patchU16(at, n);
 
-    // --- areas (AOI) ---------------------------------------------------------------
+    // --- areas (AOI, by priority: telegraphs never lose their place to a carpet of pools) ------------------
     at = w.pos;
-    w.u8(0);
-    n = 0;
-    const areas = view.areas;
-    for (let k = 0; k < areas.length && n < MAX_WIRE_AREAS; k++) {
-      const a = areas[k];
-      const code = AREA_KIND_CODE.get(a.kind);
-      if (code === undefined) continue;
-      const dx = a.x - ox;
-      const dy = a.y - oy;
-      const r = a.radius;
-      if (dx > hw + r || dx < -hw - r || dy > hh + r || dy < -hh - r) continue;
-      w.u32(a.id);
-      w.u8(code);
-      w.i16(q16(dx * POS_SCALE));
-      w.i16(q16(dy * POS_SCALE));
-      w.u16(clampInt(r * AREA_RADIUS_SCALE, 0, 0xffff));
-      w.f32(a.age);
-      w.f32(a.duration);
-      n++;
-    }
-    w.patchU8(at, n);
+    w.u16(0);
+    w.patchU16(at, writeAreas(view.areas, ox, oy, hw, hh));
 
     // --- drops: the viewer's own (instanced loot) first, then public ones (owner 0), AOI-culled ----------
     at = w.pos;

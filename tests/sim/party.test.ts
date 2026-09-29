@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { MONSTER_KINDS } from '../../src/contracts/content';
 import { SIM_DT, type SimEvent, type SimOutcome } from '../../src/contracts/sim';
 import { createRun } from '../../src/sim';
-import { ARCHETYPES } from '../../src/sim/archetypes';
+import { monsterDef } from '../../src/sim/rosters';
 import { damageMonster, damagePlayer } from '../../src/sim/combat';
 import { MAX_PLAYERS } from '../../src/sim/constants';
 import { DAMAGE_INDEX } from '../../src/sim/math';
@@ -188,7 +188,7 @@ describe('instanced loot', () => {
     }
     expect(boss).toBeGreaterThanOrEqual(0);
     // Party of 3: the Matriarch has ×2 life.
-    expect(world.monsters.maxLife[boss]).toBeCloseTo(ARCHETYPES.cinderMatriarch.life * 2 * 1, 0);
+    expect(world.monsters.maxLife[boss]).toBeCloseTo(monsterDef('cinderMatriarch').life * 2 * 1, 0);
     // Player 3 falls before the end: the dead get no loot.
     damagePlayer(world, world.playerById[3]!, 1e12, DAMAGE_INDEX.physical, 'area');
     world.monsters.life[boss] = 1;
@@ -254,7 +254,7 @@ describe('party scaling', () => {
       return a.world.monsters.maxLife[i];
     };
     const solo = lifeWith(1);
-    expect(solo).toBeCloseTo(ARCHETYPES.ironhideBrute.life, 3);
+    expect(solo).toBeCloseTo(monsterDef('ironhideBrute').life, 3);
     expect(lifeWith(2) / solo).toBeCloseTo(1.5, 5);
     expect(lifeWith(4) / solo).toBeCloseTo(2.5, 5);
   });
@@ -480,7 +480,7 @@ describe('a full party', () => {
     expect(outcomesOf(outcomes, 'kill').filter((k) => k.isBoss)).toHaveLength(1);
     expect(outcomesOf(outcomes, 'kill').filter((k) => k.isLieutenant)).toHaveLength(1);
     // The Matriarch was scaled for four (×2.5 life).
-    expect(bossLife).toBeGreaterThan(ARCHETYPES.cinderMatriarch.life * TIER5.lifeMultiplier! * 2.4);
+    expect(bossLife).toBeGreaterThan(monsterDef('cinderMatriarch').life * TIER5.lifeMultiplier! * 2.4);
     // Everyone pulled their weight (kill credit is spread over the party).
     const credited = new Set(outcomesOf(outcomes, 'kill').map((k) => k.playerId));
     for (const id of [1, 2, 3, 4]) expect(credited.has(id)).toBe(true);

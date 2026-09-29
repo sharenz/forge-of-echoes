@@ -9,6 +9,8 @@ import { useLocal } from '../local';
 import { shallowEqual, useStore, useUi } from '../store';
 import { safe } from './hooks';
 import { keepArmedAfterApply } from '../lib/crafting';
+import { formatInt } from '../lib/format';
+import { parseCurrencyStashUid, stashCount } from '../lib/stash';
 
 const armedSel = (s: UiState) => ({ armed: s.armed, allowed: s.craftingAllowed, choice: s.affixChoice });
 
@@ -17,6 +19,14 @@ export function ArmedCursor() {
   const local = useLocal();
   const { armed } = useUi(armedSel, shallowEqual);
   const ref = useRef<HTMLImageElement>(null);
+  // A Crafting Stash slot armed for crafting (`cstash:<id>`) that has run dry disarms, like a used-up stack.
+  const slotEmpty = useUi((s) => {
+    const id = s.armed ? parseCurrencyStashUid(s.armed.uid) : null;
+    return !!id && !!s.character && stashCount(s.character, id) <= 0;
+  });
+  useEffect(() => {
+    if (slotEmpty && !store.get().affixChoice) store.actions.disarm();
+  }, [slotEmpty, store]);
   useEffect(() => {
     if (!armed) return;
     const move = (e: PointerEvent): void => {
@@ -45,7 +55,9 @@ export function CraftStrip() {
       <div class="fe-craft-strip__text">
         <div class="fe-craft-strip__name">
           {info?.name ?? 'Currency'}
-          {count !== null && <span class="fe-muted"> ({count} left)</span>}
+          {count !== null && (
+            <span class="fe-muted"> ({count.stash ? `${formatInt(count.count)} in the stash` : `${count.count} left`})</span>
+          )}
         </div>
         <div class="fe-craft-strip__help">
           {allowed ? (
@@ -67,13 +79,16 @@ export function CraftStrip() {
   );
 }
 
-function useCount(uid: string | null): number | null {
+/** Uses left of the armed currency: the stack's count, or a Crafting Stash slot's count (`cstash:<id>`). */
+function useCount(uid: string | null): { count: number; stash: boolean } | null {
   const store = useStore();
   const ch = useUi((s) => s.character);
   return useMemo(() => {
     if (!ch || !uid) return null;
+    const slot = parseCurrencyStashUid(uid);
+    if (slot) return { count: stashCount(ch, slot), stash: true };
     const f = safe(() => store.rules.findItem(ch, uid), null);
-    return f && f.item.kind === 'currency' ? f.item.count : null;
+    return f && f.item.kind === 'currency' ? { count: f.item.count, stash: false } : null;
   }, [ch, uid, store]);
 }
 

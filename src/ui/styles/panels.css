@@ -157,11 +157,12 @@
 }
 
 /* ---- stash ---- */
+/* Normal tabs wrap on the left (.fe-tabs__normal); the special tabs sit at the right (stash.css). */
 .fe-tabs {
   display: flex;
-  gap: 4px;
+  align-items: flex-end;
+  gap: 10px;
   width: calc(var(--cell) * 12 + 2px);
-  flex-wrap: wrap;
   margin-bottom: -8px;
 }
 .fe-tab {
@@ -199,6 +200,7 @@
   font-size: var(--font-ui-secondary);
 }
 .fe-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -206,12 +208,16 @@
 .fe-tab--nohits {
   opacity: 0.55;
 }
+/* Search hits ride on the tab's corner, so a search never widens a tab or re-wraps the row. */
 .fe-tab__hits {
+  position: absolute;
+  top: -8px;
+  right: -7px;
+  z-index: 1;
   display: inline-grid;
   place-items: center;
   min-width: 18px;
   height: 16px;
-  margin-left: 7px;
   padding: 0 5px;
   font-family: var(--font-text);
   font-size: var(--font-ui-caption);
@@ -857,6 +863,13 @@
   .fe-device__circle {
     width: 200px;
     height: 200px;
+  }
+}
+/* Short windows: the compact socket, so the readout (boss, afflictions, danger) keeps more of the column. */
+@media (max-height: 760px) {
+  .fe-device__circle {
+    width: 112px;
+    height: 112px;
   }
 }
 .fe-device__circle::before {

@@ -24,6 +24,8 @@ export class PostState {
   /** Callbacks fired when a delayed flash lands (hit-stop / shake timed to a sound). */
   private readonly pending: { at: number; fn: () => void }[] = [];
   private clock = 0;
+  /** Cold wash (0..1): the local player frozen or standing in a blizzard; eased in and out. */
+  private coldK = 0;
 
   /**
    * Zone change: clear slow-mo, chromatic kicks, the death grade and pending callbacks. Running flashes are kept on
@@ -34,6 +36,7 @@ export class PostState {
     this.slowLeft = 0;
     this.slowScale = 1;
     this.deathK = 0;
+    this.coldK = 0;
     this.pending.length = 0;
   }
 
@@ -48,6 +51,11 @@ export class PostState {
     this.col[i * 3] = color[0];
     this.col[i * 3 + 1] = color[1];
     this.col[i * 3 + 2] = color[2];
+  }
+
+  /** Target of the cold screen wash this frame (0..1), eased over ~0.25 s. */
+  cold(target: number, dt: number): void {
+    this.coldK += (Math.max(0, Math.min(1, target)) - this.coldK) * approach(target > this.coldK ? 8 : 3, dt);
   }
 
   chromatic(amount: number): void {
@@ -121,6 +129,14 @@ export class PostState {
       fc[2] += (this.col[i * 3 + 2] - fc[2]) * w;
       fa += a;
     }
+    if (this.coldK > 0.01 && !dead) {
+      const a = 0.11 * this.coldK;
+      const w = a / (fa + a);
+      fc[0] += (0.55 - fc[0]) * w;
+      fc[1] += (0.78 - fc[1]) * w;
+      fc[2] += (1 - fc[2]) * w;
+      fa += a;
+    }
     if (lowLife > 0 && !dead) {
       const beat = Math.pow(Math.max(0, Math.sin(time * 5.2)), 6) * 0.1 * lowLife;
       if (beat > 0.002) {
@@ -135,7 +151,7 @@ export class PostState {
     const d = this.deathK;
     o.bloom = look.bloom * (1 - 0.3 * d);
     o.vignette = look.vignette + 0.25 * d + 0.12 * clamp01(lowLife);
-    o.saturation = look.saturation * (1 - 0.85 * d);
+    o.saturation = look.saturation * (1 - 0.85 * d) * (1 - 0.18 * this.coldK);
     o.exposure = look.exposure * (1 - 0.18 * d);
     o.chromatic = Math.min(1, this.chroma);
     if (fa > 0.002) {

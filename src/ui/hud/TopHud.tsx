@@ -8,11 +8,12 @@
 // and the compact zone chip in the centre stack takes over.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { HudAlly, HudRun, UiState } from '../../contracts/ui';
-import { Bar, Button, cx } from '../components/common';
+import { Bar, Button, PixelIcon, cx } from '../components/common';
 import { CraftStrip } from '../items/Crafting';
 import { safe } from '../items/hooks';
 import { useLocal } from '../local';
-import { BOSS_WAVE, LIEUTENANT_WAVE, MONSTER_NAMES } from '../lib/content';
+import { BOSS_WAVE, LIEUTENANT_WAVE, MONSTER_NAMES, eliteDisplayName, monsterTitle, rosterFor } from '../lib/content';
+import { DEBUFF_INFO, waveDebuffs } from '../lib/debuffs';
 import { formatDuration, formatLuck, fraction, possessive } from '../lib/format';
 import { visiblePanels } from '../lib/panels';
 import { zoneLabel } from '../lib/zone';
@@ -139,11 +140,12 @@ const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 
 function BossBar({ boss }: { boss: NonNullable<HudRun['boss']> }) {
   const f = fraction(boss.life, boss.maxLife);
+  const name = eliteDisplayName(boss.name);
   return (
-    <div class="fe-boss" role="status" aria-label={`${boss.name}, phase ${boss.phase}`}>
+    <div class="fe-boss" role="status" aria-label={`${name}, phase ${boss.phase}`}>
       <div class="fe-boss__name">
         <span class="fe-boss__skull" />
-        {boss.name}
+        {name}
         <span class="fe-boss__phase">Phase {ROMAN[boss.phase] ?? boss.phase}</span>
       </div>
       <div class="fe-boss__bar">
@@ -158,7 +160,7 @@ function BossBar({ boss }: { boss: NonNullable<HudRun['boss']> }) {
 function LieutenantBar({ lt }: { lt: NonNullable<HudRun['lieutenant']> }) {
   return (
     <div class="fe-lt">
-      <div class="fe-lt__name">{lt.name}</div>
+      <div class="fe-lt__name">{eliteDisplayName(lt.name)}</div>
       <div class="fe-lt__bar">
         <div class="fe-lt__fill" style={{ width: `${(fraction(lt.life, lt.maxLife) * 100).toFixed(2)}%` }} />
       </div>
@@ -222,16 +224,40 @@ function RunBars() {
   );
 }
 
+/** "The Hollow Warden is coming", "Varkus, the Iron Champion, is coming". */
+function announce(title: string, rest: string): string {
+  return `${title}${title.includes(',') ? ',' : ''} ${rest}`;
+}
+
 function TellBanner() {
   const tell = useUi((s) => (s.hud?.run?.phase === 'tell' ? s.hud.run.tell : null));
+  const baseId = useUi((s) => s.run?.map.baseId ?? null);
   if (!tell) return null;
   const names = tell.families.map((f) => MONSTER_NAMES[f]?.many ?? f);
+  // Each map base has its own lieutenant and boss (GAME_SPEC §14).
+  const roster = rosterFor(baseId, tell.families);
+  const threats = waveDebuffs([
+    ...tell.families,
+    ...(tell.lieutenant ? [roster.lieutenant] : []),
+    ...(tell.boss ? [roster.boss] : []),
+  ]);
   return (
     <div class={cx('fe-tell', (tell.boss || tell.lieutenant) && 'fe-tell--danger')} role="alert">
       <div class="fe-tell__title">Wave {tell.wave} approaches</div>
       {names.length > 0 && <div class="fe-tell__families">{names.join(', ')}</div>}
-      {tell.lieutenant && <div class="fe-tell__warn">The Ashbound Herald leads this wave</div>}
-      {tell.boss && <div class="fe-tell__warn">The Cinder Matriarch is coming</div>}
+      {tell.lieutenant && <div class="fe-tell__warn">{announce(monsterTitle(roster.lieutenant), 'leads this wave')}</div>}
+      {tell.boss && <div class="fe-tell__warn">{announce(monsterTitle(roster.boss), 'is coming')}</div>}
+      {threats.length > 0 && (
+        <div class="fe-tell__brings">
+          <span>Brings</span>
+          {threats.map((d) => (
+            <span key={d} class="fe-tell__debuff">
+              <PixelIcon id={`icon/debuff/${d}`} width={16} height={16} />
+              {DEBUFF_INFO[d].name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

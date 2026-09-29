@@ -11,8 +11,9 @@ import {
   BELT_SLOT_CAPACITY, CLASS_LABEL, CURRENCY_FAMILY_LABEL, FLASK_STACK, TAG_LABEL, findBase, findCurrency, findFlask,
   findUnique, getAffix, getScar,
 } from '../../data/items';
-import { formatLine, formatNumber, formatRange } from './format';
-import { parseBeltUid } from './ids';
+import { CURRENCY_STASH_MAX } from '../../contracts/items';
+import { formatCount, formatLine, formatNumber, formatRange } from './format';
+import { parseBeltUid, parseCurrencyStashUid } from './ids';
 import { equipmentLevelRequirement, itemDisplayName, itemProperties, uniqueModDef } from './modifiers';
 
 export interface EquipmentDescribeOptions {
@@ -131,6 +132,14 @@ export function describeCurrency(stack: CurrencyStack): ItemDescription {
     ? 'Right-click to arm, then left-click a map in the hideout.'
     : 'Right-click to arm, then left-click an item in the hideout.';
   if (def?.needsAffixChoice) hint = 'Right-click to arm, left-click an item, then choose an affix.';
+  // A Crafting Stash slot (uid "cstash:<id>", see src/game/items/special-stash.ts).
+  const inStash = parseCurrencyStashUid(stack.uid) !== null;
+  if (inStash) {
+    const stackSize = def?.maxStack ?? 1;
+    hint = stack.count > 0
+      ? `${hint} Each use takes one from here. Drag or Ctrl+click to take a stack of up to ${stackSize}; Shift+Ctrl+click takes one.`
+      : `Empty. Any ${name} you deposit is filed here.`;
+  }
   const desc: ItemDescription = {
     title: name,
     subtitle: null,
@@ -138,7 +147,9 @@ export function describeCurrency(stack: CurrencyStack): ItemDescription {
     iconId: iconIdForCurrency(stack.currencyId),
     classLabel: isMap ? 'Map Currency' : 'Currency',
     size: { w: 1, h: 1 },
-    headerLines: [`Stack ${stack.count} / ${def?.maxStack ?? stack.count}`],
+    headerLines: [inStash
+      ? `Crafting Stash ${formatCount(stack.count)} / ${formatCount(CURRENCY_STASH_MAX)}`
+      : `Stack ${stack.count} / ${def?.maxStack ?? stack.count}`],
     properties,
     implicits: [],
     affixes: [],

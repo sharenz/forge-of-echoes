@@ -1,6 +1,7 @@
 // Items on the floor (GAME_SPEC §12): the `dropItem` and `pickup` commands and the life of public drops.
 //
-//   dropItem  an item you carry (backpack, equipment, belt; stash and map device only where they are usable)
+//   dropItem  an item you carry (backpack, equipment, belt; the stash — its tabs and the Map Stash — and the map
+//             device only where they are usable; a Crafting Stash slot is not an item and cannot be dropped)
 //             goes onto the floor at your feet as a PUBLIC drop (DropSpec.owner 0, never auto-collected):
 //             the sim tosses it first (it throws before changing anything), then the item leaves the
 //             character and the dropper's save is flushed at once. The first drop of a session explains
@@ -19,6 +20,7 @@ import type { Item } from '../contracts/items';
 import type { PickupResult } from '../contracts/sim';
 import { rules } from '../game';
 import { MAX_WIRE_PUBLIC_DROPS } from '../net';
+import { isStashLocation, missingItem } from './commands';
 import type { CommandResult } from './commands';
 import type { Game } from './game';
 import type { GroundItem, Instance } from './instance';
@@ -95,10 +97,12 @@ export class GroundService {
     if (inst.isDead(s)) return fail("You can't drop items while you are dead.");
     const ch = s.record.ch;
     const found = rules.findItem(ch, uid);
-    if (!found) return fail('That item no longer exists.');
+    // An empty Crafting Stash slot names the currency it lacks, as in every other item command.
+    if (!found) return fail(missingItem(uid));
     if (this.game.trades.isLocked(s.characterId, uid)) return fail(ITEM_IN_TRADE);
     const where = found.location.kind;
-    if (where === 'stash' && inst.kind !== 'hideout') return fail('Stash items can only be dropped in a hideout.');
+    // Every stash tab counts: the normal tabs and the Map Stash (a Crafting Stash slot is refused by the rules).
+    if (isStashLocation(found.location) && inst.kind !== 'hideout') return fail('Stash items can only be dropped in a hideout.');
     if (where === 'mapDevice' && (inst.kind !== 'hideout' || inst.ownerId !== s.characterId)) return fail('The map device is in your own hideout.');
     if (found.item.kind === 'flask' && found.item.count <= 0) return fail('That belt slot is empty.');
     if (inst.groundItems.size >= MAX_GROUND_ITEMS) return fail('There are too many items on the ground here. Pick some up first.');

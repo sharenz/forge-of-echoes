@@ -123,6 +123,63 @@ export const CHILL_SLOW = 0.3;
 export const SHOCK_DURATION = 3;
 export const SHOCK_BONUS = 0.2;
 
+// --- player debuffs (GAME_SPEC §13) -----------------------------------------------
+// Elemental durations (chilled / frozen: cold, burning: fire, shocked: lightning) are scaled by
+// (1 − res/2) with the player's matching resistance; while Cinder Ward is up every debuff runs out
+// WARD_DEBUFF_RATE times as fast (its durations are halved). Death clears them all.
+/** Chilled: −30% move and cast speed. Refreshes, doesn't stack. */
+export const PLAYER_CHILL_DURATION = 2;
+export const PLAYER_CHILL_SLOW = 0.3;
+/** Frozen: can't move or act (flasks still work). Only telegraphed sources freeze. */
+export const FREEZE_DURATION = 0.8;
+/** After a freeze ends the player can't be frozen again for this long (a freeze then becomes a chill). */
+export const FREEZE_IMMUNITY = 3;
+/** Rooted: can't move, can still cast; Rift Step breaks it. */
+export const ROOT_DURATION = 1.4;
+/**
+ * Roots don't chain: while rooted and for this long after a root ends (or is broken), new roots are
+ * ignored (a chain hook still drags). Many hooks and tar pools at once must not lock a player down:
+ * with 3 s a player standing in every hook and tar pool of an Iron Coliseum is held at most ~4 s of
+ * any 10 s (1.5 s let it reach 5.5 s — over half the time), and a typical careless player about 3 s.
+ */
+export const ROOT_GRACE = 3;
+/** Burning: this share of the triggering hit as fire damage over BURN_DURATION; the strongest burn is kept. */
+export const BURN_DURATION = 3;
+export const BURN_FRACTION = 0.4;
+/** Bleeding: this share of the hit over BLEED_DURATION, doubled while moving; up to BLEED_MAX_STACKS. */
+export const BLEED_DURATION = 4;
+export const BLEED_FRACTION = 0.2;
+export const BLEED_MOVING_MULT = 2;
+export const BLEED_MAX_STACKS = 3;
+/** Shocked: +20% damage taken. */
+export const PLAYER_SHOCK_DURATION = 2;
+export const PLAYER_SHOCK_BONUS = 0.2;
+/** Withered: −12% to every resistance (not physical) per stack; the stacks share one refreshing timer. */
+export const WITHER_DURATION = 4;
+export const WITHER_RES_PER_STACK = 0.12;
+export const WITHER_MAX_STACKS = 3;
+/** Debuff timers run this many times as fast while Cinder Ward is active (= durations halved). */
+export const WARD_DEBUFF_RATE = 2;
+/** A refresh of an unchanged debuff re-emits its 'debuff' event at most this often (per player, per debuff). */
+export const DEBUFF_EVENT_REPEAT = 1;
+/** Player damage-over-time (burning, bleeding) is reported as one 'hit' event per type this often. */
+export const PLAYER_DOT_EVENT_INTERVAL = 0.5;
+/** A chain hook drags its victim over this long (then the root holds them). */
+export const PULL_TIME = 0.25;
+/**
+ * Longest single drag (units): a pull asking for more stops here. Over PULL_TIME that is at most
+ * ~9.3 units a tick — below PLAYER_RADIUS + the smallest solid prop (6), so a drag never tunnels
+ * through a prop — and a yank a player can read. The duration stays PULL_TIME: client prediction
+ * replays the drag from the 'pull' event with exactly that timing.
+ */
+export const PULL_MAX_DISTANCE = 140;
+/** Default pull distance of a chain hook (GAME_SPEC §14: 40 units toward the thrower). */
+export const CHAIN_PULL_DISTANCE = 40;
+/** Knockback displacement applied to a player per tick (geometric, like monsters). */
+export const PLAYER_KNOCKBACK_RATE = 0.3;
+/** Largest knockback a player can have pending (units). */
+export const PLAYER_KNOCKBACK_MAX = 60;
+
 // --- skills ------------------------------------------------------------------
 export const NOVA_ECHO_DELAY = 0.4;
 export const ARC_TARGET_RANGE = 240;
@@ -153,16 +210,44 @@ export const SEPARATION_MAX_STEP = 2.5;
 export const WAVE_LIFE_GROWTH = 0.08;
 export const WAVE_DAMAGE_GROWTH = 0.04;
 export const EMPOWER_BONUS = 0.3;
+/** Haste auras (the Bone Chorister, GAME_SPEC §14): allies inside move this much faster (speed only). */
+export const HASTE_BONUS = 0.25;
+/**
+ * Heavy bodies wedged by props: after PROP_STUCK_TIME of walking into props without getting anywhere
+ * (less than PROP_STUCK_PROGRESS of the step made good), they slide sideways around the obstacle for
+ * PROP_SLIDE_TIME, always to the same side until they have been clear of props for PROP_SIDE_MEMORY
+ * (so they follow a wall of stones to its end instead of pacing back and forth; see ai.ts integrate).
+ */
+export const PROP_STUCK_TIME = 0.25;
+export const PROP_STUCK_PROGRESS = 0.2;
+export const PROP_SLIDE_TIME = 0.8;
+export const PROP_SIDE_MEMORY = 1;
 export const HERALD_AURA_RADIUS = 110;
 export const WARDED_REDUCTION = 0.4;
 export const WARDED_ALLY_RADIUS = 90;
-/** Ironhide Brutes take this much less damage from hits (burning — ignite, trails, ward embers — ignores it). */
+/** Ironhide Brutes (MonsterDef.hitReduction) take this much less damage from hits (burning — ignite, trails, ward embers — ignores it). */
 export const ARMOURED_HIT_REDUCTION = 0.4;
 /** Minions summoned by the Herald/Matriarch roll no loot and carry this share of their XP. */
 export const SUMMONED_XP_FACTOR = 0.5;
+/**
+ * A saturated field (GAME_SPEC §8, §14): while this many monsters are alive, no lieutenant or boss summons —
+ * no cast starts, and minions due from a cast in progress don't appear (bosses.ts fieldFull). A summoner the
+ * party can't reach (the Herald kiting behind its ashlings, the Chorister behind its thralls) used to snowball
+ * the horde until the boss wave; the local caps on top (the Chainmaster's thralls, Varkus's hounds near him)
+ * keep a summoner's own crowd readable on a thinner field.
+ */
+export const SUMMON_FIELD_CAP = 160;
 /** Cinder Spitter spit: a lob with a fixed flight time that bursts where it lands. */
 export const SPIT_FLIGHT = 1.1;
+/** Landing splash radius of a lob (ProjectileStore.splash overrides it per projectile). */
 export const SPIT_SPLASH_RADIUS = 12;
+/** A landed tar glob leaves a tar pool of this radius and duration. */
+export const TAR_POOL_RADIUS = 26;
+export const TAR_POOL_DURATION = 6;
+/** Deaths remembered for corpse-raising (Bone Chorister): a ring of the most recent ones. */
+export const CORPSE_MEMORY = 64;
+/** A remembered corpse can be raised for this long after the death. */
+export const CORPSE_LIFETIME = 30;
 
 // --- waves -------------------------------------------------------------------
 export const PACK_SHARE = 0.6;

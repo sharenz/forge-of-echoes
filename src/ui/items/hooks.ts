@@ -6,6 +6,7 @@ import type { Local } from '../local';
 import { useStore, useUi } from '../store';
 import { useMemo } from 'preact/hooks';
 import { craftPending, keepArmedAfterApply, type PendingCraft } from '../lib/crafting';
+import { withdrawCount } from '../lib/stash';
 import { visiblePanels } from '../lib/panels';
 import { offerAddError, offerWith, offerWithout } from '../lib/trade';
 
@@ -44,7 +45,7 @@ export function isTradeLocked(s: UiState, uid: string): boolean {
 
 /** Items the crafting bench accepts: gear (bench recipes and currency) and maps (map currency). */
 export function benchAccepts(item: Item, uid: string): boolean {
-  return (item.kind === 'equipment' || item.kind === 'map') && !uid.startsWith('belt:');
+  return (item.kind === 'equipment' || item.kind === 'map') && !uid.startsWith('belt:') && !uid.startsWith('cstash:');
 }
 
 /** Add to or take out of your trade offer (Ctrl-click and drag share it). Returns false with a hint on refusal. */
@@ -87,9 +88,10 @@ export function placeOnBench(store: UiStore, local: Local, uid: string, item: It
 
 /**
  * Ctrl/⌘-click, by the visible left panel: the trade window adds / removes backpack items to / from your offer,
- * the crafting bench takes gear and maps onto the bench, an open map device takes maps; everything else uses the
- * rules' quick move (equipped gear still unequips while you trade). Ctrl/⌘+Shift-click on gear or a map in the
- * stash puts it on the crafting bench and opens the bench (the stash and the bench share the left side).
+ * the crafting bench takes gear and maps onto the bench, an open map device takes maps (also from the Map Stash
+ * picker in its panel); everything else uses the rules' quick move (equipped gear still unequips while you trade;
+ * a Crafting Stash slot gives a stack, Shift+Ctrl exactly one). Ctrl/⌘+Shift-click on gear or a map in the stash
+ * or the Map Stash puts it on the crafting bench and opens the bench (the stash and the bench share the left side).
  */
 export function quickMoveItem(store: UiStore, local: Local, e: MouseEvent, uid: string, item: Item, from: ItemLocation): void {
   const s = store.get();
@@ -108,7 +110,7 @@ export function quickMoveItem(store: UiStore, local: Local, e: MouseEvent, uid: 
     placeOnBench(store, local, uid, item, at);
     return;
   }
-  if (left === 'stash' && e.shiftKey && from.kind === 'stash' && benchAccepts(item, uid)) {
+  if (left === 'stash' && e.shiftKey && (from.kind === 'stash' || from.kind === 'mapStash') && benchAccepts(item, uid)) {
     if (!s.craftingAllowed) {
       store.actions.uiSound('error');
       local.flashHint('Crafting only works in a hideout.', at.x, at.y);
@@ -124,7 +126,10 @@ export function quickMoveItem(store: UiStore, local: Local, e: MouseEvent, uid: 
     if (store.actions.moveItem(uid, { kind: 'mapDevice' })) store.actions.uiSound('click');
     return;
   }
-  store.actions.quickMove(uid);
+  // A Crafting Stash slot gives a stack; with Shift exactly one.
+  const count = from.kind === 'currencyStash' ? withdrawCount(e.shiftKey) : undefined;
+  if (count === undefined) store.actions.quickMove(uid);
+  else store.actions.quickMove(uid, count);
   store.actions.uiSound('click');
 }
 
@@ -132,6 +137,11 @@ let suppressClickUntil = 0;
 /** Called by the drag controller so the click that ends a drag is not treated as an item click. */
 export function suppressNextClick(): void {
   suppressClickUntil = performance.now() + 80;
+}
+
+/** The click that is arriving ends a drag (see suppressNextClick): it must not act as a click. */
+export function clickSuppressed(): boolean {
+  return performance.now() < suppressClickUntil;
 }
 
 let pendingCraft: PendingCraft | null = null;
@@ -190,7 +200,7 @@ export function applyCurrencyOnce(store: UiStore, local: Local, e: MouseEvent, c
  * Crafts are irreversible, so a second click on the same item waits until the server has answered the first.
  */
 export function itemClick(store: UiStore, local: Local, e: MouseEvent, uid: string, item: Item, from: ItemLocation): void {
-  if (performance.now() < suppressClickUntil) return;
+  if (clickSuppressed()) return;
   const s = store.get();
   const ch = s.character;
   if (!ch) return;

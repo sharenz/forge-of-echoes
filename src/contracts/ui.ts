@@ -5,9 +5,10 @@
 // evaluated locally for display; every state change is a command sent to the authoritative server.
 import type { CurrencyId, MonsterKind, SkillId } from './content';
 import type { DerivedStats, GameRulesApi, MerchantOffer, RunSetup } from './game';
-import type { CharacterSave, ItemLocation, ItemTone, Settings } from './items';
+import type { CharacterSave, ItemLocation, ItemTone, Settings, SpecialStashTab } from './items';
 import type { AccountInfo, CharacterSummary, PartyInfo, PartyInvite, PortalInfo, RunSummaryInfo, TradeInfo, TradeRequestInfo } from './net';
 import type { RunPhase } from './sim';
+import type { PlayerDebuff } from './bestiary';
 
 export type Screen =
   | 'loading'       // booting / generating art
@@ -91,6 +92,8 @@ export interface HudState {
   /** Hideout: the map portal of this hideout's owner (null = none open). */
   portal: PortalInfo | null;
   allies: HudAlly[];
+  /** The local player's active debuffs (HUD icons: icon/debuff/<id>). */
+  debuffs: { id: PlayerDebuff; remaining: number; duration: number; stacks: number }[];
   fps: number;
   pingMs: number;
   dead: boolean;
@@ -122,8 +125,8 @@ export interface UiState {
   derived: DerivedStats | null;
   zone: 'hideout' | 'map' | null;
   openPanels: Panel[];
-  /** Active stash tab index. */
-  stashTab: number;
+  /** Active stash tab: a normal tab index or a special tab. */
+  stashTab: number | SpecialStashTab;
   /** Currency stack armed for crafting (right-click). */
   armed: { uid: string; currencyId: CurrencyId } | null;
   /** Waiting for the player to pick an affix line (seal, catalyst, fracture core). */
@@ -174,11 +177,13 @@ export interface UiActions {
   openPanel(panel: Panel): void;
   closePanel(panel: Panel): void;
   closeAllPanels(): void;
-  setStashTab(tab: number): void;
+  setStashTab(tab: number | SpecialStashTab): void;
+  depositAllCurrency(): void;
 
   // items (sent to the server; optimistic UI is optional)
-  moveItem(uid: string, to: ItemLocation): boolean;
-  quickMove(uid: string): void;
+  moveItem(uid: string, to: ItemLocation, count?: number): boolean;
+  /** Ctrl-click; `count` (e.g. 1 with Shift) withdraws a partial stack from the Crafting Stash. */
+  quickMove(uid: string, count?: number): void;
   discardItem(uid: string): void;
   armCurrency(uid: string): void;
   disarm(): void;

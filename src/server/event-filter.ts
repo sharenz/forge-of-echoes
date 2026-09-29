@@ -2,11 +2,13 @@
 //
 // Every event is classified for one viewer:
 //   -1  not for this viewer (someone else's loot, someone else's "not enough focus", outside the AOI)
-//    0  essential — never capped: the viewer's own feedback, their own drops, public ground items (owner 0)
+//    0  essential — never capped: the viewer's own feedback (incl. their debuffs, cleanses and chain-hook pulls —
+//       the client's prediction replays its own pull), their own drops, public ground items (owner 0)
 //       appearing / picked up in view, run-wide cues (wave tells, boss phases, the clear, portals opening),
 //       and party-relevant moments (players joining / dying)
 //    1  important: the viewer's own hits on monsters and motes (wherever they are), and in view: deaths,
-//       monster attacks, telegraphs resolving, allies' casts, crits and killing blows, allies getting hit
+//       monster attacks, telegraphs resolving, shield blocks, allies' casts, crits and killing blows, allies
+//       getting hit, debuffed, cleansed or pulled
 //    2  low — AOI-filtered: other players' plain hits, motes, evades, projectile ends, ailment pops
 // Every event carrying the viewer's own playerId / owner is delivered (class 0 or 1).
 // A packet (one per snapshot) keeps every class-0 event, then class 1, then class 2 up to EVENTS_PER_PACKET,
@@ -84,6 +86,16 @@ export function eventClass(e: SimEvent, viewer: number, vx: number, vy: number):
       // Rare, lieutenant and boss deaths are big moments (loot fountains): always worth sending in view.
       if (!inAoi(e.x, e.y, vx, vy)) return e.rarity >= RARITY_CODE.lieutenant ? 0 : -1;
       return e.rarity >= RARITY_CODE.rare ? 0 : 1;
+    case 'debuff':
+    case 'cleanse':
+      // Debuff state itself travels in every snapshot (PlayerView.debuffs); these are its cues (sound, flash).
+      if (e.playerId === viewer) return 0;
+      return inAoi(e.x, e.y, vx, vy) ? 1 : -1;
+    case 'pull':
+      // The viewer's own drag is essential: the client's prediction replays it (ClientWorld.noteEvents).
+      if (e.playerId === viewer) return 0;
+      return inAoi(e.fromX, e.fromY, vx, vy) || inAoi(e.toX, e.toY, vx, vy) ? 1 : -1;
+    case 'blocked':
     case 'monsterAttack':
     case 'monsterSpawn':
     case 'areaResolve':
@@ -91,8 +103,13 @@ export function eventClass(e: SimEvent, viewer: number, vx: number, vy: number):
     case 'projectileEnd':
     case 'ailment':
       return inAoi(e.x, e.y, vx, vy) ? 2 : -1;
-    default:
-      return 1;
+    default: {
+      // Every SimEvent must be classified above: a new contract event fails `tsc` here until it is. At run time
+      // an unknown event (a sim ahead of this build) fails closed — nobody gets it rather than every viewer.
+      const unhandled: never = e;
+      void unhandled;
+      return -1;
+    }
   }
 }
 

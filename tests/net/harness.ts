@@ -3,15 +3,23 @@
 // createInputQueue: one per tick, bursts coalesced, repeats when starved and paid back later), casts timed skills with the sim's rules (held slots start as soon as
 // free, back-to-back with the overshoot carried), steps scripted monsters, and sends encoded snapshots (plus the
 // tick's cosmetic events) every SNAPSHOT_EVERY ticks through a fake network with latency, jitter, loss, reordering
-// and TCP-style stalls.
+// and TCP-style stalls. Player debuffs follow the sim's rules (src/sim/debuffs.ts, movement.ts): the ward ticks first,
+// casting progresses at 0 (frozen) / 0.7 (chilled) × SIM_DT, the move uses playerSlow(cast, debuff, ground) with
+// Rooted/Frozen holding her, Chilled at `chillSlow` (the sim's 0.3) and a 'tarPool' at her feet at `tarSlow` (0.5),
+// and only then do the debuff timers run down (twice as fast under Cinder Ward). A chain hook's drag (pull()) replaces
+// her movement exactly like the sim's pullPlayer / updatePlayer (lerp over PULL_TIME, resolvePlayerAt, vx = vy = 0)
+// and emits her 'pull' event; the client gets every batch through noteEvents (after the snapshot of its tick, like the
+// game server sends them) unless `noteEvents` is off.
 import type { SkillId } from '../../src/contracts/content';
 import type { InputMessage } from '../../src/contracts/net';
 import { SNAPSHOT_EVERY } from '../../src/contracts/net';
 import { SIM_DT } from '../../src/contracts/sim';
-import type { PlayerAnim, PropView, SimEvent, WorldView } from '../../src/contracts/sim';
+import type { PlayerAnim, PlayerDebuffView, PropView, RootSource, SimEvent, WorldView } from '../../src/contracts/sim';
+import type { PlayerDebuff } from '../../src/contracts/bestiary';
 import { createClientWorld, createEventTimeline, createInputQueue, createSnapshotEncoder, heldToMask, moveVector } from '../../src/net';
 import type { EventTimeline, InputQueue, NetClientWorld } from '../../src/net';
-import { CAST_SLOW, movePlayer } from '../../src/sim/movement';
+import { CAST_SLOW, PLAYER_CHILL_SLOW, movePlayer, playerSlow, resolvePlayerAt } from '../../src/sim/movement';
+import { PLAYER_RADIUS, PULL_TIME } from '../../src/sim/constants';
 import { makePlayer, makeView, makeZone, setTick } from './fixtures';
 
 export const TICK = 1000 / 60;
@@ -38,6 +46,14 @@ export interface HarnessOptions {
   stalls?: { at: number; ms: number }[];
   /** Timed skills in loadout slots (slot ≥ 1): the server casts them like the sim while their slot is held. */
   skills?: { slot: number; skill: SkillId; castTime: number }[];
+  /** Server-side Chilled move slow (the sim's PLAYER_CHILL_SLOW unless testing a sim that deviates). */
+  chillSlow?: number;
+  /** Server-side tar pool slow (the sim's 0.5 unless testing a deviating sim). */
+  tarSlow?: number;
+  /** Feed each events batch to ClientWorld.noteEvents (default true). */
+  noteEvents?: boolean;
+  /** Deliver each events batch before its snapshot instead of right after it (robustness). */
+  eventsFirst?: boolean;
 }
 
 export interface HarnessInput {
@@ -74,6 +90,8 @@ export class NetHarness {
   seq = 0;
   ackSeq = 0;
   castSlow = false;
+  /** The sim's drag state (player.ts pullTime / pullTotal / from / to). */
+  pullState: { fromX: number; fromY: number; toX: number; toY: number; total: number; time: number } | null = null;
   playerAnim: PlayerAnim = 'idle';
   playerAnimTime = 0;
   /** Server position right after applying input `seq`. */
@@ -116,6 +134,10 @@ export class NetHarness {
       serverHz: opts.serverHz ?? 60,
       stalls: opts.stalls ?? [],
       skills: opts.skills ?? [],
+      chillSlow: opts.chillSlow ?? PLAYER_CHILL_SLOW,
+      tarSlow: opts.tarSlow ?? 0.5,
+      noteEvents: opts.noteEvents ?? true,
+      eventsFirst: opts.eventsFirst ?? false,
     };
     this.tickMs = 1000 / this.opts.serverHz;
     this.nextServerTickAt = this.tickMs;
@@ -134,11 +156,83 @@ export class NetHarness {
     this.timeline.setLocalPlayer(1);
   }
 
+  /** Apply (or refresh, keeping the longer remaining time) a debuff on the player, like the sim would. */
+  applyDebuff(id: PlayerDebuff, seconds: number, opts: { stacks?: number; source?: RootSource | null } = {}): void {
+    const list = this.player.debuffs;
+    let d = list.find((x) => x.id === id);
+    if (!d) {
+      d = { id, remaining: 0, duration: 0, stacks: 1, source: null };
+      list.push(d);
+    }
+    d.remaining = Math.max(d.remaining, seconds);
+    d.duration = Math.max(d.remaining, seconds);
+    d.stacks = opts.stacks ?? d.stacks;
+    d.source = id === 'rooted' ? opts.source ?? 'bone' : null;
+  }
+
+  /**
+   * The sim's pullPlayer: drag her up to `distance` toward (towardX, towardY) over PULL_TIME (stopping 2 body radii
+   * short), rooted by 'chain' unless `rooted` is false (the sim's root grace), and emit her 'pull'. Call it from a
+   * `tick` hook (after her move, like a projectile hit).
+   */
+  pull(towardX: number, towardY: number, distance: number, rooted = true): void {
+    const p = this.player;
+    const dx = towardX - p.x;
+    const dy = towardY - p.y;
+    const d = Math.hypot(dx, dy);
+    const dist = Math.min(Math.max(0, distance), Math.max(0, d - 2 * PLAYER_RADIUS));
+    const fromX = p.x;
+    const fromY = p.y;
+    const toX = d > 1e-6 ? fromX + (dx / d) * dist : fromX;
+    const toY = d > 1e-6 ? fromY + (dy / d) * dist : fromY;
+    if (rooted) this.applyDebuff('rooted', 1.4, { source: 'chain' });
+    if (dist <= 0) return;
+    const total = Math.max(SIM_DT, PULL_TIME);
+    this.pullState = { fromX, fromY, toX, toY, total, time: total };
+    this.pendingEvents.push({ t: 'pull', playerId: p.id, fromX, fromY, toX, toY });
+  }
+
+  has(id: PlayerDebuff): boolean {
+    return this.player.debuffs.some((d) => d.id === id);
+  }
+
+  /** After the move: debuff timers run down (twice as fast under the ward); spent ones are removed. */
+  private tickDebuffs(): void {
+    const list: PlayerDebuffView[] = this.player.debuffs;
+    const step = SIM_DT * (this.player.wardTime > 0 ? 2 : 1);
+    for (const d of list) d.remaining -= step;
+    for (let k = list.length - 1; k >= 0; k--) if (!(list[k].remaining > 0)) list.splice(k, 1);
+  }
+
+  /** The ward's own timer runs first in a tick (the sim's tickWard). */
+  private tickWard(): void {
+    const p = this.player;
+    if (p.wardTime <= 0) return;
+    p.wardTime -= SIM_DT;
+    if (p.wardTime <= 0) p.wardTime = 0;
+  }
+
+  /** Debuff part of the movement slow. */
+  private debuffSlow(): number {
+    if (this.has('rooted') || this.has('frozen')) return 1;
+    return this.has('chilled') ? this.opts.chillSlow : 0;
+  }
+
+  /** Ground slow at the player's feet before the step. */
+  private groundSlow(): number {
+    const p = this.player;
+    for (const a of this.view.areas) {
+      if (a.kind === 'tarPool' && (p.x - a.x) ** 2 + (p.y - a.y) ** 2 <= a.radius * a.radius) return this.opts.tarSlow;
+    }
+    return 0;
+  }
+
   /** The sim's updateCasting for timed actives: advance/release the running cast, then start a held one. */
   private updateCasting(): void {
+    if (this.has('frozen')) return; // frozen: no casting at all (a running cast holds)
     let carry = 0;
     if (this.cast) {
-      this.cast.time += SIM_DT;
+      this.cast.time += SIM_DT * (this.has('chilled') ? 1 - PLAYER_CHILL_SLOW : 1);
       if (this.cast.time >= this.cast.total) {
         carry = Math.min(SIM_DT, this.cast.time - this.cast.total);
         this.cast = null;
@@ -183,14 +277,31 @@ export class NetHarness {
       consumed = this.ackSeq;
     } else if (moveVector(this.currentMove).len > 0.05) this.repeats++;
     const p = this.player;
-    if (!p.dead) this.updateCasting();
+    if (p.dead) p.debuffs.length = 0;
+    if (!p.dead) {
+      this.tickWard();
+      this.updateCasting();
+    }
     this.hooks.beforeMove?.(this, this.serverTick);
     let moving = false;
     if (p.dead) {
       p.vx = 0;
       p.vy = 0;
+      this.pullState = null;
+    } else if (this.pullState && this.pullState.time > 0) {
+      // The sim's drag (player.ts updatePlayer): it replaces her own movement while it lasts.
+      const pull = this.pullState;
+      pull.time = Math.max(0, pull.time - SIM_DT);
+      const u = pull.total > 0 ? 1 - pull.time / pull.total : 1;
+      const o = resolvePlayerAt(pull.fromX + (pull.toX - pull.fromX) * u, pull.fromY + (pull.toY - pull.fromY) * u, this.opts.arenaRadius, this.opts.props);
+      p.x = o.x;
+      p.y = o.y;
+      p.vx = 0;
+      p.vy = 0;
+      this.tickDebuffs();
     } else {
-      const slow = this.castSlow ? CAST_SLOW : 0;
+      const castSlow = this.castSlow ? CAST_SLOW : 0;
+      const slow = playerSlow(castSlow, this.debuffSlow(), this.groundSlow());
       const next = movePlayer({ x: p.x, y: p.y }, this.currentMove, {
         speed: this.opts.moveSpeed, arenaRadius: this.opts.arenaRadius, props: this.opts.props, slow,
       }, SIM_DT);
@@ -200,14 +311,20 @@ export class NetHarness {
       const speed = this.opts.moveSpeed * (1 - slow);
       p.vx = dir.x * speed;
       p.vy = dir.y * speed;
-      moving = dir.len > 0.05;
+      moving = dir.len > 0.05 && speed > 0;
+      this.tickDebuffs();
     }
     this.hooks.tick?.(this, this.serverTick);
     const anim: PlayerAnim = p.dead ? 'death' : this.playerAnim === 'dash' || this.playerAnim === 'hit' ? this.playerAnim : this.cast ? 'cast' : moving ? 'run' : 'idle';
-    if (anim !== p.anim) {
-      p.anim = anim;
-      p.animTime = 0;
-    } else p.animTime += SIM_DT;
+    // Frozen: the sim holds her pose, facing and animation clock.
+    const held = !p.dead && this.has('frozen');
+    if (!held) {
+      if (anim !== p.anim) {
+        p.anim = anim;
+        p.animTime = 0;
+      } else p.animTime += SIM_DT;
+      if (moving) p.facing = Math.abs(p.vx) >= Math.abs(p.vy) ? (p.vx >= 0 ? 'east' : 'west') : p.vy >= 0 ? 'south' : 'north';
+    }
     if (consumed >= 0) this.serverAt.set(consumed, { x: p.x, y: p.y });
     setTick(this.view, this.serverTick);
     if (this.serverTick % SNAPSHOT_EVERY === 0) {
@@ -240,7 +357,10 @@ export class NetHarness {
     this.toClient.sort((a, b) => a.at - b.at || a.order - b.order);
     while (this.toClient.length && this.toClient[0].at <= this.now) {
       const msg = this.toClient.shift()!;
+      const note = this.opts.noteEvents && msg.events.length > 0;
+      if (note && this.opts.eventsFirst) this.client.noteEvents(msg.tick, msg.events);
       this.client.pushSnapshot(msg.buf, this.now);
+      if (note && !this.opts.eventsFirst) this.client.noteEvents(msg.tick, msg.events);
       this.timeline.push(msg.tick, msg.events);
     }
     this.lastAlpha = this.client.update(this.now);

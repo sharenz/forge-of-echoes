@@ -1,5 +1,7 @@
 // Pointer-driven drag & drop for items. The item follows the cursor keeping the grabbed cell under it; the
-// hovered grid shows a green/red footprint and slots light up. Validity comes from the SAME pure rule the
+// hovered grid shows a green/red footprint and slots light up. The special stash tabs are position-free targets
+// (data-drop="currencyStash" / "mapStash", on the tab buttons and on their pages): a currency or map dropped there
+// files itself; the map device's picker (data-drop="mapPicker") loads a map dropped on it into the device. A Crafting Stash slot drags out as a stack (`cstash:<id>`; the rules take up to a full stack). Validity comes from the SAME pure rule the
 // server runs (rules.moveItem), so the preview never lies. Two targets are not item locations: the crafting
 // bench slot (places the item on the bench; it stays where it is) and your side of the trade window (adds it
 // to your offer). Dropping over the world puts the item on the floor at your feet (actions.dropItem): a
@@ -123,8 +125,21 @@ function drop(d: DragState, target: DropTarget | null, store: UiStore, local: Lo
   if (!ok) store.actions.uiSound('error');
 }
 
-/** Why the world refuses a dragged item (dropItem takes backpack, equipment, belt and stash items only). */
+/**
+ * Why the world refuses a dragged item (dropItem takes backpack, equipment, belt, stash and Map Stash items; a
+ * Crafting Stash slot is refused by the rules with the same words).
+ */
 const MAP_DEVICE_FLOOR_REASON = 'Take the map out of the device first.';
+
+/**
+ * Where a drop on the map device's picker (data-drop="mapPicker", the Map Stash inside the device panel) goes: a map
+ * from the backpack or the stash loads into the device; the device's own map goes back into the Map Stash, and a
+ * picker row dropped on the picker stays where it is.
+ */
+export function pickerDropKind(d: { item: Item; from: ItemLocation }): 'mapDevice' | 'mapStash' {
+  return d.item.kind === 'map' && d.from.kind !== 'mapDevice' && d.from.kind !== 'mapStash' ? 'mapDevice' : 'mapStash';
+}
+const CURRENCY_STASH_FLOOR_REASON = 'Take currency out of the Crafting Stash first.';
 
 /** Work out what is under the pointer and whether the dragged item may go there. */
 export function resolveTarget(x: number, y: number, d: DragState, store: UiStore): DropTarget | null {
@@ -135,7 +150,8 @@ export function resolveTarget(x: number, y: number, d: DragState, store: UiStore
   const dropEl = el.closest<HTMLElement>('[data-drop]');
   if (!dropEl) {
     if (el.closest('.fe-solid')) return null;
-    const reason = d.from.kind === 'mapDevice' ? MAP_DEVICE_FLOOR_REASON : null;
+    const reason =
+      d.from.kind === 'mapDevice' ? MAP_DEVICE_FLOOR_REASON : d.from.kind === 'currencyStash' ? CURRENCY_STASH_FLOOR_REASON : null;
     return { key: 'world', loc: null, valid: !reason, reason, noop: false, world: true };
   }
   const kind = dropEl.dataset.drop;
@@ -174,9 +190,17 @@ export function resolveTarget(x: number, y: number, d: DragState, store: UiStore
     loc = { kind: 'belt', index: Number(dropEl.dataset.index) };
   } else if (kind === 'mapDevice') {
     loc = { kind: 'mapDevice' };
+  } else if (kind === 'currencyStash') {
+    // Either Crafting Stash tab (its button or its page): a currency always files into its own slot.
+    loc = { kind: 'currencyStash' };
+  } else if (kind === 'mapStash') {
+    loc = { kind: 'mapStash' };
+  } else if (kind === 'mapPicker') {
+    loc = { kind: pickerDropKind(d) };
   }
   if (!loc) return null;
-  const key = locationKey(loc);
+  // Several elements can stand for one location (a special tab's button and its page): the key tells them apart.
+  const key = dropEl.dataset.dropId ? `${locationKey(loc)}@${dropEl.dataset.dropId}` : locationKey(loc);
   if (sameLocation(loc, d.from)) return { key, loc, valid: true, reason: null, noop: true, grid, origin };
   const ch = s.character;
   if (!ch) return null;

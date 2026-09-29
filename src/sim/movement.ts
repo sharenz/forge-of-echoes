@@ -4,9 +4,23 @@
 // position the server computes (bit for bit, as long as the inputs match). What the client cannot
 // know — knockback from heavy bodies, the crowd slow of a horde in front, pushes from allies — is
 // applied by the sim *outside* this function and reaches the client as a correction.
-import { PICKUP_REACH, type MovePlayer, type PlayerView, type PropView } from '../contracts/sim';
-import { CAST_MOVE_FACTOR, PLAYER_RADIUS } from './constants';
+//
+// The `slow` the sim passes is `playerSlow(castSlow, debuffSlow, groundSlow)`:
+//   castSlow   CAST_SLOW while a timed active (not the slot-0 basic attack) is being cast, else 0;
+//   debuffSlow `debuffSlowOf(view.debuffs)`: 1 while frozen or rooted (a chain hook's pull included),
+//              PLAYER_CHILL_SLOW while chilled, else 0;
+//   groundSlow `areaSlowAt(view.areas, x, y)` at the feet before the step: TAR_SLOW inside a tarPool.
+// A client that computes the same three from its latest snapshot predicts the step exactly; a debuff
+// that starts or ends between snapshots arrives as a small correction. `predictionSlow(view)` is the
+// first two combined. Casting also slows while chilled: a cast progresses `castRateOf(debuffs)` × SIM_DT
+// per tick (0 while frozen).
+import { PICKUP_REACH, type MovePlayer, type PlayerDebuffView, type PlayerView, type PropView } from '../contracts/sim';
+import { areaSlowAt } from './area-geometry';
+import { CAST_MOVE_FACTOR, PLAYER_CHILL_SLOW, PLAYER_RADIUS } from './constants';
 import { clamp, finiteOr } from './math';
+
+export { areaSlowAt };
+export { PLAYER_CHILL_SLOW };
 
 /**
  * `params.slow` of a player casting a timed active skill (not the basic attack): a fraction of
@@ -25,14 +39,67 @@ export const CAST_SLOW = 1 - CAST_MOVE_FACTOR;
 export const PICKUP_APPROACH = PICKUP_REACH - 16;
 
 /**
- * The `slow` a client should pass when predicting `player` from its latest server view: the cast
- * slow while a timed active (anything but the loadout's slot-0 basic attack) is being cast, else 0.
+ * Two slows (fractions of speed removed) applied together: 1 − (1 − a)(1 − b). Exact when either is 0
+ * (the other comes back unchanged) or 1 (rooted stays rooted), so a lone cast slow is still CAST_SLOW.
  */
-export function predictionSlow(player: Pick<PlayerView, 'castSkill' | 'slots'>): number {
+export function combineSlow(a: number, b: number): number {
+  if (!(b > 0)) return a;
+  if (!(a > 0)) return b;
+  if (a >= 1 || b >= 1) return 1;
+  return 1 - (1 - a) * (1 - b);
+}
+
+/** Movement slow from debuffs: 1 when held in place (frozen, rooted, being pulled), the chill slow when chilled. */
+export function debuffMoveSlow(chilled: boolean, held: boolean): number {
+  return held ? 1 : chilled ? PLAYER_CHILL_SLOW : 0;
+}
+
+/** `debuffMoveSlow` from a PlayerView's debuff list (a debuff counts while its remaining time is > 0). */
+export function debuffSlowOf(debuffs: readonly PlayerDebuffView[] | undefined): number {
+  if (!debuffs || debuffs.length === 0) return 0;
+  let chilled = false;
+  let held = false;
+  for (let k = 0; k < debuffs.length; k++) {
+    const d = debuffs[k];
+    if (!(d.remaining > 0)) continue;
+    if (d.id === 'frozen' || d.id === 'rooted') held = true;
+    else if (d.id === 'chilled') chilled = true;
+  }
+  return debuffMoveSlow(chilled, held);
+}
+
+/** Cast progress per second of cast time from debuffs: 0 frozen, 1 − PLAYER_CHILL_SLOW chilled, else 1. */
+export function castRateOf(debuffs: readonly PlayerDebuffView[] | undefined): number {
+  if (!debuffs || debuffs.length === 0) return 1;
+  let rate = 1;
+  for (let k = 0; k < debuffs.length; k++) {
+    const d = debuffs[k];
+    if (!(d.remaining > 0)) continue;
+    if (d.id === 'frozen') return 0;
+    if (d.id === 'chilled') rate = 1 - PLAYER_CHILL_SLOW;
+  }
+  return rate;
+}
+
+/** The slow the sim passes to movePlayer (see the header): cast, then debuffs, then the ground. */
+export function playerSlow(castSlow: number, debuffSlow: number, groundSlow: number): number {
+  return combineSlow(combineSlow(castSlow, debuffSlow), groundSlow);
+}
+
+/**
+ * The `slow` a client should pass when predicting `player` from its latest server view: the cast
+ * slow while a timed active (anything but the loadout's slot-0 basic attack) is being cast, combined
+ * with the debuff slow (`debuffSlowOf`). The ground slow needs the areas: combine it with
+ * `areaSlowAt(areas, x, y)` via `playerSlow` (or `combineSlow`).
+ */
+export function predictionSlow(player: Pick<PlayerView, 'castSkill' | 'slots'> & { debuffs?: readonly PlayerDebuffView[] }): number {
   const cast = player.castSkill;
-  if (!cast) return 0;
-  const basic = player.slots.length > 0 ? player.slots[0].skillId : null;
-  return cast === basic ? 0 : CAST_SLOW;
+  let castSlow = 0;
+  if (cast) {
+    const basic = player.slots.length > 0 ? player.slots[0].skillId : null;
+    castSlow = cast === basic ? 0 : CAST_SLOW;
+  }
+  return combineSlow(castSlow, debuffSlowOf(player.debuffs));
 }
 
 /** Normalised move direction (length ≤ 1) written here to avoid allocating in the sim's hot path. */

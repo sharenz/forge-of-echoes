@@ -35,8 +35,9 @@ export function maskLocked(ch: CharacterSave, locked: ReadonlySet<string>): { ch
   for (const uid of locked) {
     if (typeof uid !== 'string') continue;
     const found = findItem(next, uid);
-    // Gone already (nothing to protect), or belt charges (never offerable: they are not an item).
-    if (!found || found.location.kind === 'belt') continue;
+    // Gone already (nothing to protect), or belt charges / a Crafting Stash slot (never offerable: they
+    // are not an item of their own).
+    if (!found || found.location.kind === 'belt' || found.location.kind === 'currencyStash') continue;
     const inGrid = found.location.kind === 'backpack' || found.location.kind === 'stash';
     const placed = inGrid && isStackable(found.item) ? standIn(found.item) : found.item;
     if (placed !== found.item) next = replaceItemAt(next, found.location, placed);
@@ -52,6 +53,8 @@ function sameLocation(a: ItemLocation, b: ItemLocation): boolean {
     case 'equipment': return b.kind === 'equipment' && a.slot === b.slot;
     case 'belt': return b.kind === 'belt' && a.index === b.index;
     case 'mapDevice': return b.kind === 'mapDevice';
+    case 'currencyStash': return b.kind === 'currencyStash';
+    case 'mapStash': return b.kind === 'mapStash';
   }
 }
 

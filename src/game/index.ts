@@ -47,6 +47,16 @@
 //     carries a static "Party Scaling" line); the numbers mirror src/sim (PARTY_SCALING).
 //   • XP: the harness in tests/game-progression grants { t: 'xp' } to LIVING players only, following
 //     the sim's guidance; the contract text says every player — pick one reading on the server.
+//   • SPECIAL STASH TABS (GAME_SPEC §12; details in src/game/items/index.ts). New locations
+//     { kind: 'currencyStash' } and { kind: 'mapStash' }, and Crafting Stash slot uids "cstash:<id>" (findItem
+//     returns a CurrencyStack view of a slot). Gate them like normal stash tabs — hideout only — both as a
+//     source (findItem(...).location.kind) and a destination (moveItem `to.kind`, quickMove stashTab
+//     'currency' | 'mapCurrency' | 'maps'), and depositAllCurrency too. applyCurrency accepts a slot uid as
+//     the currency (crafting stays hideout-only). discardItem refuses a slot ("Take currency out of the
+//     Crafting Stash first."), so dropItem on a slot fails cleanly; a Map Stash map can be discarded /
+//     dropped like a stashed item. Neither can be offered in a trade (tradeOfferError: backpack only).
+//     withItemLocks wraps depositAllCurrency (locked stacks stay in the backpack). Rook and the Crafting
+//     Bench also pay from the Crafting Stash; stowItem files refunds there when the backpack is full.
 //
 // Also for src/client and src/ui (display):
 //   lootLuckLines(setup, ch)  the two personal luck lines with every source (tooltips, HUD)
@@ -55,7 +65,7 @@
 import type { ContentInfo, GameRulesApi } from '../contracts/game';
 import {
   BASE_INFO, CURRENCY_INFO, FLASK_INFO, UNIQUE_INFO, addStashTab, addToBackpack, applyBenchRecipe, benchRecipes, canEquip,
-  clearCraftedAffix, clearNewFlags, discardItem, findItem, itemSize, moveItem, quickMove, renameStashTab,
+  clearCraftedAffix, clearNewFlags, depositAllCurrency, discardItem, findItem, itemSize, moveItem, quickMove, renameStashTab,
 } from './items';
 import {
   MAP_BASE_INFO, SKILL_INFO, allocateAttribute, applyCurrency, applyRunEnd, buildRunConfig, buyOffer, canRankUpSkill,
@@ -78,7 +88,7 @@ export {
 } from './progression';
 export type { Luck } from './progression';
 export {
-  LOCKED_CHANGE_ERROR, LOCKED_ITEM_ERROR, RNG_COMMANDS, redactForClient, redactSetupForClient, reseedCharacter, withItemLocks,
+  LOCKED_CHANGE_ERROR, LOCKED_CURRENCY_ERROR, LOCKED_ITEM_ERROR, RNG_COMMANDS, redactForClient, redactSetupForClient, reseedCharacter, withItemLocks,
   withServerEntropy,
 } from './online';
 export type { LockedUids } from './online';
@@ -110,8 +120,9 @@ export const rules: GameRulesApi = {
   itemSize,
   findItem,
   canEquip,
-  moveItem,
+  moveItem: (ch, uid, to, count) => moveItem(ch, uid, to, count),
   quickMove: (ch, uid, ctx) => quickMove(ch, uid, ctx),
+  depositAllCurrency,
   addToBackpack: (ch, item) => addToBackpack(ch, item),
   discardItem,
   addStashTab,

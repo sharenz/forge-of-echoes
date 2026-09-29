@@ -9,6 +9,7 @@ import { useLocal } from '../local';
 import { itemIconId } from '../lib/items';
 import { formatInt } from '../lib/format';
 import { useStore, useUi } from '../store';
+import { currencyHoldings } from '../lib/stash';
 import { PanelShell } from './PanelShell';
 
 const GROUPS: { kind: MerchantOffer['kind'][]; title: string }[] = [
@@ -23,11 +24,8 @@ export function MerchantPanel() {
   const ch = useUi((s) => s.character);
   const inHideout = useUi((s) => s.zone === 'hideout');
   const offers = useMemo(() => (ch && inHideout ? safe(() => store.actions.merchantOffers(), []) : []), [ch, inHideout, store]);
-  const scrap = useMemo(() => {
-    let n = 0;
-    for (const e of ch?.backpack.entries ?? []) if (e.item.kind === 'currency' && e.item.currencyId === 'scrap') n += e.item.count;
-    return n;
-  }, [ch]);
+  // Rook takes Forge Scrap from the backpack, the stash tabs and the Crafting Stash alike.
+  const scrap = useMemo(() => (ch ? currencyHoldings(ch, 'scrap') : { backpack: 0, stash: 0, crafting: 0 }), [ch]);
   if (!ch) return null;
 
   const gambleIcon = (o: MerchantOffer): string => {
@@ -59,9 +57,12 @@ export function MerchantPanel() {
       title="Rook's Stall"
       class="fe-merchant"
       aside={
-        <span class="fe-wallet" title="Forge Scrap in your inventory">
+        <span
+          class="fe-wallet"
+          title={`Forge Scrap you can spend: ${formatInt(scrap.backpack)} in your backpack, ${formatInt(scrap.stash)} in stash tabs, ${formatInt(scrap.crafting)} in the Crafting Stash`}
+        >
           <PixelIcon id={iconIdForCurrency('scrap')} width={20} height={20} />
-          {formatInt(scrap)}
+          {formatInt(scrap.backpack + scrap.stash + scrap.crafting)}
         </span>
       }
     >

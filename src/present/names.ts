@@ -13,6 +13,32 @@ export const MONSTER_NAMES: Record<MonsterKind, string> = {
   ashboundHerald: 'Ashbound Herald',
   cinderMatriarch: 'Cinder Matriarch',
   trainingDummy: 'Training Dummy',
+  // Rimed Ossuary
+  boneThrall: 'Bone Thrall',
+  rimeshade: 'Rimeshade',
+  frostWeaver: 'Frost Weaver',
+  glacialWisp: 'Glacial Wisp',
+  ossuaryGolem: 'Ossuary Golem',
+  boneChorister: 'Bone Chorister',
+  hollowWarden: 'The Hollow Warden',
+  // Iron Coliseum
+  pitHound: 'Pit Hound',
+  chainThrall: 'Chain Thrall',
+  ironCrossbowman: 'Iron Crossbowman',
+  shieldbearer: 'Shieldbearer',
+  tarSlinger: 'Tar Slinger',
+  chainmaster: 'The Chainmaster',
+  varkus: 'Varkus, the Iron Champion',
+};
+
+/** Short names for the off-screen markers of lieutenants and bosses (one word fits a marker plate). */
+export const MARKER_NAMES: Partial<Record<MonsterKind, string>> = {
+  ashboundHerald: 'Herald',
+  cinderMatriarch: 'Matriarch',
+  boneChorister: 'Chorister',
+  hollowWarden: 'Warden',
+  chainmaster: 'Chainmaster',
+  varkus: 'Varkus',
 };
 
 /** Elite mod adjectives, highest bit first. */

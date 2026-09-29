@@ -1,9 +1,10 @@
 // Centred modals: the Esc menu (settings and session actions), controls help, and the run summary.
 import type { ComponentChildren } from 'preact';
+import type { MonsterKind } from '../../contracts/content';
 import type { Settings } from '../../contracts/items';
 import type { RunSummaryInfo } from '../../contracts/net';
 import { Button, Frame, Keycap, PanelHead, Slider, Switch, cx } from '../components/common';
-import { TONE_LABEL } from '../lib/content';
+import { TONE_LABEL, rosterFor } from '../lib/content';
 import { formatDuration, formatInt } from '../lib/format';
 import { useLocal } from '../local';
 import { useStore, useUi } from '../store';
@@ -133,7 +134,7 @@ const HELP: { title: string; rows: [string[], string][] }[] = [
       [['C'], 'Character'],
       [['K'], 'Skills'],
       [['Esc'], 'Close the top panel, or open the menu'],
-      [['Alt'], 'Hold: affix tiers, ranges and comparison'],
+      [['Alt'], 'Hold: affix tiers, ranges and comparison; point at a debuff for its counter'],
     ],
   },
   {
@@ -150,8 +151,9 @@ const HELP: { title: string; rows: [string[], string][] }[] = [
     rows: [
       [['Ctrl', 'Click'], 'Move between inventory, stash, gear, map device, bench and trade'],
       [['Ctrl', 'Shift', 'Click'], 'In the stash: put gear or a map on the crafting bench'],
+      [['Ctrl', 'Shift', 'Click'], 'On a Crafting Stash slot: take exactly one'],
       [['Ctrl', 'F'], 'Search the stash while it is open'],
-      [['RMB'], 'Arm a currency (hideout only)'],
+      [['RMB'], 'Arm a currency, also a Crafting Stash slot (hideout only)'],
       [['LMB'], 'Apply the armed currency to an item'],
       [['Drag'], 'Move an item; drop it on the world to put it on the floor'],
     ],
@@ -195,16 +197,27 @@ export function HelpModal() {
 }
 
 const RESULT_TEXT: Record<RunSummaryInfo['result'], { title: string; line: string }> = {
-  cleared: { title: 'Map cleared', line: 'The Matriarch is ash. Your spoils are safe in your inventory.' },
+  cleared: { title: 'Map cleared', line: 'Your spoils are safe in your inventory.' },
   failed: { title: 'Map lost', line: 'The portals are spent. Everything you picked up is still yours.' },
   abandoned: { title: 'Map left', line: 'You walked away. Everything you picked up is still yours.' },
+};
+
+/** How each map's boss ends (GAME_SPEC §14), for the cleared summary. */
+const BOSS_FALLS: Partial<Record<MonsterKind, string>> = {
+  cinderMatriarch: 'The Matriarch is ash.',
+  hollowWarden: "The Warden's lantern has gone dark.",
+  varkus: 'Varkus has fallen, and the crowd is silent.',
 };
 
 export function RunSummaryModal() {
   const store = useStore();
   const summary = useUi((s) => s.runSummary);
+  // state.run stays set while the summary shows: it names the map's boss.
+  const baseId = useUi((s) => s.run?.map.baseId ?? null);
   if (!summary) return null;
-  const t = RESULT_TEXT[summary.result];
+  const base = RESULT_TEXT[summary.result];
+  const boss = BOSS_FALLS[rosterFor(baseId).boss];
+  const t = summary.result === 'cleared' && boss ? { ...base, line: `${boss} ${base.line}` } : base;
   return (
     <div class="fe-backdrop fe-solid" onPointerDown={(e) => e.target === e.currentTarget && store.actions.dismissRunSummary()}>
       <Frame class={cx('fe-modal fe-summary', `fe-summary--${summary.result}`)} role="dialog" aria-modal="true" aria-label={t.title}>

@@ -1,9 +1,11 @@
 // Skill behaviour (GAME_SPEC §4). The numbers come pre-resolved in SkillRuntimeDef; this file only
 // decides what each skill *does* when its cast releases.
+import type { PlayerDebuff } from '../contracts/bestiary';
 import type { SkillId } from '../contracts/content';
 import type { SkillRuntimeDef } from '../contracts/sim';
 import { spawnArea } from './areas';
 import { damageMonster, isHittable } from './combat';
+import { cleanseDebuffs } from './debuffs';
 import {
   ARC_JUMP_RANGE, ARC_TARGET_RANGE, DASH_ANIM, DASH_INVULN, FIRE_TRAIL_DAMAGE, FIRE_TRAIL_DURATION, FIRE_TRAIL_INTERVAL, FIRE_TRAIL_RADIUS,
   FIRE_TRAIL_TICK, MUZZLE_OFFSET, NOVA_ECHO_DELAY, WARD_PULSE_INTERVAL,
@@ -209,6 +211,8 @@ function arcChain(w: World, p: PlayerState, def: SkillRuntimeDef, aimX: number, 
   w.events.push({ t: 'chain', playerId: p.id, points, damageType: def.damageType });
 }
 
+const RIFT_BREAKS: readonly PlayerDebuff[] = ['rooted'];
+
 function riftStep(w: World, p: PlayerState, def: SkillRuntimeDef, aimX: number, aimY: number, dirX: number, dirY: number): void {
   const maxDist = def.distance > 0 ? def.distance : DEFAULTS.riftStep.distance;
   const toCursor = Math.hypot(aimX - p.x, aimY - p.y);
@@ -226,6 +230,9 @@ function riftStep(w: World, p: PlayerState, def: SkillRuntimeDef, aimX: number, 
     if (!moved) break;
   }
   w.events.push({ t: 'dash', playerId: p.id, fromX: p.x, fromY: p.y, toX: tx, toY: ty });
+  // Rift Step is the answer to a root (GAME_SPEC §13): it breaks the root and a chain hook's drag.
+  p.pullTime = 0;
+  cleanseDebuffs(w, p, RIFT_BREAKS);
   p.x = tx;
   p.y = ty;
   // A blink is a teleport: no interpolated slide between the two points.

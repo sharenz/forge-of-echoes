@@ -26,7 +26,8 @@ function setupFor(): RunSetup {
 const hud = (p: Partial<HudState> = {}): HudState => ({
   zone: 'map', zoneOwnerName: 'Mira', zoneIsOwn: false, life: 0, maxLife: 100, focus: 10, maxFocus: 50, wardFraction: 0.5,
   level: 4, xp: 10, xpToNext: 100, slots: [], flasks: [], run: null, portal: null,
-  allies: [{ name: 'Mira', level: 5, life: 1, maxLife: 2, dead: false }], fps: 60, pingMs: 20, dead: true, ...p,
+  allies: [{ name: 'Mira', level: 5, life: 1, maxLife: 2, dead: false }], debuffs: [{ id: 'chilled', remaining: 1, duration: 2, stacks: 1 }],
+  fps: 60, pingMs: 20, dead: true, ...p,
 });
 
 describe('initial state', () => {
@@ -126,6 +127,8 @@ describe('zones', () => {
     expect(s.hud!.zoneIsOwn).toBe(true);
     expect(s.hud!.dead).toBe(false);
     expect(s.hud!.allies).toEqual([]);
+    // Debuffs belong to the instance left behind: the new zone starts clean.
+    expect(s.hud!.debuffs).toEqual([]);
     expect(s.hud!.level).toBe(4);
   });
 

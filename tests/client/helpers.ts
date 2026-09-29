@@ -3,7 +3,8 @@
 import type { InputMessage, ZoneInfo } from '../../src/contracts/net';
 import { MONSTER_KINDS } from '../../src/contracts/content';
 import type {
-  DropSpec, DropView, MonsterStoreView, MoteStoreView, PlayerView, ProjectileStoreView, PropView, RunView, SlotView, WorldView,
+  DropSpec, DropView, MonsterStoreView, MoteStoreView, PlayerView, ProjectileStoreView, PropView, RunView, SimEvent, SlotView,
+  WorldView,
 } from '../../src/contracts/sim';
 import type { NetClientWorld } from '../../src/net';
 
@@ -55,7 +56,7 @@ export function player(id: number, name: string, x = 0, y = 0, p: Partial<Player
   return {
     id, name, level: 3, x, y, prevX: x, prevY: y, vx: 0, vy: 0, facing: 'south', aimX: x, aimY: y + 10,
     anim: 'idle', animTime: 0, castSkill: null, castProgress: 0, life: 80, maxLife: 100, focus: 30, maxFocus: 60,
-    wardTime: 0, wardDuration: 0, invulnTime: 0, hitFlash: 0, dead: false,
+    wardTime: 0, wardDuration: 0, invulnTime: 0, hitFlash: 0, dead: false, debuffs: [],
     slots: [slot('emberLance'), slot('emberNova'), slot(), slot(), slot(), slot()],
     flasks: [
       { flaskId: 'lifeFlask', count: 3, resource: 'life', active: 1.5, duration: 3 },
@@ -104,20 +105,23 @@ export function zoneInfo(p: Partial<ZoneInfo> = {}): ZoneInfo {
   };
 }
 
-/** A NetClientWorld stand-in: a fixed view, predictions recorded. */
+/** A NetClientWorld stand-in: a fixed view, predictions and noted event batches recorded. */
 export interface FakeWorld extends NetClientWorld {
   predicted: InputMessage[];
   zones: ZoneInfo[];
+  noted: { tick: number; events: readonly SimEvent[] }[];
 }
 
 export function fakeWorld(view: WorldView = worldView()): FakeWorld {
   const predicted: InputMessage[] = [];
   const zones: ZoneInfo[] = [];
+  const noted: FakeWorld['noted'] = [];
   let local = 1;
   const w = {
     view,
     predicted,
     zones,
+    noted,
     get localPlayerId() {
       return local;
     },
@@ -147,6 +151,9 @@ export function fakeWorld(view: WorldView = worldView()): FakeWorld {
       return null;
     },
     setPredictionHints() {},
+    noteEvents(tick: number, events: readonly SimEvent[]) {
+      noted.push({ tick, events });
+    },
   };
   return w as unknown as FakeWorld;
 }

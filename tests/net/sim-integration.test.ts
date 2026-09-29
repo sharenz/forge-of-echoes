@@ -1,13 +1,18 @@
 // End-to-end: a real two-player map run from src/sim, encoded per viewer every SNAPSHOT_EVERY ticks and fed to a
 // ClientWorld. Built from contract types only (no sim internals), so it keeps working while the sim evolves.
 import { describe, expect, it } from 'vitest';
-import type { SkillId } from '../../src/contracts/content';
+import type { SkillId, Theme } from '../../src/contracts/content';
+import { MONSTER_KINDS } from '../../src/contracts/content';
+import { NEW_AREA_KINDS, NEW_MONSTER_KINDS, NEW_PROJECTILE_KINDS } from '../../src/contracts/bestiary';
+import { PROJECTILE_KINDS } from '../../src/contracts/sim';
 import { AOI_HALF_HEIGHT, AOI_HALF_WIDTH, SNAPSHOT_EVERY } from '../../src/contracts/net';
 import type { InputMessage } from '../../src/contracts/net';
 import type {
-  DropSpec, PlayerCombatStats, PlayerIntent, PlayerRuntime, RunConfig, SkillRuntimeDef, WorldView,
+  DropSpec, PlayerCombatStats, PlayerIntent, PlayerRuntime, RunConfig, SimEvent, SkillRuntimeDef, WorldView,
 } from '../../src/contracts/sim';
-import { AOI_MARGIN, createClientWorld, createInputQueue, createSnapshotEncoder, decodeSnapshot } from '../../src/net';
+import {
+  AOI_MARGIN, MAX_WIRE_GROUND_AREAS, PULL_STEPS, createClientWorld, createInputQueue, createSnapshotEncoder, decodeSnapshot,
+} from '../../src/net';
 import { createRun } from '../../src/sim';
 import { makeZone } from './fixtures';
 
@@ -154,6 +159,103 @@ describe('snapshots of a real sim run', () => {
     }
     process.stdout.write(`[net] real run: ${sizes.length} snapshots, avg ${avg.toFixed(0)} B, max ${max} B, peak AOI monsters ${maxMonstersSent}\n`);
   });
+});
+
+describe('the Rimed Ossuary and Iron Coliseum rosters through the real sim', () => {
+  for (const theme of ['rimedOssuary', 'ironColiseum'] as const satisfies readonly Theme[]) {
+    it(`replicates a ${theme} map exactly: new monster/projectile/area kinds and every player's debuffs`, () => {
+      const cfg = config();
+      const run = createRun({
+        ...cfg, theme, mapName: theme, seed: theme === 'rimedOssuary' ? 91 : 92,
+        monsters: { ...cfg.monsters, damageMultiplier: 0.05 },
+        waves: { ...cfg.waves, waveDuration: 12, baseMonsters: 30 },
+      });
+      run.addPlayer({ id: 1, name: 'Mira', level: 30, runtime: runtime() });
+      run.addPlayer({ id: 2, name: 'Brann', level: 28, runtime: runtime() });
+      const enc = createSnapshotEncoder();
+      const cw = createClientWorld();
+      cw.setZone(makeZone({ localPlayerId: 1, theme }));
+      const seenKinds = new Set<string>();
+      const seenProjectiles = new Set<string>();
+      const seenAreas = new Set<string>();
+      const seenDebuffs = new Set<string>();
+      let checked = 0;
+      for (let t = 0; t < 60 * 50; t++) {
+        const a = t * 0.013;
+        run.setIntent(1, { moveX: Math.cos(a), moveY: Math.sin(a), aimX: 0, aimY: 0, held: [true, false, false, false, false, false], flask: -1 });
+        run.setIntent(2, { moveX: 0, moveY: 0, aimX: 0, aimY: 100, held: [true, false, false, false, false, false], flask: -1 });
+        run.step();
+        run.drainEvents();
+        run.drainOutcomes();
+        if (run.view.tick % SNAPSHOT_EVERY !== 0) continue;
+        const v = run.view;
+        const buf = enc.encode(v, 1, t);
+        cw.pushSnapshot(buf, t * (1000 / 60) + 30);
+        cw.update(t * (1000 / 60) + 30);
+        if (v.tick % 30 !== 0) continue;
+        const s = decodeSnapshot(buf);
+        const me = v.players[0];
+        // Monsters: every one in the AOI, with its (possibly new) kind.
+        const sent = new Map<number, number>();
+        for (let i = 0; i < s.monsters.n; i++) sent.set(s.monsters.id[i], i);
+        let expected = 0;
+        for (let i = 0; i < v.monsters.capacity; i++) {
+          if (!v.monsters.alive[i] || !inAoi(v, me.x, me.y, v.monsters.x[i], v.monsters.y[i], v.monsters.radius[i])) continue;
+          expected++;
+          const j = sent.get(((((v.monsters.id[i] >>> 16) & 0xff) << 16) | (v.monsters.id[i] & 0xffff)) >>> 0);
+          expect(j).toBeDefined();
+          expect(s.monsters.kind[j!]).toBe(v.monsters.kind[i]);
+          expect(s.monsters.rarity[j!]).toBe(v.monsters.rarity[i]);
+          seenKinds.add(MONSTER_KINDS[v.monsters.kind[i]]);
+        }
+        expect(s.monsters.n).toBe(expected);
+        // Projectiles: kinds and hostility.
+        const pSent = new Map<number, number>();
+        for (let i = 0; i < s.projectiles.n; i++) pSent.set(s.projectiles.id[i], i);
+        for (let i = 0; i < v.projectiles.capacity; i++) {
+          if (!v.projectiles.alive[i] || !inAoi(v, me.x, me.y, v.projectiles.x[i], v.projectiles.y[i], v.projectiles.radius[i])) continue;
+          const j = pSent.get(((((v.projectiles.id[i] >>> 16) & 0xff) << 16) | (v.projectiles.id[i] & 0xffff)) >>> 0);
+          expect(j).toBeDefined();
+          expect(s.projectiles.kind[j!]).toBe(v.projectiles.kind[i]);
+          expect(s.projectiles.hostile[j!]).toBe(v.projectiles.hostile[i]);
+          seenProjectiles.add(PROJECTILE_KINDS[v.projectiles.kind[i]]);
+        }
+        // Areas: every telegraph in the AOI, and the pools too while they fit the ground budget (in the sim's order).
+        const areaKinds = s.areas.slice(0, s.areaCount).map((ar) => `${ar.id}:${ar.kind}`);
+        const inView = v.areas.filter((ar) => inAoi(v, me.x, me.y, ar.x, ar.y, ar.radius));
+        const isGround = (ar: { kind: string }) => ar.kind === 'tarPool' || ar.kind === 'firePool' || ar.kind === 'fireTrail';
+        if (inView.filter(isGround).length <= MAX_WIRE_GROUND_AREAS) {
+          expect(areaKinds).toEqual(inView.map((ar) => `${ar.id}:${ar.kind}`));
+        } else {
+          const sent = new Set(areaKinds);
+          for (const ar of inView) if (!isGround(ar)) expect(sent.has(`${ar.id}:${ar.kind}`)).toBe(true);
+          expect(areaKinds.length).toBe(inView.filter((ar) => !isGround(ar)).length + MAX_WIRE_GROUND_AREAS);
+        }
+        for (const ar of v.areas) seenAreas.add(ar.kind);
+        // Debuffs of every player, exactly (timers to the millisecond; a timer still running below 0.5 ms travels
+        // as 1 ms — the sim applies it on its next tick, so the client must never read it as run out).
+        for (const p of v.players) {
+          const got = s.player(p.id)!.debuffs;
+          expect(got.map((d) => [d.id, d.stacks, d.source])).toEqual(p.debuffs.map((d) => [d.id, d.stacks, d.source]));
+          got.forEach((d, k) => {
+            const want = p.debuffs[k].remaining;
+            const tol = want > 0 && want < 0.0005 ? 0.001 + 1e-6 : 0.0005 + 1e-6;
+            expect(Math.abs(d.remaining - want)).toBeLessThanOrEqual(tol);
+            if (want > 0) expect(d.remaining).toBeGreaterThanOrEqual(0.001);
+          });
+          for (const d of p.debuffs) seenDebuffs.add(d.id);
+        }
+        checked++;
+      }
+      expect(checked).toBeGreaterThan(90);
+      expect(cw.stats().decodeErrors).toBe(0);
+      const fresh = (seen: Set<string>, table: readonly string[]) => table.filter((k) => seen.has(k)).join(',') || '–';
+      process.stdout.write(
+        `[net] ${theme}: new kinds ${fresh(seenKinds, NEW_MONSTER_KINDS)} · projectiles ${fresh(seenProjectiles, NEW_PROJECTILE_KINDS)}` +
+        ` · areas ${fresh(seenAreas, NEW_AREA_KINDS)} · debuffs ${[...seenDebuffs].join(',') || '–'}\n`,
+      );
+    });
+  }
 });
 
 describe('public drops through the real sim', () => {
@@ -338,4 +440,207 @@ describe('prediction against the real sim', () => {
     expect(compared).toBeGreaterThan(300);
     expect(maxErr).toBeLessThan(1e-3);
   });
+});
+
+describe('chain hook drags against the real sim (Iron Coliseum)', () => {
+  const TICK = 1000 / 60;
+
+  function coliseum(): RunConfig {
+    const cfg = config();
+    return {
+      ...cfg, theme: 'ironColiseum', mapName: 'Iron Coliseum', seed: 1, tier: 5,
+      monsters: { ...cfg.monsters, damageMultiplier: 0.05, countMultiplier: 1.5 },
+      hooks: { rollKillLoot: () => [], rollChestLoot: () => [], tryPickup: () => false },
+    };
+  }
+
+  /**
+   * One real instance behind a `latency` link (inputs through createInputQueue; each snapshot followed by the events
+   * collected since the previous one, like the game server sends them). The inputs never depend on the client, so the
+   * server plays out identically with and without noteEvents. Correction sizes are bucketed per snapshot / batch.
+   */
+  function play(note: boolean, latency: number) {
+    const run = createRun(coliseum());
+    const rt = runtime();
+    rt.stats = { ...rt.stats, maxLife: 50000, lifeRegen: 500 };
+    run.addPlayer({ id: 1, name: 'Mira', level: 30, runtime: rt });
+    const enc = createSnapshotEncoder();
+    const queue = createInputQueue();
+    const intent: PlayerIntent = { moveX: 0, moveY: 0, aimX: 0, aimY: 0, held: [], flask: -1 };
+    const cw = createClientWorld();
+    cw.setZone(makeZone({ localPlayerId: 1, theme: 'ironColiseum', arenaRadius: 900, props: run.view.props.map((p) => ({ ...p })) }));
+    cw.setPredictionHints({ moveSpeed: 125, castTimes: { emberLance: 0.3, emberNova: 0.4 } });
+    const toServer: { at: number; input: InputMessage }[] = [];
+    const toClient: { at: number; buf: ArrayBuffer; tick: number; events: SimEvent[] }[] = [];
+    let pending: SimEvent[] = [];
+    let pullBatches = 0;
+    const sizes = { small: 0, mid: 0, large: 0 }; // < 1 · 1–15 · ≥ 15 units
+    let seq = 0;
+    let nextServer = TICK;
+    let nextInput = 3;
+    let nextFrame = 0;
+    const bucket = (before: number) => {
+      const st = cw.stats();
+      if (st.corrections === before) return;
+      const e = st.lastCorrection;
+      if (e < 1) sizes.small++;
+      else if (e < 15) sizes.mid++;
+      else sizes.large++;
+    };
+    for (let now = 0; now < 80000; ) {
+      now = Math.min(nextServer, nextInput, nextFrame);
+      if (now >= nextServer) {
+        while (toServer.length && toServer[0].at <= now) queue.push(toServer.shift()!.input);
+        run.setIntent(1, queue.next(intent));
+        run.step();
+        for (const e of run.drainEvents()) pending.push(e);
+        run.drainOutcomes();
+        if (run.view.tick % SNAPSHOT_EVERY === 0) {
+          if (pending.some((e) => e.t === 'pull' && e.playerId === 1)) pullBatches++;
+          toClient.push({ at: now + latency, buf: enc.encode(run.view, 1, queue.ackSeq), tick: run.view.tick, events: pending });
+          pending = [];
+        }
+        nextServer += TICK;
+      }
+      if (now >= nextInput) {
+        const s = ++seq;
+        const a = s * 0.012;
+        const input: InputMessage = {
+          t: 'input', seq: s, moveX: Math.cos(a), moveY: Math.sin(a), aimX: Math.cos(a * 3) * 400, aimY: Math.sin(a * 3) * 400, held: 1, flask: -1,
+        };
+        toServer.push({ at: now + latency, input });
+        cw.predict(input);
+        nextInput += TICK;
+      }
+      if (now >= nextFrame) {
+        while (toClient.length && toClient[0].at <= now) {
+          const m = toClient.shift()!;
+          let before = cw.stats().corrections;
+          cw.pushSnapshot(m.buf, now);
+          bucket(before);
+          before = cw.stats().corrections;
+          if (note) cw.noteEvents(m.tick, m.events);
+          bucket(before);
+        }
+        cw.update(now);
+        nextFrame += 1000 / 144;
+      }
+    }
+    return { st: cw.stats(), pullBatches, sizes };
+  }
+
+  /**
+   * The e2e's rubber-band check, against the real sim: after each of her pulls, once a snapshot past every drag of
+   * hers is in (mid-drag the prediction is already further along it), the predicted position is exactly where that
+   * snapshot puts her plus what her unacknowledged inputs may walk — nothing when a root or freeze holds her through
+   * the whole predicted stretch. Client frames at 12 fps, like a software-rendered headless page.
+   */
+  function pullAgreement(latency: number, seed: number) {
+    const run = createRun({ ...coliseum(), seed });
+    const rt = runtime();
+    rt.stats = { ...rt.stats, maxLife: 50000, lifeRegen: 500 };
+    run.addPlayer({ id: 1, name: 'Mira', level: 30, runtime: rt });
+    const enc = createSnapshotEncoder();
+    const queue = createInputQueue();
+    const intent: PlayerIntent = { moveX: 0, moveY: 0, aimX: 0, aimY: 0, held: [], flask: -1 };
+    const cw = createClientWorld();
+    cw.setZone(makeZone({ localPlayerId: 1, theme: 'ironColiseum', arenaRadius: 900, props: run.view.props.map((p) => ({ ...p })) }));
+    cw.setPredictionHints({ moveSpeed: 125, castTimes: { emberLance: 0.3, emberNova: 0.4 } });
+    const toServer: { at: number; input: InputMessage }[] = [];
+    const toClient: { at: number; buf: ArrayBuffer; tick: number; events: SimEvent[]; x: number; y: number; hold: number }[] = [];
+    let pending: SimEvent[] = [];
+    let last: { tick: number; x: number; y: number; hold: number } | null = null;
+    const waiting: { at: number; tick: number }[] = [];
+    const dragTicks: number[] = [];
+    const bad: string[] = [];
+    let judged = 0;
+    let seq = 0;
+    let nextServer = TICK;
+    let nextInput = 3;
+    let nextFrame = 0;
+    for (let now = 0; now < 90000; ) {
+      now = Math.min(nextServer, nextInput, nextFrame);
+      if (now >= nextServer) {
+        while (toServer.length && toServer[0].at <= now) queue.push(toServer.shift()!.input);
+        run.setIntent(1, queue.next(intent));
+        run.step();
+        for (const e of run.drainEvents()) pending.push(e);
+        run.drainOutcomes();
+        if (run.view.tick % SNAPSHOT_EVERY === 0) {
+          const p = run.view.players[0];
+          const hold = Math.max(0, ...p.debuffs.filter((d) => d.id === 'rooted' || d.id === 'frozen').map((d) => d.remaining));
+          toClient.push({ at: now + latency, buf: enc.encode(run.view, 1, queue.ackSeq), tick: run.view.tick, events: pending, x: p.x, y: p.y, hold });
+          pending = [];
+        }
+        nextServer += TICK;
+      }
+      if (now >= nextInput) {
+        const s = ++seq;
+        const a = s * 0.012;
+        const input: InputMessage = {
+          t: 'input', seq: s, moveX: Math.cos(a), moveY: Math.sin(a), aimX: Math.cos(a * 3) * 400, aimY: Math.sin(a * 3) * 400, held: 1, flask: -1,
+        };
+        toServer.push({ at: now + latency, input });
+        cw.predict(input);
+        nextInput += TICK;
+      }
+      if (now >= nextFrame) {
+        while (toClient.length && toClient[0].at <= now) {
+          const m = toClient.shift()!;
+          cw.pushSnapshot(m.buf, now);
+          cw.noteEvents(m.tick, m.events);
+          last = m;
+          for (const e of m.events) {
+            if (e.t !== 'pull' || e.playerId !== 1) continue;
+            waiting.push({ at: now, tick: m.tick });
+            dragTicks.push(m.tick);
+          }
+        }
+        cw.update(now);
+        for (let k = 0; k < waiting.length; k++) {
+          const w = waiting[k];
+          if (!last || now < w.at + 300 || last.tick < w.tick + PULL_STEPS + 1) continue;
+          if (dragTicks.some((t) => t <= last!.tick && last!.tick < t + PULL_STEPS + 1)) continue;
+          waiting.splice(k--, 1);
+          const pp = cw.predictedPosition()!;
+          const st = cw.stats();
+          const held = last.hold > ((st.pendingInputs + 2) / 60) * 2;
+          const bound = held ? 12 : 12 + (st.pendingInputs * st.moveSpeed) / 60;
+          const dist = Math.hypot(pp.x - last.x, pp.y - last.y);
+          judged++;
+          if (dist > bound) bad.push(`tick ${last.tick}: ${dist.toFixed(1)} u off (≤ ${bound.toFixed(1)}${held ? ', held' : ''})`);
+        }
+        nextFrame += 1000 / 12;
+      }
+    }
+    return { judged, bad };
+  }
+
+  for (const latency of [50, 133]) {
+    it(`after every hook drag at ${latency} ms one way, her prediction agrees with the server (no rubber band)`, () => {
+      const { judged, bad } = pullAgreement(latency, 2);
+      expect(judged).toBeGreaterThanOrEqual(5); // the chain thralls really hooked her
+      expect(bad).toEqual([]);
+    });
+  }
+
+  for (const latency of [50, 133]) {
+    it(`replays every hook drag at ${latency} ms one way: one correction per pull instead of one per snapshot`, () => {
+      const seen = play(true, latency);
+      const blind = play(false, latency);
+      process.stdout.write(
+        `[net] coliseum ${latency} ms: ${seen.pullBatches} pulls, ${seen.st.pulls} replayed · corrections <1/1–15/≥15 units: ` +
+        `${seen.sizes.small}/${seen.sizes.mid}/${seen.sizes.large} with noteEvents, ${blind.sizes.small}/${blind.sizes.mid}/${blind.sizes.large} without\n`,
+      );
+      expect(seen.pullBatches).toBeGreaterThanOrEqual(5); // the chain thralls really hooked her
+      expect(seen.st.pulls).toBe(seen.pullBatches); // every delivered pull matched its snapshot
+      expect(blind.st.pulls).toBe(0);
+      // The drags stop costing a correction per snapshot: the mid-size ones (a drag step is 2.7 units) mostly vanish …
+      // (The sub-unit ones are the horde's crowd slow and shoves — sim-only either way.)
+      expect(seen.sizes.mid).toBeLessThan(blind.sizes.mid * 0.5);
+      expect(seen.sizes.mid + seen.sizes.large).toBeLessThan((blind.sizes.mid + blind.sizes.large) * 0.6);
+      // … leaving about one (unforeseeable) correction per hook.
+      expect(seen.sizes.large).toBeLessThanOrEqual(seen.pullBatches + 2);
+    });
+  }
 });

@@ -6,6 +6,7 @@ import { Keycap, PixelIcon } from '../components/common';
 import { BeltSlotView, EquipSlotView, ItemGrid } from '../items/Containers';
 import { PAPERDOLL_SIZE } from '../lib/content';
 import { formatInt } from '../lib/format';
+import { currencyHoldings } from '../lib/stash';
 import { useStore, useUi } from '../store';
 import { PanelShell } from './PanelShell';
 
@@ -21,18 +22,17 @@ export function InventoryPanel() {
     () => () => {
       const c = store.get().character;
       if (!c) return;
-      const anyNew = c.backpack.entries.some((e) => e.item.isNew) || c.stash.some((t) => t.grid.entries.some((e) => e.item.isNew));
+      const anyNew =
+        c.backpack.entries.some((e) => e.item.isNew) ||
+        c.stash.some((t) => t.grid.entries.some((e) => e.item.isNew)) ||
+        (c.mapStash ?? []).some((m) => m.isNew);
       if (anyNew) store.actions.clearNewFlags();
     },
     [store],
   );
 
-  const scrap = useMemo(() => {
-    if (!ch) return 0;
-    let n = 0;
-    for (const e of ch.backpack.entries) if (e.item.kind === 'currency' && e.item.currencyId === 'scrap') n += e.item.count;
-    return n;
-  }, [ch]);
+  // What Rook would take: the backpack, the stash tabs and the Crafting Stash.
+  const scrap = useMemo(() => (ch ? currencyHoldings(ch, 'scrap') : { backpack: 0, stash: 0, crafting: 0 }), [ch]);
 
   if (!ch) return null;
   return (
@@ -51,9 +51,12 @@ export function InventoryPanel() {
         <ItemGrid grid={ch.backpack} kind="backpack" />
       </div>
       <div class="fe-inv__foot">
-        <span class="fe-inv__wallet" title="Forge Scrap is also the merchant's coin">
+        <span
+          class="fe-inv__wallet"
+          title={`Forge Scrap is also the merchant's coin: ${formatInt(scrap.backpack)} in your backpack, ${formatInt(scrap.stash)} in stash tabs, ${formatInt(scrap.crafting)} in the Crafting Stash`}
+        >
           <PixelIcon id={iconIdForCurrency('scrap')} width={20} height={20} />
-          <span class="fe-inv__wallet-n">{formatInt(scrap)}</span>
+          <span class="fe-inv__wallet-n">{formatInt(scrap.backpack + scrap.stash + scrap.crafting)}</span>
           <span class="fe-muted">Forge Scrap</span>
         </span>
         <span class="fe-inv__hints ui-type-caption">

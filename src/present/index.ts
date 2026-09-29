@@ -37,14 +37,28 @@
 //  • Party colours (ally name plates, rings, off-screen markers) come from partyColorSlots(names): stable per
 //    character name on every client and in every zone. The UI's party panel should use the same function with the
 //    party members' names and PARTY_COLORS so both agree.
-//  • Off-screen markers for rare packs, the Herald and the Matriarch need those monsters in the view: the snapshot
-//    encoder has to send rare+ monsters regardless of the area of interest (src/net).
+//  • Off-screen markers for rare packs, lieutenants and bosses (named per roster: Herald, Chorister, Chainmaster,
+//    Matriarch, Warden, Varkus) need those monsters in the view: the snapshot encoder has to send rare+ monsters
+//    regardless of the area of interest (src/net).
 //
-// Dependencies: contracts and core, plus the pure `sfxImpactDelay` table lookup from src/audio/sfx so flashes,
-// hit-stops and beams land on the frame a sound's transient is heard.
+//  • Rimed Ossuary / Iron Coliseum (GAME_SPEC §13–§14): player debuffs are drawn on every player from
+//    PlayerView.debuffs (debuffs.ts) and pop / rinse on 'debuff' / 'cleanse'; the rosters' special action sets,
+//    presences, areas and projectiles follow bestiary.ts, bestiary-areas.ts and the sim's area conventions
+//    (src/sim/area-geometry.ts); their sounds follow the cue map in src/audio/index.ts (sound.ts). While the local
+//    player is frozen or stands in a blizzard the screen takes a faint cold wash.
 //
-// Module map: ground.ts (tiles, veins, rim, light pools) · props.ts · players.ts · monsters.ts ·
-// projectiles.ts · areas.ts · motes.ts · drops.ts (+ labels.ts stacking) · fx.ts (pooled transient effects) ·
+// Dependencies: contracts and core, plus pure tables and helpers of the modules whose conventions the presenter
+// draws: `sfxImpactDelay` / CHAIN_REV / VARKUS_REV (src/audio/sfx) and AUDIBLE_RADIUS (src/audio/mixing) so
+// flashes and loops land with their sounds; the art's frame pickers and constants (debuffOverlayFrame,
+// DEBUFF_PLAYER_TINT, icePrisonShardFrame, CHAIN_PERIOD, … from src/art) and the sim's area geometry
+// (src/sim/area-geometry, contracts-only by design). The few sim tuning values a telegraph is sized or timed by and
+// area-geometry doesn't export yet (the tar pool's radius, Varkus's charge tail and mark lock, his leap) are mirrored
+// in bestiary.ts and pinned to their sources by tests/present/telegraphs.test.ts.
+//
+// Module map: ground.ts (tiles, veins, rim, light pools) · props.ts · players.ts (+ debuffs.ts: player debuff
+// overlays, tints, pops and cleanses) · monsters.ts (+ bestiary.ts: per-kind looks, presences, action sets and the
+// area geometry helpers) · projectiles.ts (+ chain.ts: chain links and pull tethers) · areas.ts (+ bestiary-areas.ts:
+// the Ossuary / Coliseum ground areas) · motes.ts · drops.ts (+ labels.ts stacking) · fx.ts (pooled transient effects) ·
 // events.ts (event → visuals; per-frame shake/hurt/crit budgets) · heat.ts (impact-convergence guard and the
 // per-frame Proximity budget that keeps stacked danger telegraphs, meteor showers and fire pools from summing into a
 // white blob over the player) ·
@@ -55,6 +69,7 @@
 // path (snapshot encoder → ClientWorld interpolation/prediction → EventTimeline). See src/present/dev/sandbox.ts.
 import type { ArtBundle } from '../contracts/art';
 import type { AudioEngine, PlayOptions, SfxId } from '../contracts/audio';
+import type { MonsterKind } from '../contracts/content';
 import type { Presenter, PresentInput } from '../contracts/present';
 import type { Camera, Renderer } from '../contracts/render';
 import type { PlayerView, WorldView } from '../contracts/sim';
@@ -62,7 +77,9 @@ import { sfxImpactDelay } from '../audio/sfx';
 import { Ambience } from './ambience';
 import { AreaPainter } from './areas';
 import { CameraRig } from './camera';
+import { Tethers } from './chain';
 import { createFrameCtx, type FrameCtx } from './context';
+import { DebuffPainter, findDebuff } from './debuffs';
 import { DropPainter } from './drops';
 import { EventFx } from './events';
 import { Effects } from './fx';
@@ -77,7 +94,7 @@ import { PostState } from './post';
 import { ProjectilePainter } from './projectiles';
 import { PropPainter } from './props';
 import { SoundDirector } from './sound';
-import { SpriteTable, WandTips } from './sprites';
+import { Hotspots, SpriteTable, WandTips } from './sprites';
 import { THEME_LOOKS } from './themes';
 
 export { facingFromVector, spriteDir } from './direction';
@@ -88,9 +105,14 @@ export { eliteName, MonsterNameCache, MONSTER_NAMES } from './names';
 export { PARTY_COLORS, partyColorSlots } from './party';
 export { SoundDirector, SFX_LIMITS } from './sound';
 export { THEME_LOOKS, type ThemeLook } from './themes';
+export { DEBUFF_COLOR, DEBUFF_DRAW_ORDER, debuffTint } from './debuffs';
+export { MONSTER_LOOKS } from './bestiary';
 
 /** View margin (world units) around the camera rectangle inside which things are drawn. */
 const VIEW_MARGIN = 24;
+/** World beats shake the camera less the further from the local player they happen; none beyond this. */
+const SHAKE_REACH = 420;
+const CHARGE_BURST: [number, number, number] = [1, 0.6, 0.3];
 
 class WorldPresenter implements Presenter {
   private readonly r: Renderer;
@@ -105,7 +127,10 @@ class WorldPresenter implements Presenter {
   private readonly players: PlayerPainter;
   private readonly monsters: MonsterPainter;
   private readonly projectiles: ProjectilePainter;
-  private readonly areas = new AreaPainter();
+  private readonly areas: AreaPainter;
+  private readonly debuffs: DebuffPainter;
+  private readonly tethers = new Tethers();
+  private readonly playerAt = (id: number): { x: number; y: number } | null => this.players.pos.get(id) ?? null;
   private readonly motes = new MotePainter();
   private readonly drops: DropPainter;
   private readonly indicators = new Indicators();
@@ -133,17 +158,22 @@ class WorldPresenter implements Presenter {
     this.table = new SpriteTable(renderer);
     const tips = new WandTips(art.sprites);
     this.props = new PropPainter(this.table);
-    this.monsters = new MonsterPainter(this.table);
-    this.projectiles = new ProjectilePainter(this.table);
-    this.drops = new DropPainter(sfxImpactDelay, this.table);
     this.sound = new SoundDirector((id, x, y, volume, pitch) => this.playSfx(id, x, y, volume, pitch));
+    this.monsters = new MonsterPainter(this.table, new Hotspots(art.sprites), {
+      actionStart: (kind, action, x, y) => this.monsterAction(kind, action, x, y),
+    });
+    this.projectiles = new ProjectilePainter(this.table, this.tethers);
+    this.areas = new AreaPainter(this.table, this.fx);
+    this.drops = new DropPainter(sfxImpactDelay, this.table);
+    this.debuffs = new DebuffPainter(this.fx);
     this.players = new PlayerPainter(tips, {
       levelUp: (p, x, y) => this.levelUp(p, x, y),
-    });
+    }, this.debuffs);
     this.events = new EventFx({
       pen: this.pen, fx: this.fx, rig: this.rig, post: this.post, players: this.players, props: this.props, table: this.table,
-      impactDelay: sfxImpactDelay,
+      impactDelay: sfxImpactDelay, monsters: this.monsters, debuffs: this.debuffs, tethers: this.tethers,
     });
+    this.areas.onAppear = (kind, x, y, radius, id) => this.events.areaAppear(kind, x, y, radius, id, this.ctx);
   }
 
   get camera(): Camera {
@@ -166,6 +196,10 @@ class WorldPresenter implements Presenter {
     this.monsters.reset();
     this.drops.reset();
     this.motes.reset();
+    this.areas.reset();
+    this.projectiles.reset();
+    this.sound.reset();
+    this.tethers.clear();
     this.r.clearParticles();
     // The client resets on the 'zone' message, before the first snapshot: with nobody in the world yet, keep the
     // camera where it is and snap onto the local player the moment she appears (no visible pan from the origin).
@@ -238,14 +272,21 @@ class WorldPresenter implements Presenter {
 
     // --- events: visuals + sound -----------------------------------------------------------------------------
     this.sound.beginFrame(this.time);
+    this.sound.setTheme(world.theme);
     this.events.beginFrame(dt);
     const events = input.events;
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
-      this.events.handle(e, f);
-      this.sound.handle(e, input.localPlayerId);
+      // Burn / bleed ticks arrive as plain player hits (no DoT flag in the event): tell them apart once for both.
+      const dot = e.t === 'hit' && e.target === 'player' && this.debuffs.isDotTick(e, world);
+      this.events.handle(e, f, dot);
+      this.sound.handle(e, input.localPlayerId, dot);
     }
     this.events.endFrame(f);
+    this.sound.syncLocalDebuffs(local && !local.dead ? local.debuffs : null);
+    this.sound.ambient(world, local ? px : cam.x, local ? py : cam.y);
+    this.post.cold(local && !local.dead ? coldness(world, local, px, py) : 0, dt);
+    this.tethers.update(fxDt);
 
     // --- draw ------------------------------------------------------------------------------------------------
     const r = this.r;
@@ -267,6 +308,7 @@ class WorldPresenter implements Presenter {
     this.motes.draw(pen, f);
     this.monsters.draw(pen, f);
     this.players.draw(pen, f);
+    this.tethers.draw(pen, this.playerAt);
     this.projectiles.draw(pen, f);
     this.fx.rings.draw(pen);
     this.fx.chains.draw(pen);
@@ -300,12 +342,40 @@ class WorldPresenter implements Presenter {
     this.audio.play(id, o);
   }
 
+  /** A driven monster action began (Varkus launches his charge; a whirl starts spinning). */
+  private monsterAction(kind: MonsterKind, action: 'charge' | 'whirl', x: number, y: number): void {
+    this.sound.action(kind, action, x, y);
+    if (action === 'charge') {
+      this.fx.rings.spawn(x, y, 6, 40, 0.35, CHARGE_BURST, 1, 0.7);
+      // Felt by how close it happens, like every world beat (events.ts: near = 1 − dist / SHAKE_REACH).
+      const me = this.ctx?.local ?? null;
+      const cx = me ? me.x : this.rig.camera.x;
+      const cy = me ? me.y : this.rig.camera.y;
+      const near = clamp01(1 - Math.hypot(x - cx, y - cy) / SHAKE_REACH);
+      if (near > 0) this.rig.shake(0.2 * near);
+    }
+  }
+
   private levelUp(p: PlayerView, x: number, y: number): void {
     const local = p.id === this.localId;
     this.events.levelUp(x, y, local, p.level);
     if (local) this.sound.play('levelUp', undefined, undefined, 1, 1);
     else this.sound.play('levelUp', x, y, 0.6, 1);
   }
+}
+
+/** How cold the local player's screen should look: frozen (full), inside a blizzard (partial), else 0. */
+function coldness(world: WorldView, p: PlayerView, x: number, y: number): number {
+  if (findDebuff(p.debuffs, 'frozen')) return 1;
+  const areas = world.areas;
+  for (let k = 0; k < areas.length; k++) {
+    const a = areas[k];
+    if (a.kind !== 'blizzard') continue;
+    const dx = a.x - x;
+    const dy = a.y - y;
+    if (dx * dx + dy * dy <= a.radius * a.radius) return 0.55;
+  }
+  return 0;
 }
 
 function findPlayer(world: WorldView, id: number): PlayerView | null {

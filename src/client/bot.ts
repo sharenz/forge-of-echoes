@@ -1,14 +1,19 @@
 // Client-side autopilot (window.__foe.bot): plays the local character from the replicated WorldView, used by the
 // end-to-end test and screenshot runs. In a hideout it walks into the open map portal; in a map it kites the
-// horde while shooting the nearest monster (bosses first when close), dodges telegraphs and hostile projectiles,
-// drinks flasks, collects its own drops when it is safe (walking over currency, flasks and maps; clicking
+// horde while shooting the nearest monster (bosses first when close), dodges telegraphs, lingering hazards (tar,
+// blizzards, ice prisons) and hostile projectiles, drinks flasks (early to cleanse burning / bleeding / withered),
+// breaks roots with Rift Step, collects its own drops when it is safe (walking over currency, flasks and maps; clicking
 // equipment once in reach, like a player), and after the clear opens the chest, loots and takes the return
 // portal. Public drops (other players' items on the floor) are left alone. Scripted modes for the e2e run: `hold`
-// (stand on a spot while fighting, collecting nothing) and `charge` (walk into the horde: a scripted death). Pure
-// apart from its own steering memory; one step per 60 Hz input tick. Dev builds only (see app.ts DEBUG_HOOKS).
+// (stand on a spot while fighting, collecting nothing), `charge` (walk into the horde: a scripted death) and `bait`
+// (stand in reach of chosen monsters without shooting them or dodging their shots and hazards, so the debuffs they
+// deal land on purpose). Pure apart from its own steering memory; one step per 60 Hz input tick. Dev builds only
+// (see app.ts DEBUG_HOOKS).
+import type { PlayerDebuff } from '../contracts/bestiary';
+import { MONSTER_KINDS, type MonsterKind } from '../contracts/content';
 import type { HeldMask } from '../contracts/net';
 import { RARITY_CODE } from '../contracts/sim';
-import type { DropView, PlayerView, PropView, WorldView } from '../contracts/sim';
+import type { AreaKind, DropView, PlayerView, PropView, WorldView } from '../contracts/sim';
 import { PICKUP_APPROACH } from './autowalk';
 
 export interface BotOptions {
@@ -27,6 +32,13 @@ export interface BotOptions {
   hold: { x: number; y: number } | null;
   /** Map: walk into the nearest monster without attacking or drinking (a scripted death). Default false. */
   charge: boolean;
+  /**
+   * Map: monster kinds whose debuffs it wants (the e2e run's debuff checks). While one of them is alive it walks
+   * within BAIT_REACH of the nearest and stands there: it never shoots them, doesn't sidestep hostile projectiles,
+   * stands in their hazards (tar, wisp bursts, ice prisons), doesn't collect and never breaks a root with Rift Step.
+   * Every other monster is still shot; a crowd of them or low life sends it kiting as usual. Default null.
+   */
+  bait: readonly MonsterKind[] | null;
 }
 
 export const DEFAULT_BOT_OPTIONS: Readonly<BotOptions> = Object.freeze({
@@ -36,6 +48,7 @@ export const DEFAULT_BOT_OPTIONS: Readonly<BotOptions> = Object.freeze({
   skills: true,
   hold: null,
   charge: false,
+  bait: null,
 });
 
 export interface BotOutput {
@@ -49,7 +62,25 @@ export interface BotOutput {
   pickup: number;
 }
 
-const HURTFUL_AREAS = new Set(['slamWarning', 'leapWarning', 'eruptionWarning', 'meteorWarning', 'firePool']);
+/**
+ * Ground the autopilot steps out of: telegraphs (they resolve where they are drawn) and lingering hazards. The Choir
+ * Wave (walk through its gaps) and the charge / aim lines (x, y is the start and `radius` the length, not a circle)
+ * are left to the kiting.
+ */
+const HURTFUL_AREAS: ReadonlySet<string> = new Set<AreaKind>([
+  'slamWarning', 'leapWarning', 'eruptionWarning', 'meteorWarning', 'firePool',
+  'frostNovaWarning', 'glacialSpike', 'icePrison', 'blizzard', 'wispBurst', 'tarPool', 'executionMark', 'arenaSpikes',
+  'whirlwind',
+]);
+/** Bait: stand no farther than this from the nearest bait monster (ranged kinds keep their own distance inside it). */
+const BAIT_REACH = 220;
+/** Bait: this many other monsters within 60 units, or life below BAIT_LIFE, and it kites as usual instead. */
+const BAIT_CROWD = 3;
+const BAIT_LIFE = 0.5;
+/** Hazards the bait mode stands in: their riders are what it is after. Every other telegraph is still dodged. */
+const BAIT_AREAS: ReadonlySet<string> = new Set<AreaKind>(['tarPool', 'wispBurst', 'icePrison']);
+/** Debuffs the Life flask cleanses (GAME_SPEC §13): worth a sip earlier than the usual threshold. */
+const LIFE_CLEANSED: ReadonlySet<PlayerDebuff> = new Set<PlayerDebuff>(['burning', 'bleeding']);
 /** Standing this close to a portal counts as "in it". */
 const PORTAL_REACH = 10;
 /** Ticks inside an open portal without being taken → step out and back in (it was open under our feet). */
@@ -63,6 +94,9 @@ export class Autopilot {
   private stuck = 0;
   private inPortalTicks = 0;
   private stepOutTicks = 0;
+  /** opts.bait as a MONSTER_KINDS index mask (rebuilt when the option changes). */
+  private baitFor: readonly MonsterKind[] | null = null;
+  private baitMask: Uint8Array | null = null;
 
   constructor(opts: Partial<BotOptions> = {}) {
     this.opts = { ...DEFAULT_BOT_OPTIONS, ...opts };
@@ -161,8 +195,10 @@ export class Autopilot {
       return out;
     }
 
-    // Threat field: monsters close by, hostile projectiles heading our way, telegraphs, the arena edge.
+    // Threat field: monsters close by, hostile projectiles heading our way, telegraphs, the arena edge. Bait
+    // monsters push like any other but are never targets (nearest / boss / crowds count the others).
     const m = view.monsters;
+    const baitMask = this.baitKinds();
     let fx = 0;
     let fy = 0;
     let nearest = -1;
@@ -171,11 +207,25 @@ export class Autopilot {
     let bd = Infinity;
     let crowd60 = 0;
     let crowd120 = 0;
+    let bait = -1;
+    let baitD = Infinity;
     for (let i = 0; i < m.capacity; i++) {
       if (!m.alive[i]) continue;
       const dx = m.x[i] - p.x;
       const dy = m.y[i] - p.y;
       const d = Math.hypot(dx, dy) || 1e-3;
+      if (d < 150) {
+        const w = ((150 - d) / 150) ** 2 * (1 + m.radius[i] / 10);
+        fx -= (dx / d) * w;
+        fy -= (dy / d) * w;
+      }
+      if (baitMask && baitMask[m.kind[i]] === 1) {
+        if (d < baitD) {
+          baitD = d;
+          bait = i;
+        }
+        continue;
+      }
       if (d < nd) {
         nd = d;
         nearest = i;
@@ -184,16 +234,14 @@ export class Autopilot {
         bd = d;
         boss = i;
       }
-      if (d < 150) {
-        const w = ((150 - d) / 150) ** 2 * (1 + m.radius[i] / 10);
-        fx -= (dx / d) * w;
-        fy -= (dy / d) * w;
-      }
       if (d < 60) crowd60++;
       if (d < 120) crowd120++;
     }
+    // Baiting: standing for it (no dodging) unless a crowd or low life says to kite for now.
+    const baiting = bait >= 0 && !hold && crowd60 < BAIT_CROWD && p.life >= p.maxLife * BAIT_LIFE;
     const pj = view.projectiles;
     for (let j = 0; j < pj.capacity; j++) {
+      if (baiting) break;
       if (!pj.alive[j] || !pj.hostile[j]) continue;
       const rx = p.x - pj.x[j];
       const ry = p.y - pj.y[j];
@@ -210,7 +258,7 @@ export class Autopilot {
     }
     let inDanger = false;
     for (const a of view.areas) {
-      if (!HURTFUL_AREAS.has(a.kind)) continue;
+      if (!HURTFUL_AREAS.has(a.kind) || (baiting && BAIT_AREAS.has(a.kind))) continue;
       const dx = p.x - a.x;
       const dy = p.y - a.y;
       const d = Math.hypot(dx, dy);
@@ -231,6 +279,7 @@ export class Autopilot {
     fx += avoid.x;
     fy += avoid.y;
     const threat = Math.hypot(fx, fy);
+    const rooted = hasDebuff(p, 'rooted');
 
     const target = boss >= 0 && bd < 320 ? boss : nearest;
     if (target >= 0) {
@@ -239,27 +288,37 @@ export class Autopilot {
     }
 
     if (hold) moveToward(hold.x, hold.y, 1.5);
-    else if (nearest < 0) {
+    else if (baiting) {
+      // Close in on the bait, then stand: its shots and hazards find a still target. Any other telegraph under our
+      // feet (a slam, spikes, a nova) is still stepped out of.
+      if (inDanger && threat > 1e-3) {
+        out.moveX = fx / threat;
+        out.moveY = fy / threat;
+      } else if (baitD > BAIT_REACH) moveToward(m.x[bait], m.y[bait], BAIT_REACH - 20);
+    } else if (nearest < 0 && bait < 0) {
       const drop = this.opts.collect ? nearestDrop(700) : null;
       if (drop) {
         moveToward(drop.x, drop.y);
         clickIfInReach(drop);
       } else moveToward(0, 0, 60);
     } else {
-      const dx = m.x[nearest] - p.x;
-      const dy = m.y[nearest] - p.y;
-      const drop = this.opts.collect && threat < 0.25 && nd > 200 ? nearestDrop(260) : null;
+      // Kite round the nearest monster (a bait monster only when nothing else is left: baiting paused for low life).
+      const ref = nearest >= 0 ? nearest : bait;
+      const rd = nearest >= 0 ? nd : baitD;
+      const dx = m.x[ref] - p.x;
+      const dy = m.y[ref] - p.y;
+      const drop = this.opts.collect && bait < 0 && threat < 0.25 && rd > 200 ? nearestDrop(260) : null;
       if (drop) {
         moveToward(drop.x, drop.y);
         clickIfInReach(drop);
-      } else if (nd > 170 && threat < 0.3) moveToward(m.x[nearest], m.y[nearest], 140);
+      } else if (rd > 170 && threat < 0.3) moveToward(m.x[ref], m.y[ref], 140);
       else {
         // Kite: flee the threat field while circling the nearest monster.
-        const tx = (-dy / nd) * this.orbit;
-        const ty = (dx / nd) * this.orbit;
-        const pull = nd > 140 ? 0.5 : 0;
-        let mx = fx * 1.4 + tx * 0.8 + (dx / nd) * pull;
-        let my = fy * 1.4 + ty * 0.8 + (dy / nd) * pull;
+        const tx = (-dy / rd) * this.orbit;
+        const ty = (dx / rd) * this.orbit;
+        const pull = rd > 140 ? 0.5 : 0;
+        let mx = fx * 1.4 + tx * 0.8 + (dx / rd) * pull;
+        let my = fy * 1.4 + ty * 0.8 + (dy / rd) * pull;
         const l = Math.hypot(mx, my);
         if (l > 1e-3) {
           mx /= l;
@@ -294,7 +353,10 @@ export class Autopilot {
           hold = p.wardTime <= 0 && (crowd60 >= 2 || bd < 200);
           break;
         case 'riftStep':
-          if ((inDanger || crowd60 >= 5 || p.life < p.maxLife * 0.35) && threat > 0.5) {
+          // Also the answer to a root (web, hook, tar) with something closing in: Rift Step breaks it — not while
+          // baiting, when the root is the point.
+          if (baiting) break;
+          if ((inDanger || crowd60 >= 5 || p.life < p.maxLife * 0.35 || (rooted && crowd60 >= 1)) && threat > 0.5) {
             hold = true;
             out.aimX = p.x + (fx / threat) * 120;
             out.aimY = p.y + (fy / threat) * 120;
@@ -308,11 +370,33 @@ export class Autopilot {
     return out;
   }
 
+  /** opts.bait as a mask over MONSTER_KINDS indices, or null when not baiting. */
+  private baitKinds(): Uint8Array | null {
+    const kinds = this.opts.bait;
+    if (kinds !== this.baitFor) {
+      this.baitFor = kinds;
+      this.baitMask = null;
+      if (kinds && kinds.length) {
+        const mask = new Uint8Array(MONSTER_KINDS.length);
+        for (const k of kinds) {
+          const i = MONSTER_KINDS.indexOf(k);
+          if (i >= 0) mask[i] = 1;
+        }
+        this.baitMask = mask;
+      }
+    }
+    return this.baitMask;
+  }
+
+  /** Life below 55% (below 80% while burning or bleeding: the Life flask cleanses them), focus low or withered. */
   private drinkFlasks(p: PlayerView, out: BotOutput): void {
+    const hurting = p.debuffs?.some((d) => LIFE_CLEANSED.has(d.id)) ?? false;
+    const withered = hasDebuff(p, 'withered');
+    const lifeAt = hurting ? 0.8 : 0.55;
     for (let k = 0; k < p.flasks.length; k++) {
       const f = p.flasks[k];
       if (!f || f.count <= 0 || f.active > 0) continue;
-      if ((f.resource === 'life' && p.life < p.maxLife * 0.55) || (f.resource === 'focus' && p.focus < p.maxFocus * 0.2)) {
+      if ((f.resource === 'life' && p.life < p.maxLife * lifeAt) || (f.resource === 'focus' && (p.focus < p.maxFocus * 0.2 || withered))) {
         out.flask = k;
         return;
       }
@@ -372,4 +456,11 @@ export class Autopilot {
     this.inPortalTicks = 0;
     moveToward(portal.x, portal.y, 3);
   }
+}
+
+function hasDebuff(p: PlayerView, id: PlayerDebuff): boolean {
+  const list = p.debuffs;
+  if (!list) return false;
+  for (const d of list) if (d.id === id) return true;
+  return false;
 }

@@ -155,6 +155,8 @@ export function createCharacter(name: string, seed: number): CharacterSave {
       equipment: {},
       backpack: createGrid(BACKPACK_SIZE.w, BACKPACK_SIZE.h),
       stash: DEFAULT_STASH_TABS.map((t) => createStashTab(t)),
+      currencyStash: {},
+      mapStash: [],
       belt: STARTING_KIT.belt.map((b) => (b ? { ...b } : null)).concat(Array(BELT_SLOTS).fill(null)).slice(0, BELT_SLOTS),
       mapDevice: null,
       rngState: 0,

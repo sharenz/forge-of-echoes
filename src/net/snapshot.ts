@@ -10,31 +10,44 @@
 //   players  u8 n · n × { u8 id · u8 bits(facing:2|anim:3|dead|full|casting) · u8 level · str name · f32 x · f32 y
 //            · f32 vx · f32 vy · i16 aimDx·8 · i16 aimDy·8 · f32 animTime · [u8 skill · u16 progress·65535]
 //            · f32 life · f32 maxLife · u16 wardTime ms · u16 wardDuration ms · u16 invuln ms · u8 hitFlash·255
+//            · u8 nDebuffs × {u8 debuff:4|rootSource+1:4 · u8 stacks · u16 remaining ms · u16 duration ms}
 //            · full: f32 focus · f32 maxFocus · u8 nSlots × {u8 skill+1 · u8 usable · u16 cd ms · u16 cdTotal ms
 //              · u8 charges · u8 maxCharges · f32 focusCost} · u8 nFlasks × {u8 flask+1 · [u8 count · u8 resource
 //              · u16 active ms · u16 duration ms]} }
-//   monsters u16 n · n × 13 B { u16 slot · u8 gen · u8 kind:3|rarity:3|east|hasMaxLife · i16 x · i16 y
+//   monsters u16 n · n × 13 B { u32 slot:12|gen:8|kind:6|rarity:3|east:1|spare:2 · i16 x · i16 y
 //            · u8 anim:3|hasExtras|hitFlash:4 · u16 animTime ticks · u8 life/maxLife·255 · u8 radius·4
 //            · [hasExtras: u8 ailments · u8 mods] · [rarity ≥ rare: f32 maxLife · f32 life] }
-//   projs    u16 n · n × 14 B { u16 slot · u8 gen · u8 kind:3|hostile|lobbed|wideAge · i16 x · i16 y · i16 vx·8
+//   projs    u16 n · n × 14 B { u32 slot:12|gen:8|kind:6|hostile|lobbed|wideAge|spare:3 · i16 x · i16 y · i16 vx·8
 //            · i16 vy·8 · u8 radius·4 · (wideAge ? u16 : u8) age ticks · [u8 life ticks] }
 //   motes    u16 n · n × 7 B { u16 slot · u8 size · i16 x · i16 y }
-//   areas    u8 n · n × { u32 id · u8 kind · i16 x · i16 y · u16 radius·8 · f32 age · f32 duration }
+//   areas    u16 n · n × 19 B { u32 id · u8 kind · i16 x · i16 y · u16 radius·8 · f32 age · f32 duration }   (every
+//            telegraph / moving hazard in the AOI first, then the nearest persistent ground up to its own cap —
+//            protocol.ts AREA_TIER — written in the sim's order)
 //   drops    u8 n · n × { u32 id · u32 token · u8 owner (0 = public) · u8 tone:3|sprite:2|blocked|autoPickup
 //            · str label · str iconId · i16 x · i16 y · u16 z·16 · f32 age }   (the viewer's own drops first, then
 //            at most MAX_WIRE_PUBLIC_DROPS public ones; each pass keeps the nearest when over its cap; `blocked` is
 //            only ever set on the viewer's own)
 //   props    u8 n · n × { u32 id · u8 kind · f32 x · f32 y · f32 radius · u16 state · u8 variant · u8 interactive }
+//
+// Enum fields are indices into the append-only tables of protocol.ts (MONSTER_KINDS, PROJECTILE_KINDS, AREA_KINDS,
+// PLAYER_DEBUFFS, …); the decoder rejects any index past the end of its table.
 import type { SkillId, Theme } from '../contracts/content';
 import { BELT_SLOTS, LOADOUT_SLOTS } from '../contracts/items';
-import type { AreaView, DropView, FlaskSlotView, PlayerView, PropView, RunView, SlotView } from '../contracts/sim';
+import type {
+  AreaView, DropView, FlaskSlotView, PlayerDebuffView, PlayerView, PropView, RunView, SlotView,
+} from '../contracts/sim';
 import { ByteReader, SnapshotDecodeError, StringInterner } from './bytes';
 import {
-  AIM_SCALE, ANIM_TIME_SCALE, AREA_KINDS, AREA_RADIUS_SCALE, DIR4_CODES, DROP_AUTO_PICKUP_BIT, DROP_BLOCKED_BIT,
-  DROP_SPRITE_CODES, DROP_TONE_CODES,
-  FLASK_IDS, MONSTER_KINDS, PLAYER_ANIM_CODES, POS_SCALE, PROJ_VEL_SCALE, PROJECTILE_KINDS,
-  PROP_KIND_CODES, RADIUS_SCALE, RUN_PHASE_CODES, SKILL_IDS, SNAPSHOT_VERSION, THEMES,
+  AIM_SCALE, ANIM_TIME_SCALE, AREA_KINDS, AREA_RADIUS_SCALE, DEBUFF_CODES, DIR4_CODES, DROP_AUTO_PICKUP_BIT,
+  DROP_BLOCKED_BIT, DROP_SPRITE_CODES, DROP_TONE_CODES, FLASK_IDS, MAX_WIRE_SLOT, MONSTER_KINDS, PLAYER_ANIM_CODES,
+  POS_SCALE, PROJ_VEL_SCALE, PROJECTILE_KINDS, PROP_KIND_CODES, RADIUS_SCALE, ROOT_SOURCE_CODES, RUN_PHASE_CODES,
+  SKILL_IDS, SNAPSHOT_VERSION, THEMES, WIRE_KIND_BITS, WIRE_SLOT_BITS,
 } from './protocol';
+
+const KIND_MASK = (1 << WIRE_KIND_BITS) - 1;
+const GEN_SHIFT = WIRE_SLOT_BITS;
+const KIND_SHIFT = WIRE_SLOT_BITS + 8;
+const FLAG_SHIFT = KIND_SHIFT + WIRE_KIND_BITS;
 
 // ---------------------------------------------------------------------------
 // Pooled record stores
@@ -146,6 +159,12 @@ export class MoteRecords {
 /** A replicated player. `full` = the receiving player's own record (focus, slots and flasks are valid). */
 export interface PlayerRecord extends PlayerView {
   full: boolean;
+  /** Every debuff object this record ever decoded into (`debuffs` holds the first n of them). */
+  readonly debuffPool: PlayerDebuffView[];
+}
+
+export function createDebuffView(): PlayerDebuffView {
+  return { id: 'chilled', remaining: 0, duration: 0, stacks: 1, source: null };
 }
 
 export function createPlayerView(id = 0): PlayerView {
@@ -159,12 +178,13 @@ export function createPlayerView(id = 0): PlayerView {
     id, name: '', level: 1,
     x: 0, y: 0, prevX: 0, prevY: 0, vx: 0, vy: 0, facing: 'south', aimX: 0, aimY: 0, anim: 'idle', animTime: 0,
     castSkill: null, castProgress: 0, life: 0, maxLife: 0, focus: 0, maxFocus: 0, wardTime: 0, wardDuration: 0,
-    invulnTime: 0, hitFlash: 0, dead: false, slots, flasks,
+    invulnTime: 0, hitFlash: 0, dead: false, debuffs: [], slots, flasks,
   };
 }
 
 function createPlayerRecord(): PlayerRecord {
-  return Object.assign(createPlayerView(), { full: false });
+  const debuffPool: PlayerDebuffView[] = [];
+  return Object.assign(createPlayerView(), { full: false, debuffPool });
 }
 
 function createAreaView(): AreaView {
@@ -356,6 +376,7 @@ export class Snapshot {
       p.wardDuration = r.u16() / 1000;
       p.invulnTime = r.u16() / 1000;
       p.hitFlash = r.u8() / 255;
+      decodeDebuffs(r, p);
       if (p.full) {
         p.focus = r.f32();
         p.maxFocus = r.f32();
@@ -421,16 +442,18 @@ export class Snapshot {
     m.n = n;
     const kinds = MONSTER_KINDS.length;
     for (let i = 0; i < n; i++) {
-      const slot = r.u16();
-      const gen = r.u8();
+      const head = r.u32();
+      const slot = head & MAX_WIRE_SLOT;
+      const gen = (head >>> GEN_SHIFT) & 0xff;
       m.id[i] = ((gen << 16) | slot) >>> 0;
-      const b = r.u8();
-      const kind = b & 7;
+      const kind = (head >>> KIND_SHIFT) & KIND_MASK;
       if (kind >= kinds) throw new SnapshotDecodeError(`monster kind ${kind}`);
       m.kind[i] = kind;
-      m.rarity[i] = (b >> 3) & 7;
-      m.facing[i] = b & 64 ? 1 : -1;
-      const hasMax = (b & 128) !== 0;
+      const rarity = (head >>> FLAG_SHIFT) & 7;
+      m.rarity[i] = rarity;
+      m.facing[i] = (head >>> (FLAG_SHIFT + 3)) & 1 ? 1 : -1;
+      // Rares, lieutenants and bosses carry their exact life (RARITY_CODE.rare = 2).
+      const hasMax = rarity >= 2;
       m.x[i] = ox + r.i16() / POS_SCALE;
       m.y[i] = oy + r.i16() / POS_SCALE;
       const a = r.u8();
@@ -464,16 +487,17 @@ export class Snapshot {
     p.n = n;
     const kinds = PROJECTILE_KINDS.length;
     for (let i = 0; i < n; i++) {
-      const slot = r.u16();
-      const gen = r.u8();
+      const head = r.u32();
+      const slot = head & MAX_WIRE_SLOT;
+      const gen = (head >>> GEN_SHIFT) & 0xff;
       p.id[i] = ((gen << 16) | slot) >>> 0;
-      const b = r.u8();
-      const kind = b & 7;
+      const kind = (head >>> KIND_SHIFT) & KIND_MASK;
       if (kind >= kinds) throw new SnapshotDecodeError(`projectile kind ${kind}`);
       p.kind[i] = kind;
-      p.hostile[i] = (b >> 3) & 1;
-      const lobbed = (b & 16) !== 0;
-      const wideAge = (b & 32) !== 0;
+      const flags = head >>> FLAG_SHIFT;
+      p.hostile[i] = flags & 1;
+      const lobbed = (flags & 2) !== 0;
+      const wideAge = (flags & 4) !== 0;
       p.x[i] = ox + r.i16() / POS_SCALE;
       p.y[i] = oy + r.i16() / POS_SCALE;
       p.vx[i] = r.i16() / PROJ_VEL_SCALE;
@@ -501,7 +525,7 @@ export class Snapshot {
   private decodeAreas(r: ByteReader, ox: number, oy: number): void {
     const pool = this.areaPool;
     pool.count = 0;
-    const n = r.u8();
+    const n = r.u16();
     for (let k = 0; k < n; k++) {
       const a = pool.next();
       a.id = r.u32();
@@ -554,6 +578,31 @@ export class Snapshot {
       p.interactive = r.u8() !== 0;
     }
   }
+}
+
+/** u8 n × {u8 debuff:4|source+1:4 · u8 stacks · u16 remaining ms · u16 duration ms} into p.debuffs (pooled). */
+function decodeDebuffs(r: ByteReader, p: PlayerRecord): void {
+  const n = r.u8();
+  const list = p.debuffs;
+  const pool = p.debuffPool;
+  for (let k = 0; k < n; k++) {
+    const b = r.u8();
+    const id = enumAt(DEBUFF_CODES, b & 15, 'debuff');
+    const src = b >> 4;
+    const source = src === 0 ? null : enumAt(ROOT_SOURCE_CODES, src - 1, 'root source');
+    let d = pool[k];
+    if (!d) {
+      d = createDebuffView();
+      pool.push(d);
+    }
+    d.id = id;
+    d.source = source;
+    d.stacks = r.u8();
+    d.remaining = r.u16() / 1000;
+    d.duration = r.u16() / 1000;
+    list[k] = d;
+  }
+  list.length = n;
 }
 
 function clearSlot(sv: SlotView): void {

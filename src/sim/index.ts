@@ -13,15 +13,47 @@
 //   run.removeDrop(id)                // a drop expired (no event)
 //
 // Client prediction: `movePlayer` (contract MovePlayer) is the exact movement step the sim uses for
-// players. `params.slow` is a FRACTION OF SPEED REMOVED (0 = full speed, CAST_SLOW = 0.3 while a
-// timed active is cast); `predictionSlow(playerView)` gives the right value from a snapshot, and
-// `params.speed` is the player's PlayerCombatStats.moveSpeed. What prediction can't know — the crowd
-// slow of a horde in front, shoves from heavy bodies, easing apart from allies, blinks — arrives as a
-// server correction. (`import { movePlayer } from 'src/sim/movement'` avoids pulling in the rest.)
+// players. `params.slow` is a FRACTION OF SPEED REMOVED: the sim passes
+// `playerSlow(castSlow, debuffSlowOf(view.debuffs), areaSlowAt(view.areas, x, y))` — CAST_SLOW (0.3)
+// while a timed active is cast, 1 while frozen or rooted (held), PLAYER_CHILL_SLOW (0.3) while chilled,
+// TAR_SLOW (0.5) with the feet in a tarPool, combined as 1 − Π(1 − s). `predictionSlow(playerView)`
+// gives the first two from a snapshot; `params.speed` is the player's PlayerCombatStats.moveSpeed. A
+// chilled cast progresses at `castRateOf(view.debuffs)` (0.7) per tick; frozen, casts hold. What
+// prediction can't know — the crowd slow of a horde in front, shoves from heavy bodies and knockback,
+// a chain hook's drag, easing apart from allies, blinks, a debuff starting between snapshots — arrives
+// as a server correction. (`import … from 'src/sim/movement'` avoids pulling in the rest.)
+//
+// Monster rosters (GAME_SPEC §14): RunConfig.theme picks the wave family, lieutenant and boss
+// (contracts/bestiary.ts THEME_ROSTER). Every kind is a MonsterDef in src/sim/rosters — see the guide
+// at the top of src/sim/rosters/index.ts for the extension API.
+//
+// Player debuffs (GAME_SPEC §13, src/sim/debuffs.ts): PlayerView.debuffs lists the active ones
+// (PLAYER_DEBUFFS order; remaining/duration in seconds, stacks, the root's source). 'debuff' fires when
+// one starts or its stacks change (refreshes at most once a second), 'cleanse' when a flask (life:
+// burning + bleeding, focus: withered), Rift Step (rooted), the map's clear or death removes some.
+// Burning and bleeding damage arrive as 'hit' events (target 'player') every 0.5 s. 'pull' = a chain
+// hook dragging a player (from → to over PULL_TIME = 0.25 s, at most PULL_MAX_DISTANCE = 140 units);
+// 'blocked' = a Shieldbearer's shield stopped a player projectile at (x, y) (the event names no
+// monster: the bearer is the nearest shieldbearer; its `facing` shows the shield side).
+// Server: a player re-joining an instance can resume their debuffs like their life and focus —
+// SimPlayerJoin.debuffs = a copy of their last PlayerView.debuffs taken when they left
+// (`view.debuffs.map((d) => ({ ...d }))`; the entries carry an extra `dps`, see SimDebuffView).
+//
+// Projectiles: a chainHook is drawn as a chain from its launch point, (x − vx·age, y − vy·age) in
+// ProjectileStoreView, to (x, y) — the store has no thrower; a tarGlob is a lob (life > 0).
+//
+// Areas (src/sim/area-geometry.ts, importable on its own): the id packs a heading and a variant
+// (`areaAngle(a)`, `areaVariant(a)`). chargeLine = a lane from (x, y) along areaAngle, length radius,
+// half-width CHARGE_LINE_HALF_WIDTH[variant] (0 = a harmless aim laser); choirWave = an expanding band
+// (radius = its current radius) with variant + 1 gaps (`choirGapAngles`); icePrison = a ring closing
+// to ICE_PRISON_END_FRACTION of its start (radius is current; close = age / duration); wispBurst freezes
+// within WISP_FREEZE_FRACTION of its radius; blizzard drifts (x/y move; its areaAngle is the heading
+// it was spawned with — it bounces off the arena edge, so draw motion from the x/y deltas); whirlwind
+// variant 0 = the harmless windup, 1 = the spinning blades. Everything else is a disc.
 //
 // Multiplayer semantics:
 //  - Monsters chase the nearest *living* player (kept until another is 1.25× closer); hunters,
-//    spitters and the Herald aim at their own player; the Matriarch charges a player in charging
+//    spitters and lieutenants aim at their own player; the Matriarch charges a player in charging
 //    range and rains meteors on every living player near her.
 //  - Everyone inside is dead: the wave director freezes (no timers, no spawns), hunters stand, idle
 //    packs mill, and RunView.phase reads 'failed'. That word is the contract's; it means "party down,
@@ -101,9 +133,10 @@
 //      SimPlayerUpdate.level — PlayerUpdate has no level, and PlayerView.level changes ONLY through
 //        this field (restore alone is just a refill). Send `{ ...update, restore: true, level }` on
 //        every level-up.
-//      SimPlayerJoin.life / .focus — resume a player's vitals (clamped to 1..maxLife / 0..maxFocus)
-//        instead of full ones when re-adding them after a short absence, so a disconnect is never a
-//        free heal.
+//      SimPlayerJoin.life / .focus / .debuffs — resume a player's vitals (clamped to 1..maxLife /
+//        0..maxFocus) and debuffs (their remaining times; copy PlayerView.debuffs when they leave)
+//        instead of full / none when re-adding them after a short absence, so a disconnect is never
+//        a free heal or a free cleanse.
 //
 // Other semantics the presenter/app can rely on:
 //  - 'cast' fires on the release frame of every skill except Rift Step (which emits 'dash').
@@ -112,7 +145,10 @@
 //    per monster every 0.5 s. Crits, killing blows and dummy hits are never dropped.
 //  - Telegraphs are areas that resolve at age == duration with an 'areaResolve' event; the
 //    Matriarch's charge is a line of 'slamWarning' circles that resolve as she passes over them.
-//    Telegraphs, eruptions and fire pools hurt every living player inside them.
+//    Telegraphs, eruptions and fire pools hurt every living player inside them. An ice prison that
+//    breaks (its player walked out) also ends with an 'areaResolve'; choirWave, tarPool, blizzard,
+//    whirlwind, fire pools and the herald aura end silently, and so does a chargeLine (its damage, if
+//    any, still lands; 'areaResolve' has no heading — the 'monsterAttack' charge / bolt marks it).
 //  - 'xp' outcomes are whole numbers batched per tick (fractions carry over).
 //  - 'pickup' outcomes only follow a successful hooks.tryPickup; a refused drop stays with
 //    DropView.blocked = true and is retried when its owner walks onto it again (auto-pickup) or
@@ -128,10 +164,13 @@
 //    bursts where it lands (radius 12, then 'projectileEnd'). Draw its height as 4h·u(1−u) with
 //    u = age / life; the landing point is (x, y) + (vx, vy)·(life − age). life = 0: flat projectile.
 //  - MonsterStoreView.mods is the ELITE_BIT mask (magic packs share one mod, rare leaders two).
-//  - The Matriarch, the Herald and Ironhide Brutes are heavy: players can't shove them. Brutes
-//    take 40% less damage from hits (not from burning: ignite, fire trail, ward embers).
-//  - Minions summoned by the Herald/Matriarch never call rollKillLoot and carry half XP.
-//  - Every Matriarch phase threshold emits its own 'bossPhase' (2, then 3), each with a roar.
+//  - Bosses, lieutenants and heavy kinds (Ironhide Brutes, golems, shieldbearers) are heavy: players
+//    can't shove them. Armoured kinds (MonsterDef.hitReduction: brutes 40%) take less damage from
+//    hits (not from burning: ignite, fire trail, ward embers). Ghosts (rimeshades) drift through
+//    monsters and props and never slow a player.
+//  - Summoned minions never call rollKillLoot and carry half XP.
+//  - Every boss phase threshold emits its own 'bossPhase' (2, then 3), each with a roar.
+//  - RunView.boss.name / lieutenant.name come from the roster (e.g. 'The Hollow Warden').
 //  - A map arrival (join) gets 1 s of invulnerability; players joining together fan out on a
 //    16-unit ring around the entry point unless PlayerJoin gives x/y.
 //  - RNG streams: combat = createRng(seed); loot = combat.fork(0x10070) (handed to the hooks);
@@ -143,8 +182,17 @@ import type { RunConfig, SimRun } from '../contracts/sim';
 import { drainErrors } from './hooks';
 import { createRunInternal, worldOf } from './run';
 
-export { CAST_SLOW, PICKUP_APPROACH, movePlayer, predictionSlow } from './movement';
+export {
+  CAST_SLOW, PICKUP_APPROACH, PLAYER_CHILL_SLOW, areaSlowAt, castRateOf, combineSlow, debuffMoveSlow, debuffSlowOf, movePlayer,
+  playerSlow, predictionSlow,
+} from './movement';
+export {
+  CHARGE_LINE_HALF_WIDTH, CHOIR_GAP_HALF_ANGLE, CHOIR_RING_HALF_WIDTH, ICE_PRISON_END_FRACTION, TAR_SLOW, WISP_FREEZE_FRACTION,
+  areaAngle, areaContains, areaVariant, chargeLineEnd, choirGapAngles, inChoirGap,
+} from './area-geometry';
 export type { SimPlayerJoin, SimPlayerUpdate } from './player';
+export type { DebuffCarry, SimDebuffView } from './debuffs';
+export { PULL_MAX_DISTANCE, PULL_TIME } from './constants';
 
 export function createRun(config: RunConfig): SimRun {
   return createRunInternal(config).run;

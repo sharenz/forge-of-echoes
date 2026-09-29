@@ -16,8 +16,12 @@
 // Controls: WASD move · mouse aim · LMB Ember Lance · Space Ember Nova · P pick up · F backpack full on/off ·
 //           1/2/3 one-way latency 10/40/90 ms · J jitter on/off · L stalls on/off.  Until a movement key is pressed,
 //           an autopilot walks a figure eight.
-// URL: ?lat=40&jit=25&stall=0.02&hints=1&full=0   (hints=0: the client learns speed and cast times from snapshots
-//      alone; full=1 starts with a full backpack)
+// Debuffs: every player shows its debuffs under its name (server panel: the sim's timers; client panel: the
+// ClientWorld's — allies on the render timeline, you on your predicted timeline); the stats panel lists yours side by
+// side. theme=rimedOssuary / ironColiseum runs that map type's roster (bone/frost blues, coliseum rust).
+// URL: ?lat=40&jit=25&stall=0.02&hints=1&full=0&theme=ashenForge   (hints=0: the client learns speed and cast times
+//      from snapshots alone; full=1 starts with a full backpack)
+import type { Theme } from '../../contracts/content';
 import type { InputMessage } from '../../contracts/net';
 import { SNAPSHOT_EVERY } from '../../contracts/net';
 import type {
@@ -37,6 +41,12 @@ const net = {
   stall: Number(params.get('stall') ?? 0.02),
 };
 const useHints = params.get('hints') !== '0';
+const MAP_THEMES: Record<string, { theme: Theme; name: string }> = {
+  ashenForge: { theme: 'ashenForge', name: 'Ashen Forge' },
+  rimedOssuary: { theme: 'rimedOssuary', name: 'Rimed Ossuary' },
+  ironColiseum: { theme: 'ironColiseum', name: 'Iron Coliseum' },
+};
+const mapTheme = MAP_THEMES[params.get('theme') ?? ''] ?? MAP_THEMES.ashenForge;
 /** Simulated full backpack of the local player (player 1): the sim's tryPickup hook refuses her pickups. */
 let backpackFull = params.get('full') === '1';
 const TICK_MS = 1000 / 60;
@@ -98,7 +108,7 @@ function runtime(): PlayerRuntime {
 
 let dropToken = 1;
 const config: RunConfig = {
-  mode: 'map', seed: 0x5eed, theme: 'ashenForge', mapName: 'Ashen Forge', tier: 3, arenaRadius: 900,
+  mode: 'map', seed: 0x5eed, theme: mapTheme.theme, mapName: mapTheme.name, tier: 3, arenaRadius: 900,
   monsters: {
     level: 20, lifeMultiplier: 1, damageMultiplier: 0.1, speedMultiplier: 1, countMultiplier: 1.6, magicPackChance: 0.25,
     rarePackChance: 0.1, resistBonus: 0, xpMultiplier: 1, extraProjectiles: 0, hazards: true,
@@ -206,7 +216,7 @@ function serverTick(now: number): void {
 const client = createClientWorld();
 client.setZone({
   instanceId: 'lab', kind: 'map', ownerCharacterId: 'c1', ownerName: 'You', theme: run.view.theme,
-  arenaRadius: run.view.arenaRadius, mapName: 'Ashen Forge', tier: 3, localPlayerId: 1,
+  arenaRadius: run.view.arenaRadius, mapName: mapTheme.name, tier: 3, localPlayerId: 1,
   props: run.view.props.map((p) => ({ ...p })), setup: null, portal: null,
 });
 if (useHints) client.setPredictionHints({ moveSpeed: stats().moveSpeed, castTimes: { emberLance: 0.34, emberNova: 0.45 } });
@@ -293,7 +303,17 @@ function layout(): { server: Panel; client: Panel; plotA: Panel; plotB: Panel; s
   };
 }
 
-const KIND_COLOR: RGB[] = ['#b8862f', '#ff9a3c', '#7a3b24', '#7b3fa0', '#5a5057', '#e0b04a', '#e8662a', '#cbbfa8'];
+/** Per MONSTER_KINDS index: the Ashen Forge family, the training dummy, then Ossuary (bone/frost) and Coliseum (iron/rust). */
+const KIND_COLOR: RGB[] = [
+  '#b8862f', '#ff9a3c', '#7a3b24', '#7b3fa0', '#5a5057', '#e0b04a', '#e8662a', '#cbbfa8',
+  '#d8d2c4', '#9fc4e0', '#8fa6c9', '#bfe6ff', '#6f8fb0', '#e4e9f2', '#7ab8ff',
+  '#a0522d', '#8b6b4a', '#6d6f75', '#9a9ca3', '#3b2f2a', '#c2703d', '#e04a2a',
+];
+/** Debuff label colours (client/server panels and the stats row). */
+const DEBUFF_COLOR: Record<string, RGB> = {
+  chilled: '#9fc4e0', frozen: '#dff4ff', rooted: '#b89a6a', burning: '#ff8a3c', bleeding: '#d04848', shocked: '#f2e35c', withered: '#a070d0',
+};
+const COLD_AREAS = new Set(['frostNovaWarning', 'glacialSpike', 'icePrison', 'blizzard', 'choirWave', 'wispBurst']);
 const TONE_COLOR: Record<string, RGB> = {
   normal: '#d8d2c4', magic: '#7aa2ff', rare: '#f2d15c', unique: '#e8772e', currency: '#c9b58a', map: '#d0d0dc', flask: '#d86a6a',
 };
@@ -340,12 +360,13 @@ function drawWorld(p: Panel, view: WorldView, alpha: number, cam: { x: number; y
 
   for (const a of view.areas) {
     const f = a.duration > 0 ? Math.min(1, a.age / a.duration) : 1;
-    ctx.strokeStyle = a.kind === 'heraldAura' ? 'rgba(224,176,74,0.5)' : 'rgba(232,102,42,0.85)';
+    const rgb = COLD_AREAS.has(a.kind) ? '140,200,255' : a.kind === 'tarPool' ? '120,90,60' : '232,102,42';
+    ctx.strokeStyle = a.kind === 'heraldAura' ? 'rgba(224,176,74,0.5)' : `rgba(${rgb},0.85)`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(X(a.x), Y(a.y), a.radius * s, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = `rgba(232,102,42,${0.08 + 0.22 * f})`;
+    ctx.fillStyle = `rgba(${rgb},${0.08 + 0.22 * f})`;
     ctx.beginPath();
     ctx.arc(X(a.x), Y(a.y), a.radius * s * f, 0, Math.PI * 2);
     ctx.fill();
@@ -468,6 +489,21 @@ function drawPlayer(pl: PlayerView, x: number, y: number, s: number, local: bool
   ctx.font = '12px ui-monospace, Menlo, monospace';
   ctx.textAlign = 'center';
   ctx.fillText(`${pl.name} ${pl.anim}`, x, y - r - 6);
+  // Debuffs under the body: "rooted 0.84 · bleeding×3 2.10".
+  pl.debuffs.forEach((d, k) => {
+    ctx.fillStyle = DEBUFF_COLOR[d.id] ?? '#e8dcc0';
+    ctx.fillText(debuffLabel(d), x, y + r + 14 + k * 13);
+  });
+}
+
+function debuffLabel(d: PlayerView['debuffs'][number]): string {
+  const stacks = d.stacks > 1 ? `×${d.stacks}` : '';
+  const source = d.source ? `(${d.source})` : '';
+  return `${d.id}${stacks}${source} ${d.remaining.toFixed(2)}`;
+}
+
+function debuffList(pl: PlayerView | undefined): string {
+  return pl && pl.debuffs.length ? pl.debuffs.map(debuffLabel).join(', ') : '—';
 }
 
 // Trace buffers (last ~2.5 s).
@@ -542,11 +578,12 @@ function drawStats(p: Panel): void {
     `drift ${(st.drift * 100).toFixed(2)}% · rebases ${st.rebases} · holds ${st.holds} · extrapolating ${st.extrapolating ? 'YES' : 'no'}`,
     `buffered ${st.bufferedSnapshots} · late ${st.late} · server inputs skipped ${inputs.skipped} · starved ${inputs.starved}`,
     `prediction${useHints ? ' (rules hints)' : ' (learned)'}: pending ${st.pendingInputs} · speed ${st.moveSpeed.toFixed(0)}`,
-    `corrections ${st.corrections} (last ${st.lastCorrection.toFixed(2)}) · snaps ${st.snaps}`,
+    `corrections ${st.corrections} (last ${st.lastCorrection.toFixed(2)}) · snaps ${st.snaps} · hook drags replayed ${st.pulls}`,
     `monsters shown ${client.view.monsters.count} / server ${run.view.monsters.count}`,
     `render tick ${client.renderTick.toFixed(1)} · latest ${client.latestTick} · server ${run.view.tick}`,
     `phase ${run.view.run.phase} · wave ${run.view.run.wave}/${run.view.run.waveCount} · events shown ${eventsShown}`,
     `drops shown: own ${countDrops(1)} · public ${countDrops(0)}`,
+    `your debuffs: server ${debuffList(run.view.players.find((q) => q.id === 1))} · client ${debuffList(client.view.players.find((q) => q.id === 1))}`,
     `click pickups: ${pickupLog.length ? pickupLog.join(' · ') : '—'}${backpackFull ? ' · BACKPACK FULL' : ''}`,
   ];
   const help = [
@@ -686,6 +723,8 @@ function frame(): void {
   });
   toClient.receive(now, (msg) => {
     client.pushSnapshot(msg.buf, now);
+    // Like the game client: every batch goes to the world (her hook drags) and to the event timeline.
+    client.noteEvents(msg.tick, msg.events);
     timeline.push(msg.tick, msg.events);
     const me = decodeSnapshot(msg.buf).viewer();
     if (me) {

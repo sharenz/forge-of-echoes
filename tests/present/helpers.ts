@@ -38,10 +38,14 @@ export interface ShapeCall {
 
 export interface SpriteCall {
   id: string;
+  frame: number;
   x: number;
   y: number;
   layer: string;
   outline: readonly number[] | undefined;
+  alpha: number;
+  tint: readonly number[] | undefined;
+  flipX: boolean;
 }
 
 /** Records every draw call; the per-frame lists are cleared by beginFrame. Font: 6 px advance per glyph. */
@@ -92,7 +96,12 @@ export class RecordingRenderer implements Renderer {
     if (!Number.isFinite(frame)) throw new Error(`bad frame for ${id}`);
     if (o?.tint && o.tint.some((v) => !Number.isFinite(v))) throw new Error(`bad tint for ${id}`);
     this.sprites++;
-    this.frameSprites.push({ id, x, y, layer: o?.layer ?? 'world', outline: o?.outline ? [...o.outline] : undefined });
+    const def = this.defs.get(id);
+    if (def && (frame < 0 || frame >= def.frames.length) && !def.loop) throw new Error(`frame ${frame} out of range for ${id}`);
+    this.frameSprites.push({
+      id, frame, x, y, layer: o?.layer ?? 'world', outline: o?.outline ? [...o.outline] : undefined, alpha: o?.alpha ?? 1,
+      tint: o?.tint ? [...o.tint] : undefined, flipX: !!o?.flipX,
+    });
   }
   private shape(kind: ShapeCall['kind'], x: number, y: number, x2: number, y2: number, radius: number, o: ShapeOptions): void {
     if (![x, y, x2, y2, radius].every(Number.isFinite)) throw new Error(`bad ${kind}`);
@@ -163,7 +172,7 @@ export function player(id: number, x: number, y: number, over: Partial<PlayerVie
   return {
     id, name: `P${id}`, level: 10, x, y, prevX: x - 1, prevY: y, vx: 60, vy: 0, facing: 'east', aimX: x + 50, aimY: y,
     anim: 'run', animTime: 0.3, castSkill: null, castProgress: 0, life: 80, maxLife: 100, focus: 50, maxFocus: 70,
-    wardTime: 0, wardDuration: 0, invulnTime: 0, hitFlash: 0, dead: false, slots: [], flasks: [], ...over,
+    wardTime: 0, wardDuration: 0, invulnTime: 0, hitFlash: 0, dead: false, debuffs: [], slots: [], flasks: [], ...over,
   };
 }
 

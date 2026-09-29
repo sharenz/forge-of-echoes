@@ -1,20 +1,24 @@
 // The wave director: tell → fight, pack placement (the "hunt" part), off-screen streaming (the
-// "survive" part), lieutenant and boss arrivals, volcanic hazards, and the map clear. Budgets and
-// elite chances scale with the living party; the whole director holds still while nobody in the
-// instance is alive (an empty or wiped map is frozen until someone comes through a portal).
+// "survive" part), lieutenant and boss arrivals, volcanic hazards, and the map clear. The monsters
+// come from the map's roster (w.roster, by RunConfig.theme: contracts/bestiary.ts THEME_ROSTER).
+// Budgets and elite chances scale with the living party; the whole director holds still while
+// nobody in the instance is alive (an empty or wiped map is frozen until someone comes through a
+// portal).
 import type { MonsterKind } from '../contracts/content';
 import type { MonsterRarity } from '../contracts/sim';
-import { ARCHETYPES, MAGIC_MODS, PACK_KINDS, RARE_MODS, packWeight } from './archetypes';
+import { KIND_INDEX, MAGIC_MODS, RARE_MODS, packWeight } from './archetypes';
 import { removeHostileAreas, spawnArea } from './areas';
-import { initBossState } from './bosses';
+import { startBoss } from './bosses';
 import { DT_FIRE, killMonster } from './combat';
+import { cleanseAll } from './debuffs';
 import {
-  DT, HAZARD_MAX_INTERVAL, HAZARD_MIN_INTERVAL, HERALD_AURA_RADIUS, INTRO_DELAY, MAX_LIVE_MONSTERS, PACK_MIN_DISTANCE,
+  DT, HAZARD_MAX_INTERVAL, HAZARD_MIN_INTERVAL, INTRO_DELAY, MAX_LIVE_MONSTERS, PACK_MIN_DISTANCE,
   PACK_SHARE, PARTY_BUDGET_PER_PLAYER, PARTY_ELITE_PER_PLAYER, PRESSURE_BASE, PRESSURE_CHECK_TICKS, PRESSURE_PER_WAVE,
   PRESSURE_RADIUS, STREAM_ARC, STREAM_DEPTH, STREAM_FIRST_DELAY, STREAM_GROUP_AVG, STREAM_MARGIN, STREAM_MIN_GAP,
   STREAM_WINDOW, VIEW_HALF_H, VIEW_HALF_W, WAVE_DAMAGE_GROWTH,
 } from './constants';
 import { DAMAGE_INDEX, GOLDEN_ANGLE, TAU } from './math';
+import { monsterDef, monsterDefs } from './rosters';
 import { nearestLiving } from './player';
 import { clearHostileProjectiles } from './projectiles';
 import { spawnClearRewards } from './props';
@@ -41,7 +45,7 @@ export function createDirector(mode: 'hideout' | 'map'): Director {
     stream: { wave: 0, remaining: 0, timer: 0, interval: 1, sinceLast: 0, weights: [] },
     hazardTimer: 3,
     bossId: -1,
-    heraldId: -1,
+    lieutenantId: -1,
     bossSpawned: false,
     bossDefeated: false,
     bossDeathX: 0,
@@ -130,12 +134,15 @@ export function planWave(w: World, wave: number): WavePlan {
   const budget = waveBudget(w, wave, n);
   const elite = 1 + PARTY_ELITE_PER_PLAYER * (n - 1);
 
-  const weights = PACK_KINDS.map((kind) => ({ kind, weight: packWeight(kind, wave) })).filter((e) => e.weight > 0);
-  if (weights.length === 0) weights.push({ kind: 'ashling', weight: 1 });
+  const defs = monsterDefs();
+  const family = w.roster.family;
+  const weights = family.map((kind) => ({ kind, weight: packWeight(defs[KIND_INDEX[kind]], wave) })).filter((e) => e.weight > 0);
+  if (weights.length === 0) weights.push({ kind: family[0], weight: 1 });
   const packBudget = Math.round(budget * PACK_SHARE);
   const streamCount = budget - packBudget;
 
   const packs: PlannedPack[] = [];
+  const perPack = new Map<MonsterKind, number>();
   let left = packBudget;
   while (left > 0) {
     const size = groupSize(left, rng);
@@ -150,14 +157,20 @@ export function planWave(w: World, wave: number): WavePlan {
       pool.splice(pool.indexOf(pick), 1);
     }
     const members: MonsterKind[] = [];
-    let brutes = 0;
+    perPack.clear();
     for (let k = 0; k < size; k++) {
       let kind = (rng.weighted(types, (e) => e.weight) ?? types[0]).kind;
-      if (kind === 'ironhideBrute' && ++brutes > 2) kind = 'ashling';
+      // Kinds capped per pack (heavy bruisers) overflow into the family's first member.
+      const cap = defs[KIND_INDEX[kind]].maxPerPack;
+      if (cap !== undefined) {
+        const n = (perPack.get(kind) ?? 0) + 1;
+        perPack.set(kind, n);
+        if (n > cap) kind = family[0];
+      }
       members.push(kind);
     }
     // Heaviest first: a rare pack's leader is its most imposing member.
-    members.sort((a, b) => ARCHETYPES[b].life - ARCHETYPES[a].life);
+    members.sort((a, b) => defs[KIND_INDEX[b]].life - defs[KIND_INDEX[a]].life);
     let rarity: MonsterRarity = 'normal';
     let mods = 0;
     if (rng.next() < s.rarePackChance * elite) {
@@ -172,14 +185,12 @@ export function planWave(w: World, wave: number): WavePlan {
     left -= size;
   }
 
-  const streamWeights = weights.map((e) => ({
-    kind: e.kind,
-    weight: e.kind === 'ironhideBrute' || e.kind === 'riftStalker' ? e.weight * 0.5 : e.weight,
-  }));
+  // Heavy hitters arrive in the stream at a reduced rate (MonsterDef.streamWeight).
+  const streamWeights = weights.map((e) => ({ kind: e.kind, weight: e.weight * (defs[KIND_INDEX[e.kind]].streamWeight ?? 1) }));
   const present = new Set<MonsterKind>();
   for (const pk of packs) for (const k of pk.members) present.add(k);
   if (streamCount > 0) for (const e of streamWeights) present.add(e.kind);
-  const families = PACK_KINDS.filter((k) => present.has(k));
+  const families = family.filter((k) => present.has(k));
   return { wave, packs, streamCount, streamWeights, families, lieutenant, boss };
 }
 
@@ -217,7 +228,7 @@ function startWave(w: World, wave: number): void {
   d.stream = {
     wave, remaining: count, timer: Math.max(STREAM_FIRST_DELAY, interval * 0.5), interval, sinceLast: 0, weights: plan.streamWeights,
   };
-  if (plan.lieutenant) spawnHerald(w, wave);
+  if (plan.lieutenant) spawnLieutenant(w, wave);
   if (plan.boss) spawnBoss(w, wave);
   d.hazardTimer = Math.max(d.hazardTimer, 2);
   w.events.push({ t: 'waveStart', wave });
@@ -430,34 +441,34 @@ function leastPressured(w: World, radius: number, floor: number): PlayerState | 
   return best;
 }
 
-function spawnHerald(w: World, wave: number): void {
+/** The map's lieutenant (THEME_ROSTER) arrives with its wave, away from the party. */
+function spawnLieutenant(w: World, wave: number): void {
   const d = w.director;
   const m = w.monsters;
+  const kind = w.roster.lieutenant;
   const pos = pointAway(w, 320);
   const pk = allocPack(w, pos.x, pos.y, wave, false, 'normal', true);
-  const i = spawnMonster(w, 'ashboundHerald', pos.x, pos.y, { pack: pk, wave, lieutenant: true });
+  const i = spawnMonster(w, kind, pos.x, pos.y, { pack: pk, wave, lieutenant: true });
   if (i < 0) return;
-  m.timerA[i] = 3;
-  m.timerB[i] = 1.5;
-  d.heraldId = m.id[i];
-  spawnArea(w, 'heraldAura', pos.x, pos.y, HERALD_AURA_RADIUS, 3600, { follow: m.id[i], hurts: 'none' });
-  for (let k = 0; k < 4; k++) {
-    const a = (k / 4) * TAU + 0.4;
-    spawnMonster(w, 'ashling', pos.x + Math.cos(a) * 30, pos.y + Math.sin(a) * 30, { pack: pk, wave });
-  }
+  d.lieutenantId = m.id[i];
+  monsterDef(kind).onSpawn?.(w, i, pk, pos.x, pos.y);
 }
 
+/** The map's boss (THEME_ROSTER) arrives with the final wave. */
 function spawnBoss(w: World, wave: number): void {
   const d = w.director;
   const m = w.monsters;
+  const kind = w.roster.boss;
+  const def = monsterDef(kind);
   const pos = pointAway(w, 210);
   const pk = allocPack(w, pos.x, pos.y, wave, false, 'normal', true);
-  const i = spawnMonster(w, 'cinderMatriarch', pos.x, pos.y, { pack: pk, wave, boss: true });
+  const i = spawnMonster(w, kind, pos.x, pos.y, { pack: pk, wave, boss: true });
   if (i < 0) return;
-  initBossState(w);
+  startBoss(w, i, def);
   d.bossId = m.id[i];
   d.bossSpawned = true;
   w.events.push({ t: 'bossSpawn', x: pos.x, y: pos.y });
+  def.onSpawn?.(w, i, pk, pos.x, pos.y);
 }
 
 /** Volcanic maps: telegraphed eruptions around (and ahead of) every living player, leaving fire pools. */
@@ -499,7 +510,10 @@ function eruptAround(w: World, p: PlayerState, n: number, dmg: number, lim: numb
   }
 }
 
-/** The boss fell (or the last wave is done): everything left crumbles, motes fly home, rewards appear. */
+/**
+ * The boss fell (or the last wave is done): everything left crumbles, motes fly home, rewards appear,
+ * and the survivors' debuffs lift (a burn or a bleed must not kill anyone on the way to the chest).
+ */
 function clearRun(w: World): void {
   const anchor = clearAnchor(w);
   const d = w.director;
@@ -511,6 +525,7 @@ function clearRun(w: World): void {
   for (let i = 0; i < m.hwm; i++) if (m.alive[i]) killMonster(w, i, DT_FIRE, false);
   clearHostileProjectiles(w);
   removeHostileAreas(w);
+  for (const p of w.living) cleanseAll(w, p);
   w.vacuum = true;
   spawnClearRewards(w, anchor.x, anchor.y);
   w.events.push({ t: 'cleared', x: anchor.x, y: anchor.y });

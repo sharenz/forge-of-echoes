@@ -3,6 +3,7 @@ import { MONSTER_ANIM, SIM_DT } from '../../src/contracts/sim';
 import { damageMonster } from '../../src/sim/combat';
 import { ARMOURED_HIT_REDUCTION, PLAYER_RADIUS, SPIT_FLIGHT } from '../../src/sim/constants';
 import { DAMAGE_INDEX } from '../../src/sim/math';
+import { addProp } from '../../src/sim/props';
 import { MFLAG } from '../../src/sim/stores';
 import { idleIntent, makeStats } from './fixtures';
 import { makeArena, ofType, placeMonster, stepN, stepWith } from './helpers';
@@ -31,6 +32,38 @@ describe('heavy bodies', () => {
     const i = placeMonster(world, 'ashling', 40, 0, { life: 1e9 });
     stepN(run, Math.round(1 / SIM_DT), walkEast);
     expect(world.monsters.x[i]).toBeGreaterThan(60);
+  });
+
+  it('a hunting heavy body wedged against props slides around them instead of grinding in place', () => {
+    // A fence of standing stones whose gaps (12) are narrower than a brute (24) between it and her.
+    const fence = (world: ReturnType<typeof makeArena>['world']) => {
+      for (let y = -90; y <= 90; y += 30) addProp(world, 'standingStone', 70, y, 9);
+    };
+    const { run, world } = makeArena({ stats: tough() });
+    fence(world);
+    const i = placeMonster(world, 'ironhideBrute', 160, 0, { life: 1e9, still: false });
+    const m = world.monsters;
+    const p = world.players[0];
+    let reached = -1;
+    let slid = false;
+    for (let t = 0; t < Math.round(25 / SIM_DT) && reached < 0; t++) {
+      stepWith(run, idleIntent());
+      run.drainEvents();
+      if (m.slide[i] !== 0) slid = true;
+      if (Math.hypot(m.x[i] - p.x, m.y[i] - p.y) < m.radius[i] + PLAYER_RADIUS + 20) reached = t;
+    }
+    expect(slid).toBe(true);
+    expect(reached).toBeGreaterThan(0);
+    // Never through the fence: it went around an end.
+    expect(Math.abs(m.y[i]) > 90 || m.x[i] < 70).toBe(true);
+
+    // An idle (not yet hunting) pack member milling against the same fence doesn't slide.
+    const b = makeArena({ stats: tough() });
+    fence(b.world);
+    const j = placeMonster(b.world, 'ironhideBrute', 160, 0, { life: 1e9, still: false });
+    b.world.players[0].x = -2000; // out of aggro range, pack idle
+    stepN(b.run, 120);
+    expect(b.world.monsters.slide[j]).toBe(0);
   });
 });
 

@@ -3,6 +3,7 @@
 // All art is generated in code (no image files), palette-constrained, at native pixel resolution.
 // Generation must work in Node (vitest) — produce raw RGBA buffers, not canvases. Only `icon()`/`portrait()`
 // (DOM data URLs) may touch `document`, lazily.
+import { NEW_REQUIRED_SPRITES } from './bestiary';
 
 /** Raw RGBA image (straight alpha), row-major, width*height*4 bytes. */
 export interface PixelImage {
@@ -72,4 +73,6 @@ export const REQUIRED_SPRITES: readonly string[] = [
   'prop/banner', 'prop/anvil', 'prop/ruinWall',
   // ground drops (bottom-centre anchored, untinted; rarity is a runtime treatment)
   'drop/equipment', 'drop/currency', 'drop/map', 'drop/flask',
+  // Ossuary / Coliseum rosters, new projectiles, debuff overlays and area visuals (contracts/bestiary.ts)
+  ...NEW_REQUIRED_SPRITES,
 ];

@@ -9,8 +9,8 @@ import { CLASS_LABEL, findCurrency, getFlask } from '../../data/items';
 import { GAMBLE, GAMBLE_OFFER_PREFIX, MERCHANT_NAME, MERCHANT_STOCK } from '../../data/progression';
 import type { MerchantStockDef, PriceDef } from '../../data/progression';
 import {
-  addToBackpack, allItems, baseWeights, currencyStack, flaskStack, formatDistribution, generateEquipment, generateUnique,
-  mintUid, pickRandomBase, setStackCount, uniqueIdsFor,
+  addToBackpack, allItems, baseWeights, currencyStack, currencyStashItem, flaskStack, formatDistribution, generateEquipment,
+  generateUnique, mintUid, pickRandomBase, setStackCount, uniqueIdsFor,
 } from '../items';
 import type { FoundItem } from '../items';
 import { createMapItem, mapBaseImplicitText, mapBaseName } from './maps';
@@ -21,12 +21,18 @@ import { fail, ok } from './util';
 // Currency on hand
 // ---------------------------------------------------------------------------------------------
 
-/** Stacks of a currency the character owns: backpack first (top-left onward), then stash tabs. */
+/**
+ * Stacks of a currency the character owns: backpack first (top-left onward), then stash tabs, then its
+ * Crafting Stash slot (so "Deposit all" never leaves a player unable to pay Rook).
+ */
 function stacksOf(ch: CharacterSave, id: CurrencyId): (FoundItem & { item: CurrencyStack })[] {
-  return allItems(ch).filter(
+  const stacks = allItems(ch).filter(
     (f): f is FoundItem & { item: CurrencyStack } => f.item.kind === 'currency' && f.item.currencyId === id
       && (f.location.kind === 'backpack' || f.location.kind === 'stash'),
   );
+  const slot = currencyStashItem(ch, id);
+  if (slot.count > 0) stacks.push({ item: slot, location: { kind: 'currencyStash' } });
+  return stacks;
 }
 
 export function currencyOnHand(ch: CharacterSave, id: CurrencyId): number {

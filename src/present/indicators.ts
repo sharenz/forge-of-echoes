@@ -5,8 +5,10 @@
 //
 // Online note: the presenter only knows what the WorldView holds. The snapshot encoder must keep sending rare,
 // lieutenant and boss monsters outside the area of interest for their markers to work at range.
+import { MONSTER_KINDS } from '../contracts/content';
 import type { RGB } from '../contracts/render';
 import { RARITY_CODE } from '../contracts/sim';
+import { MARKER_NAMES } from './names';
 import { C } from './colors';
 import type { FrameCtx } from './context';
 import type { Pen } from './pen';
@@ -121,8 +123,8 @@ export class Indicators {
       const x = nb[o];
       const y = nb[o + 1];
       const rarity = nb[o + 2];
-      if (rarity === RARITY_CODE.boss) this.mark(pen, f, x, y, BOSS, 'Matriarch', 7, nb[o + 3]);
-      else if (rarity === RARITY_CODE.lieutenant) this.mark(pen, f, x, y, LT, 'Herald', 6, nb[o + 3]);
+      if (rarity === RARITY_CODE.boss) this.mark(pen, f, x, y, BOSS, MARKER_NAMES[MONSTER_KINDS[nb[o + 4]]] ?? 'Boss', 7, nb[o + 3]);
+      else if (rarity === RARITY_CODE.lieutenant) this.mark(pen, f, x, y, LT, MARKER_NAMES[MONSTER_KINDS[nb[o + 4]]] ?? 'Lieutenant', 6, nb[o + 3]);
       else {
         const d = Math.hypot(x - v.cx, y - v.cy);
         if (d > RARE_RANGE) continue;

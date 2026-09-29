@@ -5,9 +5,10 @@
 // in your trade offer cannot be moved, merged into, crafted, spent or dropped; the swap itself uses the plain rules.
 // Dev-only: presentation code, so Math.random / Date.now are fine here.
 import type { ArtBundle } from '../../contracts/art';
-import type { CurrencyId, EquipSlot, MapBaseId } from '../../contracts/content';
+import { PLAYER_DEBUFFS, THEME_ROSTER, type PlayerDebuff } from '../../contracts/bestiary';
+import type { CurrencyId, EquipSlot, MapBaseId, MonsterKind } from '../../contracts/content';
 import type { GameRulesApi, RunSetup } from '../../contracts/game';
-import type { CharacterSave, EquipmentItem, GridContainer, Item, ItemTone, Settings } from '../../contracts/items';
+import type { CharacterSave, EquipmentItem, GridContainer, Item, ItemTone, MapItem, Settings, SpecialStashTab } from '../../contracts/items';
 import { BACKPACK_SIZE, LOADOUT_KEYS, STASH_TAB_SIZE } from '../../contracts/items';
 import type { PartyInfo, PortalInfo, RunSummaryInfo, TradeInfo } from '../../contracts/net';
 import { PORTALS_PER_MAP, TRADE_ACCEPT_LOCK_MS, TRADE_MAX_ITEMS } from '../../contracts/net';
@@ -16,6 +17,8 @@ import { createRng } from '../../core/rng';
 import { deriveRunStats, rules as gameRules, withItemLocks } from '../../game';
 import { currencyStack, flaskStack, generateEquipment, generateUnique, placeItem } from '../../game/items';
 import { rollMapWithRarity } from '../../game/progression';
+import { MONSTER_NAMES } from '../lib/content';
+import { parseCurrencyStashUid } from '../lib/stash';
 
 export interface MockOptions {
   screen?: Screen;
@@ -28,7 +31,8 @@ export interface MockOptions {
   dead?: boolean;
   summary?: RunSummaryInfo['result'] | null;
   alt?: boolean;
-  armed?: CurrencyId | null;
+  /** Arm a backpack currency stack by currency id, or a Crafting Stash slot as `cstash:<id>`. */
+  armed?: string | null;
   affix?: CurrencyId | null;
   party?: boolean;
   /** You lead the party (shows kick / promote and the invite field). */
@@ -54,6 +58,16 @@ export interface MockOptions {
   trade?: boolean | 'locked' | 'waiting';
   /** An incoming trade request from Corvin. */
   tradeRequest?: boolean;
+  /** Open the stash on this tab (a normal tab index or a special tab). */
+  stash?: number | SpecialStashTab | null;
+  /** false = the Map Stash and the Crafting Stash start empty. */
+  specialStash?: boolean;
+  /** The map device starts empty (its map is filed in the Map Stash): the device panel opens on its picker. */
+  emptyDevice?: boolean;
+  /** Active player debuffs on the HUD: true = a showcase set, or a list of ids. */
+  debuffs?: boolean | PlayerDebuff[];
+  /** Map theme of the run (zone=map): its tiles, roster, lieutenant and boss. */
+  theme?: MapBaseId;
 }
 
 export interface MockStore extends UiStore {
@@ -94,8 +108,42 @@ function emptyGrid(w: number, h: number): GridContainer {
   return { w, h, entries: [] };
 }
 
+/** Crafting Stash showcase: Forge Scrap full, a few ghosted (empty) slots, some map currency. */
+const STASHED_CURRENCY: Partial<Record<CurrencyId, number>> = {
+  kindling: 184,
+  scrap: 5000,
+  reforge: 46,
+  essenceEmber: 22,
+  essenceRime: 9,
+  essenceVital: 14,
+  essenceSwift: 3,
+  catalyst: 31,
+  solvent: 12,
+  seal: 7,
+  mapDust: 96,
+  threatGlyph: 41,
+  rewardInk: 6,
+};
+
+/** Map Stash showcase: 58 maps over T1–T12 (T11 and T13–15 empty), all three bases, some corrupted, two new. */
+function stashedMaps(rng: ReturnType<typeof createRng>, uid: () => string): MapItem[] {
+  const perTier = [4, 6, 8, 9, 7, 6, 6, 4, 3, 3, 0, 2];
+  const bases: MapBaseId[] = ['ashenForge', 'rimedOssuary', 'ironColiseum'];
+  const out: MapItem[] = [];
+  let n = 0;
+  perTier.forEach((count, i) => {
+    for (let k = 0; k < count; k++) {
+      n += 1;
+      const rarity = n % 4 === 0 ? 'rare' : n % 3 === 0 ? 'magic' : n % 5 === 1 ? 'rare' : 'normal';
+      const m = rollMapWithRarity(rng, bases[(n * 7 + k) % 3], i + 1, rarity, uid(), (n * 5) % 21, n === 21 || n === 22);
+      out.push(n % 9 === 0 && rarity !== 'normal' ? { ...m, corrupted: true } : m);
+    }
+  });
+  return out;
+}
+
 /** A level 24 Sorceress with a full paperdoll and an inventory that shows every tooltip and crafting case. */
-function buildCharacter(r: GameRulesApi): CharacterSave {
+function buildCharacter(r: GameRulesApi, specialStash: boolean, emptyDevice = false): CharacterSave {
   const rng = createRng(20260928);
   const uid = uidMaker('m');
   const base = r.createCharacter(ME.name, 7);
@@ -229,6 +277,7 @@ function buildCharacter(r: GameRulesApi): CharacterSave {
     ring2,
   };
   const level = 24;
+  const deviceMap = rollMapWithRarity(rng, 'ashenForge', 4, 'rare', uid(), 8, false);
   return {
     ...base,
     id: ME.id,
@@ -252,7 +301,9 @@ function buildCharacter(r: GameRulesApi): CharacterSave {
       { flaskId: 'focusFlask', count: 3 },
       { flaskId: 'focusFlask', count: 0 },
     ],
-    mapDevice: rollMapWithRarity(rng, 'ashenForge', 4, 'rare', uid(), 8, false),
+    mapDevice: emptyDevice ? null : deviceMap,
+    currencyStash: specialStash ? { ...STASHED_CURRENCY } : {},
+    mapStash: [...(specialStash ? stashedMaps(rng, uid) : []), ...(emptyDevice ? [deviceMap] : [])],
   };
 }
 
@@ -286,7 +337,7 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
   /** Plain rules: building the character and the trade swap (the server's tradeItems is not wrapped either). */
   const plainRules = withLootLuck(gameRules);
   const rules = withItemLocks(plainRules, offeredNow);
-  let ch = buildCharacter(plainRules);
+  let ch = buildCharacter(plainRules, opts.specialStash !== false, !!opts.emptyDevice);
   const listeners = new Set<() => void>();
   let toastId = 0;
   let chatId = 0;
@@ -299,9 +350,11 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
   const zone = opts.zone ?? 'hideout';
   const inMap = zone === 'map' || zone === 'partymap';
   let runSetup: RunSetup | null = null;
+  const theme: MapBaseId = opts.theme ?? 'ashenForge';
+  const roster = THEME_ROSTER[theme];
   if (inMap) {
     const rng = createRng(99);
-    const map = rollMapWithRarity(rng, 'ashenForge', 4, 'rare', 'run-map', 10, false);
+    const map = rollMapWithRarity(rng, theme, 4, 'rare', 'run-map', 10, false);
     const opened = rules.openMap({ ...ch, mapDevice: map });
     if (opened.ok) runSetup = opened.value.setup;
   }
@@ -443,15 +496,63 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       monstersAlive: opts.cleared ? 0 : Math.round(64 + 22 * Math.sin(t / 2)),
       kills: 612 + Math.floor(t * 3),
       elapsed: 382 + t,
-      boss: opts.boss ? { name: 'Cinder Matriarch', life: 21000 * (0.52 - ((t / 400) % 0.2)), maxLife: 21000, phase: bossPhase } : null,
-      lieutenant: opts.lieutenant ? { name: 'Ashbound Herald', life: 3600 * (0.7 - ((t / 300) % 0.3)), maxLife: 3600 } : null,
-      tell: opts.tell ? { wave: 3, families: ['ashling', 'cinderSpitter', 'riftStalker'], lieutenant: true, boss: false } : null,
+      // The sim sends a plain name; the HUD shows the full title ("Varkus" → "Varkus, the Iron Champion").
+      boss: opts.boss
+        ? { name: MONSTER_NAMES[roster.boss].one, life: 21000 * (0.52 - ((t / 400) % 0.2)), maxLife: 21000, phase: bossPhase }
+        : null,
+      lieutenant: opts.lieutenant
+        ? { name: MONSTER_NAMES[roster.lieutenant].one, life: 3600 * (0.7 - ((t / 300) % 0.3)), maxLife: 3600 }
+        : null,
+      tell: opts.tell
+        ? { wave: 3, families: roster.family.slice(0, 3) as MonsterKind[], lieutenant: true, boss: false }
+        : null,
       itemQuantity: luck.itemQuantity,
       itemRarity: luck.itemRarity,
       modLines: desc.affixes.map((l) => l.text),
       portalsRemaining: zone === 'partymap' ? 6 : 5,
       portalsTotal: PORTALS_PER_MAP,
     };
+  }
+
+  /**
+   * Debuff showcase. Each debuff runs its own loop: applied, ticking down (stacking ones gain a stack every
+   * `every` seconds, which refreshes the timer), gone for a moment, applied again. So the bar shows arrivals,
+   * refreshes, stacks and expiry. `still` freezes a representative moment.
+   */
+  const DEBUFF_LOOPS: Record<PlayerDebuff, { duration: number; period: number; offset: number; maxStacks: number; every: number }> = {
+    frozen: { duration: 0.8, period: 7, offset: 0.3, maxStacks: 1, every: 0 },
+    rooted: { duration: 1.4, period: 5.5, offset: 1.1, maxStacks: 1, every: 0 },
+    chilled: { duration: 2, period: 2.6, offset: 0.4, maxStacks: 1, every: 0 },
+    shocked: { duration: 2, period: 6, offset: 2.2, maxStacks: 1, every: 0 },
+    withered: { duration: 4, period: 8, offset: 1.5, maxStacks: 3, every: 1.3 },
+    bleeding: { duration: 4, period: 7, offset: 0.8, maxStacks: 3, every: 0.9 },
+    burning: { duration: 3, period: 3.8, offset: 2.6, maxStacks: 1, every: 0 },
+  };
+  const STILL_DEBUFFS: HudState['debuffs'] = [
+    { id: 'rooted', remaining: 0.9, duration: 1.4, stacks: 1 },
+    { id: 'chilled', remaining: 1.5, duration: 2, stacks: 1 },
+    { id: 'withered', remaining: 2.8, duration: 4, stacks: 2 },
+    { id: 'bleeding', remaining: 1.2, duration: 4, stacks: 3 },
+    { id: 'burning', remaining: 2.2, duration: 3, stacks: 1 },
+  ];
+  const debuffIds: PlayerDebuff[] = Array.isArray(opts.debuffs) ? opts.debuffs : opts.debuffs ? [...PLAYER_DEBUFFS] : [];
+  function debuffs(): HudState['debuffs'] {
+    if (!debuffIds.length) return [];
+    if (opts.still) {
+      return debuffIds.map(
+        (id) => STILL_DEBUFFS.find((x) => x.id === id) ?? { id, remaining: DEBUFF_LOOPS[id].duration * 0.6, duration: DEBUFF_LOOPS[id].duration, stacks: 1 },
+      );
+    }
+    const out: HudState['debuffs'] = [];
+    for (const id of debuffIds) {
+      const loop = DEBUFF_LOOPS[id];
+      const phase = (t + loop.offset) % loop.period;
+      const stacks = loop.maxStacks > 1 ? Math.min(loop.maxStacks, 1 + Math.floor(phase / loop.every)) : 1;
+      const lastApplied = (stacks - 1) * loop.every;
+      const remaining = loop.duration - (phase - lastApplied);
+      if (remaining > 0) out.push({ id, remaining, duration: loop.duration, stacks });
+    }
+    return out;
   }
 
   function hud(): HudState {
@@ -509,6 +610,7 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
           : [];
     return {
       zone: inMap ? 'map' : 'hideout',
+      debuffs: opts.dead ? [] : debuffs(),
       zoneOwnerName: zone === 'visit' || zone === 'partymap' ? MIRA.name : ME.name,
       zoneIsOwn: !(zone === 'visit' || zone === 'partymap'),
       life: opts.dead ? 0 : Math.round(maxLife * (0.55 + 0.35 * wave(2.2, 0))),
@@ -549,7 +651,7 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
     derived: derive(),
     zone: inMap ? 'map' : 'hideout',
     openPanels: opts.panels ?? [],
-    stashTab: 0,
+    stashTab: opts.stash ?? 0,
     armed: null,
     affixChoice: null,
     craftingAllowed: !inMap,
@@ -596,8 +698,10 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
   };
 
   if (opts.armed) {
+    const slot = parseCurrencyStashUid(opts.armed);
     const e = ch.backpack.entries.find((x) => x.item.kind === 'currency' && x.item.currencyId === opts.armed);
-    if (e) state = { ...state, armed: { uid: e.item.uid, currencyId: opts.armed } };
+    if (slot) state = { ...state, armed: { uid: opts.armed, currencyId: slot } };
+    else if (e && e.item.kind === 'currency') state = { ...state, armed: { uid: e.item.uid, currencyId: e.item.currencyId } };
   }
   if (opts.affix) {
     const cur = ch.backpack.entries.find((x) => x.item.kind === 'currency' && x.item.currencyId === opts.affix);
@@ -814,9 +918,15 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       set({ stashTab: tab });
     },
 
+    depositAllCurrency() {
+      const r = rules.depositAllCurrency(ch);
+      if (!r.ok) fail(r.error);
+      else setCharacter(r.value);
+    },
+
     // Offered items: the trade-locked rules refuse (as the server does).
-    moveItem(uid, to) {
-      const r = rules.moveItem(ch, uid, to);
+    moveItem(uid, to, count) {
+      const r = rules.moveItem(ch, uid, to, count);
       if (!r.ok) {
         fail(r.error);
         return false;
@@ -824,8 +934,8 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       setCharacter(r.value);
       return true;
     },
-    quickMove(uid) {
-      const r = rules.quickMove(ch, uid, { stashTab: state.openPanels.includes('stash') ? state.stashTab : null });
+    quickMove(uid, count) {
+      const r = rules.quickMove(ch, uid, { stashTab: state.openPanels.includes('stash') ? state.stashTab : null, count });
       if (!r.ok) fail(r.error);
       else setCharacter(r.value);
     },

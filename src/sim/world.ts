@@ -1,13 +1,16 @@
 // The complete mutable state of one run. Systems are plain functions over `World`.
+import type { PlayerDebuff } from '../contracts/bestiary';
 import type { MonsterKind, SkillId } from '../contracts/content';
 import type { Rng } from '../contracts/rng';
 import type {
   AreaView, Dir4, DropView, FlaskRuntime, MonsterRarity, PlayerAnim, PlayerCombatStats, PlayerIntent, PlayerView, PropView,
-  RunConfig, RunPhase, SimOutcome, SkillRuntimeDef, WorldView,
+  RootSource, RunConfig, RunPhase, SimOutcome, SkillRuntimeDef, WorldView,
 } from '../contracts/sim';
+import type { DebuffState } from './debuffs';
 import type { EventBuffer } from './events';
 import type { PropGrid, SpatialGrid } from './grid';
 import type { HookErrorLog } from './hooks';
+import type { Roster } from './rosters/types';
 import type { MonsterStore, MoteStore, ProjectileStore } from './stores';
 
 export interface SkillChargeState {
@@ -105,6 +108,18 @@ export interface PlayerState {
   /** Open portal the player is standing in (0 = none) and for how long, continuously. */
   portalDwellId: number;
   portalDwell: number;
+  /** Active debuffs (debuffs.ts). */
+  readonly debuffs: DebuffState;
+  /** Remaining knockback displacement (shield bash, charges), applied over the next ticks. */
+  kbX: number;
+  kbY: number;
+  /** A chain hook's drag: seconds left, total, and the segment (player movement is suspended meanwhile). */
+  pullTime: number;
+  pullTotal: number;
+  pullFromX: number;
+  pullFromY: number;
+  pullToX: number;
+  pullToY: number;
 }
 
 export interface Area extends AreaView {
@@ -125,6 +140,38 @@ export interface Area extends AreaView {
   poolDuration: number;
   poolDamage: number;
   dead: boolean;
+  /** Debuff applied to every player this area damages (or touches, for tar / rings), or null. */
+  debuff: PlayerDebuff | null;
+  rootSource: RootSource;
+  /** Heading and variant packed into the id (area-geometry.ts); `angle` is the quantised heading. */
+  angle: number;
+  variant: number;
+  /** Drift velocity (blizzard), units/s. */
+  vx: number;
+  vy: number;
+  /** Radius at age 0 and at age = duration (the core interpolates `radius` linearly when they differ). */
+  startRadius: number;
+  endRadius: number;
+  /** Player id this area follows until `lockAt` seconds of age (executionMark), 0 = none. */
+  followPlayer: number;
+  lockAt: number;
+  /** Player id an ice prison closes on (leaving it breaks the prison), 0 = none. */
+  target: number;
+  /** Player ids already hit (choirWave: once per ring) or rooted (tarPool: first contact only). */
+  touched: number[];
+  /** 0 = none, else 1 + index into the area effect registry (effects.ts). */
+  effect: number;
+}
+
+/** A recent death (for corpse-raising), see World.corpses. */
+export interface Corpse {
+  kind: MonsterKind;
+  x: number;
+  y: number;
+  /** Sim time of the death. */
+  time: number;
+  /** Already raised (or consumed otherwise). */
+  used: boolean;
 }
 
 export interface Drop extends DropView {
@@ -197,7 +244,8 @@ export interface Director {
   stream: StreamState;
   hazardTimer: number;
   bossId: number;
-  heraldId: number;
+  /** Monster id of the map's lieutenant (wave 3), -1 = none. */
+  lieutenantId: number;
   bossSpawned: boolean;
   bossDefeated: boolean;
   /** Where the boss fell (the clear rewards appear by the nearest player to it). */
@@ -206,23 +254,16 @@ export interface Director {
   cleared: boolean;
 }
 
-/** Cinder Matriarch encounter state (there is at most one boss per run). */
-export interface BossState {
+/**
+ * The run's boss encounter (there is at most one boss per run). The core drives `phase` and `roar`
+ * (bosses.ts); `state` belongs to the boss's BossScript (see rosters/types.ts) and is null until the
+ * boss exists.
+ */
+export interface BossRuntime {
   phase: number;
-  /** Remaining seconds of the active orb spiral (0 = none). */
-  spiral: number;
-  spiralAngle: number;
-  /** +1 / -1: spirals alternate their rotation. */
-  spiralDir: number;
-  spiralEmit: number;
-  spiralCd: number;
-  slamCd: number;
-  meteorCd: number;
-  chargeCd: number;
-  summonCd: number;
+  /** Remaining seconds of the phase-change roar (0 = not roaring). */
   roar: number;
-  chargeDirX: number;
-  chargeDirY: number;
+  state: unknown;
 }
 
 export interface World {
@@ -250,11 +291,12 @@ export interface World {
   readonly props: Prop[];
   readonly packs: Pack[];
   readonly director: Director;
-  readonly boss: BossState;
+  /** This map's monsters (THEME_ROSTER by RunConfig.theme; the hideout gets the Ashen Forge's). */
+  readonly roster: Roster;
+  readonly boss: BossRuntime;
   readonly events: EventBuffer;
   outcomes: SimOutcome[];
   readonly view: WorldView;
-  nextAreaId: number;
   nextDropId: number;
   nextPropId: number;
   kills: number;
@@ -262,6 +304,13 @@ export interface World {
   vacuum: boolean;
   /** Lazily created hideout map portal (setPortal), or null. */
   portal: Prop | null;
+  /** The most recent deaths (a ring of CORPSE_MEMORY, oldest overwritten), for corpse-raising. */
+  readonly corpses: Corpse[];
+  corpseCursor: number;
+  /** Area id sequence (area-geometry.ts packs heading and variant into the id). */
+  areaSeq: number;
+  /** Per-monster scratch memory by monster id (behaviour.ts memoryOf), dropped on death. */
+  readonly memory: Map<number, Float64Array>;
   /** Hook calls that threw or returned malformed data (see hooks.ts). */
   readonly hookErrors: HookErrorLog;
   /** Scratch buffers for grid queries (sized to monster capacity). */

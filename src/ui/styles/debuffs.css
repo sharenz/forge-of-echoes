@@ -1,0 +1,281 @@
+/* Player debuffs on the HUD (GAME_SPEC §13): the debuff bar above the command deck, its tooltips, the counterplay
+ * glow on deck slots and the Tell banner's "brings" chips. */
+
+/* Floats over the play field, so it lets clicks through to the world; hoverable only while inspecting (Alt held
+ * or a side panel open: .fe-debuffs--inspect, which also carries .fe-solid). */
+.fe-debuffs {
+  --debuff-icon: 32px;
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--deck-clear) + 8px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  z-index: 3;
+  pointer-events: none;
+}
+.fe-debuffs--inspect {
+  pointer-events: auto;
+}
+.fe-debuffs--inspect .fe-debuff {
+  cursor: help;
+}
+@media (min-width: 1600px) and (min-height: 910px) {
+  .fe-debuffs {
+    --debuff-icon: 48px;
+    gap: 9px;
+  }
+}
+
+.fe-debuff {
+  --tone: var(--bone);
+  --tone-glow: rgba(203, 191, 168, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: default;
+}
+.fe-debuff--cold {
+  --tone: var(--frost);
+  --tone-glow: rgba(127, 198, 232, 0.45);
+}
+.fe-debuff--fire {
+  --tone: var(--flame);
+  --tone-glow: rgba(255, 154, 60, 0.45);
+}
+.fe-debuff--physical {
+  --tone: #e8584f;
+  --tone-glow: rgba(224, 70, 60, 0.45);
+}
+.fe-debuff--lightning {
+  --tone: #e6dcff;
+  --tone-glow: rgba(185, 166, 255, 0.5);
+}
+.fe-debuff--void {
+  --tone: var(--void-glow);
+  --tone-glow: rgba(192, 123, 255, 0.45);
+}
+.fe-debuff--earth {
+  --tone: #b7c77a;
+  --tone-glow: rgba(160, 190, 100, 0.45);
+}
+
+/* The icon plate: a dark socket with a tone-coloured rim. */
+.fe-debuff__plate {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(var(--debuff-icon) + 4px);
+  height: calc(var(--debuff-icon) + 4px);
+  background: radial-gradient(circle at 50% 40%, #1c1618, #070506);
+  border: 1px solid color-mix(in srgb, var(--tone) 70%, #000);
+  border-radius: 3px;
+  box-shadow:
+    0 0 0 1px #050304,
+    0 0 8px var(--tone-glow),
+    0 4px 10px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+.fe-debuff__pop {
+  display: grid;
+  place-items: center;
+  animation: fe-debuff-pop 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.25);
+}
+@keyframes fe-debuff-pop {
+  0% {
+    transform: scale(1.45);
+    filter: brightness(2.2) drop-shadow(0 0 6px var(--tone));
+  }
+  100% {
+    transform: scale(1);
+    filter: none;
+  }
+}
+.fe-debuff__icon {
+  display: block;
+}
+/* Radial sweep: the share of the duration already gone darkens clockwise from 12 o'clock. */
+.fe-debuff__sweep {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: conic-gradient(from 0deg, rgba(4, 3, 5, 0.72) calc(var(--elapsed) * 360deg), transparent 0);
+  pointer-events: none;
+}
+.fe-debuff__stacks {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  z-index: 2;
+  font-size: var(--font-ui-caption);
+  font-weight: 700;
+  line-height: 1.1;
+  color: #fff;
+  text-shadow:
+    0 1px 1px #000,
+    0 0 3px #000,
+    0 0 3px #000;
+}
+.fe-debuff__time {
+  min-height: 15px;
+  font-size: var(--font-ui-caption);
+  font-weight: 700;
+  line-height: 15px;
+  color: var(--tone);
+  text-shadow:
+    0 1px 1px #000,
+    0 0 4px #000;
+}
+/* Hard control: a thicker, breathing rim, so "why can't I move" is answered at a glance. */
+.fe-debuff--control .fe-debuff__plate {
+  border-width: 2px;
+  border-color: var(--tone);
+  animation: fe-debuff-control 0.9s ease-in-out infinite;
+}
+@keyframes fe-debuff-control {
+  50% {
+    box-shadow:
+      0 0 0 1px #050304,
+      0 0 16px var(--tone-glow),
+      0 0 4px var(--tone),
+      0 4px 10px rgba(0, 0, 0, 0.7);
+  }
+}
+/* About to run out (lib/debuffs.ts debuffEnding; never hard control, which keeps its pulse). */
+.fe-debuff--ending:not(.fe-debuff--control) .fe-debuff__plate {
+  animation: fe-debuff-ending 0.3s steps(2, jump-none) infinite;
+}
+@keyframes fe-debuff-ending {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ---- tooltip ---- */
+.fe-debufftip {
+  --tone: var(--bone);
+  min-width: 250px;
+  max-width: 320px;
+  text-align: left;
+}
+.fe-debufftip--cold {
+  --tone: var(--frost);
+}
+.fe-debufftip--fire {
+  --tone: var(--flame);
+}
+.fe-debufftip--physical {
+  --tone: #e8584f;
+}
+.fe-debufftip--lightning {
+  --tone: #e6dcff;
+}
+.fe-debufftip--void {
+  --tone: var(--void-glow);
+}
+.fe-debufftip--earth {
+  --tone: #b7c77a;
+}
+.fe-debufftip__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.fe-debufftip__name {
+  font-family: var(--font-title);
+  font-size: var(--font-ui-body);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--tone);
+}
+.fe-debufftip__facts {
+  font-size: var(--font-ui-caption);
+  color: var(--ash);
+}
+.fe-debufftip__effect {
+  font-size: var(--font-ui-secondary);
+  color: var(--parchment);
+}
+.fe-debufftip__counter {
+  margin-top: 8px;
+  padding: 6px 8px;
+  font-size: var(--font-ui-secondary);
+  color: #d9f0c8;
+  background: rgba(143, 191, 106, 0.08);
+  border-left: 2px solid var(--good);
+}
+.fe-debufftip__label {
+  display: block;
+  font-size: var(--font-ui-caption);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--good);
+}
+.fe-debufftip__note {
+  margin-top: 8px;
+  font-size: var(--font-ui-caption);
+  color: var(--stone-light);
+}
+
+/* ---- counterplay: the deck slot that answers an active debuff ---- */
+.fe-skill--counter,
+.fe-flask--counter {
+  border-color: var(--good);
+  box-shadow:
+    0 0 0 1px #050304,
+    0 0 10px rgba(143, 191, 106, 0.55),
+    inset 0 0 12px rgba(143, 191, 106, 0.3);
+  animation: fe-counter 1s ease-in-out infinite;
+}
+/* The answer exists but is not ready (cooldown, not enough Focus): a quiet ring, no pulse. */
+.fe-skill--counter-wait {
+  border-color: rgba(143, 191, 106, 0.55);
+  box-shadow:
+    0 0 0 1px #050304,
+    inset 0 0 8px rgba(143, 191, 106, 0.18);
+}
+@keyframes fe-counter {
+  50% {
+    box-shadow:
+      0 0 0 1px #050304,
+      0 0 16px rgba(143, 191, 106, 0.8),
+      inset 0 0 16px rgba(143, 191, 106, 0.45);
+  }
+}
+
+/* ---- Tell banner: what the next wave can put on you ---- */
+.fe-tell__brings {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+  font-size: var(--font-ui-caption);
+  color: var(--ash);
+}
+.fe-tell__debuff {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  color: var(--parchment);
+}
+.fe-tell__debuff img {
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px #000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fe-debuff__pop,
+  .fe-debuff--control .fe-debuff__plate,
+  .fe-debuff--ending .fe-debuff__plate,
+  .fe-skill--counter,
+  .fe-flask--counter {
+    animation: none;
+  }
+}

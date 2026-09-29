@@ -36,7 +36,7 @@ B bot for player 1 · P pause · [ ] speed
 O hideout portal (8 → 7 → … → 0) · J join a bot · K kill player 1 · V view boxes
 drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocked
 ?players=1..4 ?late=s (players 2+ join late) ?full=1 (inventories full)
-?seed ?mode=hideout ?theme ?gear=strong|fair|weak
+?seed ?mode=hideout ?theme=ashenForge|rimedOssuary|ironColiseum ?gear=strong|fair|weak
 ?skip=s ?until=boss2&amp;after=s ?view=2000
 ?bot=0 ?hazards=1 ?life= ?dmg= ?views=1</div>
     <script type="module">
@@ -51,6 +51,10 @@ drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocke
       import { PORTAL_DWELL, PORTAL_ENTER_RADIUS, VIEW_HALF_H, VIEW_HALF_W } from '/src/sim/constants.ts';
       // Walk this deep into reach before asking, like a real client (input is still queued on the server).
       import { PICKUP_APPROACH } from '/src/sim/movement.ts';
+      import {
+        CHARGE_LINE_HALF_WIDTH, CHOIR_GAP_HALF_ANGLE, CHOIR_RING_HALF_WIDTH, WISP_FREEZE_FRACTION, areaAngle, areaVariant, choirGapAngles,
+      } from '/src/sim/area-geometry.ts';
+      import { MFLAG } from '/src/sim/stores.ts';
       import { createBot } from '/tests/sim/bot.ts';
       import {
         makeConfig, makeHooks, makeJoin, makeSkill, makeStats, strongStats, strongSkills, fairStats, fairSkills, STRONG_LOADOUT, makeFlasks, TIER5,
@@ -276,7 +280,13 @@ drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocke
             case 'areaResolve': fx.push({ k: 'burst', x: e.x, y: e.y, r: e.radius, t: 0, life: 0.3, col: '#ff6a3c' }); break;
             case 'death': fx.push({ k: 'burst', x: e.x, y: e.y, r: e.rarity >= 3 ? 40 : 10, t: 0, life: 0.35, col: '#6b5f58' }); break;
             case 'bossPhase': fx.push({ k: 'flash', t: 0, life: 0.25 }); banner(`BOSS PHASE ${e.phase}`); break;
-            case 'waveTell': banner(`WAVE ${e.wave}${e.boss ? ' — THE MATRIARCH' : e.lieutenant ? ' — HERALD' : ''}  ${e.families.join(' · ')}`); break;
+            case 'waveTell': banner(`WAVE ${e.wave}${e.boss ? ' — BOSS' : e.lieutenant ? ' — LIEUTENANT' : ''}  ${e.families.join(' · ')}`); break;
+            case 'debuff':
+              if (fx.length < 600) fx.push({ k: 'num', x: e.x, y: e.y - 22, t: 0, life: 0.9, text: `${e.debuff}${e.stacks > 1 ? ' ×' + e.stacks : ''}`, col: DEBUFF_COL[e.debuff], crit: false });
+              break;
+            case 'cleanse': fx.push({ k: 'ring', x: e.x, y: e.y, r: 18, t: 0, life: 0.4, col: '#e8dcc0' }); break;
+            case 'blocked': fx.push({ k: 'burst', x: e.x, y: e.y, r: 5, t: 0, life: 0.2, col: '#f2d15c' }); break;
+            case 'pull': fx.push({ k: 'line', x1: e.fromX, y1: e.fromY, x2: e.toX, y2: e.toY, t: 0, life: 0.35, col: '#9a948a' }); break;
             case 'cleared': banner('MAP CLEARED'); break;
             case 'playerDeath': banner(`${nameOf(e.playerId)} HAS FALLEN`); break;
             case 'playerJoin': fx.push({ k: 'ring', x: e.x, y: e.y, r: 26, t: 0, life: 0.5, col: colourOf(e.playerId) }); break;
@@ -291,9 +301,19 @@ drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocke
       const KIND_COL = {
         ashling: '#9b7d6a', emberSkitter: '#e8662a', cinderSpitter: '#b8862f', riftStalker: '#7b3fa0',
         ironhideBrute: '#5a5057', ashboundHerald: '#c07bff', cinderMatriarch: '#ff5a2a', trainingDummy: '#cbbfa8',
+        boneThrall: '#cbbfa8', rimeshade: '#9fd8f0', frostWeaver: '#7fc6e8', glacialWisp: '#d4f1ff', ossuaryGolem: '#8aa0b0',
+        boneChorister: '#e8dcc0', hollowWarden: '#4a7bd6',
+        pitHound: '#7a3b24', chainThrall: '#6e7447', ironCrossbowman: '#8d8375', shieldbearer: '#b8862f', tarSlinger: '#2a2326',
+        chainmaster: '#9e2a2b', varkus: '#e0b04a',
+      };
+      const DEBUFF_COL = {
+        chilled: '#7fc6e8', frozen: '#d4f1ff', rooted: '#a08a5a', burning: '#ff8a3c', bleeding: '#d0303a', shocked: '#efe9ff', withered: '#c07bff',
       };
       const RAR_COL = ['', '#7aa2ff', '#f2d15c', '#c07bff', '#ff7a3a'];
-      const PROJ_COL = { emberLance: '#ffb060', novaFlame: '#ff8a3c', flameWave: '#ff6a2a', rimeShard: '#bfe8ff', cinderSpit: '#ffcf5a', heraldOrb: '#c07bff', matriarchOrb: '#ff4a4a' };
+      const PROJ_COL = {
+        emberLance: '#ffb060', novaFlame: '#ff8a3c', flameWave: '#ff6a2a', rimeShard: '#bfe8ff', cinderSpit: '#ffcf5a', heraldOrb: '#c07bff', matriarchOrb: '#ff4a4a',
+        webShot: '#e8f4ff', frostShard: '#9fe0ff', crossbowBolt: '#d8d2c4', chainHook: '#9a948a', tarGlob: '#3b3438', boneShard: '#cbbfa8',
+      };
       const PROP_COL = {
         mapDevice: '#7b3fa0', stash: '#7a3b24', merchant: '#b8862f', portal: '#c07bff', returnPortal: '#7fc6e8', chest: '#e0b04a',
         pillar: '#5a5057', brazier: '#e8662a', standingStone: '#3b3438', rubble: '#4a3f3a', bones: '#cbbfa8', crystal: '#7fc6e8',
@@ -302,6 +322,8 @@ drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocke
       const AREA_COL = {
         slamWarning: '#ff4a2a', leapWarning: '#b05aff', eruptionWarning: '#ff7a1a', meteorWarning: '#ff3a1a',
         firePool: '#e8662a', fireTrail: '#ff9a3c', heraldAura: '#c07bff',
+        frostNovaWarning: '#7fc6e8', glacialSpike: '#bfe8ff', icePrison: '#d4f1ff', blizzard: '#9fd8f0', choirWave: '#b9d8ff',
+        wispBurst: '#d4f1ff', tarPool: '#1a1619', chargeLine: '#ff5050', executionMark: '#d0303a', arenaSpikes: '#b8862f', whirlwind: '#c9b58a',
       };
       const lerp = (a, b, t) => a + (b - a) * t;
       function circle(x, y, r, fill, stroke, lw = 1) {
@@ -330,10 +352,38 @@ drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocke
         for (let g = -v.arenaRadius; g <= v.arenaRadius; g += 64) { ctx.moveTo(g, -v.arenaRadius); ctx.lineTo(g, v.arenaRadius); ctx.moveTo(-v.arenaRadius, g); ctx.lineTo(v.arenaRadius, g); }
         ctx.stroke();
 
-        // areas
+        // areas (bestiary shapes: see src/sim/area-geometry.ts)
         for (const a of v.areas) {
           const col = AREA_COL[a.kind];
           if (a.kind === 'heraldAura') { circle(a.x, a.y, a.radius, 'rgba(192,123,255,0.06)', 'rgba(192,123,255,0.35)', 1); continue; }
+          if (a.kind === 'chargeLine') {
+            const ang = areaAngle(a), hw = CHARGE_LINE_HALF_WIDTH[areaVariant(a)];
+            ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(ang);
+            ctx.globalAlpha = 0.18; ctx.fillStyle = col; ctx.fillRect(0, -hw, a.radius, hw * 2);
+            ctx.globalAlpha = 0.5; ctx.fillRect(0, -hw, a.radius * Math.min(1, a.age / a.duration), hw * 2);
+            ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 1 / cam.zoom; ctx.strokeRect(0, -hw, a.radius, hw * 2);
+            ctx.restore(); continue;
+          }
+          if (a.kind === 'choirWave') {
+            const gaps = choirGapAngles(a);
+            ctx.strokeStyle = col; ctx.lineWidth = CHOIR_RING_HALF_WIDTH * 2; ctx.globalAlpha = 0.55;
+            for (let k = 0; k < gaps.length; k++) {
+              const a0 = gaps[k] + CHOIR_GAP_HALF_ANGLE, a1 = (k + 1 < gaps.length ? gaps[k + 1] : gaps[0] + Math.PI * 2) - CHOIR_GAP_HALF_ANGLE;
+              ctx.beginPath(); ctx.arc(a.x, a.y, a.radius, a0, a1); ctx.stroke();
+            }
+            ctx.globalAlpha = 1; continue;
+          }
+          if (a.kind === 'icePrison') {
+            circle(a.x, a.y, a.radius, 'rgba(212,241,255,0.08)', col, 2.5);
+            continue;
+          }
+          if (a.kind === 'blizzard' || a.kind === 'tarPool' || a.kind === 'whirlwind') {
+            const active = a.kind !== 'whirlwind' || areaVariant(a) === 1;
+            ctx.globalAlpha = a.kind === 'tarPool' ? 0.85 : active ? 0.28 : 0.12;
+            circle(a.x, a.y, a.radius, col, a.kind === 'tarPool' ? '#5a5057' : col, 1.5);
+            ctx.globalAlpha = 1; continue;
+          }
+          if (a.kind === 'wispBurst') circle(a.x, a.y, a.radius * WISP_FREEZE_FRACTION, null, '#ffffff', 1);
           if (a.kind === 'firePool' || a.kind === 'fireTrail') {
             ctx.globalAlpha = 0.35 * (1 - a.age / a.duration) + 0.15;
             circle(a.x, a.y, a.radius, col); ctx.globalAlpha = 1; continue;
@@ -436,6 +486,13 @@ drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocke
           if (anim === MONSTER_ANIM.spawn) { ctx.globalAlpha = Math.min(1, m.animTime[i] / 0.5); r *= 0.5 + 0.5 * Math.min(1, m.animTime[i] / 0.5); }
           const lift = anim === MONSTER_ANIM.leap ? Math.sin(Math.min(1, m.animTime[i] / 0.25) * Math.PI) * 16 : 0;
           circle(x, y, r * 0.9, 'rgba(0,0,0,0.35)');
+          const flags = world.monsters.flags[i];
+          if (flags & MFLAG.ghost) ctx.globalAlpha = 0.55;
+          if (flags & MFLAG.guard) {
+            const aim = world.monsters.aim[i];
+            ctx.strokeStyle = '#f2d15c'; ctx.lineWidth = 2.5 / cam.zoom;
+            ctx.beginPath(); ctx.arc(x, y, r + 4, aim - Math.PI / 3, aim + Math.PI / 3); ctx.stroke();
+          }
           let col = KIND_COL[kind];
           if (m.hitFlash[i] > 0.5) col = '#ffffff';
           const rar = m.rarity[i];
@@ -520,8 +577,16 @@ drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocke
             const s = world.playerById[p.id]?.stats;
             if (s) circle(px, py, s.pickupRadius, null, 'rgba(159,224,255,0.07)', 1);
           }
+          for (let k = 0; k < p.debuffs.length; k++) {
+            const d = p.debuffs[k];
+            circle(px, py, 9 + k * 2, null, DEBUFF_COL[d.id], d.id === 'frozen' || d.id === 'rooted' ? 2.5 : 1);
+          }
           ctx.font = `${10 / cam.zoom * 1.1}px ui-monospace, monospace`;
           ctx.fillStyle = pc; ctx.fillText(`${p.name} ${p.level}`, px, py - 17);
+          if (p.debuffs.length) {
+            ctx.fillStyle = '#e8dcc0';
+            ctx.fillText(p.debuffs.map((d) => `${d.id.slice(0, 5)}${d.stacks > 1 ? d.stacks : ''} ${d.remaining.toFixed(1)}`).join(' · '), px, py - 27);
+          }
           const f = Math.max(0, p.life / p.maxLife);
           ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(px - 10, py - 13, 20, 2.2);
           ctx.fillStyle = '#c0392b'; ctx.fillRect(px - 10, py - 13, 20 * f, 2.2);
@@ -575,6 +640,11 @@ drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocke
           ctx.fillText(`${p.name}  lv ${p.level}  #${p.id}${p.dead ? '  FALLEN' : ''}`, 16, y + 10);
           bar(16, y + 16, 104, 18, p.life / p.maxLife, '#9e2a2b', `${p.life.toFixed(0)}`);
           bar(128, y + 16, 104, 18, p.focus / p.maxFocus, '#4a7bd6', `${p.focus.toFixed(0)}`);
+          p.debuffs.forEach((d, k) => {
+            ctx.fillStyle = DEBUFF_COL[d.id]; ctx.fillRect(244 + k * 34, y + 16, 30 * (d.remaining / Math.max(0.01, d.duration)), 18);
+            ctx.strokeStyle = DEBUFF_COL[d.id]; ctx.lineWidth = 1; ctx.strokeRect(244 + k * 34, y + 16, 30, 18);
+            ctx.fillStyle = '#0d0b0e'; ctx.fillText(`${d.id.slice(0, 2)}${d.stacks > 1 ? d.stacks : ''}`, 247 + k * 34, y + 30);
+          });
         });
         // player 1's skill slots
         const p1 = v.players.find((p) => p.id === 1);
@@ -694,7 +764,11 @@ drops: ● walk-over · ■ click · grey ring = public (anyone) · red = blocke
         requestAnimationFrame(frame);
       }
       requestAnimationFrame(frame);
-      window.__sim = { run, world, join, cam, toScreen: (x, y) => ({ x: (x - cam.x) * cam.zoom + W / 2, y: (y - cam.y) * cam.zoom + H / 2 }) };
+      // Screenshot / console hooks: step with the bots (stepOnce), freeze the real-time loop (pause).
+      window.__sim = {
+        run, world, join, cam, stepOnce, pause: (on = true) => { paused = on; },
+        toScreen: (x, y) => ({ x: (x - cam.x) * cam.zoom + W / 2, y: (y - cam.y) * cam.zoom + H / 2 }),
+      };
     </script>
   </body>
 </html>

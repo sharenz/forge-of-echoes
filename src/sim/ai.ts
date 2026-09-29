@@ -1,37 +1,26 @@
 // Monster update: target selection (the nearest living player, with hysteresis), staggered
-// pack-level thinking, boids-style separation through the grid, per-kind brains for the regular
-// roster, and integration (knockback, props, arena, player bodies).
-import { MONSTER_KINDS } from '../contracts/content';
+// pack-level thinking, boids-style separation through the grid, the per-kind brains of the rosters
+// (src/sim/rosters; bosses through the phase driver in bosses.ts), and integration (knockback,
+// props, arena, player bodies).
 import { AILMENT_BIT } from '../contracts/sim';
-import { BEHAVIOUR, ELITE, KIND_INDEX } from './archetypes';
-import {
-  MONSTER_ANIM as ANIM, MSTATE, extraProjectiles, empowerMult, faceTarget, fireHostile, meleeHit, moveAlong, muzzleOffset, setAnim,
-  steer, stop, toChase, wander,
-} from './behaviour';
-import { brainHerald, brainMatriarch } from './bosses';
-import { spawnArea } from './areas';
+import { ELITE } from './archetypes';
+import { MONSTER_ANIM as ANIM, MSTATE, setAnim, stop, turnToward } from './behaviour';
+import { driveBoss } from './bosses';
 import { tickIgnite } from './combat';
 import {
-  AGGRO_RADIUS, CHILL_SLOW, DT, EMPOWER_BONUS, KNOCKBACK_RATE, LARGE_BODY_RADIUS, MEMBER_AGGRO_RADIUS, MONSTER_HIT_FLASH_DECAY,
-  PACK_THINK_INTERVAL, PLAYER_RADIUS, RETARGET_RATIO, SEPARATION_MAX_STEP, SEPARATION_RELAX, SLEEP_RADIUS, SPIT_FLIGHT,
-  WARDED_ALLY_RADIUS,
+  AGGRO_RADIUS, CHILL_SLOW, DT, EMPOWER_BONUS, HASTE_BONUS, KNOCKBACK_RATE, LARGE_BODY_RADIUS, MEMBER_AGGRO_RADIUS,
+  MONSTER_HIT_FLASH_DECAY, PACK_THINK_INTERVAL, PLAYER_RADIUS, PROP_SIDE_MEMORY, PROP_SLIDE_TIME, PROP_STUCK_PROGRESS, PROP_STUCK_TIME,
+  RETARGET_RATIO,
+  SEPARATION_MAX_STEP, SEPARATION_RELAX, SLEEP_RADIUS, WARDED_ALLY_RADIUS,
 } from './constants';
 import { resolveProps } from './grid';
-import { DAMAGE_INDEX, TAU } from './math';
-import { PROJ } from './projectiles';
+import { TAU } from './math';
+import { monsterDefs } from './rosters';
 import { MFLAG } from './stores';
 import type { PlayerState, World } from './world';
 
-const ASHLING = KIND_INDEX.ashling;
-const SKITTER = KIND_INDEX.emberSkitter;
-const SPITTER = KIND_INDEX.cinderSpitter;
-const STALKER = KIND_INDEX.riftStalker;
-const BRUTE = KIND_INDEX.ironhideBrute;
-const HERALD = KIND_INDEX.ashboundHerald;
-const MATRIARCH = KIND_INDEX.cinderMatriarch;
-const DUMMY = KIND_INDEX.trainingDummy;
-
 const RETARGET2 = RETARGET_RATIO * RETARGET_RATIO;
+const GHOST = MFLAG.ghost;
 
 /** Squared distance to the nearest *present* player from the last pickTarget call (sleep check). */
 let nearestPresentD2 = Infinity;
@@ -77,6 +66,7 @@ export function updateMonsters(w: World): void {
   thinkPacks(w);
   computeSeparation(w);
   const m = w.monsters;
+  const defs = monsterDefs();
   // m.hwm is re-read every iteration: summons spawned mid-loop still act this tick.
   for (let i = 0; i < m.hwm; i++) {
     if (!m.alive[i]) continue;
@@ -89,6 +79,7 @@ export function updateMonsters(w: World): void {
     if (m.chillTime[i] > 0) m.chillTime[i] -= DT;
     if (m.shockTime[i] > 0) m.shockTime[i] -= DT;
     if (m.empowerTime[i] > 0) m.empowerTime[i] -= DT;
+    if (m.hasteTime[i] > 0) m.hasteTime[i] -= DT;
     if (m.groundCd[i] > 0) m.groundCd[i] -= DT;
     // Burning (a phase-immune boss lets the burn run out harmlessly; see tickIgnite).
     if (m.igniteTime[i] > 0 && tickIgnite(w, i, DT)) continue;
@@ -112,10 +103,10 @@ export function updateMonsters(w: World): void {
       continue;
     }
 
-    const kind = m.kind[i];
+    const def = defs[m.kind[i]];
     const t = pickTarget(w, i);
-    if (kind === DUMMY) {
-      brainDummy(w, i, t);
+    if (def.role === 'dummy') {
+      def.brain(w, i, t, 0, 0, 1e9, false);
       integrate(w, i); // rooted, but still a solid body players bump into
       continue;
     }
@@ -135,16 +126,12 @@ export function updateMonsters(w: World): void {
       continue;
     }
     if (m.mods[i] & ELITE.warded && (w.tick + i) % 10 === 0) updateWarded(w, i);
-    switch (kind) {
-      case ASHLING: brainAshling(w, i, t, dx, dy, d, hunting); break;
-      case SKITTER: brainSkitter(w, i, t, dx, dy, d, hunting); break;
-      case SPITTER: brainSpitter(w, i, t, dx, dy, d, hunting); break;
-      case STALKER: brainStalker(w, i, t, dx, dy, d, hunting); break;
-      case BRUTE: brainBrute(w, i, t, dx, dy, d, hunting); break;
-      case HERALD: brainHerald(w, i, t, dx, dy, d, hunting); break;
-      case MATRIARCH: brainMatriarch(w, i, t, dx, dy, d, hunting); break;
-    }
-    if (m.alive[i]) integrate(w, i);
+    if (def.boss) driveBoss(w, i, def, t, dx, dy, d, hunting);
+    else def.brain(w, i, t, dx, dy, d, hunting);
+    // A guarding shield turns toward its target at its own pace (flanking is the counterplay); the
+    // presenter shows it through `facing`, and a block through the 'blocked' event.
+    if (def.block && m.flags[i] & MFLAG.guard && t && m.alive[i]) turnToward(w, i, dx, dy, def.block.turnRate);
+    if (m.alive[i]) integrate(w, i, hunting);
   }
 }
 
@@ -208,6 +195,7 @@ function computeSeparation(w: World): void {
   const ys = m.y;
   const rs = m.radius;
   const alive = m.alive;
+  const flags = m.flags;
   const cols = g.cols;
   const start = g.cellStart;
   const items = g.items;
@@ -229,7 +217,7 @@ function computeSeparation(w: World): void {
       }
       for (let a = s0; a < e0; a++) {
         const i = items[a];
-        if (!alive[i]) continue;
+        if (!alive[i] || flags[i] & GHOST) continue;
         const ri = rs[i];
         if (ri > LARGE_BODY_RADIUS) {
           large++;
@@ -250,7 +238,7 @@ function computeSeparation(w: World): void {
             const dy = ys[j] - yi;
             if (dy > rr || dy < -rr) continue;
             const d2 = dx * dx + dy * dy;
-            if (d2 >= rr * rr || !alive[j]) continue;
+            if (d2 >= rr * rr || !alive[j] || flags[j] & GHOST) continue;
             pushApart(m, i, j, dx, dy, d2, rr);
           }
         }
@@ -267,12 +255,12 @@ function separateLarge(w: World): void {
   const m = w.monsters;
   const cand = w.scratch2;
   for (let i = 0; i < m.hwm; i++) {
-    if (!m.alive[i] || m.radius[i] <= LARGE_BODY_RADIUS) continue;
+    if (!m.alive[i] || m.radius[i] <= LARGE_BODY_RADIUS || m.flags[i] & GHOST) continue;
     const reach = m.radius[i] + w.grid.maxRadius;
     const n = w.grid.query(m.x[i] - reach, m.y[i] - reach, m.x[i] + reach, m.y[i] + reach, cand);
     for (let k = 0; k < n; k++) {
       const j = cand[k];
-      if (j === i || !m.alive[j]) continue;
+      if (j === i || !m.alive[j] || m.flags[j] & GHOST) continue;
       // Two large bodies: handle the pair once, from the lower slot.
       if (m.radius[j] > LARGE_BODY_RADIUS && j < i) continue;
       const dx = m.x[j] - m.x[i];
@@ -318,11 +306,29 @@ function pushApart(m: World['monsters'], i: number, j: number, dx: number, dy: n
   m.sepY[j] += ny * pj;
 }
 
-/** Apply desired velocity, separation, knockback, props, arena and the player bodies. */
-function integrate(w: World, i: number): void {
+/**
+ * Apply desired velocity, separation, knockback, props, arena and the player bodies.
+ *
+ * Heavy bodies walking (MSTATE.chase) can't squeeze through a gap between props narrower than they
+ * are, and props push straight back, so a boss steering at a player behind two standing stones would
+ * wedge there for good. When one makes (almost) no headway into props for PROP_STUCK_TIME it slides
+ * sideways — to the freer side — for PROP_SLIDE_TIME, which walks it around the obstacle (see
+ * slideStep / trackStuck). Only heavy bodies that are `hunting` do this: small monsters fit through
+ * every gap the layout leaves and the crowd jostles them loose, and an idle pack milling against a
+ * stone is harmless (it never fires in open ground or while milling: no drift of old paths).
+ */
+function integrate(w: World, i: number, hunting = false): void {
   const m = w.monsters;
   let vx = m.vx[i];
   let vy = m.vy[i];
+  const slider = hunting && (m.flags[i] & (MFLAG.heavy | GHOST)) === MFLAG.heavy && m.state[i] === MSTATE.chase;
+  const wishX = vx;
+  const wishY = vy;
+  if (slider && m.slide[i] !== 0) {
+    slideStep(w, i, vx, vy);
+    vx = slideOut.x;
+    vy = slideOut.y;
+  }
   const pushable = !(m.flags[i] & MFLAG.unpushable);
   let sx = 0;
   let sy = 0;
@@ -352,8 +358,11 @@ function integrate(w: World, i: number): void {
   let f = 1;
   if (m.chillTime[i] > 0) f *= 1 - CHILL_SLOW;
   if (m.empowerTime[i] > 0) f *= 1 + EMPOWER_BONUS;
-  let nx = m.x[i] + vx * f * DT + sx;
-  let ny = m.y[i] + vy * f * DT + sy;
+  if (m.hasteTime[i] > 0) f *= 1 + HASTE_BONUS;
+  const x0 = m.x[i];
+  const y0 = m.y[i];
+  let nx = x0 + vx * f * DT + sx;
+  let ny = y0 + vy * f * DT + sy;
 
   if (pushable) {
     const kx = m.kbX[i];
@@ -376,9 +385,12 @@ function integrate(w: World, i: number): void {
   }
 
   const r = m.radius[i];
-  const o = resolveProps(w.propGrid, nx, ny, r);
-  nx = o.x;
-  ny = o.y;
+  if ((m.flags[i] & GHOST) === 0) {
+    const o = resolveProps(w.propGrid, nx, ny, r);
+    nx = o.x;
+    ny = o.y;
+    if (slider) trackStuck(w, i, o.hit, x0, y0, nx, ny, wishX * f, wishY * f);
+  }
   const lim = w.arenaRadius - r;
   const d2 = nx * nx + ny * ny;
   if (d2 > lim * lim) {
@@ -422,9 +434,126 @@ function integrate(w: World, i: number): void {
 
   m.x[i] = nx;
   m.y[i] = ny;
-  if (vx > 1) m.facing[i] = 1;
-  else if (vx < -1) m.facing[i] = -1;
+  // A guarding shield faces where it aims (turnShield), not where it walks.
+  if ((m.flags[i] & MFLAG.guard) === 0) {
+    if (vx > 1) m.facing[i] = 1;
+    else if (vx < -1) m.facing[i] = -1;
+  }
   if (m.state[i] === MSTATE.chase) setAnim(w, i, vx * vx + vy * vy > 4 ? ANIM.move : ANIM.idle);
+}
+
+const slideOut = { x: 0, y: 0 };
+
+/** While sliding along props, this share of the step leans off their surface (so gaps don't catch it). */
+const SLIDE_LEAN = 0.25;
+/** Props within this of touching count for a sliding body's surface normal. */
+const SLIDE_CONTACT_PAD = 3;
+
+/**
+ * The velocity of a sliding heavy body (into `slideOut`), at its wish's speed: along the surface of
+ * the props it touches (perpendicular to their combined normal, leaning slightly off them), toward the
+ * side the sign of m.slide names — or sideways to its wish when it touches none. Counts the slide down.
+ * Side +1 is the wish turned a quarter anticlockwise (−y first for a wish along −x).
+ */
+function slideStep(w: World, i: number, vx: number, vy: number): void {
+  const m = w.monsters;
+  const side = m.slide[i] > 0 ? 1 : -1;
+  const left = Math.abs(m.slide[i]) - DT;
+  m.slide[i] = left > 1e-6 ? side * left : 0;
+  const l = Math.sqrt(vx * vx + vy * vy);
+  if (l < 1) {
+    slideOut.x = vx;
+    slideOut.y = vy;
+    return;
+  }
+  // Combined outward normal of the props it (nearly) touches.
+  const x = m.x[i];
+  const y = m.y[i];
+  const r = m.radius[i];
+  let nx = 0;
+  let ny = 0;
+  const near = w.propGrid.near(x, y);
+  for (let k = 0; k < near.length; k++) {
+    const p = near[k];
+    const dx = x - p.x;
+    const dy = y - p.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 1e-4 || d > p.radius + r + SLIDE_CONTACT_PAD) continue;
+    nx += dx / d;
+    ny += dy / d;
+  }
+  const nl = Math.sqrt(nx * nx + ny * ny);
+  let tx: number;
+  let ty: number;
+  if (nl > 1e-3) {
+    nx /= nl;
+    ny /= nl;
+    // Along the surface, on the side that matches "the wish turned by `side`".
+    tx = ny;
+    ty = -nx;
+    if ((-vy * side) * tx + (vx * side) * ty < 0) {
+      tx = -tx;
+      ty = -ty;
+    }
+    tx += nx * SLIDE_LEAN;
+    ty += ny * SLIDE_LEAN;
+  } else {
+    tx = -vy * side;
+    ty = vx * side;
+  }
+  const tl = Math.sqrt(tx * tx + ty * ty);
+  slideOut.x = (tx / tl) * l;
+  slideOut.y = (ty / tl) * l;
+}
+
+/**
+ * After the props resolved a heavy walker's step: count how long it has been walking into props
+ * without headway along its wish (wx, wy: the brain's velocity, already speed-scaled), and start a
+ * slide once that reaches PROP_STUCK_TIME. The first slide of an episode goes to the side where a
+ * probe step moves more freely; later ones keep that side until the body has been clear of props for
+ * PROP_SIDE_MEMORY, so it follows a wall to its end.
+ */
+function trackStuck(w: World, i: number, hit: boolean, x0: number, y0: number, nx: number, ny: number, wx: number, wy: number): void {
+  const m = w.monsters;
+  if (m.slide[i] !== 0) return;
+  if (!hit) {
+    // Clear of props: count the free time (negative) and forget the side after a while.
+    const t = Math.min(m.stuckTime[i], 0) - DT;
+    m.stuckTime[i] = t;
+    if (t <= -PROP_SIDE_MEMORY) {
+      m.stuckTime[i] = -PROP_SIDE_MEMORY;
+      m.slideSide[i] = 0;
+    }
+    return;
+  }
+  const wl = Math.sqrt(wx * wx + wy * wy);
+  const step = wl * DT;
+  if (step < 0.05 || ((nx - x0) * wx + (ny - y0) * wy) / wl >= PROP_STUCK_PROGRESS * step) {
+    // Against a prop but getting along (sliding off it): not stuck, and not clear of it either.
+    m.stuckTime[i] = 0;
+    return;
+  }
+  const t = Math.max(m.stuckTime[i], 0) + DT;
+  if (t < PROP_STUCK_TIME) {
+    m.stuckTime[i] = t;
+    return;
+  }
+  m.stuckTime[i] = 0;
+  let side = m.slideSide[i];
+  if (side === 0) {
+    // Probe a few steps to each side and slide where the props let it go further.
+    const r = m.radius[i];
+    const probe = Math.max(step * 6, r * 0.5);
+    const ux = wx / wl;
+    const uy = wy / wl;
+    let o = resolveProps(w.propGrid, nx - uy * probe, ny + ux * probe, r);
+    const plus = Math.hypot(o.x - nx, o.y - ny);
+    o = resolveProps(w.propGrid, nx + uy * probe, ny - ux * probe, r);
+    const minus = Math.hypot(o.x - nx, o.y - ny);
+    side = plus > minus + 1e-3 ? 1 : minus > plus + 1e-3 ? -1 : m.offsetAngle[i] < Math.PI ? 1 : -1;
+    m.slideSide[i] = side;
+  }
+  m.slide[i] = side * PROP_SLIDE_TIME;
 }
 
 /** Warded rares: 40% less damage taken while at least two allies stand close. */
@@ -444,273 +573,3 @@ function updateWarded(w: World, i: number): void {
   if (allies >= 2) m.flags[i] |= MFLAG.shielded;
   else m.flags[i] &= ~MFLAG.shielded;
 }
-
-// --- brains --------------------------------------------------------------------------------------
-
-function brainDummy(w: World, i: number, t: PlayerState | null): void {
-  const m = w.monsters;
-  stop(w, i);
-  if (m.stateTime[i] > 0) {
-    m.stateTime[i] -= DT;
-    if (m.stateTime[i] <= 0) setAnim(w, i, ANIM.idle);
-  }
-  faceTarget(w, i, t);
-}
-
-/** Ashling: walks at its player; a short windup, then a lunge-bite. */
-function brainAshling(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
-  const m = w.monsters;
-  const B = BEHAVIOUR.ashling;
-  const st = m.state[i];
-  if (st === MSTATE.windup) {
-    stop(w, i);
-    if (!t) {
-      toChase(w, i);
-      return;
-    }
-    faceTarget(w, i, t);
-    m.stateTime[i] -= DT;
-    if (m.stateTime[i] <= 0) {
-      m.state[i] = MSTATE.attack;
-      m.stateTime[i] = B.lungeTime;
-      setAnim(w, i, ANIM.attack);
-      // The lunge carries the ashling forward a few units.
-      m.kbX[i] += (dx / d) * B.lungeSpeed * B.lungeTime * 0.5;
-      m.kbY[i] += (dy / d) * B.lungeSpeed * B.lungeTime * 0.5;
-      if (d <= m.radius[i] + PLAYER_RADIUS + B.reach + 4) meleeHit(w, i, t);
-      m.attackCd[i] = B.cooldown;
-    }
-    return;
-  }
-  if (st === MSTATE.attack) {
-    stop(w, i);
-    m.stateTime[i] -= DT;
-    if (m.stateTime[i] <= 0) toChase(w, i);
-    return;
-  }
-  if (!hunting) {
-    wander(w, i);
-    return;
-  }
-  steer(w, i, dx, dy, d, 1);
-  if (m.attackCd[i] <= 0 && d <= m.radius[i] + PLAYER_RADIUS + B.reach) {
-    m.state[i] = MSTATE.windup;
-    m.stateTime[i] = B.windup;
-    setAnim(w, i, ANIM.windup);
-    stop(w, i);
-  }
-}
-
-/** Ember Skitter: fast, zig-zagging in bursts; quick bites without windup. */
-function brainSkitter(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
-  const m = w.monsters;
-  const B = BEHAVIOUR.skitter;
-  if (m.state[i] === MSTATE.attack) {
-    stop(w, i);
-    m.stateTime[i] -= DT;
-    if (m.stateTime[i] <= 0) toChase(w, i);
-    return;
-  }
-  if (!hunting || !t) {
-    wander(w, i);
-    return;
-  }
-  const time = w.time;
-  const ph = m.phase[i];
-  const weave = Math.sin(time * B.zigzagFreq + ph) * B.zigzagAmp * (d > 40 ? 1 : 0.3);
-  const burst = 0.55 + 0.9 * Math.max(0, Math.sin(time * B.burstFreq + ph * 1.7));
-  const ang = Math.atan2(dy, dx) + weave;
-  const v = m.speed[i] * burst;
-  m.vx[i] = Math.cos(ang) * v;
-  m.vy[i] = Math.sin(ang) * v;
-  if (m.attackCd[i] <= 0 && d <= m.radius[i] + PLAYER_RADIUS + B.reach) {
-    meleeHit(w, i, t);
-    m.attackCd[i] = B.cooldown;
-    m.state[i] = MSTATE.attack;
-    m.stateTime[i] = B.biteTime;
-    setAnim(w, i, ANIM.attack);
-    stop(w, i);
-  }
-}
-
-/**
- * Cinder Spitter: keeps 140–220 away and lobs fire spit every 2.4 s. The spit is a true lob:
- * it flies for exactly SPIT_FLIGHT seconds toward where its player is heading and bursts where
- * it lands (radius SPIT_SPLASH_RADIUS), so its landing spot is readable and dodgeable. The
- * presenter draws its height as 4h·u(1−u) with u = age / life.
- */
-function brainSpitter(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
-  const m = w.monsters;
-  const B = BEHAVIOUR.spitter;
-  if (m.state[i] === MSTATE.cast) {
-    stop(w, i);
-    if (!t) {
-      toChase(w, i);
-      return;
-    }
-    faceTarget(w, i, t);
-    m.stateTime[i] -= DT;
-    if (m.stateTime[i] <= 0) {
-      const tx = t.x + t.vx * B.lead - m.x[i];
-      const ty = t.y + t.vy * B.lead - m.y[i];
-      const base = Math.atan2(ty, tx);
-      // Ground distance from the muzzle to the landing point; the speed makes it land on time.
-      const dist = Math.min(B.range, Math.max(B.minRange, Math.hypot(tx, ty))) - muzzleOffset(w, i);
-      const speed = Math.max(0, dist) / SPIT_FLIGHT;
-      const count = 1 + extraProjectiles(w);
-      const dmg = m.damage[i] * empowerMult(w, i);
-      for (let k = 0; k < count; k++) {
-        const a = base + (k - (count - 1) / 2) * B.spread;
-        fireHostile(w, i, PROJ.cinderSpit, a, speed, dist, B.radius, dmg, DAMAGE_INDEX.fire, SPIT_FLIGHT);
-      }
-      w.events.push({ t: 'monsterAttack', kind: MONSTER_KINDS[m.kind[i]], x: m.x[i], y: m.y[i], attack: 'spit' });
-      setAnim(w, i, ANIM.attack);
-      m.state[i] = MSTATE.attack;
-      m.stateTime[i] = 0.25;
-      m.attackCd[i] = B.cooldown + w.worldRng.range(0, 0.5);
-    }
-    return;
-  }
-  if (m.state[i] === MSTATE.attack) {
-    stop(w, i);
-    m.stateTime[i] -= DT;
-    if (m.stateTime[i] <= 0) toChase(w, i);
-    return;
-  }
-  if (!hunting) {
-    wander(w, i);
-    return;
-  }
-  if (d < B.near) moveAlong(w, i, -dx, -dy, 1);
-  else if (d > B.far) steer(w, i, dx, dy, d, 1);
-  else {
-    // Strafe around the player while in the comfort band.
-    const side = m.offsetAngle[i] > Math.PI ? 1 : -1;
-    moveAlong(w, i, -dy * side, dx * side, 0.4);
-  }
-  if (m.attackCd[i] <= 0 && d < B.fireRange) {
-    m.state[i] = MSTATE.cast;
-    m.stateTime[i] = B.windup;
-    setAnim(w, i, ANIM.windup);
-    stop(w, i);
-  }
-}
-
-/** Rift Stalker: every 4 s marks its player's position (0.6 s) and leaps onto it. */
-function brainStalker(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
-  const m = w.monsters;
-  const B = BEHAVIOUR.stalker;
-  const st = m.state[i];
-  if (st === MSTATE.windup) {
-    stop(w, i);
-    m.facing[i] = m.tx[i] >= m.x[i] ? 1 : -1;
-    m.stateTime[i] -= DT;
-    if (m.stateTime[i] <= 0) {
-      m.state[i] = MSTATE.leap;
-      m.stateTime[i] = B.flight;
-      m.sx[i] = m.x[i];
-      m.sy[i] = m.y[i];
-      m.flags[i] |= MFLAG.unpushable;
-      setAnim(w, i, ANIM.leap);
-      w.events.push({ t: 'monsterAttack', kind: 'riftStalker', x: m.x[i], y: m.y[i], attack: 'leap' });
-    }
-    return;
-  }
-  if (st === MSTATE.leap) {
-    stop(w, i);
-    m.stateTime[i] -= DT;
-    const t = Math.min(1, 1 - m.stateTime[i] / B.flight);
-    m.x[i] = m.sx[i] + (m.tx[i] - m.sx[i]) * t;
-    m.y[i] = m.sy[i] + (m.ty[i] - m.sy[i]) * t;
-    if (m.stateTime[i] <= 0) {
-      m.flags[i] &= ~MFLAG.unpushable;
-      m.state[i] = MSTATE.attack;
-      m.stateTime[i] = B.recover;
-      setAnim(w, i, ANIM.attack);
-    }
-    return;
-  }
-  if (st === MSTATE.attack) {
-    stop(w, i);
-    m.stateTime[i] -= DT;
-    if (m.stateTime[i] <= 0) {
-      toChase(w, i);
-      m.attackCd[i] = B.cooldown;
-    }
-    return;
-  }
-  if (!hunting || !t) {
-    wander(w, i);
-    return;
-  }
-  steer(w, i, dx, dy, d, 1);
-  if (m.attackCd[i] <= 0 && d < B.trigger && d > B.minTrigger) {
-    let tx = t.x;
-    let ty = t.y;
-    const lim = w.arenaRadius - m.radius[i];
-    const tl = Math.hypot(tx, ty);
-    if (tl > lim) {
-      tx *= lim / tl;
-      ty *= lim / tl;
-    }
-    m.tx[i] = tx;
-    m.ty[i] = ty;
-    spawnArea(w, 'leapWarning', tx, ty, B.radius, B.windup + B.flight, {
-      damage: m.damage[i] * empowerMult(w, i), dtype: DAMAGE_INDEX.void, hurts: 'player', owner: m.id[i],
-    });
-    m.state[i] = MSTATE.windup;
-    m.stateTime[i] = B.windup;
-    setAnim(w, i, ANIM.windup);
-    stop(w, i);
-  }
-}
-
-/** Ironhide Brute: slow and armoured; a 0.9 s telegraphed slam. */
-function brainBrute(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
-  const m = w.monsters;
-  const B = BEHAVIOUR.brute;
-  const st = m.state[i];
-  if (st === MSTATE.windup) {
-    stop(w, i);
-    m.stateTime[i] -= DT;
-    if (m.stateTime[i] <= 0) {
-      m.state[i] = MSTATE.attack;
-      m.stateTime[i] = B.recover;
-      setAnim(w, i, ANIM.attack);
-      w.events.push({ t: 'monsterAttack', kind: 'ironhideBrute', x: m.tx[i], y: m.ty[i], attack: 'slam' });
-    }
-    return;
-  }
-  if (st === MSTATE.attack) {
-    stop(w, i);
-    m.stateTime[i] -= DT;
-    if (m.stateTime[i] <= 0) {
-      toChase(w, i);
-      m.attackCd[i] = B.cooldown;
-    }
-    return;
-  }
-  if (!hunting) {
-    wander(w, i);
-    return;
-  }
-  steer(w, i, dx, dy, d, 1);
-  const r = m.radius[i];
-  if (m.attackCd[i] <= 0 && d < r + B.radius + PLAYER_RADIUS * 0.5) {
-    const ux = dx / d;
-    const uy = dy / d;
-    const cx = m.x[i] + ux * (r + 12);
-    const cy = m.y[i] + uy * (r + 12);
-    m.tx[i] = cx;
-    m.ty[i] = cy;
-    faceTarget(w, i, t);
-    spawnArea(w, 'slamWarning', cx, cy, B.radius, B.windup, {
-      damage: m.damage[i] * empowerMult(w, i), dtype: DAMAGE_INDEX.physical, hurts: 'player', owner: m.id[i],
-    });
-    m.state[i] = MSTATE.windup;
-    m.stateTime[i] = B.windup;
-    setAnim(w, i, ANIM.windup);
-    stop(w, i);
-  }
-}
-

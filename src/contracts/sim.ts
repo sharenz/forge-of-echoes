@@ -14,6 +14,8 @@
 // can never drift. The sim owns *behaviour*: movement, AI, collisions, projectiles, waves, packs, bosses, drops.
 import type { DamageType, FlaskId, MonsterKind, PlayerFlag, SkillId, Theme } from './content';
 import type { Rng } from './rng';
+import type { PlayerDebuff } from './bestiary';
+import { NEW_AREA_KINDS, NEW_PROJECTILE_KINDS } from './bestiary';
 
 export const SIM_HZ = 60;
 export const SIM_DT = 1 / SIM_HZ;
@@ -218,6 +220,7 @@ export const AILMENT_BIT = { burning: 1, chilled: 2, shocked: 4, shielded: 8, em
 export const PROJECTILE_KINDS = [
   'emberLance', 'novaFlame', 'flameWave', 'rimeShard', // player
   'cinderSpit', 'heraldOrb', 'matriarchOrb',            // monster
+  ...NEW_PROJECTILE_KINDS,                              // Ossuary / Coliseum rosters (appended: stable indices)
 ] as const;
 export type ProjectileKind = (typeof PROJECTILE_KINDS)[number];
 
@@ -229,10 +232,24 @@ export const AREA_KINDS = [
   'firePool',         // burning ground hurting the player (boss/eruption aftermath)
   'fireTrail',        // player's burning ground (Cinderwalkers) hurting monsters
   'heraldAura',       // lieutenant's empowering aura
+  ...NEW_AREA_KINDS,  // Ossuary / Coliseum rosters (see contracts/bestiary.ts for each kind's meaning)
 ] as const;
 export type AreaKind = (typeof AREA_KINDS)[number];
 
 export type PlayerAnim = 'idle' | 'run' | 'cast' | 'dash' | 'hit' | 'death';
+
+/** Where a root came from (picks the art variant). */
+export type RootSource = 'bone' | 'web' | 'chain' | 'tar';
+
+/** An active debuff on a player (GAME_SPEC §13). */
+export interface PlayerDebuffView {
+  id: PlayerDebuff;
+  remaining: number;          // seconds
+  duration: number;           // seconds (full duration of the current application)
+  stacks: number;             // 1 for non-stacking debuffs
+  /** Rooted only: what is holding the player. */
+  source: RootSource | null;
+}
 
 export interface SlotView {
   skillId: SkillId | null;
@@ -273,6 +290,8 @@ export interface PlayerView {
   invulnTime: number;
   hitFlash: number;           // 0..1 decays after taking damage
   dead: boolean;
+  /** Active debuffs (empty when none). Chilled/frozen/rooted change movement & casting in the sim. */
+  debuffs: PlayerDebuffView[];
   slots: SlotView[];          // LOADOUT_SLOTS
   flasks: (FlaskSlotView | null)[]; // BELT_SLOTS
 }
@@ -409,7 +428,16 @@ export type SimEvent =
   | { t: 'evade'; playerId: number; x: number; y: number; target: 'monster' | 'player' }
   | { t: 'projectileEnd'; kind: ProjectileKind; x: number; y: number }
   | { t: 'death'; kind: MonsterKind; rarity: number /* RARITY_CODE */; x: number; y: number; facing: number; damageType: DamageType }
-  | { t: 'monsterAttack'; kind: MonsterKind; x: number; y: number; attack: 'melee' | 'spit' | 'leap' | 'slam' | 'summon' | 'orb' | 'meteor' | 'charge' }
+  | { t: 'monsterAttack'; kind: MonsterKind; x: number; y: number; attack: 'melee' | 'spit' | 'leap' | 'slam' | 'summon' | 'orb' | 'meteor' | 'charge'
+      | 'web' | 'hook' | 'aim' | 'bolt' | 'tar' | 'nova' | 'spikes' | 'prison' | 'blizzard' | 'whirl' | 'mark' | 'sing' | 'pulse' | 'burst' | 'bash' }
+  /** A debuff was applied to / refreshed on a player. */
+  | { t: 'debuff'; playerId: number; debuff: PlayerDebuff; stacks: number; x: number; y: number }
+  /** Debuffs removed by a flask / death. */
+  | { t: 'cleanse'; playerId: number; debuffs: PlayerDebuff[]; x: number; y: number }
+  /** A shieldbearer blocked a player projectile from the front. */
+  | { t: 'blocked'; x: number; y: number }
+  /** A chain hook pulled a player toward (toX, toY). */
+  | { t: 'pull'; playerId: number; fromX: number; fromY: number; toX: number; toY: number }
   | { t: 'monsterSpawn'; kind: MonsterKind; rarity: number; x: number; y: number }
   | { t: 'ailment'; ailment: 'burning' | 'chilled' | 'shocked'; x: number; y: number }
   | { t: 'areaResolve'; kind: AreaKind; x: number; y: number; radius: number }

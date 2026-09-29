@@ -4,6 +4,13 @@ An online browser action RPG: **Path of Exile itemization and crafting × Vampir
 gear and your maps in a hideout, open a map with friends, fight six escalating waves up to a boss, and come home with
 loot to craft again.
 
+- Three map types, each with its own monster family, lieutenant and boss: the **Ashen Forge** (fire; the Ashbound
+  Herald and the Cinder Matriarch), the **Rimed Ossuary** (cold and bone; the Bone Chorister and The Hollow Warden)
+  and the **Iron Coliseum** (steel and blood; The Chainmaster and Varkus, the Iron Champion).
+- Monsters inflict **debuffs** you can read and answer: Chilled, Frozen, Rooted, Burning, Bleeding, Shocked and
+  Withered, each with its own look on your character, an icon and timer on the HUD, and a counter (see below).
+- **Special stash tabs**: a Map Stash for 400 maps, and a Crafting Stash with a slot for every currency (5,000 each)
+  that you can craft from directly.
 - Pixel-art world with dynamic lights, rendered by our own WebGL2 renderer; procedural art and audio (no image or
   sound files).
 - One authoritative Node server runs the rules and a deterministic 60 Hz simulation for every hideout and map. The
@@ -69,7 +76,8 @@ A party has up to 4 players; so does every map.
 | `Enter` | Chat (party chat; `/trade <name>` requests a trade) |
 | `Esc` | Close the top panel, or open the menu (the world keeps running: the game is online) |
 | `Alt` (hold) | Affix tiers, roll ranges and a comparison with your equipped item |
-| `Ctrl`/`⌘` + click | Quick-move an item (backpack ↔ stash, into a trade offer, onto the crafting bench) |
+| `Ctrl`/`⌘` + click | Quick-move an item (backpack ↔ stash or a special stash tab, into a trade offer, onto the crafting bench, into the open map device) |
+| `Shift` + `Ctrl`/`⌘` + click | Take exactly 1 currency from a Crafting Stash slot; gear or a map in the stash goes onto the crafting bench |
 | `RMB` on a currency, then `LMB` on an item | Apply the currency (`Esc` or `RMB` cancels) |
 | Click a hideout object | Map Device, stash, Rook the merchant, the anvil (Crafting Bench) |
 | Click a portal | Enter the map (from anywhere in the hideout); in a map, the return portal takes you back |
@@ -95,10 +103,47 @@ affixes. It costs 1 Stability with no scar risk. An item holds at most one bench
 "crafted" and can be removed for free ("Clear crafted affix"). The bench also lists every currency you carry: click
 one to apply it to the bench item, with the odds preview.
 
+**Special stash tabs.** Next to your normal stash tabs are three icon tabs; they don't count towards the tab limit.
+- **Map Stash** (up to 400 maps): Ctrl-click or drag a map in and it files itself by tier and map type. Maps are
+  listed by tier (click a tier) and grouped by map type, with their mods and a full tooltip. Drag one out, Ctrl-click
+  it to your backpack, or pick it straight from the **Map Device** panel, which lists your Map Stash.
+- **Crafting Stash** (two tabs: equipment currency and map currency): one labelled slot per currency, up to 5,000
+  each. Drop or Ctrl-click any currency stack onto either tab and it files into its slot; **Deposit all** empties your
+  backpack's currency into it. Ctrl-click a slot to take a stack, Shift+Ctrl-click to take exactly one. Right-click a
+  slot to arm that currency and left-click an item to craft with it straight from the stash. Rook and the Crafting
+  Bench take what your backpack can't pay from the Crafting Stash, so "Deposit all" never leaves you short.
+
 **Stash search.** The search box on the stash panel (`Ctrl`/`⌘`+`F` while the stash is open, `Esc` clears it)
 highlights matching items in every tab and in your backpack and dims the rest; each tab shows its match count. It
 matches names, base types, affix texts and names, tags, currency and map names, and rarity words. Space-separated
 terms must all match, `"quoted phrases"` match as a whole, `a|b` matches either, and `!term` excludes.
+
+## Map types, bosses and debuffs
+
+Every map type has its own family of five monsters, a **lieutenant** on wave 3 and a **boss** on wave 6. The map
+device readout names the boss and lists the map's **Afflictions** (which debuffs its monsters inflict, from what, and
+the counter).
+
+| Map type | Family | Lieutenant | Boss | Debuffs |
+|---|---|---|---|---|
+| Ashen Forge | Ashling, Ember Skitter, Cinder Spitter, Rift Stalker, Ironhide Brute | Ashbound Herald | Cinder Matriarch | Burning, Withered |
+| Rimed Ossuary | Bone Thrall, Rimeshade, Frost Weaver, Glacial Wisp, Ossuary Golem | Bone Chorister | The Hollow Warden | Chilled, Rooted, Frozen |
+| Iron Coliseum | Pit Hound, Chain Thrall, Iron Crossbowman, Shieldbearer, Tar Slinger | The Chainmaster | Varkus, the Iron Champion | Bleeding, Rooted |
+
+| Debuff | What it does | Counter |
+|---|---|---|
+| Chilled | 30% slower movement and casting | Cold resistance shortens it |
+| Frozen | Can't move or cast for 0.8 s (only from telegraphed attacks: an Ice Prison, a Glacial Wisp at point blank), then 3 s immune | Walk out of the telegraph |
+| Rooted | Can't move, can still cast; no new root for 3 s after one | **Rift Step** breaks it |
+| Burning | Fire damage over 3 s | Life flask; fire resistance shortens it |
+| Bleeding | Physical damage over 4 s, doubled while you move, stacks to 3 | Life flask; stand still |
+| Shocked | 20% more damage taken (no monster inflicts it yet) | Lightning resistance shortens it |
+| Withered | −12% to all elemental and void resistances per stack, stacks to 3 | Focus flask |
+
+A debuff never comes from an invisible source: every root and freeze comes from a projectile you can see or a
+telegraph you can read. Cinder Ward makes debuffs run out twice as fast; dying or killing the boss clears them. Hold
+`Alt` (or open a panel) and hover a debuff icon for its details. Iron Coliseum tips: Shieldbearers block your
+projectiles from the front (flank them), and Varkus's charge lane is drawn before he runs it.
 
 ## Deploying
 

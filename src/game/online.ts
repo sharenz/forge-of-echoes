@@ -80,6 +80,8 @@ export function withServerEntropy(base: GameRulesApi, entropy: () => number): Ga
 export const LOCKED_ITEM_ERROR = 'That item is in your trade offer. Take it out of the offer or cancel the trade first.';
 /** Refusal for a command that would have moved, merged into, spent or changed a locked item on the way. */
 export const LOCKED_CHANGE_ERROR = 'That would change an item in your trade offer. Take it out of the offer or cancel the trade first.';
+/** Refusal for "Deposit all" when every currency stack in the backpack is in the trade offer. */
+export const LOCKED_CURRENCY_ERROR = 'Your currency is in your trade offer. Take it out of the offer or cancel the trade first.';
 
 /** The uids locked for a character (its items in an open trade offer); null / empty = nothing locked. */
 export type LockedUids = (ch: CharacterSave) => ReadonlySet<string> | null | undefined;
@@ -89,7 +91,9 @@ export type LockedUids = (ch: CharacterSave) => ReadonlySet<string> | null | und
  * rule that can touch an item refuses to move, craft, discard, spend or top up a locked one, and pays
  * from the other stacks instead (src/game/items/locks.ts):
  *   moveItem / quickMove / discardItem / applyCurrency / applyBenchRecipe / clearCraftedAffix aimed at a
- *     locked uid → LOCKED_ITEM_ERROR; craftingTargetError answers the same text;
+ *     locked uid → LOCKED_ITEM_ERROR; craftingTargetError answers the same text; depositAllCurrency files
+ *     every other currency stack and leaves the locked ones in the backpack (LOCKED_CURRENCY_ERROR when
+ *     they are all it holds);
  *   anything that would disturb a locked item on the way (a swap that displaces it, a stack merged into
  *     it) → LOCKED_CHANGE_ERROR;
  *   addToBackpack (pickups, refunds) never tops up a locked stack; buyOffer / applyBenchRecipe never pay
@@ -133,8 +137,17 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
   const withOutcomeCharacter = <T extends { character: CharacterSave }>(v: T, c: CharacterSave): T => ({ ...v, character: c });
   return {
     ...base,
-    moveItem: (ch, uid, to) => guard(ch, [uid], (c) => base.moveItem(c, uid, to), plain, replace),
+    moveItem: (ch, uid, to, count) => guard(ch, [uid], (c) => base.moveItem(c, uid, to, count), plain, replace),
     quickMove: (ch, uid, ctx) => guard(ch, [uid], (c) => base.quickMove(c, uid, ctx), plain, replace),
+    // Locked currency stacks are masked as inert stand-ins, so "Deposit all" leaves them in the backpack.
+    // When they are all the backpack holds, the refusal says so instead of "There is no currency".
+    depositAllCurrency: (ch) => {
+      const result = guard(ch, [], (c) => base.depositAllCurrency(c), plain, replace);
+      const locked = locksOf(ch);
+      if (result.ok || !locked) return result;
+      const stacks = ch.backpack.entries.filter((e) => e.item.kind === 'currency' && e.item.count > 0);
+      return stacks.length > 0 && stacks.every((e) => locked.has(e.item.uid)) ? { ok: false, error: LOCKED_CURRENCY_ERROR } : result;
+    },
     addToBackpack: (ch, item) => guard(ch, [], (c) => base.addToBackpack(c, item), plain, replace),
     discardItem: (ch, uid) => guard(ch, [uid], (c) => base.discardItem(c, uid), plain, replace),
     applyCurrency: (ch, currencyUid, targetUid, affixIndex) => guard(

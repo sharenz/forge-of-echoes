@@ -36,6 +36,11 @@ export function digestWorld(w: World): number {
     h.float(p.life);
     h.float(p.focus);
     h.int(p.dead ? 1 : 0);
+    const d = p.debuffs;
+    for (let k = 0; k < d.remaining.length; k++) {
+      h.float(d.remaining[k]);
+      h.int(d.stacks[k]);
+    }
   }
   const m = w.monsters;
   h.int(m.count);
