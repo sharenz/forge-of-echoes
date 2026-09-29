@@ -74,8 +74,8 @@
 //   • HUD map mods: HudRun.modLines are coloured danger / reward by matching them against
 //     describeItem(state.run.map).affixes, so keep `state.run` set while in a map.
 //   • Special stash tabs (GAME_SPEC §12): state.stashTab may be 'maps' | 'currency' | 'mapCurrency' (after the normal
-//     tabs; setStashTab(tab)). Pass it on as quickMove's ctx.stashTab so a Ctrl-click in the backpack files the item
-//     in the open special tab. The UI calls:
+//     tabs; setStashTab(tab)). Pass it on as quickMove's ctx.stashTab; maps and currency file into their special
+//     storage from any stash tab, while equipment and flasks use the selected normal tab. The UI calls:
 //       moveItem(uid, { kind: 'currencyStash' })  a currency dropped on either Crafting Stash tab (button or page)
 //       moveItem(uid, { kind: 'mapStash' })       a map dropped on the Map Stash tab / page / the device's picker
 //       moveItem('cstash:<id>', backpack cell)    a slot dragged out (no count: the rules take a full stack)
@@ -98,7 +98,7 @@
 //     the debuffs the wave can bring. HudRun.boss / lieutenant `name` may be a display name or a MonsterKind id;
 //     the bars show the full title ("hollowWarden" / "Hollow Warden" → "The Hollow Warden", "Varkus" →
 //     "Varkus, the Iron Champion"; src/ui/lib/content.ts).
-//   • CSS: tokens, layout geometry and the 12/14/17/25 type scale live in src/ui/styles/tokens.css (the only
+//   • CSS: tokens, layout geometry and the 14/16/19/28 type scale live in src/ui/styles/tokens.css (the only
 //     font sizes).
 import '@fontsource/cinzel/latin-600.css';
 import '@fontsource/cinzel/latin-700.css';
@@ -131,8 +131,8 @@ export function mountUi(root: HTMLElement, store: UiStore): () => void {
     // The browser menu would cover right-click crafting on UI surfaces.
     if ((e.target as Element | null)?.closest?.('.fe-solid')) e.preventDefault();
   };
-  // In game a clicked button / switch / slider hands its focus back straight away: Space is a skill key and
-  // would press the control again (an attribute point, a purchase, a map activation). Click still fires.
+  // In game a clicked button / switch / slider hands its focus back straight away, so keyboard input cannot
+  // press the control again (an attribute point, a purchase, a map activation). Click still fires.
   const releaseFocus = (): void => {
     if (store.get().screen !== 'game') return;
     const el = document.activeElement;

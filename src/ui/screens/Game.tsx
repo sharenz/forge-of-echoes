@@ -21,6 +21,7 @@ import { StashPanel } from '../panels/Stash';
 import { TradePanel } from '../panels/Trade';
 import { shallowEqual, useStore, useUi } from '../store';
 import { cx } from '../components/common';
+import { PlayerMenu } from '../components/PlayerMenu';
 import { useLocal } from '../local';
 
 function LeftPanel({ panel }: { panel: Panel }) {
@@ -98,6 +99,7 @@ export function GameScreen() {
       {vis.modal === 'help' && <HelpModal />}
       <RunSummaryModal />
       <AffixChoicePopover />
+      <PlayerMenu />
     </div>
   );
 }

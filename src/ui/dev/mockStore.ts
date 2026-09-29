@@ -40,6 +40,7 @@ export interface MockOptions {
   invite?: boolean;
   chat?: boolean;
   chatOpen?: boolean;
+  elite?: 'magic' | 'rare' | null;
   toasts?: boolean;
   levelUp?: boolean;
   error?: string | null;
@@ -450,6 +451,7 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
         { id: ++chatId, fromName: ME.name, text: 'on my way. anyone need a Rime Essence?', time: Date.now() - 60_000 },
         { id: ++chatId, fromName: '', text: 'Corvin has fallen.', time: Date.now() - 20_000 },
         { id: ++chatId, fromName: MIRA.name, text: 'boss at 30%, meteors incoming', time: Date.now() - 4_000 },
+        { id: ++chatId, fromName: 'Thane', text: 'Anyone up for a map?', time: Date.now() - 2_000, channel: 'global' },
       ]
     : [];
 
@@ -611,6 +613,7 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
           : [];
     return {
       zone: inMap ? 'map' : 'hideout',
+      hoveredMonster: opts.elite ? { id: 1, kind: 'ashling', rarity: opts.elite, mods: opts.elite === 'rare' ? 72 : 1, life: 0.65 } : null,
       debuffs: opts.dead ? [] : debuffs(),
       zoneOwnerName: zone === 'visit' || zone === 'partymap' ? MIRA.name : ME.name,
       zoneIsOwn: !(zone === 'visit' || zone === 'partymap'),
@@ -694,8 +697,8 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
   const toast = (text: string, tone: Toast['tone'] = 'info'): void => {
     set({ toasts: [...state.toasts, { id: ++toastId, text, tone }] });
   };
-  const chat = (fromName: string, text: string): void => {
-    set({ chat: [...state.chat, { id: ++chatId, fromName, text, time: Date.now() }].slice(-120) });
+  const chat = (fromName: string, text: string, channel: import('../../contracts/net').ChatChannel = 'party'): void => {
+    set({ chat: [...state.chat, { id: ++chatId, fromName, text, time: Date.now(), channel }].slice(-120) });
   };
 
   if (opts.armed) {
@@ -1168,8 +1171,8 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
     setChatOpen(open) {
       set({ chatOpen: open });
     },
-    sendChat(text) {
-      chat(ME.name, text);
+    sendChat(text, channel = 'global') {
+      chat(ME.name, text, channel);
     },
 
     leaveMap() {

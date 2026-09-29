@@ -112,7 +112,10 @@ describe('command results and state', () => {
     let kinds = p.conn.messages.slice(from).map((m) => m.t);
     expect(kinds).toEqual(['character', 'result']);
     // Second change right after: the push waits for its ≤ 5 Hz slot, and so does the result.
-    const second = p.session.record.ch.backpack.entries.find((e) => e.item.kind === 'currency')!.item.uid;
+    const secondItem = p.session.record.ch.backpack.entries.find((e) => e.item.kind === 'currency')!.item;
+    if (secondItem.kind !== 'currency') throw new Error('Expected a currency');
+    const second = secondItem.uid;
+    const expectedCount = (p.session.record.ch.currencyStash[secondItem.currencyId] ?? 0) + secondItem.count;
     from = p.mark();
     p.send({ t: 'cmd', id: 901, cmd: { c: 'quickMove', uid: second, stashTab: 0 } });
     expect(p.conn.messages.slice(from)).toHaveLength(0);
@@ -124,7 +127,8 @@ describe('command results and state', () => {
     kinds = p.conn.messages.slice(from).map((m) => m.t);
     expect(kinds).toEqual(['result', 'character', 'result']);
     const pushed = p.conn.messages.slice(from).find((m): m is Extract<ServerMessage, { t: 'character' }> => m.t === 'character')!;
-    expect(pushed.character.stash[0].grid.entries.some((e) => e.item.uid === second)).toBe(true);
+    expect(pushed.character.currencyStash[secondItem.currencyId]).toBe(expectedCount);
+    expect(pushed.character.backpack.entries.some((e) => e.item.uid === second)).toBe(false);
     expect((p.conn.messages.at(-1) as Extract<ServerMessage, { t: 'result' }>).id).toBe(901);
   });
 });

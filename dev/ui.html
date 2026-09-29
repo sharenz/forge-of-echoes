@@ -36,6 +36,7 @@
       //   ?armed=scrap (hovers the first valid target)   ?affix=seal|catalyst|fractureCore
       //   ?drag=ok|bad|world|equip|bench|offer   ?summary=cleared|failed|abandoned (or 1)   ?alt=1   ?levelup=1
       //   ?party=0|1 (1 opens the party panel)  &leader=1 (you lead)  ?invite=1  ?chat=1  ?chatopen=1  ?toasts=1  ?still=1
+      //   ?elite=magic|rare (monster hover card)
       //   ?bench=1|crafted (item on the crafting bench; implied by panels=craftingBench)
       //   ?trade=1|locked|waiting (a trade with Mira: she accepted / accept countdown / you wait for her)
       //   ?tradeRequest=1 (Corvin asks to trade)   ?search=life (opens the stash with that query)   ?chattext=/trade%20Mira
@@ -146,6 +147,7 @@
         invite: flag('invite'),
         chat: flag('chat') || flag('chatopen'),
         chatOpen: flag('chatopen'),
+        elite: q.get('elite'),
         toasts: flag('toasts'),
         levelUp: flag('levelup'),
         error: q.get('error'),

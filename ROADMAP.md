@@ -4,6 +4,11 @@ Maintained at the owner's request. Ask "what's next" and it is read from here; i
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
 Last reprioritised: 2026-09-29.
 
+**Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
+verify the resulting game and deploy it to production. QoL implementation is verified locally and awaiting deployment;
+account storage, Atlas, events, ingredients, high-level bases, sinks, expanded maps, remaining content and the
+map tree remain part of this delivery until individually completed and verified.
+
 **Current order:** fix the known UI layout problems → fix stash quick-move → show monster pack modifiers →
 social UI (global chat and party avatars) → account-wide storage → Atlas vertical slice → events and crafting progression → more map content.
 Priorities follow current usability problems, then progression dependencies. Wave-3 boss reuse is later content work.
@@ -83,6 +88,12 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
   Live health reports protocol 3; public JavaScript/CSS match the tested build. Live T1 remains level 4.
 
 ## P0: usability and combat readability (do these next, in order)
+
+**Implementation complete; production deployment pending.** Build/typecheck and all 1,801 always-on tests pass
+(12 on-demand balance checks skipped; this release changes no combat tuning). The production-build browser
+scenario verifies two clients' global and party chat, right-click invitation/acceptance, avatar hideout travel
+and avatar trade with no client errors. Character/party layout and elite hover cards checked at 1024×600 and
+1280×720. Protocol 5 refreshes old clients. The full map-progression block below remains outstanding.
 
 1. **Fix known UI layout problems after the font bump.** "Intelligence" collides with its `+` button in the
    character panel; party row metadata ("Ashen Forge T3 / 6/8 portals") wraps unevenly. Verify these fixes at

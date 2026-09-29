@@ -13,7 +13,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 2: level-based balance. Old tabs otherwise reconnect with stale tooltip and prediction rules.
 // 3: phase-2 affix ladders, resistance scaling and immediate kill XP (no orbs).
 // 4: freely assignable skills, RMB casting and stronger magic/rare monsters.
-export const PROTOCOL_VERSION = 4;
+// 5: global chat channels and automatic special-stash routing from every stash tab.
+export const PROTOCOL_VERSION = 5;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -128,7 +129,7 @@ export type Command =
   | { c: 'leaveMap' }
   /** Dead in a map → back to the map owner's hideout (or your own). */
   | { c: 'respawn' }
-  | { c: 'chat'; text: string }
+  | { c: 'chat'; text: string; channel?: ChatChannel }
   // --- trading (atomic, server-side; see TradeInfo) ---
   /** Ask an online player (by character name) to trade. */
   | { c: 'tradeRequest'; name: string }
@@ -199,6 +200,8 @@ export interface PartyMemberInfo {
   activeMap: PortalInfo | null;
 }
 
+export type ChatChannel = 'global' | 'party';
+
 export interface PartyInfo {
   id: string;
   leaderId: string;
@@ -260,7 +263,7 @@ export type ServerMessage =
   | { t: 'toast'; text: string; tone: 'info' | 'good' | 'bad' | ItemTone }
   | { t: 'party'; party: PartyInfo | null }
   | { t: 'invite'; invite: PartyInvite }
-  | { t: 'chat'; fromName: string; text: string; time: number }
+  | { t: 'chat'; fromName: string; text: string; time: number; channel?: ChatChannel }
   | { t: 'runSummary'; summary: RunSummaryInfo }
   | { t: 'pong'; time: number; serverTime: number; serverTick: number }
   | { t: 'tradeRequest'; request: TradeRequestInfo }

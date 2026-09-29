@@ -307,6 +307,8 @@ Reward-only mods (Reward Ink):
 **Pack rarity:**
 - Magic chance: 10% × magicPackChance multiplier. The whole pack is magic and shares one mod: Swift (+30% speed), Stout (+70% life) or Fierce (+40% damage). Blue outline.
 - Rare chance: 3% × multiplier. A single rare leader gets 2 mods from Juggernaut (+200% life), Frenzied (+50% speed), Ember-touched (fire burst on death, telegraphed) and Warded (40% less damage while allies are near). Gold outline and its name floats above it. The rest of the pack is normal.
+- Hovering a magic or rare monster shows its name, rarity, life and modifier explanations at the top centre.
+  The card clears over UI or empty space and when the monster dies.
 
 **Rarity strength:** every magic monster has ×1.5 life and ×1.2 damage; a rare leader has ×3 life and ×1.5
 damage. These multiply the monster's level, wave and rolled modifiers (a Stout magic monster has ×2.55 life,
@@ -469,7 +471,11 @@ The client also runs the shared rules locally, for **display only**: tooltips, c
   - where they are (hideout / map name and tier);
   - their open map and its portals left;
   - "Visit hideout" (and "Go home").
-- There is party chat.
+- Chat has Global and Party channels. Global reaches every online character; Party stays within the party.
+  Right-click a sender's name or message to invite them to the party. Existing leader and party-size limits apply.
+- The left HUD shows a portrait for each party member, including members in other areas and offline members.
+  Right-click a portrait for Join hideout and Trade. Offline members' actions are disabled; leaving a map explains
+  the portal cost (or that no return is possible when the portals are exhausted).
 
 **Loot is instanced.** Every kill rolls loot separately for each player in the instance, using the map's luck plus that player's own gear luck (`rules.lootLuck`). Each player sees and picks up only their own drops; there's no loot stealing. The completion chest gives every player present their own chest loot.
 
@@ -561,7 +567,7 @@ The client also runs the shared rules locally, for **display only**: tooltips, c
 - **Closing:** either side can cancel. A trade also cancels on disconnect.
 - Items in an open trade stay in your backpack, but they are locked (not movable) until the trade closes.
 
-**Special stash tabs** (every character has all three, in addition to the normal tabs; they don't count towards `MAX_STASH_TABS`). They are part of the stash: usable in any hideout (your own stash), nowhere else. They appear as three icon tabs after the normal tabs.
+**Special stash tabs** (every character has all three, in addition to the normal tabs; they don't count towards `MAX_STASH_TABS`). They are part of the stash: usable in any hideout (your own stash), nowhere else. They appear as three icon tabs after the normal tabs. With any stash tab open, Ctrl/Cmd-clicking a backpack map or currency files it into the appropriate special tab. Equipment and flasks use the selected normal tab; Ctrl/Cmd-click from a normal tab still withdraws to the backpack.
 
 **Map Stash.** Holds up to 400 maps.
 - Maps are shown grouped by tier (T1–T15). Each tier shows its count and expands into a list sectioned by map base.

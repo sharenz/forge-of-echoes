@@ -882,7 +882,7 @@ export class ClientApp {
       if (now - this.lastHud >= HUD_INTERVAL_MS) {
         this.lastHud = now;
         // Null until the local player is replicated: the provisional HUD from the zone change stays meanwhile.
-        const hud = session.hud(now, this.fps);
+        const hud = session.hud(now, this.fps, this.input.overUi || this.hover.dropId >= 0 || this.holding ? null : this.cursorWorld, this.alpha);
         if (hud) this.box.update((st) => ({ ...st, hud }));
       }
     }
@@ -985,7 +985,7 @@ export class ClientApp {
       visitHideout: (id) => inGame((g) => g.visitHideout(id), undefined),
       goHome: () => inGame((g) => g.goHome(), undefined),
       setChatOpen: (open) => this.box.update((s) => (s.chatOpen === open ? s : { ...s, chatOpen: open })),
-      sendChat: (text) => inGame((g) => g.sendChat(text), undefined),
+      sendChat: (text, channel) => inGame((g) => g.sendChat(text, channel), undefined),
 
       leaveMap: () => inGame((g) => g.leaveMap(), undefined),
       respawn: () => inGame((g) => g.respawn(), undefined),

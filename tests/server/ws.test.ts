@@ -34,7 +34,7 @@ describe('websocket sessions', () => {
     const version = await connect(server.base, { token: p.token, character: p.characterId, version: 999 });
     expect((await version.waitClose()).code).toBe(4002);
     // Pre-balance tabs can decode snapshots, but their local tooltips/rules are stale: force a reload.
-    for (const version of [1, 2, 3]) {
+    for (const version of [1, 2, 3, 4]) {
       const oldBalance = await connect(server.base, { token: p.token, character: p.characterId, version });
       expect((await oldBalance.waitClose()).code).toBe(4002);
     }

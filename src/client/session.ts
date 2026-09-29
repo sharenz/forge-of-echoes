@@ -20,6 +20,7 @@ import { AutoWalk, findDrop, inPickupReach } from './autowalk';
 import type { Autopilot } from './bot';
 import { CommandTracker, type CommandResult } from './commands';
 import { buildHud, localPlayer, type TellInfo } from './hud';
+import { hoveredMonster } from './monster-hover';
 import { shouldSendInput, toInputMessage, type InputSample } from './input';
 import { CharacterSync } from './optimistic';
 import {
@@ -337,7 +338,7 @@ export class GameSession {
       }
       case 'chat': {
         const mine = msg.fromName !== '' && msg.fromName === this.character.display?.name;
-        this.box.update((s) => pushChat(s, { id: ++this.chatId, fromName: msg.fromName, text: msg.text, time: msg.time }));
+        this.box.update((s) => pushChat(s, { id: ++this.chatId, fromName: msg.fromName, text: msg.text, time: msg.time, channel: msg.channel }));
         if (!mine) this.deps.sound('chat');
         break;
       }
@@ -558,9 +559,9 @@ export class GameSession {
     }
   }
 
-  hud(now: number, fps: number): HudState | null {
+  hud(now: number, fps: number, cursor: Point | null = null, alpha = 1): HudState | null {
     if (!this.zone) return null;
-    return buildHud({
+    const hud = buildHud({
       view: this.world.view,
       localPlayerId: this.zone.localPlayerId,
       zone: this.zone,
@@ -576,6 +577,8 @@ export class GameSession {
       pingMs: this.rttMs,
       keyLabels: this.keyLabels,
     });
+    if (hud) hud.hoveredMonster = hoveredMonster(this.world.view.monsters, cursor, alpha);
+    return hud;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -804,7 +807,7 @@ export class GameSession {
   }
 
   /**
-   * Ctrl-click. With the stash open (a hideout) the open tab is the destination — a normal tab, or a special one: the
+   * Ctrl-click. With the stash open, maps/currency file into their dedicated tabs and gear uses the selected normal tab. The
    * Map Stash files a backpack map, either Crafting Stash tab files a backpack currency stack into its slot. A Map
    * Stash map or a Crafting Stash slot goes to the backpack; `count` (Shift+Ctrl-click: 1) withdraws that many from a
    * slot instead of a full stack. Without the stash: equip / unequip, load the belt, or the map device. A click the
@@ -1195,10 +1198,10 @@ export class GameSession {
     if (this.characterId) this.visitHideout(this.characterId);
   }
 
-  sendChat(text: string): void {
+  sendChat(text: string, channel: import('../contracts/net').ChatChannel = 'global'): void {
     const t = text.trim();
     if (!t) return;
-    void this.command({ c: 'chat', text: t }, { onOk: () => undefined });
+    void this.command({ c: 'chat', text: t, channel }, { onOk: () => undefined });
   }
 
   // --- portals & map ----------------------------------------------------------------------------

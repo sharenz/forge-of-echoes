@@ -152,7 +152,7 @@ describe('special stash tabs: moves and counts', () => {
     // Wrong kinds are refused with the rules' reason and change nothing.
     const before = chOf(p);
     expect(act(p, { c: 'moveItem', uid: m1.uid, to: { kind: 'currencyStash' } }).error).toMatch(/Only currency/);
-    expect(act(p, { c: 'quickMove', uid: scrap.uid, stashTab: 'maps' }).error).toMatch(/Only maps/);
+    expect(act(p, { c: 'moveItem', uid: scrap.uid, to: { kind: 'mapStash' } }).error).toMatch(/Only maps/);
     expect(act(p, { c: 'quickMove', uid: scrap.uid, stashTab: 7 }).error).toBe('That stash tab does not exist.');
     expect(chOf(p)).toBe(before);
     conserved();
@@ -214,10 +214,10 @@ describe('special stash tabs: moves and counts', () => {
     const tabCount = (tab: number, id: CurrencyId) => tabStacks(tab, id).reduce((n, c) => n + c.count, 0);
     const at = (tab: number, x: number, y: number) => chOf(p).stash[tab].grid.entries.find((e) => e.x === x && e.y === y)?.item;
 
-    // Ctrl-click with a count splits an ordinary stack between the backpack and a normal tab — both ways.
+    // An explicit drag can still store a currency stack on a normal tab; Ctrl-click withdraws it.
     const scrap = bagStack(chOf(p), 'scrap');
     expect(scrap.count).toBeGreaterThanOrEqual(8);
-    expect(act(p, { c: 'quickMove', uid: scrap.uid, stashTab: 0, count: 6 }).ok).toBe(true);
+    expect(act(p, { c: 'moveItem', uid: scrap.uid, to: {kind: 'stash', tab: 0, x: 0, y: 0}, count: 6 }).ok).toBe(true);
     expect(bagCount(chOf(p), 'scrap')).toBe(scrap.count - 6);
     expect(tabCount(0, 'scrap')).toBe(6);
     const onTab = tabStacks(0, 'scrap')[0];

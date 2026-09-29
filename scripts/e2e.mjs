@@ -3,7 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5] [--smoke 30] [--lieutenant]
+//                        [--only wave5|qol] [--smoke 30] [--lieutenant]
 //
 // --prod tests the production bundle instead of the Vite dev server: `vite build` (with VITE_FOE_DEBUG=1, so the
 // window.__foe hooks this script drives are compiled in) into a temp dir, served by the game server itself
@@ -67,6 +67,7 @@ const flag = (name) => args.includes(`--${name}`);
 const FIGHT_SECONDS = Number(opt('fight', '40'));
 /** --only wave5: skip the two-player core scenario (A alone plays the special stash tabs and both new map types). */
 const WAVE5_ONLY = opt('only', 'all') === 'wave5';
+const QOL_ONLY = opt('only', 'all') === 'qol';
 /** Seconds of fighting in each new map type (longer while its family has not shown two kinds yet). */
 const SMOKE_SECONDS = Number(opt('smoke', '30'));
 /** --lieutenant: keep fighting each new map type until its lieutenant (wave 3) is on the field. */
@@ -1779,6 +1780,39 @@ async function wave5Scenario({ A }) {
   }
 }
 
+/** Real UI and real sockets: channel routing and the context-menu hand-offs. */
+async function qolScenario({ A, B, nameA, nameB }) {
+  await step('global chat crosses hideouts and right-click invites a sender', async () => {
+    await B.page.keyboard.press('Enter');
+    await B.page.getByRole('textbox', { name: 'Message everyone online' }).fill('Anyone up for a map?');
+    await B.page.keyboard.press('Enter');
+    await A.waitFor('global message from the other hideout', (n) => window.__foe.store.get().chat.some((l) => l.channel === 'global' && l.fromName === n && l.text === 'Anyone up for a map?'), nameB);
+    await A.page.keyboard.press('Enter');
+    await A.page.getByText(`${nameB}:`, { exact: true }).click({ button: 'right' });
+    await A.page.getByRole('dialog', { name: `Player actions for ${nameB}` }).getByRole('button', { name: 'Invite to party' }).click();
+    await B.waitFor('party invitation', () => window.__foe.store.get().invites.length === 1);
+    await B.page.getByRole('alertdialog', { name: `Party invite from ${nameA}` }).getByRole('button', { name: 'Join', exact: true }).click();
+    for (const p of [A, B]) await p.waitFor('two party members', () => window.__foe.store.get().party?.members.length === 2);
+    await A.shot('qol-party-avatars');
+  });
+  await step('party channel, avatar hideout visit and avatar trade', async () => {
+    await A.page.keyboard.press('Enter');
+    await A.page.getByRole('button', { name: 'Party', exact: true }).click();
+    await A.page.getByRole('textbox', { name: 'Message your party' }).fill('Meet in my hideout');
+    await A.page.keyboard.press('Enter');
+    await B.waitFor('party message', () => window.__foe.store.get().chat.some((l) => l.channel === 'party' && l.text === 'Meet in my hideout'));
+    await B.page.getByRole('button', { name: new RegExp(`^${nameA}, level`) }).click({ button: 'right' });
+    await B.page.getByRole('dialog', { name: `Player actions for ${nameA}` }).getByRole('button', { name: 'Join hideout' }).click();
+    await B.waitFor('the other hideout', (n) => window.__foe.store.get().hud?.zoneOwnerName === n && !window.__foe.store.get().hud?.zoneIsOwn, nameA);
+    await B.page.getByRole('button', { name: new RegExp(`^${nameA}, level`) }).click({ button: 'right' });
+    await B.page.getByRole('dialog', { name: `Player actions for ${nameA}` }).getByRole('button', { name: 'Trade', exact: true }).click();
+    await A.waitFor('trade request', () => window.__foe.store.get().tradeRequests.length === 1);
+    await A.page.getByRole('alertdialog', { name: `Trade request from ${nameB}` }).getByRole('button', { name: 'Trade', exact: true }).click();
+    for (const p of [A, B]) await p.waitFor('trade opened', () => !!window.__foe.store.get().trade);
+    await B.shot('qol-avatar-trade');
+  });
+}
+
 async function main() {
   const port = await freePort();
   if (PROD) {
@@ -1828,9 +1862,10 @@ async function main() {
       await registerAndPlay(B, base, `e2e_b_${suffix}`, 'emberpass-B1', nameB);
       return nameB;
     });
-    await coreScenario({ A, B, nameA, nameB, port });
+    if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
+    else await coreScenario({ A, B, nameA, nameB, port });
   }
-  await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

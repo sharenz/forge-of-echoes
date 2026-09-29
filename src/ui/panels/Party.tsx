@@ -98,7 +98,7 @@ export function PartyPanel() {
                     {m.activeMap ? (
                       <>
                         <span class={cx('fe-portal-pip', m.activeMap.remaining === 0 && 'fe-portal-pip--spent')} />
-                        {m.activeMap.mapName} T{m.activeMap.tier}
+                        <span>{m.activeMap.mapName} T{m.activeMap.tier}</span>
                         <span class="fe-member__portals">
                           {m.activeMap.remaining}/{m.activeMap.total} portals{m.activeMap.cleared ? ', cleared' : ''}
                         </span>

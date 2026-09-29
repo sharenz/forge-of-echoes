@@ -46,6 +46,17 @@ function withStash(stash: CharacterSave['currencyStash'], mapStash: MapItem[] = 
 }
 
 describe('stash tab state', () => {
+  it('Ctrl-click files maps and currency while a normal stash tab is selected', () => {
+    openStash(0);
+    const map = mapsIn(shown())[0];
+    r.session.quickMove(map.uid);
+    expect(shown().mapStash.some((m) => m.uid === map.uid)).toBe(true);
+    const scrap = stackOf(shown(), 'scrap');
+    r.session.quickMove(scrap.uid);
+    expect(shown().currencyStash.scrap).toBe(scrap.count);
+    expect(shown().stash[0].grid.entries).toHaveLength(0);
+  });
+
   it('special tabs stay; normal tab indices clamp to the tabs the character has; garbage falls back to 0', () => {
     for (const t of SPECIAL_STASH_TABS) expect(clampStashTab(t, 2)).toBe(t);
     expect(clampStashTab(1, 2)).toBe(1);
@@ -123,15 +134,13 @@ describe('Ctrl-click contexts', () => {
     expect(shown().mapDevice?.uid).toBe(map.uid);
   });
 
-  it('a map Ctrl-clicked with a Crafting Stash tab open is refused here (nothing sent)', () => {
+  it('files maps into the Map Stash even when a Crafting Stash tab is selected', () => {
     openStash('currency');
     const map = mapsIn(shown())[0];
-    const n = r.sent.length;
     r.session.quickMove(map.uid);
-    expect(r.sent.length).toBe(n);
-    expect(r.box.get().toasts.at(-1)).toMatchObject({ tone: 'bad', text: 'Only currency can be stored in the Crafting Stash.' });
-    expect(r.sounds.at(-1)).toBe('uiError');
-    expect(mapsIn(shown()).some((m) => m.uid === map.uid)).toBe(true);
+    expect(lastCmd(r).cmd).toEqual({ c: 'quickMove', uid: map.uid, stashTab: 'currency' });
+    expect(shown().mapStash.some((m) => m.uid === map.uid)).toBe(true);
+    expect(mapsIn(shown()).some((m) => m.uid === map.uid)).toBe(false);
   });
 
   it('a stash hidden behind another left panel is not the destination (the UI shows only the newest left panel)', () => {

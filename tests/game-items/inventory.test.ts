@@ -277,13 +277,13 @@ describe('moveItem: map device', () => {
 });
 
 describe('quickMove', () => {
-  it('moves backpack ↔ open stash tab with stacking', () => {
+  it('files backpack currency into dedicated storage and still withdraws legacy normal-tab stacks', () => {
     const base = withBackpack(makeCharacter(), [[currency('scrap', 10, 's'), 0, 0]]);
     const ch: CharacterSave = { ...base, stash: [{ name: 'Tab 1', grid: { w: 12, h: 8, entries: [{ item: currency('scrap', 35, 'st'), x: 0, y: 0 }] } }] };
     const out = expectOk(quickMove(ch, 's', { stashTab: 0 }));
-    expect(countOf(out, 'st')).toBe(40);
-    expect(countOf(out, 's')).toBe(5);
-    expect(at(out, 's')).toEqual({ kind: 'stash', tab: 0, x: 0, y: 1 });
+    expect(countOf(out, 'st')).toBe(35);
+    expect(out.currencyStash.scrap).toBe(10);
+    expect(at(out, 's')).toBeNull();
     const back = expectOk(quickMove(out, 'st', { stashTab: 0 }));
     expect(at(back, 'st')).toEqual({ kind: 'backpack', x: 0, y: 0 });
   });

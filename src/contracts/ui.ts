@@ -6,7 +6,7 @@
 import type { CurrencyId, MonsterKind, SkillId } from './content';
 import type { DerivedStats, GameRulesApi, MerchantOffer, RunSetup } from './game';
 import type { CharacterSave, ItemLocation, ItemTone, Settings, SpecialStashTab } from './items';
-import type { AccountInfo, CharacterSummary, PartyInfo, PartyInvite, PortalInfo, RunSummaryInfo, TradeInfo, TradeRequestInfo } from './net';
+import type { AccountInfo, CharacterSummary, ChatChannel, PartyInfo, PartyInvite, PortalInfo, RunSummaryInfo, TradeInfo, TradeRequestInfo } from './net';
 import type { RunPhase } from './sim';
 import type { PlayerDebuff } from './bestiary';
 
@@ -76,6 +76,7 @@ export interface HudAlly {
 }
 
 export interface HudState {
+  hoveredMonster?: { id: number; kind: MonsterKind; rarity: 'magic' | 'rare'; mods: number; life: number } | null;
   zone: 'hideout' | 'map';
   /** Owner of the current instance ("Your Hideout" / "Mira's Hideout" / "Mira's Map"). */
   zoneOwnerName: string;
@@ -112,6 +113,7 @@ export interface ChatLine {
   fromName: string;            // '' for system lines
   text: string;
   time: number;
+  channel?: ChatChannel;
 }
 
 export interface UiState {
@@ -232,7 +234,7 @@ export interface UiActions {
   visitHideout(characterId: string): void;
   goHome(): void;
   setChatOpen(open: boolean): void;
-  sendChat(text: string): void;
+  sendChat(text: string, channel?: ChatChannel): void;
 
   // map
   leaveMap(): void;

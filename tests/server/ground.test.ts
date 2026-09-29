@@ -139,7 +139,7 @@ describe('dropping items on the floor', () => {
     const { clock, players } = await setup(['Careful Cy', 'Other Ola']);
     const [cy, ola] = players;
     const scrap = cy.session.record.ch.backpack.entries.find((e) => e.item.kind === 'currency')!.item.uid;
-    expect(cy.command({ c: 'quickMove', uid: scrap, stashTab: 0 }).ok).toBe(true);
+    expect(cy.command({ c: 'moveItem', uid: scrap, to: { kind: 'stash', tab: 0, x: 0, y: 0 } }).ok).toBe(true);
     expect(cy.session.record.ch.stash[0].grid.entries.some((e) => e.item.uid === scrap)).toBe(true);
     openMap(cy);
     walkIntoProp(cy, 'portal', clock);

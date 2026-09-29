@@ -118,6 +118,22 @@ describe('leaving and kicking', () => {
 });
 
 describe('invites and leadership', () => {
+  it('global chat reaches other hideouts while party chat stays inside the party', async () => {
+    const { players } = await setup(['Global Ada', 'Global Bea', 'Global Cal']);
+    const [ada, bea, cal] = players;
+    const marks = players.map((p) => p.mark());
+    expect(ada.command({c: 'chat', channel: 'global', text: 'Hello everyone'}).ok).toBe(true);
+    players.forEach((p, i) => expect(p.all('chat', marks[i])).toContainEqual(expect.objectContaining({fromName: ada.session.name, channel: 'global', text: 'Hello everyone'})));
+    expect(ada.command({c: 'chat', channel: 'party', text: 'No party yet'}).ok).toBe(false);
+    partyUp(ada, bea);
+    const after = players.map((p) => p.mark());
+    expect(ada.command({c: 'chat', channel: 'party', text: 'Only us'}).ok).toBe(true);
+    expect(bea.all('chat', after[1])).toContainEqual(expect.objectContaining({channel: 'party', text: 'Only us'}));
+    expect(cal.all('chat', after[2])).toHaveLength(0);
+    expect(ada.command({c: 'chat', channel: 'global', text: 'Still global'}).ok).toBe(true);
+    expect(cal.all('chat', after[2])).toContainEqual(expect.objectContaining({channel: 'global', text: 'Still global'}));
+  });
+
   it('an invite dies when its sender joins another party or stops leading', async () => {
     const { server, players } = await setup(['Ann Solo', 'Bea Lead', 'Cal Late', 'Dee Late']);
     const [ann, bea, cal, dee] = players;

@@ -276,8 +276,8 @@ function command(v: unknown): Command {
       return { c, characterId: token(o.characterId, 'characterId') };
     }
     case 'chat': {
-      const o = shape(v, c, ['c', 'text']);
-      return { c, text: text(o.text, 'text', MAX_CHAT_LENGTH) };
+      const o = shape(v, c, ['c', 'text'], ['channel']);
+      return { c, text: text(o.text, 'text', MAX_CHAT_LENGTH), ...(o.channel === undefined ? {} : { channel: oneOf(o.channel, 'channel', ['global', 'party'] as const) }) };
     }
     case 'pickup': {
       const o = shape(v, c, ['c', 'dropId']);
@@ -651,10 +651,11 @@ export function validateServerMessage(v: unknown): ParseResult<ServerMessage> {
         break;
       }
       case 'chat': {
-        const o = shape(v, 'chat', ['t', 'fromName', 'text', 'time']);
+        const o = shape(v, 'chat', ['t', 'fromName', 'text', 'time'], ['channel']);
         str(o.fromName, 'fromName');
         str(o.text, 'text', 2000);
         num(o.time, 'time', -1e15, 1e15);
+        if (o.channel !== undefined) oneOf(o.channel, 'channel', ['global', 'party'] as const);
         break;
       }
       case 'runSummary': {

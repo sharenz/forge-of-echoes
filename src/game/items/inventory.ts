@@ -887,7 +887,7 @@ export interface QuickMoveContext {
 /**
  * Ctrl-click.
  *   Backpack item, with the open stash tab:
- *     a normal tab       → into that tab (stacking)
+ *     any stash tab      → maps/currency file into their dedicated tabs; other items use the selected normal tab
  *     'currency' | 'mapCurrency' → a currency stack files into its Crafting Stash slot (either Crafting
  *                          Stash tab takes every currency); anything else is refused
  *     'maps'             → a map files into the Map Stash; anything else is refused
@@ -915,6 +915,11 @@ export function quickMove(ch: CharacterSave, uid: string, ctx: QuickMoveContext)
     case 'mapStash':
       return found.item.kind === 'map' ? withdrawMap(ch, found.item, null) : fail(missingItemError(uid));
     case 'backpack': {
+      if (tab !== null) {
+        if (!special && !validStashTab(ch, tab)) return fail('That stash tab does not exist.');
+        if (found.item.kind === 'map') return moveToMapStash(ch, found);
+        if (found.item.kind === 'currency') return moveToCurrencyStash(ch, found, count);
+      }
       if (special === 'maps') return moveToMapStash(ch, found);
       if (special) return moveToCurrencyStash(ch, found, count);
       if (tab !== null) {

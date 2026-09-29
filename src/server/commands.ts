@@ -350,7 +350,7 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       game.sendBackFromMap(s, s.instance);
       return OK;
     case 'chat':
-      return chat(game, s, cmd.text);
+      return chat(game, s, cmd.text, cmd.channel ?? 'party');
 
     // --- trading ---------------------------------------------------------------------------
     case 'tradeRequest':
@@ -420,7 +420,7 @@ function visitHideout(game: Game, s: PlayerSession, targetId: string): CommandRe
   return OK;
 }
 
-function chat(game: Game, s: PlayerSession, raw: string): CommandResult {
+function chat(game: Game, s: PlayerSession, raw: string, channel: 'global' | 'party'): CommandResult {
   const text = raw.trim();
   if (!text) return fail('Type a message first.');
   // "/trade <name>" works even when the client sends it as a chat line.
@@ -428,9 +428,10 @@ function chat(game: Game, s: PlayerSession, raw: string): CommandResult {
   if (trade) return game.trades.request(s, trade[1] ?? '');
   if (text.length > MAX_CHAT_CHARS) return fail(`Messages can be at most ${MAX_CHAT_CHARS} characters.`);
   const party = game.parties.partyOf(s.characterId);
-  if (!party) return fail('Join a party to chat.');
+  if (channel === 'party' && !party) return fail('Join a party to use party chat.');
   if (!s.chat.take(game.now())) return fail('You are sending messages too quickly.');
-  const msg = { t: 'chat' as const, fromName: s.name, text, time: Date.now() };
-  for (const id of party.members) game.sessions.get(id)?.send(msg);
+  const msg = { t: 'chat' as const, fromName: s.name, text, time: Date.now(), channel };
+  if (channel === 'global') for (const player of game.sessions.values()) player.send(msg);
+  else for (const id of party!.members) game.sessions.get(id)?.send(msg);
   return OK;
 }

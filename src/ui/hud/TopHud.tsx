@@ -8,7 +8,7 @@
 // and the compact zone chip in the centre stack takes over.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { HudAlly, HudRun, UiState } from '../../contracts/ui';
-import { Bar, Button, PixelIcon, cx } from '../components/common';
+import { Bar, Button, PixelIcon, cx, usePortrait } from '../components/common';
 import { CraftStrip } from '../items/Crafting';
 import { safe } from '../items/hooks';
 import { useLocal } from '../local';
@@ -17,7 +17,9 @@ import { DEBUFF_INFO, waveDebuffs } from '../lib/debuffs';
 import { formatDuration, formatLuck, fraction, possessive } from '../lib/format';
 import { visiblePanels } from '../lib/panels';
 import { zoneLabel } from '../lib/zone';
+import { locationText } from '../lib/party';
 import { shallowEqual, useStore, useUi } from '../store';
+import { MonsterHover } from './MonsterHover';
 
 function allyEq(a: HudAlly[], b: HudAlly[]): boolean {
   if (a === b) return true;
@@ -26,22 +28,32 @@ function allyEq(a: HudAlly[], b: HudAlly[]): boolean {
 }
 
 export function PartyFrames() {
+  const local = useLocal();
+  const portrait = usePortrait(48);
+  const party = useUi((s) => s.party);
+  const me = useUi((s) => s.character?.name ?? '');
+  const ownLife = useUi((s) => s.hud ? { life: s.hud.life, maxLife: s.hud.maxLife, dead: s.hud.dead } : null, shallowEqual);
   const allies = useUi((s) => s.hud?.allies ?? [], allyEq);
-  if (!allies.length) return null;
+  if (!party) return null;
   return (
-    <div class="fe-allies" aria-label="Allies">
-      {allies.map((a) => (
-        <div key={a.name} class={cx('fe-ally', a.dead && 'fe-ally--dead')}>
-          <div class="fe-ally__lvl">{a.level}</div>
+    <div class="fe-allies" aria-label="Party members">
+      {party.members.map((member) => {
+        const a = member.name === me ? ownLife : allies.find((ally) => ally.name === member.name);
+        const show = (x: number, y: number) => local.playerMenu.set({ name: member.name, characterId: member.characterId, x, y });
+        return <button type="button" key={member.characterId} class={cx('fe-ally fe-solid', a?.dead && 'fe-ally--dead', !member.online && 'fe-ally--offline')}
+          aria-label={`${member.name}, level ${member.level}, ${locationText(member, me)}. Player actions`}
+          onContextMenu={(e) => { e.preventDefault(); show(e.clientX, e.clientY); }}
+          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); show(r.right, r.top); }}>
+          <div class="fe-ally__portrait"><img src={portrait} alt="" draggable={false} /><span>{member.level}</span>{member.isLeader && <i class="fe-crown" />}</div>
           <div class="fe-ally__main">
             <div class="fe-ally__name">
-              {a.name}
-              {a.dead && <span class="fe-ally__state">fallen</span>}
+              {member.name}
+              {a?.dead && <span class="fe-ally__state">fallen</span>}
             </div>
-            <Bar kind="life" value={a.dead ? 0 : fraction(a.life, a.maxLife)} />
+            {a && member.online ? <Bar kind="life" value={a.dead ? 0 : fraction(a.life, a.maxLife)} /> : <div class="fe-ally__location">{locationText(member, me)}</div>}
           </div>
-        </div>
-      ))}
+        </button>;
+      })}
     </div>
   );
 }
@@ -555,6 +567,7 @@ export function TopHud() {
           <WaveCard />
           <ZoneChip />
           <RunBars />
+          <MonsterHover />
           <TellBanner />
           <ZoneBanner />
         </div>

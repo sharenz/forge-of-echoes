@@ -43,6 +43,12 @@
   align-items: center;
   gap: 8px;
 }
+.fe-monster-hover { width: min(100%, 390px); padding: 8px 12px; border: 1px solid var(--bronze); background: #171115e8; font-size: var(--font-ui-secondary); }
+.fe-monster-hover > strong { display: flex; justify-content: space-between; gap: 10px; font-size: var(--font-ui-body); }
+.fe-monster-hover > strong > span { font-size: var(--font-ui-caption); }
+.fe-monster-hover--magic > strong { color: #9fc2e8; }
+.fe-monster-hover--rare > strong { color: var(--gold); }
+.fe-monster-hover .fe-bar { height: 6px; margin: 5px 0; }
 /* Medium: a panel covers one side of a small screen. The map block folds into the zone chip. */
 @container fe-hud (max-width: 819px) {
   .fe-hudgrid {
@@ -1608,12 +1614,38 @@
     0 0 4px #000;
   overflow-wrap: anywhere;
 }
+.fe-chat__line:not(.fe-chat__line--system) { pointer-events: auto; cursor: context-menu; }
+.fe-chat__channels { display: flex; gap: 6px; padding: 6px 8px; }
+.fe-chat--open { width: min(420px, calc(100vw - 28px)); }
+.fe-player-menu {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+  max-width: calc(100vw - 16px);
+  padding: 12px;
+  border: 1px solid var(--bronze);
+  background: #171115;
+  box-shadow: 0 8px 30px #000a;
+  font-size: var(--font-ui-body);
+}
+.fe-player-menu > strong { overflow-wrap: anywhere; margin-bottom: 4px; }
+.fe-ally__portrait { position: relative; flex: none; width: 44px; height: 48px; }
+.fe-ally__portrait img { width: 44px; height: 44px; image-rendering: pixelated; border: 1px solid var(--bronze); }
+.fe-ally__portrait > span { position: absolute; bottom: 0; right: 0; padding: 0 3px; background: #171115; font-size: var(--font-ui-caption); color: var(--bone); }
+.fe-ally__location { font-size: var(--font-ui-caption); color: var(--ash); overflow-wrap: anywhere; }
+.fe-ally--offline { opacity: 0.6; }
+button.fe-ally { width: 100%; text-align: left; cursor: context-menu; }
+button.fe-ally:hover { border-color: var(--bronze-light); }
 .fe-chat--idle .fe-chat__line {
   animation: fe-chat-fade 2.5s ease-in 9s forwards;
 }
 @keyframes fe-chat-fade {
   to {
     opacity: 0;
+    visibility: hidden;
   }
 }
 .fe-chat__line--system {

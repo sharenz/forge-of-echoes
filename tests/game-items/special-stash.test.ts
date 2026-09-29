@@ -47,6 +47,16 @@ function rareRing(uid = 'ring'): EquipmentItem {
 }
 
 describe('slots and synthetic uids', () => {
+  it.each([0, 'maps', 'currency', 'mapCurrency'] as const)('automatically files map and currency items with stash tab %s open', (stashTab) => {
+    let ch = withBackpack(makeCharacter(), [[map('m'), 0, 0], [currency('scrap', 7, 'c'), 1, 0]]);
+    ch = expectOk(quickMove(ch, 'm', {stashTab}));
+    ch = expectOk(quickMove(ch, 'c', {stashTab}));
+    expect(ch.mapStash.map((m) => m.uid)).toEqual(['m']);
+    expect(ch.currencyStash.scrap).toBe(7);
+    expect(ch.backpack.entries).toHaveLength(0);
+    expect(ch.stash[0].grid.entries).toHaveLength(0);
+  });
+
   it('addresses every currency by "cstash:<id>" and rejects anything else', () => {
     for (const id of CURRENCY_IDS) expect(parseCurrencyStashUid(S(id))).toBe(id);
     for (const bad of ['cstash:', 'cstash:gold', 'cstash:constructor', 'cstash:__proto__', 'scrap', 'belt:0', 7, null, undefined]) {
@@ -137,6 +147,10 @@ describe('depositing currency', () => {
     const ch = withBackpack(makeCharacter(), [[map('m'), 0, 0], [flask('lifeFlask', 3, 'f'), 1, 0], [rareRing('r'), 2, 0]]);
     for (const uid of ['m', 'f', 'r']) {
       expect(expectErr(moveItem(ch, uid, { kind: 'currencyStash' }))).toBe('Only currency can be stored in the Crafting Stash.');
+      if (uid === 'm') {
+        expect(expectOk(quickMove(ch, uid, { stashTab: 'currency' })).mapStash.map((m) => m.uid)).toEqual(['m']);
+        continue;
+      }
       expect(expectErr(quickMove(ch, uid, { stashTab: 'currency' }))).toBe('Only currency can be stored in the Crafting Stash.');
       expect(expectErr(quickMove(ch, uid, { stashTab: 'mapCurrency' }))).toBe('Only currency can be stored in the Crafting Stash.');
     }
@@ -295,10 +309,10 @@ describe('the Map Stash', () => {
     expect(expectOk(moveItem(ch, 'dev', { kind: 'mapStash' }))).toBe(ch);
   });
 
-  it('Ctrl-click with the Map Stash open deposits a map and refuses anything else', () => {
+  it('Ctrl-click with the Map Stash open files maps and currency into their dedicated storage', () => {
     const ch = withBackpack(makeCharacter(), [[map('a'), 0, 0], [currency('scrap', 3, 'c'), 1, 0]]);
     expect(expectOk(quickMove(ch, 'a', { stashTab: 'maps' })).mapStash.map((m) => m.uid)).toEqual(['a']);
-    expect(expectErr(quickMove(ch, 'c', { stashTab: 'maps' }))).toBe('Only maps can be stored in the Map Stash.');
+    expect(expectOk(quickMove(ch, 'c', { stashTab: 'maps' })).currencyStash.scrap).toBe(3);
     expect(expectErr(moveItem(ch, 'c', { kind: 'mapStash' }))).toBe('Only maps can be stored in the Map Stash.');
   });
 
@@ -423,12 +437,13 @@ describe('count: splitting stacks', () => {
       .toEqual({ kind: 'backpack', x: 4, y: 0 });
   });
 
-  it('quick-moves part of a stack between the backpack and a stash tab', () => {
+  it('quick-moves part of a currency stack into dedicated storage from a normal tab', () => {
     const out = expectOk(quickMove(ch(), 'a', { stashTab: 0, count: 10 }));
-    expect(out.stash[0].grid.entries).toEqual([{ item: { kind: 'currency', uid: 'i9', currencyId: 'scrap', count: 10 }, x: 0, y: 0 }]);
+    expect(out.stash[0].grid.entries).toEqual([]);
+    expect(out.currencyStash.scrap).toBe(10);
     expect(at(out, 0, 0)).toMatchObject({ count: 20 });
-    const back = expectOk(quickMove(out, 'i9', { stashTab: 0, count: 4 }));
-    expect(back.stash[0].grid.entries[0].item).toMatchObject({ count: 6 });
+    const back = expectOk(quickMove(out, S('scrap'), { stashTab: 0, count: 4 }));
+    expect(back.currencyStash.scrap).toBe(6);
     expect(carried(back, 'scrap')).toBe(30 - 10 + 4 + 38);
   });
 

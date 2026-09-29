@@ -85,6 +85,7 @@ export interface CursorHint {
 }
 
 export interface Local {
+  playerMenu: Signal<{ name: string; characterId?: string; x: number; y: number } | null>;
   tooltip: Signal<TooltipState | null>;
   drag: Signal<DragState | null>;
   /** Last pointer position (viewport px); updated by the drag controller and the armed cursor. */
@@ -108,6 +109,7 @@ export function createLocal(): Local {
   let hintTimer: ReturnType<typeof setTimeout> | null = null;
   let hintId = 0;
   const local: Local = {
+    playerMenu: signal<{ name: string; characterId?: string; x: number; y: number } | null>(null),
     tooltip,
     drag: signal<DragState | null>(null),
     pointer: { x: 0, y: 0 },
