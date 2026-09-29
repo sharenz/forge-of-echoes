@@ -8,9 +8,8 @@
 import { BELT_SLOTS, LOADOUT_SLOTS } from '../contracts/items';
 import type { HeldMask, InputMessage } from '../contracts/net';
 
-/** Loadout slots 1..5 (Space, Q, E, R, F); slot 0 is the left mouse button. */
+/** Keyboard slots 2..5; slots 0 and 1 are the left and right mouse buttons. */
 export const SLOT_CODES: Readonly<Record<string, number>> = {
-  Space: 1,
   KeyQ: 2,
   KeyE: 3,
   KeyR: 4,
@@ -59,8 +58,8 @@ export function moveFromCodes(down: ReadonlySet<string>, out: MoveDir = { x: 0, 
 }
 
 /** Held loadout slots as the wire bitmask (bit i = slot i). */
-export function heldMaskFrom(mouseHeld: boolean, codes: ReadonlySet<string>): HeldMask {
-  let mask = mouseHeld ? 1 : 0;
+export function heldMaskFrom(mouseHeld: number, codes: ReadonlySet<string>): HeldMask {
+  let mask = mouseHeld & 0b11;
   for (const code of codes) {
     const slot = SLOT_CODES[code];
     if (slot !== undefined && slot < LOADOUT_SLOTS) mask |= 1 << slot;
@@ -85,8 +84,8 @@ export class InputState {
   /** Keys pressed since the last sample (kept even if already released). */
   private readonly latched = new Set<string>();
   private readonly flaskQueue: number[] = [];
-  private mouseHeld = false;
-  private mouseLatched = false;
+  private mouseHeld = 0;
+  private mouseLatched = 0;
   private readonly scratch = new Set<string>();
   private readonly dir: MoveDir = { x: 0, y: 0 };
 
@@ -112,17 +111,19 @@ export class InputState {
     this.down.delete(code);
   }
 
-  mouseDown(): void {
-    this.mouseHeld = true;
-    this.mouseLatched = true;
+  mouseDown(button = 0): void {
+    const mask = button === 0 ? 1 : button === 2 ? 2 : 0;
+    this.mouseHeld |= mask;
+    this.mouseLatched |= mask;
   }
 
-  mouseUp(): void {
-    this.mouseHeld = false;
+  mouseUp(button = 0): void {
+    const mask = button === 0 ? 1 : button === 2 ? 2 : 0;
+    this.mouseHeld &= ~mask;
   }
 
   get isMouseHeld(): boolean {
-    return this.mouseHeld;
+    return this.mouseHeld !== 0;
   }
 
   isDown(code: string): boolean {
@@ -139,8 +140,8 @@ export class InputState {
   /** Forget everything (window blur, zone change, pause). */
   clear(): void {
     this.blockKeys();
-    this.mouseHeld = false;
-    this.mouseLatched = false;
+    this.mouseHeld = 0;
+    this.mouseLatched = 0;
   }
 
   /** Consume one input tick: held state plus presses latched since the last tick. */
@@ -153,10 +154,10 @@ export class InputState {
     moveFromCodes(this.down, this.dir);
     out.moveX = this.dir.x;
     out.moveY = this.dir.y;
-    out.held = heldMaskFrom(this.mouseHeld || this.mouseLatched, keys);
+    out.held = heldMaskFrom(this.mouseHeld | this.mouseLatched, keys);
     out.flask = this.flaskQueue.length ? (this.flaskQueue.shift() as number) : -1;
     this.latched.clear();
-    this.mouseLatched = false;
+    this.mouseLatched = 0;
     return out;
   }
 }

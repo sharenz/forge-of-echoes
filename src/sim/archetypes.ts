@@ -44,3 +44,10 @@ export function eliteDamageMult(mods: number): number {
 }
 
 export const RARITY_XP = { normal: 1, magic: 2, rare: 6 } as const;
+
+/** Baseline rarity strength, before the pack's rolled modifiers. Named bosses use their own tuning. */
+export const RARITY_STRENGTH = {
+  normal: { life: 1, damage: 1 },
+  magic: { life: 1.5, damage: 1.2 },
+  rare: { life: 3, damage: 1.5 },
+} as const;

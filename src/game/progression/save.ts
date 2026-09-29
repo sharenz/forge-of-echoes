@@ -421,7 +421,8 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
   const rawRanks = isObj(raw.skillRanks) ? raw.skillRanks : {};
   for (const s of SKILL_IDS) skillRanks[s] = intIn(rawRanks[s], 0, MAX_SKILL_RANK, 0);
   skillRanks.emberLance = Math.max(1, skillRanks.emberLance);
-  const rawLoadout = arr(raw.loadout).map((s) => ((SKILL_IDS as readonly unknown[]).includes(s) ? (s as SkillId) : null));
+  const rawLoadout = (Array.isArray(raw.loadout) ? raw.loadout : ['emberLance'])
+    .map((s) => ((SKILL_IDS as readonly unknown[]).includes(s) ? (s as SkillId) : null));
   const allocatedRaw = isObj(raw.allocated) ? raw.allocated : {};
 
   const minter: UidMinter = { used: new Set(), next: Math.max(intIn(raw.nextUid, 1, 1e9, 1), highestMinted(raw)) };

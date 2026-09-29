@@ -425,6 +425,19 @@ describe('input pipeline', () => {
     expect([out?.aimX, out?.aimY]).toEqual([m.x[target], m.y[target]]);
   });
 
+  it('auto-attack follows Ember Lance to any slot and stops when it is unassigned', () => {
+    addMonster(r.world.view.monsters, 100, 0);
+    const ch = r.box.get().character!;
+    for (let slot = 0; slot < 6; slot++) {
+      const loadout = Array.from({ length: 6 }, (_, i) => i === slot ? 'emberLance' as const : null);
+      feed(r, { t: 'character', character: { ...ch, loadout } });
+      const out = r.session.inputTick(IDLE, { x: 100, y: 0 }, { ...opts, autoAttack: true });
+      expect(out?.held).toBe(1 << slot);
+    }
+    feed(r, { t: 'character', character: { ...ch, loadout: Array(6).fill(null) } });
+    expect(r.session.inputTick(IDLE, { x: 100, y: 0 }, { ...opts, autoAttack: true })?.held).toBe(0);
+  });
+
   it('auto-attack leads a moving target (it is drawn in the past; the bolt needs time)', () => {
     const m = r.world.view.monsters;
     // 150 units east of the player, walking south.
@@ -484,7 +497,7 @@ describe('HUD', () => {
     expect(hud.zone).toBe('hideout');
     expect(hud.zoneIsOwn).toBe(true);
     expect(hud.life).toBe(80);
-    expect(hud.slots.map((s) => s.key)).toEqual(['LMB', 'Space', 'Q', 'E', 'R', 'F']);
+    expect(hud.slots.map((s) => s.key)).toEqual(['LMB', 'RMB', 'Q', 'E', 'R', 'F']);
     expect(hud.slots[1].skillId).toBe('emberNova');
     expect(hud.flasks[0]).toMatchObject({ key: '1', flaskId: 'lifeFlask', count: 3, active: 0.5 });
     expect(hud.flasks[1]).toBeNull();

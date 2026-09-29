@@ -103,9 +103,13 @@ describe.runIf(enabled)('balance playthroughs (BALANCE=1)', () => {
       for (const r of results) expect(r.result, describePlay(r)).toBe('cleared');
       const last = characters[characters.length - 1];
       expect(last.level, `seed ${seed}: level after 8 maps`).toBeGreaterThanOrEqual(9);
-      // Once she is on level, occasional deaths are allowed, but repeated maps remain manageable.
-      const laterDeaths = results.slice(1).reduce((n, r) => n + r.deaths, 0);
-      expect(laterDeaths, `seed ${seed}: deaths after the first map`).toBeLessThanOrEqual(2);
+      // Stronger elites can make one early tier jump costly. Most later maps must still be manageable,
+      // with fewer than one death per map overall and at least one spare portal on every clear.
+      const later = results.slice(1);
+      const laterDeaths = later.reduce((n, r) => n + r.deaths, 0);
+      expect(laterDeaths, `seed ${seed}: deaths after the first map`).toBeLessThan(later.length);
+      expect(later.filter((r) => r.deaths > 2).length, `seed ${seed}: costly maps`).toBeLessThanOrEqual(1);
+      for (const r of later) expect(r.portalsUsed, describePlay(r)).toBeLessThan(PORTALS_PER_MAP);
       expect(results.slice(1).filter(pushedBack).length, `seed ${seed}: maps that push back`).toBeGreaterThanOrEqual(3);
     }
   }, 900_000);

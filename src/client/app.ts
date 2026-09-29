@@ -232,7 +232,9 @@ export class ClientApp {
       active: () => !!this.session?.zone && this.box.get().screen === 'game',
       worldClick: (x, y) => this.worldClick(x, y),
       worldRightClick: () => {
-        if (this.box.get().armed) this.session?.disarm();
+        if (!this.box.get().armed) return false;
+        this.session?.disarm();
+        return true;
       },
       setAlt: (held) => this.box.update((s) => (s.altHeld === held ? s : { ...s, altHeld: held })),
       toggleAutoAttack: () => {

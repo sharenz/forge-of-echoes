@@ -37,11 +37,11 @@ const TICKS = 3000;
  *    213161676 in 17553 ticks. 4242 is unchanged (its 3000 ticks end before the Herald arrives).
  */
 /** record(4242): digests after ticks 1000, 2000 and 3000. */
-// Re-pinned for XP on kill: removing orb scatter stops consuming world RNG draws.
-const GOLDEN_4242 = [2860919789, 3827460678, 773456958];
+// Re-pinned for stronger magic/rare monsters: rarity now multiplies life and damage before pack mods.
+const GOLDEN_4242 = [3208589199, 586601874, 1198223135];
 /** The whole tier-5 map at seed 9001 (the bot clears it and takes the return portal): its final digest and length. */
-// Re-pinned 2026-09-29 for XP on kill and removal of orb scatter; boss damage is unchanged.
-const GOLDEN_9001 = { digest: 1820637641, ticks: 19312 };
+// Re-pinned 2026-09-29 for stronger magic/rare monsters; named boss damage is unchanged.
+const GOLDEN_9001 = { digest: 915999914, ticks: 15850 };
 const strong = { stats: strongStats(), skills: strongSkills(), loadout: STRONG_LOADOUT };
 
 function soloRun(seed: number, extra: Partial<ConfigOptions> = {}): SimRun {

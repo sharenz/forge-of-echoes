@@ -31,21 +31,37 @@ describe('movement', () => {
 });
 
 describe('held mask', () => {
-  it('LMB is slot 0; Space Q E R F are slots 1..5', () => {
-    expect(heldMaskFrom(true, codes())).toBe(0b1);
-    expect(heldMaskFrom(false, codes('Space'))).toBe(0b10);
-    expect(heldMaskFrom(false, codes('KeyQ', 'KeyF'))).toBe(0b100100);
-    expect(heldMaskFrom(true, codes('Space', 'KeyQ', 'KeyE', 'KeyR', 'KeyF'))).toBe(0b111111);
-    expect(heldMaskFrom(false, codes('KeyW', 'Digit1'))).toBe(0);
+  it('LMB and RMB are slots 0 and 1; Q E R F are slots 2..5', () => {
+    expect(heldMaskFrom(1, codes())).toBe(0b1);
+    expect(heldMaskFrom(2, codes())).toBe(0b10);
+    expect(heldMaskFrom(0, codes('KeyQ', 'KeyF'))).toBe(0b100100);
+    expect(heldMaskFrom(3, codes('KeyQ', 'KeyE', 'KeyR', 'KeyF'))).toBe(0b111111);
+    expect(heldMaskFrom(0, codes('KeyW', 'Digit1'))).toBe(0);
   });
 
   it('knows which keys belong to the game (the UI keeps I C K P, Enter, Esc)', () => {
-    for (const c of ['KeyW', 'ArrowLeft', 'Space', 'KeyQ', 'KeyF', 'Digit3', 'KeyT']) expect(isGameCode(c)).toBe(true);
-    for (const c of ['KeyI', 'KeyC', 'KeyK', 'KeyP', 'Enter', 'Escape', 'Digit5']) expect(isGameCode(c)).toBe(false);
+    for (const c of ['KeyW', 'ArrowLeft', 'KeyQ', 'KeyF', 'Digit3', 'KeyT']) expect(isGameCode(c)).toBe(true);
+    for (const c of ['KeyI', 'KeyC', 'KeyK', 'KeyP', 'Enter', 'Escape', 'Digit5', 'Space']) expect(isGameCode(c)).toBe(false);
   });
 });
 
 describe('InputState', () => {
+  it('latches RMB taps and tracks both mouse buttons independently', () => {
+    const s = new InputState();
+    s.mouseDown(2);
+    s.mouseUp(2);
+    expect(s.sample().held).toBe(2);
+    expect(s.sample().held).toBe(0);
+    s.mouseDown(0);
+    s.mouseDown(2);
+    expect(s.sample().held).toBe(3);
+    s.mouseUp(0);
+    expect(s.sample().held).toBe(2);
+    s.clear();
+    expect(s.sample().held).toBe(0);
+    s.mouseDown(1);
+    expect(s.sample().held).toBe(0);
+  });
   it('a tap shorter than one tick still holds the slot for exactly one tick', () => {
     const s = new InputState();
     s.keyDown('KeyQ', false);

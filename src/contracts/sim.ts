@@ -109,7 +109,7 @@ export interface PlayerRuntime {
   stats: PlayerCombatStats;
   /** One entry per skill the character can use (basic attack + every ranked skill). */
   skills: SkillRuntimeDef[];
-  /** LOADOUT_SLOTS entries: index 0 = LMB (basic), 1..5 = Space, Q, E, R, F. */
+  /** LOADOUT_SLOTS freely assignable entries: LMB, RMB, Q, E, R, F. */
   loadout: (SkillId | null)[];
   /** BELT_SLOTS entries. */
   flasks: (FlaskRuntime | null)[];

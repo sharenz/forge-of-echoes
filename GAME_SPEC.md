@@ -21,7 +21,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Trading | Direct, atomic player-to-player trades (§12). No market yet (§15 is planned). |
 | Persistence | Server-side SQLite (`node:sqlite`). Accounts with username and password. `localStorage` holds only the session token and client settings. |
 | Pickup | **Equipment is picked up by clicking** its label or sprite; the character walks there first if it's out of reach. Currency, flasks and maps are auto-collected by walking over them. XP is awarded immediately on monster death; there are no XP orbs to collect. |
-| Aiming | Mouse aim. `LMB` holds the basic attack. `T` toggles auto-attack (the basic attack targets the nearest enemy near the cursor). |
+| Aiming | Mouse aim. Six freely assignable skill slots: `LMB`, `RMB`, `Q`, `E`, `R`, `F`. `T` toggles auto-attack (Ember Lance targets the nearest enemy near the cursor from its assigned slot). |
 | Affixes | Prefix/suffix split. Magic items have ≤1 prefix and ≤1 suffix; rare items have ≤3 of each. |
 | Attributes | +3 allocatable points per level, plus small automatic class growth. |
 
@@ -31,8 +31,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 |---|---|
 | `WASD` / arrows | Move |
 | Mouse | Aim |
-| `LMB` (hold) | Basic attack (loadout slot 0: Ember Lance) |
-| `Space` `Q` `E` `R` `F` | Loadout slots 1–5 (held = cast as soon as usable) |
+| `LMB` `RMB` `Q` `E` `R` `F` | Six loadout slots, any learned skill in any slot (held = cast as soon as usable) |
 | `1`–`4` | Flasks |
 | `I` / `C` / `K` | Inventory / character / skills |
 | `Esc` | Close the top panel, or open the menu (pauses in maps) |
@@ -93,6 +92,13 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 ## 4. Skills (rules own the numbers; the sim owns the behaviour)
 
 A rank costs 1 skill point, and each level grants 1 point. Max rank is 20. Numbers below are rank 1 → rank 20 (linear unless noted). Effectiveness multiplies spell power. A new character starts with Ember Lance at rank 1 and one banked point; a skill must be ranked to go on the bar.
+
+**Loadout:** six slots labelled `LMB`, `RMB`, `Q`, `E`, `R`, `F`. Any learned skill, including Ember Lance,
+can occupy any slot; each skill appears at most once. Drag a learned skill from the tree or either slot row
+onto a slot, or click a skill and then a slot in the skills panel. Moving an assigned skill swaps occupied slots.
+Right-click a slot in the skills panel to clear it. Existing slot assignments keep their positions; the old
+`Space` slot is now `RMB`. Auto-attack follows Ember Lance wherever assigned, and is idle while it is unassigned.
+Ember Lance remains the basic attack for cast priority and movement regardless of its slot.
 
 | Skill | Tree | Cost / cast / cooldown | Behaviour & numbers |
 |---|---|---|---|
@@ -301,6 +307,11 @@ Reward-only mods (Reward Ink):
 **Pack rarity:**
 - Magic chance: 10% × magicPackChance multiplier. The whole pack is magic and shares one mod: Swift (+30% speed), Stout (+70% life) or Fierce (+40% damage). Blue outline.
 - Rare chance: 3% × multiplier. A single rare leader gets 2 mods from Juggernaut (+200% life), Frenzied (+50% speed), Ember-touched (fire burst on death, telegraphed) and Warded (40% less damage while allies are near). Gold outline and its name floats above it. The rest of the pack is normal.
+
+**Rarity strength:** every magic monster has ×1.5 life and ×1.2 damage; a rare leader has ×3 life and ×1.5
+damage. These multiply the monster's level, wave and rolled modifiers (a Stout magic monster has ×2.55 life,
+a Juggernaut rare ×9 life relative to its normal counterpart). Named lieutenants, final bosses and training
+dummies use their own tuning and do not receive these rarity multipliers.
 
 **Loot** (rolled per player, §9): a magic monster gets ×1.5 quantity and ×2 rarity; a rare gets ×4 quantity and ×3 rarity; the lieutenant and the boss roll their ordinary loot like rares, on top of their guaranteed drops. Summoned minions drop nothing. **XP:** magic ×2, rare ×6.
 

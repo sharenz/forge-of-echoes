@@ -142,6 +142,18 @@ describe('movement feel', () => {
 });
 
 describe('fire trail (Cinderwalkers)', () => {
+  it('keeps its damage when Ember Lance moves or is removed from the bar', () => {
+    const damage = (loadout: NonNullable<Parameters<typeof makeArena>[0]>['loadout']) => {
+      const { run, world } = makeArena({ stats: makeStats({ flags: ['fireTrail'] }), loadout });
+      stepN(run, 1, { ...idleIntent(), moveX: 1 });
+      return world.areas.find((a) => a.kind === 'fireTrail')!.damage;
+    };
+    const baseline = damage(['emberLance', 'emberNova', null, null, null, null]);
+    expect(baseline).toBeGreaterThan(0);
+    expect(damage(['emberNova', null, null, null, null, 'emberLance'])).toBe(baseline);
+    expect(damage(['emberNova', null, null, null, null, null])).toBe(baseline);
+  });
+
   it('moving leaves burning ground that damages monsters; standing still does not', () => {
     const { run, world } = makeArena({ stats: makeStats({ flags: ['fireTrail'] }) });
     stepN(run, 60);
@@ -267,5 +279,17 @@ describe('shared movement (client prediction)', () => {
     stepN(run, 3, hold(1, 100, 0));
     expect(pv(run).castSkill).toBe('emberNova');
     expect(predictionSlow(pv(run))).toBe(CAST_SLOW);
+  });
+
+  it('server movement and prediction keep the same cast slowdown after reassigning mouse slots', () => {
+    const { run } = makeArena({ skills: [makeSkill('emberLance', 1), makeSkill('emberNova', 1)], loadout: ['emberNova', 'emberLance', null, null, null, null] });
+    stepN(run, 3, { ...hold(1, 100, 0), moveX: 1 });
+    expect(pv(run).castSkill).toBe('emberLance');
+    expect(predictionSlow(pv(run))).toBe(0);
+    expect(pv(run).vx).toBeCloseTo(110, 6);
+    stepN(run, 3, { ...hold(0, 100, 0), moveX: 1 });
+    expect(pv(run).castSkill).toBe('emberNova');
+    expect(predictionSlow(pv(run))).toBe(CAST_SLOW);
+    expect(pv(run).vx).toBeCloseTo(110 * CAST_MOVE_FACTOR, 6);
   });
 });

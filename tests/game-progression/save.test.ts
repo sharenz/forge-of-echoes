@@ -124,6 +124,12 @@ describe('newSave / serializeSave / parseSave', () => {
 });
 
 describe('normalizeCharacter', () => {
+  it('preserves an intentionally empty skill bar after saving and loading', () => {
+    const ch = expectOk(rules.setLoadoutSlot(rules.createCharacter('Empty', 42), 0, null));
+    const save = { ...rules.newSave(), characters: [ch] };
+    expect(rules.parseSave(rules.serializeSave(save)).characters[0].loadout).toEqual([null, null, null, null, null, null]);
+  });
+
   it('rebuilds a minimal character from almost nothing', () => {
     const ch = normalizeCharacter({ name: 'Bare' })!;
     expect(ch).toMatchObject({ name: 'Bare', level: 1, xp: 0, classId: 'sorceress', mapDevice: null });
@@ -147,7 +153,7 @@ describe('normalizeCharacter', () => {
     expect(ch.allocated).toEqual({ str: 2, dex: 0, int: 5 });
     expect(ch.skillRanks).toMatchObject({ emberLance: 1, emberNova: 20, riftStep: 2 });
     expect(ch.skillRanks).not.toHaveProperty('bogus');
-    expect(ch.loadout).toEqual(['emberLance', 'emberNova', null, 'riftStep', null, null]);
+    expect(ch.loadout).toEqual(['emberNova', null, null, 'riftStep', null, null]);
   });
 
   it('drops unknown items and repairs broken ones', () => {

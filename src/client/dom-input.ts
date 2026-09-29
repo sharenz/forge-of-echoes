@@ -10,8 +10,8 @@ export interface DomInputHooks {
   active(): boolean;
   /** Left click on the world at css (x, y). Return true to consume it (a prop was clicked; no attack). */
   worldClick(x: number, y: number): boolean;
-  /** Right click on the world. */
-  worldRightClick(): void;
+  /** Right click on the world. Return true when consumed (e.g. cancelling crafting), otherwise cast RMB. */
+  worldRightClick(): boolean;
   setAlt(held: boolean): void;
   toggleAutoAttack(): void;
   /** Every key and button was released at once (focus left the page): the server must hear it now. */
@@ -63,11 +63,14 @@ export class DomInput {
       this.cursorY = e.clientY;
       this.overUi = e.target !== this.canvas;
     }, { passive: true });
-    on(canvas, 'pointerdown', (e) => this.pointerDown(e));
-    on(window, 'pointerup', (e) => {
-      if (e.button === 0) this.state.mouseUp();
+    // Mouse events report every button transition. Pointer down/up only report the first press and last
+    // release, which would lose RMB while LMB is held (and leave LMB held after releasing it first).
+    on(canvas, 'mousedown', (e) => this.mouseDown(e));
+    on(window, 'mouseup', (e) => {
+      this.state.mouseUp(e.button);
     });
-    on(window, 'pointercancel', () => this.state.mouseUp());
+    on(window, 'pointercancel', () => this.releaseAll());
+    on(window, 'dragstart', () => this.releaseAll());
     on(canvas, 'contextmenu', (e) => e.preventDefault());
     // Any first gesture unlocks audio (capture phase: runs even when the UI stops propagation).
     const gesture = (): void => this.hooks.gesture();
@@ -129,17 +132,17 @@ export class DomInput {
     this.state.keyUp(e.code);
   }
 
-  private pointerDown(e: PointerEvent): void {
+  private mouseDown(e: MouseEvent): void {
     this.cursorX = e.clientX;
     this.cursorY = e.clientY;
     this.overUi = false;
     if (!this.hooks.active()) return;
-    // Clicking the world takes keyboard focus away from any UI control (Space must cast, not press a button).
+    // Clicking the world takes keyboard focus away from any UI control (game keys must not activate the old control).
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused !== document.body && !isTyping(focused)) focused.blur();
     if (e.button === 2) {
       e.preventDefault();
-      this.hooks.worldRightClick();
+      if (!this.hooks.worldRightClick()) this.state.mouseDown(2);
       return;
     }
     if (e.button !== 0) return;

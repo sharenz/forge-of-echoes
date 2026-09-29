@@ -282,8 +282,6 @@ export function castSlowOf(rec: Pick<PlayerRecord, 'castSkill' | 'slots'>): numb
   return predictionSlow(castProbe);
 }
 
-/** The sim checks held slots in this order each tick: the actives first, the basic attack (slot 0) last. */
-const CAST_ORDER = [1, 2, 3, 4, 5, 0] as const;
 /** Dynamic CastModel state saved per predicted input: cast slot, time, total, then charges and timers per slot. */
 const CAST_STATE_SIZE = 3 + 2 * LOADOUT_SLOTS;
 
@@ -300,6 +298,7 @@ const CAST_STATE_SIZE = 3 + 2 * LOADOUT_SLOTS;
  */
 export class CastModel {
   castSlot = -1;
+  private basicSlot = -1;
   time = 0;
   total = 0;
   focus = 0;
@@ -316,9 +315,11 @@ export class CastModel {
     this.alive = !rec.dead;
     this.focus = rec.focus;
     const n = Math.min(rec.slots.length, LOADOUT_SLOTS);
+    this.basicSlot = -1;
     for (let s = 0; s < LOADOUT_SLOTS; s++) {
       const sv = s < n ? rec.slots[s] : null;
       const id = sv ? sv.skillId : null;
+      if (id === 'emberLance') this.basicSlot = s;
       this.castTime[s] = id === null ? -1 : castTimes.get(id) ?? -1;
       this.maxCharges[s] = sv ? sv.maxCharges : 0;
       this.cooldown[s] = sv ? sv.cooldownTotal : 0;
@@ -326,7 +327,7 @@ export class CastModel {
     }
   }
 
-  /** Loadout slot of the record's running cast (0 = basic), -1 for none, -2 for a skill not in the loadout. */
+  /** Loadout slot of the record's running cast, -1 for none, -2 for a skill not in the loadout. */
   private static castSlotOf(rec: PlayerRecord): number {
     if (rec.castSkill === null) return -1;
     const n = Math.min(rec.slots.length, LOADOUT_SLOTS);
@@ -351,12 +352,12 @@ export class CastModel {
     const slowed = castSlowOf(rec) > 0;
     const total = rec.castSkill !== null ? castTimes.get(rec.castSkill) ?? 0 : 0;
     if (total > 0) {
-      this.castSlot = slot >= 0 ? slot : 1;
+      this.castSlot = slot >= 0 ? slot : LOADOUT_SLOTS;
       this.total = total;
       this.time = castTimeAt(rec.castProgress, total);
     } else if (slowed) {
       // First sight of this active: its end is unknown, keep slowing until a snapshot says otherwise.
-      this.castSlot = slot >= 1 ? slot : 1;
+      this.castSlot = slot >= 0 ? slot : LOADOUT_SLOTS;
       this.total = Infinity;
     }
     // (An unknown basic-attack cast is ignored: it neither slows nor blocks an active.)
@@ -442,7 +443,7 @@ export class CastModel {
     }
     // The running cast advances and may release (its overshoot carries into a back-to-back cast).
     let carry = 0;
-    if (!canAct) return this.castSlot > 0 ? CAST_SLOW : 0;
+    if (!canAct) return this.castSlot >= 0 && this.castSlot !== this.basicSlot ? CAST_SLOW : 0;
     if (this.castSlot >= 0) {
       this.time += castRate === 1 ? SIM_DT : SIM_DT * castRate;
       if (this.time >= this.total) {
@@ -452,12 +453,13 @@ export class CastModel {
     }
     // Held timed skills start as soon as usable.
     if (held !== 0) {
-      for (let o = 0; o < CAST_ORDER.length; o++) {
-        const s = CAST_ORDER[o];
+      for (let o = 0; o <= LOADOUT_SLOTS; o++) {
+        const s = o === LOADOUT_SLOTS ? this.basicSlot : o;
+        if (s < 0 || (o < LOADOUT_SLOTS && s === this.basicSlot)) continue;
         if ((held & (1 << s)) === 0) continue;
         const ct = this.castTime[s];
         if (!(ct > 0)) continue;
-        if (this.castSlot >= 0 && !(this.castSlot === 0 && s !== 0)) continue;
+        if (this.castSlot >= 0 && !(this.castSlot === this.basicSlot && s !== this.basicSlot)) continue;
         if (this.charges[s] < 1 || this.focus + 1e-9 < this.cost[s]) continue;
         this.focus -= this.cost[s];
         if (this.cooldown[s] > 0) {
@@ -469,7 +471,7 @@ export class CastModel {
         this.total = ct;
       }
     }
-    return this.castSlot > 0 ? CAST_SLOW : 0;
+    return this.castSlot >= 0 && this.castSlot !== this.basicSlot ? CAST_SLOW : 0;
   }
 }
 

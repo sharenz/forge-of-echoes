@@ -2,7 +2,7 @@
 // through MonsterScaling, per-wave growth, elite modifiers and the party size.
 import type { MonsterKind } from '../contracts/content';
 import { MONSTER_ANIM, RARITY_CODE, type MonsterRarity } from '../contracts/sim';
-import { KIND_INDEX, RARITY_XP, eliteDamageMult, eliteLifeMult, eliteSpeedMult } from './archetypes';
+import { KIND_INDEX, RARITY_STRENGTH, RARITY_XP, eliteDamageMult, eliteLifeMult, eliteSpeedMult } from './archetypes';
 import { PARTY_LIFE_PER_PLAYER, SPAWN_ANIM_TIME, WAVE_DAMAGE_GROWTH, WAVE_LIFE_GROWTH } from './constants';
 import { DAMAGE_INDEX, GOLDEN_ANGLE, TAU } from './math';
 import { nearestLiving } from './player';
@@ -43,9 +43,10 @@ export function spawnMonster(w: World, kind: MonsterKind, x: number, y: number, 
   const mods = opts.mods ?? 0;
   const wave = Math.max(1, opts.wave ?? w.director.wave);
   const isDummy = kind === 'trainingDummy';
+  const strength = RARITY_STRENGTH[opts.boss || opts.lieutenant || isDummy ? 'normal' : rarity];
   // Life scales with the party present at spawn time (a later join doesn't buff living monsters).
-  const lifeMult = isDummy ? 1 : s.lifeMultiplier * (1 + WAVE_LIFE_GROWTH * (wave - 1)) * eliteLifeMult(mods) * partyLifeMult(w);
-  const dmgMult = s.damageMultiplier * (1 + WAVE_DAMAGE_GROWTH * (wave - 1)) * eliteDamageMult(mods);
+  const lifeMult = isDummy ? 1 : s.lifeMultiplier * (1 + WAVE_LIFE_GROWTH * (wave - 1)) * eliteLifeMult(mods) * partyLifeMult(w) * strength.life;
+  const dmgMult = s.damageMultiplier * (1 + WAVE_DAMAGE_GROWTH * (wave - 1)) * eliteDamageMult(mods) * strength.damage;
   const rng = w.worldRng;
   const animate = opts.animate ?? true;
 

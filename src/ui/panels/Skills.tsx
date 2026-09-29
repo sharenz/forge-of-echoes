@@ -7,7 +7,8 @@ import { Keycap, PixelIcon, cx } from '../components/common';
 import { safe } from '../items/hooks';
 import { useLocal } from '../local';
 import { BRANCH_LABEL, layoutSkillTree } from '../lib/skilltree';
-import { useStore, useUi } from '../store';
+import { allowSkillDrop, beginSkillDrag, droppedSkill } from '../lib/loadout';
+import { shallowEqual, useStore, useUi } from '../store';
 import { PanelShell } from './PanelShell';
 
 const ROW_H = 138;
@@ -22,6 +23,7 @@ export function SkillsPanel() {
   const store = useStore();
   const local = useLocal();
   const ch = useUi((s) => s.character);
+  const keyLabels = useUi((s) => s.hud?.slots.map((slot) => slot.key) ?? LOADOUT_KEYS, shallowEqual);
   const [pick, setPick] = useState<Pick>(null);
   const skills = store.rules.content.skills;
   const layout = useMemo(() => layoutSkillTree(Object.values(skills)), [skills]);
@@ -123,6 +125,11 @@ export function SkillsPanel() {
                 <button
                   class="fe-node__icon"
                   aria-label={`${info.name}, rank ${r} of ${info.maxRank}`}
+                  draggable={learned}
+                  onDragStart={(e) => {
+                    local.hideTooltip();
+                    beginSkillDrag(e, learned ? n.id : null);
+                  }}
                   onPointerEnter={(e) => local.showTooltip({ kind: 'skill', skillId: n.id }, e.currentTarget)}
                   onPointerLeave={() => local.hideTooltip()}
                   onClick={() => {
@@ -142,7 +149,7 @@ export function SkillsPanel() {
                   {locked && <PixelIcon id="icon/ui/locked" class="fe-node__lock" width={20} height={20} />}
                   {slot >= 0 && (
                     <span class="fe-node__slot">
-                      <Keycap>{LOADOUT_KEYS[slot]}</Keycap>
+                      <Keycap>{keyLabels[slot]}</Keycap>
                     </span>
                   )}
                 </button>
@@ -192,7 +199,7 @@ export function SkillsPanel() {
             ? `Choose a slot for ${skills[pickedSkill].name}`
             : pickedSlot !== null
               ? 'Choose a learned skill for this slot'
-              : 'Loadout: click a skill, then a slot. Right-click a slot to clear it.'}
+              : 'Drag skills to any slot, or click a skill then a slot. Right-click to clear.'}
         </div>
         <div class="fe-loadout__slots">
           {Array.from({ length: LOADOUT_SLOTS }, (_, i) => {
@@ -201,7 +208,19 @@ export function SkillsPanel() {
             return (
               <button
                 key={i}
+                aria-label={`${keyLabels[i]}: ${id ? skills[id].name : 'Empty slot'}`}
                 class={cx('fe-lslot', pickedSkill && (valid ? 'fe-lslot--ok' : 'fe-lslot--no'), pickedSlot === i && 'fe-lslot--picked')}
+                draggable={!!id}
+                onDragStart={(e) => {
+                  setPick(null);
+                  local.hideTooltip();
+                  beginSkillDrag(e, id);
+                }}
+                onDragOver={allowSkillDrop}
+                onDrop={(e) => {
+                  const skill = droppedSkill(e);
+                  if (skill) assign(i, skill);
+                }}
                 onClick={() => {
                   if (pickedSkill) assign(i, pickedSkill);
                   else {
@@ -218,7 +237,7 @@ export function SkillsPanel() {
               >
                 {id ? <PixelIcon id={`icon/skill/${id}`} width={36} height={36} /> : <span class="fe-lslot__empty" />}
                 <span class="fe-lslot__key">
-                  <Keycap>{LOADOUT_KEYS[i]}</Keycap>
+                  <Keycap>{keyLabels[i]}</Keycap>
                 </span>
               </button>
             );

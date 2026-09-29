@@ -220,8 +220,8 @@ export function buildHud(input: HudInput): HudState | null {
   };
 }
 
-/** The key codes behind the loadout slots (slot 0 is the left mouse button), for keyboard-layout keycap labels. */
-export const LOADOUT_KEY_CODES: readonly (string | null)[] = [null, 'Space', 'KeyQ', 'KeyE', 'KeyR', 'KeyF'];
+/** Keyboard-layout keycap labels; the two mouse slots have no keyboard code. */
+export const LOADOUT_KEY_CODES: readonly (string | null)[] = [null, null, 'KeyQ', 'KeyE', 'KeyR', 'KeyF'];
 
 /**
  * Keycap labels for the loadout slots from a keyboard layout map (navigator.keyboard.getLayoutMap(): code → the

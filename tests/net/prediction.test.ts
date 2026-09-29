@@ -218,6 +218,16 @@ describe('local player prediction', () => {
 });
 
 describe('cast slow prediction', () => {
+  it.each([0, 1, 2, 3, 4, 5])('predicts a timed active in slot %i without movement corrections', (slot) => {
+    const h = new NetHarness({ latencyMs: 60, moveSpeed: 125, skills: [{ slot, skill: 'rimeShards', castTime: 0.34 }] });
+    h.client.setPredictionHints({ moveSpeed: 125, castTimes: { rimeShards: 0.34 } });
+    h.run(3000, (seq) => ({ moveX: 0.6, moveY: 0.8, held: seq > 40 && seq % 90 < 50 ? 1 << slot : 0 }));
+    const { compared, maxErr } = comparePredictions(h, 1);
+    expect(compared).toBeGreaterThan(150);
+    expect(maxErr).toBeLessThan(1e-3);
+    expect(h.client.stats().corrections).toBe(0);
+  });
+
   // Kiting east while spamming a 0.34 s Rime Shards (held in bursts): the server slows every cast tick to 70 %.
   const speed = 125;
   const kite = (seq: number) => ({ moveX: 1, moveY: 0, held: seq % 130 < 95 ? 4 : 0 });

@@ -521,11 +521,11 @@ async function coreScenario({ A, B, nameA, nameB, port }) {
       await p.waitFor('Ember Nova rank 1', () => window.__foe.store.get().character?.skillRanks.emberNova === 1, undefined, 5000);
       await p.page.click('button[aria-label^="Ember Nova, rank"]');
       await p.page.locator('.fe-lslot').nth(1).click();
-      await p.waitFor('Ember Nova on Space', () => window.__foe.store.get().character?.loadout[1] === 'emberNova', undefined, 5000);
+      await p.waitFor('Ember Nova on RMB', () => window.__foe.store.get().character?.loadout[1] === 'emberNova', undefined, 5000);
       if (p === A) await p.shot('01b-skills-A');
       await p.page.keyboard.press('k');
       // The server confirms: the HUD slot (from the replicated player) carries the skill.
-      await p.waitFor('the Space slot on the HUD', () => window.__foe.store.get().hud?.slots[1]?.skillId === 'emberNova', undefined, 5000);
+      await p.waitFor('the RMB slot on the HUD', () => window.__foe.store.get().hud?.slots[1]?.skillId === 'emberNova', undefined, 5000);
     }
     return 'emberNova on slot 1 for both';
   });

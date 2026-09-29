@@ -4,9 +4,14 @@ Maintained at the owner's request. Ask "what's next" and it is read from here; i
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
 Last reprioritised: 2026-09-29.
 
-**Current order:** fix the known UI layout problems → fix stash quick-move → show monster pack modifiers →
-account-wide storage → Atlas vertical slice → events and crafting progression → more map content.
+**Current order:** six freely assignable skill slots + stronger elites (in progress) → fix the known UI layout problems → fix stash quick-move → show monster pack modifiers →
+social UI (global chat and party avatars) → account-wide storage → Atlas vertical slice → events and crafting progression → more map content.
 Priorities follow current usability problems, then progression dependencies. Wave-3 boss reuse is later content work.
+
+**Current release in verification (owner, 2026-09-29):** six slots labelled LMB, RMB, Q, E, R, F; any learned
+skill in any slot, including Ember Lance; drag to move/swap from the skills panel or HUD. RMB replaces Space.
+Auto-attack follows Ember Lance. Rare leaders gain ×3 life / ×1.5 damage, magic mobs ×1.5 life / ×1.2 damage,
+before their existing modifiers. Named boss tuning stays as approved in the owner's playtest.
 
 **Vision (owner):** two progressions. Character progression exists so you can run harder maps; **map
 progression is the real game progression.** Hobby project played with friends (no trust/legal/scale concerns).
@@ -81,6 +86,10 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
    centre suggested). Spec data: magic packs share one mod (Swift, Stout, Fierce); a rare leader has 2 of
    Juggernaut, Frenzied, Ember-touched, Warded (`GAME_SPEC.md` §8). Needs the mods in the client snapshot and
    a hover hit-test on monsters; uses the shared UI type scale.
+4. **Global chat and party avatars** (owner, 2026-09-29). Add a global chat channel. Right-click a player's
+   name/message in chat to invite them to the party. Show one party avatar per player along the left side of
+   the screen; right-click an avatar for **Join hideout** and **Trade**, using the existing party/trade actions.
+   Keep chat and avatar context menus readable and usable at both normal and small viewports.
 
 ## P1: the spine (build in this order; each step playable and testable)
 
@@ -143,12 +152,6 @@ reopen tuning for a specific problem rather than starting another general balanc
   so it can ship with its own skills and tree section. Open (to discuss when it's time): skill list and identity,
   weapons/armour/bases (needs melee bases and stats such as strength scaling), resource (Focus vs a rage-style
   meter), and how the map/wave combat suits melee (positioning, hordes). Needs its own art and animations.
-
-## Needs clarification before scheduling
-
-- **Adjustable skill slots** (owner). A loadout row already exists in the skills panel (click skill, click slot,
-  right-click clear). Clarify what is missing: key rebinding, slot 0 restricted to basic, swapping from the bar
-  in-game, or a bug. This does not block the ordered work above.
 
 ## Ideas (unrefined)
 

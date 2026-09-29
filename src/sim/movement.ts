@@ -6,7 +6,7 @@
 // applied by the sim *outside* this function and reaches the client as a correction.
 //
 // The `slow` the sim passes is `playerSlow(castSlow, debuffSlow, groundSlow)`:
-//   castSlow   CAST_SLOW while a timed active (not the slot-0 basic attack) is being cast, else 0;
+//   castSlow   CAST_SLOW while a timed active (not Ember Lance) is being cast, else 0;
 //   debuffSlow `debuffSlowOf(view.debuffs)`: 1 while frozen or rooted (a chain hook's pull included),
 //              PLAYER_CHILL_SLOW while chilled, else 0;
 //   groundSlow `areaSlowAt(view.areas, x, y)` at the feet before the step: TAR_SLOW inside a tarPool.
@@ -88,17 +88,13 @@ export function playerSlow(castSlow: number, debuffSlow: number, groundSlow: num
 
 /**
  * The `slow` a client should pass when predicting `player` from its latest server view: the cast
- * slow while a timed active (anything but the loadout's slot-0 basic attack) is being cast, combined
+ * slow while a timed active (anything but Ember Lance) is being cast, combined
  * with the debuff slow (`debuffSlowOf`). The ground slow needs the areas: combine it with
  * `areaSlowAt(areas, x, y)` via `playerSlow` (or `combineSlow`).
  */
 export function predictionSlow(player: Pick<PlayerView, 'castSkill' | 'slots'> & { debuffs?: readonly PlayerDebuffView[] }): number {
   const cast = player.castSkill;
-  let castSlow = 0;
-  if (cast) {
-    const basic = player.slots.length > 0 ? player.slots[0].skillId : null;
-    castSlow = cast === basic ? 0 : CAST_SLOW;
-  }
+  const castSlow = cast && cast !== 'emberLance' ? CAST_SLOW : 0;
   return combineSlow(castSlow, debuffSlowOf(player.debuffs));
 }
 

@@ -48,6 +48,21 @@ describe('held-slot casting', () => {
     stepWith(run, both);
     expect(pv(run).castSkill).toBe('emberNova');
   });
+
+  it('keeps active-skill priority and interruption after swapping LMB and RMB', () => {
+    const nova = makeSkill('emberNova', 1, { level: 10 });
+    const { run } = makeArena({ skills: [lance(), nova], loadout: ['emberNova', 'emberLance', null, null, null, null] });
+    stepN(run, 10, hold(1, 100, 0));
+    expect(pv(run).castSkill).toBe('emberLance');
+    const both = hold(0, 100, 0);
+    both.held[1] = true;
+    stepWith(run, both);
+    expect(pv(run).castSkill).toBe('emberNova');
+    stepN(run, 3, both);
+    expect(pv(run).castSkill).toBe('emberNova');
+    const finished = stepN(run, 35, both);
+    expect(ofType(finished.events, 'nova')).toHaveLength(1);
+  });
 });
 
 describe('ember lance', () => {

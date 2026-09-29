@@ -68,7 +68,7 @@ export const MAX_MONSTER_RADIUS = 30;
 // --- player ------------------------------------------------------------------
 export const PLAYER_RADIUS = 7;
 /**
- * Movement speed multiplier while a timed active skill is being cast. The basic attack (slot 0)
+ * Movement speed multiplier while a timed active skill is being cast. Ember Lance
  * is exempt: it is held most of the time, and the move speed the character sheet shows must be
  * the speed you actually walk at while fighting.
  */

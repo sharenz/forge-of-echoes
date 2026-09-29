@@ -330,9 +330,10 @@ export class Autopilot {
     }
 
     // Skills: the basic attack whenever something is in range, the loadout by situation.
-    if (nd < 330) out.held |= 1;
+    const basicSlot = p.slots.findIndex((s) => s.skillId === 'emberLance');
+    if (nd < 330 && basicSlot >= 0) out.held |= 1 << basicSlot;
     if (!this.opts.skills) return out;
-    for (let s = 1; s < p.slots.length; s++) {
+    for (let s = 0; s < p.slots.length; s++) {
       const slot = p.slots[s];
       if (!slot || !slot.skillId || !slot.usable) continue;
       let hold = false;

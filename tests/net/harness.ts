@@ -44,7 +44,7 @@ export interface HarnessOptions {
   serverHz?: number;
   /** Downlink stalls: snapshots due inside [at, at + ms) arrive together at at + ms (TCP head-of-line blocking). */
   stalls?: { at: number; ms: number }[];
-  /** Timed skills in loadout slots (slot ≥ 1): the server casts them like the sim while their slot is held. */
+  /** Timed active skills in any loadout slot: cast while their slot is held, matching the sim. */
   skills?: { slot: number; skill: SkillId; castTime: number }[];
   /** Server-side Chilled move slow (the sim's PLAYER_CHILL_SLOW unless testing a sim that deviates). */
   chillSlow?: number;

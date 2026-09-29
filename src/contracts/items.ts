@@ -191,9 +191,9 @@ export interface CharacterStatsLog {
   playSeconds: number;
 }
 
-/** Number of loadout slots. Index 0 = left mouse (basic attack), 1..5 = Space, Q, E, R, F. */
+/** Six freely assignable slots: LMB, RMB, Q, E, R, F. */
 export const LOADOUT_SLOTS = 6;
-export const LOADOUT_KEYS = ['LMB', 'Space', 'Q', 'E', 'R', 'F'] as const;
+export const LOADOUT_KEYS = ['LMB', 'RMB', 'Q', 'E', 'R', 'F'] as const;
 export const BELT_SLOTS = 4;
 export const BACKPACK_SIZE = { w: 12, h: 5 } as const;
 export const STASH_TAB_SIZE = { w: 12, h: 8 } as const;

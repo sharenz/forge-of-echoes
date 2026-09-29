@@ -53,12 +53,17 @@ let chat = false;
 let toggles = 0;
 let alt: boolean[] = [];
 let input: DomInput;
+let canvas: FakeTarget;
+let cancelCraft = false;
 
 beforeEach(() => {
   win = Object.assign(new FakeTarget(), { innerWidth: 800, innerHeight: 600 });
   doc = Object.assign(new FakeTarget(), { hidden: false, activeElement: null });
   vi.stubGlobal('window', win);
   vi.stubGlobal('document', doc);
+  vi.stubGlobal('HTMLElement', FakeTarget);
+  canvas = new FakeTarget();
+  cancelCraft = false;
   chat = false;
   toggles = 0;
   alt = [];
@@ -66,13 +71,13 @@ beforeEach(() => {
     chatOpen: () => chat,
     active: () => true,
     worldClick: () => false,
-    worldRightClick: () => undefined,
+    worldRightClick: () => cancelCraft,
     setAlt: (held) => alt.push(held),
     toggleAutoAttack: () => toggles++,
     released: () => undefined,
     gesture: () => undefined,
   };
-  input = new DomInput(new FakeTarget() as unknown as HTMLCanvasElement, hooks);
+  input = new DomInput(canvas as unknown as HTMLCanvasElement, hooks);
 });
 
 afterEach(() => {
@@ -84,6 +89,36 @@ const down = (init: KeyInit) => win.fire('keydown', key(init));
 const up = (init: KeyInit) => win.fire('keyup', key(init));
 
 describe('DomInput', () => {
+  const pointer = (button: number) => ({ button, clientX: 100, clientY: 100, preventDefault() {} });
+
+  it('casts with RMB, releases outside the canvas and consumes crafting cancellation', () => {
+    canvas.fire('mousedown', pointer(2));
+    expect(input.state.sample().held).toBe(2);
+    win.fire('mouseup', pointer(2));
+    expect(input.state.sample().held).toBe(0);
+    cancelCraft = true;
+    canvas.fire('mousedown', pointer(2));
+    expect(input.state.sample().held).toBe(0);
+  });
+
+  it('releases mouse inputs on cancellation, dragging and blur', () => {
+    for (const event of ['pointercancel', 'dragstart', 'blur']) {
+      canvas.fire('mousedown', pointer(0));
+      canvas.fire('mousedown', pointer(2));
+      expect(input.state.sample().held).toBe(3);
+      win.fire(event, {});
+      expect(input.state.sample().held).toBe(0);
+    }
+  });
+  it('tracks both mouse buttons independently when their presses and releases overlap', () => {
+    canvas.fire('mousedown', pointer(0));
+    canvas.fire('mousedown', pointer(2));
+    expect(input.state.sample().held).toBe(3);
+    win.fire('mouseup', pointer(0));
+    expect(input.state.sample().held).toBe(2);
+    win.fire('mouseup', pointer(2));
+    expect(input.state.sample().held).toBe(0);
+  });
   it('forgets keys released while ⌘ was held (macOS sends no key-up) and restores a still-held key on repeat', () => {
     down({ code: 'KeyD', key: 'd' });
     expect(input.state.sample().moveX).toBe(1);
@@ -109,13 +144,13 @@ describe('DomInput', () => {
   });
 
   it('leaves Ctrl/⌘ shortcuts to the browser but prevents the defaults of game keys', () => {
-    const space = key({ code: 'Space', key: ' ' });
-    win.fire('keydown', space);
-    expect(space.defaultPrevented).toBe(true);
+    const q = key({ code: 'KeyQ', key: 'q' });
+    win.fire('keydown', q);
+    expect(q.defaultPrevented).toBe(true);
     const copy = key({ code: 'KeyE', key: 'e', ctrlKey: true });
     win.fire('keydown', copy);
     expect(copy.defaultPrevented).toBe(false);
-    expect(input.state.sample().held).toBe(0b10); // Space only
+    expect(input.state.sample().held).toBe(0b100); // Q only
   });
 
   it('T toggles auto-attack once per press; Alt is tracked', () => {

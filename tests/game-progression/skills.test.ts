@@ -4,6 +4,7 @@ import type { CharacterSave } from '../../src/contracts/items';
 import type { SkillId } from '../../src/contracts/content';
 import { rules } from '../../src/game';
 import { damageRange } from '../../src/game/progression/skills';
+import { normalizeCharacter } from '../../src/game/progression/save';
 import { SORCERESS } from '../../src/data/progression';
 import { bareCharacter, expectErr, expectOk, unique } from './fixtures';
 
@@ -102,11 +103,18 @@ describe('the skill tree', () => {
 describe('loadout', () => {
   const ch = withRanks({ emberNova: 3, rimeShards: 1, riftStep: 1 }, { loadout: ['emberLance', 'emberNova', 'riftStep', null, null, null] });
 
-  it('keeps the basic attack on the left mouse button', () => {
-    expect(expectErr(rules.setLoadoutSlot(ch, 0, 'emberNova'))).toMatch(/left mouse button/);
-    expect(expectErr(rules.setLoadoutSlot(ch, 0, null))).toMatch(/left mouse button/);
-    expect(expectErr(rules.setLoadoutSlot(ch, 2, 'emberLance'))).toMatch(/basic attack/);
-    expect(expectOk(rules.setLoadoutSlot(ch, 0, 'emberLance')).loadout[0]).toBe('emberLance');
+  it('allows every learned skill in all six slots, including either mouse button', () => {
+    for (const skill of ['emberLance', 'emberNova', 'rimeShards', 'riftStep'] as const) {
+      for (let slot = 0; slot < 6; slot++) {
+        const moved = expectOk(rules.setLoadoutSlot(ch, slot, skill));
+        expect(moved.loadout[slot]).toBe(skill);
+        expect(moved.loadout.filter((s) => s === skill)).toHaveLength(1);
+        expect(rules.playerRuntime(moved, null).loadout).toEqual(moved.loadout);
+        expect(normalizeCharacter(moved)?.loadout).toEqual(moved.loadout);
+      }
+    }
+    expect(expectOk(rules.setLoadoutSlot(ch, 0, 'emberNova')).loadout).toEqual(['emberNova', 'emberLance', 'riftStep', null, null, null]);
+    expect(expectOk(rules.setLoadoutSlot(ch, 0, null)).loadout[0]).toBeNull();
   });
 
   it('needs rank 1', () => {

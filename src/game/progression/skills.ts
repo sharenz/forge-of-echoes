@@ -47,7 +47,7 @@ export const SKILL_INFO: Record<SkillId, SkillInfo> = Object.fromEntries(
   }),
 ) as Record<SkillId, SkillInfo>;
 
-/** The innate basic attack: always ranked, always in loadout slot 0. */
+/** The innate basic attack: always learned, assignable to any loadout slot. */
 export const BASIC_SKILL: SkillId = 'emberLance';
 
 // ---------------------------------------------------------------------------------------------
@@ -241,11 +241,11 @@ export function playerSkills(ch: CharacterSave, model: PlayerModel): SkillRuntim
   return out;
 }
 
-/** Loadout as exactly LOADOUT_SLOTS entries, basic attack in slot 0, only ranked skills, no duplicates. */
+/** Exactly LOADOUT_SLOTS entries: any learned skill in any slot, without duplicates. */
 export function normalizeLoadout(ch: Pick<CharacterSave, 'loadout' | 'skillRanks'>): (SkillId | null)[] {
-  const out: (SkillId | null)[] = [BASIC_SKILL];
-  const used = new Set<SkillId>([BASIC_SKILL]);
-  for (let i = 1; i < LOADOUT_SLOTS; i++) {
+  const out: (SkillId | null)[] = [];
+  const used = new Set<SkillId>();
+  for (let i = 0; i < LOADOUT_SLOTS; i++) {
     const id = ch.loadout?.[i] ?? null;
     if (id && findSkill(id) && !used.has(id) && skillRank(ch, id) >= 1) {
       out.push(id);
@@ -277,7 +277,7 @@ export function canRankUpSkill(ch: CharacterSave, skillId: SkillId): { ok: boole
 
 /**
  * Spend one skill point on a skill. A newly learned skill is bound to the first free loadout key
- * (Space, Q, E, R, F) so it is usable right away.
+ * so it is usable right away.
  */
 export function rankUpSkill(ch: CharacterSave, skillId: SkillId): Result<CharacterSave> {
   const check = canRankUpSkill(ch, skillId);
@@ -288,8 +288,8 @@ export function rankUpSkill(ch: CharacterSave, skillId: SkillId): Result<Charact
   if (before === 0) {
     const loadout = normalizeLoadout(next);
     if (!loadout.includes(skillId)) {
-      const free = loadout.findIndex((s, i) => i > 0 && s === null);
-      if (free > 0) loadout[free] = skillId;
+      const free = loadout.findIndex((s) => s === null);
+      if (free >= 0) loadout[free] = skillId;
     }
     next = { ...next, loadout };
   }
@@ -297,29 +297,24 @@ export function rankUpSkill(ch: CharacterSave, skillId: SkillId): Result<Charact
 }
 
 /**
- * Slot 0 holds only the basic attack; skills need rank ≥ 1; a skill occupies one slot — binding it to
- * a new slot moves it there (the displaced skill takes its old slot). null clears slots 1–5.
+ * Any learned skill can occupy any slot. Binding it to a new slot moves it there, swapping with
+ * the displaced skill. null clears any slot, including the mouse buttons.
  */
 export function setLoadoutSlot(ch: CharacterSave, slot: number, skillId: SkillId | null): Result<CharacterSave> {
   if (!Number.isInteger(slot) || slot < 0 || slot >= LOADOUT_SLOTS) return fail('That loadout slot does not exist.');
   const loadout = normalizeLoadout(ch);
-  if (slot === 0) {
-    if (skillId === BASIC_SKILL) return ok({ ...ch, loadout });
-    return fail(`The left mouse button always holds your basic attack, ${getSkill(BASIC_SKILL).name}.`);
-  }
   if (skillId === null) {
     loadout[slot] = null;
     return ok({ ...ch, loadout });
   }
   const def = findSkill(skillId);
   if (!def) return fail('Unknown skill.');
-  if (skillId === BASIC_SKILL) return fail(`${def.name} is your basic attack and stays on the left mouse button.`);
   if (skillRank(ch, skillId) < 1) return fail(`Learn ${def.name} first: spend a skill point on it.`);
   const from = loadout.indexOf(skillId);
   if (from === slot) return ok({ ...ch, loadout });
   const displaced = loadout[slot];
   loadout[slot] = skillId;
-  if (from > 0) loadout[from] = displaced;
+  if (from >= 0) loadout[from] = displaced;
   return ok({ ...ch, loadout });
 }
 

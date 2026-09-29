@@ -301,18 +301,21 @@ describe('loot entropy', () => {
     const [p] = players;
     const map = soloMap(p, clock);
     let rolls = 0;
+    let calls = 0;
     const lootRng = server.game.lootRng.bind(server.game);
     server.game.lootRng = (simRng) => {
+      calls++;
       const rng = lootRng(simRng);
       if (rng !== simRng) rolls++;
       return rng;
     };
     const bot = createBot();
-    for (let t = 0; t < 60 * 60 && map.run.view.drops.length === 0; t++) {
+    for (let t = 0; t < 60 * 60 && calls < 5; t++) {
       p.intent(bot.intent(map.run.view, p.playerId));
       tick(server, clock);
     }
-    expect(map.run.view.drops.length).toBeGreaterThan(0);
-    expect(rolls).toBeGreaterThan(0);
+    // An entropy check must not depend on a random drop appearing within one minute.
+    expect(calls).toBeGreaterThanOrEqual(5);
+    expect(rolls).toBe(calls);
   }, 60_000);
 });

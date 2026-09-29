@@ -123,6 +123,14 @@ describe('command authority', () => {
     expect(p.command({ c: 'setLoadoutSlot', slot: 1, skillId: 'emberNova' }).ok).toBe(true);
     tick(p.server, clock, 2);
     expect(p.me()!.slots[1].skillId).toBe('emberNova');
+    // Swapping the two mouse slots reaches the authoritative sim, including Ember Lance on RMB.
+    expect(p.command({ c: 'setLoadoutSlot', slot: 0, skillId: 'emberNova' }).ok).toBe(true);
+    tick(p.server, clock, 2);
+    expect(p.me()!.slots.slice(0, 2).map((s) => s.skillId)).toEqual(['emberNova', 'emberLance']);
+    expect(p.command({ c: 'setLoadoutSlot', slot: 5, skillId: 'emberLance' }).ok).toBe(true);
+    tick(p.server, clock, 2);
+    expect(p.me()!.slots[1].skillId).toBeNull();
+    expect(p.me()!.slots[5].skillId).toBe('emberLance');
     expect(p.me()!.maxLife).toBeLessThanOrEqual(before);
     expect(p.command({ c: 'rankUpSkill', skillId: 'emberNova' }).error).toBeTruthy(); // no points left
   });

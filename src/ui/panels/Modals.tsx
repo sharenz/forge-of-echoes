@@ -121,10 +121,9 @@ const HELP: { title: string; rows: [string[], string][] }[] = [
     title: 'Combat',
     rows: [
       [['W', 'A', 'S', 'D'], 'Move'],
-      [['LMB'], 'Basic attack (hold)'],
-      [['Space', 'Q', 'E', 'R', 'F'], 'Skills (hold to cast when ready)'],
+      [['LMB', 'RMB', 'Q', 'E', 'R', 'F'], 'Assigned skills (hold to cast when ready)'],
       [['1', '2', '3', '4'], 'Drink a flask'],
-      [['T'], 'Toggle auto-attack'],
+      [['T'], 'Toggle auto-attack for Ember Lance in its assigned slot'],
     ],
   },
   {

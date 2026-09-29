@@ -6,8 +6,10 @@ import type { HudFlask, HudSlot } from '../../contracts/ui';
 import { PixelIcon, cx } from '../components/common';
 import { useLocal } from '../local';
 import { counterplay } from '../lib/debuffs';
+import { allowSkillDrop, beginSkillDrag, droppedSkill } from '../lib/loadout';
+import { safe } from '../items/hooks';
 import { formatCooldown, formatInt, fraction } from '../lib/format';
-import { shallowEqual, useUi } from '../store';
+import { shallowEqual, useStore, useUi } from '../store';
 
 function Globe({ kind }: { kind: 'life' | 'focus' }) {
   const local = useLocal();
@@ -60,8 +62,9 @@ function Globe({ kind }: { kind: 'life' | 'focus' }) {
 
 function SkillSlot({ index }: { index: number }) {
   const local = useLocal();
+  const store = useStore();
   const slot = useUi((s) => s.hud?.slots[index] ?? null, slotEq);
-  const auto = useUi((s) => index === 0 && s.settings.autoAttack);
+  const auto = useUi((s) => s.hud?.slots[index]?.skillId === 'emberLance' && s.settings.autoAttack);
   // The skill that answers an active debuff (Rift Step breaks a root) glows while it lasts and is ready.
   const counter = useUi((s) => {
     const id = s.hud?.slots[index]?.skillId;
@@ -73,12 +76,32 @@ function SkillSlot({ index }: { index: number }) {
   const starved = !slot.usable && !cooling && !!slot.skillId;
   return (
     <div
+      aria-label={`${slot.key}: ${slot.skillId ? store.rules.content.skills[slot.skillId].name : 'Empty slot'}`}
+      draggable={!!slot.skillId}
+      onDragStart={(e) => {
+        local.hideTooltip();
+        beginSkillDrag(e, slot.skillId);
+      }}
+      onDragOver={allowSkillDrop}
+      onDrop={(e) => {
+        const skill = droppedSkill(e);
+        const character = store.get().character;
+        if (!skill || !character) return;
+        const result = safe(() => store.rules.setLoadoutSlot(character, index, skill), { ok: false as const, error: 'That skill cannot go there.' });
+        if (!result.ok) {
+          store.actions.uiSound('error');
+          local.flashHint(result.error);
+          return;
+        }
+        store.actions.setLoadoutSlot(index, skill);
+        store.actions.uiSound('equip');
+      }}
       class={cx(
         'fe-skill',
         !slot.skillId && 'fe-skill--empty',
         cooling && 'fe-skill--cooling',
         starved && 'fe-skill--starved',
-        index === 0 && 'fe-skill--basic',
+        slot.skillId === 'emberLance' && 'fe-skill--basic',
         // Only a skill you can use right now says "use me"; on cooldown or short of Focus it keeps a quiet ring.
         counter && (cooling || !slot.usable ? 'fe-skill--counter-wait' : 'fe-skill--counter'),
       )}

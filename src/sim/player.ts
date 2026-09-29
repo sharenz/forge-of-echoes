@@ -23,9 +23,6 @@ import { releaseSkill, tickFireTrail, tickPendingNovas, tickWard } from './skill
 import { MFLAG, MSTATE } from './stores';
 import type { FlaskState, PlayerState, SkillChargeState, World } from './world';
 
-/** Non-basic slots get first pick; the basic attack (slot 0) fills the gaps. */
-const CAST_ORDER = [1, 2, 3, 4, 5, 0] as const;
-
 function maxCharges(def: SkillRuntimeDef): number {
   return Math.max(1, Math.floor(def.charges));
 }
@@ -255,8 +252,11 @@ function updateCasting(w: World, p: PlayerState): void {
       releaseSkill(w, p, c.def, p.aimX, p.aimY);
     }
   }
-  for (let o = 0; o < CAST_ORDER.length && rate > 0; o++) {
-    const slot = CAST_ORDER[o];
+  // Active skills get first pick; Ember Lance fills the gaps wherever it is assigned.
+  const basicSlot = p.loadout.indexOf('emberLance');
+  for (let o = 0; o <= LOADOUT_SLOTS && rate > 0; o++) {
+    const slot = o === LOADOUT_SLOTS ? basicSlot : o;
+    if (slot < 0 || (o < LOADOUT_SLOTS && slot === basicSlot)) continue;
     if (held[slot] !== true) continue;
     const id = p.loadout[slot];
     if (!id) continue;
@@ -268,7 +268,7 @@ function updateCasting(w: World, p: PlayerState): void {
     // normal keypress spanning several ticks spends exactly one Rift Step charge.
     if (instant && p.prevHeld[slot] && p.slotLock[slot] > 0) continue;
     // Only one timed cast at a time, but any skill may cut short the (free) basic attack.
-    if (!instant && p.cast && !(p.cast.slot === 0 && slot !== 0)) continue;
+    if (!instant && p.cast && !(p.cast.def.id === 'emberLance' && id !== 'emberLance')) continue;
     if (ch.charges < 1) continue;
     if (!canAfford(p, def)) {
       if (!p.prevHeld[slot] || p.focusWarnCd <= 0) {
@@ -351,7 +351,7 @@ export function updatePlayer(w: World, p: PlayerState): void {
     mx = dir.x;
     my = dir.y;
     const ml = dir.len;
-    const castSlow = p.cast && p.cast.slot !== 0 ? CAST_SLOW : 0;
+    const castSlow = p.cast && p.cast.def.id !== 'emberLance' ? CAST_SLOW : 0;
     const base = playerSlow(castSlow, moveSlowOf(p), areaSlowAt(w.areas, p.x, p.y));
     const crowd = ml > 0.05 && base < 1 ? crowdFactor(w, p, mx / ml, my / ml) : 1;
     // Uncrowded, the slow is exactly what a predicting client passes (see movement.ts playerSlow).

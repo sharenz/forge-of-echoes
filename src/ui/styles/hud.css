@@ -298,6 +298,12 @@
 .fe-skill .fe-skill__icon {
   transition: filter 0.15s;
 }
+.fe-skill[draggable='true'] {
+  cursor: grab;
+}
+.fe-skill[draggable='true']:active {
+  cursor: grabbing;
+}
 .fe-skill--basic {
   border-color: #8a6a3e;
 }

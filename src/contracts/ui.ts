@@ -23,7 +23,7 @@ export type Panel =
   | 'inventory' | 'stash' | 'character' | 'skills' | 'mapDevice' | 'merchant' | 'craftingBench' | 'trade' | 'party' | 'menu' | 'help';
 
 export interface HudSlot {
-  key: string;                 // "LMB", "Space", "Q", …
+  key: string;                 // "LMB", "RMB", "Q", …
   skillId: SkillId | null;
   cooldown: number;            // remaining seconds
   cooldownTotal: number;

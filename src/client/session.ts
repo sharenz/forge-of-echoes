@@ -158,6 +158,7 @@ export class GameSession {
   private readonly discardScratch: SimEvent[] = [];
   /** Projectile speed of the basic attack (auto-attack lead); 0 for non-projectile skills. */
   private basicProjectileSpeed = 0;
+  private autoAttackSlot = -1;
   /** Monotonic per connection. */
   seq = 0;
   private lastSent: InputMessage | null = null;
@@ -484,7 +485,8 @@ export class GameSession {
     const castTimes: Partial<Record<SkillId, number>> = {};
     for (const k of rt.skills) castTimes[k.id] = k.castTime;
     this.world.setPredictionHints({ moveSpeed: rt.stats.moveSpeed, castTimes });
-    const basic = rt.loadout[0] ? rt.skills.find((k) => k.id === rt.loadout[0]) : undefined;
+    this.autoAttackSlot = rt.loadout.indexOf('emberLance');
+    const basic = rt.skills.find((k) => k.id === 'emberLance');
     this.basicProjectileSpeed = basic && basic.projectiles > 0 ? basic.projectileSpeed : 0;
   }
 
@@ -614,8 +616,8 @@ export class GameSession {
     } else {
       if (this.walk.active) this.stepWalk(s);
       // Auto-attack only when no slot is held by hand (a held skill aims at the cursor).
-      if (opts.autoAttack && s.held === 0 && this.autoAim(cursor, opts.alpha)) {
-        s.held = 1;
+      if (opts.autoAttack && this.autoAttackSlot >= 0 && s.held === 0 && this.autoAim(cursor, opts.alpha)) {
+        s.held = 1 << this.autoAttackSlot;
         aimX = this.targetScratch.x;
         aimY = this.targetScratch.y;
       }

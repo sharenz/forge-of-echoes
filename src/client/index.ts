@@ -14,7 +14,7 @@
 //     dropConnection() (simulated network drop → reconnect + in-place resume), dropEvents() (drop/pickup events by
 //     owner: own / public / foreign), skewSnapshots('once' | 'always' | 'off') (a stale bundle after a deploy:
 //     snapshots it cannot decode) }.
-//   • Input: WASD / arrows move, LMB (on the world) basic attack, Space Q E R F slots 1–5, 1–4 flasks, T auto-attack,
+//   • Input: WASD / arrows move, LMB / RMB / Q / E / R / F freely assigned skills, 1–4 flasks, T auto-attack,
 //     Alt affix details. The UI owns I C K P, Enter and Esc. Game keys are ignored while a text field has focus,
 //     while chat is open, and (as input) while the menu is open. Keycaps follow the keyboard layout where the
 //     browser tells it (navigator.keyboard; AZERTY shows A for the Q slot).
