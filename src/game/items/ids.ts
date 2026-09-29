@@ -2,15 +2,15 @@
 //
 // Uid namespaces:
 //   "i<base36>"      minted from CharacterSave.nextUid (hideout operations, merchant, starting kit)
+//   "<namespace>:i<base36>"  server characters' minted IDs; distinct across alts sharing an account stash
 //   "d<base36x2>"    random uid from a run's loot rng (items created without a CharacterSave)
 //   "belt:<index>"   synthetic uid of a belt slot's flask charges (see beltItem / findItem)
 //   "cstash:<id>"    synthetic uid of a Crafting Stash slot (currencyStashUid / parseCurrencyStashUid;
 //                    see src/game/items/special-stash.ts)
 //
-// UIDS ARE UNIQUE PER CHARACTER, NOT PER SERVER. Every character mints "i0", "i1", … from its own
-// counter, so an item that arrives from another character (a trade, a public drop someone else threw
-// on the floor) can carry a uid this character minted or will mint next. Two rules keep a character's
-// uids unique, and every inventory operation relies on that:
+// Pure fixtures and old saves may still mint "i0", "i1", … from their own counters. Server characters
+// have a persistent namespace; raw loot/legacy IDs are adopted into it on pickup. Incoming legacy IDs
+// can overlap, so two rules keep every inventory valid:
 //   • mintUid never hands out a uid the character already holds (it skips taken ones), and
 //   • addToBackpack keeps a foreign uid only when it is free, and then moves nextUid past it
 //     (adoptUid), so later mints do not even have to skip it; a taken uid is re-minted.
@@ -55,7 +55,7 @@ export function mintUid(ch: CharacterSave): { uid: string; character: CharacterS
   let n = Math.max(0, Math.floor(ch.nextUid || 0));
   let taken: Set<string> | null = null;
   for (;;) {
-    const uid = `i${n.toString(36)}`;
+    const uid = `${ch.uidNamespace ?? ''}i${n.toString(36)}`;
     taken ??= heldUids(ch);
     if (!taken.has(uid)) return { uid, character: { ...ch, nextUid: n + 1 } };
     n++;
@@ -68,7 +68,8 @@ export function mintUid(ch: CharacterSave): { uid: string; character: CharacterS
  * parseSave applies to a loaded save). Any other uid leaves the character unchanged.
  */
 export function adoptUid(ch: CharacterSave, uid: string): CharacterSave {
-  const m = MINTED_UID.exec(uid);
+  const prefix = ch.uidNamespace ?? '';
+  const m = MINTED_UID.exec(prefix && uid.startsWith(prefix) ? uid.slice(prefix.length) : uid);
   if (!m) return ch;
   const n = parseInt(m[1], 36);
   const next = Math.max(0, Math.floor(ch.nextUid || 0));

@@ -3,7 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5|qol] [--smoke 30] [--lieutenant]
+//                        [--only wave5|qol|account] [--smoke 30] [--lieutenant]
 //
 // --prod tests the production bundle instead of the Vite dev server: `vite build` (with VITE_FOE_DEBUG=1, so the
 // window.__foe hooks this script drives are compiled in) into a temp dir, served by the game server itself
@@ -68,6 +68,7 @@ const FIGHT_SECONDS = Number(opt('fight', '40'));
 /** --only wave5: skip the two-player core scenario (A alone plays the special stash tabs and both new map types). */
 const WAVE5_ONLY = opt('only', 'all') === 'wave5';
 const QOL_ONLY = opt('only', 'all') === 'qol';
+const ACCOUNT_ONLY = opt('only', 'all') === 'account';
 /** Seconds of fighting in each new map type (longer while its family has not shown two kinds yet). */
 const SMOKE_SECONDS = Number(opt('smoke', '30'));
 /** --lieutenant: keep fighting each new map type until its lieutenant (wave 3) is on the field. */
@@ -291,16 +292,17 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-async function registerAndPlay(p, base, username, password, charName) {
+async function registerAndPlay(p, base, username, password, charName, register = true) {
   const { page } = p;
   await page.goto(base + '/', { waitUntil: 'load' });
   await page.waitForSelector('.fe-auth', { timeout: 60_000 });
-  await page.click('.fe-auth__tab:has-text("Create account")');
+  if (register) await page.click('.fe-auth__tab:has-text("Create account")');
   await page.fill('#fe-user', username);
   await page.fill('#fe-pass', password);
-  await page.fill('#fe-pass2', password);
+  if (register) await page.fill('#fe-pass2', password);
   await page.click('.fe-auth__form button[type=submit]');
   await page.waitForSelector('.fe-chars', { timeout: 20_000 });
+  if (!register) await page.locator('.fe-charcard--new').click();
   await page.fill('#fe-cname', charName);
   await page.click('.fe-create button[type=submit]');
   await p.waitFor('the new character in the list', (n) => window.__foe.store.get().characters.some((c) => c.name === n), charName);
@@ -1813,6 +1815,46 @@ async function qolScenario({ A, B, nameA, nameB }) {
   });
 }
 
+async function accountScenario({ A, B, nameB, port }) {
+  let uid;
+  await step('a normal stash tab files maps/currency into storage shared with an online alt', async () => {
+    await openStashTab(A, 'maps');
+    await A.page.locator('.fe-tabs__normal .fe-tab').first().click();
+    const map = (await itemsOf(A)).find((i) => i.kind === 'map');
+    const currency = (await itemsOf(A)).find((i) => i.currencyId === 'scrap');
+    uid = map.uid;
+    await A.page.locator(`[data-drop="backpack"] [data-uid="${uid}"]`).click({ modifiers: ['Control'] });
+    await B.waitFor('shared map from the other character', (id) => window.__foe.store.get().character.mapStash.some((m) => m.uid === id), uid);
+    await A.page.locator(`[data-drop="backpack"] [data-uid="${currency.uid}"]`).click({ modifiers: ['Control'] });
+    await B.waitFor('shared currency from the other character', (n) => window.__foe.store.get().character.currencyStash.scrap === n, currency.count);
+    await A.page.locator('.fe-tabs__normal .fe-tab').first().dblclick();
+    await A.page.locator('.fe-tabs__rename').fill('Account Gear');
+    await A.page.locator('.fe-tabs__rename').press('Enter');
+    await B.waitFor('shared tab name', () => window.__foe.store.get().character.stash[0].name === 'Account Gear');
+    await A.shot('account-stash-normal');
+  });
+  await step('the alt withdraws the shared map once and both clients lose the stash entry', async () => {
+    await openStashTab(B, 'maps');
+    await B.page.locator(`.fe-maprow[data-uid="${uid}"]`).click({ modifiers: ['Control'] });
+    await B.waitFor('map in alt backpack', (id) => window.__foe.store.get().character.backpack.entries.some((e) => e.item.uid === id), uid);
+    await A.waitFor('map removed from the shared stash', (id) => !window.__foe.store.get().character.mapStash.some((m) => m.uid === id), uid);
+    await B.page.locator(`[data-drop="backpack"] [data-uid="${uid}"]`).click({ modifiers: ['Control'] });
+    await A.waitFor('map returned to the shared stash', (id) => window.__foe.store.get().character.mapStash.some((m) => m.uid === id), uid);
+    await B.shot('account-stash-maps');
+  });
+  await step('both alts reconnect after a server restart with the same shared map and tab name', async () => {
+    outage = true;
+    await stopGameServer();
+    await startGameServer(port);
+    for (const p of [A, B]) await p.waitFor('reconnected shared stash', (id) => {
+      const s = window.__foe.store.get();
+      return s.connection === 'online' && s.screen === 'game' && s.character.stash[0].name === 'Account Gear' && s.character.mapStash.filter((m) => m.uid === id).length === 1;
+    }, uid, 30_000);
+    outage = false;
+    return `one shared map, two online characters; alt ${nameB}`;
+  });
+}
+
 async function main() {
   const port = await freePort();
   if (PROD) {
@@ -1859,13 +1901,14 @@ async function main() {
   });
   if (!WAVE5_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
-      await registerAndPlay(B, base, `e2e_b_${suffix}`, 'emberpass-B1', nameB);
+      await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
     });
-    if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
+    if (ACCOUNT_ONLY) await accountScenario({ A, B, nameB, port });
+    else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

@@ -14,7 +14,7 @@ import type {
   Rarity, RolledAffix, RolledMapMod, RolledScar, SaveGame, Settings, StashTab,
 } from '../../contracts/items';
 import {
-  BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, MAP_STASH_CAPACITY, MAX_STASH_TABS, STASH_TAB_SIZE,
+  BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, MAP_STASH_CAPACITY, MAX_STASH_TABS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
 } from '../../contracts/items';
 import type { CurrencyId, EquipSlot, FlaskId, MapBaseId, SkillId, UniqueId } from '../../contracts/content';
 import { CURRENCY_IDS, EQUIP_SLOTS, FLASK_IDS, MAP_BASE_IDS, SKILL_IDS } from '../../contracts/content';
@@ -306,6 +306,7 @@ const MINTED_UID = /^i([0-9a-z]+)$/;
 interface UidMinter {
   used: Set<string>;
   next: number;
+  prefix: string;
 }
 
 /** Keep a valid unique uid (never a synthetic belt / Crafting Stash / offer uid), otherwise mint a fresh "i…" one. */
@@ -315,18 +316,19 @@ function claimUid(m: UidMinter, raw: unknown): string {
     m.used.add(uid);
     return uid;
   }
-  let fresh = `i${m.next.toString(36)}`;
-  while (m.used.has(fresh)) fresh = `i${(++m.next).toString(36)}`;
+  let fresh = `${m.prefix}i${m.next.toString(36)}`;
+  while (m.used.has(fresh)) fresh = `${m.prefix}i${(++m.next).toString(36)}`;
   m.next += 1;
   m.used.add(fresh);
   return fresh;
 }
 
-function highestMinted(raw: Json): number {
+function highestMinted(raw: Json, prefix: string): number {
   let max = 0;
   const visit = (item: unknown) => {
     if (!isObj(item)) return;
-    const m = MINTED_UID.exec(str(item.uid));
+    const uid = str(item.uid);
+    const m = MINTED_UID.exec(prefix && uid.startsWith(prefix) ? uid.slice(prefix.length) : uid);
     if (m) max = Math.max(max, parseInt(m[1], 36) + 1);
   };
   const equipment = isObj(raw.equipment) ? raw.equipment : {};
@@ -425,7 +427,8 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     .map((s) => ((SKILL_IDS as readonly unknown[]).includes(s) ? (s as SkillId) : null));
   const allocatedRaw = isObj(raw.allocated) ? raw.allocated : {};
 
-  const minter: UidMinter = { used: new Set(), next: Math.max(intIn(raw.nextUid, 1, 1e9, 1), highestMinted(raw)) };
+  const prefix = typeof raw.uidNamespace === 'string' && /^[a-z0-9-]{1,36}:$/.test(raw.uidNamespace) ? raw.uidNamespace : '';
+  const minter: UidMinter = { used: new Set(), prefix, next: Math.max(intIn(raw.nextUid, 1, 1e9, 1), highestMinted(raw, prefix)) };
   const overflow: Item[] = [];
 
   const equipment: Partial<Record<EquipSlot, EquipmentItem>> = {};
@@ -441,7 +444,8 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
 
   const backpack = normalizeGrid(raw.backpack, BACKPACK_SIZE.w, BACKPACK_SIZE.h, minter, overflow);
   const stash: StashTab[] = [];
-  for (const t of arr(raw.stash).slice(0, MAX_STASH_TABS)) {
+  const stashCapacity = intIn(raw.stashCapacity, MAX_STASH_TABS, MAX_PRESERVED_STASH_TABS, MAX_STASH_TABS);
+  for (const t of arr(raw.stash).slice(0, stashCapacity)) {
     if (!isObj(t)) continue;
     const tabName = str(t.name).replace(/\s+/g, ' ').trim().slice(0, STASH_TAB_NAME_MAX) || `Tab ${stash.length + 1}`;
     stash.push({ name: tabName, grid: normalizeGrid(t.grid, STASH_TAB_SIZE.w, STASH_TAB_SIZE.h, minter, overflow) });
@@ -497,7 +501,7 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
       rest = { ...rest, count: rest.count - n };
     }
     if (intoStashTabs(rest)) continue;
-    if (stash.length < MAX_STASH_TABS) {
+    if (stash.length < stashCapacity) {
       const tab = createStashTab('Recovered');
       const g = autoPlace(tab.grid, rest);
       if (g) {
@@ -526,12 +530,14 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     equipment,
     backpack: bp,
     stash,
+    ...(stashCapacity > MAX_STASH_TABS ? { stashCapacity } : {}),
     currencyStash,
     mapStash,
     belt: normalizeBelt(raw.belt),
     mapDevice,
     rngState: typeof raw.rngState === 'number' && Number.isFinite(raw.rngState) ? raw.rngState >>> 0 : hashString(id),
     nextUid: minter.next,
+    ...(prefix ? { uidNamespace: prefix } : {}),
     stats: normalizeStats(raw.stats),
     createdAt: Math.max(0, finite(raw.createdAt, 0)),
     updatedAt: Math.max(0, finite(raw.updatedAt, 0)),

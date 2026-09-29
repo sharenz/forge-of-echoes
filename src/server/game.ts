@@ -177,6 +177,10 @@ export class Game implements InstanceHost {
       save: (party) => this.persistParty(party),
       remove: (partyId) => this.guard('party delete', () => this.db.deleteParty(partyId)),
     });
+    this.store.onSharedChange = (rec) => {
+      this.sessions.get(rec.id)?.pushCharacter('soon');
+      this.guard('shared stash trade revalidate', () => this.trades.characterChanged(rec.id));
+    };
   }
 
   // =========================================================================================

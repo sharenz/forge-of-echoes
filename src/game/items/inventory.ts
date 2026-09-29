@@ -1006,9 +1006,10 @@ export interface AddOptions {
  */
 export function claimIncomingUid(ch: CharacterSave, item: Item): { ch: CharacterSave; item: Item } {
   const uid = item.uid;
+  const globallyScoped = !ch.uidNamespace || /^[a-z0-9-]{1,36}:i[0-9a-z]+$/.test(uid) || /^recovered:[a-f0-9-]{36}$/.test(uid);
   // Synthetic uids (belt slots, Crafting Stash slots, merchant previews) and malformed ones never become
   // an item's uid.
-  if (!isReservedUid(uid) && !heldUids(ch).has(uid)) return { ch: adoptUid(ch, uid), item };
+  if (globallyScoped && !isReservedUid(uid) && !heldUids(ch).has(uid)) return { ch: adoptUid(ch, uid), item };
   const minted = mintUid(ch);
   return { ch: minted.character, item: { ...item, uid: minted.uid } };
 }
@@ -1062,7 +1063,8 @@ export function createStashTab(name: string): StashTab {
 }
 
 export function addStashTab(ch: CharacterSave): Result<CharacterSave> {
-  if (ch.stash.length >= MAX_STASH_TABS) return fail(`The stash holds at most ${MAX_STASH_TABS} tabs.`);
+  const capacity = ch.stashCapacity ?? MAX_STASH_TABS;
+  if (ch.stash.length >= capacity) return fail(`The stash holds at most ${capacity} tabs.`);
   const names = new Set(ch.stash.map((t) => t.name));
   let n = ch.stash.length + 1;
   while (names.has(`Tab ${n}`)) n++;

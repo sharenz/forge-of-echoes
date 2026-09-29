@@ -311,8 +311,9 @@ export function fillBackpack(p: LocalPlayer, leaveFree = 0): string[] {
     const uid = `fill${n}`;
     const r = rules.addToBackpack(ch, { ...template, uid });
     if (!r.ok) break;
+    const added = r.value.backpack.entries.find((e) => !ch.backpack.entries.some((old) => old.item.uid === e.item.uid));
     ch = r.value;
-    fillers.push(uid);
+    if (added) fillers.push(added.item.uid);
   }
   for (let k = 0; k < leaveFree; k++) {
     const uid = fillers.pop();
@@ -376,11 +377,12 @@ export function uidsOf(ch: CharacterSave): string[] {
   return out;
 }
 
-/** The character as last written to the database (no debounce involved). */
+/** The persisted private character plus its persisted account stash (no live cache or debounce involved). */
 export function savedCharacter(server: ServerHandle, characterId: string): CharacterSave {
   const row = server.db.characterById(characterId);
   if (!row) throw new Error('no such character row');
-  return JSON.parse(row.data) as CharacterSave;
+  const shared = server.db.accountStorage(row.accountId);
+  return { ...JSON.parse(row.data), ...(shared ? JSON.parse(shared.data) : {}) } as CharacterSave;
 }
 
 // ---------------------------------------------------------------------------

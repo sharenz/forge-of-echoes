@@ -123,8 +123,13 @@ Prioritise persistent map progression and reasons to craft. The Atlas can start 
 bases; expanding the map roster is not a prerequisite. Continue collecting balance feedback during this work;
 reopen tuning for a specific problem rather than starting another general balance pass.
 
-1. **Account-wide storage.** Stash and atlas progress move from per-character to per-account (owner decision).
-   Prerequisite for the atlas. `GAME_SPEC.md` currently says character-specific stash.
+1. **Account-wide storage — verified; deployment pending.** Normal tabs, Map Stash and Crafting
+   Stash share one account record. Legacy characters merge without losing overflow; extra tabs are retained.
+   Other online alts see changes immediately; transfers save both sides atomically. Build and 1,809 always-on
+   tests, two-client browser/restart checks at 1024×600 and 1280×720, and a production-copy migration audit pass
+   (4 accounts, 7 characters, 426 items; counts/rolls preserved, unique IDs, idempotent reload). Deployments now
+   back up the database after draining; isolated checks verify healthy activation, database/code rollback and
+   refusing an existing backup. Deployment remains before marking this done. Atlas uses account persistence in P1.2.
 2. **Atlas vertical slice** (owner's main idea, see "Atlas design"). 12 hand-authored areas, depth 0-4, tier
    ceiling 1-9, fog with 2 reveals per boss kill, area type label visible once revealed, one dead end (Ember
    Vault), one sealed rare area (Sealed Reliquary), atlas panel in the Map Device, per-account save, party

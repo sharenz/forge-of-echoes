@@ -522,11 +522,11 @@ describe('special stash tabs: characters saved before them', () => {
     const loaded = chOf(p);
     expect(loaded.currencyStash).toEqual({});
     expect(loaded.mapStash).toEqual([]);
-    // Nothing else moved: level, the named stash tab and its items, the device's map, the backpack.
+    // Item content survives; IDs are namespaced once and the other legacy character's stash joins the account.
     expect(loaded.level).toBe(fixture.level);
     expect(loaded.stash[0].name).toBe('Loot');
-    expect(loaded.stash[0].grid.entries.map((e) => e.item.uid)).toEqual(fixture.stash[0].grid.entries.map((e) => e.item.uid));
-    expect(loaded.mapDevice?.uid).toBe(fixture.mapDevice!.uid);
+    expect(loaded.stash[0].grid.entries.every((e) => e.item.uid.startsWith(loaded.uidNamespace!))).toBe(true);
+    expect(loaded.mapDevice?.uid.startsWith(loaded.uidNamespace!)).toBe(true);
     const expected = structuredClone({ ...fixture, currencyStash: {}, mapStash: [] });
     // Equipment also migrates to the new affix revision; this starter roll keeps its value.
     for (const item of [...Object.values(expected.equipment), ...expected.backpack.entries.map((e) => e.item),
@@ -535,7 +535,8 @@ describe('special stash tabs: characters saved before them', () => {
       item.affixVersion = 2;
       for (const affix of item.affixes) if (affix.affixId === 'fireDamage' && affix.tier === 8) affix.tier = 10;
     }
-    expect(holdings(loaded)).toEqual(holdings(expected));
+    expect(holdings({ ...loaded, stash: loaded.stash.slice(0, fixture.stash.length) })).toEqual(holdings(expected));
+    expect(loaded.stash.length).toBeGreaterThan(fixture.stash.length);
     // The client is sent the normalised state.
     const pushed = p.last('character')!.character;
     expect(pushed.currencyStash).toEqual({});
@@ -549,23 +550,26 @@ describe('special stash tabs: characters saved before them', () => {
     expect(act(p, { c: 'depositAllCurrency' }).ok).toBe(true);
     const after = chOf(p);
     expect(slot(after, glyph.currencyId)).toBeGreaterThanOrEqual(glyph.count);
-    expect(after.mapStash.map((m) => m.uid)).toEqual([fixture.mapDevice!.uid]);
+    expect(after.mapStash.map((m) => m.uid)).toEqual([loaded.mapDevice!.uid]);
     expect(currencyIn(after)).toEqual([]);
     expect(holdings(after)).toEqual(holdings(loaded));
 
-    // The damaged row loads too: its garbage reads as empty tabs.
+    // The damaged row loads too, with the same authoritative account stash.
     const bo = new LocalPlayer(server, 'ch-damaged');
-    expect(chOf(bo).currencyStash).toEqual({});
-    expect(chOf(bo).mapStash).toEqual([]);
+    expect(chOf(bo).currencyStash).toEqual(after.currencyStash);
+    expect(chOf(bo).mapStash).toEqual(after.mapStash);
 
     // Shutdown writes the new format; a restart reads it back unchanged.
     await server.close();
     server = null;
     const reopened = await GameDatabase.open(dbPath);
     const stored = JSON.parse(reopened.characterById(fixture.id)!.data) as CharacterSave;
+    const storedShared = JSON.parse(reopened.accountStorage('acct-old')!.data);
     reopened.close();
-    expect(stored.currencyStash).toEqual(after.currencyStash);
-    expect(stored.mapStash).toEqual(after.mapStash);
+    expect(stored.currencyStash).toEqual({});
+    expect(stored.mapStash).toEqual([]);
+    expect(storedShared.currencyStash).toEqual(after.currencyStash);
+    expect(storedShared.mapStash).toEqual(after.mapStash);
     server = await startTestServer({ dbPath, game: { autoTick: false, now: clock.now } });
     const again = new LocalPlayer(server, fixture.id);
     expect(chOf(again).currencyStash).toEqual(after.currencyStash);

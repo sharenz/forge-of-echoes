@@ -14,7 +14,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 3: phase-2 affix ladders, resistance scaling and immediate kill XP (no orbs).
 // 4: freely assignable skills, RMB casting and stronger magic/rare monsters.
 // 5: global chat channels and automatic special-stash routing from every stash tab.
-export const PROTOCOL_VERSION = 5;
+// 6: account-wide storage, character item-ID namespaces and preserved legacy stash tabs.
+export const PROTOCOL_VERSION = 6;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;

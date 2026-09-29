@@ -168,6 +168,7 @@ export function StashPanel() {
   const special = isSpecialTab(active) ? active : null;
   const tabIndex = normalTabIndex(active, ch.stash.length);
   const tab = tabIndex === null ? null : ch.stash[tabIndex];
+  const capacity = ch.stashCapacity ?? MAX_STASH_TABS;
 
   const commitRename = (): void => {
     if (renaming === null) return;
@@ -178,6 +179,7 @@ export function StashPanel() {
 
   return (
     <PanelShell panel="stash" title="Stash" class="fe-stash">
+      <p class="ui-type-caption fe-muted">Shared by all characters on your account.</p>
       <StashSearch />
       <div class="fe-tabs" role="tablist">
         <div class="fe-tabs__normal">
@@ -234,7 +236,7 @@ export function StashPanel() {
               </button>
             );
           })}
-          {ch.stash.length < MAX_STASH_TABS && (
+          {ch.stash.length < capacity && (
             <button
               class="fe-tab fe-tab--add"
               aria-label="Add a stash tab"
@@ -243,7 +245,7 @@ export function StashPanel() {
                 store.actions.addStashTab();
               }}
               onPointerEnter={(e) =>
-                local.showTooltip({ kind: 'text', lines: [`Add a tab (${ch.stash.length}/${MAX_STASH_TABS})`] }, e.currentTarget, 'above')
+                local.showTooltip({ kind: 'text', lines: [`Add a tab (${ch.stash.length}/${capacity})`] }, e.currentTarget, 'above')
               }
               onPointerLeave={() => local.hideTooltip()}
             >

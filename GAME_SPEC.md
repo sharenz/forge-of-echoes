@@ -454,7 +454,8 @@ The client also runs the shared rules locally, for **display only**: tooltips, c
 - **Hideout (one per character).** Created on demand and disposed 60 s after it empties. Anyone in the owner's party may visit.
   - The map device works only for the owner.
   - **Rook (the merchant) trades with everyone** in any hideout; you pay with your own currency.
-  - The stash always opens the *viewer's own* stash.
+  - The stash always opens the *viewer's account* stash. Every character on that account shares normal tabs,
+    the Map Stash and both Crafting Stash views; backpacks, equipment, flasks and map devices remain per character.
   - Crafting works in any hideout.
 - **Map.** Created when the owner activates their map device. The map is consumed, and **8 portals** open next to the device in the owner's hideout.
   - Entering consumes one portal. It doesn't matter who enters (owner or party member), and re-entry after death or leaving also costs one.
@@ -509,7 +510,9 @@ The client also runs the shared rules locally, for **display only**: tooltips, c
 - One socket per character: a newer login kicks the older socket with code 4003.
 - A protocol version handshake; on a mismatch the client reloads.
 - Every async handler is wrapped: no unhandled rejections, and one bad room never crashes the process.
-- Saves are debounced per character (1 s) and flushed on leave and shutdown.
+- Saves are debounced (1 s) and flushed on leave and shutdown. A stash change saves the account stash and
+  every dirty character on that account in one transaction; another online alt receives the new state immediately.
+  Character deletion never deletes the account stash.
 - Graceful SIGTERM: kick everyone with code 4004 and flush saves.
 
 **Restart safety** (deploys must not cost players their session):
@@ -567,7 +570,13 @@ The client also runs the shared rules locally, for **display only**: tooltips, c
 - **Closing:** either side can cancel. A trade also cancels on disconnect.
 - Items in an open trade stay in your backpack, but they are locked (not movable) until the trade closes.
 
-**Special stash tabs** (every character has all three, in addition to the normal tabs; they don't count towards `MAX_STASH_TABS`). They are part of the stash: usable in any hideout (your own stash), nowhere else. They appear as three icon tabs after the normal tabs. With any stash tab open, Ctrl/Cmd-clicking a backpack map or currency files it into the appropriate special tab. Equipment and flasks use the selected normal tab; Ctrl/Cmd-click from a normal tab still withdraws to the backpack.
+**Special stash tabs** (every account has all three, in addition to the normal tabs; they don't count towards `MAX_STASH_TABS`). They are part of the stash: usable in any hideout (your own account's stash), nowhere else. They appear as three icon tabs after the normal tabs. With any stash tab open, Ctrl/Cmd-clicking a backpack map or currency files it into the appropriate special tab. Equipment and flasks use the selected normal tab; Ctrl/Cmd-click from a normal tab still withdraws to the backpack.
+
+**Legacy account migration.** The first character's normal tabs are retained, along with every other character's
+nonempty tabs. Special-stash counts/maps merge; anything over their normal limits becomes physical stacks/maps
+in normal or additional Recovered tabs. Accounts retain any extra tabs needed by this migration; new accounts
+still have at most eight normal tabs. Items receive distinct character namespaces once, preserving their rolls,
+crafting history, protections and stability. The database stores shared holdings only once, in `account_storage`.
 
 **Map Stash.** Holds up to 400 maps.
 - Maps are shown grouped by tier (T1–T15). Each tier shows its count and expands into a list sectioned by map base.
@@ -593,7 +602,7 @@ The client also runs the shared rules locally, for **display only**: tooltips, c
 **Crafting Stash — Maps.** The same, for map currencies: Map Dust, Threat Glyph, Reward Ink and Void Needle (a list with each currency's effect).
 
 **Model.**
-- `CharacterSave.currencyStash` (count per currency) and `CharacterSave.mapStash` (list of maps). Old saves normalise to empty; loading clamps counts to 0–5,000, drops unknown currencies, repairs maps and moves anything that doesn't belong (non-maps, maps past 400) to the backpack or the stash instead of losing it.
+- `CharacterSave.stash`, `currencyStash` (counts) and `mapStash` (maps) project the account's shared holdings into the rules and client state. SQLite stores the authoritative copy in `account_storage`, with empty shared fields on character rows. Legacy characters use the existing item repair rules before their stashes merge. Loading an account stash rejects lost items or changed currency counts instead of silently clamping or dropping them.
 - A currency slot is addressed by the synthetic uid `cstash:<currencyId>`, like `belt:<i>`.
 - New item locations: `currencyStash`, `mapStash`.
 - `moveItem` gains an optional `count`, for splits and single withdrawals (it also splits normal stacks and limits flask charges loaded into the belt).

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ClientMessage, Command, ServerMessage, TradeInfo } from '../../src/contracts/net';
 import { TRADE_MAX_ITEMS } from '../../src/contracts/net';
 import type { CurrencyStack, EquipmentItem } from '../../src/contracts/items';
-import { CURRENCY_STASH_MAX, currencyStashUid } from '../../src/contracts/items';
+import { CURRENCY_STASH_MAX, MAX_PRESERVED_STASH_TABS, currencyStashUid } from '../../src/contracts/items';
 import { CURRENCY_IDS, MONSTER_KINDS } from '../../src/contracts/content';
 import { NEW_AREA_KINDS, PLAYER_DEBUFFS, THEME_ROSTER } from '../../src/contracts/bestiary';
 import {
@@ -57,16 +57,19 @@ describe('client message validation', () => {
     const commands: Command[] = [
       { c: 'moveItem', uid: 'i1f', to: { kind: 'backpack', x: 11, y: 4 } },
       { c: 'moveItem', uid: 'd3k9abc0000001', to: { kind: 'stash', tab: 7, x: 11, y: 7 } },
+      { c: 'moveItem', uid: 'legacy:i1', to: { kind: 'stash', tab: 21, x: 11, y: 7 } },
       { c: 'moveItem', uid: 'belt:2', to: { kind: 'equipment', slot: 'ring2' } },
       { c: 'moveItem', uid: 'i2', to: { kind: 'belt', index: 3 } },
       { c: 'moveItem', uid: 'i3', to: { kind: 'mapDevice' } },
       { c: 'quickMove', uid: 'i1', stashTab: null },
       { c: 'quickMove', uid: 'i1', stashTab: 2 },
+      { c: 'quickMove', uid: 'legacy:i1', stashTab: 21 },
       { c: 'discardItem', uid: 'i9' },
       { c: 'applyCurrency', currencyUid: 'i1', targetUid: 'i2' },
       { c: 'applyCurrency', currencyUid: 'i1', targetUid: 'i2', affixIndex: 3 },
       { c: 'addStashTab' },
       { c: 'renameStashTab', tab: 1, name: 'Maps ✦ T5+' },
+      { c: 'renameStashTab', tab: 21, name: 'Recovered' },
       { c: 'clearNewFlags' },
       { c: 'allocateAttribute', attr: 'int' },
       { c: 'rankUpSkill', skillId: 'arcChain' },
@@ -160,7 +163,7 @@ describe('client message validation', () => {
       cmd({ c: 'quickMove', uid: 'i1', stashTab: 'Maps' }),
       cmd({ c: 'quickMove', uid: 'i1', stashTab: 'map' }),
       cmd({ c: 'quickMove', uid: 'i1', stashTab: '' }),
-      cmd({ c: 'quickMove', uid: 'i1', stashTab: 8 }),
+      cmd({ c: 'quickMove', uid: 'i1', stashTab: MAX_PRESERVED_STASH_TABS }),
       cmd({ c: 'quickMove', uid: 'i1', stashTab: -1 }),
       cmd({ c: 'quickMove', uid: 'i1', stashTab: 1.5 }),
       cmd({ c: 'quickMove', uid: 'i1', stashTab: true }),
@@ -204,7 +207,7 @@ describe('client message validation', () => {
       cmd({ c: 'leaveMap', now: true }),
       cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'backpack', x: 12, y: 0 } }),
       cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'backpack', x: 0, y: 5 } }),
-      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'stash', tab: 8, x: 0, y: 0 } }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'stash', tab: MAX_PRESERVED_STASH_TABS, x: 0, y: 0 } }),
       cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'equipment', slot: 'ring3' } }),
       cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'belt', index: 4 } }),
       cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'floor' } }),

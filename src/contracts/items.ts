@@ -198,6 +198,8 @@ export const BELT_SLOTS = 4;
 export const BACKPACK_SIZE = { w: 12, h: 5 } as const;
 export const STASH_TAB_SIZE = { w: 12, h: 8 } as const;
 export const MAX_STASH_TABS = 8;
+/** Upper bound for tabs retained when legacy character stashes are merged into one account. */
+export const MAX_PRESERVED_STASH_TABS = 1024;
 /** Max count per currency slot in the Crafting Stash. */
 export const CURRENCY_STASH_MAX = 5000;
 /** Max maps in the Map Stash. */
@@ -223,6 +225,8 @@ export interface CharacterSave {
   equipment: Partial<Record<EquipSlot, EquipmentItem>>;
   backpack: GridContainer;
   stash: StashTab[];
+  /** Account migration may preserve more than eight legacy tabs; new accounts have eight at most. */
+  stashCapacity?: number;
   /** Crafting Stash: count per currency (equipment and map currencies; the UI shows them as two tabs). */
   currencyStash: Partial<Record<CurrencyId, number>>;
   /** Map Stash (≤ MAP_STASH_CAPACITY maps). */
@@ -234,6 +238,8 @@ export interface CharacterSave {
   rngState: number;
   /** Monotonic counter used to mint item uids. */
   nextUid: number;
+  /** Server-assigned namespace keeps minted item IDs distinct across characters sharing a stash. */
+  uidNamespace?: string;
   stats: CharacterStatsLog;
   createdAt: number;
   updatedAt: number;

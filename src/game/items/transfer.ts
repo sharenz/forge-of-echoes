@@ -146,7 +146,7 @@ export function stowItem(ch: CharacterSave, item: Item): Result<Stowed> {
       return ok({ character, where: 'stash', tab: t, text: `your stash (tab "${claimed.ch.stash[t].name}")` });
     }
   }
-  if (claimed.ch.stash.length < MAX_STASH_TABS) {
+  if (claimed.ch.stash.length < (claimed.ch.stashCapacity ?? MAX_STASH_TABS)) {
     const tab = createStashTab('Recovered');
     const grid = autoPlace(tab.grid, claimed.item);
     if (grid) {

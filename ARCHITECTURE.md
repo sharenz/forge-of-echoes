@@ -80,7 +80,9 @@ The sim exposes `digest()`. The same seed and intents must give the same digest.
    | portal | Move the player to another instance |
 
 4. Every 2 ticks, `encoder.encode(view, viewerId, ackSeq)` per client produces a binary frame. The AOI-filtered events for that client are sent as JSON.
-5. A changed `CharacterSave` is pushed to its owner (debounced).
+5. A changed `CharacterSave` is pushed to its owner (debounced). Shared stash changes also update every online
+   character on that account. Persistence writes the account stash once and all dirty private character rows
+   in the same transaction, so an item transfer cannot persist only one side.
 
 **Client, on each snapshot and frame**
 1. `clientWorld.pushSnapshot()` stores it.

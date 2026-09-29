@@ -49,9 +49,9 @@ describe('persistence', () => {
       await server.close();
     }
 
-    // The schema is versioned (2: restart-safety tables); reopening an up-to-date database changes nothing.
+    // The schema is versioned (3: account storage); reopening an up-to-date database changes nothing.
     const db = await GameDatabase.open(dbPath);
-    expect(db.schemaVersion).toBe(2);
+    expect(db.schemaVersion).toBe(3);
     expect(db.characterById(p.characterId)?.name).toBe('Keeper');
     db.close();
   });
@@ -74,7 +74,7 @@ describe('persistence', () => {
     raw.close();
     const db = await GameDatabase.open(dbPath);
     try {
-      expect(db.schemaVersion).toBe(2);
+      expect(db.schemaVersion).toBe(3);
       expect(db.characterById('c1')).toMatchObject({ name: 'Old Timer', level: 7 });
       expect(db.loadParties()).toEqual([]);
       expect(db.loadOpenMaps()).toEqual([]);

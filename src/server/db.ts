@@ -65,6 +65,13 @@ export interface CharacterRow extends CharacterListRow {
 
 export type InsertCharacterResult = 'ok' | 'nameTaken' | 'idTaken';
 
+export interface AccountStorageRow {
+  accountId: string;
+  data: string;
+  saveVersion: number;
+  updated: number;
+}
+
 export interface PartyRow {
   id: string;
   leaderId: string;
@@ -175,6 +182,15 @@ const MIGRATIONS: readonly string[] = [
     map_id       TEXT NOT NULL,
     owner_id     TEXT NOT NULL,
     map_name     TEXT NOT NULL,
+    updated      INTEGER NOT NULL
+  );
+  `,
+  // 2 → 3: shared account stash. Legacy character stashes are merged atomically on first access.
+  `
+  CREATE TABLE account_storage (
+    account_id   TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    data         TEXT NOT NULL,
+    save_version INTEGER NOT NULL,
     updated      INTEGER NOT NULL
   );
   `,
@@ -351,6 +367,19 @@ export class GameDatabase {
   }
 
   // --- characters -------------------------------------------------------------------------
+
+  accountStorage(accountId: string): AccountStorageRow | null {
+    const r = this.get('SELECT * FROM account_storage WHERE account_id = ?', accountId);
+    return r ? { accountId, data: str(r.data), saveVersion: num(r.save_version), updated: num(r.updated) } : null;
+  }
+
+  saveAccountStorage(row: AccountStorageRow): void {
+    this.run(
+      `INSERT INTO account_storage (account_id, data, save_version, updated) VALUES (?, ?, ?, ?)
+       ON CONFLICT(account_id) DO UPDATE SET data=excluded.data, save_version=excluded.save_version, updated=excluded.updated`,
+      row.accountId, row.data, row.saveVersion, row.updated,
+    );
+  }
 
   listCharacters(accountId: string): CharacterListRow[] {
     return this.all('SELECT id, name, level, class_id FROM characters WHERE account_id = ? ORDER BY created, id', accountId).map(

@@ -183,7 +183,7 @@ describe('trading', () => {
   it('a backpack without room refuses the swap: nothing moves, both are told, the trade stays open with accepts cleared', async () => {
     const { clock, players } = await setup(['Roomy Rae', 'Stuffed Sid']);
     const [rae, sid] = players;
-    fillBackpack(sid);
+    const fillers = fillBackpack(sid);
     const before = holdings(rae.session.record.ch, sid.session.record.ch);
     const tradeId = openTrade(rae, sid);
     const map = uidOf(rae.session.record.ch, (k) => k === 'map');
@@ -197,7 +197,7 @@ describe('trading', () => {
     expect(holdings(rae.session.record.ch, sid.session.record.ch)).toEqual(before);
 
     // Sid gives something back in the same trade: his own offer frees the room it needs.
-    const filler = sid.session.record.ch.backpack.entries.find((e) => e.item.uid.startsWith('fill'))!.item.uid;
+    const filler = fillers[0];
     expect(sid.command({ c: 'tradeOffer', tradeId, uids: [filler] }).ok).toBe(true);
     expect(bothAccept(rae, sid, clock, tradeId)).toMatchObject({ ok: true });
     expect(holdings(rae.session.record.ch, sid.session.record.ch)).toEqual(before);

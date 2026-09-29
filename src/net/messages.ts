@@ -11,7 +11,7 @@
 import { PLAYER_DEBUFFS } from '../contracts/bestiary';
 import { ATTRIBUTES, EQUIP_SLOTS, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
 import {
-  BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_SLOTS, MAX_STASH_TABS, STASH_TAB_SIZE,
+  BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_SLOTS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
 } from '../contracts/items';
 import type { ItemLocation, SpecialStashTab } from '../contracts/items';
 import { TRADE_MAX_ITEMS } from '../contracts/net';
@@ -154,7 +154,7 @@ function itemLocation(v: unknown): ItemLocation {
       const o = shape(v, 'location', ['kind', 'tab', 'x', 'y']);
       return {
         kind: 'stash',
-        tab: int(o.tab, 'location.tab', 0, MAX_STASH_TABS - 1),
+        tab: int(o.tab, 'location.tab', 0, MAX_PRESERVED_STASH_TABS - 1),
         x: int(o.x, 'location.x', 0, STASH_TAB_SIZE.w - 1),
         y: int(o.y, 'location.y', 0, STASH_TAB_SIZE.h - 1),
       };
@@ -190,7 +190,7 @@ function stackCount(v: unknown): number {
 function quickMoveTab(v: unknown): number | SpecialStashTab | null {
   if (v === null) return null;
   if (typeof v === 'string') return oneOf(v, 'stashTab', SPECIAL_STASH_TABS);
-  return int(v, 'stashTab', 0, MAX_STASH_TABS - 1);
+  return int(v, 'stashTab', 0, MAX_PRESERVED_STASH_TABS - 1);
 }
 
 function command(v: unknown): Command {
@@ -239,7 +239,7 @@ function command(v: unknown): Command {
     }
     case 'renameStashTab': {
       const o = shape(v, c, ['c', 'tab', 'name']);
-      return { c, tab: int(o.tab, 'tab', 0, MAX_STASH_TABS - 1), name: text(o.name, 'name', MAX_STASH_TAB_NAME_LENGTH) };
+      return { c, tab: int(o.tab, 'tab', 0, MAX_PRESERVED_STASH_TABS - 1), name: text(o.name, 'name', MAX_STASH_TAB_NAME_LENGTH) };
     }
     case 'allocateAttribute': {
       const o = shape(v, c, ['c', 'attr']);
