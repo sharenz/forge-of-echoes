@@ -170,16 +170,16 @@ describe('recipe list', () => {
   it('labels a recipe with its tier range, tooltip-style', () => {
     const ch = bench(item({ baseId: 'emberRing', itemLevel: 80, rarity: 'normal' }), RICH);
     expect(recipe(ch, 'bench:life')).toMatchObject({
-      affixId: 'life', kind: 'prefix', tier: 4, label: '+(32–40) to maximum Life', tags: ['Life'],
+      affixId: 'life', kind: 'prefix', tier: 4, label: '+(34–39) to maximum Life', tags: ['Life'],
       cost: [{ currencyId: 'scrap', count: 9 }, { currencyId: 'essenceVital', count: 1 }],
     });
-    expect(recipe(ch, 'bench:fireDamage').label).toBe('(31–38)% increased Fire Damage');
-    expect(recipe(ch, 'bench:lifeRegen').label).toBe('Regenerate (8–11) Life per second');
-    expect(recipe(ch, 'bench:fireResistance')).toMatchObject({ kind: 'suffix', label: '+(26–30)% to Fire Resistance', tags: ['Fire', 'Resistance'] });
-    expect(recipe(ch, 'bench:allResistances')).toMatchObject({ tier: 4, label: '+(6–8)% to all Resistances' });
-    expect(recipe(ch, 'bench:castSpeed').cost).toEqual([{ currencyId: 'scrap', count: 7 }, { currencyId: 'essenceSwift', count: 1 }]);
+    expect(recipe(ch, 'bench:fireDamage').label).toBe('(33–37)% increased Fire Damage');
+    expect(recipe(ch, 'bench:lifeRegen').label).toBe('Regenerate (12–14) Life per second');
+    expect(recipe(ch, 'bench:fireResistance')).toMatchObject({ kind: 'suffix', label: '+(23–25)% to Fire Resistance', tags: ['Fire', 'Resistance'] });
+    expect(recipe(ch, 'bench:allResistances')).toMatchObject({ tier: 4, label: '+8% to all Resistances' });
+    expect(recipe(ch, 'bench:castSpeed').cost).toEqual([{ currencyId: 'scrap', count: 9 }, { currencyId: 'essenceSwift', count: 1 }]);
     // Luck pays a premium on the Scrap-only price (12 at this band).
-    expect(recipe(ch, 'bench:itemRarity').cost).toEqual([{ currencyId: 'scrap', count: 30 }]);
+    expect(recipe(ch, 'bench:itemRarity').cost).toEqual([{ currencyId: 'scrap', count: 38 }]);
   });
 
   it('is empty for anything that is not equipment, or that does not exist', () => {
@@ -196,15 +196,15 @@ describe('tier: the best the item level allows, capped at T4', () => {
   const tierAt = (affixId: string, ilvl: number) => benchTier(getAffix(affixId)!, ilvl)!.tier;
 
   it('follows each ladder up to T4 and never beyond', () => {
-    // 8 tiers: T8 @1, T7 @6, T6 @14, T5 @24, T4 @36 (T3 @48 … never granted).
+    // 10 tiers: T10 @1 through T4 @48; T3 @60 and above are never granted.
     expect([1, 5, 6, 13, 14, 23, 24, 35, 36, 47, 48, 75, 100].map((l) => tierAt('life', l)))
-      .toEqual([8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 4, 4, 4]);
-    // 7 tiers: T7 @1, T6 @8, T5 @18, T4 @30.
-    expect([1, 8, 18, 29, 30, 72].map((l) => tierAt('focus', l))).toEqual([7, 6, 5, 5, 4, 4]);
-    // 6 tiers: T6 @1, T5 @10, T4 @24.
-    expect([1, 9, 10, 24, 70].map((l) => tierAt('critMultiplier', l))).toEqual([6, 6, 5, 4, 4]);
-    // 5 tiers: T5 @1, T4 @14.
-    expect([1, 13, 14, 68].map((l) => tierAt('allResistances', l))).toEqual([5, 5, 4, 4]);
+      .toEqual([10, 10, 9, 8, 8, 7, 7, 6, 6, 5, 4, 4, 4]);
+    // 9 tiers: T9 @1 through T4 @46.
+    expect([1, 8, 18, 29, 30, 72].map((l) => tierAt('focus', l))).toEqual([9, 8, 7, 6, 6, 4]);
+    // 8 tiers: T8 @1 through T4 @44.
+    expect([1, 9, 10, 24, 70].map((l) => tierAt('critMultiplier', l))).toEqual([8, 8, 7, 6, 4]);
+    // 7 tiers: T7 @1 through T4 @40.
+    expect([1, 13, 14, 68].map((l) => tierAt('allResistances', l))).toEqual([7, 6, 6, 4]);
   });
 
   it('prices the granted tier by the item level that unlocks it', () => {
@@ -212,9 +212,9 @@ describe('tier: the best the item level allows, capped at T4', () => {
     const price = (ilvl: number) => benchCost(life, benchTier(life, ilvl)!);
     expect(price(1)).toEqual([{ currencyId: 'scrap', count: 2 }, { currencyId: 'essenceVital', count: 1 }]);
     expect(price(6)[0].count).toBe(3);
-    expect(price(14)[0].count).toBe(5);
-    expect(price(24)[0].count).toBe(7);
-    expect(price(36)[0].count).toBe(9);
+    expect(price(14)[0].count).toBe(3);
+    expect(price(24)[0].count).toBe(5);
+    expect(price(36)[0].count).toBe(7);
     expect(price(90)[0].count).toBe(9);
     const crit = getAffix('critChance')!;
     expect(benchCost(crit, benchTier(crit, 1)!)).toEqual([{ currencyId: 'scrap', count: 4 }]);
@@ -237,12 +237,12 @@ describe('tier: the best the item level allows, capped at T4', () => {
       const ch = bench(item({ baseId: 'emberRing', itemLevel: 20, rarity: 'normal' }), RICH, seed);
       const out = expectOk(applyBenchRecipe(ch, T, 'bench:life'));
       const added = target(out.character).affixes.find((a) => a.crafted)!;
-      expect(added).toMatchObject({ affixId: 'life', tier: 6, crafted: true });
-      expect(added.value).toBeGreaterThanOrEqual(17);
-      expect(added.value).toBeLessThanOrEqual(23);
+      expect(added).toMatchObject({ affixId: 'life', tier: 7, crafted: true });
+      expect(added.value).toBeGreaterThanOrEqual(18);
+      expect(added.value).toBeLessThanOrEqual(21);
       values.add(added.value);
     }
-    expect(values.size).toBe(7);
+    expect(values.size).toBe(4);
   });
 });
 
@@ -302,7 +302,7 @@ describe('availability and reasons', () => {
       .toBe('Not enough currency in your backpack or Crafting Stash: needs 9 Forge Scrap (you have 3) and 1 Vital Essence (you have 0).');
     expect(benchRecipes(ch, T).some((r) => r.id === 'bench:critChance')).toBe(false); // not a ring affix
     expect(reasonOf(ch, 'bench:itemRarity'))
-      .toBe('Not enough currency in your backpack or Crafting Stash: needs 30 Forge Scrap (you have 3).');
+      .toBe('Not enough currency in your backpack or Crafting Stash: needs 38 Forge Scrap (you have 3).');
     // Currency in normal stash tabs does not count.
     const stashed = { ...ch, stash: [{ name: 'Tab 1', grid: { w: 12, h: 8, entries: [
       { item: currency('scrap', 40, 'stash-scrap'), x: 0, y: 0 }, { item: currency('essenceVital', 9, 'stash-vital'), x: 1, y: 0 },
@@ -392,7 +392,7 @@ describe('applying a recipe', () => {
       expect(it.stability).toBe(0);
       expect(out.kind).toBe('finished');
       expect(out.message).toMatch(/· Finished$/);
-      expect(it.history.slice(-2)).toEqual(['Bench: added of Haste (T4)', 'Finished at 0 Stability']);
+      expect(it.history.slice(-2)).toEqual(['Bench: added of Haste (T5)', 'Finished at 0 Stability']);
     }
   });
 
@@ -409,7 +409,7 @@ describe('applying a recipe', () => {
     expect(findItem(ch, 'scrap-small')).toBeNull();
     ch = expectOk(applyBenchRecipe(ch, 'stashed', 'bench:critChance')).character;
     expect(target(ch, 'stashed').affixes[0]).toMatchObject({ affixId: 'critChance', crafted: true });
-    expect(count(ch, 'scrap')).toBe(50 - 30 - 12);
+    expect(count(ch, 'scrap')).toBe(50 - 23 - 12);
   });
 
   it('changes nothing when it fails', () => {
@@ -475,12 +475,12 @@ describe('crafted affixes and the currencies', () => {
       const out = expectOk(applyEquipmentCurrency(bench(item(RING), { scrap: 1 }, seed), 'scrap', T));
       const life = target(out.character).affixes.find((a) => a.affixId === 'life')!;
       expect(life).toMatchObject({ tier: 4, crafted: true });
-      expect(life.value).toBeGreaterThanOrEqual(32);
-      expect(life.value).toBeLessThanOrEqual(40);
+      expect(life.value).toBeGreaterThanOrEqual(34);
+      expect(life.value).toBeLessThanOrEqual(39);
       seen.add(life.value);
     }
     expect(seen.size).toBeGreaterThan(4);
-    expect(craftPreview(bench(item(RING), { scrap: 1 }), 'scrap', T)[0]).toContain('Hale (crafted) 32–40');
+    expect(craftPreview(bench(item(RING), { scrap: 1 }), 'scrap', T)[0]).toContain('Hale (crafted) 34–39');
   });
 
   it('Reforge replaces a crafted affix unless it is sealed', () => {
@@ -541,9 +541,9 @@ describe('crafted affixes and the currencies', () => {
     const up = target(expectOk(applyEquipmentCurrency(bench(plain, { catalyst: 1 }), 'catalyst', T, 0)).character);
     expect(up.affixes[0]).toMatchObject({ affixId: 'life', tier: 3 });
     // Below T4 the item level decides, as for any affix.
-    const low = item({ baseId: 'emberRing', itemLevel: 20, rarity: 'magic', affixes: [{ affixId: 'life', tier: 6, value: 20, crafted: true }] });
+    const low = item({ baseId: 'emberRing', itemLevel: 28, rarity: 'magic', affixes: [{ affixId: 'life', tier: 6, value: 22, crafted: true }] });
     expect(expectErr(applyEquipmentCurrency(bench(low, { catalyst: 1 }), 'catalyst', T, 0)))
-      .toBe('T5 Hale needs item level 24 (this item is 20).');
+      .toBe('T5 Hale needs item level 38 (this item is 28).');
   });
 
   it('counts toward the room an Essence needs', () => {

@@ -18,8 +18,7 @@ export const SORCERESS: ClassDef = {
     maxFocus: 40,
     evasion: 20,
     moveSpeed: 110,
-    // Echo motes (XP) inside this radius fly to you. 90 rather than a tighter 60: kiting leaves kills
-    // behind, and the balance playthroughs lost about half of the early experience at 60.
+    // Currency, flasks and map drops inside this radius fly to their owner.
     pickupRadius: 90,
     critMultiplier: 150,
   },

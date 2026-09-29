@@ -266,7 +266,7 @@ describe('buildEquipment & names', () => {
   it('builds explicit items and rolls missing values', () => {
     const item = buildEquipment({
       baseId: 'ashwoodWand', itemLevel: 1, rarity: 'magic', uid: 'kit-wand',
-      affixes: [{ affixId: 'fireDamage', tier: 8 }],
+      affixes: [{ affixId: 'fireDamage', tier: 10 }],
     }, createRng(3));
     expect(item.affixes[0].affixId).toBe('fireDamage');
     expect(item.affixes[0].value).toBeGreaterThanOrEqual(8);
@@ -314,14 +314,14 @@ describe('buildEquipment & names', () => {
   });
 
   it('builds the starting-kit wand at item level 1, and scripted tiers only on request', () => {
-    // GAME_SPEC §3 asks for a "T7-ish" fire affix; T8 is the best tier item level 1 can roll.
-    const kit = buildEquipment({ baseId: 'ashwoodWand', itemLevel: 1, rarity: 'magic', uid: 'kit', affixes: [{ affixId: 'fireDamage', tier: 8 }] }, createRng(4));
+    // The starter uses T10: the best fire tier item level 1 can roll.
+    const kit = buildEquipment({ baseId: 'ashwoodWand', itemLevel: 1, rarity: 'magic', uid: 'kit', affixes: [{ affixId: 'fireDamage', tier: 10 }] }, createRng(4));
     expect(kit.affixes).toHaveLength(1);
     expect(kit.itemLevel).toBe(1);
-    const t7 = { baseId: 'ashwoodWand', itemLevel: 1, rarity: 'magic', affixes: [{ affixId: 'fireDamage', tier: 7, value: 15 }] } as const;
-    expect(() => buildEquipment(t7, createRng(4))).toThrow(/T7 needs item level 6 \(pass ignoreItemLevel/);
+    const t7 = { baseId: 'ashwoodWand', itemLevel: 1, rarity: 'magic', affixes: [{ affixId: 'fireDamage', tier: 7, value: 20 }] } as const;
+    expect(() => buildEquipment(t7, createRng(4))).toThrow(/T7 needs item level 20 \(pass ignoreItemLevel/);
     const scripted = buildEquipment({ ...t7, ignoreItemLevel: true }, createRng(4));
-    expect(scripted.affixes[0]).toEqual({ affixId: 'fireDamage', tier: 7, value: 15 });
+    expect(scripted.affixes[0]).toEqual({ affixId: 'fireDamage', tier: 7, value: 20 });
     // ignoreItemLevel skips only the item-level gate.
     expect(() => buildEquipment({ ...t7, ignoreItemLevel: true, affixes: [{ affixId: 'moveSpeed', tier: 6 }] }, createRng(4))).toThrow();
   });

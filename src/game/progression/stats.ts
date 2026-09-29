@@ -187,15 +187,19 @@ function defenceSection(c: Computed, model: PlayerModel): SheetSection {
   const b = c.breakdowns;
   const cls = model.cls;
   const armor = c.combat.armor;
-  const sample = 20;
+  const monsterLevel = model.monsterLevel ?? MONSTER_LEVEL_SCALING.referenceLevel;
+  // Armour already loses effectiveness against larger hits. Scale the example with monster damage,
+  // rather than applying a second, hidden level penalty to the actual armour rating.
+  const sample = round1(20 * MONSTER_LEVEL_SCALING.damage ** (monsterLevel - MONSTER_LEVEL_SCALING.referenceLevel));
   const armourNote = armor > 0
     ? `A ${sample} damage physical hit is reduced by ${percent(armor / (armor + 10 * sample))}`
     : 'Armour reduces physical hits: armour / (armour + 10 x damage)';
   const lines: SheetLine[] = [
-    line('Armour', String(armor), [...breakdownLines(b.armor!), armourNote]),
+    line('Armour', String(armor), [...breakdownLines(b.armor!), armourNote, `Example hit at monster level ${monsterLevel}; larger hits receive less reduction`]),
     line('Evasion Rating', String(c.evasionRating), breakdownLines(b.evasion!)),
     line('Chance to Evade', percent(c.combat.evasion, 1), [
       `Evasion Rating ${c.evasionRating}`,
+      `Monster Accuracy ${evasionConstantFor(cls, model.monsterLevel)}`,
       `Chance = rating / (rating + ${evasionConstantFor(cls, model.monsterLevel)}), at most ${percent(cls.evasionCap)}`,
       model.monsterLevel === null
         ? `Against monster level ${MONSTER_LEVEL_SCALING.referenceLevel}: ${cls.evasionPerMonsterLevel} per monster level`
@@ -386,7 +390,7 @@ export function deriveFromModel(ch: CharacterSave, model: PlayerModel, setup: Ru
  * `setup` null / omitted = the hideout sheet. DerivedStats.itemQuantity / itemRarity stay gear-only.
  */
 export function deriveStats(ch: CharacterSave, setup: RunSetup | null = null): DerivedStats {
-  return deriveFromModel(ch, buildPlayerModel(ch, setup ? mapPlayerModifiers(setup.map) : [], undefined, setup?.monsterLevel ?? null), setup);
+  return deriveFromModel(ch, buildPlayerModel(ch, setup ? mapPlayerModifiers(setup.map, setup.monsterLevel) : [], undefined, setup?.monsterLevel ?? null), setup);
 }
 
 /** @deprecated Same as deriveStats(ch, setup) — kept for callers written before deriveStats took a RunSetup. */

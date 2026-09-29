@@ -11,7 +11,7 @@ import type { AffixDef, BaseDef, CurrencyDef, FlaskDef, ScarDef, UniqueDef } fro
 
 export * from './types';
 export * from './rules';
-export { AFFIXES, TIER_LADDERS } from './affixes';
+export { AFFIXES, AFFIX_VERSION, TIER_LADDERS } from './affixes';
 export { BASES, CLASS_SIZE, CLASS_SLOTS } from './bases';
 export {
   BENCH_BEST_TIER, BENCH_LUCK_PRICE_MULTIPLIER, BENCH_MAX_CRAFTED, BENCH_PRICE_BANDS, BENCH_RECIPES, BENCH_RECIPE_PREFIX,

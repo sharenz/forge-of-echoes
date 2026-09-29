@@ -12,7 +12,7 @@ import {
 } from './constants';
 import { applyDebuff, cleanseAll, clearDebuffs, effectiveResist, isActive, shockMult } from './debuffs';
 import { rollKillLoot } from './hooks';
-import { spawnDrops, spawnMotes } from './loot';
+import { grantXp, spawnDrops } from './loot';
 import { DAMAGE_INDEX, damageTypeAt } from './math';
 import { refreshLiving } from './player';
 import { monsterDefs } from './rosters';
@@ -205,7 +205,7 @@ export function livingIds(w: World): number[] {
 /**
  * Remove a monster. `credited` kills (a player's hit crossed zero) grant the kill outcome, loot,
  * on-kill recovery and elite death effects; uncredited deaths (crumbling to ash after the boss)
- * only leave their echo motes. `source` is the killing player's id (0 = nobody present, e.g. a
+ * still grant their XP. `source` is the killing player's id (0 = nobody present, e.g. a
  * burn from someone who left): the kill still counts and still drops loot for everyone.
  *
  * The death is committed (slot released, pack/boss bookkeeping done, outcomes pushed) before the
@@ -270,7 +270,7 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
       if (specs.length > 0) spawnDrops(w, specs, x, y, isBoss || isLieutenant || rarity === 'rare');
     }
   }
-  if (xp > 0) spawnMotes(w, x, y, xp);
+  if (xp > 0) grantXp(w, xp);
 }
 
 export type PlayerHitKind = 'melee' | 'projectile' | 'area' | 'dot';

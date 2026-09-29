@@ -108,7 +108,7 @@ export interface PlayOptions {
   onStep?: (events: readonly SimEvent[], view: WorldView, tick: number) => void;
   /**
    * Probe: fight the lieutenant or the boss without the horde. The tick it arrives, every other monster
-   * crumbles (uncredited: no loot, no XP) and the wave's stream is dropped; its own escorts and summons still
+   * crumbles (uncredited: no loot, but XP is granted) and the wave's stream is dropped; its own escorts and summons still
    * come. 'lieutenant' also holds the wave clock (nothing else arrives) and ends the run when it falls (the
    * result is then 'timeout'; read `lieutenantSeconds`).
    */

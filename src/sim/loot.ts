@@ -1,19 +1,16 @@
 // Physical drops (bounce out of corpses/chests, magnetise, auto-pickup through hooks.tryPickup;
-// click pickups and floor drops through the SimRun API) and echo motes (XP orbs,
-// Vampire-Survivors style).
+// click pickups and floor drops through the SimRun API).
 //
 // Loot is INSTANCED: every monster/chest drop belongs to one player (spec.owner) and only that
 // player can magnetise or pick it up. Items a player puts on the floor are PUBLIC (owner 0): anyone
 // in the instance may click them. Only `spec.autoPickup` drops of a living owner are collected by
-// walking over them; equipment and public drops wait for a click (requestPickup). XP is SHARED: a
-// mote flies to the nearest living player that comes within their pickup radius, and whoever
-// collects it grants its XP to the whole instance.
+// walking over them; equipment and public drops wait for a click (requestPickup). Kill XP is awarded
+// immediately and shared with every living player in the instance.
 import { hashU32 } from '../core/rng';
 import { PICKUP_REACH, type DropSpec, type PickupResult } from '../contracts/sim';
 import {
   DROP_EDGE_MARGIN, DROP_GRAVITY, DROP_PICKUP_DELAY, DROP_PROP_RADIUS, DROP_TOUCH_RADIUS, DT, FLOOR_TOSS_ANGLE_MAX,
   FLOOR_TOSS_ANGLE_MIN, FLOOR_TOSS_LIFT_MAX, FLOOR_TOSS_LIFT_MIN, FLOOR_TOSS_SPEED_MAX, FLOOR_TOSS_SPEED_MIN, MAX_PLAYER_ID,
-  MOTE_TOUCH_RADIUS,
 } from './constants';
 import { resolveProps } from './grid';
 import { tryPickup } from './hooks';
@@ -22,9 +19,6 @@ import type { Drop, PlayerState, World } from './world';
 
 const DROP_MAGNET_MAX_SPEED = 420;
 const DROP_MAGNET_ACCEL = 900;
-const MOTE_MAX_SPEED = 720;
-const MOTE_ACCEL = 1100;
-const MOTE_START_SPEED = 70;
 
 /** A new drop leaving (x, y) with the given launch velocity; it lands (and may bounce) on its own. */
 function airborneDrop(w: World, spec: DropSpec, x: number, y: number, vx: number, vy: number, vz: number): Drop {
@@ -294,132 +288,6 @@ export function updateDrops(w: World): void {
     for (let k = 0; k < drops.length; k++) if (drops[k].age >= 0) drops[write++] = drops[k];
     drops.length = write;
   }
-}
-
-function moteSize(xp: number): number {
-  return xp < 8 ? 0 : xp < 40 ? 1 : 2;
-}
-
-/** Spawn echo motes worth `xp` at a death position (big rewards split into several motes). */
-export function spawnMotes(w: World, x: number, y: number, xp: number): void {
-  if (!(xp > 0)) return;
-  const motes = w.motes;
-  const rng = w.worldRng;
-  const pieces = xp >= 120 ? Math.min(12, Math.ceil(xp / 90)) : 1;
-  const each = xp / pieces;
-  for (let k = 0; k < pieces; k++) {
-    const slot = motes.alloc();
-    if (slot < 0) {
-      mergeMote(w, each);
-      continue;
-    }
-    const ang = rng.range(0, TAU);
-    const pop = pieces > 1 ? rng.range(60, 120) : rng.range(12, 30);
-    motes.x[slot] = x;
-    motes.y[slot] = y;
-    motes.prevX[slot] = x;
-    motes.prevY[slot] = y;
-    motes.vx[slot] = Math.cos(ang) * pop;
-    motes.vy[slot] = Math.sin(ang) * pop;
-    motes.xp[slot] = each;
-    motes.size[slot] = moteSize(each);
-    motes.speed[slot] = MOTE_START_SPEED;
-  }
-}
-
-/** Store full: fold the XP into an existing mote so no experience is ever lost. */
-function mergeMote(w: World, xp: number): void {
-  const motes = w.motes;
-  const cap = motes.capacity;
-  const start = (w.tick * 7919) % cap;
-  for (let k = 0; k < cap; k++) {
-    const i = (start + k) % cap;
-    if (!motes.alive[i]) continue;
-    motes.xp[i] += xp;
-    motes.size[i] = moteSize(motes.xp[i]);
-    return;
-  }
-  w.xpCarry += xp;
-}
-
-/**
- * The living player a loose mote at (x, y) should fly to: the nearest one whose pickup radius it
- * is inside (any living player at all once the map is cleared and motes vacuum home).
- */
-function moteSeeker(w: World, x: number, y: number): PlayerState | null {
-  const living = w.living;
-  let best: PlayerState | null = null;
-  let bd = Infinity;
-  for (let k = 0; k < living.length; k++) {
-    const p = living[k];
-    const dx = p.x - x;
-    const dy = p.y - y;
-    const d2 = dx * dx + dy * dy;
-    const r = Math.max(0, p.stats.pickupRadius);
-    if ((w.vacuum || d2 < r * r) && d2 < bd) {
-      bd = d2;
-      best = p;
-    }
-  }
-  return best;
-}
-
-export function updateMotes(w: World): void {
-  const motes = w.motes;
-  if (motes.count === 0) return;
-  let gained = 0;
-  for (let i = 0; i < motes.hwm; i++) {
-    if (!motes.alive[i]) continue;
-    let x = motes.x[i];
-    let y = motes.y[i];
-    let p: PlayerState | null = null;
-    if (motes.magnet[i]) {
-      const t = w.playerById[motes.target[i]];
-      if (t && !t.dead) p = t;
-      else {
-        // Its player fell or left: another player in reach takes over, else it settles.
-        p = moteSeeker(w, x, y);
-        if (p) motes.target[i] = p.id;
-        else {
-          motes.magnet[i] = 0;
-          motes.target[i] = 0;
-          motes.speed[i] = MOTE_START_SPEED;
-        }
-      }
-    } else {
-      const vx = motes.vx[i];
-      const vy = motes.vy[i];
-      if (vx !== 0 || vy !== 0) {
-        x += vx * DT;
-        y += vy * DT;
-        motes.vx[i] = Math.abs(vx) < 1 ? 0 : vx * 0.88;
-        motes.vy[i] = Math.abs(vy) < 1 ? 0 : vy * 0.88;
-      }
-      p = moteSeeker(w, x, y);
-      if (p) {
-        motes.magnet[i] = 1;
-        motes.target[i] = p.id;
-      }
-    }
-    if (p) {
-      const dx = p.x - x;
-      const dy = p.y - y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const speed = Math.min(MOTE_MAX_SPEED, motes.speed[i] + MOTE_ACCEL * DT);
-      motes.speed[i] = speed;
-      if (dist <= MOTE_TOUCH_RADIUS + speed * DT) {
-        gained += motes.xp[i];
-        if (w.events.lowOpen) w.events.low({ t: 'mote', playerId: p.id, x: p.x, y: p.y });
-        motes.release(i);
-        continue;
-      }
-      x += (dx / dist) * speed * DT;
-      y += (dy / dist) * speed * DT;
-    }
-    motes.x[i] = x;
-    motes.y[i] = y;
-  }
-  if (gained > 0) grantXp(w, gained);
 }
 
 /** Shared XP: one whole-number outcome for the whole instance; fractional XP carries over. */

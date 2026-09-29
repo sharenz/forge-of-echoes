@@ -50,7 +50,7 @@ describe('joining and leaving', () => {
     }
   });
 
-  it('a player arriving after the clear can still open the chest, collect motes and go home', () => {
+  it('a player arriving after the clear can still open the chest and go home', () => {
     const { hooks, log } = makeHooks();
     const { run, world } = makeParty({ seed: 8, hooks, waves: { count: 0 } }, [{ stats: sturdy() }]);
     run.step();
@@ -215,33 +215,16 @@ describe('instanced loot', () => {
 });
 
 describe('shared XP', () => {
-  it('a mote collected by any player is one xp outcome for the whole instance', () => {
-    const a = makeArena({ stats: makeStats({ pickupRadius: 20 }) });
-    joinArena(a, 2, 200, 0, makeStats({ pickupRadius: 120 }));
-    const i = placeMonster(a.world, 'riftStalker', 260, 0, { life: 1 });
+  it('a kill is one immediate shared XP outcome regardless of which player is nearby', () => {
+    const a = makeArena({ stats: makeStats({ pickupRadius: 0 }) });
+    joinArena(a, 2, 200, 0, makeStats({ pickupRadius: 0 }));
+    const i = placeMonster(a.world, 'riftStalker', 500, 0, { life: 1 });
     damageMonster(a.world, i, 100, DAMAGE_INDEX.fire, 0, 1.5, 0, 1, 0, 1, true, 1);
-    const r = stepN(a.run, 120);
-    expect(outcomesOf(r.outcomes, 'xp')).toEqual([{ t: 'xp', amount: 8 }]);
-    // Player 2 was in reach, so the mote flew to them (and the cue plays at them).
-    expect(ofType(r.events, 'mote').map((e) => e.playerId)).toEqual([2]);
-    expect(outcomesOf(r.outcomes, 'kill')).toEqual([expect.objectContaining({ playerId: 1 })]);
-  });
-
-  it('motes fly to the nearest player in reach, and to the next one when theirs falls', () => {
-    const a = makeArena({ stats: makeStats({ pickupRadius: 400, moveSpeed: 0 }) });
-    const p2 = joinArena(a, 2, 150, 0, makeStats({ pickupRadius: 400, maxLife: 10, evasion: 0 }));
-    const i = placeMonster(a.world, 'ashling', 300, 0, { life: 1 });
-    damageMonster(a.world, i, 100, DAMAGE_INDEX.fire, 0, 1.5, 0, 1, 0, 1, true, 2);
-    stepN(a.run, 2);
-    const mo = a.world.motes;
-    let slot = -1;
-    for (let k = 0; k < mo.capacity; k++) if (mo.alive[k]) slot = k;
-    expect(mo.magnet[slot]).toBe(1);
-    expect(mo.target[slot]).toBe(2);
-    damagePlayer(a.world, p2, 1e9, DAMAGE_INDEX.physical, 'area');
-    const r = stepN(a.run, 120);
-    expect(ofType(r.events, 'mote').map((e) => e.playerId)).toEqual([1]);
-    expect(outcomesOf(r.outcomes, 'xp')).toEqual([{ t: 'xp', amount: 3 }]);
+    const outcomes = a.run.drainOutcomes();
+    expect(outcomesOf(outcomes, 'xp')).toEqual([{ t: 'xp', amount: 8 }]);
+    expect(outcomesOf(outcomes, 'kill')).toEqual([expect.objectContaining({ playerId: 1 })]);
+    expect(a.run.view.motes.count).toBe(0);
+    expect(outcomesOf(stepN(a.run, 120).outcomes, 'xp')).toEqual([]);
   });
 });
 

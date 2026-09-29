@@ -37,10 +37,11 @@ const TICKS = 3000;
  *    213161676 in 17553 ticks. 4242 is unchanged (its 3000 ticks end before the Herald arrives).
  */
 /** record(4242): digests after ticks 1000, 2000 and 3000. */
-const GOLDEN_4242 = [1370587382, 1412034228, 381017223];
+// Re-pinned for XP on kill: removing orb scatter stops consuming world RNG draws.
+const GOLDEN_4242 = [2860919789, 3827460678, 773456958];
 /** The whole tier-5 map at seed 9001 (the bot clears it and takes the return portal): its final digest and length. */
-// Re-pinned 2026-09-29: bosses/lieutenants retuned to real fights (Matriarch 4800, Herald 1800, Herald field cap).
-const GOLDEN_9001 = { digest: 1184275088, ticks: 18197 };
+// Re-pinned 2026-09-29 for XP on kill and removal of orb scatter; boss damage is unchanged.
+const GOLDEN_9001 = { digest: 1820637641, ticks: 19312 };
 const strong = { stats: strongStats(), skills: strongSkills(), loadout: STRONG_LOADOUT };
 
 function soloRun(seed: number, extra: Partial<ConfigOptions> = {}): SimRun {

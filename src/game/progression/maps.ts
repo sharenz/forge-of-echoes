@@ -21,7 +21,7 @@ import {
   BASE_MAGIC_PACK_CHANCE, BASE_RARE_PACK_CHANCE, CORRUPTED_MODS, DANGER_MODS, DEBUFFS, ECHO_MOD, HAZARD_AFFLICTION, MAP_AFFLICTIONS,
   MAP_BASES, MAP_DANGER_LIMITS, MAP_DUST_COUNTS, MAP_NAME_FIRST, MAP_NAME_SECOND, MAX_DANGER_MODS, MAX_MAP_TIER, MAX_REWARD_MODS,
   MIN_MAP_TIER, MOD_VALUE_ROLL, MONSTER_LEVEL, MONSTER_LEVEL_SCALING, MONSTER_NAMES, MONSTER_PLURALS, MONSTER_SENTENCE_NAMES, PARTY_SCALING, REWARD_MODS,
-  TIER_SCALING, VOID_NEEDLE_OUTCOMES, WAVES, findMapBase, getMapMod,
+  PLAYER_RESISTANCE_SCALING, TIER_SCALING, VOID_NEEDLE_OUTCOMES, WAVES, findMapBase, getMapMod,
 } from '../../data/progression';
 import type { MapEffectDef, MapModDef, MapStat, VoidOutcomeId } from '../../data/progression';
 import { findCurrency, ownEntry } from '../../data/items';
@@ -48,6 +48,11 @@ export function clampTier(tier: number): number {
 /** Monster level (= item level of every drop) = min(90, 6 × tier − 2). */
 export function monsterLevelForTier(tier: number): number {
   return Math.min(MONSTER_LEVEL.cap, MONSTER_LEVEL.base + MONSTER_LEVEL.perTier * clampTier(tier));
+}
+
+export function resistancePenaltyForLevel(level: number): number {
+  const s = PLAYER_RESISTANCE_SCALING;
+  return Math.min(s.cap, Math.max(0, level - s.startLevel) * s.perLevel);
 }
 
 export function mapBaseName(baseId: MapBaseId | string): string {
@@ -344,8 +349,10 @@ export function echoWaveIndex(map: MapItem): number {
 }
 
 /** Player penalties of a map (Exhausting, Hexed, corruption) as ordinary player StatModifiers. */
-export function mapPlayerModifiers(map: MapItem): StatModifier[] {
+export function mapPlayerModifiers(map: MapItem, monsterLevel = monsterLevelForTier(map.tier)): StatModifier[] {
   const out: StatModifier[] = [];
+  const penalty = resistancePenaltyForLevel(monsterLevel);
+  if (penalty > 0) out.push({ stat: 'allRes', mode: 'flat', value: -penalty, source: `Monster level ${monsterLevel}`, label: 'Map level resistance penalty' });
   for (const m of mapModifiers(map)) {
     if (m.stat === 'playerFocusRegen') {
       out.push({ stat: 'focusRegen', mode: m.mode, value: m.value, source: `${m.source} (map)`, label: effectText(m.stat, m.mode, m.value) });
@@ -523,6 +530,8 @@ export function buildMapSummary(map: MapItem): MapSummaryLine[] {
     out.push({ label: 'Your Focus Regeneration', value: signedPercent(resolveModes(100, regen) - 100), breakdown: regen.map((m) => modifierLine(m)) });
   }
   const res = ofStat(mods, 'playerResist');
+  const resistancePenalty = resistancePenaltyForLevel(monsterLevelForTier(map.tier));
+  if (resistancePenalty > 0) res.push({ stat: 'playerResist', mode: 'flat', value: -resistancePenalty, source: `Monster level ${monsterLevelForTier(map.tier)}` });
   if (res.length) {
     out.push({ label: 'Your Resistances', value: signedPercent(resolveModes(0, res)), breakdown: res.map((m) => modifierLine(m)) });
   }
@@ -688,10 +697,15 @@ export function describeMap(map: MapItem, opts: MapDescribeOptions = {}): ItemDe
 
   const implicits: TooltipLine[] = base
     ? [
-      ...base.implicitEffects.map((e): TooltipLine => ({ text: effectText(e.stat, e.mode, e.value), kind: 'implicit' })),
+      ...base.implicitEffects.map((e): TooltipLine => ({ text: effectText(e.stat, e.mode, e.value), kind: 'implicit', ...(isThreat(e.stat) ? { negative: true } : {}) })),
       ...(base.arenaNote ? [{ text: base.arenaNote, kind: 'implicit' as const }] : []),
     ]
     : [];
+  const levelPenalty = resistancePenaltyForLevel(level);
+  if (levelPenalty > 0) implicits.push({
+    text: `Players have -${formatNumber(levelPenalty)}% to all Resistances from monster level ${level}`,
+    kind: 'implicit', negative: true,
+  });
   const affixes = map.mods.flatMap((m) => modLines(m, tier, mapBosses(map.baseId).boss.sentence, map.baseId));
 
   const headerLines = [`Tier ${tier} Map`];

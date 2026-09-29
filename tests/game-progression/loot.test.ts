@@ -293,7 +293,7 @@ describe('determinism and drop specs', () => {
 
   it('marks loot walk-over or click-only, and anything a player drops as click-only and public', () => {
     const kinds: Item[] = [
-      equip({ baseId: 'emberRing', itemLevel: 20, rarity: 'magic', affixes: [{ affixId: 'life', tier: 6 }] }),
+      equip({ baseId: 'emberRing', itemLevel: 28, rarity: 'magic', affixes: [{ affixId: 'life', tier: 6 }] }),
       unique('cinderwalkers'),
       { kind: 'currency', uid: 'c', currencyId: 'scrap', count: 2 },
       { kind: 'flask', uid: 'f', flaskId: 'focusFlask', count: 1 },
@@ -479,7 +479,7 @@ describe('uniques drop only where they can be worn (item level ≥ the unique\'s
   });
 
   it('below every unique\'s level the unique roll becomes a rare (never nothing)', () => {
-    const low: RunSetup = { ...setupFor(map('ashenForge', 1)), monsterLevel: 10, itemRarity: 2000 };
+    const low: RunSetup = { ...setupFor(map('ashenForge', 1)), monsterLevel: 9, itemRarity: 2000 };
     const rng = createRng(9);
     for (let i = 0; i < 100; i++) {
       const eq = rules.rollKillLoot(low, kill({ kind: 'cinderMatriarch', isBoss: true, wave: 6 }), rng, NAKED)

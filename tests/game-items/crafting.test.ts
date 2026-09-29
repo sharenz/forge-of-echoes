@@ -34,7 +34,7 @@ function count(ch: CharacterSave, uid: string): number {
 
 const MAGIC_RING: Omit<EquipmentSpec, 'uid'> = {
   baseId: 'emberRing', itemLevel: 60, rarity: 'magic',
-  affixes: [{ affixId: 'life', tier: 5, value: 30 }, { affixId: 'coldResistance', tier: 5, value: 24 }],
+  affixes: [{ affixId: 'life', tier: 5, value: 30 }, { affixId: 'coldResistance', tier: 5, value: 22 }],
 };
 
 describe('validation (nothing is consumed on failure)', () => {
@@ -101,7 +101,7 @@ describe('Forge Scrap', () => {
     affixes: [
       { affixId: 'life', tier: 2, value: 51, sealed: true },
       { affixId: 'spellDamage', tier: 2, value: 53, fractured: true },
-      { affixId: 'fireDamage', tier: 4, value: 31 },
+      { affixId: 'fireDamage', tier: 4, value: 33 },
       { affixId: 'castSpeed', tier: 4, value: 12 },
     ],
   };
@@ -116,14 +116,14 @@ describe('Forge Scrap', () => {
       expect(by('life').sealed).toBeUndefined();
       expect(by('spellDamage')).toEqual({ affixId: 'spellDamage', tier: 2, value: 53, fractured: true });
       expect(by('fireDamage').tier).toBe(4);
-      expect(by('fireDamage').value).toBeGreaterThanOrEqual(31);
-      expect(by('fireDamage').value).toBeLessThanOrEqual(38);
+      expect(by('fireDamage').value).toBeGreaterThanOrEqual(33);
+      expect(by('fireDamage').value).toBeLessThanOrEqual(37);
       seen.add(by('fireDamage').value);
       expect(it.history.at(-1)).toBe('Forge Scrap rerolled 2 values (Hale sealed)');
       expect(count(out.character, 'scrap')).toBe(0);
       expect(findItem(out.character, 'scrap')).toBeNull();
     }
-    expect(seen.size).toBe(8);
+    expect(seen.size).toBe(5);
   });
 
   it('rejects items whose values cannot change', () => {
@@ -208,7 +208,7 @@ describe('Essences', () => {
     expect(craftingTargetError(bench(belt, { essenceSwift: 1 }), 'essenceSwift', T)).toBe('No speed affix can roll on a Belt.');
 
     const full = item({
-      baseId: 'ashwoodWand', itemLevel: 40, rarity: 'magic',
+      baseId: 'ashwoodWand', itemLevel: 44, rarity: 'magic',
       affixes: [{ affixId: 'fireDamage', tier: 5 }, { affixId: 'igniteChance', tier: 4 }],
     });
     // Magic with 2 → would become rare, but both fire affixes of a wand are present already.
@@ -255,11 +255,11 @@ describe('Essences', () => {
 
 describe('Tempering Catalyst', () => {
   const spec: Omit<EquipmentSpec, 'uid'> = {
-    baseId: 'emberRing', itemLevel: 70, rarity: 'rare', name: 'Pyre Mark',
+    baseId: 'emberRing', itemLevel: 80, rarity: 'rare', name: 'Pyre Mark',
     affixes: [
-      { affixId: 'life', tier: 4, value: 40 },
+      { affixId: 'life', tier: 4, value: 39 },
       { affixId: 'fireDamage', tier: 2, value: 50 },
-      { affixId: 'voidResistance', tier: 1, value: 28 },
+      { affixId: 'voidResistance', tier: 1, value: 24 },
       { affixId: 'strength', tier: 5, value: 18, sealed: true },
       { affixId: 'dexterity', tier: 6, value: 14, fractured: true },
     ],
@@ -273,8 +273,8 @@ describe('Tempering Catalyst', () => {
       const it = target(out.character);
       const life = it.affixes.find((a) => a.affixId === 'life')!;
       expect(life.tier).toBe(3);
-      expect(life.value).toBeGreaterThanOrEqual(41);
-      expect(life.value).toBeLessThanOrEqual(50);
+      expect(life.value).toBeGreaterThanOrEqual(40);
+      expect(life.value).toBeLessThanOrEqual(46);
       expect(it.stability).toBe(4);
       expect(it.history.at(-1)).toBe('Tempering Catalyst raised Hale to T3 (of Brawn sealed)');
       expect(it.affixes.find((a) => a.affixId === 'fireDamage')).toEqual({ affixId: 'fireDamage', tier: 2, value: 50 });
@@ -287,12 +287,12 @@ describe('Tempering Catalyst', () => {
     const ch = bench(it, { catalyst: 1 });
     expect(expectErr(applyEquipmentCurrency(ch, 'catalyst', T))).toBe('Choose an affix for Tempering Catalyst.');
     expect(equipmentCraftError(it, 'catalyst', idx('voidResistance'))).toBe('of the Veil is already at its best tier.');
-    expect(equipmentCraftError(it, 'catalyst', idx('fireDamage'))).toBe('T1 Blazing needs item level 75 (this item is 70).');
+    expect(equipmentCraftError(it, 'catalyst', idx('fireDamage'))).toBe('T1 Blazing needs item level 84 (this item is 80).');
     expect(equipmentCraftError(it, 'catalyst', idx('strength'))).toBe('of Brawn is sealed and protected from this craft.');
     expect(equipmentCraftError(it, 'catalyst', idx('dexterity'))).toBe('of Grace is fractured and immune to crafting.');
     expect(equipmentCraftError(it, 'catalyst', 42)).toBe('Choose an affix on the item.');
     expect(craftingTargetError(ch, 'catalyst', T)).toBeNull();
-    const maxed = item({ baseId: 'emberRing', itemLevel: 70, rarity: 'magic', affixes: [{ affixId: 'voidResistance', tier: 1 }] });
+    const maxed = item({ baseId: 'emberRing', itemLevel: 80, rarity: 'magic', affixes: [{ affixId: 'voidResistance', tier: 1 }] });
     expect(craftingTargetError(bench(maxed, { catalyst: 1 }), 'catalyst', T)).toBe('No affix on this item can be upgraded further.');
   });
 });
@@ -302,7 +302,7 @@ describe('Forge Solvent', () => {
     const removed = new Set<string>();
     for (let seed = 0; seed < 120; seed++) {
       const it = item({
-        baseId: 'ironVisor', itemLevel: 70, rarity: 'rare', name: 'Hex Crown',
+        baseId: 'ironVisor', itemLevel: 72, rarity: 'rare', name: 'Hex Crown',
         affixes: [
           { affixId: 'life', tier: 7 }, { affixId: 'focus', tier: 7 }, { affixId: 'armourFlat', tier: 2 },
           { affixId: 'strength', tier: 8, sealed: true }, { affixId: 'coldResistance', tier: 8, fractured: true },
@@ -320,7 +320,7 @@ describe('Forge Solvent', () => {
   });
 
   it('makes an item normal when its last affix goes', () => {
-    const it = item({ baseId: 'ashwoodWand', itemLevel: 10, rarity: 'rare', name: 'Ash Bite', affixes: [{ affixId: 'fireDamage', tier: 7 }] });
+    const it = item({ baseId: 'ashwoodWand', itemLevel: 20, rarity: 'rare', name: 'Ash Bite', affixes: [{ affixId: 'fireDamage', tier: 7 }] });
     const res = expectOk(craftEquipment(it, 'solvent', createRng(1)));
     expect(res.item.rarity).toBe('normal');
     expect(res.item.name).toBeNull();
@@ -382,12 +382,12 @@ describe('Fracture Core', () => {
   it('locks an affix permanently against every other currency', () => {
     let ch = bench(item({
       baseId: 'boneTalisman', itemLevel: 80, rarity: 'rare', name: 'Vigil Hymn',
-      affixes: [{ affixId: 'spellDamage', tier: 3, value: 50, sealed: true }, { affixId: 'life', tier: 6 }, { affixId: 'castSpeed', tier: 5 }],
+      affixes: [{ affixId: 'spellDamage', tier: 3, value: 48, sealed: true }, { affixId: 'life', tier: 6 }, { affixId: 'castSpeed', tier: 5 }],
     }), { fractureCore: 2, scrap: 3, reforge: 1, catalyst: 1 });
     const idx = target(ch).affixes.findIndex((a) => a.affixId === 'spellDamage');
     ch = expectOk(applyEquipmentCurrency(ch, 'fractureCore', T, idx)).character;
     let it = target(ch);
-    expect(it.affixes[idx]).toEqual({ affixId: 'spellDamage', tier: 3, value: 50, fractured: true });
+    expect(it.affixes[idx]).toEqual({ affixId: 'spellDamage', tier: 3, value: 48, fractured: true });
     expect(it.stability).toBe(4);
     expect(it.history.at(-1)).toBe('Fracture Core fractured Arcane (T3)');
     expect(craftingTargetError(ch, 'fractureCore', T)).toBe('This item already has a fractured affix.');
@@ -396,7 +396,7 @@ describe('Fracture Core', () => {
     ch = expectOk(applyEquipmentCurrency(ch, 'scrap', T)).character;
     ch = expectOk(applyEquipmentCurrency(ch, 'reforge', T)).character;
     it = target(ch);
-    expect(it.affixes.find((a) => a.affixId === 'spellDamage')).toEqual({ affixId: 'spellDamage', tier: 3, value: 50, fractured: true });
+    expect(it.affixes.find((a) => a.affixId === 'spellDamage')).toEqual({ affixId: 'spellDamage', tier: 3, value: 48, fractured: true });
   });
 });
 
@@ -583,8 +583,8 @@ describe('craft preview (exact odds)', () => {
     expect(solvent.lines).toContain('Scar risk 35%: Stability drops to 2 (scars can form at 2 or less).');
 
     const cat = equipmentCraftPreview({ ...it, stability: 8 }, 'catalyst');
-    expect(cat.lines).toContain('Hale T7: upgrades to T6 (17–23)');
-    expect(cat.lines).toContain('Blazing T3: T2 needs item level 62');
+    expect(cat.lines).toContain('Hale T7: upgrades to T6 (22–27)');
+    expect(cat.lines).toContain('Blazing T3: T2 needs item level 72');
     expect(cat.lines).toContain('No scar risk.');
 
     const fin = equipmentCraftPreview({ ...it, stability: 1 }, 'scrap');

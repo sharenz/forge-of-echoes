@@ -1,6 +1,6 @@
 # Roadmap
 
-Maintained by Claude at the owner's request. Ask "what's next" and it is read from here; ideas and decisions
+Maintained at the owner's request. Ask "what's next" and it is read from here; ideas and decisions
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
 Last reprioritised: 2026-09-29.
 
@@ -41,22 +41,35 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
   the Map Device picker needed more minimum height to keep sticky headings from blocking map clicks; fixed and
   verified. The full browser harness still has intermittent random-drop and small-viewport navigation failures.
 
-**Phase 2 (open, discuss/tune after playing it):**
-- More affix tiers and lower stat values (item level now tops out lower per tier, so gear is already weaker early;
-  best affix tiers need item level 68+, i.e. tier 12+).
-- Armour and resistances vs monster level (only evasion scales with monster level so far); monster accuracy.
-- Uniques' level requirements against the new item levels (only 4 exist; the first two become eligible at T3).
-- Boss fights on the first map are long for the bot (Ashen T1 about 6 minutes): check with real play.
-- Real-player feedback loop: play a fresh character and a mid character on this build, then retune the four
-  constants (`MONSTER_LEVEL_SCALING.life/damage/referenceLevel`, `evasionPerMonsterLevel`) and the drop weights.
+**Phase 2: Done — implementation and validation complete, ready for production.**
+- Affixes now have 7–10 tiers, with top tiers requiring item level 78–84 (T14–15 maps) and lower maximum values.
+  All lowest-tier ranges and starting-kit values are preserved. Existing equipment migrates once, retaining
+  its identity, relative roll, history, stability, scars and crafting protections.
+- Resistances lose 0.5 percentage points per monster level above 10, capped at 40: no penalty in T1–T2,
+  -3% in T3, -6% in T4, -39% in T15. The tooltip, map device, character sheet and map HUD disclose it.
+- Armour already scales against the size of incoming hits; its sheet example now uses the map's monster
+  level. Evasion already uses level-scaled monster accuracy, which the sheet now explicitly shows.
+- The Patient Spark now requires level 10 and can drop in T2. The other three uniques unlock in T3/T4/T5.
+- XP orbs removed at the owner's request: kills grant XP immediately to each living party member in the
+  instance, regardless of distance. Fractional XP carries between kills; physical loot pickup is unchanged.
+- Owner playtest: the first boss already feels hard and the balance feels about right. Boss damage is unchanged.
+  With immediate XP, the fresh-character bot clears Ashen T1 in 9–10.4 minutes, reaches level 6 and drops to
+  35–47% life across three seeds without dying. Level-11 characters fail T5 on all three seeds. Keep watching
+  real-player feedback, especially the first Ashen boss's 4.5–5.6-minute bot fight.
+- Validation: build/typecheck, 1,776 always-on tests and all 12 on-demand balance checks pass. HUD verified at
+  1280×720 and 1024×600. Read-only migration audit of all 5 production characters preserves all 321 item IDs,
+  including 148 equipment items / 258 affixes, with crafting metadata intact and no repeated migration.
 
-## P0: now (small, ready)
+## P0: next
 
-1. **UI polish after the font bump.** "Intelligence" label collides with its `+` button in the character panel;
+1. **Reuse wave-3 bosses to expand the map roster** (owner, 2026-09-29). Remove the wave-3 lieutenant encounter
+   from every existing map. Promote those three encounters into final bosses of three new maps, aiming to grow
+   the roster from 3 to 6 maps. Reuse the existing boss mechanics; give each new map its own theme, packs and
+   implicit. Rebalance wave 3, encounter rewards and map completion time after the split. This is queued work,
+   not part of the current phase-2 balance tuning.
+2. **UI polish after the font bump.** "Intelligence" label collides with its `+` button in the character panel;
    party row metadata ("Ashen Forge T3 / 6/8 portals") wraps unevenly. Then review the panels not yet checked at
    the new sizes (stash, merchant, crafting bench, map device, trade, menu, tooltips, smaller viewports).
-2. **Map HUD: complete map modifiers** (owner). Monster level is now shown in the top right and compact map
-   readout. Danger, reward and corrupted affixes are shown; include the map's implicit modifiers as well.
 3. **Monster pack modifiers on hover** (owner). When you hover a magic or rare pack, show its modifiers (top
    centre suggested). Spec data: magic packs share one mod (Swift, Stout, Fierce); a rare leader has 2 of
    Juggernaut, Frenzied, Ember-touched, Warded (`GAME_SPEC.md` §8). Needs the mods in the client snapshot and
@@ -188,6 +201,8 @@ decide"), informed by an ARPG-designer agent review. Owner can overrule any of t
 
 ## Done
 
+- 2026-09-29: Completed phase 2 of the balance overhaul and immediate XP on kill. Map HUD includes implicit
+  modifiers and the map-level resistance penalty. Protocol 3 refreshes clients with old shared rules.
 - 2026-09-29: Added the authoritative monster level to the top-right map HUD and compact readout. T1 remains
   level 4 (owner confirmed). Raised client compatibility to protocol 2 so pre-balance tabs reload on reconnect
   instead of keeping old tooltip rules. Build, all 1,774 always-on tests and wide/compact visual checks pass.

@@ -43,6 +43,32 @@ function livedIn(): CharacterSave {
 }
 
 describe('newSave / serializeSave / parseSave', () => {
+  it('migrates old equipment once, preserving roll quality, identity and craft protections', () => {
+    const ch = rules.createCharacter('Legacy', 42);
+    const old: EquipmentItem = {
+      kind: 'equipment', uid: 'legacy-ring', baseId: 'emberRing', itemLevel: 40, rarity: 'rare', name: 'Old Flame',
+      implicitValues: [18], stability: 3, maxStability: 7, scars: [{ scarId: 'frail', value: 6 }], history: ['A favourite ring'],
+      affixes: [
+        { affixId: 'life', tier: 4, value: 40, sealed: true },
+        { affixId: 'fireResistance', tier: 7, value: 11, fractured: true },
+        { affixId: 'castSpeed', tier: 5, value: 10, crafted: true },
+      ],
+    };
+    ch.equipment.ring1 = old;
+    ch.stash[0].grid.entries.push({ item: { ...old, uid: 'stored-ring' }, x: 0, y: 0 });
+    const migrated = normalizeCharacter(ch)!;
+    const ring = migrated.equipment.ring1!;
+    expect(ring).toMatchObject({ uid: old.uid, name: old.name, affixVersion: 2, stability: 3, scars: old.scars, history: old.history });
+    expect(ring.affixes).toEqual([
+      { affixId: 'life', tier: 6, value: 27, sealed: true },
+      { affixId: 'castSpeed', tier: 7, value: 7, crafted: true },
+      { affixId: 'fireResistance', tier: 9, value: 11, fractured: true },
+    ]);
+    const stored = migrated.stash[0].grid.entries.find((e) => e.item.uid === 'stored-ring')!.item as EquipmentItem;
+    expect(stored.affixes).toEqual(ring.affixes);
+    expect(normalizeCharacter(JSON.parse(JSON.stringify(migrated)))).toEqual(migrated);
+  });
+
   it('creates an empty current-version save', () => {
     expect(rules.newSave()).toEqual({
       version: SAVE_VERSION, characters: [], lastCharacterId: null,
@@ -150,7 +176,7 @@ describe('normalizeCharacter', () => {
     const ch = normalizeCharacter(JSON.parse(JSON.stringify(raw)))!;
     const w = ch.equipment.mainHand!;
     expect(w.itemLevel).toBe(100);
-    expect(w.affixes).toEqual([{ affixId: 'fireDamage', tier: 8, value: 12, sealed: true }]);
+    expect(w.affixes).toEqual([{ affixId: 'fireDamage', tier: 10, value: 12, sealed: true }]);
     expect(w.rarity).toBe('magic');
     expect(w.implicitValues).toEqual([16]);
     expect(w.stability).toBe(w.maxStability);
@@ -165,7 +191,7 @@ describe('normalizeCharacter', () => {
   it('keeps at most one crafted affix, never a fractured one, and only a real true flag', () => {
     const good = livedIn();
     const ring = (affixes: unknown[]) => ({
-      kind: 'equipment', uid: 'r', baseId: 'emberRing', itemLevel: 60, rarity: 'rare', name: 'Grave Coil',
+      kind: 'equipment', affixVersion: 2, uid: 'r', baseId: 'emberRing', itemLevel: 60, rarity: 'rare', name: 'Grave Coil',
       implicitValues: [16], affixes, scars: [], stability: 5, maxStability: 7, history: ['Bench: added Hale (T4)'],
     });
     const load = (affixes: unknown[]) => normalizeCharacter(JSON.parse(JSON.stringify({ ...good, equipment: { ring1: ring(affixes) } })))!

@@ -149,27 +149,30 @@ describe('kill credit and loot', () => {
     expect(log.pickups).toHaveLength(1);
   });
 
-  it('echo motes carry the kill XP and are magnetised inside the pickup radius', () => {
-    const { run, world } = makeArena({ stats: makeStats({ pickupRadius: 120 }) });
-    const i = placeMonster(world, 'riftStalker', 90, 0, { life: 1 });
-    const xp = world.monsters.xp[i];
-    expect(xp).toBe(8);
+  it('awards XP on a distant kill immediately, without orbs or pickup radius', () => {
+    const { run, world } = makeArena({ stats: makeStats({ pickupRadius: 0 }) });
+    const i = placeMonster(world, 'riftStalker', 500, 0, { life: 1 });
     damageMonster(world, i, 100, DAMAGE_INDEX.fire, 0, 1.5, 0, 1, 0, 1);
-    expect(run.view.motes.count).toBe(1);
-    const r = stepN(run, 120);
-    const gained = r.outcomes.filter((o) => o.t === 'xp').reduce((a, o) => a + (o.t === 'xp' ? o.amount : 0), 0);
-    expect(gained).toBe(8);
+    expect(run.drainOutcomes().filter((o) => o.t === 'xp')).toEqual([{ t: 'xp', amount: 8 }]);
     expect(run.view.motes.count).toBe(0);
-    expect(ofType(r.events, 'mote')).toEqual([expect.objectContaining({ t: 'mote', playerId: 1 })]);
+    // An overkill and later ticks cannot award the same kill twice.
+    damageMonster(world, i, 100, DAMAGE_INDEX.fire, 0, 1.5, 0, 1, 0, 1);
+    const later = stepN(run, 120);
+    expect(later.outcomes.filter((o) => o.t === 'xp')).toEqual([]);
+    expect(ofType(later.events, 'mote')).toEqual([]);
   });
 
-  it('far motes wait until the player comes close', () => {
-    const { run, world } = makeArena({ stats: makeStats({ pickupRadius: 40 }) });
-    const i = placeMonster(world, 'ashling', 300, 0, { life: 1 });
-    damageMonster(world, i, 100, DAMAGE_INDEX.fire, 0, 1.5, 0, 1, 0, 1);
-    const r = stepN(run, 120);
-    expect(r.outcomes.filter((o) => o.t === 'xp')).toHaveLength(0);
-    expect(run.view.motes.count).toBe(1);
+  it('keeps fractional XP across kills without leaving any on the ground', () => {
+    const { run, world } = makeArena({ stats: makeStats({ pickupRadius: 0 }) });
+    const gained: number[] = [];
+    for (let k = 0; k < 4; k++) {
+      const i = placeMonster(world, 'ashling', 500, 0, { life: 1 });
+      world.monsters.xp[i] = 1.25;
+      damageMonster(world, i, 100, DAMAGE_INDEX.fire, 0, 1.5, 0, 1, 0, 1);
+      for (const o of run.drainOutcomes()) if (o.t === 'xp') gained.push(o.amount);
+    }
+    expect(gained).toEqual([1, 1, 1, 2]);
+    expect(run.view.motes.count).toBe(0);
   });
 });
 

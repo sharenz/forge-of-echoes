@@ -115,11 +115,11 @@ describe('affixes', () => {
     expect(AFFIXES.slice(firstSuffix).every((a) => a.kind === 'suffix')).toBe(true);
   });
 
-  it('has 5–8 well-formed tiers per affix (T1 best, gated by item level, steeply weighted)', () => {
+  it('has 7–10 well-formed tiers per affix (T1 best, gated by item level, steeply weighted)', () => {
     for (const a of AFFIXES) {
       if (a.id === 'splintering') continue;
-      expect(a.tiers.length, a.id).toBeGreaterThanOrEqual(5);
-      expect(a.tiers.length, a.id).toBeLessThanOrEqual(8);
+      expect(a.tiers.length, a.id).toBeGreaterThanOrEqual(7);
+      expect(a.tiers.length, a.id).toBeLessThanOrEqual(10);
       a.tiers.forEach((t, i) => {
         expect(t.tier).toBe(i + 1);
         expect(t.min).toBeLessThanOrEqual(t.max);
@@ -137,7 +137,7 @@ describe('affixes', () => {
       expect(a.tags.length).toBeGreaterThan(0);
       expect(lineHasTemplate(a), a.id).toBe(true);
     }
-    for (const n of [5, 6, 7, 8]) expect(TIER_LADDERS[n].weight).toHaveLength(n);
+    for (const n of [7, 8, 9, 10]) expect(TIER_LADDERS[n].weight).toHaveLength(n);
   });
 
   it('makes "of Splintering" a very rare wand-only T1 at ilvl 70+', () => {

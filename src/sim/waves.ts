@@ -511,7 +511,7 @@ function eruptAround(w: World, p: PlayerState, n: number, dmg: number, lim: numb
 }
 
 /**
- * The boss fell (or the last wave is done): everything left crumbles, motes fly home, rewards appear,
+ * The boss fell (or the last wave is done): everything left crumbles and grants XP, rewards appear,
  * and the survivors' debuffs lift (a burn or a bleed must not kill anyone on the way to the chest).
  */
 function clearRun(w: World): void {

@@ -122,10 +122,10 @@ describe('tier odds in previews', () => {
   it('shows each essence outcome with its exact tier split, matching real rolls', () => {
     const wand = equip({ baseId: 'ashwoodWand', itemLevel: 30, rarity: 'normal', uid: 'w' });
     const lines = equipmentCraftPreview(wand, 'essenceEmber').lines;
-    expect(lines[0]).toBe('Adds one of 2 fire affixes: Blazing 55% · of Immolation 45%');
+    expect(lines[0]).toBe('Adds one of 2 fire affixes: Blazing 59% · of Immolation 41%');
     expect(lines).toContain('Tier odds by affix:');
-    expect(lines).toContain('Blazing: T8 36% · T7 29% · T6 21% · T5 14%');
-    expect(lines).toContain('of Immolation: T6 45% · T5 33% · T4 22%');
+    expect(lines).toContain('Blazing: T10 29% · T9 24% · T8 20% · T7 16% · T6 11%');
+    expect(lines).toContain('of Immolation: T8 42% · T7 33% · T6 25%');
 
     const rng = createRng(5);
     const N = 10000;
@@ -137,9 +137,9 @@ describe('tier odds in previews', () => {
       blazing++;
       tiers.set(a.tier, (tiers.get(a.tier) ?? 0) + 1);
     }
-    const weights = { 8: 1000, 7: 800, 6: 600, 5: 400 } as const;
+    const weights = { 10: 1000, 9: 850, 8: 700, 7: 550, 6: 400 } as const;
     for (const [tier, w] of Object.entries(weights)) {
-      expect(Math.abs((tiers.get(Number(tier)) ?? 0) / blazing - w / 2800), `T${tier}`).toBeLessThan(0.02);
+      expect(Math.abs((tiers.get(Number(tier)) ?? 0) / blazing - w / 3500), `T${tier}`).toBeLessThan(0.02);
     }
   });
 
@@ -151,13 +151,13 @@ describe('tier odds in previews', () => {
     const tierLines = lines.slice(start + 1).filter((l) => / T\d+ /.test(` ${l}`) && l.includes(': T'));
     expect(tierLines.length).toBeGreaterThanOrEqual(2);
     for (const l of tierLines) expect(sumPct(l.slice(l.indexOf(': T'))), l).toBeCloseTo(100, 6);
-    expect(tierLines[0]).toMatch(/^Hale, Plated, of the Kiln, of Thaw and of Grounding: T8 30\.9% · /);
+    expect(tierLines[0]).toMatch(/^Hale, Plated, of the Kiln, of Thaw and of Grounding: T10 24\.4% · /);
   });
 
   it('shortens long name lists for Kindling and Reforge and explains item level 1', () => {
     const wand = equip({ baseId: 'ashwoodWand', itemLevel: 30, rarity: 'normal', uid: 'w' });
     const kindling = equipmentCraftPreview(wand, 'kindling').lines;
-    expect(kindling).toContain('Blazing, of Omens, of Insight and 4 more: T8 36% · T7 29% · T6 21% · T5 14%');
+    expect(kindling).toContain('Blazing, of Omens, of Insight and 4 more: T10 29% · T9 24% · T8 20% · T7 16% · T6 11%');
     expect(kindling.find((l) => l.startsWith('Chance for each affix:'))).toMatch(/ · and 8 others at [\d.]+% or less$/);
 
     const fresh = equip({ baseId: 'ashwoodWand', itemLevel: 1, rarity: 'normal', uid: 'f' });
@@ -170,7 +170,7 @@ describe('tier odds in previews', () => {
     });
     const storm = equipmentCraftPreview(ring, 'essenceStorm').lines;
     expect(storm[0]).toBe('Adds the only lightning affix that can roll here: of Grounding.');
-    expect(storm[1]).toBe('Tier odds: T8 31% · T7 25% · T6 19% · T5 13% · T4 8% · T3 4%');
-    expect(equipmentCraftPreview(ring, 'catalyst').lines).toContain('Hale T5: upgrades to T4 (32–40)');
+    expect(storm[1]).toBe('Tier odds: T10 25% · T9 21% · T8 17% · T7 14% · T6 10% · T5 7% · T4 4% · T3 2%');
+    expect(equipmentCraftPreview(ring, 'catalyst').lines).toContain('Hale T5: upgrades to T4 (34–39)');
   });
 });

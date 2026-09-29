@@ -138,7 +138,7 @@ describe('journey through the core loop', () => {
     ch = expectOk(rules.applyBenchRecipe(ch, benchUid, recipe.id)).character;
     const benched = rules.findItem(ch, benchUid)!.item as EquipmentItem;
     expect(benched.affixes.filter((a) => a.crafted)).toEqual([expect.objectContaining({ affixId: recipe.affixId, tier: recipe.tier })]);
-    expect(benched.history.at(-1)).toMatch(/^Bench: added .+ \(T\d\)$/);
+    expect(benched.history.at(-1)).toMatch(/^Bench: added .+ \(T\d+\)$/);
     expect(rules.describeItem(benched, ch).affixes.filter((l) => l.crafted)).toHaveLength(1);
 
     const save = { ...rules.newSave(), characters: [ch], lastCharacterId: ch.id };

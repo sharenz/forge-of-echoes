@@ -5,7 +5,7 @@
 //   run.setIntent(id, intent);        // held state; kept until replaced (flask presses apply once)
 //   run.step();                       // exactly one SIM_DT tick for everyone, players in join order
 //   run.view                          // read-only WorldView, updated in place (stable object references)
-//   run.drainEvents()                 // cosmetic, capped per tick (plain hits / motes / projectile ends drop first)
+//   run.drainEvents()                 // cosmetic, capped per tick (plain hits / projectile ends drop first)
 //   run.drainOutcomes()               // authoritative, never dropped
 //   run.removePlayer(id)              // left / disconnected / respawned home
 //   run.spawnDrop(spec, x, y)         // an item a player put on the floor (public: spec.owner 0) → drop id
@@ -110,8 +110,8 @@
 //    throwing (or malformed) rollKillLoot / rollChestLoot yields no drops, a throwing tryPickup
 //    refuses the pickup. The errors are collected: `drainHookErrors(run)` (the first one per
 //    instance is also console.error'd). Specs whose owner isn't one of the ids passed are dropped.
-//  - XP is shared: a mote flies to the nearest living player whose pickup radius it enters (any
-//    living player after the clear); whoever collects it, one { t: 'xp' } outcome goes to everyone.
+//  - XP is shared immediately on monster death: one { t: 'xp' } outcome goes to every living
+//    player in the instance. No pickup, proximity check or XP orb is involved.
 //  - The completion chest opens for everyone when the first player touches it:
 //    rollChestLoot(livingIds, lootRng), outcome chestOpened { playerId: opener }.
 //  - Portals are walk-in and per player: a living player who STAYS inside an open portal for 0.5 s

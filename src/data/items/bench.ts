@@ -3,7 +3,7 @@
 // the tables below; nothing here is random.
 //
 //   • Tier: the best tier the item level unlocks, but never better than BENCH_BEST_TIER (tier numbers:
-//     1 = best). An ilvl 20 ring gets T6 Hale (17–23 life); from ilvl 36 on every 8-tier affix stops at T4.
+//     1 = best). An ilvl 20 ring gets T7 Hale (18–21 life); from ilvl 48 the 10-tier ladder stops at T4.
 //   • Price: Forge Scrap by the granted tier's item-level requirement (a tier's power follows the item
 //     level that unlocks it, whatever the length of its ladder), plus one essence whose tags match the
 //     affix. Affixes no essence can add (critical, luck, focus, caster, utility) cost extra Scrap instead,
@@ -37,7 +37,7 @@ export interface BenchPriceBand {
 
 /**
  * Scrap price by the item level that unlocks the granted tier, cheapest first. The bench tiers unlock at
- * ilvl 1 (every worst tier), 6–10, 14–18, 24–30 and 36 (T4 of an 8-tier affix).
+ * the shared price bands below; a 10-tier affix reaches the bench ceiling at ilvl 48.
  */
 export const BENCH_PRICE_BANDS: readonly BenchPriceBand[] = [
   { minItemLevel: 1, scrap: 2, scrapWithoutEssence: 4 },
@@ -50,7 +50,7 @@ export const BENCH_PRICE_BANDS: readonly BenchPriceBand[] = [
 /**
  * Luck-tagged recipes (Fortunate, of Plenty) cost `scrapWithoutEssence` × this, rounded up: on par with
  * an essence recipe of the same band (an essence drops about 1/17 as often as a Scrap stack), e.g.
- * T4 Fortunate (17–21% rarity, ilvl 24) costs 30 Scrap instead of 12.
+ * T4 Fortunate (14–16% rarity, ilvl 44) costs 38 Scrap instead of 15.
  */
 export const BENCH_LUCK_PRICE_MULTIPLIER = 2.5;
 

@@ -509,7 +509,7 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
         : null,
       itemQuantity: luck.itemQuantity,
       itemRarity: luck.itemRarity,
-      modLines: desc.affixes.map((l) => l.text),
+      modLines: [...desc.implicits, ...desc.affixes].map((l) => l.text),
       portalsRemaining: zone === 'partymap' ? 6 : 5,
       portalsTotal: PORTALS_PER_MAP,
     };

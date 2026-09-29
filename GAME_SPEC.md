@@ -20,7 +20,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Online | **Online-only, server-authoritative** (see §11). No offline or single-player mode: solo play is a party of one on the server. |
 | Trading | Direct, atomic player-to-player trades (§12). No market yet (§15 is planned). |
 | Persistence | Server-side SQLite (`node:sqlite`). Accounts with username and password. `localStorage` holds only the session token and client settings. |
-| Pickup | **Equipment is picked up by clicking** its label or sprite; the character walks there first if it's out of reach. Currency, flasks and maps are auto-collected by walking over them. Echo motes (XP orbs) are magnetised Vampire-Survivors style. |
+| Pickup | **Equipment is picked up by clicking** its label or sprite; the character walks there first if it's out of reach. Currency, flasks and maps are auto-collected by walking over them. XP is awarded immediately on monster death; there are no XP orbs to collect. |
 | Aiming | Mouse aim. `LMB` holds the basic attack. `T` toggles auto-attack (the basic attack targets the nearest enemy near the cursor). |
 | Affixes | Prefix/suffix split. Magic items have ≤1 prefix and ≤1 suffix; rare items have ≤3 of each. |
 | Attributes | +3 allocatable points per level, plus small automatic class growth. |
@@ -57,7 +57,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
    - A 3 s "Tell" preview announces each wave's families, then the wave spawns.
    - Waves last 60 s or until cleared. They can stack.
    - The lieutenant arrives on wave 3 and the boss on wave 6. Killing the boss clears the map.
-   - On clear: all motes vacuum to you, a chest spawns, and a return portal opens.
+   - On clear: a chest spawns and a return portal opens. Kill XP has already been awarded.
 4. **Return:** a run summary appears (kills, XP, items found, best drop). Then craft, equip, allocate points and repeat.
 
 ## 3. Character: Sorceress
@@ -74,7 +74,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Armour | 0 base. Physical hit reduction = `armor / (armor + 10·damage)` |
 | Resistances | 0 base. Capped at 75%. Map mods can add a negative player-resistance penalty |
 | Move speed | 110 units/s base (+% from gear) |
-| Pickup radius | 90 units base (+% from gear). Drops and echo motes inside it fly to you |
+| Pickup radius | 90 units base (+% from gear). Auto-pickup drops inside it fly to you; XP does not use pickup radius |
 | Spell power | Every skill hit starts from `base = 11 + 1.6·(L−1)` plus `addedSpellDamage`, times the skill's effectiveness (the original target of 5 at L1 left a new character unable to make progress on the hard Tier 1) |
 | Int bonus | +1% increased spell damage per 5 int |
 | Dex bonus | +1% increased evasion per 5 dex |
@@ -84,7 +84,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Flasks | Recover over 3 s, never instantly. Life Flask `40 + 8·L` life, Focus Flask `30 + 4·L` focus, both × flask effect. 5 charges per belt slot; pickups refill a matching belt slot first |
 
 **Starting kit:**
-- **Equipment:** an equipped magic ilvl 1 Ashwood Wand with a T8 "Blazing" affix (8–12% increased fire damage: the best tier item level 1 can roll) and a normal Ashen Robe.
+- **Equipment:** an equipped magic ilvl 1 Ashwood Wand with a T10 "Blazing" affix (8–12% increased fire damage: the best tier item level 1 can roll) and a normal Ashen Robe.
 - **Backpack currency:** 10 Scrap, 4 Kindling, 2 Ember Essence, 1 Reforge, 1 Solvent, 1 Seal, 3 Map Dust, 2 Threat Glyph.
 - **Maps:** 2× Tier 1 Ashen Forge and 1× Tier 1 Rimed Ossuary.
 - **Belt:** 2 Life Flask slots (3 charges each) and 1 Focus Flask slot (3 charges).
@@ -146,27 +146,29 @@ Player modifiers on skills (resolved by the rules into the sim's numbers, so too
 
 **Rare names** come from two word lists (for example "Ember" + "Bite", "Grave" + "Coil"), with 40 words each.
 
-**Affixes:** 39 (15 prefixes, 24 suffixes), each with 5–8 tiers (T1 best), except "of Splintering" (1 tier). Item level unlocks tiers; weights fall steeply, so the top tiers (ilvl 68–75) stay rare even on high-level items:
+**Affixes:** 39 (15 prefixes, 24 suffixes), each with 7–10 tiers (T1 best), except "of Splintering" (1 tier). Item level unlocks tiers; weights fall steeply, so the top tiers (ilvl 78–84) stay rare even on high-level items:
 
 | Tiers | Item level per tier (worst → best) | Weight per tier (worst → best) |
 |---|---|---|
-| 5 | 1 / 14 / 32 / 50 / 68 | 1000 / 700 / 400 / 150 / 40 |
-| 6 | 1 / 10 / 24 / 40 / 56 / 70 | 1000 / 750 / 500 / 280 / 110 / 30 |
-| 7 | 1 / 8 / 18 / 30 / 44 / 58 / 72 | 1000 / 800 / 600 / 400 / 220 / 90 / 25 |
-| 8 | 1 / 6 / 14 / 24 / 36 / 48 / 62 / 75 | 1000 / 800 / 600 / 400 / 250 / 120 / 50 / 15 |
+| 7 | 1 / 12 / 26 / 40 / 54 / 66 / 78 | 1000 / 800 / 600 / 400 / 220 / 90 / 25 |
+| 8 | 1 / 10 / 20 / 32 / 44 / 56 / 68 / 80 | 1000 / 800 / 600 / 400 / 250 / 120 / 50 / 15 |
+| 9 | 1 / 8 / 16 / 24 / 34 / 46 / 58 / 70 / 82 | 1000 / 850 / 700 / 550 / 400 / 250 / 120 / 50 / 15 |
+| 10 | 1 / 6 / 12 / 20 / 28 / 38 / 48 / 60 / 72 / 84 | 1000 / 850 / 700 / 550 / 400 / 280 / 180 / 100 / 40 / 10 |
 
 | Kind | Affixes |
 |---|---|
-| Prefixes | flat max life (T1 63–76) · flat max focus · added spell damage (wand/sceptre/focus/amulet/ring; T1 22–27) · % spell damage (weapon/focus/amulet; T1 65–78%) · % fire / cold / lightning damage (weapon/focus/amulet/ring; T1 59–70%) · % elemental damage (ring/amulet) · flat armour / flat evasion (armour pieces with that property) · % armour / % evasion (armour pieces with that property) · % item rarity (helm/gloves/boots/amulet/ring, 5–32% — *luck*) · life on kill (weapon/gloves/belt/ring) · focus on kill (weapon/focus/gloves/belt/amulet) |
-| Suffixes | % cast speed (weapon/gloves/amulet/ring) · % crit chance (weapon/focus/helm/amulet) · crit multiplier (weapon/amulet) · fire / cold / lightning resistance (armour, belt & jewellery; T1 41–45%) · void resistance (T1 26–30%) · all resistances (amulet/ring) · % move speed (boots) · % focus regen (helm/focus/amulet/ring) · life regen (chest/belt/ring) · str / dex (armour, belt & jewellery) · int (also weapons and foci) · % projectile speed (weapon) · % area (focus/amulet) · % cooldown recovery (helm/amulet) · % pickup radius (belt/boots) · % item quantity (belt/amulet, 3–18% — *luck*) · % flask effect (belt) · ignite / chill / shock chance (weapon/gloves) · **+1 projectile** ("of Splintering", wand only, T1 only, ilvl 70+, weight 15) |
+| Prefixes | flat max life (T1 54–60) · flat max focus · added spell damage (wand/sceptre/focus/amulet/ring; T1 19–21) · % spell damage (weapon/focus/amulet; T1 56–62%) · % fire / cold / lightning damage (weapon/focus/amulet/ring; T1 51–56%) · % elemental damage (ring/amulet) · flat armour / flat evasion (armour pieces with that property) · % armour / % evasion (armour pieces with that property) · % item rarity (helm/gloves/boots/amulet/ring, 5–25% — *luck*) · life on kill (weapon/gloves/belt/ring) · focus on kill (weapon/focus/gloves/belt/amulet) |
+| Suffixes | % cast speed (weapon/gloves/amulet/ring) · % crit chance (weapon/focus/helm/amulet) · crit multiplier (weapon/amulet) · fire / cold / lightning resistance (armour, belt & jewellery; T1 33–36%) · void resistance (T1 22–24%) · all resistances (amulet/ring) · % move speed (boots) · % focus regen (helm/focus/amulet/ring) · life regen (chest/belt/ring) · str / dex (armour, belt & jewellery) · int (also weapons and foci) · % projectile speed (weapon) · % area (focus/amulet) · % cooldown recovery (helm/amulet) · % pickup radius (belt/boots) · % item quantity (belt/amulet, 3–14% — *luck*) · % flask effect (belt) · ignite / chill / shock chance (weapon/gloves) · **+1 projectile** ("of Splintering", wand only, T1 only, ilvl 70+, weight 15) |
 
 Luck affixes (item quantity / rarity) are personal: they raise only their wearer's drops (§9, §11).
 
-**Uniques** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tiers 1–2, item levels 4 and 10: none; Tier 3, item level 16: The Patient Spark and Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5+: all four), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties and cannot be crafted:
+**Saved equipment:** phase-2 affix revision 2 is stored per item. Older rolls migrate once to the best new tier unlocked by the old tier’s item-level gate (also bounded by the item’s level), preserving their relative roll within the range. Names, history, scars, stability, seals, fractures and bench-crafted marks survive. Lowest-tier values and the starting kit remain unchanged.
+
+**Uniques** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tier 1, item level 4: none; Tier 2, item level 10: The Patient Spark; Tier 3, item level 16: + Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5+: all four), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties and cannot be crafted:
 
 | Unique | Base | Effects | Flavour |
 |---|---|---|---|
-| **The Patient Spark** (level 12) | Ashwood Wand | +(30–45)% fire damage · 15% reduced cast speed · Ember Lance pierces all targets (`lancePierceAll`) | "It waits for the whole line." |
+| **The Patient Spark** (level 10) | Ashwood Wand | +(30–45)% fire damage · 15% reduced cast speed · Ember Lance pierces all targets (`lancePierceAll`) | "It waits for the whole line." |
 | **Cinderwalkers** (level 16) | Ashen Sandals | +(15–20)% move speed · +(20–30)% fire resistance · burning trail (`fireTrail`) | "Where she walked, the ash remembered." |
 | **Echo of the Matriarch** (level 20) | Cinder Pendant | +(15–25) max focus · Ember Nova repeats once after 0.4 s (`novaEcho`) · 8% reduced max life | "Her last command still rings in the embers." |
 | **Ruinheart Band** (level 24) | Void Signet | +1 projectile · +(20–30)% void resistance · 12% increased damage taken | "Power pours from the wound, not the hand." |
@@ -236,7 +238,9 @@ Every craft appends a line to `item.history`, so the item carries its own story.
 
 **Tier and monster level:** tiers 1–15. Monster level = `min(90, 6·tier − 2)` (Tier 1 = 4, Tier 4 = 22, Tier 15 = 88), and it is the item level of every drop. **Monster stats scale with monster level, not tier** (Path of Exile style): life ×1.09 and damage ×1.065 per level above the reference level 10 (the level at which the sim's base monster table applies unchanged), and the same factors as fractions below it, shown as "more" or "less" from "Monster level N" in the readout. Tier still drives experience (×1.28 per tier above 1) and +5% item rarity per tier (additive).
 
-**Defences scale with monster level too.** Evade chance = `rating / (rating + 30 × monster level)` (at most 75%): the same evasion rating avoids fewer hits from higher-level monsters, so roughly half of all hits can only be avoided with focused high-end gear. The character sheet in the hideout uses the reference level 10.
+**Defences scale with monster level too.** Evade chance = `rating / (rating + 30 × monster level)` (at most 75%): the same evasion rating avoids fewer hits from higher-level monsters, so roughly half of all hits can only be avoided with focused high-end gear. Monster accuracy is the `30 × monster level` term. Armour retains its hit-size formula (`armor / (armor + 10 × damage)`): higher-level hits already reduce its effectiveness, so there is no second armour penalty. The sheet's example physical hit scales from 20 at monster level 10 with the same damage curve.
+
+Maps above monster level 10 impose `min(40, 0.5 × (monster level − 10))` percentage points of resistance penalty: T1/T2 none, T3 −3%, T4 −6%, T15 −39% (the current tier ceiling); capped at −40% for monster levels 90+. This combines with map mods and is shown in the map tooltip, Map Device, map HUD and character sheet. Hideouts use reference level 10, with no map penalty.
 
 **Balance intent (owner, 2026-09-29):**
 - There is no early-tier easing. A brand-new character with the starting kit is expected to die on Tier 1 (monster level 4) a few times, level up on the way and come back through the portals.
@@ -364,7 +368,7 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 - Labels use the pixel font on dark plates coloured by tone.
 - A rare monster glows gold and shows its name. When it dies, loot fountains out.
 
-**Gambling at Rook:** 6 Scrap buys a random item of a chosen class at the player's level, with magic 25%, rare 6% and unique 0.5% (×m from gear rarity; unique only for classes with a unique whose level requirement ≤ the player's level — a wand from level 12, a ring from 24; offered only for classes with a base at the player's level).
+**Gambling at Rook:** 6 Scrap buys a random item of a chosen class at the player's level, with magic 25%, rare 6% and unique 0.5% (×m from gear rarity; unique only for classes with a unique whose level requirement ≤ the player's level — a wand from level 10, a ring from 24; offered only for classes with a base at the player's level).
 
 **Merchant stock:**
 - T1 map (free) and T2 map (4 Scrap)
@@ -458,7 +462,7 @@ The client also runs the shared rules locally, for **display only**: tooltips, c
 
 **Loot is instanced.** Every kill rolls loot separately for each player in the instance, using the map's luck plus that player's own gear luck (`rules.lootLuck`). Each player sees and picks up only their own drops; there's no loot stealing. The completion chest gives every player present their own chest loot.
 
-**XP is shared.** Each echo mote grants its XP to every player in the instance, whoever collects it.
+**XP is shared.** Each monster death immediately grants its full XP to every living player in the instance, regardless of distance or who killed it. There are no XP orbs; fractional XP carries between kills. Dead players and players in another instance receive none.
 
 **Party scaling (inside the sim):**
 - Monster life: ×(1 + 0.5·(n−1)).

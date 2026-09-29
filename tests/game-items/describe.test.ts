@@ -83,7 +83,7 @@ describe('describeEquipment', () => {
 
   it('names magic items from their affixes and rare items with a subtitle', () => {
     const magic = equip({
-      baseId: 'ashwoodWand', itemLevel: 40, rarity: 'magic',
+      baseId: 'ashwoodWand', itemLevel: 48, rarity: 'magic',
       affixes: [{ affixId: 'fireDamage', tier: 4, value: 33 }, { affixId: 'castSpeed', tier: 5, value: 10 }],
     });
     expect(itemDisplayName(magic)).toBe('Blazing Ashwood Wand of Haste');
@@ -94,7 +94,7 @@ describe('describeEquipment', () => {
 
     const rare = equip({
       baseId: 'emberRing', itemLevel: 60, rarity: 'rare', name: 'Ember Bite',
-      affixes: [{ affixId: 'life', tier: 4, value: 38 }, { affixId: 'coldResistance', tier: 3, value: 33 }],
+      affixes: [{ affixId: 'life', tier: 4, value: 38 }, { affixId: 'coldResistance', tier: 3, value: 29 }],
     });
     const dr = describeEquipment(rare);
     expect(dr.title).toBe('Ember Bite');
@@ -104,11 +104,11 @@ describe('describeEquipment', () => {
 
   it('describes affixes with tier, range, name, tags and craft marks — index-aligned with item.affixes', () => {
     const item = equip({
-      baseId: 'ironVisor', itemLevel: 70, rarity: 'rare', name: 'Grave Coil',
+      baseId: 'ironVisor', itemLevel: 72, rarity: 'rare', name: 'Grave Coil',
       affixes: [
-        { affixId: 'coldResistance', tier: 4, value: 28, fractured: true },
-        { affixId: 'life', tier: 2, value: 55, sealed: true },
-        { affixId: 'armourPercent', tier: 2, value: 60 },
+        { affixId: 'coldResistance', tier: 4, value: 25, fractured: true },
+        { affixId: 'life', tier: 2, value: 53, sealed: true },
+        { affixId: 'armourPercent', tier: 2, value: 59 },
       ],
       scars: [{ scarId: 'frail', value: 7 }],
       stability: 3,
@@ -119,7 +119,7 @@ describe('describeEquipment', () => {
     item.affixes.forEach((a, i) => expect(d.affixes[i].affixName).toBe(getAffix(a.affixId)!.name));
     const life = d.affixes[item.affixes.findIndex((a) => a.affixId === 'life')];
     expect(life).toEqual({
-      text: '+55 to maximum Life', kind: 'prefix', tier: 2, affixName: 'Hale', tags: ['Life'], range: '(51–62)', sealed: true,
+      text: '+53 to maximum Life', kind: 'prefix', tier: 2, affixName: 'Hale', tags: ['Life'], range: '(47–53)', sealed: true,
     });
     const res = d.affixes[item.affixes.findIndex((a) => a.affixId === 'coldResistance')];
     expect(res.kind).toBe('suffix');
@@ -130,7 +130,7 @@ describe('describeEquipment', () => {
     expect(d.history).toEqual(['Dropped in Rimed Ossuary (T8)']);
     // Local armour: floor((10 + 0.5×70 + implicit) × 1.6)
     const implicit = item.implicitValues[0];
-    expect(d.properties).toEqual([{ label: 'Armour', value: String(Math.floor((45 + implicit) * 1.6)) }]);
+    expect(d.properties).toEqual([{ label: 'Armour', value: String(Math.floor((46 + implicit) * 1.59)) }]);
   });
 
   it('marks finished items and spells out unmet level requirements', () => {
@@ -162,23 +162,23 @@ describe('describeEquipment', () => {
 describe('itemModifiers', () => {
   it('folds local armour lines into the property and labels every source', () => {
     const item = equip({
-      baseId: 'ironVisor', itemLevel: 40, rarity: 'rare', name: 'Rust Crown', implicitValues: [25],
+      baseId: 'ironVisor', itemLevel: 46, rarity: 'rare', name: 'Rust Crown', implicitValues: [25],
       affixes: [
-        { affixId: 'armourFlat', tier: 5, value: 40 },
+        { affixId: 'armourFlat', tier: 5, value: 56 },
         { affixId: 'armourPercent', tier: 4, value: 40 },
         { affixId: 'life', tier: 5, value: 30 },
-        { affixId: 'fireResistance', tier: 6, value: 20 },
+        { affixId: 'fireResistance', tier: 6, value: 19 },
       ],
       scars: [{ scarId: 'brittle', value: 20 }],
     });
     const mods = itemModifiers(item);
     const armour = mods.filter((m) => m.stat === 'armor');
     // (10 + 0.5×40) + 25 + 40 = 95; × (1 + (40 − 20)/100) = 114
-    expect(armour).toEqual([{ stat: 'armor', mode: 'flat', value: 114, source: 'Rust Crown (Armour)', label: 'Armour: 114' }]);
-    expect(itemProperties(item)[0]).toMatchObject({ base: 30, flat: 65, increased: 20, value: 114 });
+    expect(armour).toEqual([{ stat: 'armor', mode: 'flat', value: 136, source: 'Rust Crown (Armour)', label: 'Armour: 136' }]);
+    expect(itemProperties(item)[0]).toMatchObject({ base: 33, flat: 81, increased: 20, value: 136 });
     expect(mods).toContainEqual({ stat: 'maxLife', mode: 'flat', value: 30, source: 'Rust Crown (Hale T5)', label: '+30 to maximum Life' });
-    expect(mods).toContainEqual({ stat: 'fireRes', mode: 'flat', value: 20, source: 'Rust Crown (of the Kiln T6)', label: '+20% to Fire Resistance' });
-    expect(resolveStat(0, armour)).toBe(114);
+    expect(mods).toContainEqual({ stat: 'fireRes', mode: 'flat', value: 19, source: 'Rust Crown (of the Kiln T6)', label: '+19% to Fire Resistance' });
+    expect(resolveStat(0, armour)).toBe(136);
   });
 
   it('emits multi-stat implicits, scars as negatives, weapon spell damage as one property total', () => {
@@ -189,12 +189,12 @@ describe('itemModifiers', () => {
 
     const wand = equip({
       baseId: 'ironrootWand', itemLevel: 50, rarity: 'magic', implicitValues: [4],
-      affixes: [{ affixId: 'addedSpellDamage', tier: 4, value: 11 }],
+      affixes: [{ affixId: 'addedSpellDamage', tier: 4, value: 12 }],
     });
     const spell = itemModifiers(wand).filter((m) => m.stat === 'addedSpellDamage');
     // floor(1 + 0.06 × 50) = 4 base + 4 implicit + 11 affix
     expect(spell).toHaveLength(1);
-    expect(spell[0].value).toBe(19);
+    expect(spell[0].value).toBe(20);
   });
 
   it('matches the tooltip for every generated item', () => {
@@ -253,7 +253,7 @@ describe('describeCurrency & describeFlask', () => {
 
 describe('labels, tones and stack constructors', () => {
   it('labels and tones every item kind', () => {
-    const rare = equip({ baseId: 'emberRing', itemLevel: 20, rarity: 'rare', name: 'Ash Song', affixes: [{ affixId: 'life', tier: 6 }] });
+    const rare = equip({ baseId: 'emberRing', itemLevel: 28, rarity: 'rare', name: 'Ash Song', affixes: [{ affixId: 'life', tier: 6 }] });
     expect(itemLabel(rare)).toBe('Ash Song');
     expect(itemTone(rare)).toBe('rare');
     expect(itemLabel(currency('scrap', 3))).toBe('Forge Scrap \u00d73');

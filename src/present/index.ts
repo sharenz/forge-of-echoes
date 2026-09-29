@@ -58,7 +58,7 @@
 // Module map: ground.ts (tiles, veins, rim, light pools) · props.ts · players.ts (+ debuffs.ts: player debuff
 // overlays, tints, pops and cleanses) · monsters.ts (+ bestiary.ts: per-kind looks, presences, action sets and the
 // area geometry helpers) · projectiles.ts (+ chain.ts: chain links and pull tethers) · areas.ts (+ bestiary-areas.ts:
-// the Ossuary / Coliseum ground areas) · motes.ts · drops.ts (+ labels.ts stacking) · fx.ts (pooled transient effects) ·
+// the Ossuary / Coliseum ground areas) · drops.ts (+ labels.ts stacking) · fx.ts (pooled transient effects) ·
 // events.ts (event → visuals; per-frame shake/hurt/crit budgets) · heat.ts (impact-convergence guard and the
 // per-frame Proximity budget that keeps stacked danger telegraphs, meteor showers and fire pools from summing into a
 // white blob over the player) ·
@@ -87,7 +87,6 @@ import { Ground } from './ground';
 import { Indicators } from './indicators';
 import { clamp, clamp01 } from './math';
 import { MonsterPainter } from './monsters';
-import { MotePainter } from './motes';
 import { Pen } from './pen';
 import { PlayerPainter } from './players';
 import { PostState } from './post';
@@ -131,7 +130,6 @@ class WorldPresenter implements Presenter {
   private readonly debuffs: DebuffPainter;
   private readonly tethers = new Tethers();
   private readonly playerAt = (id: number): { x: number; y: number } | null => this.players.pos.get(id) ?? null;
-  private readonly motes = new MotePainter();
   private readonly drops: DropPainter;
   private readonly indicators = new Indicators();
   private readonly ambience = new Ambience();
@@ -195,7 +193,6 @@ class WorldPresenter implements Presenter {
     this.players.reset();
     this.monsters.reset();
     this.drops.reset();
-    this.motes.reset();
     this.areas.reset();
     this.projectiles.reset();
     this.sound.reset();
@@ -305,7 +302,6 @@ class WorldPresenter implements Presenter {
     this.areas.draw(pen, f);
     this.props.draw(pen, f);
     this.drops.draw(pen, f);
-    this.motes.draw(pen, f);
     this.monsters.draw(pen, f);
     this.players.draw(pen, f);
     this.tethers.draw(pen, this.playerAt);

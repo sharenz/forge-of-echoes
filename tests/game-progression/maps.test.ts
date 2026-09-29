@@ -278,7 +278,7 @@ describe('luck', () => {
 
   it('shows every source of the map in the map device summary (map-side luck: gear is personal)', () => {
     const amulet = equip({
-      baseId: 'cinderPendant', itemLevel: 40, rarity: 'magic', implicitValues: [12],
+      baseId: 'cinderPendant', itemLevel: 54, rarity: 'magic', implicitValues: [12],
       affixes: [{ affixId: 'itemQuantity', tier: 3, value: 10 }],
     });
     const ch = bareCharacter({ equipment: { amulet } });
@@ -299,7 +299,7 @@ describe('luck', () => {
     expect(byLabel.get('Monster Life')!.breakdown).toEqual([`${pct(lifeAt(22))} more from Monster level 22`]);
     expect(byLabel.get('Monster Life')!.value).toBe(`+${Math.round((lifeAt(22) - 1) * 100)}%`);
     expect(byLabel.get('Monster Damage')!.breakdown).toEqual([`${pct(damageAt(22))} more from Monster level 22`]);
-    expect(byLabel.get('Your Resistances')!.value).toBe('−20%');
+    expect(byLabel.get('Your Resistances')!.value).toBe('−26%');
     expect(byLabel.get('Waves')!.value).toBe('6');
   });
 

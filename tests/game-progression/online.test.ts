@@ -14,7 +14,7 @@ import { bareCharacter, currency, equip, expectOk, luckyAmulet, map, withBackpac
 /** A character with a bit of everything: currencies, a normal and a rare base, a map in the device, luck gear. */
 function workshop(rngState = 0x1234abcd): CharacterSave {
   const rare: EquipmentItem = equip({
-    baseId: 'ironrootWand', itemLevel: 40, rarity: 'rare', uid: 'rare-wand',
+    baseId: 'ironrootWand', itemLevel: 48, rarity: 'rare', uid: 'rare-wand',
     affixes: [{ affixId: 'fireDamage', tier: 4 }, { affixId: 'castSpeed', tier: 4 }, { affixId: 'intelligence', tier: 5 }],
   });
   const normal = equip({ baseId: 'silkWraps', itemLevel: 30, rarity: 'normal', uid: 'gloves' });
@@ -160,7 +160,7 @@ describe('server entropy decides every rng outcome', () => {
       values.add((rules.findItem(r.character, 'gloves')!.item as EquipmentItem).affixes[0].value);
     }
     expect(calls).toBe(40);
-    expect(values.size).toBe(5); // every value of T5 of the Kiln (21–25)
+    expect(values.size).toBe(3); // every value of T6 of the Kiln (17–19)
     expect(server.clearCraftedAffix).toBe(rules.clearCraftedAffix);
     expect(server.benchRecipes).toBe(rules.benchRecipes);
   });

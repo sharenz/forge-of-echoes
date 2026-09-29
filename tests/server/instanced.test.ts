@@ -7,6 +7,10 @@ import type { ServerMessage } from '../../src/contracts/net';
 import type { SimEvent } from '../../src/contracts/sim';
 import { AOI_MARGIN, decodeSnapshot } from '../../src/net';
 import { MapInstance } from '../../src/server/instance';
+import { worldOf } from '../../src/sim/run';
+import { damageMonster, damagePlayer } from '../../src/sim/combat';
+import { DAMAGE_INDEX } from '../../src/sim/math';
+import { placeMonster } from '../sim/helpers';
 import { createBot } from '../sim/bot';
 import { LocalPlayer, createClock, createLocalCharacter, startTestServer, tick, walkIntoProp } from './helpers';
 import type { Clock } from './helpers';
@@ -66,6 +70,32 @@ function eventsOf(messages: readonly ServerMessage[]): SimEvent[] {
 }
 
 describe('instanced loot and shared xp', () => {
+  it('grants distant kill XP immediately to living party members, once, without orbs', async () => {
+    const { server, clock, players } = await setup(['Killwise', 'Sharewise']);
+    const map = openAndEnter(players, clock);
+    const world = worldOf(map.run)!;
+    for (const p of world.players) p.stats.pickupRadius = 0;
+    const before = players.map((p) => map.participant(p.session).xpGained);
+    const kill = () => {
+      const i = placeMonster(world, 'riftStalker', 500, 0, { life: 1 });
+      const xp = world.monsters.xp[i];
+      damageMonster(world, i, 1000, DAMAGE_INDEX.fire, 0, 1.5, 0, 1, 0, 1, true, players[0].playerId);
+      tick(server, clock);
+      return xp;
+    };
+    const first = kill();
+    expect(players.map((p, i) => map.participant(p.session).xpGained - before[i])).toEqual([first, first]);
+    expect(map.run.view.motes.count).toBe(0);
+    tick(server, clock, 3);
+    expect(players.map((p, i) => map.participant(p.session).xpGained - before[i])).toEqual([first, first]);
+    const secondPlayer = world.playerById[players[1].playerId]!;
+    secondPlayer.invulnTime = 0;
+    damagePlayer(world, secondPlayer, 1e9, DAMAGE_INDEX.physical, 'area');
+    expect(secondPlayer.dead).toBe(true);
+    const second = kill();
+    expect(players.map((p, i) => map.participant(p.session).xpGained - before[i])).toEqual([first + second, first]);
+  });
+
   it('each player sees and picks up only their own drops; XP goes to both', async () => {
     const { server, clock, players } = await setup(['Lootwise', 'Sharewell']);
     const [a, b] = players;

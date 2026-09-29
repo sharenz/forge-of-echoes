@@ -13,6 +13,31 @@ const SP_LEVEL = SORCERESS.spellPower.perLevel;
 
 const runtime = (ch: CharacterSave, id: string) => rules.playerRuntime(ch, null).skills.find((s) => s.id === id)!;
 
+describe('level-based defences', () => {
+  it('combines level and crafted-map resistance penalties in both the sheet and runtime, clearing them at home', () => {
+    const ch = bareCharacter({ equipment: { ring1: equip({ baseId: 'emberRing', itemLevel: 1, rarity: 'normal', implicitValues: [15] }) } });
+    for (const [tier, penalty] of [[1, 0], [2, 0], [3, 3], [4, 6], [15, 39]]) {
+      const setup = setupFor(map('ashenForge', tier, { mods: [{ modId: 'hexed', value: 100 }] }));
+      const d = rules.deriveStats(ch, setup);
+      expect(d.combat.resist.fire).toBeCloseTo((15 - 20 - penalty) / 100);
+      expect(rules.playerRuntime(ch, setup).stats.resist).toEqual(d.combat.resist);
+      if (penalty) expect(d.breakdowns.fireRes?.sources.some((m) => m.source === `Monster level ${setup.monsterLevel}` && m.value === -penalty)).toBe(true);
+    }
+    expect(rules.deriveStats(ch).combat.resist.fire).toBe(0.15);
+  });
+
+  it('keeps armour as a rating and explains larger level-scaled hits instead of penalising it twice', () => {
+    const ch = bareCharacter({ equipment: { helmet: equip({ baseId: 'ironVisor', itemLevel: 20, rarity: 'normal', implicitValues: [25] }) } });
+    const low = rules.deriveStats(ch, setupFor(map('ashenForge', 1)));
+    const high = rules.deriveStats(ch, setupFor(map('ashenForge', 15)));
+    expect(low.combat.armor).toBe(45);
+    expect(high.combat.armor).toBe(45);
+    expect(high.combat.evasion).toBeLessThan(low.combat.evasion);
+    const armour = high.sections.flatMap((s) => s.lines).find((l) => l.label === 'Armour')!;
+    expect(armour.breakdown).toContain('Example hit at monster level 88; larger hits receive less reduction');
+  });
+});
+
 describe('deriveStats: a naked level 1 Sorceress', () => {
   const d = rules.deriveStats(bareCharacter());
 
@@ -85,18 +110,18 @@ describe('deriveStats: gear', () => {
 
   it('caps resistances at 75% and applies all-resistances to each element', () => {
     const ring1 = equip({
-      baseId: 'emberRing', itemLevel: 80, rarity: 'rare', name: 'Kiln Heart', implicitValues: [20],
-      affixes: [{ affixId: 'fireResistance', tier: 1, value: 45 }, { affixId: 'allResistances', tier: 1, value: 17 }],
+      baseId: 'emberRing', itemLevel: 84, rarity: 'rare', name: 'Kiln Heart', implicitValues: [20],
+      affixes: [{ affixId: 'fireResistance', tier: 1, value: 36 }, { affixId: 'allResistances', tier: 1, value: 13 }],
     });
     const ring2 = equip({ baseId: 'emberRing', itemLevel: 1, rarity: 'normal', implicitValues: [15] });
     const d = rules.deriveStats(bareCharacter({ level: 30, equipment: { ring1, ring2 } }));
     expect(d.combat.resist.fire).toBe(0.75);
-    expect(d.combat.resist.cold).toBeCloseTo(0.17, 10);
-    expect(d.combat.resist.lightning).toBeCloseTo(0.17, 10);
-    expect(d.combat.resist.void).toBeCloseTo(0.17, 10);
+    expect(d.combat.resist.cold).toBeCloseTo(0.13, 10);
+    expect(d.combat.resist.lightning).toBeCloseTo(0.13, 10);
+    expect(d.combat.resist.void).toBeCloseTo(0.13, 10);
     const fire = d.sections.find((s) => s.title === 'Defence')!.lines.find((l) => l.label === 'Fire Resistance')!;
     expect(fire.value).toBe('75%');
-    expect(fire.breakdown.join(' ')).toContain('97% uncapped');
+    expect(fire.breakdown.join(' ')).toContain('84% uncapped');
   });
 
   it('applies local armour and evasion properties', () => {
@@ -136,7 +161,7 @@ describe('deriveStats: gear', () => {
     const sceptre = equip({ baseId: 'emberSceptre', itemLevel: 30, rarity: 'normal', implicitValues: [20] });
     const ring = equip({
       baseId: 'stormLoop', itemLevel: 40, rarity: 'magic', implicitValues: [15],
-      affixes: [{ affixId: 'addedSpellDamage', tier: 4, value: 10 }, { affixId: 'lightningResistance', tier: 8, value: 6 }],
+      affixes: [{ affixId: 'addedSpellDamage', tier: 5, value: 10 }, { affixId: 'lightningResistance', tier: 10, value: 6 }],
     });
     const ch = bareCharacter({ level: 20, equipment: { mainHand: sceptre, ring1: ring } });
     const sceptreSpell = Math.floor(2 + 0.09 * 30);
@@ -149,11 +174,11 @@ describe('deriveStats: gear', () => {
 
   it('adds element damage and elemental damage only to matching skills', () => {
     const amulet = equip({
-      baseId: 'cinderPendant', itemLevel: 40, rarity: 'magic', implicitValues: [12],
+      baseId: 'cinderPendant', itemLevel: 48, rarity: 'magic', implicitValues: [12],
       affixes: [{ affixId: 'coldDamage', tier: 4, value: 35 }],
     });
     const ring = equip({
-      baseId: 'emberRing', itemLevel: 40, rarity: 'magic', implicitValues: [15],
+      baseId: 'emberRing', itemLevel: 56, rarity: 'magic', implicitValues: [15],
       affixes: [{ affixId: 'elementalDamage', tier: 3, value: 20 }],
     });
     const ch = bareCharacter({ equipment: { amulet, ring1: ring }, skillRanks: {
@@ -198,8 +223,8 @@ describe('deriveStats: gear', () => {
 
   it('reports gear luck', () => {
     const amulet = equip({
-      baseId: 'cinderPendant', itemLevel: 40, rarity: 'magic', implicitValues: [12],
-      affixes: [{ affixId: 'itemRarity', tier: 3, value: 20 }, { affixId: 'itemQuantity', tier: 3, value: 10 }],
+      baseId: 'cinderPendant', itemLevel: 68, rarity: 'magic', implicitValues: [12],
+      affixes: [{ affixId: 'itemRarity', tier: 2, value: 20 }, { affixId: 'itemQuantity', tier: 3, value: 10 }],
     });
     const d = rules.deriveStats(bareCharacter({ equipment: { amulet } }));
     expect(d.itemRarity).toBe(20);
@@ -298,8 +323,8 @@ describe('map penalties apply only inside the map', () => {
 
   it('adds your personal luck in that map to the Luck section; itemQuantity / itemRarity stay gear-only', () => {
     const amulet = equip({
-      baseId: 'cinderPendant', itemLevel: 40, rarity: 'magic', implicitValues: [12],
-      affixes: [{ affixId: 'itemRarity', tier: 3, value: 20 }, { affixId: 'itemQuantity', tier: 3, value: 10 }],
+      baseId: 'cinderPendant', itemLevel: 68, rarity: 'magic', implicitValues: [12],
+      affixes: [{ affixId: 'itemRarity', tier: 2, value: 20 }, { affixId: 'itemQuantity', tier: 3, value: 10 }],
     });
     const ch = bareCharacter({ equipment: { amulet } });
     const setup = setupFor(map('rimedOssuary', 3, { quality: 8 }), ch);
@@ -366,8 +391,8 @@ describe('compareWithEquipped', () => {
     expect(byLabel.get('Maximum Focus')!.delta).toBe(12);
 
     const ring = equip({
-      baseId: 'emberRing', itemLevel: 40, rarity: 'rare', implicitValues: [15],
-      affixes: [{ affixId: 'addedSpellDamage', tier: 4, value: 10 }, { affixId: 'elementalDamage', tier: 3, value: 20 }],
+      baseId: 'emberRing', itemLevel: 56, rarity: 'rare', implicitValues: [15],
+      affixes: [{ affixId: 'addedSpellDamage', tier: 5, value: 10 }, { affixId: 'elementalDamage', tier: 3, value: 20 }],
     });
     const ringLines = new Map(rules.compareWithEquipped(ch, ring)[0].lines.map((l) => [l.label, l]));
     const power = SP + SP_LEVEL * 9;

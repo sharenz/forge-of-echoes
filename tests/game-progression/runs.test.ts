@@ -152,7 +152,7 @@ describe('playerRuntime', () => {
     expect(rb.stats.maxLife).toBeGreaterThan(ra.stats.maxLife);
     for (const [ch, rt] of [[a, ra], [b, rb]] as const) {
       expect(rt.stats).toEqual(rules.deriveStats(ch, setup).combat);
-      expect(rt.stats.resist.fire).toBeCloseTo(-0.2, 10);
+      expect(rt.stats.resist.fire).toBeCloseTo(-0.23, 10);
       expect(rules.playerRuntime(ch, null).stats.resist.fire).toBe(0);
     }
   });

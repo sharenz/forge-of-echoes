@@ -26,6 +26,9 @@ export const MONSTER_LEVEL = { base: -2, perTier: 6, cap: 90 } as const;
  */
 export const MONSTER_LEVEL_SCALING = { life: 1.09, damage: 1.065, referenceLevel: 10 } as const;
 
+/** Deeper maps require more resistance investment; the first two tiers have no penalty. */
+export const PLAYER_RESISTANCE_SCALING = { startLevel: 10, perLevel: 0.5, cap: 40 } as const;
+
 /** Tier still drives experience and item rarity; life and damage come from the monster level. */
 export const TIER_SCALING = {
   /** Experience compounds per tier so deeper maps keep pace with the XP curve. */

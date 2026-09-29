@@ -21,7 +21,7 @@ export const DEFAULT_CHARACTER_NAME = 'Sorceress';
 export const DEFAULT_STASH_TABS: readonly string[] = ['Main', 'Maps'];
 
 export interface StartingKit {
-  /** Equipped magic Ashwood Wand: the best fire tier item level 1 can roll (T8, "T7-ish"). */
+  /** Equipped magic Ashwood Wand: the best fire tier item level 1 can roll (T10). */
   wand: { affixId: string; tier: number };
   /** Currency stacks, placed along the top row of the backpack in this order. */
   currency: readonly { currencyId: CurrencyId; count: number }[];
@@ -35,7 +35,7 @@ export interface StartingKit {
 }
 
 export const STARTING_KIT: StartingKit = {
-  wand: { affixId: 'fireDamage', tier: 8 },
+  wand: { affixId: 'fireDamage', tier: 10 },
   currency: [
     { currencyId: 'scrap', count: 10 },
     { currencyId: 'kindling', count: 4 },

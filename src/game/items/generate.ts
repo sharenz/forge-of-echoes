@@ -7,7 +7,7 @@ import type { Rng } from '../../contracts/rng';
 import type { BaseId, CurrencyId, FlaskId, ItemClass, UniqueId } from '../../contracts/content';
 import { UNIQUE_IDS } from '../../contracts/content';
 import {
-  AFFIX_LIMITS, BASES, BENCH_BEST_TIER, BENCH_MAX_CRAFTED, FLASK_STACK, MAGIC_AFFIX_COUNTS, MAX_ITEM_LEVEL, MAX_SCARS, MIN_ITEM_LEVEL,
+  AFFIX_LIMITS, AFFIX_VERSION, BASES, BENCH_BEST_TIER, BENCH_MAX_CRAFTED, FLASK_STACK, MAGIC_AFFIX_COUNTS, MAX_ITEM_LEVEL, MAX_SCARS, MIN_ITEM_LEVEL,
   RARE_AFFIX_COUNTS,
   RARE_NAME_FIRST, RARE_NAME_SECOND, UNIQUES, getAffix, getBase, getCurrency, getFlask, getScar, getUnique,
 } from '../../data/items';
@@ -80,6 +80,7 @@ export function generateEquipment(
   const maxStability = Math.max(0, base.maxStability + Math.floor(opts.extraStability ?? 0));
   return {
     kind: 'equipment',
+    affixVersion: AFFIX_VERSION,
     uid,
     baseId,
     itemLevel: ilvl,
@@ -116,6 +117,7 @@ export function generateUnique(uniqueId: UniqueId, rng: Rng, opts: UniqueOptions
   const affixes = def.mods.map((m, i) => ({ affixId: uniqueModId(uniqueId, i), tier: 1, value: rollValue(rng, m.min, m.max) }));
   return {
     kind: 'equipment',
+    affixVersion: AFFIX_VERSION,
     uid,
     baseId: def.baseId,
     itemLevel: clampItemLevel(opts.itemLevel ?? def.levelRequirement),
@@ -224,6 +226,7 @@ export function buildEquipment(spec: EquipmentSpec, rng: Rng): EquipmentItem {
   const name = spec.rarity === 'rare' ? (spec.name ?? rollRareName(rng)) : null;
   return {
     kind: 'equipment',
+    affixVersion: AFFIX_VERSION,
     uid: spec.uid ?? randomUid(rng),
     baseId: spec.baseId,
     itemLevel: ilvl,

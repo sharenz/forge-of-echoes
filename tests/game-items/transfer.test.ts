@@ -7,7 +7,7 @@ import { allItems, beltUid, findItem, stowItem, tradeItems, tradeOfferError } fr
 import { currency, equip, expectErr, expectOk, flask, makeCharacter, map, withBackpack } from './fixtures';
 
 const ring = (uid: string): EquipmentItem => equip({
-  baseId: 'emberRing', itemLevel: 40, rarity: 'magic', uid,
+  baseId: 'emberRing', itemLevel: 48, rarity: 'magic', uid,
   affixes: [{ affixId: 'life', tier: 4, crafted: true }, { affixId: 'castSpeed', tier: 5, sealed: true }],
 });
 

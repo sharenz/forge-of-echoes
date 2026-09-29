@@ -469,7 +469,10 @@ export class GameSession {
     const setup = this.setup;
     const derived = safe(() => this.rules.deriveStats(ch, setup), this.state.derived);
     this.luck = setup ? safe(() => this.rules.lootLuck(setup, ch), null) : null;
-    this.modLines = setup ? safe(() => this.rules.describeItem(setup.map, ch).affixes.map((l) => l.text), []) : [];
+    this.modLines = setup ? safe(() => {
+      const desc = this.rules.describeItem(setup.map, ch);
+      return [...desc.implicits, ...desc.affixes].map((l) => l.text);
+    }, []) : [];
     this.box.update((s) => withCharacter(s, ch, derived, (uid) => !!safe(() => this.rules.findItem(ch, uid), null)));
   }
 

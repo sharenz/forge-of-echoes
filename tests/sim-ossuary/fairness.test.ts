@@ -75,12 +75,13 @@ describe('the fairness monitor', () => {
 // tests is rarely rooted and almost never frozen.)
 describe('whole Ossuary maps, played carelessly', () => {
   it('Tier 5: every root and freeze the careless fair character suffers had a visible source', () => {
-    const r = playOssuary(6, fairPlayer(), { ...TIER5 }, { sloppy: SLOPPY });
-    expect(r.unfair).toEqual([]);
-    expect(r.roots, 'no root to check').toBeGreaterThan(0);
-    expect(r.freezes, 'no freeze to check').toBeGreaterThan(0);
+    // Two seeded maps cover both debuffs even when one route avoids every freezing core.
+    const runs = [6, 7].map((seed) => playOssuary(seed, fairPlayer(), { ...TIER5 }, { sloppy: SLOPPY }));
+    for (const r of runs) expect(r.unfair).toEqual([]);
+    expect(runs.reduce((n, r) => n + r.roots, 0), 'no root to check').toBeGreaterThan(0);
+    expect(runs.reduce((n, r) => n + r.freezes, 0), 'no freeze to check').toBeGreaterThan(0);
     // She got as far as the Warden (her Ice Prisons were in play).
-    expect(r.boss).not.toBe('');
+    for (const r of runs) expect(r.boss).not.toBe('');
   }, 60_000);
 
   it('Tier 1: the same for a careless new-ish character', () => {

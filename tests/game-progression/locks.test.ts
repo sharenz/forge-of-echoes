@@ -10,7 +10,7 @@ import {
 import { bareCharacter, currency, equip, expectErr, expectOk, map, withBackpack } from './fixtures';
 
 const RING = (): EquipmentItem => equip({
-  baseId: 'emberRing', itemLevel: 40, rarity: 'magic', uid: 'ring', affixes: [{ affixId: 'life', tier: 4, crafted: true }],
+  baseId: 'emberRing', itemLevel: 48, rarity: 'magic', uid: 'ring', affixes: [{ affixId: 'life', tier: 4, crafted: true }],
 });
 
 /** Offered: the 5 Scrap (smallest stack, paid first without locks), the ring and a map. */

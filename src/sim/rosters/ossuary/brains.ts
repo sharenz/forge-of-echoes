@@ -164,7 +164,7 @@ export function brainWeaver(w: World, i: number, t: PlayerState | null, dx: numb
 /**
  * The wisp's burst: when its pulse telegraph resolves (the core has just chilled everyone in the ring and
  * frozen everyone in its inner 40%), the shard flies apart — 'burst' at the ring, then the wisp dies. The
- * death is credited (to nobody), so a shattered wisp still leaves its loot and echo motes like a kill: the
+ * death is credited (to nobody), so a shattered wisp still drops its loot and grants XP like a kill: the
  * Ossuary gives the same loot per monster as every other map. A wisp killed during its pulse takes the
  * telegraph with it (removeOwnedAreas): no burst.
  *

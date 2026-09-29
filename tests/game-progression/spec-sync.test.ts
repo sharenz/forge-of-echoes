@@ -32,7 +32,7 @@ describe('GAME_SPEC matches the implemented numbers', () => {
     const single = AFFIXES.filter((a) => a.tiers.length === 1).map((a) => a.name);
     expect(section(5)).toContain(`**Affixes:** ${AFFIXES.length} (${prefixes} prefixes, ${suffixes} suffixes)`);
     expect(single).toEqual(['of Splintering']);
-    expect(AFFIXES.filter((a) => a.tiers.length > 1).every((a) => a.tiers.length >= 5 && a.tiers.length <= 8)).toBe(true);
+    expect(AFFIXES.filter((a) => a.tiers.length > 1).every((a) => a.tiers.length >= 7 && a.tiers.length <= 10)).toBe(true);
   });
 
   it('§5 unique table: level requirements and flavour text', () => {

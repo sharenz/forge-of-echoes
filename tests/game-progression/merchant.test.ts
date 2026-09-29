@@ -146,9 +146,9 @@ describe('gambling', () => {
   });
 
   it('only offers a unique the player can already wear', () => {
-    // The Patient Spark (wand) needs level 12, Ruinheart Band (ring) level 24.
-    expect(gambleOdds('wand', 1, 11).unique).toBe(0);
-    expect(gambleOdds('wand', 1, 12).unique).toBeCloseTo(0.005, 10);
+    // The Patient Spark (wand) needs level 10, Ruinheart Band (ring) level 24.
+    expect(gambleOdds('wand', 1, 9).unique).toBe(0);
+    expect(gambleOdds('wand', 1, 10).unique).toBeCloseTo(0.005, 10);
     expect(gambleOdds('ring', 1, 23).unique).toBe(0);
     expect(gambleOdds('ring', 1, 24).unique).toBeCloseTo(0.005, 10);
     // Huge gear rarity saturates the odds (unique = 0.5 / 31.5 ≈ 1.6% of gambles), yet a level 23 ring

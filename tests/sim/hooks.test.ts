@@ -70,6 +70,7 @@ describe('hooks that fail', () => {
     const m = world.monsters;
     const i = placeMonster(world, 'ashling', 60, 0, { life: 1 });
     const id = m.id[i];
+    const xp = m.xp[i];
     kill(world, i);
     expect(calls).toBe(1);
     expect(m.alive[i]).toBe(0);
@@ -83,8 +84,9 @@ describe('hooks that fail', () => {
       { t: 'kill', playerId: 1, kind: 'ashling', rarity: 'normal', isLieutenant: false, isBoss: false },
     ]);
     expect(world.kills).toBe(1);
-    // Its motes still dropped and were collected; no loot for anyone.
-    expect(outcomesOf(r.outcomes, 'xp').length).toBeGreaterThan(0);
+    // XP is committed with the kill even when the loot hook fails.
+    expect(outcomesOf(pending, 'xp')).toEqual([{ t: 'xp', amount: xp }]);
+    expect(outcomesOf(r.outcomes, 'xp')).toEqual([]);
     expect(run.view.drops).toHaveLength(0);
     // The server hears about it: logged once, and drainable.
     expect(logged).toHaveBeenCalledTimes(1);
@@ -137,7 +139,7 @@ describe('hooks that fail', () => {
     kill(world, i);
     const tick0 = run.view.tick;
     const r = stepN(run, 90);
-    // Every tick ran to the end (view synced, motes collected) and the drop is kept, blocked.
+    // Every tick ran to the end; kill XP is granted and the drop is kept, blocked.
     expect(run.view.tick).toBe(tick0 + 90);
     expect(outcomesOf(r.outcomes, 'xp').length).toBeGreaterThan(0);
     expect(outcomesOf(r.outcomes, 'pickup')).toHaveLength(0);

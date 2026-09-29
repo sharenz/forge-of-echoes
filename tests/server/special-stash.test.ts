@@ -527,7 +527,15 @@ describe('special stash tabs: characters saved before them', () => {
     expect(loaded.stash[0].name).toBe('Loot');
     expect(loaded.stash[0].grid.entries.map((e) => e.item.uid)).toEqual(fixture.stash[0].grid.entries.map((e) => e.item.uid));
     expect(loaded.mapDevice?.uid).toBe(fixture.mapDevice!.uid);
-    expect(holdings(loaded)).toEqual(holdings({ ...fixture, currencyStash: {}, mapStash: [] }));
+    const expected = structuredClone({ ...fixture, currencyStash: {}, mapStash: [] });
+    // Equipment also migrates to the new affix revision; this starter roll keeps its value.
+    for (const item of [...Object.values(expected.equipment), ...expected.backpack.entries.map((e) => e.item),
+      ...expected.stash.flatMap((s) => s.grid.entries.map((e) => e.item))]) {
+      if (!item || item.kind !== 'equipment') continue;
+      item.affixVersion = 2;
+      for (const affix of item.affixes) if (affix.affixId === 'fireDamage' && affix.tier === 8) affix.tier = 10;
+    }
+    expect(holdings(loaded)).toEqual(holdings(expected));
     // The client is sent the normalised state.
     const pushed = p.last('character')!.character;
     expect(pushed.currencyStash).toEqual({});

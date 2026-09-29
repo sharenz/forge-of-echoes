@@ -168,40 +168,20 @@ describe('zone entry', () => {
   });
 });
 
-describe('echo motes', () => {
-  it('streak length follows the on-screen motion, not the snapshot gap (network path)', () => {
-    const r = new RecordingRenderer();
-    const p = createPresenter(r, art(), new RecordingAudio());
+describe('retired XP orbs', () => {
+  it('renders no XP orb sprites, trails or lights even if an old view contains them', () => {
     const w = emptyWorld([player(1, 0, 0, { vx: 0, prevX: 0 })]);
-    const m = w.motes;
-    m.alive[0] = 1;
-    m.count = 1;
-    for (let f = 0; f < 4; f++) {
-      // Interpolated between two snapshots 60 units apart; it moves 8 units per rendered frame.
-      m.prevX[0] = 40 + f * 8 - 60;
-      m.x[0] = 40 + f * 8;
-      m.prevY[0] = m.y[0] = 30;
-      p.frame(input(w));
-    }
-    const streaks = r.frameShapes.filter((s) => s.kind === 'line' && s.layer === 'fx');
-    expect(streaks.length).toBe(1);
-    const len = Math.hypot(streaks[0].x2 - streaks[0].x, streaks[0].y2 - streaks[0].y);
-    expect(len).toBeLessThanOrEqual(16.01);
-  });
-
-  it('a pile of motes on one spot lights the floor once', () => {
-    const w = emptyWorld([player(1, 0, 0, { vx: 0, prevX: 0 })]);
-    const m = w.motes;
-    for (let i = 0; i < 50; i++) {
-      m.alive[i] = 1;
-      m.x[i] = m.prevX[i] = 100 + (i % 5);
-      m.y[i] = m.prevY[i] = 40 + (i % 3);
-      m.size[i] = 2;
-    }
-    m.count = 50;
-    const r = render(w);
-    const pileLights = r.frameLights.filter((l) => Math.abs(l.x - 102) < 8 && Math.abs(l.y - 36) < 8 && l.radius === 30);
-    expect(pileLights.length).toBeLessThanOrEqual(1);
+    const before = render(w);
+    w.motes.alive[0] = 1;
+    w.motes.count = 1;
+    w.motes.x[0] = 100;
+    w.motes.prevX[0] = 40;
+    w.motes.y[0] = w.motes.prevY[0] = 30;
+    w.motes.size[0] = 2;
+    const after = render(w);
+    expect(after.frameShapes).toEqual(before.frameShapes);
+    expect(after.frameSprites).toEqual(before.frameSprites);
+    expect(after.frameLights).toEqual(before.frameLights);
   });
 });
 

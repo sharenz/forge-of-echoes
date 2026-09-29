@@ -20,10 +20,11 @@ import type { CurrencyId, EquipSlot, FlaskId, MapBaseId, SkillId, UniqueId } fro
 import { CURRENCY_IDS, EQUIP_SLOTS, FLASK_IDS, MAP_BASE_IDS, SKILL_IDS } from '../../contracts/content';
 import { createRng, hashString } from '../../core/rng';
 import {
-  AFFIX_LIMITS, BELT_SLOT_CAPACITY, FLASK_STACK, MAX_HISTORY_LINES, MAX_SCARS, STASH_TAB_NAME_MAX, findBase,
+  AFFIX_LIMITS, AFFIX_VERSION, BELT_SLOT_CAPACITY, FLASK_STACK, MAX_HISTORY_LINES, MAX_SCARS, STASH_TAB_NAME_MAX, findBase,
   findCurrency, findUnique, getAffix, getScar,
 } from '../../data/items';
 import type { BaseDef } from '../../data/items';
+import { LEGACY_AFFIX_TIERS } from '../../data/items/affixes-v1';
 import {
   DEFAULT_SETTINGS, DEFAULT_STASH_TABS, LEVEL_CAP, MAX_DANGER_MODS, MAX_MAP_QUALITY, MAX_REWARD_MODS, MAX_SKILL_RANK,
   SAVE_VERSION, getMapMod,
@@ -157,7 +158,7 @@ function normalizeEquipment(raw: Json, uid: string): EquipmentItem | null {
       return { affixId: id, tier: 1, value: clamp(Math.round(finite(found?.value, lo)), lo, hi) };
     });
     return {
-      kind: 'equipment', uid, baseId: base.id, itemLevel, rarity: 'unique', name: unique.name, uniqueId: unique.id as UniqueId,
+      kind: 'equipment', affixVersion: AFFIX_VERSION, uid, baseId: base.id, itemLevel, rarity: 'unique', name: unique.name, uniqueId: unique.id as UniqueId,
       implicitValues, affixes, scars: [], stability: 0, maxStability: 0, history: normalizeHistory(raw.history),
       ...(raw.isNew === true ? { isNew: true } : {}),
     };
@@ -175,9 +176,24 @@ function normalizeEquipment(raw: Json, uid: string): EquipmentItem | null {
     const def = getAffix(id);
     if (!def || !affixAllowed(base, id) || groups.has(def.group)) continue;
     if (counts[def.kind] >= AFFIX_LIMITS.rare[def.kind]) continue;
-    const tierNo = clamp(Math.floor(finite(a.tier, def.tiers.length)), 1, def.tiers.length);
+    // Old tier numbers referred to a shorter ladder. Preserve the old unlock level and relative roll,
+    // then persist the revision so reconnects/restarts cannot apply the reduction twice.
+    let savedTier = a.tier;
+    let savedValue = a.value;
+    if (finite(raw.affixVersion, 1) < AFFIX_VERSION) {
+      const legacy = Object.prototype.hasOwnProperty.call(LEGACY_AFFIX_TIERS, id) ? LEGACY_AFFIX_TIERS[id] : undefined;
+      const old = legacy?.find((t) => t[0] === a.tier);
+      if (old) {
+        const gate = Math.min(itemLevel, old[1]);
+        const next = def.tiers.find((t) => t.itemLevel <= gate) ?? def.tiers[def.tiers.length - 1];
+        const fraction = old[3] === old[2] ? 0 : clamp((finite(a.value, old[2]) - old[2]) / (old[3] - old[2]), 0, 1);
+        savedTier = next.tier;
+        savedValue = Math.round(next.min + fraction * (next.max - next.min));
+      }
+    }
+    const tierNo = clamp(Math.floor(finite(savedTier, def.tiers.length)), 1, def.tiers.length);
     const tier = def.tiers.find((t) => t.tier === tierNo) ?? def.tiers[def.tiers.length - 1];
-    const rolled: RolledAffix = { affixId: id, tier: tier.tier, value: clamp(Math.round(finite(a.value, tier.min)), tier.min, tier.max) };
+    const rolled: RolledAffix = { affixId: id, tier: tier.tier, value: clamp(Math.round(finite(savedValue, tier.min)), tier.min, tier.max) };
     if (a.fractured === true && !fractured) {
       rolled.fractured = true;
       fractured = true;
@@ -213,7 +229,7 @@ function normalizeEquipment(raw: Json, uid: string): EquipmentItem | null {
     name = n || rollRareName(createRng(hashString(uid || 'item')));
   }
   return {
-    kind: 'equipment', uid, baseId: base.id, itemLevel, rarity, name, implicitValues, affixes: sortAffixes(affixes), scars,
+    kind: 'equipment', affixVersion: AFFIX_VERSION, uid, baseId: base.id, itemLevel, rarity, name, implicitValues, affixes: sortAffixes(affixes), scars,
     stability, maxStability, history: normalizeHistory(raw.history), ...(raw.isNew === true ? { isNew: true } : {}),
   };
 }

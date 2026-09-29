@@ -9,7 +9,7 @@ export const UNIQUES: Record<UniqueId, UniqueDef> = {
     name: 'The Patient Spark',
     baseId: 'ashwoodWand',
     flavor: 'It waits for the whole line.',
-    levelRequirement: 12,
+    levelRequirement: 10,
     mods: [
       { stats: ['fireDamage'], mode: 'increased', min: 30, max: 45 },
       { stats: ['castSpeed'], mode: 'increased', min: -15, max: -15 },

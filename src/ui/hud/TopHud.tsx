@@ -286,7 +286,9 @@ function useModLines(lines: string[]): { text: string; tone: ModTone }[] {
     const tones = new Map<string, ModTone>();
     if (map && ch) {
       const desc = safe(() => store.rules.describeItem(map, ch), null);
-      for (const l of desc?.affixes ?? []) tones.set(l.text, l.kind === 'corrupted' ? 'corrupt' : l.negative ? 'danger' : 'reward');
+      for (const l of [...(desc?.implicits ?? []), ...(desc?.affixes ?? [])]) {
+        tones.set(l.text, l.kind === 'corrupted' ? 'corrupt' : l.negative ? 'danger' : l.tags?.length ? 'reward' : null);
+      }
     }
     return lines.map((text) => ({ text, tone: tones.get(text) ?? null }));
   }, [lines, map, ch, store]);

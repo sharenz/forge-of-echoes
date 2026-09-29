@@ -1,5 +1,5 @@
 // Cosmetic event channel with a per-tick budget. Low-priority events (plain hits, projectile ends,
-// motes, ailment pops) are dropped first so that important cues (deaths, casts, telegraphs, loot)
+// ailment pops) are dropped first so that important cues (deaths, casts, telegraphs, loot)
 // always make it through even in the densest fights. Outcomes live elsewhere and are never dropped.
 import type { SimEvent } from '../contracts/sim';
 import {

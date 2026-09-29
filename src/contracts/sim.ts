@@ -5,7 +5,7 @@
 //
 // MULTIPLAYER: an instance (a hideout or a map) holds 0..4 players that join/leave at runtime.
 // Monsters target the nearest living player. Loot is INSTANCED: every drop has an owner player id and only
-// that player can see/pick it. XP (echo motes) is SHARED: a mote collected by anyone grants its XP to every
+// that player can see/pick it. Kill XP is SHARED: each monster death immediately grants its XP to every
 // player in the instance. Party scaling (done inside the sim from the current player count n):
 // monster life ×(1 + 0.5·(n−1)) at spawn, wave budget ×(1 + 0.25·(n−1)).
 //
@@ -37,7 +37,7 @@ export interface PlayerCombatStats {
   resist: Record<DamageType, number>; // fraction, capped at 0.75, may be negative
   damageTaken: number;        // multiplier, 1 = normal
   moveSpeed: number;          // world units / second
-  pickupRadius: number;       // world units (drops & echo motes are magnetised inside this)
+  pickupRadius: number;       // world units (auto-pickup drops are magnetised inside this)
   lifeOnKill: number;
   focusOnKill: number;
   flaskEffect: number;        // multiplier
@@ -332,7 +332,7 @@ export interface ProjectileStoreView {
   life: Float32Array;
 }
 
-/** Echo motes = experience orbs (Vampire-Survivors style), magnetised to the player. */
+/** Reserved snapshot field for older renderers; gameplay no longer spawns XP motes. */
 export interface MoteStoreView {
   capacity: number;
   count: number;

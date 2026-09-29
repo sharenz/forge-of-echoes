@@ -14,7 +14,7 @@ import { digestWorld } from './digest';
 import { EventBuffer } from './events';
 import { PropGrid, SpatialGrid } from './grid';
 import { createHookErrorLog } from './hooks';
-import { removeDrop, removePlayerDrops, requestPickup, spawnFloorDrop, updateDrops, updateMotes } from './loot';
+import { removeDrop, removePlayerDrops, requestPickup, spawnFloorDrop, updateDrops } from './loot';
 import { resolvePlayerAt } from './movement';
 import {
   applyPlayerPushes, applyPlayerUpdate, createPlayer, refreshLiving, storeIntent, updatePlayer, writePlayerView,
@@ -202,7 +202,7 @@ export function removePlayer(w: World, id: number): void {
   w.playerById[id] = undefined;
   refreshLiving(w);
   // Their instanced drops vanish with them (public floor items stay for everyone else); their
-  // burning trail goes out. Monsters and motes that were after them pick someone else on the next
+  // burning trail goes out. Monsters that were after them pick someone else on the next
   // tick; kill credit for their lingering burns and projectiles falls to nobody (the kill and its
   // loot for everyone else still happen).
   removePlayerDrops(w, id);
@@ -262,7 +262,6 @@ export function stepWorld(w: World): void {
   w.grid.build(w.monsters);
   updateProjectiles(w);
   updateAreas(w);
-  updateMotes(w);
   updateDrops(w);
   updatePropInteractions(w);
   syncView(w);

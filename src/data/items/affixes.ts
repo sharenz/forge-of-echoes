@@ -1,7 +1,7 @@
-// Affixes (GAME_SPEC §5): prefix/suffix split, exclusive groups, tags, class allow-lists and 5–8 tiers.
+// Affixes (GAME_SPEC §5): prefix/suffix split, exclusive groups, tags, class allow-lists and 7–10 tiers.
 //
 // Tiers are written worst → best as value ranges; `ladder()` attaches the shared item-level gates and
-// steeply falling weights, so the best tiers need ilvl 68–75 and are rare even then.
+// steeply falling weights, so the best tiers need ilvl 78–84 and are rare even then.
 import type { AffixKind, AffixTag, ModifierMode, StatId } from '../../contracts/items';
 import type { ItemClass } from '../../contracts/content';
 import type { AffixDef, AffixTierDef } from './types';
@@ -11,12 +11,14 @@ interface Ladder {
   weight: readonly number[];
 }
 
+export const AFFIX_VERSION = 2;
+
 /** Item-level gates and weights by tier count, listed worst tier → best tier. */
 export const TIER_LADDERS: Readonly<Record<number, Ladder>> = {
-  5: { itemLevel: [1, 14, 32, 50, 68], weight: [1000, 700, 400, 150, 40] },
-  6: { itemLevel: [1, 10, 24, 40, 56, 70], weight: [1000, 750, 500, 280, 110, 30] },
-  7: { itemLevel: [1, 8, 18, 30, 44, 58, 72], weight: [1000, 800, 600, 400, 220, 90, 25] },
-  8: { itemLevel: [1, 6, 14, 24, 36, 48, 62, 75], weight: [1000, 800, 600, 400, 250, 120, 50, 15] },
+  7: { itemLevel: [1, 12, 26, 40, 54, 66, 78], weight: [1000, 800, 600, 400, 220, 90, 25] },
+  8: { itemLevel: [1, 10, 20, 32, 44, 56, 68, 80], weight: [1000, 800, 600, 400, 250, 120, 50, 15] },
+  9: { itemLevel: [1, 8, 16, 24, 34, 46, 58, 70, 82], weight: [1000, 850, 700, 550, 400, 250, 120, 50, 15] },
+  10: { itemLevel: [1, 6, 12, 20, 28, 38, 48, 60, 72, 84], weight: [1000, 850, 700, 550, 400, 280, 180, 100, 40, 10] },
 };
 
 /** Build tiers from value ranges listed worst → best. Returns T1 first. */
@@ -65,12 +67,12 @@ function affix(id: string, s: AffixSpec): AffixDef {
 }
 
 // Shared value ladders --------------------------------------------------------------------------
-const ELEMENT_DAMAGE = ladder([[8, 12], [13, 17], [18, 23], [24, 30], [31, 38], [39, 47], [48, 58], [59, 70]]);
-const ELEMENT_RES = ladder([[6, 10], [11, 15], [16, 20], [21, 25], [26, 30], [31, 35], [36, 40], [41, 45]]);
-const DEFENCE_FLAT = ladder([[6, 12], [13, 22], [23, 35], [36, 52], [53, 74], [75, 100], [101, 135], [136, 175]]);
-const DEFENCE_PCT = ladder([[10, 16], [17, 24], [25, 33], [34, 44], [45, 56], [57, 70], [71, 86]]);
-const ATTRIBUTE = ladder([[3, 6], [7, 10], [11, 15], [16, 20], [21, 26], [27, 32], [33, 39], [40, 47]]);
-const AILMENT = ladder([[3, 5], [6, 8], [9, 11], [12, 14], [15, 18], [19, 22]]);
+const ELEMENT_DAMAGE = ladder([[8, 12], [13, 14], [15, 18], [19, 22], [23, 27], [28, 32], [33, 37], [38, 43], [44, 50], [51, 56]]);
+const ELEMENT_RES = ladder([[6, 10], [11, 11], [12, 13], [14, 16], [17, 19], [20, 22], [23, 25], [26, 29], [30, 32], [33, 36]]);
+const DEFENCE_FLAT = ladder([[6, 12], [13, 19], [20, 29], [30, 41], [42, 55], [56, 70], [71, 86], [87, 103], [104, 121], [122, 140]]);
+const DEFENCE_PCT = ladder([[10, 16], [17, 19], [20, 24], [25, 30], [31, 36], [37, 44], [45, 51], [52, 59], [60, 68]]);
+const ATTRIBUTE = ladder([[3, 6], [7, 8], [9, 10], [11, 13], [14, 16], [17, 20], [21, 24], [25, 28], [29, 32], [33, 37]]);
+const AILMENT = ladder([[3, 5], [6, 6], [7, 7], [8, 9], [10, 11], [12, 13], [14, 15], [16, 17]]);
 const ATTR_CLASSES: ItemClass[] = [...ARMOUR, 'belt', ...JEWEL];
 const RES_CLASSES: ItemClass[] = [...ARMOUR, 'belt', ...JEWEL];
 
@@ -80,22 +82,22 @@ export const AFFIXES: readonly AffixDef[] = [
   affix('life', {
     name: 'Hale', kind: 'prefix', stat: 'maxLife', mode: 'flat', tags: ['life'],
     classes: ['focus', ...ARMOUR, 'belt', ...JEWEL],
-    tiers: ladder([[6, 10], [11, 16], [17, 23], [24, 31], [32, 40], [41, 50], [51, 62], [63, 76]]),
+    tiers: ladder([[6, 10], [11, 13], [14, 17], [18, 21], [22, 27], [28, 33], [34, 39], [40, 46], [47, 53], [54, 60]]),
   }),
   affix('focus', {
     name: 'Lucid', kind: 'prefix', stat: 'maxFocus', mode: 'flat', tags: ['focus'],
     classes: [...WEAPON, 'focus', ...ARMOUR, 'belt', ...JEWEL],
-    tiers: ladder([[5, 8], [9, 13], [14, 19], [20, 26], [27, 34], [35, 43], [44, 54]]),
+    tiers: ladder([[5, 8], [9, 10], [11, 13], [14, 17], [18, 22], [23, 27], [28, 32], [33, 37], [38, 43]]),
   }),
   affix('addedSpellDamage', {
     name: 'Sorcerous', kind: 'prefix', stat: 'addedSpellDamage', mode: 'flat', tags: ['caster'],
     classes: CASTER_GEAR,
-    tiers: ladder([[1, 2], [3, 4], [5, 6], [7, 9], [10, 12], [13, 16], [17, 21], [22, 27]]),
+    tiers: ladder([[1, 2], [3, 3], [4, 4], [5, 6], [7, 8], [9, 11], [12, 13], [14, 16], [17, 18], [19, 21]]),
   }),
   affix('spellDamage', {
     name: 'Arcane', kind: 'prefix', stat: 'spellDamage', mode: 'increased', tags: ['caster'],
     classes: [...WEAPON, 'focus', 'amulet'],
-    tiers: ladder([[8, 12], [13, 18], [19, 25], [26, 33], [34, 42], [43, 52], [53, 64], [65, 78]]),
+    tiers: ladder([[8, 12], [13, 15], [16, 19], [20, 23], [24, 29], [30, 35], [36, 41], [42, 48], [49, 55], [56, 62]]),
   }),
   affix('fireDamage', {
     name: 'Blazing', kind: 'prefix', stat: 'fireDamage', mode: 'increased', tags: ['fire'],
@@ -112,7 +114,7 @@ export const AFFIXES: readonly AffixDef[] = [
   affix('elementalDamage', {
     name: 'Prismatic', kind: 'prefix', stat: 'elementalDamage', mode: 'increased',
     tags: ['elemental', 'fire', 'cold', 'lightning'], classes: JEWEL,
-    tiers: ladder([[6, 9], [10, 14], [15, 19], [20, 25], [26, 31], [32, 38]]),
+    tiers: ladder([[6, 9], [10, 11], [12, 13], [14, 16], [17, 19], [20, 22], [23, 26], [27, 30]]),
   }),
   affix('armourFlat', {
     name: 'Plated', kind: 'prefix', stat: 'armor', mode: 'flat', tags: ['defense'],
@@ -133,34 +135,34 @@ export const AFFIXES: readonly AffixDef[] = [
   affix('itemRarity', {
     name: 'Fortunate', kind: 'prefix', stat: 'itemRarity', mode: 'increased', tags: ['luck'],
     classes: ['helmet', 'gloves', 'boots', ...JEWEL],
-    tiers: ladder([[5, 8], [9, 12], [13, 16], [17, 21], [22, 26], [27, 32]]),
+    tiers: ladder([[5, 8], [9, 9], [10, 11], [12, 13], [14, 16], [17, 19], [20, 22], [23, 25]]),
   }),
   affix('lifeOnKill', {
     name: 'Ravenous', kind: 'prefix', stat: 'lifeOnKill', mode: 'flat', tags: ['life'],
     classes: [...WEAPON, 'gloves', 'belt', 'ring'],
-    tiers: ladder([[1, 2], [3, 4], [5, 6], [7, 9], [10, 13], [14, 18]]),
+    tiers: ladder([[1, 2], [3, 3], [4, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14]]),
   }),
   affix('focusOnKill', {
     name: 'Siphoning', kind: 'prefix', stat: 'focusOnKill', mode: 'flat', tags: ['focus'],
     classes: [...WEAPON, 'focus', 'gloves', 'belt', 'amulet'],
-    tiers: ladder([[1, 2], [3, 4], [5, 6], [7, 8], [9, 11]]),
+    tiers: ladder([[1, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8]]),
   }),
 
   // ============================== suffixes ==============================
   affix('castSpeed', {
     name: 'of Haste', kind: 'suffix', stat: 'castSpeed', mode: 'increased', tags: ['caster', 'speed'],
     classes: [...WEAPON, 'gloves', ...JEWEL],
-    tiers: ladder([[3, 5], [6, 8], [9, 11], [12, 14], [15, 17], [18, 21], [22, 26]]),
+    tiers: ladder([[3, 5], [6, 6], [7, 7], [8, 9], [10, 11], [12, 13], [14, 15], [16, 18], [19, 20]]),
   }),
   affix('critChance', {
     name: 'of Omens', kind: 'suffix', stat: 'critChance', mode: 'increased', tags: ['critical'],
     classes: [...WEAPON, 'focus', 'helmet', 'amulet'],
-    tiers: ladder([[10, 14], [15, 19], [20, 25], [26, 32], [33, 40], [41, 49], [50, 60], [61, 72]]),
+    tiers: ladder([[10, 14], [15, 16], [17, 20], [21, 24], [25, 28], [29, 33], [34, 39], [40, 45], [46, 51], [52, 57]]),
   }),
   affix('critMultiplier', {
     name: 'of Ruin', kind: 'suffix', stat: 'critMultiplier', mode: 'flat', tags: ['critical'],
     classes: [...WEAPON, 'amulet'],
-    tiers: ladder([[8, 12], [13, 17], [18, 23], [24, 29], [30, 35], [36, 42]]),
+    tiers: ladder([[8, 12], [13, 14], [15, 16], [17, 19], [20, 22], [23, 25], [26, 29], [30, 33]]),
   }),
   affix('fireResistance', {
     name: 'of the Kiln', kind: 'suffix', stat: 'fireRes', mode: 'flat', tags: ['fire', 'resistance'],
@@ -177,27 +179,27 @@ export const AFFIXES: readonly AffixDef[] = [
   affix('voidResistance', {
     name: 'of the Veil', kind: 'suffix', stat: 'voidRes', mode: 'flat', tags: ['void', 'resistance'],
     classes: RES_CLASSES,
-    tiers: ladder([[5, 8], [9, 12], [13, 16], [17, 20], [21, 25], [26, 30]]),
+    tiers: ladder([[5, 8], [9, 9], [10, 11], [12, 13], [14, 16], [17, 18], [19, 21], [22, 24]]),
   }),
   affix('allResistances', {
     name: 'of Shelter', kind: 'suffix', stat: 'allRes', mode: 'flat', tags: ['resistance'],
     classes: JEWEL,
-    tiers: ladder([[3, 5], [6, 8], [9, 11], [12, 14], [15, 17]]),
+    tiers: ladder([[3, 5], [6, 6], [7, 7], [8, 8], [9, 10], [11, 11], [12, 13]]),
   }),
   affix('moveSpeed', {
     name: 'of Striding', kind: 'suffix', stat: 'moveSpeed', mode: 'increased', tags: ['speed'],
     classes: ['boots'],
-    tiers: ladder([[4, 6], [7, 9], [10, 12], [13, 15], [16, 19], [20, 24]]),
+    tiers: ladder([[4, 6], [7, 7], [8, 8], [9, 10], [11, 12], [13, 14], [15, 17], [18, 19]]),
   }),
   affix('focusRegen', {
     name: 'of Clarity', kind: 'suffix', stat: 'focusRegen', mode: 'increased', tags: ['focus'],
     classes: ['helmet', 'focus', ...JEWEL],
-    tiers: ladder([[10, 15], [16, 22], [23, 30], [31, 39], [40, 49], [50, 60], [61, 72]]),
+    tiers: ladder([[10, 15], [16, 18], [19, 21], [22, 26], [27, 31], [32, 37], [38, 43], [44, 50], [51, 57]]),
   }),
   affix('lifeRegen', {
     name: 'of Mending', kind: 'suffix', stat: 'lifeRegen', mode: 'flat', tags: ['life'],
     classes: ['chest', 'belt', 'ring'],
-    tiers: ladder([[1, 2], [3, 4], [5, 7], [8, 11], [12, 16], [17, 22], [23, 30]]),
+    tiers: ladder([[1, 2], [3, 3], [4, 5], [6, 8], [9, 11], [12, 14], [15, 17], [18, 20], [21, 24]]),
   }),
   affix('strength', {
     name: 'of Brawn', kind: 'suffix', stat: 'str', mode: 'flat', tags: ['utility'],
@@ -214,32 +216,32 @@ export const AFFIXES: readonly AffixDef[] = [
   affix('projectileSpeed', {
     name: 'of Flight', kind: 'suffix', stat: 'projectileSpeed', mode: 'increased', tags: ['speed'],
     classes: WEAPON,
-    tiers: ladder([[8, 12], [13, 18], [19, 24], [25, 31], [32, 38], [39, 46]]),
+    tiers: ladder([[8, 12], [13, 14], [15, 16], [17, 20], [21, 23], [24, 27], [28, 31], [32, 36]]),
   }),
   affix('area', {
     name: 'of Expanse', kind: 'suffix', stat: 'area', mode: 'increased', tags: ['caster'],
     classes: ['focus', 'amulet'],
-    tiers: ladder([[5, 8], [9, 12], [13, 16], [17, 21], [22, 26], [27, 32]]),
+    tiers: ladder([[5, 8], [9, 9], [10, 11], [12, 13], [14, 16], [17, 19], [20, 22], [23, 25]]),
   }),
   affix('cooldownRecovery', {
     name: 'of Recurrence', kind: 'suffix', stat: 'cooldownRecovery', mode: 'increased', tags: ['caster'],
     classes: ['helmet', 'amulet'],
-    tiers: ladder([[4, 6], [7, 9], [10, 12], [13, 16], [17, 20]]),
+    tiers: ladder([[4, 6], [7, 7], [8, 8], [9, 10], [11, 12], [13, 14], [15, 16]]),
   }),
   affix('pickupRadius', {
     name: 'of Gathering', kind: 'suffix', stat: 'pickupRadius', mode: 'increased', tags: ['utility'],
     classes: ['belt', 'boots'],
-    tiers: ladder([[10, 15], [16, 22], [23, 30], [31, 40], [41, 50]]),
+    tiers: ladder([[10, 15], [16, 17], [18, 21], [22, 25], [26, 29], [30, 35], [36, 40]]),
   }),
   affix('itemQuantity', {
     name: 'of Plenty', kind: 'suffix', stat: 'itemQuantity', mode: 'increased', tags: ['luck'],
     classes: ['belt', 'amulet'],
-    tiers: ladder([[3, 5], [6, 8], [9, 11], [12, 14], [15, 18]]),
+    tiers: ladder([[3, 5], [6, 6], [7, 7], [8, 9], [10, 10], [11, 12], [13, 14]]),
   }),
   affix('flaskEffect', {
     name: 'of Tinctures', kind: 'suffix', stat: 'flaskEffect', mode: 'increased', tags: ['utility'],
     classes: ['belt'],
-    tiers: ladder([[6, 9], [10, 14], [15, 19], [20, 25], [26, 32]]),
+    tiers: ladder([[6, 9], [10, 10], [11, 13], [14, 15], [16, 18], [19, 22], [23, 25]]),
   }),
   affix('igniteChance', {
     name: 'of Immolation', kind: 'suffix', stat: 'igniteChance', mode: 'flat', tags: ['fire'],
@@ -253,7 +255,7 @@ export const AFFIXES: readonly AffixDef[] = [
     name: 'of Static', kind: 'suffix', stat: 'shockChance', mode: 'flat', tags: ['lightning'],
     classes: [...WEAPON, 'gloves'], tiers: AILMENT,
   }),
-  // The one exception to the 5–8 tier rule: a single, very rare T1 that needs ilvl 70 (GAME_SPEC §5).
+  // The one exception to the 7–10 tier rule: a single, very rare T1 that needs ilvl 70 (GAME_SPEC §5).
   affix('splintering', {
     name: 'of Splintering', kind: 'suffix', stat: 'extraProjectiles', mode: 'flat', tags: ['caster'],
     classes: ['wand'],

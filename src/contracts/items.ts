@@ -89,6 +89,8 @@ export interface EquipmentItem {
   uniqueId?: UniqueId;
   /** Rolled values of the base's implicit modifiers (same order as the base definition). */
   implicitValues: number[];
+  /** Affix balance revision; missing means pre-phase-2 saved equipment. */
+  affixVersion?: number;
   affixes: RolledAffix[];
   scars: RolledScar[];
   /** Crafting budget. At 0 the item is finished (never destroyed). */
