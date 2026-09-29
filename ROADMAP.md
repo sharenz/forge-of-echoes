@@ -41,7 +41,7 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
   the Map Device picker needed more minimum height to keep sticky headings from blocking map clicks; fixed and
   verified. The full browser harness still has intermittent random-drop and small-viewport navigation failures.
 
-**Phase 2: Done — implementation and validation complete, ready for production.**
+**Phase 2: Done — pushed on `balance-overhaul` and deployed as `20260929-190322-126a855`.**
 - Affixes now have 7–10 tiers, with top tiers requiring item level 78–84 (T14–15 maps) and lower maximum values.
   All lowest-tier ranges and starting-kit values are preserved. Existing equipment migrates once, retaining
   its identity, relative roll, history, stability, scars and crafting protections.
@@ -59,6 +59,8 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
 - Validation: build/typecheck, 1,776 always-on tests and all 12 on-demand balance checks pass. HUD verified at
   1280×720 and 1024×600. Read-only migration audit of all 5 production characters preserves all 321 item IDs,
   including 148 equipment items / 258 affixes, with crafting metadata intact and no repeated migration.
+- Production backup: `/var/lib/forge/backups/pre-phase2-2026-09-29T19-00-57.502Z.db` (integrity check passed).
+  Live health reports protocol 3; public JavaScript/CSS match the tested build. Live T1 remains level 4.
 
 ## P0: next
 
