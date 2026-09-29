@@ -5,14 +5,20 @@ from discussions are added or moved between items. Nothing here is built unless 
 Last reprioritised: 2026-09-29.
 
 **Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
-verify the resulting game and deploy it to production. QoL (P0.1–4), account storage (P1.1) and Atlas (P1.2) are done and deployed;
-events, ingredients, high-level bases, sinks, expanded maps, remaining content and the
+verify the resulting game and deploy it to production. QoL (P0.1–4), account storage, Atlas and the first events (P1.1–3) are done and deployed;
+ingredients, high-level bases, sinks, expanded maps, remaining content and the
 map tree remain part of this delivery until individually completed and verified.
 
-**Current order:** first map events → crafting progression → more map content.
+**Current order:** crafting ingredients and higher-level bases → Scrap sinks → more map content.
 Priorities follow current usability problems, then progression dependencies. Wave-3 boss reuse is later content work.
 
-**Latest release: Done — `20260929-211123-98a6a84` (2026-09-29).** Twelve-area account Atlas, party discovery,
+**Latest release: Done — `20260929-213628-49369b3` (2026-09-29).** The Hunted and Echo Rift (P1.3): hidden
+creation rolls, area/mod odds, warnings, world markers, progress and per-player rewards. Build/typecheck and
+all 1,838 always-on tests pass; both encounters pass in Chromium at 1024×600 and 1280×720. Live protocol 8 and
+public JS/CSS exactly match the tested build; production database integrity is healthy. Post-drain backup:
+`/var/lib/forge/backups/pre-release-20260929-213628-49369b3.db`. Existing open maps remain event-free.
+
+**Previous release: Done — `20260929-211123-98a6a84` (2026-09-29).** Twelve-area account Atlas, party discovery,
 area-specific drops, Reliquary keys and same-tier/+1 completion maps (P1.2). Build/typecheck, a full 1,824-test
 run and 29 final transaction checks pass; browser entry/key flows pass at 1024×600 and 1280×720. Live protocol 7
 and public JS/CSS match the tested build. Host-local production-copy audits before and after preserve all
@@ -157,7 +163,7 @@ reopen tuning for a specific problem rather than starting another general balanc
    Atlas/restart checks after adding one final cross-account transaction regression. Browser entry/key flow
    and layout pass at 1024×600 and 1280×720. A fresh production-copy audit preserves all 457 items on 7 characters.
    Protocol 7, exact public bundle matches and a post-deployment production-copy audit also pass.
-3. **Map events, first two — verified, deployment pending.** The Hunted and Echo Rift roll at map
+3. **Map events, first two — Done, deployed as `20260929-213628-49369b3`.** The Hunted and Echo Rift roll at map
    creation (25% base, at most one per map), hidden until wave 2 or 4. Area types and selected map mods favour
    specific events; Map Device displays exact odds. Hunted brings a rare pursuer and guarantees a Rare item;
    an optional Echo Rift releases three magic packs and rewards Reforging Ember + Map Dust. Both have warning
@@ -165,7 +171,8 @@ reopen tuning for a specific problem rather than starting another general balanc
    map progression cannot stall. Legacy runs remain event-free. See GAME_SPEC §7 for mechanics.
    Build/typecheck and all 1,838 always-on tests pass (12 optional balance checks skipped). Both encounters,
    hidden discovery, rewards and restart fixtures pass in Chromium at 1024×600 and 1280×720; final HUD
-   contrast/layout inspected at both sizes. Production activation and live verification remain.
+   contrast/layout inspected at both sizes. Live protocol 8, exact public bundle matches and production
+   database integrity pass. The active goal continues with P1.4–9.
 4. **Ingredients, first batch.** Verbs, not stronger currency (Prefix Rune / Suffix Rune to start), tied to areas
    so the best ingredient for a craft is not in the area you farm. Tradeable.
 5. **Item bases at ilvl 42+** (tier 8+ under the new monster-level formula), in parallel with 4, so the tier gate yields gear worth wanting.
