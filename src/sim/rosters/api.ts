@@ -66,7 +66,7 @@ export {
 export { NO_SOURCE } from '../stores';
 
 // --- summons and bosses -----------------------------------------------------------------------------------
-export { bossState, fieldFull, summon, summonAt } from '../bosses';
+export { bossState, bossRuntime, fieldFull, summon, summonAt } from '../bosses';
 export { SUMMON_FIELD_CAP } from '../constants';
 export { spawnMonster } from '../spawn';
 
@@ -89,7 +89,7 @@ export function monsterDamage(w: World, i: number): number {
 
 /** The boss phase monster `i` is in (1 for anything but the run's boss). */
 export function phaseOf(w: World, i: number): number {
-  return w.monsters.flags[i] & MFLAG.boss ? w.boss.phase : 1;
+  return w.bossStates.get(w.monsters.id[i])?.phase ?? (w.monsters.flags[i] & MFLAG.boss ? w.boss.phase : 1);
 }
 
 /** Whether monster `i` is guarding with its shield (MonsterDef.block). */

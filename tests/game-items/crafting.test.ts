@@ -52,7 +52,7 @@ describe('validation (nothing is consumed on failure)', () => {
 
   it('rejects uniques, finished items and crafts the item cannot afford', () => {
     const uniqueItem = { ...generateUnique('cinderwalkers', createRng(1)), uid: T };
-    expect(craftingTargetError(bench(uniqueItem, { scrap: 1 }), 'scrap', T)).toBe('Unique items cannot be crafted.');
+    expect(craftingTargetError(bench(uniqueItem, { scrap: 1 }), 'scrap', T)).toBe('Only a Crown Fragment can refine Unique items.');
 
     const finished = item({ ...MAGIC_RING, stability: 0 });
     expect(craftingTargetError(bench(finished, { seal: 1 }), 'seal', T)).toMatch(/Finished/);

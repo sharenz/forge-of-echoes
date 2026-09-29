@@ -253,8 +253,8 @@ describe('availability and reasons', () => {
     const u = { ...generateUnique('ruinheartBand', createRng(1)), uid: T };
     const all = benchRecipes(bench(u, RICH), T);
     expect(all.length).toBeGreaterThan(0);
-    expect(all.every((r) => !r.available && r.reason === 'Unique items cannot be crafted.')).toBe(true);
-    expect(expectErr(applyBenchRecipe(bench(u, RICH), T, 'bench:life'))).toBe('Unique items cannot be crafted.');
+    expect(all.every((r) => !r.available && r.reason === 'Unique items cannot use bench recipes.')).toBe(true);
+    expect(expectErr(applyBenchRecipe(bench(u, RICH), T, 'bench:life'))).toBe('Unique items cannot use bench recipes.');
 
     const done = bench(item({ baseId: 'emberRing', itemLevel: 40, rarity: 'normal', stability: 0 }), RICH);
     expect(reasonOf(done, 'bench:life')).toBe('This item is Finished. Repair Stability at the bench to continue.');
@@ -458,7 +458,7 @@ describe('clearing the crafted affix', () => {
     expect(expectErr(clearCraftedAffix(plain, T))).toBe('This item has no crafted affix to clear.');
     expect(expectErr(clearCraftedAffix(plain, 'nope'))).toBe('That item no longer exists.');
     const u = { ...generateUnique('cinderwalkers', createRng(1)), uid: T };
-    expect(expectErr(clearCraftedAffix(bench(u), T))).toBe('Unique items cannot be crafted.');
+    expect(expectErr(clearCraftedAffix(bench(u), T))).toBe('Unique items cannot use bench recipes.');
   });
 });
 

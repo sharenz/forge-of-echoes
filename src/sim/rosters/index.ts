@@ -34,7 +34,7 @@
 //                around them by itself (ai.ts integrate) — no pathing needed in brains.
 //   brain        called every tick while awake (see Brain in types.ts for its arguments and duties)
 //   boss         BossScript: phase thresholds + roar (the core drives phases; your brain reads
-//                `w.boss.phase` or `phaseOf(w, i)`; encounter state via `bossState<S>(w)`)
+//                `phaseOf(w, i)`; encounter state via `bossState<S>(w, i)`)
 //   onSpawn      lieutenant / boss arrival (escorts, auras, opening timers)
 //   onDeath      after it died (its slot is already free)
 //

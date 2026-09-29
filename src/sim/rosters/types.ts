@@ -32,10 +32,10 @@ export type Brain = (w: World, i: number, t: PlayerState | null, dx: number, dy:
  * `phases[k]` it enters phase k + 2 (one phase per roar, even after a huge hit): it becomes immune,
  * stops, plays its windup pose for `roar` seconds, its unresolved telegraphs are cancelled, and
  * 'bossPhase' is emitted. The brain is not called while it roars. `RunView.boss.phase` shows the
- * phase; read it in the brain as `w.boss.phase`.
+ * phase; read it in the brain as `phaseOf(w, i)`.
  *
  * `S` is the script's own encounter state (cooldowns, patterns…), created by `init` when the boss
- * spawns and read in the brain with `bossState<S>(w)` (api.ts). There is at most one boss per run.
+ * spawns and read in the brain with `bossState<S>(w, i)` (api.ts). Each boss owns independent state.
  */
 export interface BossScript<S = unknown> {
   /** Life fractions (descending) at which phases 2, 3, … begin, e.g. [0.66, 0.33]. */

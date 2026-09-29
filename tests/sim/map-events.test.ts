@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { MapEventKind } from '../../src/contracts/map-events';
 import { killMonster, DT_FIRE } from '../../src/sim/combat';
 import { updateMapEvent } from '../../src/sim/map-events';
+import { driveEventMonster } from '../../src/sim/map-events';
+import { startBoss, bossRuntime, driveBoss } from '../../src/sim/bosses';
+import { monsterDef } from '../../src/sim/rosters';
+import { spawnMonster } from '../../src/sim/spawn';
 import { createRunInternal } from '../../src/sim/run';
 import { updateDirector } from '../../src/sim/waves';
 import { makeConfig, makeHooks, makeJoin } from './fixtures';
@@ -136,5 +140,110 @@ describe('The Hunted and Echo Rift', () => {
     killMonster(w, w.monsters.slotOf([...event.members][0]), DT_FIRE, false);
     expect(log.killRolls).toHaveLength(0);
     expect(event.finished).toBe(true);
+  });
+});
+
+describe('expanded map encounters', () => {
+  it('Blackout moves between three guarded beacons and pays only after the last guard', () => {
+    const { world: w, event, log } = encounter('blackout');
+    updateMapEvent(w);
+    const sites = new Set<string>();
+    for (let wave = 0; wave < 3; wave++) {
+      expect(event.view?.phase).toBe('available');
+      sites.add(`${event.view!.x},${event.view!.y}`);
+      w.players[0].x = event.view!.x; w.players[0].y = event.view!.y;
+      tick(w);
+      expect(event.members.size).toBe(3);
+      slay(w);
+      expect(log.killRolls.filter(r => r.ctx.eventReward)).toHaveLength(wave === 2 ? 1 : 0);
+    }
+    expect(sites.size).toBe(3);
+    expect(log.killRolls.at(-1)?.ctx.eventReward).toBe('blackout');
+    expect(event.view).toMatchObject({ phase: 'complete', remaining: 0 });
+  });
+
+  it('Wound is optional, warns before eruptions, and makes its last pack harder', () => {
+    const { world: w, event, log } = encounter('wound');
+    updateMapEvent(w);
+    expect(event.view?.phase).toBe('available');
+    expect(w.areas).toHaveLength(0);
+    w.players[0].x = event.view!.x; w.players[0].y = event.view!.y;
+    tick(w);
+    for (let pulse = 0; pulse < 3; pulse++) {
+      const rare = [...event.members].filter(id => w.monsters.rarity[w.monsters.slotOf(id)] === 2);
+      expect(rare.length).toBe(pulse === 2 ? 1 : 0);
+      expect(w.areas.filter(a => a.kind === 'eruptionWarning')).toHaveLength((pulse + 1) * 2);
+      expect(w.areas.every(a => a.duration >= 1.5)).toBe(true);
+      slay(w);
+      if (pulse < 2) tick(w, 121);
+    }
+    expect(log.killRolls.filter(r => r.ctx.eventReward === 'wound')).toHaveLength(1);
+  });
+
+  it('Vaultbreakers flee, pay once per kill, and escape without XP or loot when time expires', () => {
+    const { world: w, event, log, run } = encounter('vaultbreakers');
+    tick(w);
+    expect(event.members.size).toBe(3);
+    const first = w.monsters.slotOf([...event.members][0]);
+    const dx = w.monsters.x[first] - w.players[0].x, dy = w.monsters.y[first] - w.players[0].y;
+    expect(driveEventMonster(w, first, w.players[0])).toBe(true);
+    expect(w.monsters.vx[first] * dx + w.monsters.vy[first] * dy).toBeGreaterThan(0);
+    killMonster(w, first, DT_FIRE, true, 1);
+    killMonster(w, first, DT_FIRE, true, 1);
+    expect(log.killRolls.filter(r => r.ctx.eventReward === 'vaultbreakers')).toHaveLength(1);
+    expect(event.view?.remaining).toBe(2);
+    const before = event.deadline, living = w.living;
+    w.living = []; tick(w, 120); expect(event.deadline).toBe(before); w.living = living;
+    run.drainOutcomes();
+    tick(w, 2401);
+    expect(event.view).toMatchObject({ phase: 'failed', remaining: 2, seconds: 0 });
+    expect(event.members.size).toBe(0); expect(w.monsters.count).toBe(0);
+    expect(log.killRolls).toHaveLength(1);
+    expect(run.drainOutcomes()).toEqual([]);
+    expect(w.packs.every(p => !p.active)).toBe(true);
+  });
+
+  it('Second Crown keeps all three scripted bosses independent and grants one completion after both deaths', () => {
+    for (const kind of ['cinderMatriarch', 'hollowWarden', 'varkus'] as const) {
+      const { world: w, event, log, run } = encounter('secondCrown');
+      const original = spawnMonster(w, kind, 180, 0, { boss: true, animate: false });
+      startBoss(w, original, monsterDef(kind));
+      w.director.bossId = w.monsters.id[original];
+      // Match the area's roster to the hand-placed primary for this probe.
+      Object.assign(w, { roster: { ...w.roster, boss: kind } });
+      tick(w);
+      expect(event.members.size).toBe(2);
+      const twin = w.monsters.slotOf([...event.members].find(id => id !== w.monsters.id[original])!);
+      expect(bossRuntime(w, original)).not.toBe(bossRuntime(w, twin));
+      expect(bossRuntime(w, original).state).not.toBe(bossRuntime(w, twin).state);
+      w.monsters.life[original] = w.monsters.maxLife[original] * 0.5;
+      driveBoss(w, original, monsterDef(kind), w.players[0], -180, 0, 180, true);
+      expect(bossRuntime(w, original).phase).toBe(2);
+      expect(bossRuntime(w, twin).phase).toBe(1);
+      killMonster(w, original, DT_FIRE, true, 1);
+      expect(w.director.bossDefeated).toBe(false);
+      expect(w.director.bossId).toBe(w.monsters.id[twin]);
+      expect(run.drainOutcomes().filter(o => o.t === 'bossDefeated')).toHaveLength(0);
+      killMonster(w, twin, DT_FIRE, true, 1);
+      expect(w.director.bossDefeated).toBe(true);
+      expect(w.bossStates.size).toBe(0);
+      expect(run.drainOutcomes().filter(o => o.t === 'bossDefeated')).toHaveLength(1);
+      expect(log.killRolls.filter(r => r.ctx.eventReward === 'secondCrown')).toHaveLength(1);
+    }
+  });
+
+  it('killing the first boss before its twin is revealed never skips the encounter', () => {
+    const { world: w, event, log, run } = encounter('secondCrown');
+    const original = spawnMonster(w, 'cinderMatriarch', 180, 0, { boss: true, animate: false });
+    w.director.bossId = w.monsters.id[original];
+    killMonster(w, original, DT_FIRE, true, 1);
+    expect(w.director.bossDefeated).toBe(false);
+    expect(run.drainOutcomes().filter(o => o.t === 'bossDefeated')).toHaveLength(0);
+    tick(w);
+    expect(event.members.size).toBe(1);
+    expect(event.view?.remaining).toBe(1);
+    slay(w);
+    expect(w.director.bossDefeated).toBe(true);
+    expect(log.killRolls.filter(r => r.ctx.eventReward === 'secondCrown')).toHaveLength(1);
   });
 });

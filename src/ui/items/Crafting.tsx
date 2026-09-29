@@ -93,6 +93,7 @@ function useCount(uid: string | null): { count: number; stash: boolean } | null 
 }
 
 const VERB: Partial<Record<CurrencyId, string>> = {
+  graft: 'Choose an affix to replace',
   seal: 'Choose an affix to seal',
   catalyst: 'Choose an affix to temper',
   fractureCore: 'Choose an affix to fracture',

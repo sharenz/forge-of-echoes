@@ -132,7 +132,8 @@ describe('instanced loot and shared xp', () => {
       }
       deaths = Math.max(deaths, players.filter((p) => map.isDead(p.session)).length);
       const gained = players.every((p, k) => p.session.record.ch.xp !== xp0[k].xp || p.session.record.ch.level !== xp0[k].level);
-      if (sawOwnDrop.every(Boolean) && sawOtherHidden.some(Boolean) && gained && t > 60 * 30) break;
+      const collected = players.some(p => map.participant(p.session).itemsFound.length > 0);
+      if (sawOwnDrop.every(Boolean) && sawOtherHidden.some(Boolean) && gained && collected && t > 60 * 30) break;
     }
     expect(sawOwnDrop).toEqual([true, true]);
     // Another player's drop was right there in view, and the snapshot left it out.

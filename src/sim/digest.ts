@@ -1,5 +1,6 @@
 // FNV-1a digest over the authoritative world state (exact float bits), for determinism tests.
 import { AREA_KINDS, type RunPhase } from '../contracts/sim';
+import { MAP_EVENT_KINDS, MAP_EVENT_PHASES } from '../contracts/map-events';
 import type { World } from './world';
 
 const f32 = new Float32Array(1);
@@ -44,10 +45,11 @@ export function digestWorld(w: World): number {
   }
   const event = w.mapEvent;
   if (event) {
-    h.int(event.plan.kind === 'hunted' ? 1 : 2); h.int(event.plan.wave); h.float(event.plan.angle);
+    h.int(MAP_EVENT_KINDS.indexOf(event.plan.kind) + 1); h.int(event.plan.wave); h.float(event.plan.angle);
     h.int(event.finished ? 1 : 0); h.float(event.timer); h.float(event.grace); h.int(event.pulses);
+    if (event.plan.kind === 'vaultbreakers') h.float(event.deadline);
     for (const id of event.members) h.int(id);
-    h.int(event.view ? ['available', 'warning', 'active', 'complete'].indexOf(event.view.phase) + 1 : 0);
+    h.int(event.view ? MAP_EVENT_PHASES.indexOf(event.view.phase) + 1 : 0);
     if (event.view) { h.float(event.view.x); h.float(event.view.y); h.int(event.view.remaining); }
   }
   const m = w.monsters;

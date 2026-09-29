@@ -3,7 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5|qol|account|atlas|events|crafting|economy|maps] [--smoke 30]
+//                        [--only wave5|qol|account|atlas|events|crafting|ingredients|economy|maps] [--smoke 30]
 //
 // --prod tests the production bundle instead of the Vite dev server: `vite build` (with VITE_FOE_DEBUG=1, so the
 // window.__foe hooks this script drives are compiled in) into a temp dir, served by the game server itself
@@ -49,6 +49,7 @@
 // warning), each client only ever sees its own loot or public drops (in snapshots AND drop/pickup events), portal
 // counts, zones and run summaries. Prints PASS/FAIL per step and exits 0 / 1.
 import { spawn } from 'node:child_process';
+import { isDeepStrictEqual } from 'node:util';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -69,6 +70,7 @@ const WAVE5_ONLY = opt('only', 'all') === 'wave5';
 const QOL_ONLY = opt('only', 'all') === 'qol';
 const ACCOUNT_ONLY = opt('only', 'all') === 'account';
 const ATLAS_ONLY = opt('only', 'all') === 'atlas';
+const INGREDIENTS_ONLY = opt('only', 'all') === 'ingredients';
 const EVENTS_ONLY = opt('only', 'all') === 'events';
 const MAPS_ONLY = opt('only', 'all') === 'maps';
 const ECONOMY_ONLY = opt('only', 'all') === 'economy';
@@ -252,7 +254,7 @@ class Player {
     try {
       await this.page.waitForFunction(fn, arg, { timeout, polling: 100 });
     } catch (err) {
-      throw new Error(`${this.label}: timed out waiting for ${desc}`);
+      throw new Error(`${this.label}: waiting for ${desc}: ${err.message}`);
     }
   }
 
@@ -2062,7 +2064,9 @@ async function craftingScenario({ A, port }) {
     assert(bindingBox && bindingBox.y > 0 && bindingBox.y + bindingBox.height < VH - 90, 'lower crafting currencies are unreachable');
     const blockedSlots = await A.eval(() => [...document.querySelectorAll('.fe-cstash .fe-cslot')].filter(el => {
       const r = el.getBoundingClientRect();
-      return !el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+      const parent = el.closest('.fe-cstash').getBoundingClientRect();
+      const visible = r.top >= parent.top && r.bottom <= parent.bottom;
+      return visible && !el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
     }).map(el => el.dataset.currency));
     assert(blockedSlots.length === 0, `currency controls are covered: ${blockedSlots.join(', ')}`);
     await shot('crafting-stash-binding');
@@ -2114,9 +2118,99 @@ async function craftingScenario({ A, port }) {
   });
 }
 
+async function ingredientsScenario({ A, port }) {
+  const ids = ['scarBalm', 'anneal', 'graft', 'transmute', 'echoShard', 'crownFragment', 'compass', 'twinInk', 'voidSplinter'];
+  const names = ['Scar Balm', 'Anneal', 'Graft', 'Transmute', 'Echo Shard', 'Crown Fragment', 'Compass', 'Twin Ink', 'Void Splinter'];
+  const shot = async name => { await settlePanels(A); await A.shot(`ingredients-${name}-${VW}x${VH}`); };
+  await step('prepare one project per advanced ingredient in the disposable database', async () => {
+    outage = true; await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const { tsImport } = await import('tsx/esm/api');
+    const { buildEquipment, generateUnique, addToBackpack } = await tsImport('../src/game/items/index.ts', import.meta.url);
+    const { createRng } = await tsImport('../src/core/rng.ts', import.meta.url);
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const account = db.prepare('SELECT account_id, data FROM account_storage').get();
+    const shared = JSON.parse(account.data);
+    shared.currencyStash = Object.fromEntries(ids.map(id => [id, 2]));
+    db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), account.account_id);
+    const row = db.prepare('SELECT id, data FROM characters').get();
+    let ch = JSON.parse(row.data); ch.backpack.entries = []; ch.level = 60;
+    for (const id of ids) {
+      const uid = `e2e-${id.toLowerCase()}:i1`, rng = createRng(83);
+      let item;
+      if (id === 'crownFragment') item = generateUnique('thePatientSpark', rng, { uid });
+      else if (['compass', 'twinInk', 'voidSplinter'].includes(id)) item = {
+        kind: 'map', uid, baseId: 'ashenForge', tier: 3, rarity: 'magic', quality: 12, corrupted: id === 'voidSplinter',
+        mods: [{ modId: 'teeming', value: 108 }, { modId: 'gilded', value: 102 },
+          ...(id === 'voidSplinter' ? [{ modId: 'echo', value: 100, corrupted: true }] : [])],
+      };
+      else {
+        item = buildEquipment({ uid, baseId: 'emberRing', itemLevel: 60, rarity: 'magic',
+          stability: ['scarBalm', 'anneal'].includes(id) ? 0 : 8,
+          affixes: [{ affixId: 'life', tier: 5 }, { affixId: 'coldResistance', tier: 5, sealed: true }],
+        }, rng);
+        if (id === 'scarBalm') item.scars = [{ scarId: 'frail', value: 5 }];
+      }
+      const placed = addToBackpack(ch, item); assert(placed.ok, `cannot place ${id}`); ch = placed.value;
+    }
+    db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(ch), row.id);
+    db.close(); await startGameServer(port);
+    await A.waitFor('ingredient projects after reconnect', () => window.__foe.store.get().connection === 'online'
+      && window.__foe.store.get().character?.currencyStash?.crownFragment === 2, undefined, 30000);
+    outage = false;
+  });
+  await step('apply every new ingredient through the bench palette, including Graft affix selection', async () => {
+    await closePanels(A);
+    const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'anvil', 8), 'the anvil');
+    await clickWorld(A, at, 'the anvil'); await A.page.waitForSelector('.fe-bench');
+    for (let n = 0; n < ids.length; n++) {
+      const id = ids[n], uid = `e2e-${id.toLowerCase()}:i1`;
+      const target = A.page.locator(`.fe-grid[data-drop="backpack"] .fe-item[data-uid="${uid}"]`);
+      await target.click({ modifiers: ['Control'] });
+      await A.waitFor('ingredient target on bench', uid => window.__foe.store.get().benchItemUid === uid, uid);
+      const button = A.page.getByRole('button', { name: names[n], exact: true });
+      await button.scrollIntoViewIfNeeded(); await button.hover();
+      await A.page.waitForSelector('.fe-curtip');
+      await shot(`${id}-preview`);
+      const bounds = await A.page.locator('.fe-curtip').boundingBox();
+      assert(bounds && bounds.y >= 0 && bounds.y + bounds.height <= VH + 1, `${id} preview exceeds viewport`);
+      await button.click();
+      if (id === 'graft') {
+        await A.page.waitForSelector('.fe-affix-choice'); await shot('graft-choice');
+        await A.page.locator('.fe-affix-choice .fe-affix-row:not([disabled])').first().click();
+      }
+      await A.waitFor(`${id} applied exactly once`, id => window.__foe.store.get().character.currencyStash[id] === 1, id);
+      await A.page.mouse.move(10, 10); await sleep(250);
+    }
+  });
+  await step('all new stash slots are reachable and expose their drop sources', async () => {
+    await closePanels(A);
+    for (const tab of ['currency', 'mapCurrency']) {
+      await openStashTab(A, tab);
+      for (const id of ids.filter(id => (['compass', 'twinInk', 'voidSplinter'].includes(id)) === (tab === 'mapCurrency'))) {
+        const slot = A.page.locator(`.fe-cslot[data-currency="${id}"]`);
+        await slot.scrollIntoViewIfNeeded(); await slot.hover(); await sleep(200);
+        const b = await slot.boundingBox();
+        assert(b && b.y > 0 && b.y + b.height < VH - 90, `${id} slot is unreachable`);
+        assert(await slot.evaluate(el => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), `${id} slot is covered`);
+        await shot(`${id}-stash`);
+      }
+      await closePanels(A);
+    }
+  });
+  await step('all nine crafted projects and shared material counts survive a real restart', async () => {
+    const before = await A.eval(() => ({ backpack: window.__foe.store.get().character.backpack, stash: window.__foe.store.get().character.currencyStash }));
+    outage = true; await stopGameServer(); await startGameServer(port);
+    await A.waitFor('ingredient reconnect', () => window.__foe.store.get().connection === 'online', undefined, 30000);
+    outage = false;
+    const after = await A.eval(() => ({ backpack: window.__foe.store.get().character.backpack, stash: window.__foe.store.get().character.currencyStash }));
+    assert(isDeepStrictEqual(after, before), `advanced crafts or payments changed after restart: ${JSON.stringify({ before, after })}`);
+  });
+}
+
 async function eventsScenario({ A, port }) {
   const eventShot = async (name) => {
-    await A.shot(name);
+    await A.shot(`${name}-${VW}x${VH}`);
     if (VW !== 1024 || VH !== 600) {
       await A.page.setViewportSize({ width: 1024, height: 600 });
       await sleep(120);
@@ -2134,7 +2228,7 @@ async function eventsScenario({ A, port }) {
     });
     assert(result.ok, result.error);
   });
-  for (const kind of ['hunted', 'echoRift']) {
+  for (const kind of opt('events', 'hunted,echoRift,blackout,vaultbreakers,wound,secondCrown').split(',')) {
     await step(`${kind}: seed the disposable map and strong browser-test character`, async () => {
       outage = true;
       await stopGameServer();
@@ -2142,18 +2236,27 @@ async function eventsScenario({ A, port }) {
       const db = new DatabaseSync(join(tmp, 'e2e.db'));
       const row = db.prepare('SELECT map_id, setup FROM open_maps').get();
       const setup = JSON.parse(row.setup);
-      setup.event = { kind, wave: 2, angle: 0 };
+      setup.event = { kind, wave: kind === 'secondCrown' ? 6 : 2, angle: 0 };
+      const tier = kind === 'secondCrown' ? 5 : ['hunted', 'echoRift'].includes(kind) ? 1 : 3;
+      setup.map.tier = tier;
+      if (setup.sourceMap) setup.sourceMap.tier = tier;
       db.prepare('UPDATE open_maps SET setup = ?, cleared = 0, portals_remaining = 8 WHERE map_id = ?').run(JSON.stringify(setup), row.map_id);
       const ch = db.prepare('SELECT id, data FROM characters').get();
       const saved = JSON.parse(ch.data);
-      saved.level = 50;
-      saved.allocated = { str: 100, dex: 50, int: 100 };
+      saved.level = 60;
+      saved.allocated = { str: 195, dex: 100, int: 195 };
+      const { tsImport } = await import('tsx/esm/api');
+      const { buildEquipment } = await tsImport('../src/game/items/index.ts', import.meta.url);
+      const { createRng } = await tsImport('../src/core/rng.ts', import.meta.url);
+      saved.equipment.mainHand = buildEquipment({ uid: 'e2e-events-wand:i1', baseId: 'emberheartWand', itemLevel: 88, rarity: 'rare',
+        affixes: [{ affixId: 'spellDamage', tier: 1 }, { affixId: 'fireDamage', tier: 1 }, { affixId: 'addedSpellDamage', tier: 1 },
+          { affixId: 'castSpeed', tier: 1 }, { affixId: 'critChance', tier: 1 }, { affixId: 'critMultiplier', tier: 1 }] }, createRng(81));
       for (const id of Object.keys(saved.skillRanks)) saved.skillRanks[id] = 20;
       saved.loadout = ['emberLance', 'emberNova', 'arcChain', 'flameWave', 'cinderWard', 'riftStep'];
       db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(saved), ch.id);
       db.close();
       await startGameServer(port);
-      await A.waitFor('event fixture reconnect', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.level === 50, undefined, 30000);
+      await A.waitFor('event fixture reconnect', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.level === 60, undefined, 30000);
       outage = false;
     });
     await step(`${kind}: hidden before discovery; visible status and world marker during combat`, async () => {
@@ -2162,19 +2265,40 @@ async function eventsScenario({ A, port }) {
       assert(await A.eval(() => !Object.hasOwn(window.__foe.store.get().run, 'event')), 'event plan leaked in ZoneInfo');
       assert(await A.eval(() => !window.__foe.world.view.run.event), 'event appeared before its wave');
       await A.eval(() => window.__foe.bot.enable({ returnPortal: false, collect: false }));
-      await A.waitFor('event discovery', () => !!window.__foe.world.view.run.event, undefined, 150000);
+      await A.waitFor('event discovery', () => !!window.__foe.world.view.run.event, undefined, 450000);
       await A.eval(() => window.__foe.bot.disable());
       await A.page.waitForSelector('.fe-map-event');
       await eventShot(`events-${kind}-discovered`);
       const e = await A.eval(() => window.__foe.world.view.run.event);
       assert(e.kind === kind, 'wrong event');
-      await A.eval(() => { window.__eventEmbersBefore = window.__foe.store.get().character.backpack.entries.reduce((sum, e) => sum + (e.item.kind === 'currency' && e.item.currencyId === 'reforge' ? e.item.count : 0), 0); });
-      await A.eval((event) => window.__foe.bot.enable({ returnPortal: false, collect: false, hold: event.kind === 'echoRift' ? { x: event.x, y: event.y } : null }), e);
-      await A.waitFor('completed event', () => window.__foe.world.view.run.event?.phase === 'complete', undefined, 120000);
-      await eventShot(`events-${kind}-complete`);
+      await A.eval(() => { window.__eventMaterialsBefore = Object.fromEntries(['seal', 'twinInk', 'voidSplinter', 'crownFragment'].map(id => [id, window.__foe.store.get().character.backpack.entries.reduce((n, e) => n + (e.item.kind === 'currency' && e.item.currencyId === id ? e.item.count : 0), 0)])); window.__eventEmbersBefore = window.__foe.store.get().character.backpack.entries.reduce((sum, e) => sum + (e.item.kind === 'currency' && e.item.currencyId === 'reforge' ? e.item.count : 0), 0); });
+      await A.eval((event) => window.__foe.bot.enable({ returnPortal: false, collect: false, hold: ['echoRift', 'wound', 'blackout'].includes(event.kind) ? { x: event.x, y: event.y } : null }), e);
+      await A.waitFor('completed event', () => {
+        const event = window.__foe.world.view.run.event;
+        if (event?.phase === 'available') {
+          const key = `${event.x},${event.y}`;
+          if (window.__eventHold !== key) {
+            window.__eventHold = key;
+            window.__foe.bot.enable({ returnPortal: false, collect: false, hold: { x: event.x, y: event.y } });
+          }
+        }
+        return event?.phase === 'complete' || (event?.kind === 'vaultbreakers' && event.phase === 'failed');
+      }, undefined, 300000);
+      const outcome = await A.eval(() => window.__foe.world.view.run.event);
+      await eventShot(`events-${kind}-${outcome.phase}`);
+      if (kind === 'vaultbreakers') {
+        assert(outcome.phase === 'complete' || (outcome.phase === 'failed' && outcome.seconds === 0 && outcome.remaining > 0), 'invalid escape outcome');
+        log(`Vaultbreakers result: ${outcome.total - outcome.remaining}/${outcome.total} defeated, ${outcome.phase}`);
+      }
       const drops = await A.eval(() => window.__foe.world.view.drops.map(d => ({ tone: d.spec.tone, label: d.spec.label })));
       const pickedEmbers = await A.eval(() => window.__foe.store.get().character.backpack.entries.reduce((sum, e) => sum + (e.item.kind === 'currency' && e.item.currencyId === 'reforge' ? e.item.count : 0), 0) > window.__eventEmbersBefore);
-      assert(kind === 'hunted' ? drops.some(d => d.tone === 'rare') : drops.some(d => /Reforging Ember/.test(d.label)) || pickedEmbers, 'event reward missing');
+      if (kind === 'hunted') assert(drops.some(d => d.tone === 'rare'), 'hunter reward missing');
+      else if (kind === 'echoRift') assert(drops.some(d => /Reforging Ember/.test(d.label)) || pickedEmbers, 'rift reward missing');
+      else if (kind !== 'vaultbreakers') {
+        const reward = { blackout: ['seal', 'Binding Seal'], wound: ['voidSplinter', 'Void Splinter'], secondCrown: ['crownFragment', 'Crown Fragment'] }[kind];
+        const picked = await A.eval(id => window.__foe.store.get().character.backpack.entries.reduce((n, e) => n + (e.item.kind === 'currency' && e.item.currencyId === id ? e.item.count : 0), 0) > window.__eventMaterialsBefore[id], reward[0]);
+        assert(drops.some(d => d.label.includes(reward[1])) || picked, `${reward[1]} reward missing`);
+      }
       await A.eval(() => window.__foe.bot.disable());
       const leave = await A.eval(() => window.__foe.send({ c: 'leaveMap' }));
       assert(leave.ok, leave.error);
@@ -2326,9 +2450,10 @@ async function main() {
   });
   if (MAPS_ONLY) await expandedMapsScenario({ A, port });
   if (ATLAS_ONLY) await atlasScenario({ A, port });
+  if (INGREDIENTS_ONLY) await ingredientsScenario({ A, port });
   if (EVENTS_ONLY) await eventsScenario({ A, port });
   if (CRAFTING_ONLY) await craftingScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY) {
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -2337,7 +2462,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

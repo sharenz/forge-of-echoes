@@ -399,6 +399,7 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
       w.u8(MAP_EVENT_PHASES.indexOf(run.event.phase));
       w.f32(run.event.x); w.f32(run.event.y);
       w.u8(run.event.remaining); w.u8(run.event.total);
+      w.u8(run.event.seconds ?? 255);
     }
 
     // --- players (all of them; the viewer's own record carries the HUD data) ---

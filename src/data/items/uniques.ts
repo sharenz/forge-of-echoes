@@ -1,5 +1,5 @@
 // Uniques (GAME_SPEC §5): fixed, rule-changing items. They keep their base's implicit and properties,
-// roll their own mod values, grant player flags, and cannot be crafted.
+// roll their own mod values and grant player flags. Only Crown Fragments reroll their values.
 import type { UniqueId } from '../../contracts/content';
 import type { UniqueDef } from './types';
 

@@ -96,6 +96,51 @@ export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
     description: 'Reforges the unsealed, unfractured suffixes, preserving their count and every prefix. Found from the Ember Vault boss on Tier 3 maps (25% chance).',
     family: 'shape', stabilityCost: 3, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
   }),
+  scarBalm: currency('scarBalm', {
+    name: "Scar Balm",
+    description: "Removes the oldest scar. Preserves affixes, seals and Stability; works on Finished equipment. Found from the Glass Sepulchre boss on Tier 3+ maps (15%).",
+    family: 'remove', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  anneal: currency('anneal', {
+    name: "Anneal",
+    description: "Sacrifices 1 maximum Stability permanently, then restores Stability to that new maximum. Preserves scars, seals and affixes. Found from the Crown Foundry boss on Tier 5+ maps (20%).",
+    family: 'refine', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  graft: currency('graft', {
+    name: "Graft",
+    description: "Replaces a chosen unsealed, unfractured affix with a different family of the same prefix/suffix type and tier. Preserves all other affixes. Found from the Winter Throne boss on Tier 5+ maps (20%).",
+    family: 'transform', stabilityCost: 3, needsAffixChoice: true, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  transmute: currency('transmute', {
+    name: "Transmute",
+    description: "Changes equipment into a different compatible base of the same class and rerolls its implicit. Preserves affixes, scars and lifetime crafting costs. Unequip the item first. Found from the Ember Vault boss on Tier 3 maps (15%).",
+    family: 'transform', stabilityCost: 3, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  echoShard: currency('echoShard', {
+    name: "Echo Shard",
+    description: "Rerolls each unsealed, unfractured affix value twice and keeps the higher new roll. Values can still fall. Found from Echo Rifts on Tier 3+ maps (50%).",
+    family: 'refine', stabilityCost: 2, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  crownFragment: currency('crownFragment', {
+    name: "Crown Fragment",
+    description: "Rerolls a Unique item’s numeric modifiers within their ranges. Preserves its base implicit, identity and special behaviour. Guaranteed from Second Crown encounters on Tier 5+ maps.",
+    family: 'refine', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  compass: currency('compass', {
+    name: "Compass",
+    description: "Charts a map: its completion chest guarantees a map one tier higher, up to Tier 15. Found from the Champion’s Approach boss on Tier 5+ maps (20%).",
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  twinInk: currency('twinInk', {
+    name: "Twin Ink",
+    description: "Adds a second distinct reward-only mod to a map that already has one. Found from each Vaultbreaker carrier on Tier 3+ maps (20%).",
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  voidSplinter: currency('voidSplinter', {
+    name: "Void Splinter",
+    description: "Removes a map’s corruption and every corruption-marked mod. All quality is lost; tier and ordinary mods remain. Guaranteed from the Wound on Tier 3+ maps.",
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
   mapDust: currency('mapDust', {
     name: 'Map Dust',
     description: 'Turns a Normal map Magic with 1–2 mods, or rerolls the mods of a Magic or Rare map.',
@@ -122,7 +167,7 @@ export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
   }),
   voidNeedle: currency('voidNeedle', {
     name: 'Void Needle',
-    description: 'Corrupts a map with an unpredictable outcome. A corrupted map can no longer be modified.',
+    description: 'Corrupts a map with an unpredictable outcome. Further crafting requires a Void Splinter, which removes corruption, its modifiers and all quality.',
     family: 'map',
     stabilityCost: 0,
     needsAffixChoice: false,

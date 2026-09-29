@@ -134,6 +134,10 @@ export interface MapItem {
   corrupted: boolean;
   /** A paid commission: guarantees The Hunted when this map is opened. */
   bounty?: boolean;
+  /** Compass: the progression map in the completion chest upgrades by one tier. */
+  charted?: boolean;
+  /** Twin Ink allows a second reward-only modifier (ordinary Reward Ink still adds at most one). */
+  twinInked?: boolean;
   isNew?: boolean;
 }
 

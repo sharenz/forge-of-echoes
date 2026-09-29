@@ -1,3 +1,5 @@
+import { MAP_EVENT_KINDS } from '../../contracts/map-events';
+import { MAP_EVENT_NAMES } from '../../data/progression/map-events';
 // Map Device (own hideout only): the map slot, the rules' map readout with breakdowns, the player's
 // personal luck (map + own gear, via rules.lootLuck on a preview of the run setup), portal status and the
 // ember "Activate" button, then a picker over the Map Stash (tier tiles and map rows: click, Ctrl-click or drag a
@@ -192,7 +194,7 @@ export function MapDevicePanel() {
                     </div>
                   </div>
                 )}
-                <p class="ui-type-caption">Encounter chance: The Hunted {Math.round(readout.events.hunted * 1000) / 10}% · Echo Rift {Math.round(readout.events.echoRift * 1000) / 10}%. At most one; discovered during the map.</p>
+                <p class="ui-type-caption">Encounter chance: {MAP_EVENT_KINDS.filter(k => readout.events[k] > 0).map(k => `${MAP_EVENT_NAMES[k]} ${Math.round(readout.events[k] * 1000) / 10}%`).join(' · ')}. At most one; discovered during the map.</p>
                 <div class="fe-device__summary">
                   {readout.summary.map((l) => {
                     const isOpen = openLine === l.label;

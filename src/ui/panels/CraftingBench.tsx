@@ -400,7 +400,7 @@ function Recipes({
     return (
       <section class="fe-bench__section">
         <div class="fe-section-title">Bench recipes</div>
-        <p class="fe-bench__note">Unique items cannot be crafted.</p>
+        <p class="fe-bench__note">Unique items cannot use bench recipes. A Crown Fragment can reroll their numeric modifiers.</p>
       </section>
     );
   }

@@ -155,7 +155,7 @@ describe('describeEquipment', () => {
     expect(d.affixes[0].range).toBe('(30–45)');
     expect(d.affixes[1]).toMatchObject({ text: '15% reduced Cast Speed', negative: true });
     expect(d.affixes[2].text).toBe('Ember Lance pierces all targets');
-    expect(d.hint).toMatch(/cannot be crafted/);
+    expect(d.hint).toMatch(/Crown Fragment can reroll/);
   });
 });
 

@@ -229,6 +229,8 @@ export class Ground {
     const n = this.n;
     const size = this.size;
     const tint = this.tint;
+    const event = f.world.run.event;
+    const blackout = event?.kind === 'blackout' && event.phase !== 'complete' && event.phase !== 'failed';
     const kinds = this.cellKind;
     const shade = this.shade;
     const floorVar = this.floorVar;
@@ -245,7 +247,7 @@ export class Ground {
         const i = row + tx + n;
         const kind = kinds[i];
         if (kind === 0) continue;
-        const b = shade[i] / 255;
+        const b = shade[i] / 255 * (blackout ? 0.8 : 1);
         tint[0] = b;
         tint[1] = b;
         tint[2] = b;

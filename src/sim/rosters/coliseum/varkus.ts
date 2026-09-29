@@ -64,7 +64,7 @@ const MARK_HOLD_LEAD = 0.25;
 /** …for at most this long in all. */
 export const MARK_MAX_PAUSE = 2.5;
 
-/** His encounter state (BossScript state; bossState<VarkusState>(w)). */
+/** His encounter state (BossScript state; bossState<VarkusState>(w, i)). */
 export interface VarkusState {
   /** The current charge: lane start, heading, length, dash speed, distance covered, the lane's area id. */
   startX: number;
@@ -162,7 +162,7 @@ function holdGate(w: World, i: number, s: VarkusState): void {
 function spikeTick(w: World, a: Area): void {
   const floor = a.duration - V.walkOut;
   if (a.age <= floor) return;
-  const s = w.boss.state as VarkusState | null;
+  const s = (w.bossStates.get(a.owner)?.state ?? null) as VarkusState | null;
   if (!s || s.spikeHold >= V.maxHold || !heldIn(w, a)) return;
   a.age = floor;
   if (s.spikeHoldTick !== w.tick) {
@@ -186,8 +186,8 @@ function spikesPending(w: World, i: number): boolean {
  * Nothing he starts now would still be going when a pending mark makes him leap: `dur` seconds from now end
  * before the leap (with a little slack), or no mark is pending.
  */
-function free(w: World, dur: number): boolean {
-  const s = bossState<VarkusState>(w);
+function free(w: World, i: number, dur: number): boolean {
+  const s = bossState<VarkusState>(w, i);
   return s.markStrikeAt <= w.time || w.time + dur <= s.markStrikeAt - V.leapFlight - 0.1;
 }
 
@@ -217,7 +217,7 @@ export function registerVarkusEffects(): void {
  */
 function markTick(w: World, a: Area): void {
   const start = a.duration - V.leapFlight;
-  const s = w.boss.state as VarkusState | null;
+  const s = (w.bossStates.get(a.owner)?.state ?? null) as VarkusState | null;
   const p = a.followPlayer > 0 ? w.playerById[a.followPlayer] : undefined;
   if (
     p && !p.dead && a.age - DT < start && a.age >= a.lockAt - MARK_HOLD_LEAD && held(p) &&
@@ -284,7 +284,7 @@ function executionMark(w: World, i: number): void {
     followPlayer: p.id, lockAt: V.markLock, owner: m.id[i], hurts: 'player', damage: monsterDamage(w, i) * V.markMult,
     dtype: DAMAGE_INDEX.physical, effect: markEffect,
   });
-  const s = bossState<VarkusState>(w);
+  const s = bossState<VarkusState>(w, i);
   s.markStrikeAt = w.time + V.markTime;
   s.markPaused = 0;
 }
@@ -297,7 +297,7 @@ function executionMark(w: World, i: number): void {
  */
 function chargeTelegraph(w: World, i: number, _t: PlayerState, dx: number, dy: number, d: number): void {
   const m = w.monsters;
-  const s = bossState<VarkusState>(w);
+  const s = bossState<VarkusState>(w, i);
   const ux = dx / d;
   const uy = dy / d;
   const lim = w.arenaRadius - m.radius[i] - 4;
@@ -325,7 +325,7 @@ function chargeTelegraph(w: World, i: number, _t: PlayerState, dx: number, dy: n
 /** The dash begins: he can't be shoved off the lane, and starts from exactly its start. */
 function chargeRelease(w: World, i: number): void {
   const m = w.monsters;
-  const s = bossState<VarkusState>(w);
+  const s = bossState<VarkusState>(w, i);
   m.flags[i] |= MFLAG.unpushable;
   m.x[i] = s.startX;
   m.y[i] = s.startY;
@@ -335,7 +335,7 @@ function chargeRelease(w: World, i: number): void {
 /** One tick of the dash along the lane; true when it is over (lane covered, or a prop stopped him). */
 function chargeTick(w: World, i: number): boolean {
   const m = w.monsters;
-  const s = bossState<VarkusState>(w);
+  const s = bossState<VarkusState>(w, i);
   // Where the lane says he is: a prop that pushed him off it ends the charge where he stands.
   const ex = s.startX + s.dirX * s.travelled;
   const ey = s.startY + s.dirY * s.travelled;
@@ -387,7 +387,7 @@ function cleaveTelegraph(w: World, i: number, _t: PlayerState, dx: number, dy: n
   const slam = spawnArea(w, 'slamWarning', m.tx[i], m.ty[i], V.cleaveRadius, V.cleaveCast, {
     owner: m.id[i], hurts: 'player', damage: monsterDamage(w, i) * V.cleaveMult, dtype: DAMAGE_INDEX.physical,
   });
-  const s = bossState<VarkusState>(w);
+  const s = bossState<VarkusState>(w, i);
   s.gateId = slam.id;
   s.held = 0;
   s.castFace = m.facing[i];
@@ -446,7 +446,7 @@ function spikePattern(w: World, i: number, pattern: number, x: number, y: number
  */
 function crowdsFavour(w: World, i: number, t: PlayerState): void {
   const m = w.monsters;
-  const s = bossState<VarkusState>(w);
+  const s = bossState<VarkusState>(w, i);
   const damage = monsterDamage(w, i) * V.spikeMult;
   const pattern = s.pattern;
   s.pattern = (s.pattern + 1) % 3;
@@ -489,7 +489,7 @@ function houndsNear(w: World, i: number, r: number): number {
 }
 
 const canSummon = (w: World, i: number): boolean =>
-  !fieldFull(w) && free(w, V.summonCast + 0.3) && houndsNear(w, i, V.summonCountRadius) < V.summonCap;
+  !fieldFull(w) && free(w, i, V.summonCast + 0.3) && houndsNear(w, i, V.summonCountRadius) < V.summonCap;
 
 // --- the brain ---------------------------------------------------------------------------------------------------
 
@@ -505,14 +505,14 @@ export function varkusBrain(): Brain {
       {
         every: V.crowdEvery, first: V.crowdFirst, cast: V.crowdCast, release: V.crowdRelease, phase: 3, castAttack: 'spikes',
         // Not over a pending mark (its strike and a pattern could cover each other's way out), not round anyone held.
-        when: (w, i) => bossState<VarkusState>(w).markStrikeAt <= w.time && !heldNear(w, i, V.crowdReach),
+        when: (w, i) => bossState<VarkusState>(w, i).markStrikeAt <= w.time && !heldNear(w, i, V.crowdReach),
         onCast: crowdsFavour,
         run: () => undefined,
       },
       {
         every: V.markEvery, first: V.markFirst, cast: V.markCast, release: V.markRelease, castAttack: 'mark',
         when: (w, i) =>
-          bossState<VarkusState>(w).markStrikeAt <= w.time && w.time >= bossState<VarkusState>(w).chargeUntil && !spikesPending(w, i) &&
+          bossState<VarkusState>(w, i).markStrikeAt <= w.time && w.time >= bossState<VarkusState>(w, i).chargeUntil && !spikesPending(w, i) &&
           markTarget(w, i) !== null,
         run: executionMark,
       },
@@ -529,7 +529,7 @@ export function varkusBrain(): Brain {
       {
         every: V.whirlEvery, first: V.whirlFirst, cast: V.whirlCast, phase: 2, castAttack: 'whirl', range: V.whirlRange,
         channel: V.whirlChannel, release: V.whirlRelease,
-        when: (w, _i, t) => !held(t) && free(w, V.whirlCast + V.whirlChannel + V.whirlRelease),
+        when: (w, i, t) => !held(t) && free(w, i, V.whirlCast + V.whirlChannel + V.whirlRelease),
         onCast: (w, i) => chainWhirl(w, i, V.whirlRadius, V.whirlCast, false, 0, 0),
         run: (w, i) => chainWhirl(w, i, V.whirlRadius, V.whirlChannel, true, V.whirlMult, V.whirlTick),
         // He walks his blades at his target — but never into one who is held (they couldn't step aside).
@@ -541,14 +541,14 @@ export function varkusBrain(): Brain {
       {
         every: V.chargeEvery, first: V.chargeFirst, cast: V.chargeCast, range: V.chargeRange, attack: 'charge', channel: V.chargeChannel,
         release: V.chargeRelease,
-        when: (w, i, t) => !held(t) && !spikesPending(w, i) && free(w, V.chargeCast + V.chargeChannel + V.chargeRelease + 0.2),
+        when: (w, i, t) => !held(t) && !spikesPending(w, i) && free(w, i, V.chargeCast + V.chargeChannel + V.chargeRelease + 0.2),
         onCast: chargeTelegraph,
         run: chargeRelease,
         tick: chargeTick,
       },
       {
         every: V.cleaveEvery, first: V.cleaveFirst, cast: V.cleaveCast, release: V.cleaveRelease, range: V.cleaveRange,
-        when: (w, i, t) => !held(t) && !spikesPending(w, i) && free(w, V.cleaveCast + V.cleaveRelease),
+        when: (w, i, t) => !held(t) && !spikesPending(w, i) && free(w, i, V.cleaveCast + V.cleaveRelease),
         onCast: cleaveTelegraph,
         run: (w, i) => attackEvent(w, i, 'slam', w.monsters.tx[i], w.monsters.ty[i]),
       },
@@ -560,7 +560,7 @@ export function varkusBrain(): Brain {
       leapTick(w, i);
       return;
     }
-    const s = bossState<VarkusState>(w);
+    const s = bossState<VarkusState>(w, i);
     if (m.state[i] === MSTATE.cast && s.gateId >= 0) holdGate(w, i, s);
     commander(w, i, t, dx, dy, d, hunting);
     if (m.state[i] !== MSTATE.cast) {

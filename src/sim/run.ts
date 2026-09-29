@@ -121,6 +121,7 @@ export function createWorld(config: RunConfig, capacities: StoreCapacities = def
     mapEvent: config.mode === 'map' ? createMapEvent(config.event) : null,
     roster: rosterFor(config.theme),
     boss: { phase: 1, roar: 0, state: null },
+    bossStates: new Map(),
     events: new EventBuffer(),
     outcomes: [],
     view,

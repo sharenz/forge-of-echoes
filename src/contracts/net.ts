@@ -20,7 +20,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 9: Prefix/Suffix Runes, area ingredient sources and advanced equipment bases.
 // 10: durable crafting history, Scrap services, Bounty maps and refundable territory fees.
 // 11: six map themes, promoted final bosses, no wave-3 lieutenant and transferred completion rewards.
-export const PROTOCOL_VERSION = 11;
+// 12: advanced ingredients, map crafting flags, four more events and independent twin bosses.
+export const PROTOCOL_VERSION = 12;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;

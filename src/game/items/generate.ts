@@ -108,7 +108,7 @@ export interface UniqueOptions {
   isNew?: boolean;
 }
 
-/** Generate a unique with rolled implicit and mod values. Uniques have no stability (never craftable). */
+/** Generate a unique with rolled implicit and mod values. Crown Fragments can refine values without Stability. */
 export function generateUnique(uniqueId: UniqueId, rng: Rng, opts: UniqueOptions = {}): EquipmentItem {
   const def = getUnique(uniqueId);
   const base = getBase(def.baseId);

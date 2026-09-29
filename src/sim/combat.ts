@@ -12,7 +12,7 @@ import {
 } from './constants';
 import { applyDebuff, cleanseAll, clearDebuffs, effectiveResist, isActive, shockMult } from './debuffs';
 import { rollKillLoot } from './hooks';
-import { mapEventKill } from './map-events';
+import { crownPending, mapEventKill } from './map-events';
 import { grantXp, spawnDrops } from './loot';
 import { DAMAGE_INDEX, damageTypeAt } from './math';
 import { refreshLiving } from './player';
@@ -239,15 +239,23 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
   removeOwnedAreas(w, m.id[i]);
   if (w.memory.size > 0) w.memory.delete(m.id[i]);
   const eventReward = mapEventKill(w, m.id[i], credited);
+  w.bossStates.delete(m.id[i]);
   m.release(i);
   recordCorpse(w, kind, x, y);
+  let finalBoss = false;
   if (isBoss) {
-    w.director.bossDefeated = true;
-    w.director.bossDeathX = x;
-    w.director.bossDeathY = y;
+    let survivor = -1;
+    for (let j = 0; j < m.hwm; j++) if (m.alive[j] && (m.flags[j] & MFLAG.boss)) { survivor = j; break; }
+    finalBoss = survivor < 0 && !crownPending(w);
+    w.director.bossDefeated = finalBoss;
+    if (survivor >= 0) {
+      w.director.bossId = m.id[survivor];
+      w.boss = w.bossStates.get(m.id[survivor]) ?? w.boss;
+    }
+    if (finalBoss) { w.director.bossDeathX = x; w.director.bossDeathY = y; }
     // The map is won (the director clears it next tick, after the players' own update): lift the
     // survivors' debuffs now, so no burn or bleed ticks in between.
-    for (const p of w.living) cleanseAll(w, p);
+    if (finalBoss) for (const p of w.living) cleanseAll(w, p);
   }
   def.onDeath?.(w, x, y, credited);
 
@@ -255,7 +263,7 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
     w.kills++;
     const killer = source > 0 ? w.playerById[source] : undefined;
     w.outcomes.push({ t: 'kill', playerId: killer ? killer.id : 0, kind, rarity, isLieutenant, isBoss });
-    if (isBoss) w.outcomes.push({ t: 'bossDefeated' });
+    if (finalBoss) w.outcomes.push({ t: 'bossDefeated' });
     if (killer && !killer.dead) {
       const s = killer.stats;
       if (s.lifeOnKill > 0) killer.life = Math.min(s.maxLife, killer.life + s.lifeOnKill);

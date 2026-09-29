@@ -187,7 +187,7 @@ Luck affixes (item quantity / rarity) are personal: they raise only their wearer
 
 **Saved equipment:** phase-2 affix revision 2 is stored per item. Older rolls migrate once to the best new tier unlocked by the old tier’s item-level gate (also bounded by the item’s level), preserving their relative roll within the range. Names, history, scars, stability, seals, fractures and bench-crafted marks survive. Lowest-tier values and the starting kit remain unchanged.
 
-**Uniques** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tier 1, item level 4: none; Tier 2, item level 10: The Patient Spark; Tier 3, item level 16: + Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5+: all four), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties and cannot be crafted:
+**Uniques** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tier 1, item level 4: none; Tier 2, item level 10: The Patient Spark; Tier 3, item level 16: + Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5+: all four), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties. Only Crown Fragments can reroll their numeric modifiers; ordinary and bench crafts cannot change them:
 
 | Unique | Base | Effects | Flavour |
 |---|---|---|---|
@@ -201,7 +201,7 @@ Luck affixes (item quantity / rarity) are personal: they raise only their wearer
 **Stability:**
 - Every non-unique item has `maxStability` from its base; it starts full.
 - Each operation costs stability.
-- **Scar risk:** if the remaining stability after paying is ≤ 2 (≤ 3 on Glassbone), there's a 35% chance to gain a scar. Scars are a permanent negative line; items can have at most 2, never the same one twice:
+- **Scar risk:** if the remaining stability after paying is ≤ 2 (≤ 3 on Glassbone), there's a 35% chance to gain a scar. Scars persist until removed with Scar Balm; items can have at most 2, never the same one twice:
 
   | Scar | Drawback |
   |---|---|
@@ -230,8 +230,15 @@ Luck affixes (item quantity / rarity) are personal: they raise only their wearer
 | Fracture Core | transform | 3 | **Choose an affix:** it becomes permanently fractured, immune to everything. One fracture per item. |
 | Prefix Rune | shape | 3 | Reforges all unsealed, unfractured prefixes, keeping their count and every suffix. Keeps rarity and name. |
 | Suffix Rune | shape | 3 | Reforges all unsealed, unfractured suffixes, keeping their count and every prefix. Keeps rarity and name. |
+| Scar Balm | remove | 0 | Removes the oldest scar, even on Finished equipment. Preserves affixes, seals and Stability. |
+| Anneal | refine | 0 | Permanently loses 1 maximum Stability, then restores current Stability to that maximum. Requires at least two missing Stability. Keeps scars, seals and lifetime costs. |
+| Graft | transform | 3 | Choose an unprotected affix: replace its family with a different eligible family of the same prefix/suffix type and exact tier. Keeps all other affixes, rarity and name. |
+| Transmute | transform | 3 | Change to a random different compatible base of the same class. Rerolls implicit values; preserves affixes, scars, name, item level, UID and Stability budget. Must be unequipped; equip requirements and base properties can change. |
+| Echo Shard | refine | 2 | Roll each unprotected affix value twice within its tier and take the higher new roll. A new roll can still be worse than the previous value. |
+| Crown Fragment | refine | 0 | Reroll a Unique's numeric modifiers within their defined ranges. Keeps implicit values, identity and special behaviour. No Stability or scars. |
 
-Currencies stack to 40 (Fracture Core, Void Needle, Reliquary Key and both Runes to 20). Map currencies cost no stability.
+
+Currencies stack to 40 (Fracture Core, Void Needle, Reliquary Key and both Runes and all nine advanced ingredients to 20). Map currencies cost no stability.
 
 **Rune sources:** the Glass Sepulchre boss has a 25% chance to drop one Prefix Rune on Tier 3+ maps;
 the Ember Vault boss has a 25% chance to drop one Suffix Rune on Tier 3 maps (the area's ceiling).
@@ -239,6 +246,27 @@ These are extra independent rolls per living player, unaffected by quantity/rari
 ordinary currency rolls, chests or merchant offers. Both are tradeable and have Crafting Stash slots.
 Runes use normal scar rules and break seals after the operation. A rune with no eligible target affix is
 rejected without spending the rune, Stability or RNG. Previews show preserved affixes and exact family/tier odds.
+
+**Advanced ingredient sources** (extra rolls per living player, independent of quantity/rarity):
+
+| Ingredient | Source |
+|---|---|
+| Scar Balm | Glass Sepulchre boss, T3+, 15% |
+| Anneal | Crown Foundry boss, T5+, 20% |
+| Graft | Winter Throne boss, T5+, 20% |
+| Transmute | Ember Vault boss, T3, 15% |
+| Compass | Champion's Approach boss, T5+, 20% |
+| Echo Shard | Echo Rift completion, T3+, 50% |
+| Twin Ink | Each defeated Vaultbreaker carrier, T3+, 20% |
+| Void Splinter | Wound completion, T3+, guaranteed |
+| Crown Fragment | Second Crown completion, T5+, guaranteed |
+
+All are tradeable, have Crafting Stash slots and stay out of ordinary currency rolls. Graft, Transmute and
+Echo Shard use the ordinary scar rule and break seals after protection applies. Transmute's scar risk uses
+the original material; any new scar must fit the resulting base. Scar Balm and Anneal preserve
+seals. Lifetime crafting/repair counters survive every transformation and reload. Graft previews exact family
+odds at the chosen tier, Transmute lists equip-compatible candidates, and Echo Shard shows the probability
+of beating each current value. Invalid and redundant crafts consume nothing.
 
 Tooltips and the craft preview show exact odds, for example "Adds one of 5 fire affixes: Blazing 34%, Smouldering 28%, …", filtered by item class, free prefix/suffix room and item level.
 
@@ -262,10 +290,13 @@ Hard currencies (Reforging Ember, Tempering Catalyst and Fracture Core) retain t
 
 
 **Map currencies:**
-- **Map Dust:** normal → magic (1 or 2 danger mods, 50/50), or rerolls the danger mods of a magic map (1–2) or a rare map (3–4, 50/50). A reward mod is kept.
+- **Map Dust:** normal → magic (1 or 2 danger mods, 50/50), or rerolls the danger mods of a magic map (1–2) or a rare map (3–4, 50/50). Both reward mods are kept when Twin Ink has added a second.
 - **Threat Glyph:** adds one danger+reward mod; the map becomes rare at 3+ danger mods (max 4).
 - **Reward Ink:** adds one reward-only mod (max 1 per map; it doesn't count toward rarity).
-- **Void Needle:** corrupts the map; after that it can't be modified. Outcomes (the +1 tier outcome is left out at Tier 15):
+- **Compass:** marks a map below T15 so its guaranteed chest map is one tier higher (100%, rather than 25%). The optional extra map roll is unchanged.
+- **Twin Ink:** adds a second distinct reward-only mod to a map that already has one. Once per map; the flag and both rewards survive saving and Map Dust. Ordinary Reward Ink still adds at most one.
+- **Void Splinter:** removes corruption and every corruption-marked, corrupted-kind or Echo mod; quality becomes 0. Preserves tier, ordinary mods, Bounty, Compass and Twin Ink. Crafting becomes available again.
+- **Void Needle:** corrupts the map; further crafting requires a Void Splinter. Outcomes (the +1 tier outcome is left out at Tier 15):
 
   | Chance | Outcome |
   |---|---|
@@ -387,22 +418,39 @@ an extra Rare. Its twin-boss event and Crown Fragment arrive with the remaining 
 The rules retain legacy map setups across a restart. A run that cannot be restored refunds its original
 map and entrance key together; discovery and its per-run receipt are also one transaction.
 
-**Map events.** At creation, each map privately rolls at most one encounter (Bounty maps guarantee The Hunted; otherwise 25% base: 12.5% The Hunted,
-12.5% Echo Rift), appearing in wave 2 or 4. The actual roll is omitted from the client's setup and only revealed
-when it occurs. Map Device displays the odds, never the roll. Forge/arena areas add 5/10 percentage points to
-The Hunted; crypt/vault areas add 10/5 points to Echo Rift. Commanded adds 8 points and Restless 5 to The Hunted;
-Teeming adds 5 and Echoing 10 to Echo Rift. Combined chance caps at 65%, preserving relative event weights.
-- **The Hunted:** a three-second warning precedes one rare pursuer from the current roster, with Swift and
-  Fierce. Its final credited kill adds one guaranteed Rare equipment item per living player, at the map's
-  monster level and with the area's equipment preferences. Normal kill rewards still apply.
-- **Echo Rift:** an optional violet ground sigil with an off-screen direction marker. Coming within 70 units
-  starts a three-second warning, then three bursts of three Swift magic monsters, two seconds between cleared
-  bursts. The ninth kill adds one Reforging Ember and one Map Dust per living player. An ignored rift closes
-  before the final boss. There is no failure timer, and its monsters still give ordinary XP and loot.
-- Active encounters give up to 20 seconds of breathing room before ordinary wave timers and streams resume;
-  they never indefinitely hold the map. Timers freeze while no one is alive. The HUD shows progress and the
-  completion reward. Map cleanup cannot award event rewards. Restarted fights keep their original event roll;
-  maps created before this feature retain no event.
+**Map events.** At creation, each map privately rolls at most one encounter. Bounty maps guarantee The Hunted.
+Otherwise a 25% base chance is divided equally among eligible encounters: Hunted/Echo Rift at T1+, plus
+Blackout/Vaultbreakers/Wound at T3+, plus Second Crown at T5+. Mid-map events appear in wave 2 or 4; Second
+Crown appears with the final boss in wave 6. The server omits the plan from the client's setup; Map Device
+shows exact odds rather than the roll. Forge/arena areas add 5/10 percentage points to Hunted; crypt/vault
+add 10/5 to Echo Rift. Eligible T3+ events gain +5 Blackout in forges, +5 Wound in crypts, +10 Vaultbreakers in
+vaults; T5+ arenas add +5 Second Crown. Commanded adds +8 Hunted, Restless +5 Hunted, Teeming +5 Echo Rift,
+and Echoing +10 Echo Rift. Combined odds cap at 65% while preserving their proportions.
+
+- **The Hunted:** three-second warning, then one Swift/Fierce rare pursuer. Defeating it adds a Rare item per
+  living player, at the map's item level and using area preferences.
+- **Echo Rift:** optional violet sigil, activated within 70 units. A three-second warning precedes three
+  packs of three Swift magic monsters, two seconds between packs. Completion gives Reforging Ember and
+  Map Dust, plus a 50% Echo Shard chance on T3+.
+- **Blackout:** the floor dims while actors and attack cues retain their brightness. Three beacons appear
+  sequentially; approaching each warns for three seconds and releases three Swift magic guards. Defeat all
+  nine to restore the light and receive one Binding Seal and 4–6 Scrap per living player.
+- **Vaultbreakers:** a three-second warning reveals three Swift magic carriers. They flee for 40 seconds,
+  with ordinary collision, chill and knockback. Each kill adds one ordinary currency roll and a 20% Twin Ink
+  chance. Escaped carriers grant no XP or loot; partial rewards remain earned. Countdown and remaining
+  carriers are visible, and every timer freezes while the party is absent or dead.
+- **Second Crown:** the final boss's twin arrives after a three-second warning. Each has independent attack
+  timers, phases and summons. Both drop normal boss loot, but only the last death grants Atlas/map completion
+  and one Crown Fragment per living player. Killing the first during the warning cannot skip the second.
+- **The Wound:** optional red sigil with three warning seconds before the first of three packs of three.
+  The final pack includes a Swift/Fierce rare guardian. Each pulse warns for 1.5 seconds before eruptions at
+  players' previous positions; movement avoids them. The ninth kill gives one Void Splinter per living player.
+
+Ignored optional sigils and unfinished beacon paths close before the final boss. Active encounters give at
+most 20 seconds of breathing room before ordinary waves resume; they never indefinitely stall normal waves.
+Kill rewards are per living player, on top of ordinary loot, and cleanup/overkill never duplicate them.
+Completed encounter text remains for five seconds, including after the final boss. Restarts preserve hidden
+creation plans; legacy event-free maps stay event-free.
 
 ## 8. Waves & monsters (the sim owns these numbers)
 

@@ -1,3 +1,5 @@
+import { MAP_EVENT_NAMES } from '../../data/progression/map-events';
+import type { MapEventKind } from '../../contracts/map-events';
 // Top of the screen, laid out as one grid over the part of the screen no docked panel covers (see
 // `.fe-hudarea` in hud.css):
 //   left   party frames, party invites, trade requests and the open-trade chip
@@ -229,13 +231,31 @@ function WaveCard() {
 function MapEventCard() {
   const event = useUi(s => s.hud?.run?.event ?? null, shallowEqual);
   if (!event) return null;
-  const hunted = event.kind === 'hunted';
-  const text = event.phase === 'complete' ? (hunted ? 'Hunter defeated · rare item dropped' : 'Rift sealed · crafting materials dropped')
-    : event.phase === 'available' ? 'Approach the rift to awaken it · optional'
-    : event.phase === 'warning' ? (hunted ? 'A rare hunter is approaching' : 'The rift is opening')
-    : hunted ? 'Defeat the pursuing hunter for a rare item' : `${event.total - event.remaining} / ${event.total} echoes defeated · crafting materials`;
-  return <div class="fe-map-event" role="status" aria-label={hunted ? 'The Hunted' : 'Echo Rift'}>
-    <b>{hunted ? 'The Hunted' : 'Echo Rift'}</b><span>{text}</span>
+  const available: Record<MapEventKind, string> = {
+    hunted: '', echoRift: 'Approach the rift to awaken it · optional', blackout: 'Approach the beacon and defeat its guards to restore light',
+    vaultbreakers: '', secondCrown: '', wound: 'Approach to open the Wound · three packs and eruptions · optional',
+  };
+  const active: Record<MapEventKind, string> = {
+    hunted: 'Defeat the pursuing hunter for a rare item', echoRift: `${event.total - event.remaining} / ${event.total} echoes defeated · crafting materials`,
+    blackout: `${Math.floor((event.total - event.remaining) / 3)} / 3 beacons restored · Binding Seal and Scrap`,
+    vaultbreakers: `${event.remaining} carriers left · ${event.seconds ?? 40}s to escape · each drops currency, 20% Twin Ink`,
+    secondCrown: `${event.remaining} crowns remain · defeat both for a Crown Fragment`,
+    wound: `${event.total - event.remaining} / ${event.total} guardians defeated · dodge eruptions · Void Splinter`,
+  };
+  const done: Record<MapEventKind, string> = {
+    hunted: 'Hunter defeated · rare item dropped', echoRift: 'Rift sealed · crafting materials dropped',
+    blackout: 'Light restored · Binding Seal and Scrap dropped', vaultbreakers: 'All carriers defeated · materials dropped',
+    secondCrown: 'Both crowns defeated · Crown Fragment dropped', wound: 'Wound closed · Void Splinter dropped',
+  };
+  const text = event.phase === 'complete' ? done[event.kind]
+    : event.phase === 'failed' ? `${event.remaining} carriers escaped · collected rewards are yours`
+    : event.phase === 'available' ? available[event.kind]
+    : event.phase === 'warning' ? event.kind === 'secondCrown' ? 'A second boss is arriving · both must fall'
+      : event.kind === 'vaultbreakers' ? 'Three carriers are escaping · 40 seconds to catch them'
+      : event.kind === 'hunted' ? 'A rare hunter is approaching' : 'Guardians are awakening'
+    : active[event.kind];
+  return <div class="fe-map-event" role="status" aria-label={MAP_EVENT_NAMES[event.kind]}>
+    <b>{MAP_EVENT_NAMES[event.kind]}</b><span>{text}</span>
   </div>;
 }
 

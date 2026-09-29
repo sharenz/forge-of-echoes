@@ -125,10 +125,10 @@ describe('Void Needle', () => {
     for (const m of craftAll(map('ashenForge', 15), 'voidNeedle', 300)) expect(m.tier).toBe(15);
   });
 
-  it('locks the map: no map currency works on a corrupted map', () => {
+  it('locks ordinary crafting until corruption is removed', () => {
     const m = craftAll(map(), 'voidNeedle', 1)[0];
     for (const id of ['mapDust', 'threatGlyph', 'rewardInk', 'voidNeedle'] as const) {
-      expect(mapCraftError(m, id)).toBe('Corrupted maps cannot be modified.');
+      expect(mapCraftError(m, id)).toBe('Use a Void Splinter to remove corruption before modifying this map.');
     }
   });
 
@@ -157,9 +157,9 @@ describe('applyCurrency on maps', () => {
   it('rejects without consuming anything', () => {
     const m: MapItem = { ...map(), corrupted: true };
     const ch = workshop(m);
-    expect(rules.craftingTargetError(ch, 'dust', m.uid)).toBe('Corrupted maps cannot be modified.');
-    expect(expectErr(rules.applyCurrency(ch, 'dust', m.uid))).toBe('Corrupted maps cannot be modified.');
-    expect(rules.craftPreview(ch, 'dust', m.uid)).toEqual(['Corrupted maps cannot be modified.']);
+    expect(rules.craftingTargetError(ch, 'dust', m.uid)).toBe('Use a Void Splinter to remove corruption before modifying this map.');
+    expect(expectErr(rules.applyCurrency(ch, 'dust', m.uid))).toBe('Use a Void Splinter to remove corruption before modifying this map.');
+    expect(rules.craftPreview(ch, 'dust', m.uid)).toEqual(['Use a Void Splinter to remove corruption before modifying this map.']);
   });
 
   it('crafts a map sitting in the map device', () => {

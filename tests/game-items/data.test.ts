@@ -179,9 +179,9 @@ describe('currencies', () => {
     }
     for (const id of CURRENCY_IDS) {
       const c = CURRENCIES[id];
-      const rare = id === 'fractureCore' || id === 'voidNeedle' || id === 'reliquaryKey' || id === 'prefixRune' || id === 'suffixRune';
+      const rare = id === 'fractureCore' || id === 'voidNeedle' || id === 'reliquaryKey' || id === 'prefixRune' || id === 'suffixRune' || ['scarBalm', 'anneal', 'graft', 'transmute', 'echoShard', 'crownFragment', 'compass', 'twinInk', 'voidSplinter'].includes(id);
       expect(c.maxStack, id).toBe(rare ? 20 : 40);
-      expect(c.needsAffixChoice, id).toBe(id === 'catalyst' || id === 'seal' || id === 'fractureCore');
+      expect(c.needsAffixChoice, id).toBe(id === 'catalyst' || id === 'seal' || id === 'fractureCore' || id === 'graft');
       expect(c.description, id).toMatch(/^[A-Z][a-z]+s\b/);
       expect(c.description.endsWith('.'), id).toBe(true);
     }
@@ -244,7 +244,7 @@ describe('uniques, scars, flasks, names', () => {
 
   it('exposes plain ContentInfo records', () => {
     expect(Object.keys(BASE_INFO)).toHaveLength(32);
-    expect(Object.keys(CURRENCY_INFO)).toHaveLength(19);
+    expect(Object.keys(CURRENCY_INFO).sort()).toEqual([...CURRENCY_IDS].sort());
     expect(Object.keys(FLASK_INFO)).toHaveLength(2);
     expect(Object.keys(UNIQUE_INFO)).toHaveLength(4);
     expect(BASE_INFO.ashwoodWand).toEqual({

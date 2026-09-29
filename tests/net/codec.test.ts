@@ -73,6 +73,12 @@ describe('snapshot codec', () => {
     v.run.event = { kind: 'echoRift', phase: 'active', x: 345, y: -123, remaining: 6, total: 9 };
     snapshot.decode(encoder.encode(v, 1, 1), reader, strings);
     expect(snapshot.run.event).toEqual(v.run.event);
+    v.run.event = { kind: 'vaultbreakers', phase: 'active', x: 20, y: -40, remaining: 2, total: 3, seconds: 31 };
+    snapshot.decode(encoder.encode(v, 1, 2), reader, strings);
+    expect(snapshot.run.event).toEqual(v.run.event);
+    v.run.event = { kind: 'secondCrown', phase: 'complete', x: 30, y: -50, remaining: 0, total: 2 };
+    snapshot.decode(encoder.encode(v, 1, 3), reader, strings);
+    expect(snapshot.run.event).toEqual(v.run.event); // No stale countdown from the previous event.
     v.run.event = null;
     snapshot.decode(encoder.encode(v, 1, 2), reader, strings);
     expect(snapshot.run.event).toBeNull();
@@ -296,17 +302,17 @@ describe('snapshot codec', () => {
     expect(flagsOf(ground)).toBe(4 | (1 << 3));
   });
 
-  it('stamps version 6 and rejects older snapshots, so a stale bundle reloads instead of limping on', () => {
-    // Revealed event state is new in v6; older decoders must reload.
-    expect(SNAPSHOT_VERSION).toBe(6);
+  it('stamps version 7 and rejects older snapshots, so a stale bundle reloads instead of limping on', () => {
+    // Encounter countdowns change the v7 byte layout; older decoders must reload.
+    expect(SNAPSHOT_VERSION).toBe(7);
     const v = richWorld();
     const buf = new Uint8Array(createSnapshotEncoder().encode(v, 1, 1));
-    expect(buf[0]).toBe(6);
-    for (const version of [3, 4, 5]) {
+    expect(buf[0]).toBe(7);
+    for (const version of [3, 4, 5, 6]) {
       const old = buf.slice();
       old[0] = version;
       expect(() => decodeSnapshot(old)).toThrow(SnapshotDecodeError);
-      expect(() => decodeSnapshot(old)).toThrow(`snapshot version ${version} != 6`);
+      expect(() => decodeSnapshot(old)).toThrow(`snapshot version ${version} != 7`);
     }
   });
 

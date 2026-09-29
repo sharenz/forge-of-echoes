@@ -1,3 +1,4 @@
+import { advancedCraftError, advancedCraftOp, advancedCraftPreview, graftTargetError, isAdvancedEquipmentCurrency, preservesSeals } from './advanced-crafting';
 import { nextCraftCount } from './crafting-history';
 // The Workbench: every equipment currency with exact GAME_SPEC §6 semantics.
 //
@@ -147,6 +148,7 @@ export function affixTargetError(item: EquipmentItem, currencyId: CurrencyId, af
   const def = getAffix(a.affixId);
   if (!def) return 'That affix can no longer be crafted.';
   switch (currencyId) {
+    case 'graft': return graftTargetError(item, affixIndex);
     case 'catalyst': {
       if (a.fractured) return `${def.name} is fractured and immune to crafting.`;
       if (a.sealed) return `${def.name} is sealed and protected from this craft.`;
@@ -186,11 +188,13 @@ export function equipmentCraftError(item: EquipmentItem, currencyId: CurrencyId,
   if (isMapCurrency(currencyId)) return `${def.name} can only be applied to maps.`;
   const base = findBase(item.baseId);
   if (!base) return 'This item can no longer be crafted.';
-  if (item.rarity === 'unique') return 'Unique items cannot be crafted.';
-  if (item.stability <= 0) return 'This item is Finished. Repair Stability at the bench to continue.';
+  if (currencyId === 'crownFragment') return advancedCraftError(item, currencyId);
+  if (item.rarity === 'unique') return 'Only a Crown Fragment can refine Unique items.';
+  if (item.stability <= 0 && !preservesSeals(currencyId)) return 'This item is Finished. Repair Stability at the bench to continue.';
   if (item.stability < def.stabilityCost) {
     return `${def.name} needs ${def.stabilityCost} Stability; this item has ${item.stability} left.`;
   }
+  if (isAdvancedEquipmentCurrency(currencyId)) return advancedCraftError(item, currencyId, affixIndex);
   const count = item.affixes.length;
 
   switch (currencyId) {
@@ -288,6 +292,7 @@ function resolve(ch: CharacterSave, currencyUid: string, targetUid: string): Res
     return target.item.kind === 'map' ? `${def.name} is applied by the map rules.` : `${def.name} can only be applied to maps.`;
   }
   if (target.item.kind !== 'equipment') return `${def.name} can only be applied to equipment.`;
+  if (def.id === 'transmute' && target.location.kind === 'equipment') return 'Unequip this item before changing its base with Transmute.';
   return {
     currency: currency as Resolved['currency'],
     target: target as Resolved['target'],
@@ -315,6 +320,7 @@ interface OpResult {
 }
 
 function performOp(item: EquipmentItem, base: BaseDef, def: CurrencyDef, rng: Rng, affixIndex?: number): OpResult {
+  if (isAdvancedEquipmentCurrency(def.id)) return advancedCraftOp(item, def.id, rng, affixIndex);
   switch (def.id) {
     case 'prefixRune':
     case 'suffixRune': {
@@ -440,11 +446,11 @@ export function craftEquipment(
   if (error) return fail(error);
 
   const op = performOp(item, base, def, rng, affixIndex);
-  let next: EquipmentItem = { ...op.item, stability: Math.max(0, item.stability - def.stabilityCost) };
+  let next: EquipmentItem = { ...op.item, stability: Math.max(0, op.item.stability - def.stabilityCost) };
 
   // Seals protect for exactly one operation, then break (sealing itself is not that operation).
   let line = op.line;
-  if (currencyId !== 'seal') {
+  if (currencyId !== 'seal' && !preservesSeals(currencyId)) {
     const held = item.affixes
       .map((a, i) => ({ a, i }))
       .filter(({ a, i }) => a.sealed && i !== op.targetIndex)
@@ -457,7 +463,8 @@ export function craftEquipment(
   let scarText: string | null = null;
   const chance = scarChanceFor(item, base, def.stabilityCost);
   if (chance > 0 && rng.chance(chance)) {
-    const scar = rng.weighted(eligibleScars(base, item.scars), (s) => s.weight);
+    // Transmute can change the item's defence properties. Its new scar must fit the resulting base.
+    const scar = rng.weighted(eligibleScars(findBase(next.baseId)!, next.scars), (s) => s.weight);
     if (scar) {
       const value = rollValue(rng, scar.min, scar.max);
       next = { ...next, scars: [...next.scars, { scarId: scar.id, value }] };
@@ -465,7 +472,7 @@ export function craftEquipment(
       lines.push(`Scarred: ${scarText}`);
     }
   }
-  const finished = next.stability <= 0;
+  const finished = next.rarity !== 'unique' && next.stability <= 0;
   if (finished) lines.push('Finished at 0 Stability');
   next = { ...next, craftCount: nextCraftCount(item), history: appendHistory(item.history, lines) };
 
@@ -624,6 +631,10 @@ export function equipmentCraftPreview(item: EquipmentItem, currencyId: CurrencyI
   let inclusion: OddsEntry[] = [];
   let inclusionExact = true;
 
+  if (isAdvancedEquipmentCurrency(currencyId)) {
+    const preview = advancedCraftPreview(item, currencyId);
+    lines.push(...preview.lines); outcomes = preview.outcomes;
+  }
   switch (currencyId) {
     case 'prefixRune':
     case 'suffixRune': {
@@ -745,7 +756,7 @@ export function equipmentCraftPreview(item: EquipmentItem, currencyId: CurrencyI
   }
 
   const cost = def.stabilityCost;
-  const after = Math.max(0, item.stability - cost);
+  const after = currencyId === 'anneal' ? item.maxStability - 1 : Math.max(0, item.stability - cost);
   lines.push(cost === 0 ? 'Costs no Stability.' : `Costs ${cost} Stability, leaving ${after}.`);
   const scarChance = scarChanceFor(item, base, cost);
   if (scarChance > 0) {
@@ -756,7 +767,7 @@ export function equipmentCraftPreview(item: EquipmentItem, currencyId: CurrencyI
     lines.push('No scar risk.');
   }
   if (cost > 0 && after === 0) lines.push('Stability reaches 0: the item will be Finished.');
-  if (currencyId !== 'seal') {
+  if (currencyId !== 'seal' && !preservesSeals(currencyId)) {
     const sealed = item.affixes.filter((a) => a.sealed).map(affixName);
     if (sealed.length && currencyId !== 'fractureCore') {
       lines.push(`The seal protects ${joinWords(sealed)} from this craft, then breaks.`);

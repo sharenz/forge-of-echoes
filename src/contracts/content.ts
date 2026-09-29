@@ -55,6 +55,12 @@ export const EQUIPMENT_CURRENCY_IDS = [
   'fractureCore',   // Transform: fracture one chosen affix permanently (immune to all crafting)
   'prefixRune',     // Reforge prefixes while preserving suffixes
   'suffixRune',     // Reforge suffixes while preserving prefixes
+  'scarBalm',       // Remove the oldest scar without disturbing affixes
+  'anneal',         // Restore Stability, permanently sacrificing one maximum point
+  'graft',          // Replace a chosen affix family while retaining its side and tier
+  'transmute',      // Change to a compatible base of the same equipment class
+  'echoShard',      // Roll each unprotected affix value twice and keep the higher roll
+  'crownFragment',  // Reroll a unique's numeric modifiers, preserving its special behaviour
 ] as const;
 export const MAP_CURRENCY_IDS = [
   'mapDust',        // normal → magic, or reroll a magic/rare map's mods
@@ -62,6 +68,9 @@ export const MAP_CURRENCY_IDS = [
   'rewardInk',      // add one reward-only mod (costs map quality / is rarer)
   'voidNeedle',     // corrupt a map: random powerful outcome, then locked
   'reliquaryKey',   // consumed by the map device to enter the Sealed Reliquary
+  'compass',        // Guarantee the completion chest's progression map is one tier higher
+  'twinInk',        // Add a second distinct reward-only modifier
+  'voidSplinter',   // Remove corruption and its marked mods, sacrificing all quality
 ] as const;
 export const CURRENCY_IDS = [...EQUIPMENT_CURRENCY_IDS, ...MAP_CURRENCY_IDS] as const;
 export type CurrencyId = (typeof CURRENCY_IDS)[number];

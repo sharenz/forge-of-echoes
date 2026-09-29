@@ -572,7 +572,9 @@
   --cslot-icon-wide: 48px;
   display: flex;
   flex-direction: column;
-  justify-content: space-evenly;
+  justify-content: flex-start;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   gap: 6px;
   padding: 11px 10px 6px;
   box-sizing: border-box;
@@ -580,6 +582,7 @@
   height: calc(var(--cell) * 8 + 2px);
 }
 .fe-cstash__shelf {
+  flex: none;
   position: relative;
   padding: 10px 6px 5px;
   border: 1px solid rgba(201, 160, 100, 0.16);
@@ -613,15 +616,14 @@
   min-width: 0;
 }
 .fe-cstash--mapCurrency .fe-cstash__shelf {
-  flex: 1;
+  flex: none;
   display: flex;
   flex-direction: column;
 }
 .fe-cstash--mapCurrency .fe-cstash__row {
-  flex: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: auto;
 }
 
 /* one slot */

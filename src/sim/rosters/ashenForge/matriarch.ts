@@ -1,6 +1,6 @@
 // The Cinder Matriarch (Ashen Forge boss, final wave).
 import {
-  DAMAGE_INDEX, DT, MFLAG, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, TAU, bossState, clamp, empowerMult, extraProjectiles,
+  DAMAGE_INDEX, DT, MFLAG, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, TAU, bossState, phaseOf, clamp, empowerMult, extraProjectiles,
   faceTarget, fieldFull, fireHostile, meleeHit, setAnim, spawnArea, steer, stop, summon, toChase, type BossScript, type PlayerState, type World,
 } from '../api';
 import { MATRIARCH as M } from './tuning';
@@ -49,8 +49,8 @@ export function brainMatriarch(
   w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean,
 ): void {
   const m = w.monsters;
-  const b = bossState<MatriarchState>(w);
-  const phase = w.boss.phase;
+  const b = bossState<MatriarchState>(w, i);
+  const phase = phaseOf(w, i);
   const dmg = m.damage[i] * empowerMult(w, i);
   // The orb spiral runs alongside whatever else she is doing.
   if (b.spiral > 0) {
@@ -254,5 +254,5 @@ function meteorRain(w: World, i: number, b: MatriarchState, t: PlayerState, dmg:
     }
   }
   w.events.push({ t: 'monsterAttack', kind: 'cinderMatriarch', x: m.x[i], y: m.y[i], attack: 'meteor' });
-  b.meteorCd = M.meteorCd[w.boss.phase - 1];
+  b.meteorCd = M.meteorCd[phaseOf(w, i) - 1];
 }

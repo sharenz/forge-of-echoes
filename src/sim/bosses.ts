@@ -8,7 +8,7 @@ import { TAU } from './math';
 import type { MonsterDef } from './rosters/types';
 import { spawnMonster } from './spawn';
 import { MFLAG } from './stores';
-import type { PlayerState, World } from './world';
+import type { BossRuntime, PlayerState, World } from './world';
 
 /**
  * Whether the field is saturated for lieutenant and boss summons: SUMMON_FIELD_CAP or more monsters alive.
@@ -62,15 +62,20 @@ export function summonAt(w: World, i: number, kind: MonsterKind, x: number, y: n
 
 /** Start a boss encounter: phase 1 and a fresh script state. */
 export function startBoss(w: World, i: number, def: MonsterDef): void {
-  const b = w.boss;
+  const b: BossRuntime = w.bossStates.size === 0 ? w.boss : { phase: 1, roar: 0, state: null };
+  w.bossStates.set(w.monsters.id[i], b);
   b.phase = 1;
   b.roar = 0;
   b.state = def.boss ? def.boss.init(w, i) : null;
 }
 
-/** The boss script's own state (typed by the caller: `bossState<MyState>(w)`). */
-export function bossState<S>(w: World): S {
-  return w.boss.state as S;
+export function bossRuntime(w: World, i: number): BossRuntime {
+  return w.bossStates.get(w.monsters.id[i]) ?? w.boss;
+}
+
+/** The script state of this monster, including its own phase and attack timers. */
+export function bossState<S>(w: World, i: number): S {
+  return bossRuntime(w, i).state as S;
 }
 
 /**
@@ -87,7 +92,8 @@ export function driveBoss(
     return;
   }
   const m = w.monsters;
-  const b = w.boss;
+  if (!w.bossStates.has(m.id[i])) startBoss(w, i, def);
+  const b = bossRuntime(w, i);
   if (b.state === null) b.state = script.init(w, i);
   const frac = m.life[i] / m.maxLife[i];
   let want = 1;

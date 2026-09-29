@@ -235,6 +235,10 @@ reopen tuning for a specific problem rather than starting another general balanc
    (Scar Balm, Anneal, Graft, Transmute, Compass; event-only Echo Shard, Twin Ink, Void Splinter, Crown Fragment),
    remaining dead ends and rare barrier areas, keystone bosses with their own unique pools (needs many more
    uniques; only 4 exist).
+   **In progress, not deployed:** all nine ingredient operations and their targeted sources are implemented.
+   Blackout, Vaultbreakers, Second Crown and Wound are in validation, including independent twin-boss state,
+   timed escape rewards, crafting preservation and save/reload rules. Deeper routes, remaining rare/dead-end
+   areas and expanded exclusive unique pools are still outstanding; this does not complete P1.8.
 9. **Map tree v0** (15 nodes, map-only effects). Biggest scope trap: only once events and ingredients are proven.
 
 ## P2: character depth

@@ -192,7 +192,7 @@ function benchLimits(item: EquipmentItem): AffixLimits {
 
 /** Why no recipe at all can be used on this item right now (unique, finished, crafted affix); else null. */
 export function benchItemError(item: EquipmentItem): string | null {
-  if (item.rarity === 'unique') return 'Unique items cannot be crafted.';
+  if (item.rarity === 'unique') return 'Unique items cannot use bench recipes.';
   if (item.stability <= 0) return 'This item is Finished. Repair Stability at the bench to continue.';
   if (item.stability < BENCH_STABILITY_COST) {
     return `The Crafting Bench needs ${BENCH_STABILITY_COST} Stability; this item has ${item.stability} left.`;
@@ -355,7 +355,7 @@ export function applyBenchRecipe(ch: CharacterSave, targetUid: string, recipeId:
 export function clearCraftedAffix(ch: CharacterSave, targetUid: string): Result<CraftOutcome> {
   const t = resolveTarget(ch, targetUid);
   if (typeof t === 'string') return fail(t);
-  if (t.item.rarity === 'unique') return fail('Unique items cannot be crafted.');
+  if (t.item.rarity === 'unique') return fail('Unique items cannot use bench recipes.');
   const index = craftedAffixIndex(t.item);
   if (index < 0) return fail('This item has no crafted affix to clear.');
   const removed = t.item.affixes[index];

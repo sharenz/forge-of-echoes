@@ -255,7 +255,7 @@ export interface Director {
 }
 
 /**
- * The run's boss encounter (there is at most one boss per run). The core drives `phase` and `roar`
+ * One boss's encounter state. The core drives `phase` and `roar`
  * (bosses.ts); `state` belongs to the boss's BossScript (see rosters/types.ts) and is null until the
  * boss exists.
  */
@@ -294,7 +294,10 @@ export interface World {
   readonly mapEvent: import('./map-events').MapEventState | null;
   /** This map's monsters (THEME_ROSTER by RunConfig.theme; the hideout gets the Ashen Forge's). */
   readonly roster: Roster;
-  readonly boss: BossRuntime;
+  /** Primary boss alias, retained for the HUD and single-boss fixtures. */
+  boss: BossRuntime;
+  /** Independent script state keyed by generation-safe monster ID. */
+  readonly bossStates: Map<number, BossRuntime>;
   readonly events: EventBuffer;
   outcomes: SimOutcome[];
   readonly view: WorldView;

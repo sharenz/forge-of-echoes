@@ -1,3 +1,4 @@
+import { MAP_EVENT_COLORS, MAP_EVENT_NAMES } from '../data/progression/map-events';
 // Off-screen indicators: a pulsing chevron at the screen edge pointing at things worth walking to — rare packs,
 // the lieutenant, the boss, the reward chest, the return portal and allies — with a short plate for the
 // important ones. Drawn on 'top' (unlit, crisp). A target counts as visible (no marker) while any of its body or
@@ -114,9 +115,9 @@ export class Indicators {
     const v = f.view;
     this.placedCount = 0;
     const event = f.world.run.event;
-    if (event && event.phase !== 'complete') {
-      this.mark(pen, f, event.x, event.y, event.kind === 'hunted' ? [0.95, 0.68, 0.25] : [0.55, 0.35, 0.82],
-        event.kind === 'hunted' ? 'The Hunted' : 'Echo Rift', 5);
+    if (event && event.phase !== 'complete' && event.phase !== 'failed') {
+      this.mark(pen, f, event.x, event.y, MAP_EVENT_COLORS[event.kind],
+        MAP_EVENT_NAMES[event.kind], 5);
     }
     const near = this.near;
     near[0] = near[1] = near[2] = -1;

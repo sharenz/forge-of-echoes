@@ -16,7 +16,7 @@
 // Only one big cast at a time, with a short breather between them, so the patterns stay readable; the
 // volleys fill the gaps. Every freeze is the Ice Prison closing — a ring shown for its whole 2 s.
 import {
-  DAMAGE_INDEX, DT, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, TAU, areaAngle, areaLine, attackEvent, bossState, clamp,
+  DAMAGE_INDEX, DT, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, TAU, areaAngle, areaLine, attackEvent, bossState, phaseOf, clamp,
   clampToArena, extraProjectiles, faceTarget, fieldFull, fireHostile, fireHostileFrom, meleeHit, monsterDamage, moveAlong, nearestLiving,
   registerAreaEffect, setAnim, spawnArea, steer, stop, summonAt, toChase, type Area, type AreaOptions, type BossScript, type PlayerState, type World,
 } from '../api';
@@ -70,8 +70,8 @@ export const WARDEN_SCRIPT: BossScript<WardenState> = {
 };
 
 /** 0-based index of the current phase into the per-phase tables. */
-function phaseIndex(w: World): number {
-  return clamp(w.boss.phase, 1, 3) - 1;
+function phaseIndex(w: World, i: number): number {
+  return clamp(phaseOf(w, i), 1, 3) - 1;
 }
 
 /**
@@ -87,7 +87,7 @@ const NOVA_BURST = registerAreaEffect({
     const slot = a.owner >= 0 ? m.slotOf(a.owner) : -1;
     if (slot < 0) return;
     attackEvent(w, slot, 'nova', a.x, a.y);
-    const n = W.nova.shards[phaseIndex(w)] + extraProjectiles(w);
+    const n = W.nova.shards[phaseIndex(w, slot)] + extraProjectiles(w);
     const dmg = monsterDamage(w, slot) * W.nova.shardMult;
     const turn = areaAngle(a);
     const r0 = a.radius * W.nova.shardStart;
@@ -107,7 +107,7 @@ const NOVA_BURST = registerAreaEffect({
  */
 export function brainWarden(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
   const m = w.monsters;
-  const s = bossState<WardenState>(w);
+  const s = bossState<WardenState>(w, i);
   s.novaCd -= DT;
   s.volleyCd -= DT;
   s.spikesCd -= DT;
@@ -141,7 +141,7 @@ export function brainWarden(w: World, i: number, t: PlayerState | null, dx: numb
     m.attackCd[i] = W.meleeCd;
   }
 
-  const p = phaseIndex(w);
+  const p = phaseIndex(w, i);
   const phase = p + 1;
   if (s.gap <= 0) {
     if (phase >= 3 && s.blizzardCd <= 0) {
@@ -219,7 +219,7 @@ function release(w: World, i: number, s: WardenState, t: PlayerState | null): vo
 function shardVolley(w: World, i: number, t: PlayerState): void {
   const m = w.monsters;
   const V = W.volley;
-  const n = V.count[phaseIndex(w)] + extraProjectiles(w);
+  const n = V.count[phaseIndex(w, i)] + extraProjectiles(w);
   const base = Math.atan2(t.y + t.vy * V.lead - m.y[i], t.x + t.vx * V.lead - m.x[i]);
   const dmg = monsterDamage(w, i) * V.mult;
   for (let k = 0; k < n; k++) {
@@ -232,7 +232,7 @@ function shardVolley(w: World, i: number, t: PlayerState): void {
 function summonShades(w: World, i: number): void {
   const m = w.monsters;
   const S = W.summon;
-  const count = S.count[phaseIndex(w)];
+  const count = S.count[phaseIndex(w, i)];
   if (fieldFull(w)) return;
   const base = w.worldRng.range(0, TAU);
   for (let k = 0; k < count; k++) {
@@ -255,7 +255,7 @@ function glacialSpikes(w: World, i: number, t: PlayerState): void {
   const m = w.monsters;
   const S = W.spikes;
   const opts: AreaOptions = { owner: m.id[i], hurts: 'player', damage: monsterDamage(w, i) * S.mult, dtype: DAMAGE_INDEX.cold };
-  let lines = spikeLines(w, i, t, w.boss.phase >= 3 ? FAN.length : 1, S.maxLines, opts);
+  let lines = spikeLines(w, i, t, phaseOf(w, i) >= 3 ? FAN.length : 1, S.maxLines, opts);
   for (const p of w.living) {
     if (lines >= S.maxLines) break;
     if (p === t || Math.hypot(p.x - m.x[i], p.y - m.y[i]) > S.range) continue;

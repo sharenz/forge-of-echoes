@@ -101,7 +101,7 @@ describe('map Scrap services', () => {
     expect(bounty).toEqual({ ...source, bounty: true });
     expect(benchCurrency(result, 'scrap')).toBe(1003 - 18);
     expect(rules.describeItem(bounty).headerLines).toContain('Bounty: The Hunted guaranteed');
-    expect(mapEventOdds(bounty, 'glassSepulchre')).toEqual({ hunted: 1, echoRift: 0 });
+    expect(mapEventOdds(bounty, 'glassSepulchre')).toEqual({ hunted: 1, echoRift: 0, blackout: 0, vaultbreakers: 0, secondCrown: 0, wound: 0 });
     for (let seed = 0; seed < 100; seed++) {
       expect(rollMapEvent(bounty, seed, 'glassSepulchre')?.kind).toBe('hunted');
     }

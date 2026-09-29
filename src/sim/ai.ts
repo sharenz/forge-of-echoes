@@ -6,6 +6,7 @@ import { AILMENT_BIT } from '../contracts/sim';
 import { ELITE } from './archetypes';
 import { MONSTER_ANIM as ANIM, MSTATE, setAnim, stop, turnToward } from './behaviour';
 import { driveBoss } from './bosses';
+import { driveEventMonster } from './map-events';
 import { tickIgnite } from './combat';
 import {
   AGGRO_RADIUS, CHILL_SLOW, DT, EMPOWER_BONUS, HASTE_BONUS, KNOCKBACK_RATE, LARGE_BODY_RADIUS, MEMBER_AGGRO_RADIUS,
@@ -126,7 +127,8 @@ export function updateMonsters(w: World): void {
       continue;
     }
     if (m.mods[i] & ELITE.warded && (w.tick + i) % 10 === 0) updateWarded(w, i);
-    if (def.boss) driveBoss(w, i, def, t, dx, dy, d, hunting);
+    if (driveEventMonster(w, i, t)) { /* Carrier movement still uses normal integration below. */ }
+    else if (def.boss) driveBoss(w, i, def, t, dx, dy, d, hunting);
     else def.brain(w, i, t, dx, dy, d, hunting);
     // A guarding shield turns toward its target at its own pace (flanking is the counterplay); the
     // presenter shows it through `facing`, and a block through the 'blocked' event.

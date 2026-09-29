@@ -162,6 +162,7 @@ function normalizeEquipment(raw: Json, uid: string): EquipmentItem | null {
     return {
       kind: 'equipment', affixVersion: AFFIX_VERSION, uid, baseId: base.id, itemLevel, rarity: 'unique', name: unique.name, uniqueId: unique.id as UniqueId,
       implicitValues, affixes, scars: [], stability: 0, maxStability: 0, history: normalizeHistory(raw.history),
+      ...(raw.craftCount !== undefined ? { craftCount: historyCount(raw.craftCount) } : {}),
       ...(raw.isNew === true ? { isNew: true } : {}),
     };
   }
@@ -266,7 +267,7 @@ export function normalizeMap(raw: Json, uid: string): MapItem | null {
     const def = getMapMod(str(m.modId));
     if (!def || mods.some((x) => x.modId === def.id)) continue;
     if (def.kind === 'danger' && danger >= MAX_DANGER_MODS) continue;
-    if (def.kind === 'reward' && reward >= MAX_REWARD_MODS) continue;
+    if (def.kind === 'reward' && reward >= MAX_REWARD_MODS + (raw.twinInked === true ? 1 : 0)) continue;
     if (def.kind === 'danger') danger++;
     if (def.kind === 'reward') reward++;
     const rolled: RolledMapMod = { modId: def.id, value: intIn(m.value, 1, 500, 100) };
@@ -279,6 +280,8 @@ export function normalizeMap(raw: Json, uid: string): MapItem | null {
   return {
     kind: 'map',
     ...(raw.bounty === true ? { bounty: true } : {}),
+    ...(raw.charted === true ? { charted: true } : {}),
+    ...(raw.twinInked === true ? { twinInked: true } : {}),
     uid,
     baseId,
     tier: clampTier(finite(raw.tier, 1)),

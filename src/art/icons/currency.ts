@@ -494,7 +494,77 @@ function affixRune(prefix: boolean): Frame {
   return f;
 }
 
+/** Clay balm pot, with a broad green wax lid. */
+function scarBalm(): Frame {
+  const f = newIcon(), s = new Sculpt();
+  s.ell(16, 21, 10, 9, style(RAMPS.bone, -0.4));
+  s.ell(16, 12, 9, 4, style([C.vitalDeep, C.vitalMid, C.vitalGreen, C.vitalLight, C.bone], 0.2));
+  s.render(f.c, f.e);
+  glyph(f, ['..#..', '.###.', '#####', '.###.', '..#..'], 16, 22, C.vitalDeep, C.bone);
+  return f;
+}
+function anneal(): Frame {
+  const f = newIcon(), s = new Sculpt();
+  s.cap(8, 7, 7, 24, 3, 4, style(RAMPS.metal, 0.3));
+  s.cap(7, 24, 24, 24, 4, 3, style(RAMPS.metal, 0.1));
+  s.cap(24, 24, 24, 7, 3, 3, style(RAMPS.metal, 0.3));
+  s.cap(16, 6, 16, 22, 2, 2, style(EMBER, 0.7)); s.render(f.c, f.e);
+  sparkle(f, 15, 4, C.hot, 2); return f;
+}
+function graft(): Frame {
+  const f = newIcon(), s = new Sculpt();
+  s.cap(7, 25, 16, 16, 4, 3, style(RAMPS.bone, 0.2));
+  s.cap(16, 16, 25, 6, 3, 4, style(RAMPS.rust, 0.4)); s.render(f.c, f.e);
+  for (let n = -2; n <= 2; n++) line(f, 11 + n * 2, 14 - n * 2, 18 + n * 2, 21 - n * 2, C.vitalLight);
+  gem(f, 16, 16, 2, 2, RAMPS.void); return f;
+}
+function transmute(): Frame {
+  const f = newIcon();
+  gem(f, 10, 13, 6, 8, RAMPS.metal); gem(f, 22, 20, 6, 8, RAMPS.gold);
+  line(f, 16, 5, 25, 8, C.voidGlow); line(f, 25, 8, 24, 12, C.voidGlow);
+  line(f, 25, 8, 21, 9, C.voidGlow); line(f, 16, 28, 7, 25, C.voidLight);
+  line(f, 7, 25, 8, 21, C.voidLight); return f;
+}
+function echoShard(): Frame {
+  const f = newIcon();
+  crystalShard(f, 8, 27, 20, 3.8, RAMPS.frost, 0.3);
+  crystalShard(f, 19, 27, 25, 4.2, RAMPS.void, 0.15);
+  line(f, 12, 18, 19, 18, C.ice); sparkle(f, 6, 6, C.voidGlow, 1); return f;
+}
+function crownFragment(): Frame {
+  const f = newIcon(), s = new Sculpt();
+  s.poly([[5, 25], [4, 8], [12, 15], [17, 3], [22, 14], [28, 7], [25, 23], [17, 27], [13, 23], [11, 28]], style(RAMPS.gold, 0.3), 2);
+  s.render(f.c, f.e); gem(f, 17, 18, 3, 4, [C.lifeDark, C.blood, C.life, C.lifeLight, C.hot]);
+  line(f, 12, 27, 16, 22, C.ink); sparkle(f, 18, 3, C.goldHi, 1); return f;
+}
+function compass(): Frame {
+  const f = newIcon(), s = new Sculpt();
+  s.ell(16, 17, 12, 12, style(RAMPS.gold, 0.2));
+  s.ell(16, 17, 9, 9, style(RAMPS.basalt, 0.3)); s.render(f.c, f.e);
+  gem(f, 16, 17, 3, 10, RAMPS.frost); line(f, 8, 17, 24, 17, C.metalLight);
+  gem(f, 16, 17, 2, 2, RAMPS.gold); return f;
+}
+function twinInk(): Frame {
+  const f = newIcon();
+  flaskShape(f, 10, 22, 6, RAMPS.gold, 0.6); flaskShape(f, 23, 16, 6, RAMPS.void, 0.6);
+  line(f, 9, 14, 22, 25, C.bone); line(f, 10, 14, 23, 25, C.wood); return f;
+}
+function voidSplinter(): Frame {
+  const f = newIcon(); crystalShard(f, 10, 29, 29, 3.2, RAMPS.void, 0.35);
+  line(f, 13, 20, 20, 18, C.ink); line(f, 15, 12, 21, 10, C.ink);
+  sparkle(f, 7, 15, C.voidGlow, 2); sparkle(f, 25, 20, C.voidLight, 1); return f;
+}
+
 export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
+  'icon/currency/scarBalm': () => finishIcon(scarBalm()),
+  'icon/currency/anneal': () => finishIcon(anneal(), C.hot),
+  'icon/currency/graft': () => finishIcon(graft(), C.vitalLight),
+  'icon/currency/transmute': () => finishIcon(transmute(), C.voidGlow),
+  'icon/currency/echoShard': () => finishIcon(echoShard(), C.ice),
+  'icon/currency/crownFragment': () => finishIcon(crownFragment(), C.goldHi),
+  'icon/currency/compass': () => finishIcon(compass(), C.ice),
+  'icon/currency/twinInk': () => finishIcon(twinInk(), C.voidGlow),
+  'icon/currency/voidSplinter': () => finishIcon(voidSplinter(), C.voidGlow),
   'icon/currency/kindling': () => finishIcon(kindling(), C.hot),
   'icon/currency/scrap': () => finishIcon(scrap()),
   'icon/currency/reforge': () => finishIcon(reforge(), C.hot),

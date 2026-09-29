@@ -1,4 +1,4 @@
-export const MAP_EVENT_KINDS = ['hunted', 'echoRift'] as const;
+export const MAP_EVENT_KINDS = ['hunted', 'echoRift', 'blackout', 'vaultbreakers', 'secondCrown', 'wound'] as const;
 export type MapEventKind = typeof MAP_EVENT_KINDS[number];
 
 /** Server-only creation roll. Never sent in ZoneInfo or a map tooltip. */
@@ -8,7 +8,7 @@ export interface MapEventPlan {
   angle: number;
 }
 
-export const MAP_EVENT_PHASES = ['available', 'warning', 'active', 'complete'] as const;
+export const MAP_EVENT_PHASES = ['available', 'warning', 'active', 'complete', 'failed'] as const;
 export interface MapEventView {
   kind: MapEventKind;
   phase: typeof MAP_EVENT_PHASES[number];
@@ -16,4 +16,6 @@ export interface MapEventView {
   y: number;
   remaining: number;
   total: number;
+  /** Remaining seconds for the fleeing carriers; omitted on untimed encounters. */
+  seconds?: number;
 }

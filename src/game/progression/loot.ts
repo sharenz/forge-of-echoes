@@ -268,7 +268,18 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
   if (kill.eventReward === 'echoRift') {
     out.push(currencyStack('reforge', 1, randomUid(rng), true));
     out.push(currencyStack('mapDust', 1, randomUid(rng), true));
+    if (ctx.tier >= 3 && rng.chance(0.5)) out.push(currencyStack('echoShard', 1, randomUid(rng), true));
   }
+  if (kill.eventReward === 'blackout') {
+    out.push(currencyStack('seal', 1, randomUid(rng), true));
+    out.push(currencyStack('scrap', rng.int(4, 6), randomUid(rng), true));
+  }
+  if (kill.eventReward === 'vaultbreakers') {
+    out.push(makeCurrency(ctx, rng));
+    if (ctx.tier >= 3 && rng.chance(0.2)) out.push(currencyStack('twinInk', 1, randomUid(rng), true));
+  }
+  if (kill.eventReward === 'wound' && ctx.tier >= 3) out.push(currencyStack('voidSplinter', 1, randomUid(rng), true));
+  if (kill.eventReward === 'secondCrown' && ctx.tier >= 5) out.push(currencyStack('crownFragment', 1, randomUid(rng), true));
 
   // Guarantees use the looter's personal rarity (the elite multiplier already boosts the ordinary roll above).
   const mapM = luck.personal.itemRarity / 100;
@@ -316,7 +327,7 @@ export function rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave |
   const currency = rng.int(CHEST_LOOT.currency.min, CHEST_LOOT.currency.max);
   for (let i = 0; i < currency; i++) out.push(makeCurrency(ctx, rng));
   for (let i = 0; i < CHEST_LOOT.flasks; i++) out.push(makeFlask(rng));
-  const tier = Math.min(MAX_MAP_TIER, ctx.tier + (rng.chance(CHEST_LOOT.mapTierUpgradeChance) ? 1 : 0));
+  const tier = Math.min(MAX_MAP_TIER, ctx.tier + ((setup.map.charted || rng.chance(CHEST_LOOT.mapTierUpgradeChance)) ? 1 : 0));
   out.push(makeMap(rng, tier, m, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max)));
   if (rng.chance(CHEST_LOOT.extraMapChance)) out.push(makeRandomMap(ctx, rng, m));
   return out;

@@ -7,7 +7,7 @@
 //   run      u8 phase · u8 wave · u8 waveCount · f32 waveTime · f32 waveDuration · f32 elapsed · u32 kills
 //            · u16 monstersAlive · u8 playersAlive · u8 flags(boss|lieutenant<<1|portalOpen<<2|event<<3)
 //            · [boss: str name · f32 life · f32 maxLife · u8 phase] · [lieutenant: str name · f32 life · f32 maxLife]
-//            · [event: u8 kind · u8 phase · f32 x · f32 y · u8 remaining · u8 total]
+//            · [event: u8 kind · u8 phase · f32 x · f32 y · u8 remaining · u8 total · u8 seconds(255=none)]
 //   players  u8 n · n × { u8 id · u8 bits(facing:2|anim:3|dead|full|casting) · u8 level · str name · f32 x · f32 y
 //            · f32 vx · f32 vy · i16 aimDx·8 · i16 aimDy·8 · f32 animTime · [u8 skill · u16 progress·65535]
 //            · f32 life · f32 maxLife · u16 wardTime ms · u16 wardDuration ms · u16 invuln ms · u8 hitFlash·255
@@ -345,6 +345,8 @@ export class Snapshot {
       run.event = { kind: enumAt(MAP_EVENT_KINDS, r.u8(), 'map event'),
         phase: enumAt(MAP_EVENT_PHASES, r.u8(), 'map event phase'),
         x: r.f32(), y: r.f32(), remaining: r.u8(), total: r.u8() };
+      const seconds = r.u8();
+      if (seconds !== 255) run.event.seconds = seconds;
     } else run.event = null;
   }
 

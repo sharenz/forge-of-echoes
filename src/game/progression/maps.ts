@@ -1,10 +1,10 @@
 // Map rules: effects of tier, quality, implicits and mods; monster scaling and waves for the sim;
-// item quantity/rarity with breakdowns; map tooltips; and the four map currencies (GAME_SPEC §6–§7).
+// item quantity/rarity with breakdowns; map tooltips; and map currencies (GAME_SPEC §6–§7).
 //
 // Map mod model:
 //   • Danger mods (Threat Glyph, Map Dust) pair a threat with a reward. Their count sets the rarity:
 //     0 Normal · 1–2 Magic · 3–4 Rare (max 4).
-//   • Reward-only mods (Reward Ink, max 1) and corrupted mods (Void Needle) are extra lines that do not
+//   • Reward-only mods (Reward Ink, max 1; Twin Ink adds a second) and corrupted mods are extra lines that do not
 //     count toward rarity.
 //   • A mod's `value` is its rolled magnitude in percent of the nominal numbers (tier-scaled roll).
 import type { MapSummaryLine } from '../../contracts/game';
@@ -710,6 +710,8 @@ export function describeMap(map: MapItem, opts: MapDescribeOptions = {}): ItemDe
 
   const headerLines = [`Tier ${tier} Map`];
   if (map.bounty) headerLines.push('Bounty: The Hunted guaranteed');
+  if (map.charted) headerLines.push(`Charted: completion chest guarantees a Tier ${Math.min(MAX_MAP_TIER, map.tier + 1)} map`);
+  if (map.twinInked) headerLines.push('Twin Ink: two reward-mod slots');
   if (map.corrupted) headerLines.push('Corrupted');
   let hint = opts.inDevice
     ? 'Activate the Map Device to open a portal.'
@@ -741,10 +743,11 @@ export function describeMap(map: MapItem, opts: MapDescribeOptions = {}): ItemDe
 // Map crafting
 // ---------------------------------------------------------------------------------------------
 
-export type MapCurrencyId = 'mapDust' | 'threatGlyph' | 'rewardInk' | 'voidNeedle';
+export type MapCurrencyId = 'mapDust' | 'threatGlyph' | 'rewardInk' | 'voidNeedle' | 'compass' | 'twinInk' | 'voidSplinter';
 
 export function isMapCurrencyId(id: CurrencyId): id is MapCurrencyId {
-  return id === 'mapDust' || id === 'threatGlyph' || id === 'rewardInk' || id === 'voidNeedle';
+  return id === 'mapDust' || id === 'threatGlyph' || id === 'rewardInk' || id === 'voidNeedle'
+    || id === 'compass' || id === 'twinInk' || id === 'voidSplinter';
 }
 
 function currencyName(id: CurrencyId): string {
@@ -766,8 +769,11 @@ export function mapCraftError(map: MapItem, currencyId: CurrencyId): string | nu
   if (currencyId === 'reliquaryKey') return 'Select the Sealed Reliquary in the Map Device to use this key.';
   const name = currencyName(currencyId);
   if (!isMapCurrencyId(currencyId)) return `${name} cannot be applied to maps.`;
-  if (map.corrupted) return 'Corrupted maps cannot be modified.';
+  if (currencyId === 'voidSplinter') return map.corrupted ? null : 'This map is not corrupted.';
+  if (map.corrupted) return 'Use a Void Splinter to remove corruption before modifying this map.';
   switch (currencyId) {
+    case 'compass': return map.charted ? 'This map is already charted.' : map.tier >= MAX_MAP_TIER ? 'Tier 15 is already the highest map tier.' : null;
+    case 'twinInk': return !map.twinInked && rewardModCount(map) === 1 ? null : 'Twin Ink needs exactly one reward-only mod and can be used once per map.';
     case 'mapDust':
       return null;
     case 'threatGlyph':
@@ -839,6 +845,16 @@ export function mapCraftPreview(map: MapItem, currencyId: CurrencyId): string[] 
   const lines: string[] = [];
   const danger = dangerModCount(map);
   switch (currencyId as MapCurrencyId) {
+    case 'compass':
+      lines.push(`The completion chest's progression map will be Tier ${Math.min(MAX_MAP_TIER, map.tier + 1)} (100% chance, instead of 25%).`, 'Mods, quality and the extra-map roll are unchanged.'); break;
+    case 'twinInk': {
+      const pool = REWARD_MODS.filter(m => !map.mods.some(r => r.modId === m.id));
+      lines.push(pickOddsLine('Adds a second reward-only mod', pool, map.baseId), 'Preserves the first reward and all danger mods. Twin Ink can be used once per map.'); break;
+    }
+    case 'voidSplinter': {
+      const removed = map.mods.filter(m => m.corrupted || ['corrupted', 'echo'].includes(getMapMod(m.modId)?.kind ?? ''));
+      lines.push(`Removes corruption and ${removed.length ? names(removed, map.baseId) : 'no modifiers'}.`, `Quality falls from ${map.quality} to 0. Tier ${map.tier}, ordinary mods and paid commissions remain. The map can be crafted again.`); break;
+    }
     case 'mapDust': {
       if (danger === 0) {
         lines.push(`Awakens a Magic map with ${countOddsText(MAP_DUST_COUNTS.magic)}.`);
@@ -848,9 +864,8 @@ export function mapCraftPreview(map: MapItem, currencyId: CurrencyId): string[] 
         lines.push(`Rerolls all ${danger} danger mod${danger === 1 ? '' : 's'}: ${countOddsText(MAP_DUST_COUNTS[band])}. The map stays ${band === 'rare' ? 'Rare' : 'Magic'}.`);
         lines.push(inclusionLine(DANGER_MODS, MAP_DUST_COUNTS[band], map.baseId));
       }
-      const reward = modsOfKind(map, 'reward')[0];
-      const rewardDef = reward ? getMapMod(reward.modId) : undefined;
-      if (rewardDef) lines.push(`The reward mod ${mapModName(rewardDef, map.baseId)} is kept.`);
+      const rewards = modsOfKind(map, 'reward');
+      if (rewards.length) lines.push(`Reward mods are kept: ${names(rewards, map.baseId)}.`);
       break;
     }
     case 'threatGlyph': {
@@ -870,7 +885,7 @@ export function mapCraftPreview(map: MapItem, currencyId: CurrencyId): string[] 
       const outcomes = voidOutcomes(map);
       lines.push(`Corrupts the map: ${formatDistribution(outcomes.map((o) => ({ label: o.label, chance: o.weight }))).join(' · ')}`);
       lines.push(pickOddsLine('Corrupted mods', CORRUPTED_MODS, map.baseId));
-      lines.push('A corrupted map can no longer be modified.');
+      lines.push('Further crafting requires a Void Splinter, which removes corruption, its modifiers and all quality.');
       break;
     }
   }
@@ -905,6 +920,17 @@ export function craftMap(map: MapItem, currencyId: CurrencyId, rng: Rng): MapCra
   const tier = clampTier(map.tier);
   const keep = map.mods.filter((m) => getMapMod(m.modId)?.kind !== 'danger');
   switch (currencyId as MapCurrencyId) {
+    case 'compass': return { map: { ...map, charted: true }, message: 'Compass charted the map: the completion chest guarantees a higher-tier map', kind: 'success' };
+    case 'twinInk': {
+      const pool = REWARD_MODS.filter(m => !map.mods.some(r => r.modId === m.id));
+      const pick = rng.weighted(pool, m => m.weight)!;
+      return { map: { ...withMods(map, [...map.mods, { modId: pick.id, value: rollModValue(rng, tier) }]), twinInked: true },
+        message: `Twin Ink added ${mapModName(pick, map.baseId)} as a second reward mod`, kind: 'success' };
+    }
+    case 'voidSplinter': return {
+      map: withMods({ ...map, corrupted: false, quality: 0 }, map.mods.filter(m => !m.corrupted && !['corrupted', 'echo'].includes(getMapMod(m.modId)?.kind ?? ''))),
+      message: 'Void Splinter removed corruption, corruption-marked mods and all quality', kind: 'success',
+    };
     case 'mapDust': {
       const band = dangerModCount(map) === 0 ? 'magic' : map.rarity === 'rare' ? 'rare' : 'magic';
       const count = rollCountTable(rng, MAP_DUST_COUNTS[band]);

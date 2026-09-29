@@ -59,7 +59,7 @@ export const ATLAS_AREAS: readonly AtlasAreaDef[] = [
     neighbours: ['emberRoad'], x: 41, y: 6, deadEnd: true, arenaScale: 0.8,
     description: 'A dead end for targeted crafting supplies. Its tier limit matches Ember Road.',
     currencyWeights: { essenceEmber: 2, seal: 3 },
-    ingredientDrops: [{ currencyId: 'suffixRune', chance: 0.25, minTier: 3 }],
+    ingredientDrops: [{ currencyId: 'suffixRune', chance: 0.25, minTier: 3 }, { currencyId: 'transmute', chance: 0.15, minTier: 3 }],
   },
   {
     id: 'furnaceYard', name: 'Furnace Yard', type: 'forge', baseId: 'ashenForge', depth: 2,
@@ -72,7 +72,7 @@ export const ATLAS_AREAS: readonly AtlasAreaDef[] = [
     neighbours: ['boneApproach', 'furnaceYard'], x: 44, y: 56,
     description: 'Jewellery and crafting Solvents, with a passage toward the furnaces.',
     classWeights: { ring: 2, amulet: 2 }, currencyWeights: { solvent: 2 }, arenaScale: 0.85,
-    ingredientDrops: [{ currencyId: 'prefixRune', chance: 0.25, minTier: 3 }],
+    ingredientDrops: [{ currencyId: 'prefixRune', chance: 0.25, minTier: 3 }, { currencyId: 'scarBalm', chance: 0.15, minTier: 3 }],
   },
   {
     id: 'ironMarch', name: 'Iron March', type: 'arena', baseId: 'chainworks', depth: 2,
@@ -88,18 +88,21 @@ export const ATLAS_AREAS: readonly AtlasAreaDef[] = [
   },
   {
     id: 'championsApproach', name: "Champion's Approach", type: 'arena', baseId: 'ironColiseum', depth: 3,
+    ingredientDrops: [{ currencyId: 'compass', chance: 0.20, minTier: 5 }],
     neighbours: ['ironMarch', 'winterThrone', 'crownFoundry'], x: 65, y: 73,
     description: 'Armour and Fracture Cores on the road to the deep territories.',
     classWeights: { helmet: 2, chest: 2, gloves: 2, boots: 2 }, currencyWeights: { fractureCore: 3 }, arenaScale: 0.9,
   },
   {
     id: 'crownFoundry', name: 'Crown Foundry', type: 'forge', baseId: 'ashenForge', depth: 4,
+    ingredientDrops: [{ currencyId: 'anneal', chance: 0.20, minTier: 5 }],
     neighbours: ['shatteredForge', 'championsApproach'], x: 87, y: 24,
     description: 'The deepest foundry. High-level caster bases and Tempering Catalysts.',
     classWeights: { wand: 2, sceptre: 2, focus: 2 }, currencyWeights: { catalyst: 2 },
   },
   {
     id: 'winterThrone', name: 'Winter Throne', type: 'crypt', baseId: 'rimedOssuary', depth: 4,
+    ingredientDrops: [{ currencyId: 'graft', chance: 0.20, minTier: 5 }],
     neighbours: ['championsApproach', 'shatteredForge'], x: 87, y: 76,
     description: 'High-level jewellery and preserving seals in the frozen depths.',
     classWeights: { ring: 2, amulet: 2 }, currencyWeights: { seal: 2 }, arenaScale: 1.1,

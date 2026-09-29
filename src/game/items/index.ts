@@ -17,7 +17,7 @@
 //   • Local properties: Armour / Evasion Rating / Added Spell Damage base properties absorb the
 //     item's own flat and % lines of that stat; itemModifiers emits them once as the property total.
 //   • Level requirements come from the base (or unique) only, so crafting never changes them.
-//   • Uniques: stability 0/0, affixes hold their fixed mods ("unique:<id>:<n>"); never craftable.
+//   • Uniques: stability 0/0, fixed mod families ("unique:<id>:<n>"); only Crown Fragments reroll their values.
 //   • Player-facing text only uses glyphs the UI fonts' latin subset covers (no →, ≈, ≤ …);
 //     tests/game-items/describe.test.ts enforces it.
 //
