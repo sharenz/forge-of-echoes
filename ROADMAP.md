@@ -22,7 +22,8 @@ character had crafted every item the way they wanted. Requirements from the owne
   geared character comfortably clears maps up to about their own level + 3**; modded maps and higher tiers need
   properly crafted gear.
 
-**Phase 1: implemented on branch `balance-overhaul` (2026-09-29); production deployment pending.**
+**Phase 1: Done — committed on `balance-overhaul` and deployed to production on 2026-09-29.**
+Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, map-picker fix `e64cfd2`).
 - Monster level = `6 x tier - 2` (T1 = 4, T4 = 22, T15 = 88); it is the item level of drops. Monster life x1.09 and
   damage x1.065 per level around reference level 10 (`MONSTER_LEVEL_SCALING`); tier scaling and early-tier easing
   are gone (tier still drives XP and rarity). Evade chance = `rating / (rating + 30 x monster level)`.
@@ -33,40 +34,39 @@ character had crafted every item the way they wanted. Requirements from the owne
   life at the low point; a "normal player" (maps up to level + 3) reaches level 14 after 10 maps and is still pushed
   back; the prod character Eldurin (level 13, strong crafted gear) clears T1-T4, barely T5, fails T6.
 - Tests: balance suites rewritten for the new intent (tests/game-progression/balance*.test.ts, playProgression
-  helper), loot/maps/stats/spec tests derive numbers from the data; GAME_SPEC §5/§7/§9 updated. All 1773 always-on
-  tests and the BALANCE=1 suites pass.
+  helper), loot/maps/stats/spec tests derive numbers from the data; GAME_SPEC §3/§5/§7/§9 updated. All 1774 always-on
+  tests and the BALANCE=1 suites pass, including a new regression check for map-level evasion in the runtime and sheet.
+- Release verification: a fresh clone installs with `npm ci` and builds; the production browser's party, trade,
+  pickup and restart scenarios passed, and the targeted stash/map-theme smoke passed at 1280×720. At 1024×600,
+  the Map Device picker needed more minimum height to keep sticky headings from blocking map clicks; fixed and
+  verified. The full browser harness still has intermittent random-drop and small-viewport navigation failures.
 
 **Phase 2 (open, discuss/tune after playing it):**
 - More affix tiers and lower stat values (item level now tops out lower per tier, so gear is already weaker early;
   best affix tiers need item level 68+, i.e. tier 12+).
 - Armour and resistances vs monster level (only evasion scales with monster level so far); monster accuracy.
-- Uniques' level requirements against the new item levels (only 4 exist; one drops from T3).
+- Uniques' level requirements against the new item levels (only 4 exist; the first two become eligible at T3).
 - Boss fights on the first map are long for the bot (Ashen T1 about 6 minutes): check with real play.
 - Real-player feedback loop: play a fresh character and a mid character on this build, then retune the four
   constants (`MONSTER_LEVEL_SCALING.life/damage/referenceLevel`, `evasionPerMonsterLevel`) and the drop weights.
 
 ## P0: now (small, ready)
 
-1. **Commit.** The font change (already deployed, uncommitted), this file, the balance work on branch
-   `balance-overhaul`, and **`src/data/`**: it was never in git because `.gitignore` had an unanchored `data/`
-   (now `/data/`), so the whole game data layer (items, affixes, loot, maps, classes) was untracked. Verify a
-   fresh clone builds after committing.
-2. **UI polish after the font bump.** "Intelligence" label collides with its `+` button in the character panel;
+1. **UI polish after the font bump.** "Intelligence" label collides with its `+` button in the character panel;
    party row metadata ("Ashen Forge T3 / 6/8 portals") wraps unevenly. Then review the panels not yet checked at
    the new sizes (stash, merchant, crafting bench, map device, trade, menu, tooltips, smaller viewports).
-3. **Map HUD: monster level and map modifiers** (owner). While inside a map, show the monster level in the top
+2. **Map HUD: monster level and map modifiers** (owner). While inside a map, show the monster level in the top
    right, together with all the modifiers of the map (danger and reward mods, corrupted/implicit if any).
-4. **Monster pack modifiers on hover** (owner). When you hover a magic or rare pack, show its modifiers (top
+3. **Monster pack modifiers on hover** (owner). When you hover a magic or rare pack, show its modifiers (top
    centre suggested). Spec data: magic packs share one mod (Swift, Stout, Fierce); a rare leader has 2 of
    Juggernaut, Frenzied, Ember-touched, Warded (`GAME_SPEC.md` §8). Needs the mods in the client snapshot and
    a hover hit-test on monsters; uses the shared UI type scale.
-5. **Stash quick-move to the special tabs** (owner). With a normal stash tab selected, Ctrl/Cmd-click on a map (or a
+4. **Stash quick-move to the special tabs** (owner). With a normal stash tab selected, Ctrl/Cmd-click on a map (or a
    currency) in the inventory should file it straight into the Map Stash / Crafting Stash, instead of into the open
    normal tab, so nothing has to be sorted by hand. `GAME_SPEC.md` §12 already says maps and currency "file
    themselves" on Ctrl-click, but per the owner it doesn't work this way while a normal tab is open. Also check
    Ctrl-click from a normal tab back out, and flasks/equipment (which stay in normal tabs).
-6. (moved) **Balance overhaul**: top priority above (phase 1 built on a branch, not merged or deployed).
-7. **Adjustable skill slots** (owner). A loadout row already exists in the skills panel (click skill, click slot,
+5. **Adjustable skill slots** (owner). A loadout row already exists in the skills panel (click skill, click slot,
    right-click clear). Waiting for the owner to say what is missing: key rebinding, slot 0 restricted to basic,
    swapping from the bar in-game, or a bug.
 
@@ -84,7 +84,7 @@ character had crafted every item the way they wanted. Requirements from the owne
    until they happen), map mods and area type raise the odds of specific events. Must feel good, not annoying.
 4. **Ingredients, first batch.** Verbs, not stronger currency (Prefix Rune / Suffix Rune to start), tied to areas
    so the best ingredient for a craft is not in the area you farm. Tradeable.
-5. **Item bases at ilvl 42+** (tier 6+), in parallel with 4, so the tier gate yields gear worth wanting.
+5. **Item bases at ilvl 42+** (tier 8+ under the new monster-level formula), in parallel with 4, so the tier gate yields gear worth wanting.
 6. **Economy sinks.** Scrap repairs stability at the bench (decided, simple version) with a cost that escalates
    with the item's crafting history (designer: flat cost breaks scars); hard currencies as the value store
    (Reforging Ember / Tempering Catalyst / Fracture Core); Scrap sinks (territory/bounty fees, map rerolls).
@@ -129,6 +129,8 @@ character had crafted every item the way they wanted. Requirements from the owne
 - Survey consumable (reveals one adjacent area's type; a Scrap sink).
 - Live-ops basics: telemetry, DB backups, admin tool (check what exists first).
 - Client bundle code-splitting (chunks over 500 kB); `vite.config.ts` uses `__dirname` (native config loader warning).
+- Stabilise the browser harness: avoid relying on a random equipment drop within a short timeout, and avoid
+  walking back through a hideout portal during the 1024×600 map-theme smoke.
 
 ## Atlas design (decided 2026-09-29)
 
@@ -162,7 +164,7 @@ decide"), informed by an ARPG-designer agent review. Owner can overrule any of t
 - **Top failure modes to watch:** the community solves one best route; areas feel alike on shared rosters; players
   confused about what the item vs the area decides.
 
-## Balance findings (2026-09-29, from the prod character Eldurin, level 13, and a bot replay)
+## Pre-overhaul balance findings (2026-09-29, from Eldurin, level 13, and a bot replay)
 
 - **Monster level is only a label:** it sets the item level of drops (and unique eligibility) and does nothing to
   monster stats. T4 = "monster level 30" therefore does not mean monsters two times your level; it is just
@@ -187,3 +189,8 @@ decide"), informed by an ARPG-designer agent review. Owner can overrule any of t
 ## Done
 
 - 2026-09-29: UI type scale raised to 14 / 16 / 19 / 28 px and deployed to prod.
+- 2026-09-29: Committed the font change, roadmap, balance phase 1 and all 21 `src/data/` files; anchored the
+  runtime-data ignore rule to `/data/`. A fresh clone now installs and builds successfully.
+- 2026-09-29: Deployed balance phase 1 and the short-window Map Device picker fix as
+  `20260929-182502-e64cfd2`. Production database backed up and integrity checked before activation;
+  server and public health checks passed. Phase 2 remains open for real-player feedback.
