@@ -5,14 +5,21 @@ from discussions are added or moved between items. Nothing here is built unless 
 Last reprioritised: 2026-09-29.
 
 **Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
-verify the resulting game and deploy it to production. QoL (P0.1–4) and account storage (P1.1) are done and deployed;
-Atlas, events, ingredients, high-level bases, sinks, expanded maps, remaining content and the
+verify the resulting game and deploy it to production. QoL (P0.1–4), account storage (P1.1) and Atlas (P1.2) are done and deployed;
+events, ingredients, high-level bases, sinks, expanded maps, remaining content and the
 map tree remain part of this delivery until individually completed and verified.
 
-**Current order:** Atlas vertical slice → events and crafting progression → more map content.
+**Current order:** first map events → crafting progression → more map content.
 Priorities follow current usability problems, then progression dependencies. Wave-3 boss reuse is later content work.
 
-**Latest release: Done — `20260929-203731-0923fa7` (2026-09-29).** Shared account stash, atomic transfers and legacy
+**Latest release: Done — `20260929-211123-98a6a84` (2026-09-29).** Twelve-area account Atlas, party discovery,
+area-specific drops, Reliquary keys and same-tier/+1 completion maps (P1.2). Build/typecheck, a full 1,824-test
+run and 29 final transaction checks pass; browser entry/key flows pass at 1024×600 and 1280×720. Live protocol 7
+and public JS/CSS match the tested build. Host-local production-copy audits before and after preserve all
+457 items on 7 characters across 4 accounts, with unique IDs, no duplicate storage and idempotent reload.
+Post-drain backup: `/var/lib/forge/backups/pre-release-20260929-211123-98a6a84.db`.
+
+**Previous release: Done — `20260929-203731-0923fa7` (2026-09-29).** Shared account stash, atomic transfers and legacy
 stash migration (P1.1). Build/typecheck, 1,809 always-on tests and two-client browser/restart tests at both
 1280×720 and 1024×600 pass. Protocol 6 and public JS/CSS match the tested build. Production-copy audits before
 and after deployment preserve all holdings (4 accounts, 7 characters, 457 physical items), with unique item IDs,
@@ -138,18 +145,18 @@ reopen tuning for a specific problem rather than starting another general balanc
    (4 accounts, 7 characters, 457 items; counts/rolls preserved, unique IDs, idempotent reload). Deployments now
    back up the database after draining; isolated checks verify healthy activation, database/code rollback and
    refusing an existing backup. Atlas uses account persistence in P1.2.
-2. **Atlas vertical slice** (owner's main idea, see "Atlas design"). 12 hand-authored areas, depth 0-4, tier
+2. **Atlas vertical slice — Done, deployed as `20260929-211123-98a6a84`.** (owner's main idea, see "Atlas design"). 12 hand-authored areas, depth 0-4, tier
    ceiling 1-9, fog with 2 reveals per boss kill, area type label visible once revealed, one dead end (Ember
    Vault), one sealed rare area (Sealed Reliquary), atlas panel in the Map Device, per-account save, party
    discovery credit. Replaces the "chest guarantees tier+1" rule (proposal: same tier, 25% chance of +1).
    Must prove: players choose different routes on purpose; the dead end is a choice not a trap; the sealed door
    creates a goal; a fresh alt benefits without feeling cheated.
-   **Verified; deployment pending:** routes, account discovery, party credit, restart receipts/retries, area selection,
+   **Verified and live:** routes, account discovery, party credit, restart receipts/retries, area selection,
    theme/loot preferences, key-gated Reliquary and the 75% same-tier / 25% +1 chest rule are implemented.
    Build and all 1,824 tests in the full run pass (12 optional balance checks skipped), followed by 29 account/
    Atlas/restart checks after adding one final cross-account transaction regression. Browser entry/key flow
    and layout pass at 1024×600 and 1280×720. A fresh production-copy audit preserves all 457 items on 7 characters.
-   Production remains on the shared-stash release until activation and live verification complete.
+   Protocol 7, exact public bundle matches and a post-deployment production-copy audit also pass.
 3. **Map events, first two.** The Hunted and Echo Rift, rolled at map creation (~25% base, one per map, hidden
    until they happen), map mods and area type raise the odds of specific events. Must feel good, not annoying.
 4. **Ingredients, first batch.** Verbs, not stronger currency (Prefix Rune / Suffix Rune to start), tied to areas
