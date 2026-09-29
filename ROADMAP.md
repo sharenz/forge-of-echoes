@@ -6,13 +6,24 @@ Last reprioritised: 2026-09-29.
 
 **Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
 verify the resulting game and deploy it to production. QoL (P0.1–4), account storage, Atlas, the first events,
-Prefix/Suffix Runes and advanced bases (P1.1–5) are done and deployed. Economy sinks, expanded maps,
-remaining content and the map tree (P1.6–9) remain part of this delivery until individually completed and verified.
+Prefix/Suffix Runes, advanced bases and economy sinks (P1.1–6) are done and deployed. Expanded maps,
+remaining content and the map tree (P1.7–9) remain part of this delivery until individually completed and verified.
 
-**Current order:** Scrap sinks → expanded map roster → remaining events/ingredients/areas → map tree.
+**Current order:** expanded map roster → remaining events/ingredients/areas → map tree.
 Priorities follow current usability problems, then progression dependencies. Wave-3 boss reuse is later content work.
 
-**Latest release: Done — `20260929-215849-789fe30` (2026-09-29).** Prefix/Suffix Runes and ten advanced bases
+**Latest release: Done — `20260929-222322-301c1b2` (2026-09-30).** Scrap economy services (P1.6):
+repair one Stability with escalating lifetime prices, selectively replace one map danger/reward pair, and
+commission a guaranteed Hunted encounter. T1–T3 territory entry stays free; deeper tiers charge 1–4 Scrap
+once, refunded with an unrestorable expedition. Prices, odds and effects are shown before payment;
+trade locks, stale quotes, save reloads and restart refunds are covered. Build/typecheck and all 1,863
+always-on tests pass. Browser crafting, payments and restart checks pass at 1024×600 and 1280×720.
+Live protocol 10 and exact public JS/CSS matches are verified. Production-copy audits before and after
+preserve all 457 physical items across 4 accounts / 7 characters; unique IDs, no duplicate storage,
+idempotent reload and database integrity pass. Post-drain backup:
+`/var/lib/forge/backups/pre-release-20260929-222322-301c1b2.db`. P1.7–9 remain in the active delivery.
+
+**Previous release: Done — `20260929-215849-789fe30` (2026-09-29).** Prefix/Suffix Runes and ten advanced bases
 (P1.4–5). Runes preserve the other affix side and have separate Atlas boss sources; every equipment class
 gets a level-42+ project, first eligible in Tier 8 drops. Exact previews, new artwork, stash slots and source
 labels are included. Build/typecheck and all 1,853 always-on tests pass; final art/stash checks and real-browser
@@ -192,9 +203,12 @@ reopen tuning for a specific problem rather than starting another general balanc
    artwork. Tier 7 (ilvl 40) cannot drop them; Tier 8 (ilvl 46) can. Existing bases retain their stats; area class
    preferences apply to the new bases. Rook's gamble also respects each base's level gate. Generation, actual
    chest rewards, save reloads, icon footprints and both browser viewport checks pass. See GAME_SPEC §5.
-6. **Economy sinks.** Scrap repairs stability at the bench (decided, simple version) with a cost that escalates
-   with the item's crafting history (designer: flat cost breaks scars); hard currencies as the value store
-   (Reforging Ember / Tempering Catalyst / Fracture Core); Scrap sinks (territory/bounty fees, map rerolls).
+6. **Economy sinks — Done, deployed as `20260929-222322-301c1b2`.** Bench repair restores one Stability for
+   `8 + 3 × lifetime crafts + 6 × previous repairs²` Scrap, preserving scars, affixes and protections. Counters
+   survive capped history, trading and reloads. Selective map danger rerolls cost `3 + tier`; Bounty commissions
+   cost `8 + 2 × tier` and guarantee The Hunted. Territory fees are free at T1–T3, then 1–4 Scrap, paid once by
+   the owner and refunded atomically with server-unrestorable maps/keys. Exact prices/odds, stale-price refusal,
+   trade locks and browser/restart checks pass. Hard crafting currencies retain their scarce drop sources.
    Watch the Scrap balance for a week before the Exchange.
 7. **Reuse wave-3 bosses to expand the map roster** (owner, 2026-09-29). Remove the wave-3 lieutenant encounter
    from every existing map. Promote those three encounters into final bosses of three new maps, aiming to grow
