@@ -540,7 +540,9 @@
 }
 .fe-device__stash--grow {
   flex: 1 1 auto;
-  min-height: calc(var(--cell) * 5);
+  /* Keep room for the wrapped title, tier tiles, sticky heading and clickable map rows.
+   * Short windows scroll the device column instead of collapsing the list beneath its heading. */
+  min-height: calc(var(--cell) * 7.5);
 }
 .fe-device__stash--grow .fe-mstash--device {
   flex: 1 1 auto;
