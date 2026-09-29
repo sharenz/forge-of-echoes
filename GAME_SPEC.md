@@ -329,6 +329,23 @@ an extra Rare. Its twin-boss event and Crown Fragment arrive with the remaining 
 The rules retain legacy map setups across a restart. A run that cannot be restored refunds its original
 map and entrance key together; discovery and its per-run receipt are also one transaction.
 
+**Map events.** At creation, each map privately rolls at most one encounter (25% base: 12.5% The Hunted,
+12.5% Echo Rift), appearing in wave 2 or 4. The actual roll is omitted from the client's setup and only revealed
+when it occurs. Map Device displays the odds, never the roll. Forge/arena areas add 5/10 percentage points to
+The Hunted; crypt/vault areas add 10/5 points to Echo Rift. Commanded adds 8 points and Restless 5 to The Hunted;
+Teeming adds 5 and Echoing 10 to Echo Rift. Combined chance caps at 65%, preserving relative event weights.
+- **The Hunted:** a three-second warning precedes one rare pursuer from the current roster, with Swift and
+  Fierce. Its final credited kill adds one guaranteed Rare equipment item per living player, at the map's
+  monster level and with the area's equipment preferences. Normal kill rewards still apply.
+- **Echo Rift:** an optional violet ground sigil with an off-screen direction marker. Coming within 70 units
+  starts a three-second warning, then three bursts of three Swift magic monsters, two seconds between cleared
+  bursts. The ninth kill adds one Reforging Ember and one Map Dust per living player. An ignored rift closes
+  before the final boss. There is no failure timer, and its monsters still give ordinary XP and loot.
+- Active encounters give up to 20 seconds of breathing room before ordinary wave timers and streams resume;
+  they never indefinitely hold the map. Timers freeze while no one is alive. The HUD shows progress and the
+  completion reward. Map cleanup cannot award event rewards. Restarted fights keep their original event roll;
+  maps created before this feature retain no event.
+
 ## 8. Waves & monsters (the sim owns these numbers)
 
 **Wave budget:** `baseMonsters 40 + 18·(wave−1)` × countMultiplier, over 60 s.

@@ -155,6 +155,7 @@ export function hudRun(input: HudInput): HudRun | null {
     monstersAlive: r.monstersAlive,
     kills: r.kills,
     elapsed: r.elapsed,
+    event: r.event ? { ...r.event } : null,
     boss: r.boss ? { ...r.boss } : null,
     lieutenant: r.lieutenant ? { ...r.lieutenant } : null,
     tell: tell ? { wave: tell.wave, families: tell.families, lieutenant: tell.lieutenant, boss: tell.boss } : null,

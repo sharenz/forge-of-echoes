@@ -12,6 +12,7 @@ import {
 } from './constants';
 import { digestWorld } from './digest';
 import { EventBuffer } from './events';
+import { createMapEvent, updateMapEvent } from './map-events';
 import { PropGrid, SpatialGrid } from './grid';
 import { createHookErrorLog } from './hooks';
 import { removeDrop, removePlayerDrops, requestPickup, spawnFloorDrop, updateDrops } from './loot';
@@ -117,6 +118,7 @@ export function createWorld(config: RunConfig, capacities: StoreCapacities = def
     props,
     packs: [],
     director,
+    mapEvent: config.mode === 'map' ? createMapEvent(config.event) : null,
     roster: rosterFor(config.theme),
     boss: { phase: 1, roar: 0, state: null },
     events: new EventBuffer(),
@@ -255,6 +257,7 @@ export function stepWorld(w: World): void {
   w.grid.build(w.monsters);
   const players = w.players;
   for (let k = 0; k < players.length; k++) updatePlayer(w, players[k]);
+  updateMapEvent(w);
   updateDirector(w);
   updateMonsters(w);
   applyPlayerPushes(w);
@@ -288,6 +291,7 @@ function syncView(w: World): void {
   const d = w.director;
   const r = v.run;
   const m = w.monsters;
+  r.event = w.mapEvent?.view ?? null;
   r.wave = d.wave;
   r.waveTime = d.waveTime;
   r.elapsed = w.time;

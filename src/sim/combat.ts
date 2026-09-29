@@ -12,6 +12,7 @@ import {
 } from './constants';
 import { applyDebuff, cleanseAll, clearDebuffs, effectiveResist, isActive, shockMult } from './debuffs';
 import { rollKillLoot } from './hooks';
+import { mapEventKill } from './map-events';
 import { grantXp, spawnDrops } from './loot';
 import { DAMAGE_INDEX, damageTypeAt } from './math';
 import { refreshLiving } from './player';
@@ -237,6 +238,7 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
   }
   removeOwnedAreas(w, m.id[i]);
   if (w.memory.size > 0) w.memory.delete(m.id[i]);
+  const eventReward = mapEventKill(w, m.id[i], credited);
   m.release(i);
   recordCorpse(w, kind, x, y);
   if (isBoss) {
@@ -266,7 +268,7 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
     // and leave by respawning). Summoned minions never roll loot: stalling a summoner would
     // otherwise be an endless farm.
     if (!summoned && w.living.length > 0) {
-      const specs = rollKillLoot(w, { kind, summoned, rarity, isLieutenant, isBoss, wave, x, y }, livingIds(w));
+      const specs = rollKillLoot(w, { kind, summoned, rarity, isLieutenant, isBoss, wave, x, y, ...(eventReward ? { eventReward } : {}) }, livingIds(w));
       if (specs.length > 0) spawnDrops(w, specs, x, y, isBoss || isLieutenant || rarity === 'rare');
     }
   }

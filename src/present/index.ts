@@ -85,6 +85,7 @@ import { EventFx } from './events';
 import { Effects } from './fx';
 import { Ground } from './ground';
 import { Indicators } from './indicators';
+import { drawMapEvent } from './map-events';
 import { clamp, clamp01 } from './math';
 import { MonsterPainter } from './monsters';
 import { Pen } from './pen';
@@ -300,6 +301,7 @@ class WorldPresenter implements Presenter {
     this.fx.decals.draw(pen, f);
     this.fx.corpses.draw(pen, f);
     this.areas.draw(pen, f);
+    drawMapEvent(pen, f);
     this.props.draw(pen, f);
     this.drops.draw(pen, f);
     this.monsters.draw(pen, f);

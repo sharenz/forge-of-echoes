@@ -3,6 +3,7 @@
 // ember "Activate" button, then a picker over the Map Stash (tier tiles and map rows: click, Ctrl-click or drag a
 // map into the device; drag the device's map back onto the picker to file it). In a party member's hideout it
 // shows THEIR open portal instead (read-only).
+import { mapEventOdds } from '../../game/progression/map-events';
 import { useMemo, useState } from 'preact/hooks';
 import { PORTALS_PER_MAP } from '../../contracts/net';
 import type { PortalInfo } from '../../contracts/net';
@@ -72,7 +73,7 @@ export function MapDevicePanel() {
     const preview = safe(() => store.rules.openMap(ch, areaId), null);
     const luck = preview && preview.ok ? safe(() => store.rules.lootLuck(preview.value.setup, ch), null) : null;
     const mapLuck = preview && preview.ok ? { q: preview.value.setup.itemQuantity, r: preview.value.setup.itemRarity } : null;
-    return { desc, summary, luck, mapLuck, error: preview && !preview.ok ? preview.error : null };
+    return { desc, summary, luck, mapLuck, events: mapEventOdds(effective, areaId), error: preview && !preview.ok ? preview.error : null };
   }, [ch, map, store, areaId]);
 
   if (!ch) return null;
@@ -191,6 +192,7 @@ export function MapDevicePanel() {
                     </div>
                   </div>
                 )}
+                <p class="ui-type-caption">Encounter chance: The Hunted {Math.round(readout.events.hunted * 1000) / 10}% · Echo Rift {Math.round(readout.events.echoRift * 1000) / 10}%. At most one; discovered during the map.</p>
                 <div class="fe-device__summary">
                   {readout.summary.map((l) => {
                     const isOpen = openLine === l.label;

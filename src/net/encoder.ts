@@ -1,6 +1,7 @@
 // Server-side snapshot encoder: WorldView (+ viewer id + acked input seq) → one compact binary message.
 // Layout: see the table at the top of snapshot.ts. One encoder may serve any number of viewers and instances;
 // it only keeps a reusable output buffer between calls.
+import { MAP_EVENT_KINDS, MAP_EVENT_PHASES } from '../contracts/map-events';
 import { AOI_HALF_HEIGHT, AOI_HALF_WIDTH } from '../contracts/net';
 import type { SnapshotEncoder } from '../contracts/net';
 import type { AreaView, DropView, PlayerView, WorldView } from '../contracts/sim';
@@ -380,7 +381,7 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
     w.u32(clampInt(run.kills, 0, 0xffffffff));
     w.u16(clampInt(run.monstersAlive, 0, 0xffff));
     w.u8(clampInt(run.playersAlive, 0, 255));
-    w.u8((run.boss ? 1 : 0) | (run.lieutenant ? 2 : 0) | (run.portalOpen ? 4 : 0));
+    w.u8((run.boss ? 1 : 0) | (run.lieutenant ? 2 : 0) | (run.portalOpen ? 4 : 0) | (run.event ? 8 : 0));
     if (run.boss) {
       w.str(run.boss.name);
       w.f32(run.boss.life);
@@ -391,6 +392,13 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
       w.str(run.lieutenant.name);
       w.f32(run.lieutenant.life);
       w.f32(run.lieutenant.maxLife);
+    }
+
+    if (run.event) {
+      w.u8(MAP_EVENT_KINDS.indexOf(run.event.kind));
+      w.u8(MAP_EVENT_PHASES.indexOf(run.event.phase));
+      w.f32(run.event.x); w.f32(run.event.y);
+      w.u8(run.event.remaining); w.u8(run.event.total);
     }
 
     // --- players (all of them; the viewer's own record carries the HUD data) ---

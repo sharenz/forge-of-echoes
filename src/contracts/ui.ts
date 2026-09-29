@@ -42,6 +42,7 @@ export interface HudFlask {
 }
 
 export interface HudRun {
+  event?: import('./map-events').MapEventView | null;
   mapName: string;
   tier: number;
   /** Authoritative monster level from the server's run setup. */

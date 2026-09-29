@@ -49,11 +49,13 @@ export function redactForClient(ch: CharacterSave): CharacterSave {
 }
 
 /**
- * The RunSetup a client may see (ZoneInfo.setup): the seed zeroed, so the map's loot stream cannot be
- * mirrored. lootLuck / lootLuckLines / deriveStats(ch, setup) / the summary lines never read it.
+ * The RunSetup a client may see (ZoneInfo.setup): seed zeroed and the event plan removed, so neither
+ * the loot stream nor an unrevealed encounter can be read ahead. Display rules (lootLuck, lootLuckLines,
+ * deriveStats and summary lines) never read either field.
  */
 export function redactSetupForClient(setup: RunSetup): RunSetup {
-  return setup.seed === 0 ? setup : { ...setup, seed: 0 };
+  const { event: _event, ...publicSetup } = setup;
+  return { ...publicSetup, seed: 0 };
 }
 
 /**

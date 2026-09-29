@@ -24,7 +24,8 @@ import type { AreaKind, Dir4, DropSprite, DropTone, PlayerAnim, PropKind, RootSo
  * 5: the area count is a u16 (up to MAX_WIRE_AREAS) and areas are chosen by priority: every telegraph first, then the
  *    nearest persistent ground. A version-4 bundle would read the second count byte as the first area record.
  */
-export const SNAPSHOT_VERSION = 5;
+// v6 adds the revealed map-event state behind run flag bit 8.
+export const SNAPSHOT_VERSION = 6;
 
 /** Drop flag byte: tone in bits 0–2, sprite in bits 3–4, then these (bit 7 is spare). */
 export const DROP_BLOCKED_BIT = 32;

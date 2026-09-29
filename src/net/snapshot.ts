@@ -5,8 +5,9 @@
 //
 //   header   u8 version · u32 tick · u32 ackSeq · u8 viewerId · u8 theme · f32 arenaRadius · f32 originX · f32 originY
 //   run      u8 phase · u8 wave · u8 waveCount · f32 waveTime · f32 waveDuration · f32 elapsed · u32 kills
-//            · u16 monstersAlive · u8 playersAlive · u8 flags(boss|lieutenant<<1|portalOpen<<2)
+//            · u16 monstersAlive · u8 playersAlive · u8 flags(boss|lieutenant<<1|portalOpen<<2|event<<3)
 //            · [boss: str name · f32 life · f32 maxLife · u8 phase] · [lieutenant: str name · f32 life · f32 maxLife]
+//            · [event: u8 kind · u8 phase · f32 x · f32 y · u8 remaining · u8 total]
 //   players  u8 n · n × { u8 id · u8 bits(facing:2|anim:3|dead|full|casting) · u8 level · str name · f32 x · f32 y
 //            · f32 vx · f32 vy · i16 aimDx·8 · i16 aimDy·8 · f32 animTime · [u8 skill · u16 progress·65535]
 //            · f32 life · f32 maxLife · u16 wardTime ms · u16 wardDuration ms · u16 invuln ms · u8 hitFlash·255
@@ -31,6 +32,7 @@
 //
 // Enum fields are indices into the append-only tables of protocol.ts (MONSTER_KINDS, PROJECTILE_KINDS, AREA_KINDS,
 // PLAYER_DEBUFFS, …); the decoder rejects any index past the end of its table.
+import { MAP_EVENT_KINDS, MAP_EVENT_PHASES } from '../contracts/map-events';
 import type { SkillId, Theme } from '../contracts/content';
 import { BELT_SLOTS, LOADOUT_SLOTS } from '../contracts/items';
 import type {
@@ -339,6 +341,11 @@ export class Snapshot {
       l.maxLife = r.f32();
       run.lieutenant = l;
     } else run.lieutenant = null;
+    if (flags & 8) {
+      run.event = { kind: enumAt(MAP_EVENT_KINDS, r.u8(), 'map event'),
+        phase: enumAt(MAP_EVENT_PHASES, r.u8(), 'map event phase'),
+        x: r.f32(), y: r.f32(), remaining: r.u8(), total: r.u8() };
+    } else run.event = null;
   }
 
   private decodePlayers(r: ByteReader, interner: StringInterner): void {

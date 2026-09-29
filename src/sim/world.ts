@@ -291,6 +291,7 @@ export interface World {
   readonly props: Prop[];
   readonly packs: Pack[];
   readonly director: Director;
+  readonly mapEvent: import('./map-events').MapEventState | null;
   /** This map's monsters (THEME_ROSTER by RunConfig.theme; the hideout gets the Ashen Forge's). */
   readonly roster: Roster;
   readonly boss: BossRuntime;

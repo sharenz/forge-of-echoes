@@ -226,6 +226,19 @@ function WaveCard() {
   );
 }
 
+function MapEventCard() {
+  const event = useUi(s => s.hud?.run?.event ?? null, shallowEqual);
+  if (!event) return null;
+  const hunted = event.kind === 'hunted';
+  const text = event.phase === 'complete' ? (hunted ? 'Hunter defeated · rare item dropped' : 'Rift sealed · crafting materials dropped')
+    : event.phase === 'available' ? 'Approach the rift to awaken it · optional'
+    : event.phase === 'warning' ? (hunted ? 'A rare hunter is approaching' : 'The rift is opening')
+    : hunted ? 'Defeat the pursuing hunter for a rare item' : `${event.total - event.remaining} / ${event.total} echoes defeated · crafting materials`;
+  return <div class="fe-map-event" role="status" aria-label={hunted ? 'The Hunted' : 'Echo Rift'}>
+    <b>{hunted ? 'The Hunted' : 'Echo Rift'}</b><span>{text}</span>
+  </div>;
+}
+
 function RunBars() {
   const bars = useUi((s) => ({ lt: s.hud?.run?.lieutenant ?? null, boss: s.hud?.run?.boss ?? null }), shallowEqual);
   return (
@@ -567,6 +580,7 @@ export function TopHud() {
           <WaveCard />
           <ZoneChip />
           <RunBars />
+          <MapEventCard />
           <MonsterHover />
           <TellBanner />
           <ZoneBanner />

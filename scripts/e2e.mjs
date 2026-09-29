@@ -3,7 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5|qol|account|atlas] [--smoke 30] [--lieutenant]
+//                        [--only wave5|qol|account|atlas|events] [--smoke 30] [--lieutenant]
 //
 // --prod tests the production bundle instead of the Vite dev server: `vite build` (with VITE_FOE_DEBUG=1, so the
 // window.__foe hooks this script drives are compiled in) into a temp dir, served by the game server itself
@@ -70,6 +70,7 @@ const WAVE5_ONLY = opt('only', 'all') === 'wave5';
 const QOL_ONLY = opt('only', 'all') === 'qol';
 const ACCOUNT_ONLY = opt('only', 'all') === 'account';
 const ATLAS_ONLY = opt('only', 'all') === 'atlas';
+const EVENTS_ONLY = opt('only', 'all') === 'events';
 /** Seconds of fighting in each new map type (longer while its family has not shown two kinds yet). */
 const SMOKE_SECONDS = Number(opt('smoke', '30'));
 /** --lieutenant: keep fighting each new map type until its lieutenant (wave 3) is on the field. */
@@ -1927,6 +1928,76 @@ async function atlasScenario({ A, port }) {
   });
 }
 
+async function eventsScenario({ A, port }) {
+  const eventShot = async (name) => {
+    await A.shot(name);
+    if (VW !== 1024 || VH !== 600) {
+      await A.page.setViewportSize({ width: 1024, height: 600 });
+      await sleep(120);
+      await A.shot(`${name}-600`);
+      await A.page.setViewportSize({ width: VW, height: VH });
+    }
+  };
+  await step('open a map for the event browser fixture', async () => {
+    const result = await A.eval(async () => {
+      const f = window.__foe;
+      const item = f.store.get().character.backpack.entries.find(e => e.item.kind === 'map').item;
+      let r = await f.send({ c: 'moveItem', uid: item.uid, to: { kind: 'mapDevice' } });
+      if (!r.ok) return r;
+      return f.send({ c: 'activateMapDevice' });
+    });
+    assert(result.ok, result.error);
+  });
+  for (const kind of ['hunted', 'echoRift']) {
+    await step(`${kind}: seed the disposable map and strong browser-test character`, async () => {
+      outage = true;
+      await stopGameServer();
+      const { DatabaseSync } = await import('node:sqlite');
+      const db = new DatabaseSync(join(tmp, 'e2e.db'));
+      const row = db.prepare('SELECT map_id, setup FROM open_maps').get();
+      const setup = JSON.parse(row.setup);
+      setup.event = { kind, wave: 2, angle: 0 };
+      db.prepare('UPDATE open_maps SET setup = ?, cleared = 0, portals_remaining = 8 WHERE map_id = ?').run(JSON.stringify(setup), row.map_id);
+      const ch = db.prepare('SELECT id, data FROM characters').get();
+      const saved = JSON.parse(ch.data);
+      saved.level = 50;
+      saved.allocated = { str: 100, dex: 50, int: 100 };
+      for (const id of Object.keys(saved.skillRanks)) saved.skillRanks[id] = 20;
+      saved.loadout = ['emberLance', 'emberNova', 'arcChain', 'flameWave', 'cinderWard', 'riftStep'];
+      db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(saved), ch.id);
+      db.close();
+      await startGameServer(port);
+      await A.waitFor('event fixture reconnect', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.level === 50, undefined, 30000);
+      outage = false;
+    });
+    await step(`${kind}: hidden before discovery; visible status and world marker during combat`, async () => {
+      await clickPortal(A);
+      await A.waitFor('inside the event map', () => window.__foe.store.get().hud?.zone === 'map');
+      assert(await A.eval(() => !Object.hasOwn(window.__foe.store.get().run, 'event')), 'event plan leaked in ZoneInfo');
+      assert(await A.eval(() => !window.__foe.world.view.run.event), 'event appeared before its wave');
+      await A.eval(() => window.__foe.bot.enable({ returnPortal: false, collect: false }));
+      await A.waitFor('event discovery', () => !!window.__foe.world.view.run.event, undefined, 150000);
+      await A.eval(() => window.__foe.bot.disable());
+      await A.page.waitForSelector('.fe-map-event');
+      await eventShot(`events-${kind}-discovered`);
+      const e = await A.eval(() => window.__foe.world.view.run.event);
+      assert(e.kind === kind, 'wrong event');
+      await A.eval(() => { window.__eventEmbersBefore = window.__foe.store.get().character.backpack.entries.reduce((sum, e) => sum + (e.item.kind === 'currency' && e.item.currencyId === 'reforge' ? e.item.count : 0), 0); });
+      await A.eval((event) => window.__foe.bot.enable({ returnPortal: false, collect: false, hold: event.kind === 'echoRift' ? { x: event.x, y: event.y } : null }), e);
+      await A.waitFor('completed event', () => window.__foe.world.view.run.event?.phase === 'complete', undefined, 120000);
+      await eventShot(`events-${kind}-complete`);
+      const drops = await A.eval(() => window.__foe.world.view.drops.map(d => ({ tone: d.spec.tone, label: d.spec.label })));
+      const pickedEmbers = await A.eval(() => window.__foe.store.get().character.backpack.entries.reduce((sum, e) => sum + (e.item.kind === 'currency' && e.item.currencyId === 'reforge' ? e.item.count : 0), 0) > window.__eventEmbersBefore);
+      assert(kind === 'hunted' ? drops.some(d => d.tone === 'rare') : drops.some(d => /Reforging Ember/.test(d.label)) || pickedEmbers, 'event reward missing');
+      await A.eval(() => window.__foe.bot.disable());
+      const leave = await A.eval(() => window.__foe.send({ c: 'leaveMap' }));
+      assert(leave.ok, leave.error);
+      await A.waitFor('home after event', () => window.__foe.store.get().hud?.zone === 'hideout');
+      await closePanels(A);
+    });
+  }
+}
+
 async function main() {
   const port = await freePort();
   if (PROD) {
@@ -1972,7 +2043,8 @@ async function main() {
     return nameA;
   });
   if (ATLAS_ONLY) await atlasScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY) {
+  if (EVENTS_ONLY) await eventsScenario({ A, port });
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -1981,7 +2053,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

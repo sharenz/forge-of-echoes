@@ -17,6 +17,7 @@ import { clean, fail, ok } from './util';
 import { findAtlasArea } from '../../data/progression/atlas';
 import { atlasAccessError, newAtlas } from './atlas';
 import { spendCurrency } from './merchant';
+import { normalizeMapEvent, rollMapEvent } from './map-events';
 
 /**
  * Map device readout: monster level, the map's own luck, waves, dangers and rewards. Map-side only —
@@ -39,6 +40,7 @@ function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId): RunSetup
   const luck = mapLuck(map, null);
   return {
     map,
+    event: rollMapEvent(map, seed, areaId),
     ...(area ? { atlasAreaId: area.id, sourceMap: source } : {}),
     seed: seed >>> 0,
     monsterLevel: monsterLevelForTier(map.tier),
@@ -106,7 +108,11 @@ export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
   const uid = typeof source.uid === 'string' && source.uid.length > 0 && source.uid.length <= 64 ? source.uid : 'restored-map';
   const map = normalizeMap(source, uid);
   if (!map || !findMapBase(map.baseId)) return null;
-  return setupFor(snapshotMap(map), Math.floor(seed), area?.id);
+  const setup = setupFor(snapshotMap(map), Math.floor(seed), area?.id);
+  // Preserve the creation decision; pre-event maps do not gain a surprise on restart.
+  if (wrapper && 'event' in wrapper) setup.event = normalizeMapEvent(wrapper.event);
+  else delete setup.event;
+  return setup;
 }
 
 /**
@@ -186,6 +192,7 @@ export function buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConf
   const area = findAtlasArea(setup.atlasAreaId);
   return {
     mode: 'map',
+    event: setup.event ?? null,
     seed: setup.seed >>> 0,
     theme: base?.theme ?? 'ashenForge',
     mapName: area?.name ?? mapTitle(map),

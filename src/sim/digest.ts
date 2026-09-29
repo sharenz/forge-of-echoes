@@ -42,6 +42,14 @@ export function digestWorld(w: World): number {
       h.int(d.stacks[k]);
     }
   }
+  const event = w.mapEvent;
+  if (event) {
+    h.int(event.plan.kind === 'hunted' ? 1 : 2); h.int(event.plan.wave); h.float(event.plan.angle);
+    h.int(event.finished ? 1 : 0); h.float(event.timer); h.float(event.grace); h.int(event.pulses);
+    for (const id of event.members) h.int(id);
+    h.int(event.view ? ['available', 'warning', 'active', 'complete'].indexOf(event.view.phase) + 1 : 0);
+    if (event.view) { h.float(event.view.x); h.float(event.view.y); h.int(event.view.remaining); }
+  }
   const m = w.monsters;
   h.int(m.count);
   for (let i = 0; i < m.hwm; i++) {

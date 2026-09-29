@@ -127,6 +127,8 @@ export interface PlayerJoin {
 }
 
 export interface KillLootContext {
+  /** Final credited kill of a map event; adds its one-time reward. */
+  eventReward?: import('./map-events').MapEventKind;
   kind: MonsterKind;
   /** Summoned minions (Herald/Matriarch) — the sim never rolls loot for them; flag kept for completeness. */
   summoned: boolean;
@@ -178,6 +180,7 @@ export interface RunHooks {
 }
 
 export interface RunConfig {
+  event?: import('./map-events').MapEventPlan | null;
   mode: 'hideout' | 'map';
   seed: number;
   theme: Theme;
@@ -382,6 +385,8 @@ export interface PropView {
 export type RunPhase = 'hideout' | 'tell' | 'fight' | 'boss' | 'cleared' | 'failed';
 
 export interface RunView {
+  /** Null until a map event reveals itself. */
+  event?: import('./map-events').MapEventView | null;
   phase: RunPhase;
   wave: number;               // 1-based, 0 before the first wave
   waveCount: number;

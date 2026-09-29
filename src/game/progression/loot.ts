@@ -264,6 +264,12 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
     for (let i = 0; i < n; i++) out.push(rollCategory(cat, ctx, rng, m, origin));
   }
 
+  if (kill.eventReward === 'hunted') out.push(makeEquipment(ctx, rng, 'rare', `Reward from The Hunted in ${ctx.place}`));
+  if (kill.eventReward === 'echoRift') {
+    out.push(currencyStack('reforge', 1, randomUid(rng), true));
+    out.push(currencyStack('mapDust', 1, randomUid(rng), true));
+  }
+
   // Guarantees use the looter's personal rarity (the elite multiplier already boosts the ordinary roll above).
   const mapM = luck.personal.itemRarity / 100;
   if (kill.isLieutenant) {

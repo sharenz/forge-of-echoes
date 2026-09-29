@@ -66,6 +66,18 @@ function richWorld() {
 }
 
 describe('snapshot codec', () => {
+  it('round-trips revealed event state and clears it on the next snapshot', () => {
+    const v = richWorld();
+    const encoder = createSnapshotEncoder();
+    const reader = new ByteReader(); const strings = new StringInterner(256); const snapshot = new Snapshot();
+    v.run.event = { kind: 'echoRift', phase: 'active', x: 345, y: -123, remaining: 6, total: 9 };
+    snapshot.decode(encoder.encode(v, 1, 1), reader, strings);
+    expect(snapshot.run.event).toEqual(v.run.event);
+    v.run.event = null;
+    snapshot.decode(encoder.encode(v, 1, 2), reader, strings);
+    expect(snapshot.run.event).toBeNull();
+  });
+
   it('round-trips a rich world view', () => {
     const v = richWorld();
     const enc = createSnapshotEncoder();
@@ -284,19 +296,17 @@ describe('snapshot codec', () => {
     expect(flagsOf(ground)).toBe(4 | (1 << 3));
   });
 
-  it('stamps version 5 and rejects older snapshots, so a stale bundle reloads instead of limping on', () => {
-    // Version 5 = u16 area count (areas chosen by priority). A version-4 decoder would read the count's high byte as
-    // the first area record; it rejects every v5 snapshot instead, and after MAX_SNAPSHOT_FAILURES the client reloads
-    // into the new bundle. (Version 4 brought the packed monster/projectile heads and the player debuffs.)
-    expect(SNAPSHOT_VERSION).toBe(5);
+  it('stamps version 6 and rejects older snapshots, so a stale bundle reloads instead of limping on', () => {
+    // Revealed event state is new in v6; older decoders must reload.
+    expect(SNAPSHOT_VERSION).toBe(6);
     const v = richWorld();
     const buf = new Uint8Array(createSnapshotEncoder().encode(v, 1, 1));
-    expect(buf[0]).toBe(5);
-    for (const version of [3, 4]) {
+    expect(buf[0]).toBe(6);
+    for (const version of [3, 4, 5]) {
       const old = buf.slice();
       old[0] = version;
       expect(() => decodeSnapshot(old)).toThrow(SnapshotDecodeError);
-      expect(() => decodeSnapshot(old)).toThrow(`snapshot version ${version} != 5`);
+      expect(() => decodeSnapshot(old)).toThrow(`snapshot version ${version} != 6`);
     }
   });
 

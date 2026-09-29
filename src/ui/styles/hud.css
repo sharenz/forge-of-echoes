@@ -1764,3 +1764,8 @@ button.fe-ally:hover { border-color: var(--bronze-light); }
 .fe-craft-strip--blocked .fe-craft-strip__help {
   color: #f3c9c2;
 }
+
+/* Event status shares the existing top stack; it never covers an encounter health bar. */
+.fe-map-event { max-width: 380px; padding: 8px 14px; border: 1px solid #735b82; background: rgba(18, 13, 23, 0.94); display: grid; gap: 3px; text-align: center; }
+.fe-map-event b { color: #dfc6ed; font-size: var(--font-ui-body); }
+.fe-map-event span { color: var(--color-text-secondary, #c8c0b4); font-size: var(--font-ui-caption); }

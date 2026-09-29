@@ -133,6 +133,8 @@ export interface MapSummaryLine {
 }
 
 export interface RunSetup {
+  /** Creation roll, omitted from client projections; absent on pre-event maps. */
+  event?: import('./map-events').MapEventPlan | null;
   map: MapItem;         // effective map: item tier/quality/mods with the Atlas area's theme/implicit
   /** Original item for restart refunds when the chosen area changed its base. */
   sourceMap?: MapItem;

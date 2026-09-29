@@ -259,6 +259,7 @@ function copyRun(src: RunView, dst: RunView, boss: NonNullable<RunView['boss']>,
     boss.phase = src.boss.phase;
     dst.boss = boss;
   } else dst.boss = null;
+  dst.event = src.event ? { ...src.event } : null;
   if (src.lieutenant) {
     lieutenant.name = src.lieutenant.name;
     lieutenant.life = src.lieutenant.life;

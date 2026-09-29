@@ -55,15 +55,16 @@ describe('restoreRunSetup (restart safety: open maps survive a deploy)', () => {
   it('rebuilds exactly the setup the map was opened with, from the persisted map and seed', () => {
     const setup = opened();
     const row = JSON.parse(JSON.stringify({ map: setup.map, seed: setup.seed }));
-    expect(restoreRunSetup(row.map, row.seed)).toEqual(setup);
+    const { event: _event, ...legacy } = setup;
+    expect(restoreRunSetup(row.map, row.seed)).toEqual(legacy);
     // The whole persisted RunSetup works too; its map is what counts. So does the JSON text of a column.
     expect(restoreRunSetup(JSON.parse(JSON.stringify(setup)), setup.seed)).toEqual(setup);
-    expect(restoreRunSetup(JSON.stringify(setup.map), setup.seed)).toEqual(setup);
+    expect(restoreRunSetup(JSON.stringify(setup.map), setup.seed)).toEqual(legacy);
     expect(restoreRunSetup(JSON.stringify(setup), setup.seed)).toEqual(setup);
     // Same instance config as the original run.
     const hooksNone: RunHooks = { rollKillLoot: () => [], rollChestLoot: () => [], tryPickup: () => true };
     const { hooks: _a, ...before } = rules.buildRunConfig(setup, hooksNone);
-    const { hooks: _b, ...after } = rules.buildRunConfig(restoreRunSetup(row.map, row.seed)!, hooksNone);
+    const { hooks: _b, ...after } = rules.buildRunConfig(restoreRunSetup(setup, row.seed)!, hooksNone);
     expect(after).toEqual(before);
   });
 

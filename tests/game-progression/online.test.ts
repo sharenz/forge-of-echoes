@@ -71,7 +71,7 @@ describe('display rules never read the character rng (the server redacts it)', (
     expect(preview.seed).not.toBe(real.seed);
     expect(rules.lootLuck(preview, redacted)).toEqual(rules.lootLuck(real, ch));
     expect(lootLuckLines(preview, redacted)).toEqual(lootLuckLines(real, ch));
-    expect({ ...preview, seed: 0 }).toEqual({ ...real, seed: 0 });
+    expect(redactSetupForClient(preview)).toEqual(redactSetupForClient(real));
   });
 });
 
@@ -80,10 +80,11 @@ describe('the map seed stays on the server (ZoneInfo.setup is redacted)', () => 
   const setup = expectOk(rules.openMap(ch)).setup;
   const shown = redactSetupForClient(setup);
 
-  it('zeroes the seed and nothing else', () => {
+  it('zeroes the seed and removes the hidden event roll', () => {
     expect(setup.seed).not.toBe(0);
     expect(shown.seed).toBe(0);
-    expect({ ...shown, seed: setup.seed }).toEqual(setup);
+    expect(shown).not.toHaveProperty('event');
+    expect({ ...shown, seed: setup.seed, event: setup.event }).toEqual(setup);
   });
 
   it('personal luck, its lines and the in-map sheet are identical', () => {

@@ -70,15 +70,18 @@ export function updateDirector(w: World): void {
     refreshPhase(w);
     return;
   }
-  if (d.tellWave > 0) {
+  const eventHolding = (w.mapEvent?.grace ?? 0) > 0 && (w.mapEvent?.view?.phase === 'warning' || w.mapEvent?.view?.phase === 'active');
+  if (d.tellWave > 0 && !eventHolding) {
     d.tellTimer -= DT;
     if (d.tellTimer <= 0) startWave(w, d.tellWave);
   }
   if (d.wave > 0) {
-    d.waveTime += DT;
-    updateStream(w);
+    if (!eventHolding) {
+      d.waveTime += DT;
+      updateStream(w);
+    }
     updateHazards(w);
-    if (d.tellWave === 0) {
+    if (d.tellWave === 0 && !eventHolding) {
       const cleared = waveCleared(w);
       if (d.wave < cfg.count) {
         // The boss wave holds until the boss falls; other waves advance on clear or on time.

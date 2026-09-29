@@ -157,8 +157,15 @@ reopen tuning for a specific problem rather than starting another general balanc
    Atlas/restart checks after adding one final cross-account transaction regression. Browser entry/key flow
    and layout pass at 1024×600 and 1280×720. A fresh production-copy audit preserves all 457 items on 7 characters.
    Protocol 7, exact public bundle matches and a post-deployment production-copy audit also pass.
-3. **Map events, first two.** The Hunted and Echo Rift, rolled at map creation (~25% base, one per map, hidden
-   until they happen), map mods and area type raise the odds of specific events. Must feel good, not annoying.
+3. **Map events, first two — verified, deployment pending.** The Hunted and Echo Rift roll at map
+   creation (25% base, at most one per map), hidden until wave 2 or 4. Area types and selected map mods favour
+   specific events; Map Device displays exact odds. Hunted brings a rare pursuer and guarantees a Rare item;
+   an optional Echo Rift releases three magic packs and rewards Reforging Ember + Map Dust. Both have warning
+   cues, HUD progress, world markers and per-player rewards. Event grace is capped at 20 seconds so normal
+   map progression cannot stall. Legacy runs remain event-free. See GAME_SPEC §7 for mechanics.
+   Build/typecheck and all 1,838 always-on tests pass (12 optional balance checks skipped). Both encounters,
+   hidden discovery, rewards and restart fixtures pass in Chromium at 1024×600 and 1280×720; final HUD
+   contrast/layout inspected at both sizes. Production activation and live verification remain.
 4. **Ingredients, first batch.** Verbs, not stronger currency (Prefix Rune / Suffix Rune to start), tied to areas
    so the best ingredient for a craft is not in the area you farm. Tradeable.
 5. **Item bases at ilvl 42+** (tier 8+ under the new monster-level formula), in parallel with 4, so the tier gate yields gear worth wanting.
