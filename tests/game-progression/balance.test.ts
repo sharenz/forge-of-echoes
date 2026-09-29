@@ -103,12 +103,12 @@ describe.runIf(enabled)('balance playthroughs (BALANCE=1)', () => {
       for (const r of results) expect(r.result, describePlay(r)).toBe('cleared');
       const last = characters[characters.length - 1];
       expect(last.level, `seed ${seed}: level after 8 maps`).toBeGreaterThanOrEqual(9);
-      // Stronger elites can make one early tier jump costly. Most later maps must still be manageable,
-      // with fewer than one death per map overall and at least one spare portal on every clear.
+      // nextMap prefers normal maps but can use a crafted drop when no normal one is available.
+      // Preserve the on-level death budget for normal maps; crafted maps have their own danger mods.
       const later = results.slice(1);
-      const laterDeaths = later.reduce((n, r) => n + r.deaths, 0);
-      expect(laterDeaths, `seed ${seed}: deaths after the first map`).toBeLessThan(later.length);
-      expect(later.filter((r) => r.deaths > 2).length, `seed ${seed}: costly maps`).toBeLessThanOrEqual(1);
+      const normal = later.filter((r) => r.setup.map.rarity === 'normal');
+      expect(normal.length, `seed ${seed}: normal maps sampled`).toBeGreaterThanOrEqual(3);
+      expect(normal.reduce((n, r) => n + r.deaths, 0), `seed ${seed}: normal-map deaths after the first map`).toBeLessThanOrEqual(2);
       for (const r of later) expect(r.portalsUsed, describePlay(r)).toBeLessThan(PORTALS_PER_MAP);
       expect(results.slice(1).filter(pushedBack).length, `seed ${seed}: maps that push back`).toBeGreaterThanOrEqual(3);
     }

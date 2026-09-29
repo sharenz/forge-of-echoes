@@ -4,14 +4,25 @@ Maintained at the owner's request. Ask "what's next" and it is read from here; i
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
 Last reprioritised: 2026-09-29.
 
-**Current order:** six freely assignable skill slots + stronger elites (in progress) → fix the known UI layout problems → fix stash quick-move → show monster pack modifiers →
+**Current order:** fix the known UI layout problems → fix stash quick-move → show monster pack modifiers →
 social UI (global chat and party avatars) → account-wide storage → Atlas vertical slice → events and crafting progression → more map content.
 Priorities follow current usability problems, then progression dependencies. Wave-3 boss reuse is later content work.
 
-**Current release in verification (owner, 2026-09-29):** six slots labelled LMB, RMB, Q, E, R, F; any learned
+**Latest release: Done — `20260929-193742-2bcfd46` (2026-09-29).** Six slots labelled LMB, RMB, Q, E, R, F; any learned
 skill in any slot, including Ember Lance; drag to move/swap from the skills panel or HUD. RMB replaces Space.
 Auto-attack follows Ember Lance. Rare leaders gain ×3 life / ×1.5 damage, magic mobs ×1.5 life / ×1.2 damage,
 before their existing modifiers. Named boss tuning stays as approved in the owner's playtest.
+- Build/typecheck and 1,793 always-on tests pass, as do the full balance sweep's 18 checks (including 12
+  on-demand checks). Drag/swap, clearing LMB, moving Ember Lance to F, and overlapping mouse buttons verified
+  in Chromium; layouts checked at 1280×720 and 1024×600. Protocol 4 refreshes old clients.
+- Fresh Ashen T1 clears in 9.2–11.5 minutes with 1–4 deaths across the three balance seeds. All normal T1–T3
+  reference maps clear; on-level normal maps cost at most two deaths. One **magic** Coliseum T2 in the
+  progression route costs five deaths before clearing: keep watching crafted-map difficulty in playtests.
+  Progression checks now distinguish crafted drops from normal maps; stronger elites widen the permitted
+  cross-theme lowest-life margin spread from 20 to 25 percentage points.
+- Live health is healthy on protocol 4, the served JavaScript/CSS match the tested build, and the deployed
+  bindings and elite multipliers were checked directly. Production backup:
+  `/var/lib/forge/backups/pre-skill-slots-2026-09-29T19-32-46.599Z.db` (integrity check passed).
 
 **Vision (owner):** two progressions. Character progression exists so you can run harder maps; **map
 progression is the real game progression.** Hobby project played with friends (no trust/legal/scale concerns).
@@ -218,6 +229,8 @@ decide"), informed by an ARPG-designer agent review. Owner can overrule any of t
 
 ## Done
 
+- 2026-09-29: Six freely assignable skill slots with RMB, drag-and-drop swaps, and stronger rare/magic mobs
+  deployed as `20260929-193742-2bcfd46`. Global chat, chat party invites and party-avatar menus queued in P0.4.
 - 2026-09-29: Completed phase 2 of the balance overhaul and immediate XP on kill. Map HUD includes implicit
   modifiers and the map-level resistance penalty. Protocol 3 refreshes clients with old shared rules.
 - 2026-09-29: Added the authoritative monster level to the top-right map HUD and compact readout. T1 remains
