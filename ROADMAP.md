@@ -5,15 +5,19 @@ from discussions are added or moved between items. Nothing here is built unless 
 Last reprioritised: 2026-09-29.
 
 **Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
-verify the resulting game and deploy it to production. QoL implementation is verified locally and awaiting deployment;
+verify the resulting game and deploy it to production. QoL (P0.1–4) is done and deployed;
 account storage, Atlas, events, ingredients, high-level bases, sinks, expanded maps, remaining content and the
 map tree remain part of this delivery until individually completed and verified.
 
-**Current order:** fix the known UI layout problems → fix stash quick-move → show monster pack modifiers →
-social UI (global chat and party avatars) → account-wide storage → Atlas vertical slice → events and crafting progression → more map content.
+**Current order:** account-wide storage → Atlas vertical slice → events and crafting progression → more map content.
 Priorities follow current usability problems, then progression dependencies. Wave-3 boss reuse is later content work.
 
-**Latest release: Done — `20260929-193742-2bcfd46` (2026-09-29).** Six slots labelled LMB, RMB, Q, E, R, F; any learned
+**Latest release: Done — `20260929-200443-00f0f86` (2026-09-29).** Global/party chat, chat party invitations,
+party portraits with hideout/trade menus, automatic map/currency quick-move, elite hover modifiers and the
+character/party layout fixes (P0 below). Live protocol 5 and the public JS/CSS match the tested build.
+Production backup: `/var/lib/forge/backups/pre-qol-2026-09-29T20-03-30.120Z.db` (integrity check passed).
+
+**Previous release: Done — `20260929-193742-2bcfd46` (2026-09-29).** Six slots labelled LMB, RMB, Q, E, R, F; any learned
 skill in any slot, including Ember Lance; drag to move/swap from the skills panel or HUD. RMB replaces Space.
 Auto-attack follows Ember Lance. Rare leaders gain ×3 life / ×1.5 damage, magic mobs ×1.5 life / ×1.2 damage,
 before their existing modifiers. Named boss tuning stays as approved in the owner's playtest.
@@ -87,13 +91,13 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
 - Production backup: `/var/lib/forge/backups/pre-phase2-2026-09-29T19-00-57.502Z.db` (integrity check passed).
   Live health reports protocol 3; public JavaScript/CSS match the tested build. Live T1 remains level 4.
 
-## P0: usability and combat readability (do these next, in order)
+## P0: usability and combat readability — Done (2026-09-29)
 
-**Implementation complete; production deployment pending.** Build/typecheck and all 1,801 always-on tests pass
+**Done — deployed as `20260929-200443-00f0f86`.** Build/typecheck and all 1,801 always-on tests pass
 (12 on-demand balance checks skipped; this release changes no combat tuning). The production-build browser
 scenario verifies two clients' global and party chat, right-click invitation/acceptance, avatar hideout travel
-and avatar trade with no client errors. Character/party layout and elite hover cards checked at 1024×600 and
-1280×720. Protocol 5 refreshes old clients. The full map-progression block below remains outstanding.
+and avatar trade with no client errors at both 1024×600 and 1280×720. Character/party layout and elite hover
+cards checked at both sizes. Protocol 5 refreshes old clients. The full map-progression block below remains outstanding.
 
 1. **Fix known UI layout problems after the font bump.** "Intelligence" collides with its `+` button in the
    character panel; party row metadata ("Ashen Forge T3 / 6/8 portals") wraps unevenly. Verify these fixes at
