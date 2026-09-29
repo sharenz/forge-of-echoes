@@ -312,6 +312,7 @@ export function ZoneInfo() {
       <div class="fe-zoneinfo fe-zoneinfo--map">
         <div class="fe-zoneinfo__title">{label.title}</div>
         {label.subtitle && <div class="fe-zoneinfo__sub">{label.subtitle}</div>}
+        {run.monsterLevel !== null && <div class="fe-zoneinfo__sub">Monster level {run.monsterLevel}</div>}
         <div class="fe-zoneinfo__luck">
           <span
             class="fe-solid"
@@ -411,6 +412,7 @@ function ZoneChip() {
                 {label.title}
                 {label.subtitle && <span class="fe-zonetip__sub"> · {label.subtitle}</span>}
               </div>
+              {run.monsterLevel !== null && <div class="fe-zonetip__sub">Monster level {run.monsterLevel}</div>}
               <div class="fe-zonetip__luck">
                 Your quantity <b>{formatLuck(run.itemQuantity)}</b> · rarity <b>{formatLuck(run.itemRarity)}</b>
               </div>
@@ -466,6 +468,7 @@ function ZoneChip() {
             <span class="fe-zonechip__title">{label.title}</span>
             <span class="fe-zonechip__tier">T{run.tier}</span>
           </span>
+          {run.monsterLevel !== null && <span class="fe-zonechip__tier">Monster level {run.monsterLevel}</span>}
           <span class="fe-zonechip__group">
             <PortalPips remaining={run.portalsRemaining} total={run.portalsTotal} />
             <span class="fe-zonechip__count">

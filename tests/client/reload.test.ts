@@ -2,6 +2,7 @@
 // real encoder bytes with a newer format byte — reach the connection as failures through GameSession, end the
 // session with 'reload' (4002) after MAX_SNAPSHOT_FAILURES, and the ReloadGuard allows exactly one automatic reload
 // until the page has read the world again: no reload loop, and the next deploy may reload again.
+import { PROTOCOL_VERSION } from '../../src/contracts/net';
 import { describe, expect, it } from 'vitest';
 import type { ServerMessage } from '../../src/contracts/net';
 import { rules } from '../../src/game';
@@ -132,7 +133,7 @@ function page(store: KeyValueStore, wall: { t: number }) {
       conn.connect('ws://x/ws');
       const s = sockets[sockets.length - 1];
       s.open();
-      s.text({ t: 'welcome', protocol: 1, characterId: 'me', tickRate: 60, serverTime: wall.t });
+      s.text({ t: 'welcome', protocol: PROTOCOL_VERSION, characterId: 'me', tickRate: 60, serverTime: wall.t });
       s.text({ t: 'character', character: ch });
       s.text({ t: 'zone', zone: zoneInfo({ ownerCharacterId: 'me' }) });
       return s;

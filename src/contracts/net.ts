@@ -9,7 +9,9 @@ import type { MerchantOffer, RunSetup } from './game';
 import type { CharacterSave, Item, ItemLocation, ItemTone } from './items';
 import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 
-export const PROTOCOL_VERSION = 1;
+// Bump for incompatible wire changes OR shared-rule changes that require a fresh browser bundle.
+// 2: level-based balance. Old tabs otherwise reconnect with stale tooltip and prediction rules.
+export const PROTOCOL_VERSION = 2;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;

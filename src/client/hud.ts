@@ -147,6 +147,7 @@ export function hudRun(input: HudInput): HudRun | null {
   return {
     mapName: zone.mapName,
     tier: zone.tier,
+    monsterLevel: zone.setup?.monsterLevel ?? null,
     phase: r.phase,
     wave: r.wave,
     waveCount: r.waveCount,

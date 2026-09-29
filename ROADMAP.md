@@ -55,8 +55,8 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
 1. **UI polish after the font bump.** "Intelligence" label collides with its `+` button in the character panel;
    party row metadata ("Ashen Forge T3 / 6/8 portals") wraps unevenly. Then review the panels not yet checked at
    the new sizes (stash, merchant, crafting bench, map device, trade, menu, tooltips, smaller viewports).
-2. **Map HUD: monster level and map modifiers** (owner). While inside a map, show the monster level in the top
-   right, together with all the modifiers of the map (danger and reward mods, corrupted/implicit if any).
+2. **Map HUD: complete map modifiers** (owner). Monster level is now shown in the top right and compact map
+   readout. Danger, reward and corrupted affixes are shown; include the map's implicit modifiers as well.
 3. **Monster pack modifiers on hover** (owner). When you hover a magic or rare pack, show its modifiers (top
    centre suggested). Spec data: magic packs share one mod (Swift, Stout, Fierce); a rare leader has 2 of
    Juggernaut, Frenzied, Ember-touched, Warded (`GAME_SPEC.md` §8). Needs the mods in the client snapshot and
@@ -188,6 +188,9 @@ decide"), informed by an ARPG-designer agent review. Owner can overrule any of t
 
 ## Done
 
+- 2026-09-29: Added the authoritative monster level to the top-right map HUD and compact readout. T1 remains
+  level 4 (owner confirmed). Raised client compatibility to protocol 2 so pre-balance tabs reload on reconnect
+  instead of keeping old tooltip rules. Build, all 1,774 always-on tests and wide/compact visual checks pass.
 - 2026-09-29: UI type scale raised to 14 / 16 / 19 / 28 px and deployed to prod.
 - 2026-09-29: Committed the font change, roadmap, balance phase 1 and all 21 `src/data/` files; anchored the
   runtime-data ignore rule to `/data/`. A fresh clone now installs and builds successfully.

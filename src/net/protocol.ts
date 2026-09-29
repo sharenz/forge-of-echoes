@@ -9,7 +9,7 @@ import type { AreaKind, Dir4, DropSprite, DropTone, PlayerAnim, PropKind, RootSo
 
 /**
  * First byte of every binary snapshot. Bump it whenever the byte layout OR the meaning of a field changes, even if
- * an older decoder could still parse the bytes. PROTOCOL_VERSION (frozen in contracts) does not move with it, so a
+ * an older decoder could still parse the bytes. PROTOCOL_VERSION does not need to move with it, so a
  * browser tab still running an older bundle after a deploy reconnects fine and then receives snapshots it rejects
  * (`snapshot version … != …`). After MAX_SNAPSHOT_FAILURES of those in a row, src/client/connection.ts ends the
  * session with 'reload' and the page reloads once (index.html is served no-cache, PROTOCOL_RELOAD_KEY stops loops).

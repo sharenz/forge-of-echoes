@@ -1,4 +1,5 @@
 // A GameSession on a fake world and a recording `send`, with a manual clock — for the feature tests.
+import { PROTOCOL_VERSION } from '../../src/contracts/net';
 import type { SfxId } from '../../src/contracts/audio';
 import type { CharacterSave } from '../../src/contracts/items';
 import type { ClientMessage, Command, CommandMessage, ServerMessage, ZoneInfo } from '../../src/contracts/net';
@@ -50,7 +51,7 @@ export function feed(r: Rig, ...msgs: ServerMessage[]): void {
 export function enter(r: Rig, zone: Partial<ZoneInfo> = {}): void {
   feed(
     r,
-    { t: 'welcome', protocol: 1, characterId: r.ch.id, tickRate: 60, serverTime: 0 },
+    { t: 'welcome', protocol: PROTOCOL_VERSION, characterId: r.ch.id, tickRate: 60, serverTime: 0 },
     { t: 'character', character: r.ch },
     {
       t: 'zone',

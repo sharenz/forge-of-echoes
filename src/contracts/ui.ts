@@ -44,6 +44,8 @@ export interface HudFlask {
 export interface HudRun {
   mapName: string;
   tier: number;
+  /** Authoritative monster level from the server's run setup. */
+  monsterLevel: number | null;
   phase: RunPhase;
   wave: number;
   waveCount: number;

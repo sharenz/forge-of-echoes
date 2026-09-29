@@ -1,5 +1,6 @@
 // Click-to-pick-up through the session (in reach → pickup now; out of reach → walk, then pickup; WASD / the item
 // vanishing / a zone change cancel), dropping items on the floor, the crafting bench and the server clock.
+import { PROTOCOL_VERSION } from '../../src/contracts/net';
 import { describe, expect, it } from 'vitest';
 import type { InputMessage } from '../../src/contracts/net';
 import { rules } from '../../src/game';
@@ -190,7 +191,7 @@ describe('crafting bench', () => {
 describe('server clock', () => {
   it('estimates the offset from welcome and pongs (half the round trip) and skips slow outliers', () => {
     const r = rig();
-    feed(r, { t: 'welcome', protocol: 1, characterId: 'me', tickRate: 60, serverTime: r.clock.wall + 5000 });
+    feed(r, { t: 'welcome', protocol: PROTOCOL_VERSION, characterId: 'me', tickRate: 60, serverTime: r.clock.wall + 5000 });
     expect(r.box.get().serverClockOffset).toBe(5000);
     r.clock.t = 2000;
     feed(r, { t: 'pong', time: 1900, serverTime: r.clock.wall + 5200 - 50, serverTick: 1 });

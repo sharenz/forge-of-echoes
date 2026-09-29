@@ -1,5 +1,6 @@
 // WebSocket sessions over real sockets: handshake failures, the welcome → character → zone sequence,
 // authoritative movement from inputs, the one-socket-per-character rule, logout, ping and message validation.
+import { PROTOCOL_VERSION } from '../../src/contracts/net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { api, newPlayer, startTestServer } from './helpers';
 import { TestClient } from './ws-client';
@@ -32,6 +33,9 @@ describe('websocket sessions', () => {
     expect((await noToken.waitClose()).code).toBe(4001);
     const version = await connect(server.base, { token: p.token, character: p.characterId, version: 999 });
     expect((await version.waitClose()).code).toBe(4002);
+    // Pre-balance tabs can decode snapshots, but their local tooltips/rules are stale: force a reload.
+    const oldBalance = await connect(server.base, { token: p.token, character: p.characterId, version: 1 });
+    expect((await oldBalance.waitClose()).code).toBe(4002);
     const foreign = await connect(server.base, { token: p.token, character: other.characterId });
     expect((await foreign.waitClose()).code).toBe(4001);
     const unknown = await connect(server.base, { token: p.token, character: 'ch-nope' });
@@ -45,7 +49,7 @@ describe('websocket sessions', () => {
     const kinds = c.log.map((m) => m.t);
     expect(kinds.slice(0, 3)).toEqual(['welcome', 'character', 'zone']);
     const welcome = c.log[0];
-    expect(welcome).toMatchObject({ t: 'welcome', protocol: 1, characterId: p.characterId, tickRate: 60 });
+    expect(welcome).toMatchObject({ t: 'welcome', protocol: PROTOCOL_VERSION, characterId: p.characterId, tickRate: 60 });
     const ch = c.log[1];
     if (ch.t !== 'character') throw new Error('expected character');
     expect(ch.character.id).toBe(p.characterId);

@@ -1,5 +1,6 @@
 // GameSession: server messages → UiState, commands with results and optimistic predictions, the input pipeline
 // (keyboard, pause, auto-attack, autopilot) and the HUD.
+import { PROTOCOL_VERSION } from '../../src/contracts/net';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { SfxId } from '../../src/contracts/audio';
 import type { CharacterSave, EquipmentItem } from '../../src/contracts/items';
@@ -63,7 +64,7 @@ function feed(r: Rig, ...msgs: ServerMessage[]): void {
 function enter(r: Rig, ch: CharacterSave): void {
   feed(
     r,
-    { t: 'welcome', protocol: 1, characterId: ch.id, tickRate: 60, serverTime: 0 },
+    { t: 'welcome', protocol: PROTOCOL_VERSION, characterId: ch.id, tickRate: 60, serverTime: 0 },
     { t: 'character', character: ch },
     { t: 'zone', zone: zoneInfo({ ownerCharacterId: ch.id, ownerName: ch.name, props: [prop(1, 'mapDevice', 0, -180)] }) },
   );
@@ -118,7 +119,7 @@ describe('connection handshake', () => {
     r.box.update((s) => ({ ...s, openPanels: ['inventory', 'stash'] }));
     // The restarted server numbers instances and players from 1 again: h1 / player 1 is a coincidence.
     r.session.connectionOpened(false);
-    feed(r, { t: 'welcome', protocol: 1, characterId: 'me', tickRate: 60, serverTime: 0 });
+    feed(r, { t: 'welcome', protocol: PROTOCOL_VERSION, characterId: 'me', tickRate: 60, serverTime: 0 });
     feed(r, { t: 'zone', zone: zoneInfo({ ownerCharacterId: 'me', props: [prop(1, 'mapDevice', 0, -180)] }) });
     expect(r.resumes).toEqual([false, false]);
     expect(r.box.get().openPanels).toEqual(['inventory']);
@@ -148,7 +149,7 @@ describe('party and invites after a reconnect', () => {
     ],
   };
   const invite = (id: string, from: string) => ({ inviteId: id, fromCharacterId: from, fromName: from });
-  const welcome: ServerMessage = { t: 'welcome', protocol: 1, characterId: 'me', tickRate: 60, serverTime: 0 };
+  const welcome: ServerMessage = { t: 'welcome', protocol: PROTOCOL_VERSION, characterId: 'me', tickRate: 60, serverTime: 0 };
   const zone = (): ServerMessage => ({ t: 'zone', zone: zoneInfo({ ownerCharacterId: 'me' }) });
   const snapshot = () => r.session.snapshot(new ArrayBuffer(8), r.clock.t);
 
@@ -500,7 +501,7 @@ describe('HUD', () => {
     if (!opened.ok) throw new Error(opened.error);
     feed(
       r,
-      { t: 'welcome', protocol: 1, characterId: 'me', tickRate: 60, serverTime: 0 },
+      { t: 'welcome', protocol: PROTOCOL_VERSION, characterId: 'me', tickRate: 60, serverTime: 0 },
       { t: 'character', character: ch },
       {
         t: 'zone',
@@ -513,11 +514,17 @@ describe('HUD', () => {
     r.session.timeline.push(1, [{ t: 'waveTell', wave: 3, families: ['ashling', 'riftStalker'], lieutenant: true, boss: false }]);
     r.session.drainEvents([]);
     const hud = r.session.hud(r.clock.t, 60)!;
-    expect(hud.run).toMatchObject({ mapName: 'Ashen Forge', tier: 1, wave: 2, portalsRemaining: 7, portalsTotal: 8 });
+    expect(hud.run).toMatchObject({ mapName: 'Ashen Forge', tier: 1, monsterLevel: 4, wave: 2, portalsRemaining: 7, portalsTotal: 8 });
     expect(hud.run!.waveProgress).toBeCloseTo(0.25);
     expect(hud.run!.itemQuantity).toBe(rules.lootLuck(opened.value.setup, ch).itemQuantity);
     expect(hud.run!.tell).toMatchObject({ wave: 3, lieutenant: true });
     expect(r.box.get().run).toBe(opened.value.setup);
+
+    // Trust the authoritative setup, even when it differs from the browser's tier formula.
+    feed(r, { t: 'zone', zone: zoneInfo({ kind: 'map', tier: 1, setup: { ...opened.value.setup, monsterLevel: 17 } }) });
+    expect(r.session.hud(r.clock.t, 60)?.run?.monsterLevel).toBe(17);
+    feed(r, { t: 'zone', zone: zoneInfo() });
+    expect(r.session.hud(r.clock.t, 60)?.run).toBeNull();
   });
 });
 

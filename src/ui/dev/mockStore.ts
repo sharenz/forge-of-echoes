@@ -489,6 +489,7 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
     return {
       mapName: desc.title,
       tier: runSetup.map.tier,
+      monsterLevel: runSetup.monsterLevel,
       phase: opts.cleared ? 'cleared' : opts.tell ? 'tell' : opts.boss ? 'boss' : 'fight',
       wave: opts.tell ? 2 : wave,
       waveCount: 6,
