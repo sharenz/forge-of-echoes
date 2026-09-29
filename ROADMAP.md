@@ -5,14 +5,22 @@ from discussions are added or moved between items. Nothing here is built unless 
 Last reprioritised: 2026-09-29.
 
 **Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
-verify the resulting game and deploy it to production. QoL (P0.1–4), account storage, Atlas and the first events (P1.1–3) are done and deployed;
-ingredients, high-level bases, sinks, expanded maps, remaining content and the
-map tree remain part of this delivery until individually completed and verified.
+verify the resulting game and deploy it to production. QoL (P0.1–4), account storage, Atlas, the first events,
+Prefix/Suffix Runes and advanced bases (P1.1–5) are done and deployed. Economy sinks, expanded maps,
+remaining content and the map tree (P1.6–9) remain part of this delivery until individually completed and verified.
 
-**Current order:** crafting ingredients and higher-level bases → Scrap sinks → more map content.
+**Current order:** Scrap sinks → expanded map roster → remaining events/ingredients/areas → map tree.
 Priorities follow current usability problems, then progression dependencies. Wave-3 boss reuse is later content work.
 
-**Latest release: Done — `20260929-213628-49369b3` (2026-09-29).** The Hunted and Echo Rift (P1.3): hidden
+**Latest release: Done — `20260929-215849-789fe30` (2026-09-29).** Prefix/Suffix Runes and ten advanced bases
+(P1.4–5). Runes preserve the other affix side and have separate Atlas boss sources; every equipment class
+gets a level-42+ project, first eligible in Tier 8 drops. Exact previews, new artwork, stash slots and source
+labels are included. Build/typecheck and all 1,853 always-on tests pass; final art/stash checks and real-browser
+crafting, preservation, currency access and server-restart checks pass at 1024×600 and 1280×720. Live protocol 9,
+exact public JS/CSS matches and production database integrity are verified. Post-drain backup:
+`/var/lib/forge/backups/pre-release-20260929-215849-789fe30.db`. P1.6–9 remain in the active delivery.
+
+**Previous release: Done — `20260929-213628-49369b3` (2026-09-29).** The Hunted and Echo Rift (P1.3): hidden
 creation rolls, area/mod odds, warnings, world markers, progress and per-player rewards. Build/typecheck and
 all 1,838 always-on tests pass; both encounters pass in Chromium at 1024×600 and 1280×720. Live protocol 8 and
 public JS/CSS exactly match the tested build; production database integrity is healthy. Post-drain backup:
@@ -172,10 +180,18 @@ reopen tuning for a specific problem rather than starting another general balanc
    Build/typecheck and all 1,838 always-on tests pass (12 optional balance checks skipped). Both encounters,
    hidden discovery, rewards and restart fixtures pass in Chromium at 1024×600 and 1280×720; final HUD
    contrast/layout inspected at both sizes. Live protocol 8, exact public bundle matches and production
-   database integrity pass. The active goal continues with P1.4–9.
-4. **Ingredients, first batch.** Verbs, not stronger currency (Prefix Rune / Suffix Rune to start), tied to areas
-   so the best ingredient for a craft is not in the area you farm. Tradeable.
-5. **Item bases at ilvl 42+** (tier 8+ under the new monster-level formula), in parallel with 4, so the tier gate yields gear worth wanting.
+   database integrity pass. The remaining progression work is tracked below.
+4. **Ingredients, first batch — Done, deployed as `20260929-215849-789fe30`.** Prefix Rune reforges prefixes;
+   Suffix Rune reforges suffixes. Both preserve affix count, rarity, name, the opposite side and protected affixes,
+   cost 3 Stability, use normal scar rules and break seals after the craft. Exact family/tier previews; tradeable,
+   stack to 20, Crafting Stash slots. The Glass Sepulchre boss drops Prefix Rune on T3+; Ember Vault drops Suffix
+   Rune on T3: each 25%, one extra per living player, outside ordinary currency rolls. Sources appear on the Atlas
+   and rune tooltips. Preservation, odds, rejection, spending, save/trade locks and real browser/restart checks pass.
+5. **Item bases at ilvl 42+ — Done, deployed as `20260929-215849-789fe30`.** Ten new bases cover all ten equipment
+   classes, with level requirements 42 or 46, stronger implicits/properties, distinct material preferences and new
+   artwork. Tier 7 (ilvl 40) cannot drop them; Tier 8 (ilvl 46) can. Existing bases retain their stats; area class
+   preferences apply to the new bases. Rook's gamble also respects each base's level gate. Generation, actual
+   chest rewards, save reloads, icon footprints and both browser viewport checks pass. See GAME_SPEC §5.
 6. **Economy sinks.** Scrap repairs stability at the bench (decided, simple version) with a cost that escalates
    with the item's crafting history (designer: flat cost breaks scars); hard currencies as the value store
    (Reforging Ember / Tempering Catalyst / Fracture Core); Scrap sinks (territory/bounty fees, map rerolls).
