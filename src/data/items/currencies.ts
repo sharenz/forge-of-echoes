@@ -1,4 +1,4 @@
-// Currency definitions (GAME_SPEC §6): all 12 equipment currencies and the 4 map currencies.
+// Currency definitions (GAME_SPEC §6–§7): equipment/map crafting materials and Atlas entrance keys.
 // Descriptions are verb-first and describe exactly what the rules do.
 import type { CurrencyId } from '../../contracts/content';
 import { CURRENCY_STACK, RARE_CURRENCY_STACK } from './rules';
@@ -118,6 +118,11 @@ export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
     needsAffixChoice: false,
     maxStack: RARE_CURRENCY_STACK,
     dropTier: 'rare',
+  }),
+  reliquaryKey: currency('reliquaryKey', {
+    name: 'Reliquary Key',
+    description: 'Opens one expedition into the Sealed Reliquary. Found most often in the Ember Vault; tradeable and never expires.',
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
   }),
 };
 

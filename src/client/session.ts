@@ -1143,8 +1143,8 @@ export class GameSession {
 
   // --- hideout -----------------------------------------------------------------------------------
 
-  activateMapDevice(): void {
-    void this.command({ c: 'activateMapDevice' }, {
+  activateMapDevice(areaId?: import('../contracts/atlas').AtlasAreaId): void {
+    void this.command({ c: 'activateMapDevice', ...(areaId ? { areaId } : {}) }, {
       onOk: (r) => {
         if (r.message) this.toast(r.message, 'good');
         this.box.update((s) => closePanel(s, 'mapDevice'));

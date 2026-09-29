@@ -35,6 +35,7 @@ import {
 import { sanitizeName, xpToNext } from './character';
 import { clampTier, rarityForDangerCount, sortMapMods } from './maps';
 import { normalizeLoadout } from './skills';
+import { normalizeAtlas } from './atlas';
 import { clamp, finite, intIn } from './util';
 
 type Json = Record<string, unknown>;
@@ -533,6 +534,7 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     ...(stashCapacity > MAX_STASH_TABS ? { stashCapacity } : {}),
     currencyStash,
     mapStash,
+    ...(raw.atlas !== undefined ? { atlas: normalizeAtlas(raw.atlas) } : {}),
     belt: normalizeBelt(raw.belt),
     mapDevice,
     rngState: typeof raw.rngState === 'number' && Number.isFinite(raw.rngState) ? raw.rngState >>> 0 : hashString(id),

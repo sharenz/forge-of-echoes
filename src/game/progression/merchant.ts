@@ -58,6 +58,12 @@ function pay(ch: CharacterSave, price: readonly PriceDef[]): CharacterSave {
   return next;
 }
 
+/** Account-funded map costs use the same backpack → normal stash → Crafting Stash order as Rook. */
+export function spendCurrency(ch: CharacterSave, id: CurrencyId, count: number): CharacterSave | null {
+  if (!Number.isInteger(count) || count < 0 || currencyOnHand(ch, id) < count) return null;
+  return pay(ch, [{ currencyId: id, count }]);
+}
+
 function priceText(price: readonly PriceDef[]): string {
   if (!price.length) return 'Free';
   return price.map((p) => `${p.count} ${findCurrency(p.currencyId)?.name ?? p.currencyId}`).join(', ');

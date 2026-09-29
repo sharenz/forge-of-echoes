@@ -441,6 +441,19 @@ const MAP_COLISEUM: MapTheme = {
   },
 };
 
+function reliquaryKey(): Frame {
+  const f = newIcon();
+  const s = new Sculpt();
+  s.ell(10, 10, 6, 6, style(RAMPS.gold, 0.3));
+  s.render(f.c, f.e);
+  gem(f, 10, 10, 2, 2, RAMPS.frost);
+  for (let n = 0; n < 3; n++) line(f, 13 + n, 13, 26 + n, 26, n === 0 ? C.goldHi : C.gold);
+  line(f, 21, 23, 18, 26, C.gold);
+  line(f, 25, 27, 22, 30, C.goldHi);
+  sparkle(f, 8, 5, C.goldHi, 1);
+  return f;
+}
+
 export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
   'icon/currency/kindling': () => finishIcon(kindling(), C.hot),
   'icon/currency/scrap': () => finishIcon(scrap()),
@@ -458,6 +471,7 @@ export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
   'icon/currency/threatGlyph': () => finishIcon(threatGlyph()),
   'icon/currency/rewardInk': () => finishIcon(rewardInk(), C.goldHi),
   'icon/currency/voidNeedle': () => finishIcon(voidNeedle(), C.voidGlow),
+  'icon/currency/reliquaryKey': () => finishIcon(reliquaryKey(), C.goldHi),
   'icon/flask/lifeFlask': () => finishIcon(flask([C.wineDeep, C.lifeDark, C.blood, C.life, C.lifeLight, C.hot])),
   'icon/flask/focusFlask': () => finishIcon(flask([C.frostDeep, C.frostDark, C.frostMid, C.mana, C.frost, C.ice]), C.frost),
   'icon/map/ashenForge': () => finishIcon(mapIcon(MAP_FORGE), C.hot),

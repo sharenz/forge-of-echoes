@@ -291,9 +291,43 @@ Reward-only mods (Reward Ink):
 - **Essence-laden:** essences 3× as likely
 
 **Map drops:**
-- The next tier is only guaranteed from the completion chest.
+- The completion chest guarantees one map: 75% at the current tier, 25% one tier higher, capped at Tier 15.
 - Random map drops are same tier 60%, one lower 25%, one higher 15% (within 1–15). Their rarity mirrors equipment (normal 70 · magic 22·m · rare 1.6·m^1.3); all three bases are equally likely.
 - The merchant always sells T1 (free) and T2 (4 Scrap).
+
+**Atlas (account-wide).** The Map Device opens maps at a chosen revealed destination. The item supplies
+tier, quality, mods and corruption; the destination supplies the theme, arena and implicit, plus weights for
+specific currencies and equipment classes. The original item is preserved for a server-fault refund.
+The Atlas shows area names/types/rewards only after discovery. It starts at Cinder Crossing; each final boss
+reveals two unexplored neighbours in a fixed order. Repeating an area can reveal any remaining neighbours.
+Every party member present at the kill receives credit (including a dead player); the owner receives no
+extra credit from the hideout. Two characters on one account earn one discovery. A receipt stored with the
+open run prevents a restart or repeated boss outcome from awarding the same account again.
+
+| Depth | Areas | Highest map tier |
+|---|---|---|
+| 0 | Cinder Crossing | 1 |
+| 1 | Ember Road, Bone Approach | 3 |
+| 2 | Furnace Yard, Glass Sepulchre, Iron March | 5 |
+| 2, side route | Ember Vault (dead end from Ember Road) | 3 |
+| 3 | Shattered Forge, Champion's Approach | 7 |
+| 4 | Crown Foundry, Winter Throne (two approaches each) | 9 |
+| 3, rare destination | Sealed Reliquary | 7 |
+
+Any map item up to the area's tier ceiling is accepted, including low-tier maps in deep areas. Forged areas
+favour caster bases; crypts favour jewellery; arenas favour armour and Fracture Cores. These change weights
+within the loot tables, not the total quantity. The Atlas displays the exact weight multipliers and the
+theme's implicit. Ember Vault specialises in Ember Essences, Binding Seals and Reliquary Keys.
+
+An ordinary area's boss has a 1-in-8 chance to reveal the Sealed Reliquary in addition to normal neighbours.
+It never unlocks a tier route. Each expedition consumes one **Reliquary Key** from the backpack, normal stash
+or Crafting Stash, atomically with the map. Keys are tradeable, stack to 20 and do not expire. Boss key drop
+chances are 25% in Ember Vault at any tier; at Tier 3+, 8% in crypts and 2% elsewhere. The Reliquary does not
+drop its own key. Its boss guarantees an extra Unique when the item level allows one (Tier 2+), otherwise
+an extra Rare. Its twin-boss event and Crown Fragment arrive with the remaining event content.
+
+The rules retain legacy map setups across a restart. A run that cannot be restored refunds its original
+map and entrance key together; discovery and its per-run receipt are also one transaction.
 
 ## 8. Waves & monsters (the sim owns these numbers)
 
@@ -362,7 +396,7 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 **Guaranteed drops** (for every player present, on top of the ordinary roll; m = that player's personal rarity / 100):
 - **Lieutenant:** 1 equipment (≥ magic, ≥ rare 30% of the time), 2 currency, map 50%.
 - **Boss:** 2 equipment (1 guaranteed rare, 1 ≥ magic), 3 currency, and an 8%×m chance of a unique.
-- **Completion chest:** 1 equipment (≥ magic), 2–3 currency, 1 flask, and **1 map of tier+1 (guaranteed**, quality 4–12, capped at Tier 15).
+- **Completion chest:** 1 equipment (≥ magic), 2–3 currency, 1 flask, and **1 map** (75% current tier, 25% tier+1; quality 4–12, capped at Tier 15).
 
 **Making luck *felt* (presentation):**
 - Drop beams by tone:

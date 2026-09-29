@@ -15,7 +15,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 4: freely assignable skills, RMB casting and stronger magic/rare monsters.
 // 5: global chat channels and automatic special-stash routing from every stash tab.
 // 6: account-wide storage, character item-ID namespaces and preserved legacy stash tabs.
-export const PROTOCOL_VERSION = 6;
+// 7: account Atlas, area selection, entrance keys and revised map progression rewards.
+export const PROTOCOL_VERSION = 7;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -102,7 +103,7 @@ export type Command =
   | { c: 'rankUpSkill'; skillId: SkillId }
   | { c: 'setLoadoutSlot'; slot: number; skillId: SkillId | null }
   // hideout
-  | { c: 'activateMapDevice' }
+  | { c: 'activateMapDevice'; areaId?: import('./atlas').AtlasAreaId }
   | { c: 'merchantOffers' }
   | { c: 'buyOffer'; offerId: string }
   // party & social

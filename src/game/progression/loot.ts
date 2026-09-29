@@ -37,6 +37,7 @@ import {
   clampTier, echoWaveIndex, mapBaseName, mapDropMultipliers, mapTitle, monsterName, monsterSentenceName, rollMapWithRarity,
 } from './maps';
 import { asciiLabel, rollCountTable } from './util';
+import { findAtlasArea, RELIQUARY_KEY_CHANCE, type AtlasAreaDef } from '../../data/progression/atlas';
 
 // ---------------------------------------------------------------------------------------------
 // Rarity weights
@@ -93,6 +94,7 @@ interface LootContext {
   armourStability: number;
   echoWave: number;
   place: string;
+  area?: AtlasAreaDef;
 }
 
 const CONTEXTS = new WeakMap<RunSetup, LootContext>();
@@ -117,15 +119,17 @@ function lootContext(setup: RunSetup): LootContext {
   const map = setup.map;
   const tier = clampTier(map.tier);
   const drops = mapDropMultipliers(map);
+  const area = findAtlasArea(setup.atlasAreaId);
   ctx = {
     map,
     tier,
     monsterLevel: Math.max(1, Math.floor(setup.monsterLevel || 1)),
     mapChance: drops.map,
-    currency: currencyWeightsFor(map),
+    currency: currencyWeightsFor(map).map((d) => ({ ...d, weight: d.weight * (area?.currencyWeights?.[d.currencyId] ?? 1) })),
     armourStability: drops.armourStability,
     echoWave: echoWaveIndex(map),
-    place: `${mapBaseName(map.baseId)} (Tier ${tier})`,
+    place: `${area?.name ?? mapBaseName(map.baseId)} (Tier ${tier})`,
+    area,
   };
   CONTEXTS.set(setup, ctx);
   return ctx;
@@ -142,7 +146,7 @@ function makeEquipment(ctx: LootContext, rng: Rng, rarity: Rarity, origin: strin
     if (id) return generateUnique(id, rng, { itemLevel: ctx.monsterLevel, origin, isNew: true });
     rarity = 'rare';
   }
-  const baseId = pickRandomBase(rng, { itemLevel: ctx.monsterLevel }) ?? 'ashwoodWand';
+  const baseId = pickRandomBase(rng, { itemLevel: ctx.monsterLevel, classWeights: ctx.area?.classWeights }) ?? 'ashwoodWand';
   const extraStability = ARMOUR_CLASSES.includes(getBase(baseId).itemClass) ? ctx.armourStability : 0;
   return generateEquipment(baseId, ctx.monsterLevel, rarity as Exclude<Rarity, 'unique'>, rng, { extraStability, origin, isNew: true });
 }
@@ -276,13 +280,20 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
     for (let i = 0; i < BOSS_LOOT.extraEquipment; i++) out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, mapM, 'magic'), origin));
     for (let i = 0; i < BOSS_LOOT.currency; i++) out.push(makeCurrency(ctx, rng));
     if (rng.chance(Math.min(1, BOSS_LOOT.uniqueChance * mapM))) out.push(makeEquipment(ctx, rng, 'unique', origin));
+    if (ctx.area?.sealed) out.push(makeEquipment(ctx, rng, 'unique', origin));
+    if (ctx.area && !ctx.area.sealed) {
+      const chance = ctx.area.id === 'emberVault' ? RELIQUARY_KEY_CHANCE.vault
+        : ctx.tier < RELIQUARY_KEY_CHANCE.elsewhereMinTier ? 0
+        : ctx.area.type === 'crypt' ? RELIQUARY_KEY_CHANCE.crypt : RELIQUARY_KEY_CHANCE.elsewhere;
+      if (chance > 0 && rng.chance(chance)) out.push(currencyStack('reliquaryKey', 1, randomUid(rng), true));
+    }
   }
   return out;
 }
 
 /**
- * The completion chest for ONE looter (every player present gets their own): 2 equipment (at least
- * magic), 3–6 currency, 1 flask and a map one tier higher, rolled with the looter's personal rarity.
+ * The completion chest for ONE looter: equipment of at least magic rarity, currency, a flask and
+ * a map at the current tier (25% chance of +1), rolled with the looter's personal rarity.
  */
 export function rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave | null): Item[] {
   const ctx = lootContext(setup);
@@ -293,7 +304,7 @@ export function rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave |
   const currency = rng.int(CHEST_LOOT.currency.min, CHEST_LOOT.currency.max);
   for (let i = 0; i < currency; i++) out.push(makeCurrency(ctx, rng));
   for (let i = 0; i < CHEST_LOOT.flasks; i++) out.push(makeFlask(rng));
-  const tier = Math.min(MAX_MAP_TIER, ctx.tier + CHEST_LOOT.mapTierBonus);
+  const tier = Math.min(MAX_MAP_TIER, ctx.tier + (rng.chance(CHEST_LOOT.mapTierUpgradeChance) ? 1 : 0));
   out.push(makeMap(rng, tier, m, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max)));
   return out;
 }

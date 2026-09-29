@@ -523,6 +523,10 @@ export class MapInstance extends Instance {
   portalsRemaining = PORTALS_PER_MAP;
   portalsTotal = PORTALS_PER_MAP;
   cleared = false;
+  /** Account discovery is awarded once per run, even when a restart recreates the boss. */
+  readonly atlasCredits = new Set<string>();
+  /** Boss participants awaiting an atomic discovery + map-row commit (account → character). */
+  readonly atlasPendingCredits = new Map<string, string>();
   /** Persistent id (database row; survives restarts, unlike the instance id). */
   readonly mapKey: string;
   /** Wall ms the map was opened (kept over restarts). */

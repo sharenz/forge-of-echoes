@@ -144,6 +144,12 @@ reopen tuning for a specific problem rather than starting another general balanc
    discovery credit. Replaces the "chest guarantees tier+1" rule (proposal: same tier, 25% chance of +1).
    Must prove: players choose different routes on purpose; the dead end is a choice not a trap; the sealed door
    creates a goal; a fresh alt benefits without feeling cheated.
+   **Verified; deployment pending:** routes, account discovery, party credit, restart receipts/retries, area selection,
+   theme/loot preferences, key-gated Reliquary and the 75% same-tier / 25% +1 chest rule are implemented.
+   Build and all 1,824 tests in the full run pass (12 optional balance checks skipped), followed by 29 account/
+   Atlas/restart checks after adding one final cross-account transaction regression. Browser entry/key flow
+   and layout pass at 1024×600 and 1280×720. A fresh production-copy audit preserves all 457 items on 7 characters.
+   Production remains on the shared-stash release until activation and live verification complete.
 3. **Map events, first two.** The Hunted and Echo Rift, rolled at map creation (~25% base, one per map, hidden
    until they happen), map mods and area type raise the odds of specific events. Must feel good, not annoying.
 4. **Ingredients, first batch.** Verbs, not stronger currency (Prefix Rune / Suffix Rune to start), tied to areas

@@ -2,6 +2,7 @@
 // or a map — players join it separately through SimRun.addPlayer), and one player's live runtime
 // (stats, skills, loadout, flasks).
 import type { MapSummaryLine, Result, RunSetup } from '../../contracts/game';
+import type { AtlasAreaId } from '../../contracts/atlas';
 import type { CharacterSave, MapItem } from '../../contracts/items';
 import type { MonsterScaling, PlayerRuntime, RunConfig, RunHooks, WaveConfig } from '../../contracts/sim';
 import { createRng, hashString, hashU32 } from '../../core/rng';
@@ -13,6 +14,9 @@ import { normalizeMap } from './save';
 import { normalizeLoadout, playerSkills } from './skills';
 import { computeCombat } from './stats';
 import { clean, fail, ok } from './util';
+import { findAtlasArea } from '../../data/progression/atlas';
+import { atlasAccessError, newAtlas } from './atlas';
+import { spendCurrency } from './merchant';
 
 /**
  * Map device readout: monster level, the map's own luck, waves, dangers and rewards. Map-side only —
@@ -29,10 +33,13 @@ function snapshotMap(map: MapItem): MapItem {
 }
 
 /** The run parameters of `map` (an already snapshotted map) with `seed`: map-side luck only. */
-function setupFor(map: MapItem, seed: number): RunSetup {
+function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId): RunSetup {
+  const area = findAtlasArea(areaId);
+  const map = area ? { ...source, baseId: area.baseId } : source;
   const luck = mapLuck(map, null);
   return {
     map,
+    ...(area ? { atlasAreaId: area.id, sourceMap: source } : {}),
     seed: seed >>> 0,
     monsterLevel: monsterLevelForTier(map.tier),
     itemQuantity: clean(luck.quantity.value),
@@ -46,14 +53,24 @@ function setupFor(map: MapItem, seed: number): RunSetup {
  * map-side luck (no gear — every player adds their own through lootLuck). Pure, so the UI may call it
  * as a preview.
  */
-export function openMap(ch: CharacterSave): Result<{ character: CharacterSave; setup: RunSetup }> {
+export function openMap(ch: CharacterSave, areaId?: AtlasAreaId): Result<{ character: CharacterSave; setup: RunSetup }> {
   const map = ch.mapDevice;
   if (!map) return fail('Place a map in the Map Device first.');
   if (!findMapBase(map.baseId)) return fail('This map can no longer be opened.');
+  let next = ch;
+  if (areaId !== undefined) {
+    const error = atlasAccessError(ch.atlas ?? newAtlas(), areaId, map.tier);
+    if (error) return fail(error);
+    if (findAtlasArea(areaId)?.sealed) {
+      const paid = spendCurrency(next, 'reliquaryKey', 1);
+      if (!paid) return fail('The Sealed Reliquary requires one Reliquary Key. Seek the Ember Vault or trade for one.');
+      next = paid;
+    }
+  }
   const rng = createRng(ch.rngState >>> 0);
   const seed = Math.floor(rng.next() * 0x100000000) >>> 0;
-  const setup = setupFor(snapshotMap(map), seed);
-  return ok({ character: { ...ch, mapDevice: null, rngState: rng.state() }, setup });
+  const setup = setupFor(snapshotMap(map), seed, areaId);
+  return ok({ character: { ...next, mapDevice: null, rngState: rng.state() }, setup });
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -75,18 +92,21 @@ function parsedJson(raw: unknown): unknown {
  * and returns null for anything that is not a restorable map (a corrupted row, a map base that no
  * longer exists, a non-finite seed), so one bad row cannot stop the server from starting. The map is normalised exactly like a saved one (unknown mods dropped,
  * tier / quality clamped, rarity recomputed), and monster level, luck and summary are recomputed with
- * the CURRENT rules, so balance changes shipped by the deploy apply to the restored run. Persist
- * `setup.map` and `setup.seed` (never a client's redacted setup, whose seed is 0).
+ * the CURRENT rules, so balance changes shipped by the deploy apply to the restored run. Persist the whole
+ * setup, including its area ID and original source map (never a client's redacted setup, whose seed is 0).
  */
 export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
   if (typeof seed !== 'number' || !Number.isFinite(seed)) return null;
   const value = parsedJson(raw);
-  const source = isRecord(value) && value.kind !== 'map' && isRecord(value.map) ? value.map : value;
+  const wrapper = isRecord(value) && value.kind !== 'map' && isRecord(value.map) ? value : null;
+  const area = wrapper?.atlasAreaId === undefined ? undefined : findAtlasArea(wrapper.atlasAreaId);
+  if (wrapper?.atlasAreaId !== undefined && !area) return null;
+  const source = wrapper ? (isRecord(wrapper.sourceMap) ? wrapper.sourceMap : wrapper.map) : value;
   if (!isRecord(source) || source.kind !== 'map') return null;
   const uid = typeof source.uid === 'string' && source.uid.length > 0 && source.uid.length <= 64 ? source.uid : 'restored-map';
   const map = normalizeMap(source, uid);
   if (!map || !findMapBase(map.baseId)) return null;
-  return setupFor(snapshotMap(map), Math.floor(seed));
+  return setupFor(snapshotMap(map), Math.floor(seed), area?.id);
 }
 
 /**
@@ -163,13 +183,14 @@ export function buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConf
   }
   const map = setup.map;
   const base = findMapBase(map.baseId);
+  const area = findAtlasArea(setup.atlasAreaId);
   return {
     mode: 'map',
     seed: setup.seed >>> 0,
     theme: base?.theme ?? 'ashenForge',
-    mapName: mapTitle(map),
+    mapName: area?.name ?? mapTitle(map),
     tier: clampTier(map.tier),
-    arenaRadius: base?.arenaRadius ?? 900,
+    arenaRadius: (base?.arenaRadius ?? 900) * (area?.arenaScale ?? 1),
     monsters: monsterScaling(map),
     waves: waveConfig(map),
     hooks,

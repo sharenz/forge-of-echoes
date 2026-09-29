@@ -92,6 +92,6 @@ export const CHEST_LOOT = {
   equipment: 1,
   currency: { min: 2, max: 3 },
   flasks: 1,
-  /** The completion chest always holds a map this many tiers higher (capped at the top tier). */
-  mapTierBonus: 1,
+  /** One map at the current tier, with this chance of +1 tier (capped at the top tier). */
+  mapTierUpgradeChance: 0.25,
 } as const;

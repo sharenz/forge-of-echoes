@@ -215,9 +215,10 @@ describe('guaranteed drops', () => {
     expect(uniques / n).toBeLessThan(BOSS_LOOT.uniqueChance * 1.15 * 1.3 + 0.01);
   });
 
-  it('completion chest: equipment ≥ magic, a currency range, 1 flask and a guaranteed map one tier higher', () => {
+  it('completion chest: equipment ≥ magic, currency, a flask and a same-tier map with 25% chance of +1', () => {
     const rng = createRng(13);
     const currencyCounts = new Set<number>();
+    let upgrades = 0;
     for (let i = 0; i < 500; i++) {
       const items = rules.rollChestLoot(setup, rng, NAKED);
       const eq = items.filter((x): x is EquipmentItem => x.kind === 'equipment');
@@ -230,12 +231,14 @@ describe('guaranteed drops', () => {
       expect(items.filter((x) => x.kind === 'flask')).toHaveLength(1);
       const maps = items.filter((x): x is MapItem => x.kind === 'map');
       expect(maps).toHaveLength(1);
-      expect(maps[0].tier).toBe(5);
+      expect([4, 5]).toContain(maps[0].tier);
+      if (maps[0].tier === 5) upgrades++;
       expect(maps[0].quality).toBeGreaterThan(0);
     }
     expect([...currencyCounts].sort()).toEqual(
       Array.from({ length: CHEST_LOOT.currency.max - CHEST_LOOT.currency.min + 1 }, (_, i) => CHEST_LOOT.currency.min + i),
     );
+    expectRate(upgrades, 500, 0.25);
     const top = setupFor(map('ashenForge', 15));
     expect(rules.rollChestLoot(top, createRng(1), NAKED).find((x) => x.kind === 'map')!.tier).toBe(15);
   });
@@ -412,7 +415,9 @@ describe('instanced loot', () => {
     const chest = chestFor(8);
     for (const items of chest.values()) {
       expect(items.filter((x) => x.kind === 'equipment')).toHaveLength(CHEST_LOOT.equipment);
-      expect(items.filter((x): x is MapItem => x.kind === 'map').map((m) => m.tier)).toEqual([6]);
+      const maps = items.filter((x): x is MapItem => x.kind === 'map');
+      expect(maps).toHaveLength(1);
+      expect([5, 6]).toContain(maps[0].tier);
     }
     const uids = [...chest.values()].flat().map((i) => i.uid);
     expect(new Set(uids).size).toBe(uids.length);

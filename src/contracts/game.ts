@@ -9,6 +9,7 @@ import type {
 } from './items';
 import type { DropSpec, KillLootContext, PlayerCombatStats, PlayerRuntime, RunConfig, RunHooks, SkillRuntimeDef } from './sim';
 import type { Rng } from './rng';
+import type { AtlasAreaId } from './atlas';
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -132,7 +133,10 @@ export interface MapSummaryLine {
 }
 
 export interface RunSetup {
-  map: MapItem;         // the consumed map (snapshot)
+  map: MapItem;         // effective map: item tier/quality/mods with the Atlas area's theme/implicit
+  /** Original item for restart refunds when the chosen area changed its base. */
+  sourceMap?: MapItem;
+  atlasAreaId?: AtlasAreaId;
   seed: number;
   monsterLevel: number;
   /** Map-side item quantity % (100 = base): tier + mods + quality + implicit. Excludes any player's gear. */
@@ -263,7 +267,7 @@ export interface GameRulesApi {
   // --- maps & runs ---
   mapSummary(ch: CharacterSave, map: MapItem): MapSummaryLine[];
   /** Consume the map in the device and produce run parameters (map-side luck only). */
-  openMap(ch: CharacterSave): Result<{ character: CharacterSave; setup: RunSetup }>;
+  openMap(ch: CharacterSave, areaId?: AtlasAreaId): Result<{ character: CharacterSave; setup: RunSetup }>;
   /** Build the instance sim config (players join separately via SimRun.addPlayer). `setup` null = hideout. */
   buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConfig;
   /** One player's resolved stats/skills/loadout/belt for an instance (after joining, level-ups, gear or flask changes). */

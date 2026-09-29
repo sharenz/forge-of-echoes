@@ -973,7 +973,7 @@ export class ClientApp {
       rankUpSkill: (id) => inGame((g) => g.rankUpSkill(id), undefined),
       setLoadoutSlot: (slot, id) => inGame((g) => g.setLoadoutSlot(slot, id), undefined),
 
-      activateMapDevice: () => inGame((g) => g.activateMapDevice(), undefined),
+      activateMapDevice: (areaId) => inGame((g) => g.activateMapDevice(areaId), undefined),
       merchantOffers: () => inGame((g) => g.merchantOffers(), []),
       buyOffer: (id) => inGame((g) => g.buyOffer(id), undefined),
 

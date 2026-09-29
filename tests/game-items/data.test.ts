@@ -166,7 +166,7 @@ describe('affixes', () => {
 });
 
 describe('currencies', () => {
-  it('defines all 16 currencies with spec costs, families and stacks', () => {
+  it('defines crafting currencies and the Reliquary Key with their costs, families and stacks', () => {
     expect(Object.keys(CURRENCIES).sort()).toEqual([...CURRENCY_IDS].sort());
     const cost = (id: keyof typeof CURRENCIES) => CURRENCIES[id].stabilityCost;
     expect([cost('kindling'), cost('scrap'), cost('reforge'), cost('catalyst'), cost('solvent'), cost('seal'), cost('fractureCore')])
@@ -177,7 +177,7 @@ describe('currencies', () => {
     }
     for (const id of CURRENCY_IDS) {
       const c = CURRENCIES[id];
-      const rare = id === 'fractureCore' || id === 'voidNeedle';
+      const rare = id === 'fractureCore' || id === 'voidNeedle' || id === 'reliquaryKey';
       expect(c.maxStack, id).toBe(rare ? 20 : 40);
       expect(c.needsAffixChoice, id).toBe(id === 'catalyst' || id === 'seal' || id === 'fractureCore');
       expect(c.description, id).toMatch(/^[A-Z][a-z]+s\b/);
@@ -242,7 +242,7 @@ describe('uniques, scars, flasks, names', () => {
 
   it('exposes plain ContentInfo records', () => {
     expect(Object.keys(BASE_INFO)).toHaveLength(22);
-    expect(Object.keys(CURRENCY_INFO)).toHaveLength(16);
+    expect(Object.keys(CURRENCY_INFO)).toHaveLength(17);
     expect(Object.keys(FLASK_INFO)).toHaveLength(2);
     expect(Object.keys(UNIQUE_INFO)).toHaveLength(4);
     expect(BASE_INFO.ashwoodWand).toEqual({

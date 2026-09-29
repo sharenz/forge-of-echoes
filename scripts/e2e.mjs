@@ -3,7 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5|qol|account] [--smoke 30] [--lieutenant]
+//                        [--only wave5|qol|account|atlas] [--smoke 30] [--lieutenant]
 //
 // --prod tests the production bundle instead of the Vite dev server: `vite build` (with VITE_FOE_DEBUG=1, so the
 // window.__foe hooks this script drives are compiled in) into a temp dir, served by the game server itself
@@ -69,6 +69,7 @@ const FIGHT_SECONDS = Number(opt('fight', '40'));
 const WAVE5_ONLY = opt('only', 'all') === 'wave5';
 const QOL_ONLY = opt('only', 'all') === 'qol';
 const ACCOUNT_ONLY = opt('only', 'all') === 'account';
+const ATLAS_ONLY = opt('only', 'all') === 'atlas';
 /** Seconds of fighting in each new map type (longer while its family has not shown two kinds yet). */
 const SMOKE_SECONDS = Number(opt('smoke', '30'));
 /** --lieutenant: keep fighting each new map type until its lieutenant (wave 3) is on the field. */
@@ -1855,6 +1856,77 @@ async function accountScenario({ A, B, nameB, port }) {
   });
 }
 
+async function atlasScenario({ A, port }) {
+  const openDevice = async () => {
+    await A.page.evaluate(() => window.__foe.store.actions.closeAllPanels());
+    let at = await propOnScreen(A, 'mapDevice');
+    for (let i = 0; i < 30 && at && (at.y < 90 || at.y > VH - 170); i++) {
+      const key = at.y < 90 ? 'w' : 's';
+      await A.page.keyboard.down(key); await sleep(180); await A.page.keyboard.up(key); await sleep(120);
+      at = await propOnScreen(A, 'mapDevice');
+    }
+    assert(at && at.y >= 60 && at.y <= VH - 140, 'map device is not on screen');
+    await A.page.mouse.click(at.x, at.y);
+    await A.page.waitForSelector('.fe-device');
+  };
+  await step('a fresh account sees one Atlas area and fog over the other eleven', async () => {
+    await openDevice();
+    await A.page.locator('.fe-grid[data-drop="backpack"] .fe-item[data-kind="map"]').first().click({ modifiers: ['Control'] });
+    await A.waitFor('inserted map', () => !!window.__foe.store.get().character.mapDevice);
+    await A.page.locator('.fe-device__destination').click();
+    assert(await A.page.locator('.fe-atlas__node--known').count() === 1, 'fresh Atlas has extra revealed areas');
+    assert(await A.page.locator('.fe-atlas__node:disabled').count() === 11, 'fog areas are not disabled');
+    await A.shot('atlas-fresh');
+  });
+  await step('explored Atlas handles tier limits and an item from another theme', async () => {
+    // Seed only the harness's disposable database while its server is stopped. Backend tests exercise
+    // boss discovery/party credit; this browser fixture reaches the deepest layout without hours of combat.
+    outage = true;
+    await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const { tsImport } = await import('tsx/esm/api');
+    const { ATLAS_AREA_IDS } = await tsImport('../src/contracts/atlas.ts', import.meta.url);
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const row = db.prepare('SELECT account_id, data FROM account_storage').get();
+    const shared = JSON.parse(row.data);
+    shared.atlas = { discovered: [...ATLAS_AREA_IDS], completed: ATLAS_AREA_IDS.filter((id) => id !== 'sealedReliquary'), clears: 12 };
+    shared.currencyStash.reliquaryKey = 1;
+    db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), row.account_id);
+    const character = db.prepare('SELECT id, data FROM characters').get();
+    const saved = JSON.parse(character.data);
+    saved.mapDevice.tier = 3;
+    saved.mapDevice.baseId = 'ashenForge';
+    db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(saved), character.id);
+    db.close();
+    await startGameServer(port);
+    await A.waitFor('explored Atlas after restart', () => {
+      const s = window.__foe.store.get();
+      return s.connection === 'online' && s.character?.atlas?.discovered.length === 12;
+    }, undefined, 30_000);
+    outage = false;
+    await openDevice();
+    await A.page.locator('.fe-device__destination').click();
+    await A.page.getByRole('button', { name: /^Cinder Crossing,/ }).click();
+    assert(await A.page.getByRole('button', { name: 'Use this area', exact: true }).isDisabled(), 'Tier 3 should not fit the starting area');
+    await A.page.getByRole('button', { name: /^Bone Approach,/ }).click();
+    await A.shot('atlas-explored');
+    await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+    assert((await A.page.locator('.fe-device__destination').innerText()).includes('Bone Approach'), 'area choice was not retained');
+    await A.shot('atlas-device');
+  });
+  await step('the Sealed Reliquary consumes one key and opens the selected area', async () => {
+    await A.page.locator('.fe-device__destination').click();
+    await A.page.getByRole('button', { name: /^Sealed Reliquary,/ }).click();
+    await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+    await A.shot('atlas-sealed');
+    await A.page.locator('.fe-device__activate').click();
+    await A.waitFor('sealed area portal and key spent', () => {
+      const s = window.__foe.store.get();
+      return s.hud?.portal?.mapName === 'Sealed Reliquary' && s.hud.portal.tier === 3 && !s.character.mapDevice && !s.character.currencyStash.reliquaryKey;
+    });
+  });
+}
+
 async function main() {
   const port = await freePort();
   if (PROD) {
@@ -1899,7 +1971,8 @@ async function main() {
     await registerAndPlay(A, base, `e2e_a_${suffix}`, 'emberpass-A1', nameA);
     return nameA;
   });
-  if (!WAVE5_ONLY) {
+  if (ATLAS_ONLY) await atlasScenario({ A, port });
+  if (!WAVE5_ONLY && !ATLAS_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -1908,7 +1981,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

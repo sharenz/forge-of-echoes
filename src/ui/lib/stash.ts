@@ -65,7 +65,10 @@ export const CURRENCY_SHELVES: Readonly<Record<'currency' | 'mapCurrency', reado
     { title: 'Essences', ids: ['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift'] },
     { title: 'Refining & binding', ids: ['catalyst', 'solvent', 'seal', 'fractureCore'] },
   ],
-  mapCurrency: [{ title: 'Map crafting', ids: ['mapDust', 'threatGlyph', 'rewardInk', 'voidNeedle'] }],
+  mapCurrency: [
+    { title: 'Map crafting', ids: ['mapDust', 'threatGlyph', 'rewardInk', 'voidNeedle'] },
+    { title: 'Atlas keys', ids: ['reliquaryKey'] },
+  ],
 };
 
 /** Slot labels (the full name is in the slot's tooltip). */
@@ -86,6 +89,7 @@ export const CURRENCY_SHORT: Readonly<Record<CurrencyId, string>> = {
   threatGlyph: 'Threat Glyph',
   rewardInk: 'Reward Ink',
   voidNeedle: 'Void Needle',
+  reliquaryKey: 'Reliquary Key',
 };
 
 /** The Crafting Stash tab that shows a currency. */

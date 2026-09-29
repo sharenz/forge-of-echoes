@@ -241,12 +241,13 @@ export class CharacterStore {
    * Save `next` as the record's state together with `alsoWrite` (another table's half of the same hand-over,
    * e.g. deleting the open-map row of a refunded map) in ONE transaction, and only then adopt it in memory.
    * Returns false — logged, with the record left exactly as it was — when the write failed or the character
-   * no longer exists.
+   * no longer exists. `alsoRecords` includes another account's pending state when the same world-row write
+   * depends on it (a guest's Atlas receipt must include the map owner's consumed item).
    */
-  commit(rec: CharacterRecord, next: CharacterSave, alsoWrite?: () => void): boolean {
+  commit(rec: CharacterRecord, next: CharacterSave, alsoWrite?: () => void, alsoRecords: readonly CharacterRecord[] = []): boolean {
     if (rec.deleted || !this.db.isOpen) return false;
     try {
-      this.persist([rec], alsoWrite, { rec, ch: next });
+      this.persist([rec, ...alsoRecords], alsoWrite, { rec, ch: next });
       return true;
     } catch (err) {
       this.log.error('character save failed', { character: rec.id, err });

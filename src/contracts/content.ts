@@ -56,6 +56,7 @@ export const MAP_CURRENCY_IDS = [
   'threatGlyph',    // add one danger mod (danger paired with reward)
   'rewardInk',      // add one reward-only mod (costs map quality / is rarer)
   'voidNeedle',     // corrupt a map: random powerful outcome, then locked
+  'reliquaryKey',   // consumed by the map device to enter the Sealed Reliquary
 ] as const;
 export const CURRENCY_IDS = [...EQUIPMENT_CURRENCY_IDS, ...MAP_CURRENCY_IDS] as const;
 export type CurrencyId = (typeof CURRENCY_IDS)[number];

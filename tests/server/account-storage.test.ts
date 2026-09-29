@@ -6,6 +6,7 @@ import { GameDatabase } from '../../src/server/db';
 import { CharacterStore } from '../../src/server/characters';
 import { mergeLegacyStorage, namespaceItems, parseAccountStorage, withoutStorage } from '../../src/server/account-storage';
 import { silentLogger } from '../../src/server/log';
+import { discoverAfterBoss, newAtlas } from '../../src/game/progression/atlas';
 
 let db: GameDatabase;
 let store: CharacterStore;
@@ -38,6 +39,43 @@ function items(ch: Pick<CharacterSave, 'stash' | 'mapStash'>): Item[] {
 }
 
 describe('account-wide storage', () => {
+  it('commits a guest result with another account owner’s dirty map state, or rolls both back', async () => {
+    await setup();
+    const owner = create('Atomic Owner');
+    const guest = create('Atomic Guest', 'account-b');
+    const map = owner.ch.backpack.entries.find((e) => e.item.kind === 'map')!.item;
+    store.set(owner, moved(owner.ch, map.uid, 0));
+    const next = { ...guest.ch, atlas: discoverAfterBoss(guest.ch.atlas!, 'cinderCrossing', false).progress };
+    expect(store.commit(guest, next, () => { throw new Error('map receipt failed'); }, [owner])).toBe(false);
+    expect(guest.ch.atlas!.clears).toBe(0);
+    expect(owner.dirty).toBe(true);
+    expect(JSON.parse(db.accountStorage('account-a')!.data).mapStash).toHaveLength(0);
+    expect(store.commit(guest, next, () => {}, [owner])).toBe(true);
+    expect(JSON.parse(db.accountStorage('account-a')!.data).mapStash).toHaveLength(1);
+    expect(JSON.parse(db.characterById(owner.id)!.data).backpack.entries.some((e: { item: Item }) => e.item.uid === map.uid)).toBe(false);
+    expect(JSON.parse(db.accountStorage('account-b')!.data).atlas.clears).toBe(1);
+  });
+
+  it('shares Atlas exploration with online and fresh alts and persists it only on the account', async () => {
+    await setup();
+    const a = create('Atlas Pioneer');
+    const b = create('Atlas Alt');
+    const outsider = create('Other Pioneer', 'account-b');
+    const progress = discoverAfterBoss(a.ch.atlas!, 'cinderCrossing', true).progress;
+    store.set(a, { ...a.ch, atlas: progress });
+    expect(b.ch.atlas).toBe(progress);
+    expect(outsider.ch.atlas).toEqual(newAtlas());
+    store.flush(b);
+    expect(JSON.parse(db.characterById(a.id)!.data).atlas).toBeUndefined();
+    expect(JSON.parse(db.accountStorage('account-a')!.data).atlas).toEqual(progress);
+    const fresh = create('Atlas Newcomer');
+    expect(fresh.ch.atlas).toEqual(progress);
+    const again = new CharacterStore(db, silentLogger, { saveDebounceMs: 60_000, now: Date.now });
+    const loaded = again.acquire(b.id)!;
+    expect(loaded.ch.atlas).toEqual(progress);
+    again.release(loaded);
+  });
+
   it('shares deposits immediately, prevents a second withdrawal, and persists both halves together', async () => {
     await setup();
     const a = create('First Hero');

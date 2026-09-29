@@ -51,7 +51,10 @@ function enterThemedMap(p: LocalPlayer, clock: Clock, theme: 'rimedOssuary' | 'i
   const map = p.session.record.ch.backpack.entries.map((e) => e.item).find((i): i is MapItem => i.kind === 'map' && i.baseId === theme);
   if (!map) throw new Error(`no ${theme} map`);
   expect(p.command({ c: 'moveItem', uid: map.uid, to: { kind: 'mapDevice' } }).ok).toBe(true);
-  expect(p.command({ c: 'activateMapDevice' }).ok).toBe(true);
+  const areaId = theme === 'rimedOssuary' ? 'boneApproach' : 'ironMarch';
+  const ch = p.session.record.ch;
+  p.server.game.setCharacter(p.session, { ...ch, atlas: { ...ch.atlas!, discovered: [...ch.atlas!.discovered, areaId] } });
+  expect(p.command({ c: 'activateMapDevice', areaId }).ok).toBe(true);
   walkIntoProp(p, 'portal', clock);
   const inst = p.session.instance;
   if (!(inst instanceof MapInstance)) throw new Error('not in a map');

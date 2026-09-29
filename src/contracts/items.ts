@@ -2,6 +2,7 @@
 import type {
   Attribute, BaseId, ClassId, CurrencyId, EquipSlot, FlaskId, ItemClass, MapBaseId, SkillId, UniqueId,
 } from './content';
+import type { AtlasProgress } from './atlas';
 
 // ---------------------------------------------------------------------------
 // Modifiers & stats
@@ -231,6 +232,8 @@ export interface CharacterSave {
   currencyStash: Partial<Record<CurrencyId, number>>;
   /** Map Stash (≤ MAP_STASH_CAPACITY maps). */
   mapStash: MapItem[];
+  /** Account-wide Atlas discovery, projected alongside shared storage by the server. */
+  atlas?: AtlasProgress;
   /** BELT_SLOTS entries. */
   belt: (BeltSlot | null)[];
   mapDevice: MapItem | null;

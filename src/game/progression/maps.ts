@@ -762,6 +762,7 @@ export function voidOutcomes(map: MapItem): { id: VoidOutcomeId; label: string; 
 
 /** Player-facing reason why a map currency cannot be applied to this map, or null. */
 export function mapCraftError(map: MapItem, currencyId: CurrencyId): string | null {
+  if (currencyId === 'reliquaryKey') return 'Select the Sealed Reliquary in the Map Device to use this key.';
   const name = currencyName(currencyId);
   if (!isMapCurrencyId(currencyId)) return `${name} cannot be applied to maps.`;
   if (map.corrupted) return 'Corrupted maps cannot be modified.';

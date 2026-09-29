@@ -7,20 +7,21 @@ import { rules } from '../game';
 import { autoPlace, createGrid, createStashTab } from '../game/items';
 import { normalizeCharacterReport } from '../game/progression';
 import { findCurrency } from '../data/items';
+import { newAtlas } from '../game/progression/atlas';
 
-export type AccountStorage = Pick<CharacterSave, 'stash' | 'stashCapacity' | 'currencyStash' | 'mapStash'>;
+export type AccountStorage = Pick<CharacterSave, 'stash' | 'stashCapacity' | 'currencyStash' | 'mapStash' | 'atlas'>;
 
 export function storageOf(ch: CharacterSave): AccountStorage {
-  return { stash: ch.stash, stashCapacity: ch.stashCapacity, currencyStash: ch.currencyStash, mapStash: ch.mapStash };
+  return { stash: ch.stash, stashCapacity: ch.stashCapacity, currencyStash: ch.currencyStash, mapStash: ch.mapStash, atlas: ch.atlas };
 }
 
 export function sameStorage(a: AccountStorage, b: AccountStorage): boolean {
-  return a.stash === b.stash && a.currencyStash === b.currencyStash && a.mapStash === b.mapStash && a.stashCapacity === b.stashCapacity;
+  return a.stash === b.stash && a.currencyStash === b.currencyStash && a.mapStash === b.mapStash && a.stashCapacity === b.stashCapacity && a.atlas === b.atlas;
 }
 
 /** Shared fields are a wire/rules projection, never a second persisted copy on a character. */
 export function withoutStorage(ch: CharacterSave): CharacterSave {
-  const { stashCapacity: _capacity, ...rest } = ch;
+  const { stashCapacity: _capacity, atlas: _atlas, ...rest } = ch;
   return { ...rest, stash: [], currencyStash: {}, mapStash: [] };
 }
 
@@ -82,7 +83,7 @@ export function mergeLegacyStorage(characters: readonly CharacterSave[]): Accoun
   }
   const stashCapacity = Math.max(MAX_STASH_TABS, stash.length, ...characters.map((c) => c.stashCapacity ?? MAX_STASH_TABS));
   if (stashCapacity > MAX_PRESERVED_STASH_TABS) throw new Error('Legacy stash exceeds the supported recovery capacity');
-  return { stash, stashCapacity, currencyStash, mapStash };
+  return { stash, stashCapacity, currencyStash, mapStash, atlas: newAtlas() };
 }
 
 /** Reuse item migrations and validation, but reject data loss rather than silently dropping overflow. */
@@ -92,7 +93,7 @@ export function parseAccountStorage(data: string): AccountStorage {
     throw new Error('Unreadable account storage');
   }
   const seed = rules.createCharacter('Shared Stash', 1);
-  const result = normalizeCharacterReport({ ...seed, equipment: {}, backpack: createGrid(12, 5), mapDevice: null, ...raw });
+  const result = normalizeCharacterReport({ ...seed, equipment: {}, backpack: createGrid(12, 5), mapDevice: null, ...raw, atlas: raw.atlas ?? newAtlas() });
   if (!result || result.lost.length || result.character.backpack.entries.length) throw new Error('Account storage needs recovery');
   const before = [...raw.stash.flatMap((t) => t.grid.entries.map((e) => e.item)), ...raw.mapStash];
   const after = [...result.character.stash.flatMap((t) => t.grid.entries.map((e) => e.item)), ...result.character.mapStash];

@@ -84,10 +84,12 @@ describe('journey through the core loop', () => {
     expect(cfg.hooks.rollKillLoot({ kind: 'ashling', summoned: true, rarity: 'normal', isLieutenant: false, isBoss: false, wave: 3, x: 0, y: 0 }, ids, loot)).toEqual([]);
     drops.push(...cfg.hooks.rollKillLoot({ kind: 'ashboundHerald', summoned: false, rarity: 'normal', isLieutenant: true, isBoss: false, wave: 3, x: 0, y: 0 }, ids, loot));
     drops.push(...cfg.hooks.rollKillLoot({ kind: 'cinderMatriarch', summoned: false, rarity: 'normal', isLieutenant: false, isBoss: true, wave: 6, x: 0, y: 0 }, ids, loot));
-    // Everyone present gets their own completion chest, each with a map one tier higher.
+    // Everyone present gets their own completion chest, with a same-tier map or a one-tier upgrade.
     const chest = cfg.hooks.rollChestLoot(ids, loot);
     for (const id of ids) {
-      expect(chest.filter((d) => d.owner === id && d.tone === 'map' && d.label.endsWith(`(T${setup.map.tier + 1})`))).toHaveLength(1);
+      const maps = chest.filter((d) => d.owner === id && d.tone === 'map');
+      expect(maps).toHaveLength(1);
+      expect([setup.map.tier, setup.map.tier + 1].some((tier) => maps[0].label.endsWith(`(T${tier})`))).toBe(true);
     }
     drops.unshift(...chest); // picked up first below
     expect(drops.some((d) => d.tone === 'rare' && d.owner === 1)).toBe(true);
@@ -119,9 +121,9 @@ describe('journey through the core loop', () => {
     ch = rules.clearNewFlags(ch);
     expect(ch.backpack.entries.every((e) => !e.item.isNew)).toBe(true);
 
-    // The chest map is one tier higher.
-    const higher = ch.backpack.entries.map((e) => e.item).filter((i): i is MapItem => i.kind === 'map' && i.tier === setup.map.tier + 1);
-    expect(higher.length).toBeGreaterThan(0);
+    // A usable map is available for the next expedition; an upgrade is a chance, not a guarantee.
+    const nextMaps = ch.backpack.entries.map((e) => e.item).filter((i): i is MapItem => i.kind === 'map' && i.tier >= setup.map.tier);
+    expect(nextMaps.length).toBeGreaterThan(0);
 
     // Scrap buys something; everything survives a save round-trip.
     const scrap = ch.backpack.entries.filter((e) => e.item.kind === 'currency' && e.item.currencyId === 'scrap')

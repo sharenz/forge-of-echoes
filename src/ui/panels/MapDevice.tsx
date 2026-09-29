@@ -14,6 +14,10 @@ import { formatLuck, possessive } from '../lib/format';
 import { useStore, useUi } from '../store';
 import { PanelShell } from './PanelShell';
 import { MapStashView } from './StashSpecial';
+import { AtlasView } from './Atlas';
+import type { AtlasAreaId } from '../../contracts/atlas';
+import { ATLAS_START, atlasTierCeiling, findAtlasArea } from '../../data/progression/atlas';
+import { newAtlas } from '../../game/progression/atlas';
 
 function PortalNote({ portal, own }: { portal: PortalInfo; own: boolean }) {
   const spent = portal.remaining === 0;
@@ -51,6 +55,9 @@ export function MapDevicePanel() {
   const portal = useUi((s) => s.hud?.portal ?? null);
   const zoneIsOwn = useUi((s) => s.hud?.zoneIsOwn ?? true);
   const [openLine, setOpenLine] = useState<string | null>(null);
+  const [areaId, selectArea] = useState<AtlasAreaId>(ch?.atlas?.completed.at(-1) ?? ATLAS_START);
+  const [showAtlas, setShowAtlas] = useState(false);
+  const area = findAtlasArea(areaId)!;
   const map = ch?.mapDevice ?? null;
   const stashed = ch?.mapStash?.length ?? 0;
   // An empty device with maps in the stash: the picker is the way in, so it gets the room.
@@ -58,14 +65,15 @@ export function MapDevicePanel() {
 
   const readout = useMemo(() => {
     if (!ch || !map) return null;
-    const desc = safe(() => store.rules.describeItem(map, ch), null);
-    const summary = safe(() => store.rules.mapSummary(ch, map), []);
+    const effective = { ...map, baseId: area.baseId };
+    const desc = safe(() => store.rules.describeItem(effective, ch), null);
+    const summary = safe(() => store.rules.mapSummary(ch, effective), []);
     // openMap is pure: preview the run setup to compute this player's personal luck exactly.
-    const preview = safe(() => store.rules.openMap(ch), null);
+    const preview = safe(() => store.rules.openMap(ch, areaId), null);
     const luck = preview && preview.ok ? safe(() => store.rules.lootLuck(preview.value.setup, ch), null) : null;
     const mapLuck = preview && preview.ok ? { q: preview.value.setup.itemQuantity, r: preview.value.setup.itemRarity } : null;
-    return { desc, summary, luck, mapLuck };
-  }, [ch, map, store]);
+    return { desc, summary, luck, mapLuck, error: preview && !preview.ok ? preview.error : null };
+  }, [ch, map, store, areaId]);
 
   if (!ch) return null;
   const disabled = !own || zone !== 'hideout';
@@ -76,10 +84,10 @@ export function MapDevicePanel() {
 
   const activate = (): void => {
     store.actions.uiSound('open');
-    store.actions.activateMapDevice();
+    store.actions.activateMapDevice(areaId);
   };
   const confirmActivate = (): void => {
-    const next = readout?.desc?.title ?? 'this map';
+    const next = area.name;
     if (ownPortal && ownPortal.remaining > 0 && !ownPortal.cleared) {
       local.dialog.set({
         title: 'Open a new map',
@@ -93,8 +101,9 @@ export function MapDevicePanel() {
   };
 
   return (
-    <PanelShell panel="mapDevice" title="Map Device" class="fe-device">
-      {disabled ? (
+    <PanelShell panel="mapDevice" title={showAtlas ? 'Atlas' : 'Map Device'} class={cx('fe-device', showAtlas && 'fe-device--atlas')}>
+      {showAtlas && !disabled ? <AtlasView progress={ch.atlas ?? newAtlas()} selected={areaId} tier={map?.tier ?? null}
+        onBack={() => setShowAtlas(false)} onSelect={(id) => { selectArea(id); setShowAtlas(false); }} /> : disabled ? (
         <div class="fe-device__locked">
           <div
             class={cx(
@@ -123,7 +132,13 @@ export function MapDevicePanel() {
         </div>
       ) : (
         <>
+          <button class="fe-device__destination" onClick={() => setShowAtlas(true)}>
+            <span class="ui-type-caption">Atlas destination · up to Tier {atlasTierCeiling(area)}</span>
+            <strong class="ui-type-body">{area.name}</strong>
+            <span class="ui-type-caption">Choose area →</span>
+          </button>
           <div class={cx('fe-device__scroll', !picking && 'fe-scrollfade', picking && 'fe-device__scroll--picking')}>
+            <p class="fe-panel__note ui-type-caption">Your map supplies tier, quality and mods. The area supplies enemies and rewards.</p>
             <div class={cx('fe-device__circle', map && 'fe-device__circle--charged', picking && 'fe-device__circle--compact')}>
               <MapDeviceSlotView disabled={false} />
             </div>
@@ -220,11 +235,12 @@ export function MapDevicePanel() {
           {/* Outside the scroll area: the open portal is what Activate would replace, so it stays in view. */}
           {ownPortal && <PortalNote portal={ownPortal} own />}
           <div class="fe-device__actions">
-            <Button variant="ember" size="large" class="fe-device__activate" disabled={!map} onClick={confirmActivate}>
+            {readout?.error && <span class="fe-atlas__error ui-type-secondary" role="status">{readout.error}</span>}
+            <Button variant="ember" size="large" class="fe-device__activate" disabled={!map || !!readout?.error} onClick={confirmActivate}>
               Activate
             </Button>
             <span class="fe-device__cost ui-type-caption">
-              {map ? `Consumes the map and opens ${PORTALS_PER_MAP} portals` : 'Place a map to activate'}
+              {map ? `Consumes the map${area.sealed ? ' and one Reliquary Key' : ''}; opens ${PORTALS_PER_MAP} portals` : 'Place a map to activate'}
             </span>
           </div>
         </>

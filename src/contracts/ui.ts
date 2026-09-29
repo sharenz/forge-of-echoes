@@ -220,7 +220,7 @@ export interface UiActions {
   setLoadoutSlot(slot: number, skillId: SkillId | null): void;
 
   // hideout
-  activateMapDevice(): void;
+  activateMapDevice(areaId?: import('./atlas').AtlasAreaId): void;
   /** Offers computed locally from the shared rules (display); buying goes to the server. */
   merchantOffers(): MerchantOffer[];
   buyOffer(offerId: string): void;
