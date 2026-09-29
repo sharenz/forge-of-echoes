@@ -20,7 +20,7 @@ describe('openMap', () => {
     expect(character.rngState).not.toBe(ch.rngState);
     expect(setup.map.uid).toBe(m.uid);
     expect(setup.map.isNew).toBeUndefined();
-    expect(setup.monsterLevel).toBe(30);
+    expect(setup.monsterLevel).toBe(22);
     expect(setup.itemQuantity).toBe(128);
     expect(setup.itemRarity).toBe(130);
     expect(setup.summary.map((l) => l.label)).toContain('Map Item Quantity');
@@ -113,7 +113,7 @@ describe('buildRunConfig', () => {
     const { setup } = expectOk(rules.openMap(ch));
     const cfg = rules.buildRunConfig(setup, hooks);
     expect(cfg).toMatchObject({ mode: 'map', theme: 'ironColiseum', tier: 2, arenaRadius: 650, seed: setup.seed, mapName: 'Volcanic Iron Coliseum' });
-    expect(cfg.monsters).toMatchObject({ level: 18, hazards: true });
+    expect(cfg.monsters).toMatchObject({ level: 10, hazards: true });
     expect(cfg.monsters.countMultiplier).toBeCloseTo(1.25, 10);
     expect(cfg.waves).toEqual({ count: 6, baseMonsters: 40, monstersPerWave: 18, waveDuration: 60, tellDuration: 3, lieutenantWave: 3, bossWave: 6 });
   });

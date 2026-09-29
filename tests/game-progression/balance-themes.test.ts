@@ -1,10 +1,11 @@
 // Balance across the three map types (GAME_SPEC §7, §13, §14): the real rules, the real sim and the scripted bot of
 // playthrough.ts, per map base. It guards the promise that matters most to a new player: whichever map she opens
 // first — the Ashen Forge or the Rimed Ossuary of her starting kit, or the Iron Coliseum Rook hands out for free —
-// she clears Tier 1 with the starting kit, levelling as she plays.
+// she clears Tier 1 with the starting kit, levelling as she plays. The first map is meant to be hard (GAME_SPEC §7): she
+// dies a few times and comes back through the map's portals, so "clears" here means "with the portals".
 //
-// Always on (about ten seconds): one new character per theme clears its Tier 1 alone.
-// On demand (BALANCE=1, about two minutes):
+// Always on (about a minute): one new character per theme clears its Tier 1 alone, through the portals.
+// On demand (BALANCE=1, a few minutes):
 //   • new characters clear Tier 1 of every theme on four seeds alone and on two seeds as a pair;
 //   • debuffs never chain-lock a player (GAME_SPEC §13): a careless player who stops walking 1.2 s in every 3 s
 //     (so every web, hook, tar pool, wisp burst and Ice Prison lands) is held — rooted or frozen — for at most 40%
@@ -42,20 +43,19 @@ function tier1(ch: CharacterSave, theme: MapBaseId): { character: CharacterSave;
 function freshTier1(theme: MapBaseId, seed: number, size = 1): PlayResult[] {
   const party = Array.from({ length: size }, (_, i) => rules.createCharacter(i === 0 ? 'Balance' : `Friend${i}`, seed + 100 * i));
   const { character, map } = tier1(party[0], theme);
-  return playParty([character, ...party.slice(1)], map, { maxMinutes: 20 });
+  return playParty([character, ...party.slice(1)], map, { maxMinutes: 25, reenterAfter: 12 });
 }
 
-/** A healthy first map: cleared in time without dying, under real pressure, and it levels her up. */
+/** A healthy first map: cleared through the portals in time, under real pressure, and it levels her up. */
 function expectHealthyTier1(r: PlayResult): void {
   expect(r.result, describePlay(r)).toBe('cleared');
-  expect(r.deaths, describePlay(r)).toBe(0);
-  expect(r.seconds, describePlay(r)).toBeLessThanOrEqual(12 * MINUTES);
+  expect(r.seconds, describePlay(r)).toBeLessThanOrEqual(25 * MINUTES);
   expect(r.levelEnd, describePlay(r)).toBeGreaterThanOrEqual(4);
 }
 
 describe('a new character clears Tier 1 of every map type (always on)', () => {
   for (const theme of MAP_BASE_IDS) {
-    it(`${theme}: cleared alone with the starting kit, and it pushes back`, () => {
+    it(`${theme}: cleared alone with the starting kit through the portals, and it pushes back`, () => {
       const [r] = freshTier1(theme, 1);
       console.log(`[balance] new character, ${describePlay(r)}`);
       expect(r.setup.map.baseId).toBe(theme);

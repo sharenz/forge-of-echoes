@@ -95,7 +95,7 @@ export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
  * deriveStats(ch, setup) shows. Push it again (SimRun.updatePlayer) after a level-up, gear or flask change.
  */
 export function playerRuntime(ch: CharacterSave, setup: RunSetup | null): PlayerRuntime {
-  const model = buildPlayerModel(ch, setup ? mapPlayerModifiers(setup.map) : []);
+  const model = buildPlayerModel(ch, setup ? mapPlayerModifiers(setup.map) : [], undefined, setup?.monsterLevel ?? null);
   const { combat } = computeCombat(model);
   return {
     stats: combat,

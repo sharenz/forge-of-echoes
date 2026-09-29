@@ -30,7 +30,7 @@ import {
   type WorldView,
 } from '../../src/contracts/sim';
 import { rules } from '../../src/game';
-import { createMapItem } from '../../src/game/progression';
+import { createMapItem, monsterLevelForTier } from '../../src/game/progression';
 import type { SimPlayerUpdate } from '../../src/sim';
 // run.ts first: it loads the sim's core modules (they import each other in a cycle) in the right order.
 import { createRunInternal } from '../../src/sim/run';
@@ -535,6 +535,39 @@ export function nextMap(ch: CharacterSave, tier: number): { character: Character
     if (bought.ok && bought.value.item.kind === 'map') return { character: bought.value.character, map: bought.value.item };
   }
   return { character: ch, map: createMapItem('ashenForge', tier, `balance-t${tier}-${ch.nextUid}`) };
+}
+
+/** The highest tier whose monsters are at most `ahead` levels above `level` (GAME_SPEC §7: level + 3 is "fine"). */
+export function tierForLevel(level: number, ahead = 3): number {
+  let tier = 1;
+  for (let t = 2; t <= 15; t++) if (monsterLevelForTier(t) <= level + ahead) tier = t;
+  return tier;
+}
+
+export interface Progression {
+  /** One result per map played, in order. */
+  results: PlayResult[];
+  /** The character after each map (gear upgraded, as a player equips drops); characters[0] is the new character. */
+  characters: CharacterSave[];
+}
+
+/**
+ * A "normal player": a fresh character plays `maps` maps in a row, each at the highest tier whose monsters are at most
+ * `ahead` levels above their level, dying and coming back through the portals (`reenterAfter`), equipping upgrades and
+ * spending points between maps. This is the reference for the pace of levels, gear and danger.
+ */
+export function playProgression(seed: number, maps: number, opts: PlayOptions & { ahead?: number } = {}): Progression {
+  const { ahead = 3, ...playOpts } = opts;
+  let ch = rules.createCharacter('Balance', seed);
+  const out: Progression = { results: [], characters: [ch] };
+  for (let i = 0; i < maps; i++) {
+    const next = nextMap(ch, tierForLevel(ch.level, ahead));
+    const r = playMap(next.character, next.map, { maxMinutes: 30, reenterAfter: 15, ...playOpts });
+    out.results.push(r);
+    ch = upgradeGear(r.character);
+    out.characters.push(ch);
+  }
+  return out;
 }
 
 /**

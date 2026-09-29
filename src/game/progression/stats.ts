@@ -9,7 +9,8 @@ import { ATTRIBUTES, PLAYER_FLAGS } from '../../contracts/content';
 import type { PlayerCombatStats } from '../../contracts/sim';
 import { resolveStatBreakdown } from '../../core/modifiers';
 import { STAT_LABEL, UNIQUES, findBase } from '../../data/items';
-import { getSkill } from '../../data/progression';
+import { MONSTER_LEVEL_SCALING, getSkill } from '../../data/progression';
+import type { ClassDef } from '../../data/progression';
 import { formatNumber, formatSigned } from '../items';
 import { lootLuckLines } from './luck';
 import { mapPlayerModifiers } from './maps';
@@ -56,6 +57,11 @@ const RESIST_STATS: Record<Exclude<DamageType, 'physical'>, StatId> = {
   fire: 'fireRes', cold: 'coldRes', lightning: 'lightningRes', void: 'voidRes',
 };
 
+/** The evasion constant against monsters of a level: higher-level monsters are harder to evade. */
+export function evasionConstantFor(cls: ClassDef, monsterLevel: number | null): number {
+  return cls.evasionPerMonsterLevel * (monsterLevel ?? MONSTER_LEVEL_SCALING.referenceLevel);
+}
+
 interface Computed {
   combat: PlayerCombatStats;
   breakdowns: Partial<Record<StatId, StatBreakdown>>;
@@ -88,7 +94,8 @@ export function computeCombat(model: PlayerModel): Computed {
   const lifeRegen = Math.max(0, take('lifeRegen', 0).value);
   const armor = Math.max(0, Math.floor(take('armor', 0).value));
   const evasionRating = Math.max(0, Math.floor(take('evasion').value));
-  const evasion = Math.min(cls.evasionCap, evasionRating / (evasionRating + cls.evasionConstant));
+  const evasionConstant = evasionConstantFor(cls, model.monsterLevel);
+  const evasion = Math.min(cls.evasionCap, evasionRating / (evasionRating + evasionConstant));
 
   const resistUncapped = { fire: 0, cold: 0, lightning: 0, void: 0 };
   const resist: Record<DamageType, number> = { physical: 0, fire: 0, cold: 0, lightning: 0, void: 0 };
@@ -189,7 +196,10 @@ function defenceSection(c: Computed, model: PlayerModel): SheetSection {
     line('Evasion Rating', String(c.evasionRating), breakdownLines(b.evasion!)),
     line('Chance to Evade', percent(c.combat.evasion, 1), [
       `Evasion Rating ${c.evasionRating}`,
-      `Chance = rating / (rating + ${cls.evasionConstant}), at most ${percent(cls.evasionCap)}`,
+      `Chance = rating / (rating + ${evasionConstantFor(cls, model.monsterLevel)}), at most ${percent(cls.evasionCap)}`,
+      model.monsterLevel === null
+        ? `Against monster level ${MONSTER_LEVEL_SCALING.referenceLevel}: ${cls.evasionPerMonsterLevel} per monster level`
+        : `Against monster level ${model.monsterLevel}: ${cls.evasionPerMonsterLevel} per monster level`,
       'Evasion avoids monster attacks and projectiles',
     ]),
   ];
@@ -376,7 +386,7 @@ export function deriveFromModel(ch: CharacterSave, model: PlayerModel, setup: Ru
  * `setup` null / omitted = the hideout sheet. DerivedStats.itemQuantity / itemRarity stay gear-only.
  */
 export function deriveStats(ch: CharacterSave, setup: RunSetup | null = null): DerivedStats {
-  return deriveFromModel(ch, buildPlayerModel(ch, setup ? mapPlayerModifiers(setup.map) : []), setup);
+  return deriveFromModel(ch, buildPlayerModel(ch, setup ? mapPlayerModifiers(setup.map) : [], undefined, setup?.monsterLevel ?? null), setup);
 }
 
 /** @deprecated Same as deriveStats(ch, setup) — kept for callers written before deriveStats took a RunSetup. */

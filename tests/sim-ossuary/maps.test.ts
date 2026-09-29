@@ -30,15 +30,14 @@ describe('Tier 1 Rimed Ossuary', () => {
     expect(results.reduce((n, r) => n + r.roots, 0)).toBeGreaterThan(0);
   }, 120_000);
 
-  it('a fresh character (the real rules, her starting kit) clears the Tier 1 Ossuary she starts with', () => {
+  it('a fresh character (the real rules, her starting kit) clears the Tier 1 Ossuary she starts with, through the portals', () => {
     for (const seed of [1, 2]) {
       const ch = rules.createCharacter('Rimewalker', seed);
       const map = mapInBag(ch, (m) => m.baseId === 'rimedOssuary' && m.tier === 1);
       expect(map, 'the starting kit has a Tier 1 Rimed Ossuary').not.toBeNull();
-      const r = playMap(ch, map!, { maxMinutes: 20 });
+      const r = playMap(ch, map!, { maxMinutes: 25, reenterAfter: 12 });
       console.info(`fresh character seed ${seed}: ${describePlay(r)}`);
       expect(r.result, describePlay(r)).toBe('cleared');
-      expect(r.deaths).toBe(0);
       expect(r.levelEnd).toBeGreaterThanOrEqual(4);
     }
   }, 120_000);

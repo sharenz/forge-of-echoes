@@ -11,7 +11,7 @@
 // Echo wave, by double quantity. Each category is then rolled independently:
 //   chance = base × Q / 100 (maps additionally × map drop chance); a chance above 100% drops
 //   floor(chance) items plus one more with the remainder.
-// Equipment rarity weights with m = R / 100: normal 70 · magic 27·m · rare 3·m^1.3 · unique 0.2·m^1.5.
+// Equipment rarity weights with m = R / 100: normal 70 · magic 22·m · rare 1.6·m^1.3 · unique 0.2·m^1.5.
 // A unique is picked among those wearable at the drop's item level (the unique's and its base's level
 // requirement ≤ monster level); when none is, the drop becomes a rare.
 // Summoned minions (and the training dummy) never drop anything.
@@ -263,9 +263,11 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
   // Guarantees use the looter's personal rarity (the elite multiplier already boosts the ordinary roll above).
   const mapM = luck.personal.itemRarity / 100;
   if (kill.isLieutenant) {
-    out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, mapM, 'magic'), origin));
-    const min: Rarity = rng.chance(LIEUTENANT_LOOT.rareChance) ? 'rare' : 'magic';
-    out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, mapM, min), origin));
+    // Every guaranteed item is at least magic; the last one is at least rare with rareChance.
+    for (let i = 0; i < LIEUTENANT_LOOT.equipment; i++) {
+      const min: Rarity = i === LIEUTENANT_LOOT.equipment - 1 && rng.chance(LIEUTENANT_LOOT.rareChance) ? 'rare' : 'magic';
+      out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, mapM, min), origin));
+    }
     for (let i = 0; i < LIEUTENANT_LOOT.currency; i++) out.push(makeCurrency(ctx, rng));
     if (rng.chance(LIEUTENANT_LOOT.mapChance)) out.push(makeRandomMap(ctx, rng, mapM));
   }

@@ -70,12 +70,12 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Max focus | `40 + 2·(L−1) + 1·int` (L1 ≈ 70) |
 | Focus regen | `3 /s + 2% of max focus /s` |
 | Life regen | 0 base |
-| Evasion rating | `20 + 3·(L−1) + 2·dex`. Evade chance = `rating / (rating + 250)`, capped at 75% |
+| Evasion rating | `20 + 3·(L−1) + 2·dex`. Evade chance = `rating / (rating + 30 × monster level)`, capped at 75%; the hideout sheet uses monster level 10 |
 | Armour | 0 base. Physical hit reduction = `armor / (armor + 10·damage)` |
 | Resistances | 0 base. Capped at 75%. Map mods can add a negative player-resistance penalty |
 | Move speed | 110 units/s base (+% from gear) |
 | Pickup radius | 90 units base (+% from gear). Drops and echo motes inside it fly to you |
-| Spell power | Every skill hit starts from `base = 8 + 1.6·(L−1)` plus `addedSpellDamage`, times the skill's effectiveness (the original target of 5 at L1 left a new character unable to one- or two-shot Tier 1 monsters) |
+| Spell power | Every skill hit starts from `base = 11 + 1.6·(L−1)` plus `addedSpellDamage`, times the skill's effectiveness (the original target of 5 at L1 left a new character unable to make progress on the hard Tier 1) |
 | Int bonus | +1% increased spell damage per 5 int |
 | Dex bonus | +1% increased evasion per 5 dex |
 | Str bonus | +1% increased max life per 10 str |
@@ -162,7 +162,7 @@ Player modifiers on skills (resolved by the rules into the sim's numbers, so too
 
 Luck affixes (item quantity / rarity) are personal: they raise only their wearer's drops (§9, §11).
 
-**Uniques** (any equipment drop at weight `0.2·m^1.5` of about 100, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tier 1, item level 12: only The Patient Spark; Tier 2: + Cinderwalkers; Tier 3+: all four), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties and cannot be crafted:
+**Uniques** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tiers 1–2, item levels 4 and 10: none; Tier 3, item level 16: The Patient Spark and Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5+: all four), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties and cannot be crafted:
 
 | Unique | Base | Effects | Flavour |
 |---|---|---|---|
@@ -234,16 +234,14 @@ Every craft appends a line to `item.history`, so the item carries its own story.
 | Rimed Ossuary | Frosted bone-tiles, cold blue light, ice crystals | 900 | Rime Essences 3× as likely; +20% monster life; +15% item rarity |
 | Iron Coliseum | Rusted iron plates, sand, torchlight | 650 | +25% monster count; armour bases +2 stability |
 
-**Tier:** 1–15. Monster level = `min(90, 6 + tier·6)` (= the item level of every drop). Tier scaling (compounding per tier above 1, shown as "more" in the readout): monster life ×1.16, damage ×1.10, experience ×1.28 (Tier 5: 2.7×, Tier 15: 31.7×), and +5% item rarity per tier (additive).
+**Tier and monster level:** tiers 1–15. Monster level = `min(90, 6·tier − 2)` (Tier 1 = 4, Tier 4 = 22, Tier 15 = 88), and it is the item level of every drop. **Monster stats scale with monster level, not tier** (Path of Exile style): life ×1.09 and damage ×1.065 per level above the reference level 10 (the level at which the sim's base monster table applies unchanged), and the same factors as fractions below it, shown as "more" or "less" from "Monster level N" in the readout. Tier still drives experience (×1.28 per tier above 1) and +5% item rarity per tier (additive).
 
-**Early-tier easing** on top, so a new character with the starting kit clears Tier 1 and the full scaling arrives at Tier 5. It tapers fast so the first levels and drops don't outrun it: Tiers 2–4 must keep pushing back (guarded by the balance playthroughs, which also check that Tiers 2 and 3 still cost life or flasks):
+**Defences scale with monster level too.** Evade chance = `rating / (rating + 30 × monster level)` (at most 75%): the same evasion rating avoids fewer hits from higher-level monsters, so roughly half of all hits can only be avoided with focused high-end gear. The character sheet in the hideout uses the reference level 10.
 
-| Tier | Monster life | Monster damage |
-|---|---|---|
-| 1 | 65% less | 40% less |
-| 2 | 35% less | 15% less |
-| 3 | 25% less | 10% less |
-| 4 | 10% less | – |
+**Balance intent (owner, 2026-09-29):**
+- There is no early-tier easing. A brand-new character with the starting kit is expected to die on Tier 1 (monster level 4) a few times, level up on the way and come back through the portals.
+- A normally geared character comfortably clears maps whose monster level is up to about their own level + 3. Modded maps and higher tiers need properly crafted gear and a balanced build.
+- Progression is steep: drops are scarce (§9), and item level is monster level, so better affix tiers need higher tiers.
 
 **Quality** (0–20): +1% item quantity and +1% map drop chance per point. Dropped maps have quality 25% of the time (1–10); chest maps always have 4–12.
 
@@ -284,7 +282,7 @@ Reward-only mods (Reward Ink):
 
 **Map drops:**
 - The next tier is only guaranteed from the completion chest.
-- Random map drops are same tier 60%, one lower 25%, one higher 15% (within 1–15). Their rarity mirrors equipment (normal 70 · magic 27·m · rare 3·m^1.3); all three bases are equally likely.
+- Random map drops are same tier 60%, one lower 25%, one higher 15% (within 1–15). Their rarity mirrors equipment (normal 70 · magic 22·m · rare 1.6·m^1.3); all three bases are equally likely.
 - The merchant always sells T1 (free) and T2 (4 Scrap).
 
 ## 8. Waves & monsters (the sim owns these numbers)
@@ -333,21 +331,21 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 
 | Category | Base chance | Contents |
 |---|---|---|
-| Currency | 4% | Scrap 40 · Kindling 22 · Map Dust 12 · Solvent 5 · Reforge 4 · Threat Glyph 3 · each Essence 2.4 (×5) · Seal 2.5 · Reward Ink 1.4 · Catalyst 1.6 · Void Needle 0.6 · Fracture Core 0.25. Scrap drops in stacks of 1 (70%), 2 (22%) or 3 (8%). Map implicits and Essence-laden multiply essence weights |
-| Equipment | 1.8% | Uniform over the bases whose level requirement ≤ item level; item level = monster level. A unique roll picks among the uniques wearable at that item level (§5), else it becomes a rare |
-| Flask | 1.2% | Life 60 · Focus 40 |
-| Map | 0.6% | See section 7 |
+| Currency | 1.5% | Scrap 40 · Kindling 12 · Map Dust 6 · Solvent 2.5 · Reforge 1.5 · Threat Glyph 1.5 · each Essence 0.8 (×5) · Seal 1.2 · Reward Ink 0.6 · Catalyst 0.5 · Void Needle 0.2 · Fracture Core 0.08. Scrap drops in stacks of 1 (75%), 2 (20%) or 3 (5%). Map implicits and Essence-laden multiply essence weights |
+| Equipment | 0.9% | Uniform over the bases whose level requirement ≤ item level; item level = monster level. A unique roll picks among the uniques wearable at that item level (§5), else it becomes a rare |
+| Flask | 1% | Life 60 · Focus 40 |
+| Map | 0.5% | See section 7 |
 
 **Equipment rarity** (m = R/100):
 - normal weight 70
-- magic 27·m
-- rare 3·m^1.3
+- magic 22·m
+- rare 1.6·m^1.3
 - unique 0.2·m^1.5
 
 **Guaranteed drops** (for every player present, on top of the ordinary roll; m = that player's personal rarity / 100):
-- **Lieutenant:** 2 equipment (≥ magic, the second ≥ rare 30% of the time), 4 currency, map 50%.
-- **Boss:** 3 equipment (1 guaranteed rare, 2 ≥ magic), 6 currency, and an 8%×m chance of a unique.
-- **Completion chest:** 2 equipment (≥ magic), 3–6 currency, 1 flask, and **1 map of tier+1 (guaranteed**, quality 4–12, capped at Tier 15).
+- **Lieutenant:** 1 equipment (≥ magic, ≥ rare 30% of the time), 2 currency, map 50%.
+- **Boss:** 2 equipment (1 guaranteed rare, 1 ≥ magic), 3 currency, and an 8%×m chance of a unique.
+- **Completion chest:** 1 equipment (≥ magic), 2–3 currency, 1 flask, and **1 map of tier+1 (guaranteed**, quality 4–12, capped at Tier 15).
 
 **Making luck *felt* (presentation):**
 - Drop beams by tone:

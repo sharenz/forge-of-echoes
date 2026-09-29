@@ -7,11 +7,23 @@ import type { CurrencyId } from '../../src/contracts/content';
 import { createRng } from '../../src/core/rng';
 import { lootLuckLines, rules } from '../../src/game';
 import { getBase } from '../../src/data/items';
-import { ARMOUR_CLASSES } from '../../src/data/items';
-import { categoryChances, currencyWeightsFor, equipmentRarityOdds, killLuck, rollEquipmentRarity } from '../../src/game/progression';
+import { ARMOUR_CLASSES, UNIQUES } from '../../src/data/items';
+import {
+  BOSS_LOOT, CATEGORY_CHANCE, CHEST_LOOT, CURRENCY_DROPS, EQUIPMENT_RARITY_WEIGHTS, LIEUTENANT_LOOT,
+} from '../../src/data/progression';
+import {
+  categoryChances, currencyWeightsFor, equipmentRarityOdds, killLuck, monsterLevelForTier, rollEquipmentRarity,
+} from '../../src/game/progression';
 import { bareCharacter, equip, kill, luckyAmulet, map, setupFor, unique } from './fixtures';
 
 const mod = (modId: string, value = 100): RolledMapMod => ({ modId, value });
+
+const BASE_CURRENCY = CATEGORY_CHANCE.currency;
+const BASE_EQUIPMENT = CATEGORY_CHANCE.equipment;
+const BASE_FLASK = CATEGORY_CHANCE.flask;
+const BASE_MAP = CATEGORY_CHANCE.map;
+const RW = EQUIPMENT_RARITY_WEIGHTS;
+const dropWeight = (id: CurrencyId) => CURRENCY_DROPS.find((d) => d.currencyId === id)!.weight;
 
 /** Within `k` standard deviations of a binomial rate. */
 function expectRate(count: number, n: number, p: number, k = 4) {
@@ -45,15 +57,15 @@ describe('per-kill drop rates (100k kills at 100% quantity and rarity)', () => {
   });
 
   it('drops each category at base × quantity', () => {
-    expectRate(t.currency, N, 0.04);
-    expectRate(t.equipment, N, 0.018);
-    expectRate(t.flask, N, 0.012);
-    expectRate(t.map, N, 0.006);
+    expectRate(t.currency, N, BASE_CURRENCY);
+    expectRate(t.equipment, N, BASE_EQUIPMENT);
+    expectRate(t.flask, N, BASE_FLASK);
+    expectRate(t.map, N, BASE_MAP);
   });
 
   it('rolls item level = monster level and marks drops as new', () => {
     const eq = t.items.filter((i): i is EquipmentItem => i.kind === 'equipment');
-    expect(eq.every((e) => e.itemLevel === 24 && e.isNew === true)).toBe(true);
+    expect(eq.every((e) => e.itemLevel === monsterLevelForTier(3) && e.isNew === true)).toBe(true);
     expect(eq.every((e) => e.history[0] === 'Dropped in Ashen Forge (Tier 3)')).toBe(true);
   });
 
@@ -74,20 +86,21 @@ describe('per-kill drop rates (100k kills at 100% quantity and rarity)', () => {
     const weights = currencyWeightsFor(setup.map);
     const total = weights.reduce((s, w) => s + w.weight, 0);
     for (const w of weights) expectRate(counts.get(w.currencyId) ?? 0, t.currency, w.weight / total, 5);
-    expect(weights.find((w) => w.currencyId === 'essenceEmber')!.weight).toBeCloseTo(7.2, 10);
-    expect(weights.find((w) => w.currencyId === 'essenceRime')!.weight).toBeCloseTo(2.4, 10);
+    expect(weights.find((w) => w.currencyId === 'essenceEmber')!.weight).toBeCloseTo(dropWeight('essenceEmber') * 3, 10);
+    expect(weights.find((w) => w.currencyId === 'essenceRime')!.weight).toBeCloseTo(dropWeight('essenceRime'), 10);
   });
 });
 
 describe('equipment rarity weights', () => {
-  it('normal 70 · magic 27m · rare 3m^1.3 · unique 0.2m^1.5', () => {
+  it('normal · magic m · rare m^1.3 · unique m^1.5 (weights from EQUIPMENT_RARITY_WEIGHTS)', () => {
+    const total1 = RW.normal.base + RW.magic.base + RW.rare.base + RW.unique.base;
     const odds = equipmentRarityOdds(1);
-    expect(odds.normal).toBeCloseTo(70 / 100.2, 10);
-    expect(odds.magic).toBeCloseTo(27 / 100.2, 10);
-    expect(odds.rare).toBeCloseTo(3 / 100.2, 10);
-    expect(odds.unique).toBeCloseTo(0.2 / 100.2, 10);
+    expect(odds.normal).toBeCloseTo(RW.normal.base / total1, 10);
+    expect(odds.magic).toBeCloseTo(RW.magic.base / total1, 10);
+    expect(odds.rare).toBeCloseTo(RW.rare.base / total1, 10);
+    expect(odds.unique).toBeCloseTo(RW.unique.base / total1, 10);
     const m = 2;
-    const w = [70, 27 * m, 3 * m ** 1.3, 0.2 * m ** 1.5];
+    const w = [RW.normal.base, RW.magic.base * m, RW.rare.base * m ** RW.rare.exponent, RW.unique.base * m ** RW.unique.exponent];
     const sum = w.reduce((a, b) => a + b, 0);
     expect(equipmentRarityOdds(m).rare).toBeCloseTo(w[2] / sum, 10);
   });
@@ -114,17 +127,17 @@ describe('monster rarity and luck multipliers', () => {
   const setup = setupFor(map('ashenForge', 1));
 
   it('magic monsters ×1.5 quantity, rare ×4, lieutenant and boss like rares', () => {
-    expect(categoryChances(setup, kill()).currency).toBeCloseTo(0.04, 12);
-    expect(categoryChances(setup, kill({ rarity: 'magic' })).currency).toBeCloseTo(0.06, 12);
-    expect(categoryChances(setup, kill({ rarity: 'rare' })).equipment).toBeCloseTo(0.072, 12);
-    expect(categoryChances(setup, kill({ kind: 'cinderMatriarch', isBoss: true })).map).toBeCloseTo(0.024, 12);
+    expect(categoryChances(setup, kill()).currency).toBeCloseTo(BASE_CURRENCY, 12);
+    expect(categoryChances(setup, kill({ rarity: 'magic' })).currency).toBeCloseTo(BASE_CURRENCY * 1.5, 12);
+    expect(categoryChances(setup, kill({ rarity: 'rare' })).equipment).toBeCloseTo(BASE_EQUIPMENT * 4, 12);
+    expect(categoryChances(setup, kill({ kind: 'cinderMatriarch', isBoss: true })).map).toBeCloseTo(BASE_MAP * 4, 12);
   });
 
   it('rare monsters drop at 4× the rate', () => {
     const n = 40_000;
     const t = tallyKills(setup, n, kill({ rarity: 'rare', kind: 'ironhideBrute' }), 7);
-    expectRate(t.currency, n, 0.16);
-    expectRate(t.equipment, n, 0.072);
+    expectRate(t.currency, n, BASE_CURRENCY * 4);
+    expectRate(t.equipment, n, BASE_EQUIPMENT * 4);
     const eq = t.items.find((i): i is EquipmentItem => i.kind === 'equipment')!;
     expect(eq.history[0]).toBe('Dropped by a rare Ironhide Brute in Ashen Forge (Tier 1)');
   });
@@ -133,32 +146,35 @@ describe('monster rarity and luck multipliers', () => {
     const lucky = setupFor(map('ashenForge', 1, { quality: 20, mods: [mod('bountiful')] }));
     expect(lucky.itemQuantity).toBe(145);
     const c = categoryChances(lucky, kill());
-    expect(c.currency).toBeCloseTo(0.04 * 1.45, 12);
-    expect(c.map).toBeCloseTo(0.006 * 1.45 * 1.2, 12);
+    expect(c.currency).toBeCloseTo(BASE_CURRENCY * 1.45, 12);
+    expect(c.map).toBeCloseTo(BASE_MAP * 1.45 * 1.2, 12);
     const carto = setupFor(map('ashenForge', 1, { mods: [mod('cartographers')] }));
-    expect(categoryChances(carto, kill()).map).toBeCloseTo(0.018, 12);
+    expect(categoryChances(carto, kill()).map).toBeCloseTo(BASE_MAP * 3, 12);
   });
 
   it('chances above 100% drop several items', () => {
     const huge: RunSetup = { ...setupFor(map()), itemQuantity: 5000 };
     const rng = createRng(3);
     const items = rules.rollKillLoot(huge, kill({ rarity: 'rare' }), rng, NAKED);
-    // currency chance 0.04 × 50 × 4 = 8 → exactly 8.
-    expect(items.filter((i) => i.kind === 'currency')).toHaveLength(8);
+    // A rare monster at 5000% quantity: chance = base × 50 × 4, a whole number of items when it divides evenly.
+    const chance = BASE_CURRENCY * 50 * 4;
+    const count = items.filter((i) => i.kind === 'currency').length;
+    expect(count).toBeGreaterThanOrEqual(Math.floor(chance));
+    expect(count).toBeLessThanOrEqual(Math.floor(chance) + 1);
   });
 
   it('the Echo wave doubles quantity', () => {
     const echo: MapItem = { ...map(), corrupted: true, mods: [{ modId: 'echo', value: 100, corrupted: true }] };
     const s = setupFor(echo);
-    expect(categoryChances(s, kill({ wave: 6 })).currency).toBeCloseTo(0.04, 12);
-    expect(categoryChances(s, kill({ wave: 7 })).currency).toBeCloseTo(0.08, 12);
+    expect(categoryChances(s, kill({ wave: 6 })).currency).toBeCloseTo(BASE_CURRENCY, 12);
+    expect(categoryChances(s, kill({ wave: 7 })).currency).toBeCloseTo(BASE_CURRENCY * 2, 12);
   });
 });
 
 describe('guaranteed drops', () => {
   const setup = setupFor(map('ashenForge', 4));
 
-  it('lieutenant: 2 equipment of at least magic (one at least rare 30%), 4 currency, a map half the time', () => {
+  it('lieutenant: guaranteed equipment of at least magic (the last at least rare 30%), guaranteed currency, a map half the time', () => {
     const rng = createRng(11);
     const n = 3000;
     let rareish = 0;
@@ -167,21 +183,22 @@ describe('guaranteed drops', () => {
       const items = rules.rollKillLoot(setup, kill({ kind: 'ashboundHerald', isLieutenant: true, wave: 3 }), rng, NAKED);
       // The guarantees come after the ordinary roll: take the tail.
       const eq = items.filter((x): x is EquipmentItem => x.kind === 'equipment');
-      expect(eq.length).toBeGreaterThanOrEqual(2);
-      const guaranteed = eq.slice(-2);
+      expect(eq.length).toBeGreaterThanOrEqual(LIEUTENANT_LOOT.equipment);
+      const guaranteed = eq.slice(-LIEUTENANT_LOOT.equipment);
       expect(guaranteed.every((e) => e.rarity !== 'normal')).toBe(true);
-      if (guaranteed[1].rarity === 'rare' || guaranteed[1].rarity === 'unique') rareish++;
-      expect(items.filter((x) => x.kind === 'currency').length).toBeGreaterThanOrEqual(4);
+      const last = guaranteed[guaranteed.length - 1];
+      if (last.rarity === 'rare' || last.rarity === 'unique') rareish++;
+      expect(items.filter((x) => x.kind === 'currency').length).toBeGreaterThanOrEqual(LIEUTENANT_LOOT.currency);
       if (items.some((x) => x.kind === 'map')) maps++;
     }
-    // ≥ rare on the second item: 30% guaranteed + 70% × (rare+unique share of the ≥ magic roll).
+    // ≥ rare on the last guaranteed item: 30% guaranteed + 70% × (rare+unique share of the ≥ magic roll).
     const odds = equipmentRarityOdds(setup.itemRarity / 100, 'magic');
     expectRate(rareish, n, 0.3 + 0.7 * (odds.rare + odds.unique));
     const ordinaryMap = 1 - (1 - categoryChances(setup, kill({ isLieutenant: true })).map);
     expectRate(maps, n, 1 - 0.5 * (1 - ordinaryMap), 5);
   });
 
-  it('boss: a guaranteed rare, 2 more of at least magic, 6 currency, 8%×m unique', () => {
+  it('boss: a guaranteed rare, more of at least magic, guaranteed currency, unique chance × m', () => {
     const rng = createRng(12);
     const n = 3000;
     let uniques = 0;
@@ -189,26 +206,26 @@ describe('guaranteed drops', () => {
       const items = rules.rollKillLoot(setup, kill({ kind: 'cinderMatriarch', isBoss: true, wave: 6 }), rng, NAKED);
       const eq = items.filter((x): x is EquipmentItem => x.kind === 'equipment');
       expect(eq.some((e) => e.rarity === 'rare')).toBe(true);
-      expect(eq.filter((e) => e.rarity !== 'normal').length).toBeGreaterThanOrEqual(3);
-      expect(items.filter((x) => x.kind === 'currency').length).toBeGreaterThanOrEqual(6);
-      if (eq.at(-1)!.rarity === 'unique' && eq.length >= 4) uniques++;
+      expect(eq.filter((e) => e.rarity !== 'normal').length).toBeGreaterThanOrEqual(1 + BOSS_LOOT.extraEquipment);
+      expect(items.filter((x) => x.kind === 'currency').length).toBeGreaterThanOrEqual(BOSS_LOOT.currency);
+      if (eq.at(-1)!.rarity === 'unique' && eq.length >= 2 + BOSS_LOOT.extraEquipment) uniques++;
       expect(eq[0].history[0]).toMatch(/Cinder Matriarch|Dropped/);
     }
-    expect(uniques / n).toBeGreaterThan(0.08 * 1.15 * 0.7);
-    expect(uniques / n).toBeLessThan(0.08 * 1.15 * 1.3 + 0.01);
+    expect(uniques / n).toBeGreaterThan(BOSS_LOOT.uniqueChance * 1.15 * 0.7);
+    expect(uniques / n).toBeLessThan(BOSS_LOOT.uniqueChance * 1.15 * 1.3 + 0.01);
   });
 
-  it('completion chest: 2 equipment ≥ magic, 3–6 currency, 1 flask and a guaranteed map one tier higher', () => {
+  it('completion chest: equipment ≥ magic, a currency range, 1 flask and a guaranteed map one tier higher', () => {
     const rng = createRng(13);
     const currencyCounts = new Set<number>();
     for (let i = 0; i < 500; i++) {
       const items = rules.rollChestLoot(setup, rng, NAKED);
       const eq = items.filter((x): x is EquipmentItem => x.kind === 'equipment');
-      expect(eq).toHaveLength(2);
+      expect(eq).toHaveLength(CHEST_LOOT.equipment);
       expect(eq.every((e) => e.rarity !== 'normal')).toBe(true);
       const cur = items.filter((x) => x.kind === 'currency').length;
-      expect(cur).toBeGreaterThanOrEqual(3);
-      expect(cur).toBeLessThanOrEqual(6);
+      expect(cur).toBeGreaterThanOrEqual(CHEST_LOOT.currency.min);
+      expect(cur).toBeLessThanOrEqual(CHEST_LOOT.currency.max);
       currencyCounts.add(cur);
       expect(items.filter((x) => x.kind === 'flask')).toHaveLength(1);
       const maps = items.filter((x): x is MapItem => x.kind === 'map');
@@ -216,7 +233,9 @@ describe('guaranteed drops', () => {
       expect(maps[0].tier).toBe(5);
       expect(maps[0].quality).toBeGreaterThan(0);
     }
-    expect([...currencyCounts].sort()).toEqual([3, 4, 5, 6]);
+    expect([...currencyCounts].sort()).toEqual(
+      Array.from({ length: CHEST_LOOT.currency.max - CHEST_LOOT.currency.min + 1 }, (_, i) => CHEST_LOOT.currency.min + i),
+    );
     const top = setupFor(map('ashenForge', 15));
     expect(rules.rollChestLoot(top, createRng(1), NAKED).find((x) => x.kind === 'map')!.tier).toBe(15);
   });
@@ -330,8 +349,8 @@ describe('personal luck (lootLuck): map-side luck plus the looter\'s gear', () =
 
   it('scales every roll of that looter: categories, monster rarity and the guarantees', () => {
     const setup = setupFor(map('ashenForge', 1));
-    expect(categoryChances(setup, kill(), lucky).currency).toBeCloseTo(0.04 * 1.1, 12);
-    expect(categoryChances(setup, kill(), NAKED).currency).toBeCloseTo(0.04, 12);
+    expect(categoryChances(setup, kill(), lucky).currency).toBeCloseTo(BASE_CURRENCY * 1.1, 12);
+    expect(categoryChances(setup, kill(), NAKED).currency).toBeCloseTo(BASE_CURRENCY, 12);
     expect(killLuck(setup, kill({ rarity: 'magic' }), lucky)).toMatchObject({ quantity: 110 * 1.5, rarity: 120 * 2 });
     expect(killLuck(setup, kill({ rarity: 'magic' }), lucky).personal).toEqual({ itemQuantity: 110, itemRarity: 120 });
   });
@@ -342,9 +361,9 @@ describe('personal luck (lootLuck): map-side luck plus the looter\'s gear', () =
     const n = 60_000;
     const plain = tallyKills(setup, n, kill(), 5, NAKED);
     const rich = tallyKills(setup, n, kill(), 5, hoarder);
-    expectRate(plain.equipment, n, 0.018);
-    expectRate(rich.equipment, n, 0.036);
-    expectRate(rich.currency, n, 0.08);
+    expectRate(plain.equipment, n, BASE_EQUIPMENT);
+    expectRate(rich.equipment, n, BASE_EQUIPMENT * 2);
+    expectRate(rich.currency, n, BASE_CURRENCY * 2);
     const rares = (t: typeof plain) => {
       const eq = t.items.filter((i): i is EquipmentItem => i.kind === 'equipment');
       return { n: eq.length, rare: eq.filter((e) => e.rarity === 'rare' || e.rarity === 'unique').length };
@@ -368,11 +387,11 @@ describe('personal luck (lootLuck): map-side luck plus the looter\'s gear', () =
     for (let i = 0; i < n; i++) {
       const eq = rules.rollKillLoot(setup, kill({ kind: 'cinderMatriarch', isBoss: true, wave: 6 }), rng, seeker)
         .filter((x): x is EquipmentItem => x.kind === 'equipment');
-      if (eq.at(-1)!.rarity === 'unique' && eq.length >= 4) uniques++;
+      if (eq.at(-1)!.rarity === 'unique' && eq.length >= 2 + BOSS_LOOT.extraEquipment) uniques++;
     }
     // m = (115 + 100) / 100
-    expect(uniques / n).toBeGreaterThan(0.08 * 2.15 * 0.8);
-    expect(uniques / n).toBeLessThan(0.08 * 2.15 * 1.2 + 0.01);
+    expect(uniques / n).toBeGreaterThan(BOSS_LOOT.uniqueChance * 2.15 * 0.8);
+    expect(uniques / n).toBeLessThan(BOSS_LOOT.uniqueChance * 2.15 * 1.2 + 0.01);
   });
 });
 
@@ -392,7 +411,7 @@ describe('instanced loot', () => {
   it('gives every player present their own chest', () => {
     const chest = chestFor(8);
     for (const items of chest.values()) {
-      expect(items.filter((x) => x.kind === 'equipment')).toHaveLength(2);
+      expect(items.filter((x) => x.kind === 'equipment')).toHaveLength(CHEST_LOOT.equipment);
       expect(items.filter((x): x is MapItem => x.kind === 'map').map((m) => m.tier)).toEqual([6]);
     }
     const uids = [...chest.values()].flat().map((i) => i.uid);
@@ -408,8 +427,9 @@ describe('instanced loot', () => {
     const specs = ([[1, alice], [2, bob]] as const).flatMap(([id, ch]) =>
       rules.rollKillLoot(setup, kill({ kind: 'ashboundHerald', isLieutenant: true, wave: 3 }), rng, ch)
         .map((item) => rules.dropSpec(item, ++token, id)));
-    expect(specs.filter((s) => s.owner === 1).length).toBeGreaterThanOrEqual(6);
-    expect(specs.filter((s) => s.owner === 2).length).toBeGreaterThanOrEqual(6);
+    const guaranteed = LIEUTENANT_LOOT.equipment + LIEUTENANT_LOOT.currency;
+    expect(specs.filter((s) => s.owner === 1).length).toBeGreaterThanOrEqual(guaranteed);
+    expect(specs.filter((s) => s.owner === 2).length).toBeGreaterThanOrEqual(guaranteed);
     expect(new Set(specs.map((s) => s.token)).size).toBe(specs.length);
   });
 
@@ -440,17 +460,22 @@ describe('uniques drop only where they can be worn (item level ≥ the unique\'s
     return out;
   }
 
-  it('Tier 1 (item level 12): only The Patient Spark', () => {
-    expect([...bossUniques(setupFor(map('ashenForge', 1)))]).toEqual(['thePatientSpark']);
+  /** The uniques wearable at a tier's item level (= its monster level), from the data. */
+  const wearableAt = (tier: number) => Object.entries(UNIQUES)
+    .filter(([, u]) => u.levelRequirement <= monsterLevelForTier(tier))
+    .map(([id]) => id).sort();
+
+  it('a tier only rolls the uniques whose level requirement its item level meets', () => {
+    for (const tier of [1, 2, 3, 4, 5, 6]) {
+      const rolled = [...bossUniques(setupFor(map('ashenForge', tier)))].sort();
+      expect(rolled, `Tier ${tier} (item level ${monsterLevelForTier(tier)})`).toEqual(wearableAt(tier));
+    }
   });
 
-  it('Tier 2 (item level 18): The Patient Spark and Cinderwalkers', () => {
-    expect([...bossUniques(setupFor(map('ashenForge', 2)))].sort()).toEqual(['cinderwalkers', 'thePatientSpark']);
-  });
-
-  it('Tier 3 (item level 24) and up: all four', () => {
-    expect([...bossUniques(setupFor(map('ashenForge', 3)))].sort())
-      .toEqual(['cinderwalkers', 'echoOfTheMatriarch', 'ruinheartBand', 'thePatientSpark']);
+  it('the lowest tiers have no unique to roll and the top tiers have all four', () => {
+    expect(wearableAt(1)).toEqual([]);
+    expect(wearableAt(6)).toHaveLength(Object.keys(UNIQUES).length);
+    expect(wearableAt(6)).toHaveLength(4);
   });
 
   it('below every unique\'s level the unique roll becomes a rare (never nothing)', () => {
@@ -459,7 +484,7 @@ describe('uniques drop only where they can be worn (item level ≥ the unique\'s
     for (let i = 0; i < 100; i++) {
       const eq = rules.rollKillLoot(low, kill({ kind: 'cinderMatriarch', isBoss: true, wave: 6 }), rng, NAKED)
         .filter((x): x is EquipmentItem => x.kind === 'equipment');
-      expect(eq.length).toBeGreaterThanOrEqual(4); // the guaranteed rare, 2 more and the unique slot
+      expect(eq.length).toBeGreaterThanOrEqual(2 + BOSS_LOOT.extraEquipment); // the guaranteed rare, the extras and the unique slot
       expect(eq.some((e) => e.rarity === 'unique')).toBe(false);
     }
   });

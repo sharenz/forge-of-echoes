@@ -37,10 +37,10 @@ function fontDeclarations(src: string): { prop: string; value: string; line: num
 describe('UI typography scale', () => {
   it('defines the four tokens exactly once, with the AGENTS.md sizes', () => {
     const tokens = readFileSync(TOKENS, 'utf8');
-    expect(tokens).toMatch(/--font-ui-caption:\s*12px;/);
-    expect(tokens).toMatch(/--font-ui-secondary:\s*14px;/);
-    expect(tokens).toMatch(/--font-ui-body:\s*17px;/);
-    expect(tokens).toMatch(/--font-ui-title:\s*25px;/);
+    expect(tokens).toMatch(/--font-ui-caption:\s*14px;/);
+    expect(tokens).toMatch(/--font-ui-secondary:\s*16px;/);
+    expect(tokens).toMatch(/--font-ui-body:\s*19px;/);
+    expect(tokens).toMatch(/--font-ui-title:\s*28px;/);
     for (const f of files) {
       if (f === TOKENS) continue;
       const src = readFileSync(f, 'utf8');

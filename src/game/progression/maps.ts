@@ -18,9 +18,9 @@ import type { Rng } from '../../contracts/rng';
 import { resolveStatBreakdown } from '../../core/modifiers';
 import { hashString } from '../../core/rng';
 import {
-  BASE_MAGIC_PACK_CHANCE, BASE_RARE_PACK_CHANCE, CORRUPTED_MODS, DANGER_MODS, DEBUFFS, EARLY_TIER_EASING, ECHO_MOD, HAZARD_AFFLICTION, MAP_AFFLICTIONS,
+  BASE_MAGIC_PACK_CHANCE, BASE_RARE_PACK_CHANCE, CORRUPTED_MODS, DANGER_MODS, DEBUFFS, ECHO_MOD, HAZARD_AFFLICTION, MAP_AFFLICTIONS,
   MAP_BASES, MAP_DANGER_LIMITS, MAP_DUST_COUNTS, MAP_NAME_FIRST, MAP_NAME_SECOND, MAX_DANGER_MODS, MAX_MAP_TIER, MAX_REWARD_MODS,
-  MIN_MAP_TIER, MOD_VALUE_ROLL, MONSTER_LEVEL, MONSTER_NAMES, MONSTER_PLURALS, MONSTER_SENTENCE_NAMES, PARTY_SCALING, REWARD_MODS,
+  MIN_MAP_TIER, MOD_VALUE_ROLL, MONSTER_LEVEL, MONSTER_LEVEL_SCALING, MONSTER_NAMES, MONSTER_PLURALS, MONSTER_SENTENCE_NAMES, PARTY_SCALING, REWARD_MODS,
   TIER_SCALING, VOID_NEEDLE_OUTCOMES, WAVES, findMapBase, getMapMod,
 } from '../../data/progression';
 import type { MapEffectDef, MapModDef, MapStat, VoidOutcomeId } from '../../data/progression';
@@ -45,7 +45,7 @@ export function clampTier(tier: number): number {
   return clamp(Math.floor(Number.isFinite(tier) ? tier : MIN_MAP_TIER), MIN_MAP_TIER, MAX_MAP_TIER);
 }
 
-/** Monster level (= item level of every drop) = min(90, 6 + 6 × tier). */
+/** Monster level (= item level of every drop) = min(90, 6 × tier − 2). */
 export function monsterLevelForTier(tier: number): number {
   return Math.min(MONSTER_LEVEL.cap, MONSTER_LEVEL.base + MONSTER_LEVEL.perTier * clampTier(tier));
 }
@@ -260,18 +260,13 @@ export function mapModifiers(map: MapItem): MapModifier[] {
   const out: MapModifier[] = [];
   const tier = clampTier(map.tier);
   const tierSource = `Tier ${tier}`;
-  if (tier > 1) {
-    const steps = tier - 1;
-    out.push({ stat: 'monsterLife', mode: 'more', value: (TIER_SCALING.monsterLife ** steps - 1) * 100, source: tierSource });
-    out.push({ stat: 'monsterDamage', mode: 'more', value: (TIER_SCALING.monsterDamage ** steps - 1) * 100, source: tierSource });
-    out.push({ stat: 'itemRarity', mode: 'increased', value: TIER_SCALING.itemRarity * steps, source: tierSource });
-  }
-  const easing = EARLY_TIER_EASING.find((e) => e.tier === tier);
-  if (easing) {
-    const source = `${tierSource} easing`;
-    if (easing.monsterLife) out.push({ stat: 'monsterLife', mode: 'more', value: easing.monsterLife, source });
-    if (easing.monsterDamage) out.push({ stat: 'monsterDamage', mode: 'more', value: easing.monsterDamage, source });
-  }
+  if (tier > 1) out.push({ stat: 'itemRarity', mode: 'increased', value: TIER_SCALING.itemRarity * (tier - 1), source: tierSource });
+  // Monster stats follow the monster level (Path of Exile style): compounding "more" per level above the
+  // reference level, "less" below it.
+  const levelGap = monsterLevelForTier(tier) - MONSTER_LEVEL_SCALING.referenceLevel;
+  const levelSource = `Monster level ${monsterLevelForTier(tier)}`;
+  out.push({ stat: 'monsterLife', mode: 'more', value: (MONSTER_LEVEL_SCALING.life ** levelGap - 1) * 100, source: levelSource });
+  out.push({ stat: 'monsterDamage', mode: 'more', value: (MONSTER_LEVEL_SCALING.damage ** levelGap - 1) * 100, source: levelSource });
   const quality = clamp(Math.floor(map.quality || 0), 0, 20);
   if (quality > 0) {
     out.push({ stat: 'itemQuantity', mode: 'increased', value: quality, source: 'Quality' });
@@ -458,7 +453,7 @@ export function buildMapSummary(map: MapItem): MapSummaryLine[] {
     label: 'Monster Level',
     value: String(level),
     breakdown: [
-      `Tier ${tier}: 6 + 6 per tier (at most ${MONSTER_LEVEL.cap})`,
+      `Tier ${tier}: 6 per tier minus 2 (at most ${MONSTER_LEVEL.cap})`,
       `Items drop at item level ${level}`,
     ],
   });

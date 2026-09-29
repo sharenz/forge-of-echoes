@@ -1,0 +1,132 @@
+// Currency definitions (GAME_SPEC §6): all 12 equipment currencies and the 4 map currencies.
+// Descriptions are verb-first and describe exactly what the rules do.
+import type { CurrencyId } from '../../contracts/content';
+import { CURRENCY_STACK, RARE_CURRENCY_STACK } from './rules';
+import type { CurrencyDef } from './types';
+
+type Spec = Omit<CurrencyDef, 'id' | 'maxStack'> & { maxStack?: number };
+
+function currency(id: CurrencyId, spec: Spec): CurrencyDef {
+  return { id, maxStack: CURRENCY_STACK, ...spec };
+}
+
+function essence(id: CurrencyId, name: string, tags: CurrencyDef['essenceTags'], label: string): CurrencyDef {
+  return currency(id, {
+    name,
+    description: `Adds one ${label} affix. A Normal item becomes Magic; a Magic item with two affixes becomes Rare.`,
+    family: 'shape',
+    stabilityCost: 2,
+    needsAffixChoice: false,
+    essenceTags: tags,
+    essenceLabel: label,
+    dropTier: 'uncommon',
+  });
+}
+
+export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
+  kindling: currency('kindling', {
+    name: 'Kindling Shard',
+    description: 'Awakens a Normal item into a Magic item with 1–2 random affixes.',
+    family: 'shape',
+    stabilityCost: 1,
+    needsAffixChoice: false,
+    dropTier: 'common',
+  }),
+  scrap: currency('scrap', {
+    name: 'Forge Scrap',
+    description: 'Rerolls the values of all unsealed, unfractured affixes within their tiers. Also the coin of Rook’s stall.',
+    family: 'shape',
+    stabilityCost: 1,
+    needsAffixChoice: false,
+    dropTier: 'common',
+  }),
+  reforge: currency('reforge', {
+    name: 'Reforging Ember',
+    description: 'Reforges all unsealed, unfractured affixes into a new Rare item with 3–6 affixes.',
+    family: 'shape',
+    stabilityCost: 2,
+    needsAffixChoice: false,
+    dropTier: 'uncommon',
+  }),
+  essenceEmber: essence('essenceEmber', 'Ember Essence', ['fire'], 'fire'),
+  essenceRime: essence('essenceRime', 'Rime Essence', ['cold'], 'cold'),
+  essenceStorm: essence('essenceStorm', 'Storm Essence', ['lightning'], 'lightning'),
+  essenceVital: essence('essenceVital', 'Vital Essence', ['life', 'defense', 'resistance'], 'life, defence or resistance'),
+  essenceSwift: essence('essenceSwift', 'Swift Essence', ['speed'], 'speed'),
+  catalyst: currency('catalyst', {
+    name: 'Tempering Catalyst',
+    description: 'Upgrades a chosen affix by one tier, if the item level allows, and rerolls its value in the new tier.',
+    family: 'refine',
+    stabilityCost: 3,
+    needsAffixChoice: true,
+    dropTier: 'rare',
+  }),
+  solvent: currency('solvent', {
+    name: 'Forge Solvent',
+    description: 'Removes the lowest-tier unsealed, unfractured affix; ties are broken at random. An item with no affixes left becomes Normal.',
+    family: 'remove',
+    stabilityCost: 1,
+    needsAffixChoice: false,
+    dropTier: 'uncommon',
+  }),
+  seal: currency('seal', {
+    name: 'Binding Seal',
+    description: 'Seals a chosen affix, protecting it from the next crafting operation. Then the seal breaks.',
+    family: 'preserve',
+    stabilityCost: 0,
+    needsAffixChoice: true,
+    dropTier: 'uncommon',
+  }),
+  fractureCore: currency('fractureCore', {
+    name: 'Fracture Core',
+    description: 'Fractures a chosen affix, making it permanent and immune to all crafting. One fracture per item.',
+    family: 'transform',
+    stabilityCost: 3,
+    needsAffixChoice: true,
+    maxStack: RARE_CURRENCY_STACK,
+    dropTier: 'rare',
+  }),
+  mapDust: currency('mapDust', {
+    name: 'Map Dust',
+    description: 'Turns a Normal map Magic with 1–2 mods, or rerolls the mods of a Magic or Rare map.',
+    family: 'map',
+    stabilityCost: 0,
+    needsAffixChoice: false,
+    dropTier: 'common',
+  }),
+  threatGlyph: currency('threatGlyph', {
+    name: 'Threat Glyph',
+    description: 'Adds one danger mod paired with its reward. The map becomes Rare at 3 or more mods (maximum 4).',
+    family: 'map',
+    stabilityCost: 0,
+    needsAffixChoice: false,
+    dropTier: 'common',
+  }),
+  rewardInk: currency('rewardInk', {
+    name: 'Reward Ink',
+    description: 'Adds one reward-only mod to a map (maximum 1 per map).',
+    family: 'map',
+    stabilityCost: 0,
+    needsAffixChoice: false,
+    dropTier: 'uncommon',
+  }),
+  voidNeedle: currency('voidNeedle', {
+    name: 'Void Needle',
+    description: 'Corrupts a map with an unpredictable outcome. A corrupted map can no longer be modified.',
+    family: 'map',
+    stabilityCost: 0,
+    needsAffixChoice: false,
+    maxStack: RARE_CURRENCY_STACK,
+    dropTier: 'rare',
+  }),
+};
+
+/** Human family labels. */
+export const CURRENCY_FAMILY_LABEL: Record<CurrencyDef['family'], string> = {
+  shape: 'Shape',
+  refine: 'Refine',
+  remove: 'Remove',
+  preserve: 'Preserve',
+  transform: 'Transform',
+  map: 'Map',
+};

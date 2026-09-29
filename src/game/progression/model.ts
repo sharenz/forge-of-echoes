@@ -20,6 +20,8 @@ export const PERCENT_STATS: ReadonlySet<StatId> = new Set<StatId>([
 export interface PlayerModel {
   cls: ClassDef;
   level: number;
+  /** Level of the monsters the character faces (defences scale against it); null = the hideout sheet. */
+  monsterLevel: number | null;
   attributes: Record<Attribute, number>;
   attributeBreakdowns: Record<Attribute, StatBreakdown>;
   /** Every non-attribute modifier: level rules, attribute rules, gear, and any extra (map) modifiers. */
@@ -69,7 +71,9 @@ export function attributeRuleText(rule: ClassDef['perAttribute'][number]): strin
  * Build the model for a character. `extra` modifiers (map penalties, previews) join the gear
  * modifiers. Attributes are whole numbers (floored after resolution).
  */
-export function buildPlayerModel(ch: CharacterSave, extra: readonly StatModifier[] = [], cls: ClassDef = SORCERESS): PlayerModel {
+export function buildPlayerModel(
+  ch: CharacterSave, extra: readonly StatModifier[] = [], cls: ClassDef = SORCERESS, monsterLevel: number | null = null,
+): PlayerModel {
   const level = clampLevel(ch.level);
   const steps = level - 1;
   const items = equippedItems(ch);
@@ -113,6 +117,7 @@ export function buildPlayerModel(ch: CharacterSave, extra: readonly StatModifier
   const model: PlayerModel = {
     cls,
     level,
+    monsterLevel,
     attributes,
     attributeBreakdowns,
     mods,

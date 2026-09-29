@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { AFFIXES, BENCH_BEST_TIER, BENCH_MAX_CRAFTED, BENCH_STABILITY_COST, UNIQUES } from '../../src/data/items';
 import { PICKUP_REACH } from '../../src/contracts/sim';
-import { CHARACTER_NAME_MAX, CHARACTER_NAME_MIN, EARLY_TIER_EASING, PARTY_SCALING } from '../../src/data/progression';
+import { CHARACTER_NAME_MAX, CHARACTER_NAME_MIN, MONSTER_LEVEL, MONSTER_LEVEL_SCALING, PARTY_SCALING, SORCERESS, TIER_SCALING } from '../../src/data/progression';
 import { THEME_ROSTER } from '../../src/contracts/bestiary';
 import { CURRENCY_STASH_MAX, MAP_STASH_CAPACITY } from '../../src/contracts/items';
 import {
@@ -43,12 +43,12 @@ describe('GAME_SPEC matches the implemented numbers', () => {
     }
   });
 
-  it('§7 early-tier easing table', () => {
+  it('§7 monster level curve and level-based scaling', () => {
     const s7 = section(7);
-    for (const e of EARLY_TIER_EASING) {
-      const cell = (v: number) => (v ? `${-v}% less` : '–');
-      expect(s7, `Tier ${e.tier}`).toContain(`| ${e.tier} | ${cell(e.monsterLife)} | ${cell(e.monsterDamage)} |`);
-    }
+    expect(s7).toContain(`Monster level = \`min(${MONSTER_LEVEL.cap}, ${MONSTER_LEVEL.perTier}·tier − ${-MONSTER_LEVEL.base})\``);
+    expect(s7).toContain(`life ×${MONSTER_LEVEL_SCALING.life} and damage ×${MONSTER_LEVEL_SCALING.damage} per level above the reference level ${MONSTER_LEVEL_SCALING.referenceLevel}`);
+    expect(s7).toContain(`Evade chance = \`rating / (rating + ${SORCERESS.evasionPerMonsterLevel} × monster level)\``);
+    expect(s7).toContain(`experience (×${TIER_SCALING.experience} per tier above 1) and +${TIER_SCALING.itemRarity}% item rarity per tier`);
   });
 
   it('§12 Crafting Bench limits and click pickup reach', () => {

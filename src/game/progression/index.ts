@@ -39,12 +39,12 @@
 //     Focus-hungry skills — the DPS your Focus regeneration sustains. The Skills section headlines the
 //     sustained DPS, plus "· N per cast" for multi-hit skills. resolveSkill() returns all of them
 //     (dps, hits, perCast, focusSustain, sustainedDps); a Nova echo counts twice.
-//   • Early tiers are eased (EARLY_TIER_EASING in src/data/progression/maps.ts): Tier 1 monsters have 65%
-//     less life and 40% less damage, tapering fast (T2 35/15, T3 25/10, T4 10/0) so Tiers 2–4 keep
-//     pushing back. It appears in the map readout as "65% less from Tier 1 easing". Balance is guarded by
+//   • Monster life and damage scale with monster level (MONSTER_LEVEL_SCALING in src/data/progression/maps.ts),
+//     with no early-tier easing. Evasion uses that same level; the hideout sheet uses reference level 10.
+//     Tier 1 is deliberately hard for a fresh character. Balance is guarded by
 //     tests/game-progression/balance.test.ts (real rules + the multiplayer sim + bots; a solo Tier 1 and
 //     the death / re-entry paths always run, the full suite with BALANCE=1): re-run it after changing
-//     skills, class numbers, tier scaling or the sim's monsters.
+//     skills, class numbers, monster-level scaling or the sim's monsters.
 //   • LUCK IS PERSONAL, LOOT IS INSTANCED. RunSetup.itemQuantity / itemRarity (and mapSummary /
 //     RunSetup.summary, labelled "Map Item Quantity" / "Map Item Rarity", like the map tooltip's
 //     properties) are MAP-SIDE only: tier, quality, implicit and mods (100 = base). A player's personal
@@ -56,7 +56,7 @@
 //     chest). Iterate players in a fixed order (the sim's ids) so a seed replays the same drops. The roll
 //     applies monster rarity (magic ×1.5 Q ×2 R, rare ×4 Q ×3 R; lieutenant and boss like rares) and the
 //     Echo wave's double quantity on top; summoned minions (KillLootContext.summoned) never drop.
-//     Uniques only drop when wearable at the item level (a Tier 1 boss can only give The Patient Spark);
+//     Uniques only drop when wearable at the item level (the first eligible uniques appear in Tier 3);
 //     the gamble likewise only offers uniques the character can wear.
 //   • Echo corruption: WaveConfig.count = 7 with bossWave 6 — a bonus wave after the Matriarch
 //     (the sim clears the map when wave 7 is cleared). Kills in wave ≥ 7 drop double loot.

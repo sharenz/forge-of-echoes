@@ -9,7 +9,7 @@ import { PLAYER_DEBUFFS, THEME_ROSTER, type PlayerDebuff } from '../../src/contr
 import { AREA_KINDS, PROJECTILE_KINDS, type AreaKind, type ProjectileKind } from '../../src/contracts/sim';
 import { createRng } from '../../src/core/rng';
 import { rules } from '../../src/game';
-import { DEBUFFS, HAZARD_AFFLICTION, MAP_AFFLICTIONS, MAP_BASES, MONSTER_NAMES } from '../../src/data/progression';
+import { BOSS_LOOT, DEBUFFS, HAZARD_AFFLICTION, MAP_AFFLICTIONS, MAP_BASES, MONSTER_NAMES } from '../../src/data/progression';
 import { AREA_RIDERS } from '../../src/sim/areas';
 import { PROJECTILE_RIDERS } from '../../src/sim/projectiles';
 import { craftMap, mapBosses, monsterSentenceName } from '../../src/game/progression';
@@ -220,7 +220,7 @@ describe('item histories name the new bosses and lieutenants', () => {
     const setup = setupFor(map('ironColiseum', 3));
     const count = (kind: 'varkus' | 'cinderMatriarch') => rules.rollKillLoot(setup, kill({ kind, isBoss: true, rarity: 'rare', wave: 6 }), createRng(9), bareCharacter())
       .filter((i) => i.kind === 'equipment').length;
-    expect(count('varkus')).toBeGreaterThanOrEqual(3);
+    expect(count('varkus')).toBeGreaterThanOrEqual(1 + BOSS_LOOT.extraEquipment);
     expect(count('varkus')).toBe(count('cinderMatriarch'));
   });
 });

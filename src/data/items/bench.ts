@@ -1,0 +1,107 @@
+// The Crafting Bench (GAME_SPEC §12): deterministic "scaffolding". Each recipe adds one chosen affix at a
+// fixed, modest tier for a fixed price. The rules (src/game/items/bench.ts) pick the tier and price from
+// the tables below; nothing here is random.
+//
+//   • Tier: the best tier the item level unlocks, but never better than BENCH_BEST_TIER (tier numbers:
+//     1 = best). An ilvl 20 ring gets T6 Hale (17–23 life); from ilvl 36 on every 8-tier affix stops at T4.
+//   • Price: Forge Scrap by the granted tier's item-level requirement (a tier's power follows the item
+//     level that unlocks it, whatever the length of its ladder), plus one essence whose tags match the
+//     affix. Affixes no essence can add (critical, luck, focus, caster, utility) cost extra Scrap instead,
+//     and luck affixes (item rarity / quantity) a multiple of that: an essence is worth roughly 20 Scrap,
+//     and cheap bench luck on six slots would undercut the luck economy (GAME_SPEC §9).
+//   • 1 Stability, no scar roll, at most one bench-crafted affix per item; removing it is free.
+export interface BenchRecipeDef {
+  /** Stable id sent by the client (`benchCraft.recipeId`). */
+  id: string;
+  /** An id from AFFIXES (tests/game-items/bench.test.ts checks every recipe resolves). */
+  affixId: string;
+}
+
+/** The best (lowest-numbered) tier the bench ever grants. */
+export const BENCH_BEST_TIER = 4;
+/** Stability every bench craft costs. It never rolls a scar. */
+export const BENCH_STABILITY_COST = 1;
+/** Bench-crafted affixes an item may hold at once. */
+export const BENCH_MAX_CRAFTED = 1;
+/** Prefix of every recipe id. */
+export const BENCH_RECIPE_PREFIX = 'bench:';
+
+export interface BenchPriceBand {
+  /** The granted tier's item-level requirement is at least this. */
+  minItemLevel: number;
+  /** Forge Scrap when the affix also takes a matching essence. */
+  scrap: number;
+  /** Forge Scrap when no essence matches the affix (it replaces the essence). */
+  scrapWithoutEssence: number;
+}
+
+/**
+ * Scrap price by the item level that unlocks the granted tier, cheapest first. The bench tiers unlock at
+ * ilvl 1 (every worst tier), 6–10, 14–18, 24–30 and 36 (T4 of an 8-tier affix).
+ */
+export const BENCH_PRICE_BANDS: readonly BenchPriceBand[] = [
+  { minItemLevel: 1, scrap: 2, scrapWithoutEssence: 4 },
+  { minItemLevel: 6, scrap: 3, scrapWithoutEssence: 6 },
+  { minItemLevel: 14, scrap: 5, scrapWithoutEssence: 9 },
+  { minItemLevel: 24, scrap: 7, scrapWithoutEssence: 12 },
+  { minItemLevel: 36, scrap: 9, scrapWithoutEssence: 15 },
+];
+
+/**
+ * Luck-tagged recipes (Fortunate, of Plenty) cost `scrapWithoutEssence` × this, rounded up: on par with
+ * an essence recipe of the same band (an essence drops about 1/17 as often as a Scrap stack), e.g.
+ * T4 Fortunate (17–21% rarity, ilvl 24) costs 30 Scrap instead of 12.
+ */
+export const BENCH_LUCK_PRICE_MULTIPLIER = 2.5;
+
+function recipe(affixId: string): BenchRecipeDef {
+  return { id: `${BENCH_RECIPE_PREFIX}${affixId}`, affixId };
+}
+
+/**
+ * Every recipe, in bench display order (prefixes, then suffixes). One per affix family; the only affix
+ * left out is "of Splintering" (a single T1 tier, which the bench never grants). Which recipes an item
+ * sees follows the affix's own class allow-list and base-property requirement.
+ */
+export const BENCH_RECIPES: readonly BenchRecipeDef[] = [
+  // --- prefixes ---------------------------------------------------------------------------------
+  recipe('life'),
+  recipe('focus'),
+  recipe('addedSpellDamage'),
+  recipe('spellDamage'),
+  recipe('fireDamage'),
+  recipe('coldDamage'),
+  recipe('lightningDamage'),
+  recipe('elementalDamage'),
+  recipe('armourFlat'),
+  recipe('evasionFlat'),
+  recipe('armourPercent'),
+  recipe('evasionPercent'),
+  recipe('itemRarity'),
+  recipe('lifeOnKill'),
+  recipe('focusOnKill'),
+  // --- suffixes ---------------------------------------------------------------------------------
+  recipe('castSpeed'),
+  recipe('critChance'),
+  recipe('critMultiplier'),
+  recipe('fireResistance'),
+  recipe('coldResistance'),
+  recipe('lightningResistance'),
+  recipe('voidResistance'),
+  recipe('allResistances'),
+  recipe('moveSpeed'),
+  recipe('focusRegen'),
+  recipe('lifeRegen'),
+  recipe('strength'),
+  recipe('dexterity'),
+  recipe('intelligence'),
+  recipe('projectileSpeed'),
+  recipe('area'),
+  recipe('cooldownRecovery'),
+  recipe('pickupRadius'),
+  recipe('itemQuantity'),
+  recipe('flaskEffect'),
+  recipe('igniteChance'),
+  recipe('chillChance'),
+  recipe('shockChance'),
+];

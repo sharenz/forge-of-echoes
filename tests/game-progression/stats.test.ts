@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CharacterSave, MapItem } from '../../src/contracts/items';
 import { rules } from '../../src/game';
-import { SORCERESS } from '../../src/data/progression';
+import { MONSTER_LEVEL_SCALING, SORCERESS } from '../../src/data/progression';
 import { deriveRunStats } from '../../src/game';
 import { bareCharacter, equip, expectOk, map, setupFor, unique } from './fixtures';
 
@@ -29,8 +29,8 @@ describe('deriveStats: a naked level 1 Sorceress', () => {
   });
 
   it('turns the evasion rating into a capped chance', () => {
-    // Rating (20 + 2 × 14 dex) × 1.02 → 48; chance 48 / (48 + 250).
-    expect(d.combat.evasion).toBeCloseTo(48 / 298, 10);
+    // Rating (20 + 2 × 14 dex) × 1.02 → 48; chance 48 / (48 + 30 per monster level × the reference level 10).
+    expect(d.combat.evasion).toBeCloseTo(48 / (48 + SORCERESS.evasionPerMonsterLevel * MONSTER_LEVEL_SCALING.referenceLevel), 10);
     expect(d.combat).toMatchObject({
       armor: 0, damageTaken: 1, moveSpeed: 110, pickupRadius: 90, flaskEffect: 1, lifeOnKill: 0, focusOnKill: 0, flags: [],
       resist: { physical: 0, fire: 0, cold: 0, lightning: 0, void: 0 },
@@ -65,7 +65,7 @@ describe('deriveStats: level growth and allocation', () => {
     expect(d.combat.maxFocus).toBe(40 + 2 * 9 + 50);
     expect(d.combat.focusRegen).toBeCloseTo(3 + 0.02 * 108, 10);
     const rating = Math.floor((20 + 3 * 9 + 2 * 18) * 1.03);
-    expect(d.combat.evasion).toBeCloseTo(rating / (rating + 250), 10);
+    expect(d.combat.evasion).toBeCloseTo(rating / (rating + SORCERESS.evasionPerMonsterLevel * MONSTER_LEVEL_SCALING.referenceLevel), 10);
   });
 
   it('scales spell power with level and intelligence', () => {
@@ -237,6 +237,27 @@ describe('the Skills section', () => {
 });
 
 describe('map penalties apply only inside the map', () => {
+  it('uses the current map level for evasion in both the runtime and sheet, returning to the hideout reference afterwards', () => {
+    const ch = bareCharacter();
+    const home = rules.deriveStats(ch);
+    // The same naked character has rating 48 in every map; only the opposing monster level changes.
+    let previous = 1;
+    for (const [tier, monsterLevel] of [[1, 4], [2, 10], [15, 88]]) {
+      const setup = setupFor(map('ashenForge', tier), ch);
+      const sheet = rules.deriveStats(ch, setup);
+      const runtime = rules.playerRuntime(ch, setup);
+      expect(setup.monsterLevel).toBe(monsterLevel);
+      expect(runtime.stats.evasion).toBeCloseTo(48 / (48 + 30 * monsterLevel), 10);
+      expect(sheet.combat.evasion).toBe(runtime.stats.evasion);
+      expect(runtime.stats.evasion).toBeLessThan(previous);
+      const evasion = sheet.sections.find((s) => s.title === 'Defence')!.lines.find((l) => l.label === 'Chance to Evade')!;
+      expect(evasion.breakdown).toContain(`Against monster level ${monsterLevel}: 30 per monster level`);
+      previous = runtime.stats.evasion;
+    }
+    expect(rules.deriveStats(ch)).toEqual(home);
+    expect(rules.playerRuntime(ch, null).stats.evasion).toBeCloseTo(48 / (48 + 300), 10);
+  });
+
   it('deriveStats(ch, setup) shows the in-map sheet the sim actually uses', () => {
     const ch = bareCharacter();
     const m = map('ashenForge', 1, { mods: [{ modId: 'hexed', value: 100 }, { modId: 'exhausting', value: 100 }] });

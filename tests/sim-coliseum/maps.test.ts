@@ -16,10 +16,10 @@ import { STRONG_LOADOUT, TIER5, fairSkills, fairStats, makeConfig, makeJoin, str
 const MINUTE = 60;
 
 describe('Tier 1: a new character with the starting kit', () => {
-  it('clears an Iron Coliseum (real rules, seeds 1–6: at least 5), under real pressure, and levels up', () => {
+  it('clears an Iron Coliseum through the portals (real rules, seeds 1–6: at least 5), under real pressure, and levels up', () => {
     const results = [1, 2, 3, 4, 5, 6].map((seed) => {
       const ch = rules.createCharacter('Gladiator', seed);
-      return playMap(ch, createMapItem('ironColiseum', 1, `coliseum-t1-${seed}`), { maxMinutes: 20 });
+      return playMap(ch, createMapItem('ironColiseum', 1, `coliseum-t1-${seed}`), { maxMinutes: 25, reenterAfter: 12 });
     });
     const lines = results.map(describePlay);
     console.info(lines.join('\n'));
@@ -27,7 +27,7 @@ describe('Tier 1: a new character with the starting kit', () => {
     expect(cleared.length, lines.join('\n')).toBeGreaterThanOrEqual(5);
     for (const r of cleared) {
       expect(r.setup.map.baseId).toBe('ironColiseum');
-      expect(r.seconds, describePlay(r)).toBeLessThanOrEqual(12 * MINUTE);
+      expect(r.seconds, describePlay(r)).toBeLessThanOrEqual(25 * MINUTE);
       // Not a stroll: it gets to her and she needs her flasks…
       expect(r.minLife, describePlay(r)).toBeLessThan(0.9);
       expect(r.flasksDrunk).toBeGreaterThan(0);

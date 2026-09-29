@@ -12,9 +12,9 @@ input, and audio are implemented in this codebase.
 
 All game-facing interface text must use one shared four-step type scale, defined once as CSS tokens. Do not introduce one-off `font-size` values in components or feature styles.
 
-- `--font-ui-caption` / `.ui-type-caption` — 12px: hotkeys, kickers, short metadata, and compact status labels. This is the smallest permitted game UI text.
-- `--font-ui-secondary` / `.ui-type-secondary` — 14px: descriptions, supporting copy, item details, and secondary labels.
-- `--font-ui-body` / `.ui-type-body` — 17px: controls, values, primary labels, and normal readable interface text.
-- `--font-ui-title` / `.ui-type-title` — 25px: panel and modal titles.
+- `--font-ui-caption` / `.ui-type-caption` — 14px: hotkeys, kickers, short metadata, and compact status labels. This is the smallest permitted game UI text.
+- `--font-ui-secondary` / `.ui-type-secondary` — 16px: descriptions, supporting copy, item details, and secondary labels.
+- `--font-ui-body` / `.ui-type-body` — 19px: controls, values, primary labels, and normal readable interface text.
+- `--font-ui-title` / `.ui-type-title` — 28px: panel and modal titles.
 
 Choose the nearest semantic class or token instead of adding another size. Text rendered inside the game canvas may use a separate pixel-font scale when required for world-space readability, but DOM overlays, menus, tooltips, inventory, character, and skill interfaces must use this scale.

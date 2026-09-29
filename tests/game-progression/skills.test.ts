@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CharacterSave } from '../../src/contracts/items';
 import type { SkillId } from '../../src/contracts/content';
 import { rules } from '../../src/game';
+import { damageRange } from '../../src/game/progression/skills';
 import { SORCERESS } from '../../src/data/progression';
 import { bareCharacter, expectErr, expectOk, unique } from './fixtures';
 
@@ -137,7 +138,7 @@ describe('skill sheet', () => {
     const sheet = rules.skillSheet(bareCharacter(), 'emberNova', 1);
     expect(sheet.rank).toBe(1);
     const avg = L1 * 1.0;
-    expect(sheet.lines[0]).toBe(`Deals ${(avg * 0.8).toFixed(1)}–${(avg * 1.2).toFixed(1)} Fire damage`);
+    expect(sheet.lines[0]).toBe(`Deals ${damageRange(avg)} Fire damage`);
     expect(sheet.lines).toContain('Bursts 12 flames outward in a ring reaching 170 units');
     expect(sheet.lines).toContain('Cooldown 3.0 s');
     expect(sheet.lines).toContain('Costs 12 Focus');
@@ -148,7 +149,8 @@ describe('skill sheet', () => {
     const next = rules.skillSheet(bareCharacter(), 'emberNova', 4).nextRankLines;
     expect(next).toContain('Projectiles 12 to 13');
     expect(next).toContain('Pierce 1 to 2');
-    expect(next.some((l) => l.startsWith('Damage '))).toBe(true);
+    // The damage line shows once the rounded range changes: at level 1 a rank adds well under one point.
+    expect(rules.skillSheet(bareCharacter({ level: 20 }), 'emberNova', 4).nextRankLines.some((l) => l.startsWith('Damage '))).toBe(true);
     expect(rules.skillSheet(bareCharacter(), 'emberNova', 20).nextRankLines).toEqual([]);
   });
 

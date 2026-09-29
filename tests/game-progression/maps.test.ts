@@ -4,7 +4,7 @@ import type { CharacterSave, MapItem, RolledMapMod } from '../../src/contracts/i
 import type { CurrencyId } from '../../src/contracts/content';
 import { createRng } from '../../src/core/rng';
 import { partyScalingLines, rules } from '../../src/game';
-import { PARTY_SCALING, getMapMod } from '../../src/data/progression';
+import { MONSTER_LEVEL_SCALING, PARTY_SCALING, getMapMod } from '../../src/data/progression';
 import {
   craftMap, dangerModCount, mapCraftError, mapLuck, mapModName, monsterScaling, partyScaling, voidOutcomes, waveConfig,
 } from '../../src/game/progression';
@@ -210,39 +210,46 @@ describe('applyCurrency on maps', () => {
   });
 });
 
+/** Monster stats follow the monster level: compounding per level around the reference level (GAME_SPEC §7). */
+const lifeAt = (level: number) => MONSTER_LEVEL_SCALING.life ** (level - MONSTER_LEVEL_SCALING.referenceLevel);
+const damageAt = (level: number) => MONSTER_LEVEL_SCALING.damage ** (level - MONSTER_LEVEL_SCALING.referenceLevel);
+
 describe('monster scaling', () => {
-  it('Tier 1 Ashen Forge (with the early-tier easing: 65% less life, 40% less damage)', () => {
+  it('Tier 1 Ashen Forge: monster level 4, so its monsters are weaker than the base table', () => {
     const s = monsterScaling(map('ashenForge', 1));
     expect(s).toMatchObject({
-      level: 12, speedMultiplier: 1, countMultiplier: 1,
+      level: 4, speedMultiplier: 1, countMultiplier: 1,
       magicPackChance: 0.1, rarePackChance: 0.03, resistBonus: 0.1, xpMultiplier: 1, extraProjectiles: 0, hazards: false,
     });
-    expect(s.lifeMultiplier).toBeCloseTo(0.35, 10);
-    expect(s.damageMultiplier).toBeCloseTo(0.6, 10);
+    expect(s.lifeMultiplier).toBeCloseTo(lifeAt(4), 10);
+    expect(s.damageMultiplier).toBeCloseTo(damageAt(4), 10);
+    expect(s.lifeMultiplier).toBeLessThan(1);
   });
 
-  it('eases the first four tiers and reaches the full compounding at Tier 5', () => {
-    const life = [1, 2, 3, 4, 5, 6].map((t) => monsterScaling(map('ashenForge', t)).lifeMultiplier);
-    const damage = [1, 2, 3, 4, 5, 6].map((t) => monsterScaling(map('ashenForge', t)).damageMultiplier);
-    // EARLY_TIER_EASING: life 65/35/25/10% less, damage 40/15/10/0% less (a fast taper: GAME_SPEC §7).
-    const easeLife = [0.35, 0.65, 0.75, 0.9, 1, 1];
-    const easeDamage = [0.6, 0.85, 0.9, 1, 1, 1];
-    life.forEach((v, i) => expect(v, `Tier ${i + 1} life`).toBeCloseTo(1.16 ** i * easeLife[i], 10));
-    damage.forEach((v, i) => expect(v, `Tier ${i + 1} damage`).toBeCloseTo(1.1 ** i * easeDamage[i], 10));
-    // Every tier is still harder than the one before.
+  it('scales life and damage with the monster level (6 per tier minus 2), not with the tier', () => {
+    const tiers = [1, 2, 3, 4, 5, 6];
+    const scaling = tiers.map((t) => monsterScaling(map('ashenForge', t)));
+    const life = scaling.map((s) => s.lifeMultiplier);
+    const damage = scaling.map((s) => s.damageMultiplier);
+    tiers.forEach((t, i) => {
+      expect(scaling[i].level, `Tier ${t} level`).toBe(6 * t - 2);
+      expect(life[i], `Tier ${t} life`).toBeCloseTo(lifeAt(6 * t - 2), 10);
+      expect(damage[i], `Tier ${t} damage`).toBeCloseTo(damageAt(6 * t - 2), 10);
+    });
+    // Every tier is harder than the one before.
     for (let i = 1; i < life.length; i++) {
       expect(life[i]).toBeGreaterThan(life[i - 1]);
       expect(damage[i]).toBeGreaterThan(damage[i - 1]);
     }
   });
 
-  it('compounds tier scaling and adds the base implicit', () => {
+  it('follows the monster level and adds the base implicit', () => {
     const s = monsterScaling(map('rimedOssuary', 5));
-    expect(s.level).toBe(36);
-    expect(s.lifeMultiplier).toBeCloseTo(1.16 ** 4 * 1.2, 10);
-    expect(s.damageMultiplier).toBeCloseTo(1.1 ** 4, 10);
+    expect(s.level).toBe(28);
+    expect(s.lifeMultiplier).toBeCloseTo(lifeAt(28) * 1.2, 10);
+    expect(s.damageMultiplier).toBeCloseTo(damageAt(28), 10);
     expect(s.xpMultiplier).toBeCloseTo(1.28 ** 4, 10);
-    expect(monsterScaling(map('ironColiseum', 15)).level).toBe(90);
+    expect(monsterScaling(map('ironColiseum', 15)).level).toBe(88);
     expect(monsterScaling(map('ironColiseum', 1)).countMultiplier).toBeCloseTo(1.25, 10);
   });
 
@@ -251,7 +258,7 @@ describe('monster scaling', () => {
       mods: [mod('fortified'), mod('twinCrowned'), mod('teeming', 110), mod('commanded'), mod('splitting'), mod('volcanic')],
     });
     const s = monsterScaling({ ...m, mods: m.mods });
-    expect(s.lifeMultiplier).toBeCloseTo((1 + 0.2 + 0.4) * 1.25 * 0.35, 10);
+    expect(s.lifeMultiplier).toBeCloseTo((1 + 0.2 + 0.4) * 1.25 * lifeAt(4), 10);
     expect(s.countMultiplier).toBeCloseTo(1.39, 10); // round(35 × 1.10) = 39
     expect(s.magicPackChance).toBeCloseTo(0.16, 10);
     expect(s.rarePackChance).toBeCloseTo(0.048, 10);
@@ -279,7 +286,7 @@ describe('luck', () => {
     const lines = rules.mapSummary(ch, m);
     expect(rules.mapSummary(bareCharacter(), m)).toEqual(lines);
     const byLabel = new Map(lines.map((l) => [l.label, l]));
-    expect(byLabel.get('Monster Level')!.value).toBe('30');
+    expect(byLabel.get('Monster Level')!.value).toBe('22');
     const q = byLabel.get('Map Item Quantity')!;
     expect(q.value).toBe('+26%');
     expect(q.breakdown).toEqual([
@@ -288,10 +295,10 @@ describe('luck', () => {
     ]);
     expect(byLabel.get('Map Item Rarity')!.breakdown[0]).toBe('+15% Tier 4');
     expect(byLabel.has('Item Quantity')).toBe(false);
-    expect(byLabel.get('Monster Life')!.breakdown).toEqual(['56.1% more from Tier 4', '10% less from Tier 4 easing']);
-    expect(byLabel.get('Monster Life')!.value).toBe('+40%'); // 1.561 × 0.9
-    // Tier 4 eases life only: its damage already runs at the full compounding.
-    expect(byLabel.get('Monster Damage')!.breakdown).toEqual(['33.1% more from Tier 4']);
+    const pct = (m: number) => `${Math.round((m - 1) * 1000) / 10}%`;
+    expect(byLabel.get('Monster Life')!.breakdown).toEqual([`${pct(lifeAt(22))} more from Monster level 22`]);
+    expect(byLabel.get('Monster Life')!.value).toBe(`+${Math.round((lifeAt(22) - 1) * 100)}%`);
+    expect(byLabel.get('Monster Damage')!.breakdown).toEqual([`${pct(damageAt(22))} more from Monster level 22`]);
     expect(byLabel.get('Your Resistances')!.value).toBe('−20%');
     expect(byLabel.get('Waves')!.value).toBe('6');
   });
@@ -319,7 +326,7 @@ describe('map tooltip', () => {
     expect(d).toMatchObject({ title: 'Iron Coliseum', subtitle: null, tone: 'map', classLabel: 'Map', iconId: 'icon/map/ironColiseum' });
     expect(d.headerLines).toEqual(['Tier 2 Map']);
     expect(d.implicits.map((l) => l.text)).toEqual(['25% increased number of Monsters', 'Armour bases drop with +2 Stability', 'Small arena']);
-    expect(d.properties).toContainEqual({ label: 'Monster Level', value: '18' });
+    expect(d.properties).toContainEqual({ label: 'Monster Level', value: '10' });
   });
 
   it('labels its luck as the map\'s own (each player adds their gear to their own drops)', () => {
