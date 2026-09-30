@@ -651,6 +651,20 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 - Map Dust (3 Scrap)
 - Gamble per class
 
+**Testing merchant — Mira the Provisioner:** a separate NPC south of Rook, disabled by default. Server operators
+enable her per character with `debug_merch <account> <character> enable`; `disable` and `status` use the same
+arguments. The CLI verifies ownership and persists activation separately from character saves. Changes appear
+in live hideouts within one second without a restart. Every visitor to an enabled hideout can buy free stock
+for their own character; enabling a host does not enable visitors or the host's other characters.
+
+Stock includes every scarab tier, currency/key/ingredient, map base, equipment base, unique and flask. Quantity
+is 1–100; maps support T1–T15 and normal/magic/rare, bases support item levels 1–99 and normal/magic/rare,
+and uniques support item levels 1–99. Equipment/map previews are examples; purchases roll fresh values on the
+server. Existing item and Atlas requirements apply. Items go to the buyer's backpack, with flasks refilling
+the belt first, respecting stack limits and trade locks. Delivery is saved atomically: insufficient space or
+a failed save grants nothing. Every purchase checks the current hideout owner's activation, so disabling
+blocks stale panels immediately. Clients cannot change activation.
+
 ## 10. Look & feel (art direction)
 
 **World:**

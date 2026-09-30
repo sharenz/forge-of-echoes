@@ -319,6 +319,17 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       commit(game, s, bought.value.character, true);
       return { ok: true, message: `Bought ${rules.describeItem(bought.value.item, bought.value.character).title}.` };
     }
+    case 'buyDebugOffer': {
+      const instance = s.instance;
+      if (!instance || instance.kind !== 'hideout' || !game.db.debugMerchantEnabled(instance.ownerId))
+        return fail('The testing merchant is not active in this hideout.');
+      const bought = r.buyDebugOffer(ch, cmd.offerId, cmd.options);
+      if (!bought.ok) return fail(bought.error);
+      if (!game.store.commit(s.record, bought.value.character)) return fail('The purchase could not be saved. Nothing was added; try again.');
+      s.pushCharacter('now');
+      instance.updateRuntime(s);
+      return { ok: true, message: bought.value.message };
+    }
 
     // --- party & social --------------------------------------------------------------------
     case 'partyInvite':

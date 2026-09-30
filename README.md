@@ -44,6 +44,31 @@ Other useful scripts:
 | `npm start` | Production mode: the server also serves `dist/` (build first) |
 | `npm run shot -- /dev/present.html?theme=rimedOssuary --out .shots/x.png` | Headless screenshot of any page; `dev/*.html` are per-module sandboxes |
 
+## Testing merchant
+
+Enable **Mira the Provisioner** in one character's hideout using the server CLI. The account must own the
+character; names are case-insensitive. It updates live without restarting and persists across releases.
+
+```bash
+# Local development (DB_PATH defaults to data/dev.db)
+./scripts/debug_merch sharenz eldurin enable
+# Equivalent npm command, including a custom database
+DB_PATH=/path/to/forge.db npm run debug_merch -- sharenz eldurin status
+# Production (the deploy installs debug_merch on the server)
+ssh crafty-prod debug_merch sharenz eldurin enable
+ssh crafty-prod debug_merch sharenz eldurin disable
+```
+
+Click Mira, south of Rook. Every visitor to that hideout can buy free scarabs (all tiers), crafting supplies,
+maps, equipment bases, uniques and flasks. Choose quantity (1–100), map tier (1–15), equipment item level
+(1–99), and normal/magic/rare rolls where applicable. Purchases go to the buyer's backpack; flasks refill
+their belt first. A purchase that cannot fit is rejected in full. Item and Atlas requirements still apply.
+Disabling removes Mira and immediately blocks purchases, including from already-open panels. Other
+characters on the account are unaffected. No hideout has her enabled by default.
+
+`npm run e2e -- --prod --only debugmerchant --size 1024x600` tests live activation, stock, guest purchases,
+disable and restart with two real browser clients and a disposable database.
+
 ## Playing with friends
 
 1. Everyone registers their own account on the same server and creates a character.

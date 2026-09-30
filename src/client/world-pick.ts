@@ -48,6 +48,8 @@ export function panelForProp(kind: PropKind): Panel | null {
       return 'stash';
     case 'merchant':
       return 'merchant';
+    case 'debugMerchant':
+      return 'debugMerchant';
     case 'anvil':
       return 'craftingBench';
     default:

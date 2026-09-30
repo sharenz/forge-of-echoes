@@ -38,6 +38,7 @@ const SHADOW: Record<PropKind, readonly [number, number]> = {
   mapDevice: [3.3, 2.2],
   stash: [2.1, 1.5],
   merchant: [1.9, 1.3],
+  debugMerchant: [1.9, 1.3],
   portal: [2.2, 1.3],
   returnPortal: [2.2, 1.3],
   chest: [1.9, 1.4],
@@ -58,6 +59,7 @@ const LIGHT_REACH: Record<PropKind, readonly [number, number]> = {
   mapDevice: [-6, 96],
   stash: [-16, 50],
   merchant: [-24, 90],
+  debugMerchant: [-24, 90],
   portal: [-24, 110],
   returnPortal: [-24, 110],
   chest: [-12, 78],
@@ -75,10 +77,11 @@ const LIGHT_REACH: Record<PropKind, readonly [number, number]> = {
 const NAMES: Partial<Record<PropKind, string>> = {
   mapDevice: 'Map Device', stash: 'Stash', merchant: 'Rook the Merchant', anvil: 'Crafting Bench', portal: 'Enter Map',
   returnPortal: 'Return to Hideout',
+  debugMerchant: 'Mira the Provisioner',
 };
 
 /** Kinds that take the hover highlight: the interactive hideout objects, the bench and (open) portals. */
-const HOVERABLE: ReadonlySet<PropKind> = new Set<PropKind>(['mapDevice', 'stash', 'merchant', 'anvil', 'portal', 'returnPortal']);
+const HOVERABLE: ReadonlySet<PropKind> = new Set<PropKind>(['mapDevice', 'stash', 'merchant', 'debugMerchant', 'anvil', 'portal', 'returnPortal']);
 
 /** Does prop `p` take the hover highlight when the client names it in hoverPropId? */
 export function isHoverableProp(p: PropView): boolean {
@@ -91,6 +94,7 @@ const PROP_IDS: Record<PropKind, string> = {
   returnPortal: 'prop/returnPortal', chest: 'prop/chest', pillar: 'prop/pillar', brazier: 'prop/brazier',
   standingStone: 'prop/standingStone', rubble: 'prop/rubble', bones: 'prop/bones', crystal: 'prop/crystal',
   banner: 'prop/banner', anvil: 'prop/anvil', ruinWall: 'prop/ruinWall',
+  debugMerchant: 'prop/debugMerchant',
 };
 
 /** Clickable extents (half width, height above the base) of the interactive props' art. */
@@ -98,6 +102,7 @@ const PICK: Partial<Record<PropKind, readonly [number, number]>> = {
   mapDevice: [26, 46],
   stash: [15, 27],
   merchant: [17, 40],
+  debugMerchant: [17, 40],
   anvil: [13, 19],
   portal: [16, 48],
   returnPortal: [16, 48],
@@ -275,6 +280,7 @@ export class PropPainter {
           pen.light(x, y - 16, 50, CANDLE, 0.5, 0.35);
           break;
         case 'merchant':
+        case 'debugMerchant':
           pen.light(x + 6, y - 24, 84, CANDLE, 0.75, 0.3);
           break;
         case 'mapDevice': {

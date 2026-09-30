@@ -11,13 +11,14 @@ export const LEFT_PANELS: readonly Panel[] = [
   'party',
   'mapDevice',
   'merchant',
+  'debugMerchant',
   'craftingBench',
   'trade',
 ];
 export const MODAL_PANELS: readonly Panel[] = ['menu', 'help'];
 
 /** Left panels that only make sense next to the inventory (drag items between them). */
-export const NEEDS_INVENTORY: readonly Panel[] = ['stash', 'merchant', 'mapDevice', 'craftingBench', 'trade'];
+export const NEEDS_INVENTORY: readonly Panel[] = ['stash', 'merchant', 'debugMerchant', 'mapDevice', 'craftingBench', 'trade'];
 
 export type PanelSide = 'left' | 'right' | 'modal';
 

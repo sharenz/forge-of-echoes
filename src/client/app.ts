@@ -977,6 +977,7 @@ export class ClientApp {
       activateMapDevice: (areaId, lootClass) => inGame((g) => g.activateMapDevice(areaId, lootClass), undefined),
       merchantOffers: () => inGame((g) => g.merchantOffers(), []),
       buyOffer: (id) => inGame((g) => g.buyOffer(id), undefined),
+      buyDebugOffer: (id, options) => inGame(g => g.buyDebugOffer(id, options), undefined),
 
       partyInvite: (name) => inGame((g) => g.partyInvite(name), undefined),
       partyRespond: (id, accept) => inGame((g) => g.partyRespond(id, accept), undefined),

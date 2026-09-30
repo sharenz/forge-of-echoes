@@ -42,6 +42,7 @@ export const MAX_CATCHUP_STEPS = 5;
 /** What an instance needs from the Game. */
 export interface InstanceHost {
   readonly log: Logger;
+  debugMerchantEnabled(ownerId: string): boolean;
   /** Authoritative outcomes of one tick (may move players out of `inst`). */
   handleOutcomes(inst: Instance, outcomes: readonly SimOutcome[]): void;
   /** A player touched their own drop: add it to their character; false when it does not fit. */
@@ -465,6 +466,7 @@ export class HideoutInstance extends Instance {
 
   constructor(host: InstanceHost, id: string, ownerId: string, ownerName: string, now: number) {
     super(host, id, ownerId, ownerName, null, now);
+    this.run.setDebugMerchant(host.debugMerchantEnabled(ownerId));
   }
 
   // Only the training dummy lives here: it never dies and nothing drops.

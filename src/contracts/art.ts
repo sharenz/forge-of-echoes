@@ -70,6 +70,7 @@ export const REQUIRED_SPRITES: readonly string[] = [
   ]),
   // props (bottom-centre anchored)
   'prop/mapDevice', 'prop/stash', 'prop/merchant', 'prop/portal', 'prop/returnPortal', 'prop/chest',
+  'prop/debugMerchant',
   'prop/pillar', 'prop/brazier', 'prop/standingStone', 'prop/rubble', 'prop/bones', 'prop/crystal',
   'prop/banner', 'prop/anvil', 'prop/ruinWall',
   // ground drops (bottom-centre anchored, untinted; rarity is a runtime treatment)

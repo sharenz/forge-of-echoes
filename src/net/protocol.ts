@@ -107,6 +107,7 @@ export const DEBUFF_CODES: readonly PlayerDebuff[] = PLAYER_DEBUFFS;
 export const PROP_KIND_CODES = [
   'mapDevice', 'stash', 'merchant', 'portal', 'returnPortal', 'chest',
   'pillar', 'brazier', 'standingStone', 'rubble', 'bones', 'crystal', 'banner', 'anvil', 'ruinWall',
+  'debugMerchant',
 ] as const satisfies readonly PropKind[];
 
 // Compile-time exhaustiveness: every union member must have a code (a missing one fails to typecheck here).
@@ -136,7 +137,7 @@ export const AREA_TIER: Uint8Array = Uint8Array.from(AREA_KINDS, (k: AreaKind) =
 );
 
 /** Props whose presence/state is replicated in every snapshot (everything else is static zone data). */
-export const DYNAMIC_PROP_KINDS: ReadonlySet<PropKind> = new Set<PropKind>(['chest', 'portal', 'returnPortal']);
+export const DYNAMIC_PROP_KINDS: ReadonlySet<PropKind> = new Set<PropKind>(['chest', 'portal', 'returnPortal', 'debugMerchant']);
 
 export { AREA_KINDS, FLASK_IDS, MONSTER_KINDS, PROJECTILE_KINDS, SKILL_IDS, THEMES };
 

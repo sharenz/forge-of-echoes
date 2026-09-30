@@ -49,9 +49,10 @@ describe('persistence', () => {
       await server.close();
     }
 
-    // Version 4 adds durable Atlas credit; reopening an up-to-date database changes nothing.
+    // Version 5 adds per-character testing merchants; reopening changes nothing.
     const db = await GameDatabase.open(dbPath);
-    expect(db.schemaVersion).toBe(4);
+    expect(db.schemaVersion).toBe(5);
+    expect(db.debugMerchantEnabled(p.characterId)).toBe(false);
     expect(db.loadAtlasCredits()).toEqual([]);
     expect(db.characterById(p.characterId)?.name).toBe('Keeper');
     db.close();
@@ -75,7 +76,8 @@ describe('persistence', () => {
     raw.close();
     const db = await GameDatabase.open(dbPath);
     try {
-      expect(db.schemaVersion).toBe(4);
+      expect(db.schemaVersion).toBe(5);
+      expect(db.debugMerchantEnabled('c1')).toBe(false);
       expect(db.characterById('c1')).toMatchObject({ name: 'Old Timer', level: 7 });
       expect(db.loadParties()).toEqual([]);
       expect(db.loadOpenMaps()).toEqual([]);

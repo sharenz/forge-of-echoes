@@ -129,6 +129,7 @@ const ARRIVAL_FAN = [0, -26, 26, -52, 52] as const;
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 export class Game implements InstanceHost {
+  debugMerchantEnabled(ownerId: string): boolean { return this.db.debugMerchantEnabled(ownerId); }
   readonly log: Logger;
   readonly db: GameDatabase;
   readonly store: CharacterStore;
@@ -243,6 +244,8 @@ export class Game implements InstanceHost {
    */
   maintenance(): void {
     const now = this.now();
+    for (const inst of this.instances.list()) if (inst.kind === 'hideout')
+      inst.run.setDebugMerchant(this.debugMerchantEnabled(inst.ownerId));
     // During a drain nobody can reconnect (4004), so a dropped socket keeps its character in place until the
     // shutdown: that records where it stood, and the restart puts it back there.
     if (!this.draining) {

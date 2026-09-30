@@ -102,6 +102,10 @@ echo "--> healthy: $(curl -fsS http://127.0.0.1:$APP_PORT/api/health)"
 ls -1dt "$APP_DIR"/releases/* | tail -n +$((KEEP + 1)) | xargs -r rm -rf
 REMOTE
 
+echo "--> installing testing-merchant CLI"
+scp -q scripts/deploy/debug_merch "$DEPLOY_HOST:/tmp/forge-debug_merch"
+ssh "$DEPLOY_HOST" 'install -m 755 /tmp/forge-debug_merch /usr/local/bin/debug_merch'
+
 echo "--> public check"
 for i in $(seq 1 20); do
   if curl -fsS "https://$APP_DOMAIN/api/health" >/dev/null 2>&1; then

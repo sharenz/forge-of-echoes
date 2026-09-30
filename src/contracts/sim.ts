@@ -374,7 +374,7 @@ export interface DropView {
 }
 
 export type PropKind =
-  | 'mapDevice' | 'stash' | 'merchant' | 'portal' | 'returnPortal' | 'chest'
+  | 'mapDevice' | 'stash' | 'merchant' | 'debugMerchant' | 'portal' | 'returnPortal' | 'chest'
   | 'pillar' | 'brazier' | 'standingStone' | 'rubble' | 'bones' | 'crystal' | 'banner' | 'anvil' | 'ruinWall';
 
 export interface PropView {
@@ -500,6 +500,8 @@ export interface PlayerUpdate {
 export interface SimRun {
   readonly config: RunConfig;
   readonly view: WorldView;
+  /** Show or remove the CLI-enabled testing merchant in a hideout. */
+  setDebugMerchant(enabled: boolean): void;
   /** Add a player to the instance (spawn anim + 'playerJoin' event). Throws if the id is taken or 4 are present. */
   addPlayer(join: PlayerJoin): void;
   /** Remove a player (left the instance / disconnected). Their un-picked OWN drops are removed (public drops stay). */

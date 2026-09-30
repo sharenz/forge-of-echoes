@@ -74,6 +74,7 @@ const INGREDIENTS_ONLY = opt('only', 'all') === 'ingredients';
 const UNIQUES_ONLY = opt('only', 'all') === 'uniques';
 const TREE_ONLY = opt('only', 'all') === 'tree';
 const SCARABS_ONLY = opt('only', 'all') === 'scarabs';
+const DEBUGMERCHANT_ONLY = opt('only', 'all') === 'debugmerchant';
 const EVENTS_ONLY = opt('only', 'all') === 'events';
 const MAPS_ONLY = opt('only', 'all') === 'maps';
 const ECONOMY_ONLY = opt('only', 'all') === 'economy';
@@ -2230,6 +2231,102 @@ async function craftingScenario({ A, port }) {
   });
 }
 
+async function debugMerchantScenario({ A, B, base, port, nameA, nameB, suffix }) {
+  const cli = action => new Promise((resolve, reject) => {
+    const proc = spawn(process.execPath, ['--import', 'tsx', 'src/server/debug-merch-cli.ts', `e2e_a_${suffix}`, nameA, action],
+      { cwd: root, env: { ...process.env, DB_PATH: join(tmp, 'e2e.db') }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
+    proc.stdout.on('data', b => { output += b; }); proc.stderr.on('data', b => { output += b; });
+    proc.on('error', reject); proc.on('exit', code => code === 0 ? resolve(output) : reject(new Error(output)));
+  });
+  const merchantVisible = () => window.__foe.world.view.props.some(p => p.kind === 'debugMerchant');
+  const open = async player => {
+    await closePanels(player);
+    const at = await walkUntilOnScreen(player, () => propOnScreen(player, 'debugMerchant', 10), 'Mira');
+    await clickWorld(player, at, 'Mira'); await player.page.waitForSelector('.fe-debug-merchant');
+  };
+  const buy = async (player, id) => {
+    const before = await player.eval(() => JSON.stringify(window.__foe.store.get().character.backpack.entries));
+    await player.page.locator(`[data-debug-offer="${id}"] button`).click();
+    await player.waitFor('purchase delivered', before => JSON.stringify(window.__foe.store.get().character.backpack.entries) !== before, before);
+  };
+  await step('CLI enables only the named character while both players are online', async () => {
+    await registerAndPlay(B, base, `e2e_b_${suffix}`, 'emberpass-B1', nameB);
+    assert(!await A.eval(merchantVisible) && !await B.eval(merchantVisible), 'merchant should default to disabled');
+    assert((await cli('enable')).includes('enabled'), 'CLI did not enable merchant');
+    await A.waitFor('Mira appears live', merchantVisible);
+    assert(!await B.eval(merchantVisible), 'activation leaked to another hideout');
+    await A.shot(`debug-merchant-world-${VW}x${VH}`);
+  });
+  await step('buy all scarab tiers and inspect configurable map and equipment stock', async () => {
+    await open(A);
+    await A.page.getByLabel('Quantity', { exact: true }).fill('20');
+    const ids = await A.page.locator('[data-debug-offer]').evaluateAll(rows => rows.map(row => row.dataset.debugOffer));
+    assert(ids.length === 8, 'expected all eight scarabs');
+    for (const id of ids) await buy(A, id);
+    await A.page.mouse.move(VW / 2, VH / 2);
+    await A.shot(`debug-merchant-scarabs-${VW}x${VH}`);
+    await A.page.getByLabel('Quantity', { exact: true }).fill('1');
+    await A.page.getByLabel('Testing category').selectOption('Maps');
+    await A.page.getByLabel('Map tier', { exact: true }).fill('15');
+    await A.page.getByLabel('Testing rarity').selectOption('rare');
+    await buy(A, 'map:ashenForge');
+    assert(await A.eval(() => window.__foe.store.get().character.backpack.entries.some(e => e.item.kind === 'map' && e.item.tier === 15 && e.item.rarity === 'rare' && e.item.mods.length)), 'selected map tier/rarity ignored');
+    await A.shot(`debug-merchant-maps-${VW}x${VH}`);
+    await A.page.getByLabel('Testing category').selectOption('Bases');
+    await A.page.getByLabel('Item level', { exact: true }).fill('46');
+    await A.page.getByLabel('Search testing stock').fill('wand');
+    const baseId = await A.page.locator('[data-debug-offer]').first().getAttribute('data-debug-offer');
+    await buy(A, baseId);
+    assert(await A.eval(() => window.__foe.store.get().character.backpack.entries.some(e => e.item.kind === 'equipment' && e.item.itemLevel === 46 && e.item.rarity === 'rare')), 'selected equipment level/rarity ignored');
+    await A.page.getByLabel('Testing category').selectOption('Uniques');
+    await A.page.getByLabel('Item level', { exact: true }).fill('22');
+    const uniqueId = await A.page.locator('[data-debug-offer]').first().getAttribute('data-debug-offer');
+    await buy(A, uniqueId);
+    await A.page.locator(`[data-debug-offer="${uniqueId}"]`).hover();
+    await A.shot(`debug-merchant-unique-${VW}x${VH}`);
+    const bounds = await A.page.locator('.fe-debug-merchant').boundingBox();
+    assert(bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.y + bounds.height <= VH, 'merchant exceeds viewport');
+    return 'eight scarabs, T15 rare map, ilvl46 rare base and unique delivered';
+  });
+  await step('guest visits the enabled hideout and buys with no change to host inventory', async () => {
+    await closePanels(A); await A.page.keyboard.press('p');
+    await A.page.waitForSelector('#fe-invite-name'); await A.page.fill('#fe-invite-name', nameB);
+    await A.page.click('.fe-invite button:has-text("Invite")');
+    await B.page.waitForSelector('.fe-invite-card'); await B.page.click('.fe-invite-card button:has-text("Join")');
+    await B.waitFor('party of two', () => window.__foe.store.get().party?.members.length === 2);
+    await B.page.keyboard.press('p');
+    await B.page.locator('.fe-member', { hasText: nameA }).locator('button:has-text("Visit hideout")').click();
+    await B.waitFor('host hideout', owner => window.__foe.store.get().hud?.zoneOwnerName === owner && !window.__foe.store.get().hud.zoneIsOwn, nameA);
+    await B.waitFor('guest sees Mira', merchantVisible);
+    const before = await A.eval(() => JSON.stringify(window.__foe.store.get().character.backpack.entries));
+    await open(B); await B.page.getByLabel('Quantity', { exact: true }).fill('5'); await buy(B, 'currency:invasionScarab4');
+    assert(await B.eval(() => window.__foe.store.get().character.backpack.entries.some(e => e.item.currencyId === 'invasionScarab4' && e.item.count === 5)), 'guest purchase missing');
+    assert(before === await A.eval(() => JSON.stringify(window.__foe.store.get().character.backpack.entries)), 'guest changed host inventory');
+    await B.shot(`debug-merchant-guest-${VW}x${VH}`);
+  });
+  await step('disable is immediate for stale purchase panels and removes the NPC for everyone', async () => {
+    const before = await B.eval(() => JSON.stringify(window.__foe.store.get().character.backpack.entries));
+    assert((await cli('disable')).includes('disabled'), 'CLI did not disable');
+    await B.page.locator('[data-debug-offer="currency:invasionScarab4"] button').click();
+    await B.waitFor('purchase rejected', () => window.__foe.store.get().toasts.some(t => t.text.includes('not active')));
+    assert(before === await B.eval(() => JSON.stringify(window.__foe.store.get().character.backpack.entries)), 'disabled merchant delivered items');
+    await A.waitFor('host NPC removed', () => !window.__foe.world.view.props.some(p => p.kind === 'debugMerchant'));
+    await B.waitFor('guest NPC removed', () => !window.__foe.world.view.props.some(p => p.kind === 'debugMerchant'));
+    assert((await cli('status')).includes('disabled'), 'CLI status is wrong');
+  });
+  await step('activation and purchases survive a real server restart', async () => {
+    await cli('enable'); await A.waitFor('merchant enabled again', merchantVisible);
+    const before = await B.eval(() => JSON.stringify(window.__foe.store.get().character.backpack.entries));
+    outage = true; await stopGameServer(); await startGameServer(port);
+    for (const p of [A, B]) await p.waitFor('online after restart', () => window.__foe.store.get().connection === 'online', undefined, 30000);
+    outage = false;
+    await A.waitFor('merchant restored', merchantVisible);
+    assert(before === await B.eval(() => JSON.stringify(window.__foe.store.get().character.backpack.entries)), 'purchase changed at restart');
+    assert((await cli('status')).includes('enabled'), 'activation did not persist');
+  });
+}
+
 async function scarabsScenario({ A, port }) {
   const { tsImport } = await import('tsx/esm/api');
   const { SCARABS } = await tsImport('../src/data/scarabs.ts', import.meta.url);
@@ -2822,9 +2919,10 @@ async function main() {
   if (UNIQUES_ONLY) await uniquesScenario({ A, port });
   if (TREE_ONLY) await mapTreeScenario({ A, port });
   if (SCARABS_ONLY) await scarabsScenario({ A, port });
+  if (DEBUGMERCHANT_ONLY) await debugMerchantScenario({ A, B, base, port, nameA, nameB, suffix });
   if (EVENTS_ONLY) await eventsScenario({ A, port });
   if (CRAFTING_ONLY) await craftingScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY) {
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -2833,7 +2931,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

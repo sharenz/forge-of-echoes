@@ -63,6 +63,7 @@
 //   gearLuck(ch)              % item quantity / rarity from gear alone
 //   deriveRunStats(ch, setup) deprecated alias of rules.deriveStats(ch, setup)
 import { setMapTreeNode } from './progression/map-tree';
+import { buyDebugOffer } from './progression/debug-merchant';
 import type { ContentInfo, GameRulesApi } from '../contracts/game';
 import {
   BASE_INFO, CURRENCY_INFO, FLASK_INFO, UNIQUE_INFO, addStashTab, addToBackpack, applyBenchRecipe, benchRecipes, benchServices, canEquip,
@@ -156,4 +157,5 @@ export const rules: GameRulesApi = {
   // --- merchant ---
   merchantOffers,
   buyOffer,
+  buyDebugOffer,
 };

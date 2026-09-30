@@ -14,6 +14,7 @@ import { CraftingBenchPanel } from '../panels/CraftingBench';
 import { InventoryPanel } from '../panels/Inventory';
 import { MapDevicePanel } from '../panels/MapDevice';
 import { MerchantPanel } from '../panels/Merchant';
+import { DebugMerchantPanel } from '../panels/DebugMerchant';
 import { HelpModal, MenuModal, RunSummaryModal } from '../panels/Modals';
 import { PartyPanel } from '../panels/Party';
 import { SkillsPanel } from '../panels/Skills';
@@ -38,6 +39,8 @@ function LeftPanel({ panel }: { panel: Panel }) {
       return <MapDevicePanel />;
     case 'merchant':
       return <MerchantPanel />;
+    case 'debugMerchant':
+      return <DebugMerchantPanel />;
     case 'craftingBench':
       return <CraftingBenchPanel />;
     case 'trade':

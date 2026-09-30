@@ -194,6 +194,13 @@ export interface MerchantOffer {
   affordable: boolean;
 }
 
+export interface DebugMerchantOptions {
+  quantity: number;
+  itemLevel: number;
+  mapTier: number;
+  rarity: 'normal' | 'magic' | 'rare';
+}
+
 // ---------------------------------------------------------------------------
 // Crafting
 // ---------------------------------------------------------------------------
@@ -313,4 +320,5 @@ export interface GameRulesApi {
   // --- merchant ---
   merchantOffers(ch: CharacterSave): MerchantOffer[];
   buyOffer(ch: CharacterSave, offerId: string): Result<{ character: CharacterSave; item: Item }>;
+  buyDebugOffer(ch: CharacterSave, offerId: string, options: DebugMerchantOptions): Result<{ character: CharacterSave; message: string }>;
 }

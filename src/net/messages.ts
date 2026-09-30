@@ -241,6 +241,14 @@ function command(v: unknown): Command {
       const o = shape(v, c, ['c', 'nodeId', 'allocate']);
       return { c, nodeId: oneOf(o.nodeId, 'nodeId', MAP_TREE_NODE_IDS), allocate: bool(o.allocate, 'allocate') };
     }
+    case 'buyDebugOffer': {
+      const o = shape(v, c, ['c', 'offerId', 'options']);
+      const opts = shape(o.options, 'options', ['quantity', 'itemLevel', 'mapTier', 'rarity']);
+      return { c, offerId: token(o.offerId, 'offerId'), options: {
+        quantity: int(opts.quantity, 'quantity', 1, 100), itemLevel: int(opts.itemLevel, 'itemLevel', 1, 99),
+        mapTier: int(opts.mapTier, 'mapTier', 1, 15), rarity: oneOf(opts.rarity, 'rarity', ['normal', 'magic', 'rare'] as const),
+      } };
+    }
     case 'activateMapDevice': {
       const o = shape(v, c, ['c'], ['areaId', 'lootClass']);
       return { c, ...(o.areaId === undefined ? {} : { areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS) }),

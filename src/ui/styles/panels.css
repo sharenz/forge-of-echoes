@@ -1175,12 +1175,19 @@
 }
 
 /* ---- merchant ---- */
+.fe-debug-merchant__controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.fe-debug-merchant__controls label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fe-debug-merchant__controls input, .fe-debug-merchant__controls select, .fe-debug-merchant__search { width: 100%; min-width: 0; padding: 6px 8px; color: var(--ash); background: #120e10; border: 1px solid var(--bronze); }
+.fe-debug-merchant__search { margin: 8px 0; }
 .fe-merchant .fe-panel__body {
   align-items: stretch;
   -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent);
   mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent);
   padding-bottom: 28px;
 }
+.fe-debug-merchant .fe-panel__body { overflow: hidden; padding-bottom: 8px; -webkit-mask-image: none; mask-image: none; }
+.fe-debug-merchant .fe-panel__body > :not(.fe-merchant__scroll) { flex-shrink: 0; }
+.fe-debug-merchant .fe-merchant__scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .fe-wallet img {
   image-rendering: pixelated;
 }

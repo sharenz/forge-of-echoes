@@ -19,7 +19,7 @@ export const SERVER_UPDATING_TEXT = 'Server updating — reconnecting…';
 /** The special stash tabs (GAME_SPEC §12), shown after the normal tabs; every character has all three. */
 export const SPECIAL_STASH_TABS: readonly SpecialStashTab[] = ['maps', 'currency', 'mapCurrency'];
 /** Panels tied to a hideout object: they close whenever the player changes zone. */
-export const ZONE_PANELS: readonly Panel[] = ['stash', 'mapDevice', 'merchant', 'craftingBench'];
+export const ZONE_PANELS: readonly Panel[] = ['stash', 'mapDevice', 'merchant', 'debugMerchant', 'craftingBench'];
 
 export function initialUiState(settings: Settings): UiState {
   return {

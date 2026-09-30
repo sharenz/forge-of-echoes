@@ -20,7 +20,7 @@ export type Screen =
 export type ConnectionStatus = 'offline' | 'connecting' | 'online' | 'reconnecting';
 
 export type Panel =
-  | 'inventory' | 'stash' | 'character' | 'skills' | 'mapDevice' | 'merchant' | 'craftingBench' | 'trade' | 'party' | 'menu' | 'help';
+  | 'inventory' | 'stash' | 'character' | 'skills' | 'mapDevice' | 'merchant' | 'debugMerchant' | 'craftingBench' | 'trade' | 'party' | 'menu' | 'help';
 
 export interface HudSlot {
   key: string;                 // "LMB", "RMB", "Q", …
@@ -226,6 +226,7 @@ export interface UiActions {
   /** Offers computed locally from the shared rules (display); buying goes to the server. */
   merchantOffers(): MerchantOffer[];
   buyOffer(offerId: string): void;
+  buyDebugOffer(offerId: string, options: import('./game').DebugMerchantOptions): void;
 
   // party & social
   partyInvite(name: string): void;

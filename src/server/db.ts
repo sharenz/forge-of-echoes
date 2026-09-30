@@ -213,6 +213,10 @@ const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (map_id, account_id)
   );
   `,
+  // 4 → 5: CLI-managed, per-character testing merchant. Kept outside live character saves.
+  `CREATE TABLE debug_merchants (
+    character_id TEXT PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE
+  );`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
@@ -355,6 +359,15 @@ export class GameDatabase {
 
   accountByUsername(username: string): AccountRow | null {
     return this.toAccount(this.get('SELECT * FROM accounts WHERE username = ? COLLATE NOCASE', username));
+  }
+
+  debugMerchantEnabled(characterId: string): boolean {
+    return !!this.get('SELECT character_id FROM debug_merchants WHERE character_id = ?', characterId);
+  }
+
+  setDebugMerchant(characterId: string, enabled: boolean): void {
+    if (enabled) this.run('INSERT OR IGNORE INTO debug_merchants(character_id) VALUES (?)', characterId);
+    else this.run('DELETE FROM debug_merchants WHERE character_id = ?', characterId);
   }
 
   accountById(id: string): AccountRow | null {

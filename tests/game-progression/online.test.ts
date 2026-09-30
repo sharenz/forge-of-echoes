@@ -132,20 +132,23 @@ describe('server entropy decides every rng outcome', () => {
     expect([...results].filter((x) => x === predicted).length).toBeLessThanOrEqual(1);
   });
 
-  it('gambles and map seeds follow the server entropy too; everything else is the plain rules', () => {
+  it('gambles, testing stock and map seeds follow server entropy; everything else is the plain rules', () => {
     const ch = { ...workshop(), level: 30 };
     let calls = 0;
     const server = withServerEntropy(rules, () => { calls++; return 424242; });
     const gamble = expectOk(server.buyOffer(ch, 'gamble-ring'));
     expect(gamble).toEqual(expectOk(rules.buyOffer(reseedCharacter(ch, 424242), 'gamble-ring')));
+    const options = { quantity: 1, itemLevel: 46, mapTier: 1, rarity: 'rare' as const };
+    expect(expectOk(server.buyDebugOffer(ch, 'base:ashwoodWand', options)))
+      .toEqual(expectOk(rules.buyDebugOffer(reseedCharacter(ch, 424242), 'base:ashwoodWand', options)));
     const opened = expectOk(server.openMap(ch));
     expect(opened.setup.seed).toBe(expectOk(rules.openMap(reseedCharacter(ch, 424242))).setup.seed);
     expect(opened.setup.seed).not.toBe(expectOk(rules.openMap(ch)).setup.seed);
-    expect(calls).toBe(2);
+    expect(calls).toBe(3);
     expect(server.moveItem).toBe(rules.moveItem);
     expect(server.craftPreview).toBe(rules.craftPreview);
     expect(server.lootLuck).toBe(rules.lootLuck);
-    expect(calls).toBe(2);
+    expect(calls).toBe(3);
   });
 
   it('a bench craft rolls its value from server entropy; clearing needs none', () => {
@@ -167,7 +170,7 @@ describe('server entropy decides every rng outcome', () => {
   });
 
   it('names exactly the commands that draw from the character rng', () => {
-    expect([...RNG_COMMANDS].sort()).toEqual(['activateMapDevice', 'applyCurrency', 'benchCraft', 'buyOffer']);
+    expect([...RNG_COMMANDS].sort()).toEqual(['activateMapDevice', 'applyCurrency', 'benchCraft', 'buyDebugOffer', 'buyOffer']);
   });
 });
 

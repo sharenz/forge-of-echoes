@@ -23,7 +23,7 @@ import {
   type SimPlayerJoin, type SimPlayerUpdate,
 } from './player';
 import {
-  hideoutDummyPosition, hideoutSpawn, latchPortalsUnder, layoutHideout, layoutMap, setHideoutPortal, updatePropInteractions,
+  addProp, hideoutDummyPosition, hideoutSpawn, latchPortalsUnder, layoutHideout, layoutMap, setHideoutPortal, updatePropInteractions,
 } from './props';
 import { updateProjectiles } from './projectiles';
 import { monsterDefs, rosterFor } from './rosters';
@@ -379,6 +379,16 @@ export function createRunInternal(config: RunConfig, opts: InternalRunOptions = 
     setPortal(remaining: number): void {
       setHideoutPortal(w, remaining);
       syncRunView(w);
+    },
+    setDebugMerchant(enabled: boolean): void {
+      if (config.mode !== 'hideout') return;
+      const index = w.props.findIndex(p => p.kind === 'debugMerchant');
+      if (enabled && index < 0) addProp(w, 'debugMerchant', w.arenaRadius * 0.5, w.arenaRadius * 0.3, 12, { interactive: true });
+      if (!enabled && index >= 0) {
+        w.props.splice(index, 1);
+        w.propGrid.clear();
+        for (const prop of w.props) if (prop.solid) w.propGrid.insert(prop);
+      }
     },
     digest() {
       return digestWorld(w);

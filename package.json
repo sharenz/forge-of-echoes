@@ -8,6 +8,7 @@
     "dev:web": "vite",
     "dev:server": "tsx watch --clear-screen=false src/server/main.ts",
     "server": "tsx src/server/main.ts",
+    "debug_merch": "node --import tsx src/server/debug-merch-cli.ts",
     "build": "tsc --noEmit && vite build",
     "start": "NODE_ENV=production tsx src/server/main.ts",
     "typecheck": "tsc --noEmit",

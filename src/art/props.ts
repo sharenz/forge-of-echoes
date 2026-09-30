@@ -164,10 +164,10 @@ function stash(): Frame {
 // Rook, the hooded trader: crow-beak mask, towering pack, crooked staff with a swinging lantern
 // ---------------------------------------------------------------------------
 
-function merchant(k: number): Frame {
+function merchant(k: number, testing = false): Frame {
   const f = new Frame(34, 40);
   const s = new Sculpt();
-  const cloak: PrimStyle = { ramp: [C.ink, C.coal, C.mossDeep, C.mossDark, C.moss, C.olive], bias: -0.1, dither: 0.08 };
+  const cloak: PrimStyle = { ramp: testing ? RAMPS.wine : [C.ink, C.coal, C.mossDeep, C.mossDark, C.moss, C.olive], bias: -0.1, dither: 0.08 };
   const pack: PrimStyle = { ramp: RAMPS.wood, bias: 0, dither: 0.08, tex: (x, y) => ((x + y) % 5 === 0 ? -0.7 : 0) };
   const b = k === 1 || k === 2 ? 1 : 0; // breathing
   const cx = 16;
@@ -830,7 +830,8 @@ export function propSprites(): SpriteDef[] {
   return [
     one('mapDevice', [mapDevice(false), mapDevice(true)]),
     one('stash', [stash()]),
-    one('merchant', range(4).map(merchant), 4, true),
+    one('merchant', range(4).map(k => merchant(k)), 4, true),
+    one('debugMerchant', range(4).map(k => merchant(k, true)), 4, true),
     one('portal', range(PORTAL_FRAMES).map((k) => portal(k, emberRamp, PORTAL_FRAMES)), 10, true),
     one('returnPortal', range(PORTAL_FRAMES).map((k) => portal(k, frostRamp, PORTAL_FRAMES)), 10, true),
     one('chest', [chest(false), chest(true)]),

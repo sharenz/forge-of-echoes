@@ -29,7 +29,7 @@ import { maskLocked, unmaskLocked } from './items';
 
 /** Commands whose outcome draws from CharacterSave.rngState: reseed right before handling them. */
 export const RNG_COMMANDS: ReadonlySet<Command['c']> = new Set<Command['c']>([
-  'applyCurrency', 'benchCraft', 'buyOffer', 'activateMapDevice',
+  'applyCurrency', 'benchCraft', 'buyOffer', 'buyDebugOffer', 'activateMapDevice',
 ]);
 
 /**
@@ -70,6 +70,7 @@ export function withServerEntropy(base: GameRulesApi, entropy: () => number): Ga
       base.applyCurrency(reseedCharacter(ch, entropy()), currencyUid, targetUid, affixIndex),
     applyBenchRecipe: (ch, targetUid, recipeId) => base.applyBenchRecipe(reseedCharacter(ch, entropy()), targetUid, recipeId),
     buyOffer: (ch, offerId) => base.buyOffer(reseedCharacter(ch, entropy()), offerId),
+    buyDebugOffer: (ch, offerId, options) => base.buyDebugOffer(reseedCharacter(ch, entropy()), offerId, options),
     openMap: (ch, areaId, lootClass) => base.openMap(reseedCharacter(ch, entropy()), areaId, lootClass),
   };
 }
@@ -163,6 +164,7 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
     ),
     setMapTreeNode: (ch, id, allocate) => guard(ch, [], c => base.setMapTreeNode(c, id, allocate), plain, replace),
     buyOffer: (ch, offerId) => guard(ch, [], (c) => base.buyOffer(c, offerId), outcomeCharacter, withOutcomeCharacter),
+    buyDebugOffer: (ch, offerId, options) => guard(ch, [], c => base.buyDebugOffer(c, offerId, options), outcomeCharacter, withOutcomeCharacter),
     openMap: (ch, areaId, lootClass) => guard(ch, [ch.mapDevice?.uid], (c) => base.openMap(c, areaId, lootClass), outcomeCharacter, withOutcomeCharacter),
     craftingTargetError: (ch, currencyUid, targetUid) => {
       const locked = locksOf(ch);
