@@ -36,7 +36,7 @@ for (const row of rows) {
 source.close();
 
 function privateItems(ch: CharacterSave): Item[] {
-  return [...Object.values(ch.equipment).filter((i): i is NonNullable<typeof i> => !!i), ...ch.backpack.entries.map((e) => e.item), ...(ch.mapDevice ? [ch.mapDevice] : [])];
+  return [...Object.values(ch.equipment).filter((i): i is NonNullable<typeof i> => !!i), ...ch.backpack.entries.map((e) => e.item), ...(ch.mapScarabs ?? []).filter((s): s is NonNullable<typeof s> => !!s), ...(ch.mapDevice ? [ch.mapDevice] : [])];
 }
 function sharedItems(ch: CharacterSave): Item[] {
   return [...ch.stash.flatMap((t) => t.grid.entries.map((e) => e.item)), ...ch.mapStash];

@@ -23,6 +23,8 @@ import { atlasKeyDestination, findAtlasArea } from '../../data/progression/atlas
 import { atlasAccessError, newAtlas, paidTerritoryFee, territoryEntryFee } from './atlas';
 import { spendCurrency } from './merchant';
 import { normalizeMapEvent, rollMapEvent } from './map-events';
+import { findScarab, scarabEffects, validScarabs } from '../../data/scarabs';
+import type { ScarabId } from '../../contracts/content';
 
 /**
  * Base map readout, including the opener's tree modifiers but no gear. The successful openMap preview
@@ -38,12 +40,20 @@ function snapshotMap(map: MapItem): MapItem {
 }
 
 /** The run parameters of `map` (an already snapshotted map) with `seed`: map-side luck only. */
-function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass?: ItemClass, nodes: MapTreeNodeId[] = []): RunSetup {
+function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass?: ItemClass, nodes: MapTreeNodeId[] = [], scarabs: ScarabId[] = []): RunSetup {
   const area = findAtlasArea(areaId);
   let map = area ? { ...source, baseId: area.baseId } : source;
   if (area?.echoWave && !map.mods.some(m => m.modId === 'echo')) map = { ...map, mods: [...map.mods, { modId: 'echo', value: 100 }] };
   const luck = mapLuck(map, null, nodes);
   const summary = buildMapSummary(map, nodes);
+  if (scarabs.length) {
+    const effects = scarabEffects(scarabs);
+    const duration = Math.round(waveConfig(map).waveDuration * effects.durationMultiplier * 100) / 100;
+    const waves = summary.find(line => line.label === 'Waves');
+    if (waves) waves.breakdown[0] = `Each wave lasts up to ${duration} seconds; unfinished waves stack`;
+    summary.push({ label: 'Scarab wave duration', value: `${duration}s`, breakdown: scarabs.map(id => findScarab(id)!).filter(s => s.durationLess).map(s => `${s.name}: ${s.durationLess}% less duration`) });
+    summary.push({ label: 'Starting wave', value: `${effects.startWave}`, breakdown: [effects.startWave > 1 ? `All monsters from waves 1–${effects.startWave} spawn at the opening. No monsters or rewards are skipped.` : 'Normal first wave.'] });
+  }
   if (area?.quantityMore) summary.push({ label: area.name, value: `${area.quantityMore}% more item quantity`, breakdown: ['Multiplies map and personal gear quantity.'] });
   if (area?.currencyMultiplier) summary.push({ label: 'Area currency', value: `x${area.currencyMultiplier}`, breakdown: ['Ordinary currency chances and boss/chest currency guarantees. Special keys and ingredients are unchanged.'] });
   if (area?.bossLifeMultiplier) summary.push({ label: 'Area boss', value: 'Empowered', breakdown: [`${(area.bossLifeMultiplier - 1) * 100}% more life`, `${((area.bossDamageMultiplier ?? 1) - 1) * 100}% more damage`] });
@@ -53,6 +63,7 @@ function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass
     summary.push({ label: 'Completion map upgrade', value: `${map.tier >= 15 ? 0 : map.charted ? 100 : Math.round((CHEST_LOOT.mapTierUpgradeChance + mapTreeBonuses(nodes).chestUpgradeChance) * 100)}%`, breakdown: ['Chance for the guaranteed chest map to be one tier higher; Tier 15 is capped.'] });
   }
   return {
+    ...(scarabs.length ? { scarabs: [...scarabs] } : {}),
     ...(nodes.length ? { mapTree: [...nodes] } : {}),
     map,
     event: rollMapEvent(map, seed, areaId, nodes),
@@ -75,6 +86,8 @@ export function openMap(ch: CharacterSave, areaId?: AtlasAreaId, lootClass?: Ite
   const map = ch.mapDevice;
   if (!map) return fail('Place a map in the Map Device first.');
   if (!findMapBase(map.baseId)) return fail('This map can no longer be opened.');
+  const scarabs = (ch.mapScarabs ?? []).filter(s => s !== null).map(s => s.currencyId);
+  if (!validScarabs(scarabs) || ch.mapScarabs?.some(s => s && (s.kind !== 'currency' || s.count !== 1))) return fail('The scarab sockets contain an invalid loadout.');
   let next = ch;
   const area = findAtlasArea(areaId);
   if (areaId !== undefined) {
@@ -99,10 +112,10 @@ export function openMap(ch: CharacterSave, areaId?: AtlasAreaId, lootClass?: Ite
   }
   const rng = createRng(ch.rngState >>> 0);
   const seed = Math.floor(rng.next() * 0x100000000) >>> 0;
-  const setup = setupFor(snapshotMap(map), seed, areaId, lootClass, normalizeMapTree(ch.atlas?.nodes, ch.atlas?.completed.length ?? 0));
+  const setup = setupFor(snapshotMap(map), seed, areaId, lootClass, normalizeMapTree(ch.atlas?.nodes, ch.atlas?.completed.length ?? 0), scarabs);
   if (fee > 0) setup.entranceScrap = fee;
   if (area?.entranceKey) setup.entranceKey = area.entranceKey;
-  return ok({ character: { ...next, mapDevice: null, rngState: rng.state() }, setup });
+  return ok({ character: { ...next, mapDevice: null, ...(ch.mapScarabs ? { mapScarabs: [null, null, null, null] } : {}), rngState: rng.state() }, setup });
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -141,7 +154,9 @@ export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
   const lootClass = area?.chosenClass && typeof wrapper?.lootClass === 'string' && (ITEM_CLASSES as readonly string[]).includes(wrapper.lootClass)
     ? wrapper.lootClass as ItemClass : undefined;
   if (area?.chosenClass && (!lootClass || !Object.values(BASES).some(b => b.itemClass === lootClass && b.levelRequirement <= monsterLevelForTier(map.tier)))) return null;
-  const setup = setupFor(snapshotMap(map), Math.floor(seed), area?.id, lootClass, normalizeMapTree(wrapper?.mapTree));
+  const scarabs = wrapper?.scarabs ?? [];
+  if (!validScarabs(scarabs)) return null;
+  const setup = setupFor(snapshotMap(map), Math.floor(seed), area?.id, lootClass, normalizeMapTree(wrapper?.mapTree), scarabs);
   // Preserve the creation decision; pre-event maps do not gain a surprise on restart.
   if (wrapper && 'event' in wrapper) setup.event = normalizeMapEvent(wrapper.event);
   else delete setup.event;
@@ -236,6 +251,8 @@ export function buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConf
   const base = findMapBase(map.baseId);
   const area = findAtlasArea(setup.atlasAreaId);
   const tree = mapTreeBonuses(setup.mapTree);
+  const effects = scarabEffects(setup.scarabs);
+  const waves = waveConfig(map);
   return {
     mode: 'map',
     event: setup.event ?? null,
@@ -247,7 +264,7 @@ export function buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConf
     tier: clampTier(map.tier),
     arenaRadius: (base?.arenaRadius ?? 900) * (area?.arenaScale ?? 1),
     monsters: monsterScaling(map, setup.mapTree),
-    waves: area?.noBoss ? { ...waveConfig(map), bossWave: 0 } : waveConfig(map),
+    waves: { ...waves, ...(area?.noBoss ? { bossWave: 0 } : {}), ...(setup.scarabs?.length ? { waveDuration: waves.waveDuration * effects.durationMultiplier, startWave: effects.startWave } : {}) },
     hooks,
   };
 }

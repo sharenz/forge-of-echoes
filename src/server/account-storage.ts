@@ -37,7 +37,8 @@ export function namespaceItems(ch: CharacterSave): CharacterSave {
   const stash = ch.stash.map((t) => ({ ...t, grid: grid(t.grid) }));
   const mapDevice = ch.mapDevice ? item(ch.mapDevice) : null;
   const mapStash = ch.mapStash.map(item);
-  return { ...ch, uidNamespace: prefix, nextUid, equipment, backpack, stash, mapDevice, mapStash };
+  const mapScarabs = ch.mapScarabs?.map(s => s ? item(s) : null);
+  return { ...ch, uidNamespace: prefix, nextUid, equipment, backpack, stash, mapDevice, mapStash, ...(mapScarabs ? { mapScarabs } : {}) };
 }
 
 export function mergeLegacyStorage(characters: readonly CharacterSave[]): AccountStorage {

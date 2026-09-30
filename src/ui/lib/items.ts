@@ -45,6 +45,8 @@ export function sameLocation(a: ItemLocation, b: ItemLocation): boolean {
       return b.kind === 'belt' && a.index === b.index;
     case 'mapDevice':
       return b.kind === 'mapDevice';
+    case 'scarabSlot':
+      return b.kind === 'scarabSlot' && a.index === b.index;
     case 'currencyStash':
       return b.kind === 'currencyStash';
     case 'mapStash':
@@ -64,6 +66,8 @@ export function locationKey(loc: ItemLocation): string {
       return `belt:${loc.index}`;
     case 'mapDevice':
       return 'mapDevice';
+    case 'scarabSlot':
+      return `scarabSlot:${loc.index}`;
     case 'currencyStash':
       return 'currencyStash';
     case 'mapStash':

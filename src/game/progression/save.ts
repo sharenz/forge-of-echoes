@@ -37,6 +37,8 @@ import { sanitizeName, xpToNext } from './character';
 import { clampTier, rarityForDangerCount, sortMapMods } from './maps';
 import { normalizeLoadout } from './skills';
 import { normalizeAtlas } from './atlas';
+import { findScarab } from '../../data/scarabs';
+import { SCARAB_SLOTS } from '../../contracts/items';
 import { clamp, finite, intIn } from './util';
 
 type Json = Record<string, unknown>;
@@ -344,6 +346,7 @@ function highestMinted(raw: Json, prefix: string): number {
   if (isObj(raw.backpack)) arr(raw.backpack.entries).forEach((e) => isObj(e) && visit(e.item));
   for (const tab of arr(raw.stash)) if (isObj(tab) && isObj(tab.grid)) arr(tab.grid.entries).forEach((e) => isObj(e) && visit(e.item));
   visit(raw.mapDevice);
+  arr(raw.mapScarabs).forEach(visit);
   arr(raw.mapStash).forEach(visit);
   return max;
 }
@@ -467,6 +470,18 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     else if (item) overflow.push(item);
   }
 
+  const mapScarabs: (CurrencyStack | null)[] = Array(SCARAB_SLOTS).fill(null);
+  const scarabFamilies = new Set<string>();
+  for (const [index, r] of arr(raw.mapScarabs).entries()) {
+    if (!isObj(r)) continue;
+    const item = normalizeItem(r, claimUid(minter, r.uid));
+    if (!item) continue;
+    const def = item.kind === 'currency' ? findScarab(item.currencyId) : undefined;
+    if (item.kind !== 'currency' || !def || index >= SCARAB_SLOTS || scarabFamilies.has(def.family)) { overflow.push(item); continue; }
+    mapScarabs[index] = { ...item, count: 1 };
+    scarabFamilies.add(def.family);
+    if (item.count > 1) overflow.push({ ...item, uid: claimUid(minter, undefined), count: item.count - 1 });
+  }
   const mapStash: MapItem[] = [];
   for (const r of arr(raw.mapStash)) {
     if (!isObj(r)) continue;
@@ -544,6 +559,7 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     ...(raw.atlas !== undefined ? { atlas: normalizeAtlas(raw.atlas) } : {}),
     belt: normalizeBelt(raw.belt),
     mapDevice,
+    ...(raw.mapScarabs !== undefined ? { mapScarabs } : {}),
     rngState: typeof raw.rngState === 'number' && Number.isFinite(raw.rngState) ? raw.rngState >>> 0 : hashString(id),
     nextUid: minter.next,
     ...(prefix ? { uidNamespace: prefix } : {}),

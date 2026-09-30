@@ -142,6 +142,8 @@ export interface MapSummaryLine {
 }
 
 export interface RunSetup {
+  /** Consumed scarabs, fixed for this expedition and shared by its party. */
+  scarabs?: import('./content').ScarabId[];
   /** Opening account’s map nodes, frozen for the whole expedition and all party members. */
   mapTree?: MapTreeNodeId[];
   /** Creation roll, omitted from client projections; absent on pre-event maps. */

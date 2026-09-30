@@ -10,6 +10,7 @@ import { PAPERDOLL, SLOT_LABELS } from '../lib/content';
 import { useSignal, useStore, useUi } from '../store';
 import { ItemView } from './ItemView';
 import { safe } from './hooks';
+import { findScarab } from '../../data/scarabs';
 
 const cells = (n: number): string => `calc(var(--cell) * ${n})`;
 
@@ -179,4 +180,21 @@ export function MapDeviceSlotView({ disabled }: { disabled: boolean }) {
       )}
     </div>
   );
+}
+
+export function ScarabSlotView({ index }: { index: number }) {
+  const local = useLocal();
+  const store = useStore();
+  const item = useUi(s => s.character?.mapScarabs?.[index] ?? null);
+  const drag = useSignal(local.drag);
+  const hovered = drag?.target?.loc?.kind === 'scarabSlot' && drag.target.loc.index === index;
+  const accepts = drag?.item.kind === 'currency' && !!findScarab(drag.item.currencyId);
+  return <div class="fe-scarab-socket">
+    <div class={cx('fe-device-slot fe-solid', accepts && 'fe-slot--accepts', hovered && (drag!.target!.valid || drag!.target!.noop ? 'fe-slot--ok' : 'fe-slot--bad'), item && 'fe-device-slot--filled')}
+      data-drop="scarabSlot" data-index={index} aria-label={`Scarab socket ${index + 1}`}>
+      {item ? <ItemView item={item} uid={item.uid} from={{ kind: 'scarabSlot', index }} mode="slot" class={drag?.uid === item.uid ? 'fe-item--lifted' : undefined} />
+        : <span class="fe-device-slot__hint">Scarab<br />{index + 1}</span>}
+    </div>
+    {item && <button class="ui-type-caption fe-scarab-remove" aria-label={`Remove scarab ${index + 1}`} onClick={() => store.actions.quickMove(item.uid)}>Remove</button>}
+  </div>;
 }

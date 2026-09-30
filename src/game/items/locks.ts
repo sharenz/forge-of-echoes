@@ -53,6 +53,7 @@ function sameLocation(a: ItemLocation, b: ItemLocation): boolean {
     case 'equipment': return b.kind === 'equipment' && a.slot === b.slot;
     case 'belt': return b.kind === 'belt' && a.index === b.index;
     case 'mapDevice': return b.kind === 'mapDevice';
+    case 'scarabSlot': return b.kind === 'scarabSlot' && a.index === b.index;
     case 'currencyStash': return b.kind === 'currencyStash';
     case 'mapStash': return b.kind === 'mapStash';
   }

@@ -9,6 +9,7 @@ import { craftPending, keepArmedAfterApply, type PendingCraft } from '../lib/cra
 import { withdrawCount } from '../lib/stash';
 import { visiblePanels } from '../lib/panels';
 import { offerAddError, offerWith, offerWithout } from '../lib/trade';
+import { findScarab } from '../../data/scarabs';
 
 export type CraftMark = 'armed' | 'valid' | 'invalid' | null;
 
@@ -124,6 +125,12 @@ export function quickMoveItem(store: UiStore, local: Local, e: MouseEvent, uid: 
   }
   if (item.kind === 'map' && from.kind !== 'mapDevice' && s.isOwnHideout && s.openPanels.includes('mapDevice')) {
     if (store.actions.moveItem(uid, { kind: 'mapDevice' })) store.actions.uiSound('click');
+    return;
+  }
+  if (item.kind === 'currency' && findScarab(item.currencyId) && from.kind !== 'scarabSlot' && s.isOwnHideout && left === 'mapDevice') {
+    const index = Array.from({ length: 4 }, (_, i) => s.character?.mapScarabs?.[i] ?? null).findIndex(i => !i);
+    if (index < 0) { local.flashHint('All four scarab sockets are filled.', at.x, at.y); return; }
+    if (store.actions.moveItem(uid, { kind: 'scarabSlot', index })) store.actions.uiSound('click');
     return;
   }
   // A Crafting Stash slot gives a stack; with Shift exactly one.
@@ -252,6 +259,11 @@ export function itemContextMenu(store: UiStore, local: Local, e: MouseEvent, uid
     return;
   }
   if (item.kind !== 'currency') return;
+  if (findScarab(item.currencyId)) {
+    if (s.isOwnHideout && s.openPanels.includes('mapDevice')) quickMoveItem(store, local, e, uid, item, from);
+    else local.flashHint('Open your Map Device to socket this scarab.', e.clientX, e.clientY);
+    return;
+  }
   if (isTradeLocked(s, uid)) {
     store.actions.uiSound('error');
     local.flashHint(LOCKED_REASON, e.clientX, e.clientY);

@@ -66,7 +66,7 @@ export function isStashLocation(loc: ItemLocation | null | undefined): boolean {
 /** Location rules for moving an item from `from` to `to` (null = not a move, e.g. discard). */
 function locationError(s: PlayerSession, from: ItemLocation, to: ItemLocation | null): string | null {
   if ((isStashLocation(from) || isStashLocation(to)) && !inHideout(s)) return NEED_HIDEOUT_STASH;
-  if ((from.kind === 'mapDevice' || to?.kind === 'mapDevice') && !inOwnHideout(s)) return NEED_OWN_HIDEOUT_DEVICE;
+  if ((from.kind === 'mapDevice' || from.kind === 'scarabSlot' || to?.kind === 'mapDevice' || to?.kind === 'scarabSlot') && !inOwnHideout(s)) return NEED_OWN_HIDEOUT_DEVICE;
   return null;
 }
 
@@ -100,7 +100,7 @@ function placeError(s: PlayerSession, before: CharacterSave, after: CharacterSav
   if (!inHideout(s) && (
     changed(before.stash, after.stash) || changed(before.currencyStash, after.currencyStash) || changed(before.mapStash, after.mapStash)
   )) return NEED_HIDEOUT_STASH;
-  if (!inOwnHideout(s) && changed(before.mapDevice, after.mapDevice)) return NEED_OWN_HIDEOUT_DEVICE;
+  if (!inOwnHideout(s) && (changed(before.mapDevice, after.mapDevice) || changed(before.mapScarabs, after.mapScarabs))) return NEED_OWN_HIDEOUT_DEVICE;
   return null;
 }
 

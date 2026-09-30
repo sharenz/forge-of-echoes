@@ -175,6 +175,7 @@ export type ItemLocation =
   | { kind: 'equipment'; slot: EquipSlot }
   | { kind: 'belt'; index: number }
   | { kind: 'mapDevice' }
+  | { kind: 'scarabSlot'; index: number }
   /** The Crafting Stash: a currency always files into its own slot (position-free). */
   | { kind: 'currencyStash' }
   /** The Map Stash: maps file by tier/base (position-free). */
@@ -206,6 +207,7 @@ export interface CharacterStatsLog {
 export const LOADOUT_SLOTS = 6;
 export const LOADOUT_KEYS = ['LMB', 'RMB', 'Q', 'E', 'R', 'F'] as const;
 export const BELT_SLOTS = 4;
+export const SCARAB_SLOTS = 4;
 export const BACKPACK_SIZE = { w: 12, h: 5 } as const;
 export const STASH_TAB_SIZE = { w: 12, h: 8 } as const;
 export const MAX_STASH_TABS = 8;
@@ -247,6 +249,8 @@ export interface CharacterSave {
   /** BELT_SLOTS entries. */
   belt: (BeltSlot | null)[];
   mapDevice: MapItem | null;
+  /** One consumable per socket. Missing on older saves means four empty sockets. */
+  mapScarabs?: (CurrencyStack | null)[];
   /** Deterministic RNG state for out-of-run randomness (crafting, merchant, gambling). */
   rngState: number;
   /** Monotonic counter used to mint item uids. */

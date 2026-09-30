@@ -415,6 +415,32 @@ The new maps have separate floor tiles, decals, lighting, landmark layouts and m
   its recorded fee, source map (including Bounty) and any entrance key are returned in one transaction.
   Legacy runs have no fee to refund. Ordinary deaths, abandonment and voluntary map replacement do not refund fees.
 
+**Scarabs (four optional Map Device sockets beside the map).** Each socket takes one scarab, split from its
+backpack or shared Crafting Stash stack (maximum stack 20). Drag, Ctrl-click or use the device's stash picker;
+remove before activation to recover it. Successful activation consumes the map and all loaded scarabs once.
+Failed activation consumes nothing. The expedition records its scarabs for party play and restarts; guests'
+scarabs do not stack. An unrestorable server-side expedition refunds its scarabs with its map, key and fee.
+
+| Scarab tier | Name prefix | Minimum monster level | Relative drop weight | Haste | Invasion |
+|---|---|---|---|---|---|
+| 1 | Weathered | 4 | 100 | 15% less wave duration | Start at wave 2 |
+| 2 | Etched | 22 | 30 | 25% less wave duration | Start at wave 3 |
+| 3 | Gilded | 46 | 8 | 35% less wave duration | Start at wave 4 |
+| 4 | Exalted | 70 | 2 | 50% less wave duration | Start at wave 5 |
+
+Only one scarab of each type is allowed per map, regardless of tier: one Haste and one Invasion in this first batch.
+The four sockets support future distinct types. An Exalted Haste Scarab makes 60-second waves last 30 seconds. The normal 3-second tell,
+attack timing and monster budgets are retained. An Invasion Scarab starts on the
+specified wave with **all** monsters from waves 1 through that wave already spawned, including their streaming
+budgets, with each original wave's stats, rarity and rewards. It skips no monsters or loot. Normal waves continue
+afterward; the final boss and any Echo wave remain. Encounters due in earlier waves can still trigger.
+
+Scarabs have an independent 0.05% base roll per eligible monster kill, scaled by personal item quantity and
+magic/rare quantity multipliers, capped at 100%. No guaranteed boss/chest scarab; summoned monsters and the dummy
+cannot drop them. Both families share the listed tier weights. Eligibility uses monster level; every unlocked
+lower tier remains in the pool at high levels. Item rarity does not improve scarab tier. Ordinary maps retain
+their 60-second baseline and start on wave 1. Exact combined timing and starting wave appear before activation.
+
 **Map tree v0 (account-wide).** Open it from the Map Device. There are 15 nodes in five three-node paths. Each first completion of a different Atlas area grants one map point, capped at 10; existing completions count immediately. Repeated clears do not grant more points. Points are independent of attributes and skills, and no node changes character stats. Each node costs one point and requires the previous node on its path. Refund a leaf node for 5 Scrap from backpack, normal stash or Crafting Stash, excluding trade offers; currency payment and account allocation commit atomically. Refund later nodes first. Changes are allowed only in your own hideout and appear on all online alts.
 
 The opener's selected nodes are copied into the expedition at activation. They affect the whole party's map rules, with each player still adding their own gear luck. Guest trees do not stack. Respec, switching characters or a restart cannot change an existing expedition's selections. Legacy open maps have no nodes. Map Device readouts and personal luck breakdowns include the tree's sources. The map item itself remains unchanged and tradeable maps carry no account bonuses.

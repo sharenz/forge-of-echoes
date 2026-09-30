@@ -171,6 +171,10 @@ function itemLocation(v: unknown): ItemLocation {
     case 'mapDevice':
       shape(v, 'location', ['kind']);
       return { kind: 'mapDevice' };
+    case 'scarabSlot': {
+      const o = shape(v, 'location', ['kind', 'index']);
+      return { kind: 'scarabSlot', index: int(o.index, 'location.index', 0, 3) };
+    }
     case 'currencyStash':
       shape(v, 'location', ['kind']);
       return { kind: 'currencyStash' };

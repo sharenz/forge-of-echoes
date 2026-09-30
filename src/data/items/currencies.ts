@@ -3,6 +3,8 @@
 import type { CurrencyId } from '../../contracts/content';
 import { CURRENCY_STACK, RARE_CURRENCY_STACK } from './rules';
 import type { CurrencyDef } from './types';
+import { SCARABS } from '../scarabs';
+import type { ScarabId } from '../../contracts/content';
 
 type Spec = Omit<CurrencyDef, 'id' | 'maxStack'> & { maxStack?: number };
 
@@ -24,6 +26,10 @@ function essence(id: CurrencyId, name: string, tags: CurrencyDef['essenceTags'],
 }
 
 export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
+  ...Object.fromEntries(SCARABS.map(s => [s.id, currency(s.id, {
+    name: s.name, description: `${s.description} Place in a Map Device scarab socket; consumed when the map opens. Drops from monster level ${s.minMonsterLevel}+. Higher-level monsters can also drop lower tiers.`,
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: 20, dropTier: 'rare',
+  })])) as Record<ScarabId, CurrencyDef>,
   kindling: currency('kindling', {
     name: 'Kindling Shard',
     description: 'Awakens a Normal item into a Magic item with 1–2 random affixes.',

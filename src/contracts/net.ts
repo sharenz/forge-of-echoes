@@ -24,7 +24,7 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 13: extended Atlas, sealed-area keys, fixed encounter chains and chosen-class rewards.
 // 14: twelve boss-exclusive uniques, their icons and combat behaviours.
 // 15: account map tree commands and frozen expedition modifiers.
-export const PROTOCOL_VERSION = 15;
+export const PROTOCOL_VERSION = 16;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;

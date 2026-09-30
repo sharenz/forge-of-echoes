@@ -67,7 +67,7 @@ export function updateDirector(w: World): void {
   }
   if (d.intro > 0) {
     d.intro -= DT;
-    if (d.intro <= 0) beginTell(w, 1);
+    if (d.intro <= 0) beginTell(w, Math.max(1, Math.min(5, cfg.count, Math.floor(cfg.startWave ?? 1))));
     refreshPhase(w);
     return;
   }
@@ -212,6 +212,19 @@ function groupSize(left: number, rng: World['worldRng']): number {
 function startWave(w: World, wave: number): void {
   const d = w.director;
   const cfg = w.config.waves;
+  if (d.wave === 0 && wave > 1) {
+    // The opening is one real spawn for each wave, with that wave's own scaling, pack mods and XP.
+    // The initial preview belongs to the destination wave; earlier waves are planned independently.
+    const lastPlan = d.plan;
+    const lastPlayers = d.planPlayers;
+    for (let opening = 1; opening <= wave; opening++) {
+      d.plan = opening === wave ? lastPlan : null;
+      d.planPlayers = lastPlayers;
+      startWave(w, opening);
+      while (d.stream.remaining > 0) spawnStreamGroup(w, null);
+    }
+    return;
+  }
   const planned = d.plan && d.plan.wave === wave;
   const plan = planned && d.plan ? d.plan : planWave(w, wave);
   const plannedFor = planned ? d.planPlayers : partySize(w);
@@ -367,6 +380,12 @@ function updateStream(w: World): void {
   s.timer += s.interval;
   if (s.timer < s.interval * 0.5) s.timer = s.interval * 0.5; // a pull restarts the cadence
   s.sinceLast = 0;
+  spawnStreamGroup(w, pulled);
+}
+
+/** Used by the normal cadence and by an Invasion Scarab's fully populated opening. */
+function spawnStreamGroup(w: World, pulled: PlayerState | null): void {
+  const s = w.director.stream;
   const rng = w.worldRng;
   const count = groupSize(s.remaining, rng);
   s.remaining -= count;

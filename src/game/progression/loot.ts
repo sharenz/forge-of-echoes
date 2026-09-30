@@ -18,6 +18,8 @@
 import type { MapTreeNodeId } from '../../contracts/atlas';
 import { mapTreeBonuses } from '../../data/progression/map-tree';
 import type { RunSetup } from '../../contracts/game';
+import { SCARABS, SCARAB_DROP_CHANCE } from '../../data/scarabs';
+import { hashString } from '../../core/rng';
 import type { CharacterSave, CurrencyStack, EquipmentItem, FlaskStack, Item, MapItem, Rarity } from '../../contracts/items';
 import type { CurrencyId, ItemClass, MapBaseId } from '../../contracts/content';
 import { MAP_BASE_IDS, iconIdForBase, iconIdForCurrency, iconIdForFlask, iconIdForMap, iconIdForUnique } from '../../contracts/content';
@@ -273,6 +275,13 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
     const n = rollTimes(rng, chances[cat]);
     for (let i = 0; i < n; i++) out.push(rollCategory(cat, ctx, rng, m, origin));
   }
+  // An independent per-kill stream keeps ordinary currency/equipment rolls unchanged.
+  // The main stream has advanced through the category rolls, even on a kill with no ordinary drops.
+  const scarabRng = rng.fork(0x53434152);
+  if (scarabRng.chance(Math.min(1, SCARAB_DROP_CHANCE * luck.quantity / 100))) {
+    const scarab = scarabRng.weighted(SCARABS.filter(s => s.minMonsterLevel <= setup.monsterLevel), s => s.weight);
+    if (scarab) out.push(currencyStack(scarab.id, 1, randomUid(scarabRng), true));
+  }
 
   if (kill.eventReward === 'hunted') out.push(makeEquipment(ctx, rng, 'rare', `Reward from The Hunted in ${ctx.place}`, ctx.area?.chosenClass ? ctx.lootClass : undefined));
   if (kill.eventReward === 'echoRift') {
@@ -406,6 +415,7 @@ export function dropSpec(item: Item, token: number, owner: number, playerDropped
     token,
     owner,
     autoPickup: !playerDropped && owner !== 0 && item.kind !== 'equipment',
+    ...(item.kind === 'currency' && SCARABS.some(s => s.id === item.currencyId) ? { scatterSeed: hashString(item.uid) } : {}),
     label: dropLabel(item),
     tone: dropTone(item),
     sprite: item.kind as DropSprite,

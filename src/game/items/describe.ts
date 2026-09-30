@@ -15,6 +15,7 @@ import {
 import { CURRENCY_STASH_MAX } from '../../contracts/items';
 import { formatCount, formatLine, formatNumber, formatRange } from './format';
 import { parseBeltUid, parseCurrencyStashUid } from './ids';
+import { findScarab } from '../../data/scarabs';
 import { equipmentLevelRequirement, itemDisplayName, itemProperties, uniqueModDef } from './modifiers';
 
 export interface EquipmentDescribeOptions {
@@ -128,6 +129,7 @@ export function describeEquipment(item: EquipmentItem, opts: EquipmentDescribeOp
 export function describeCurrency(stack: CurrencyStack): ItemDescription {
   const def = findCurrency(stack.currencyId);
   const name = def?.name ?? 'Unknown Currency';
+  const scarab = findScarab(stack.currencyId);
   const isMap = def?.family === 'map';
   const properties: { label: string; value: string }[] = [];
   if (def) {
@@ -140,6 +142,10 @@ export function describeCurrency(stack: CurrencyStack): ItemDescription {
   if (def?.needsAffixChoice) hint = 'Right-click to arm, left-click an item, then choose an affix.';
   const keyArea = findAtlasArea(atlasKeyDestination(stack.currencyId));
   if (keyArea) hint = `Select ${keyArea.name} in the Map Device. Activation consumes one key from your inventory or stash.`;
+  if (scarab) {
+    properties.push({ label: 'Scarab tier', value: String(scarab.tier) }, { label: 'Drop monster level', value: `${scarab.minMonsterLevel}+` });
+    hint = 'Drag or Ctrl-click into one of the four scarab sockets in your Map Device. Consumed only when the map opens.';
+  }
   // A Crafting Stash slot (uid "cstash:<id>", see src/game/items/special-stash.ts).
   const inStash = parseCurrencyStashUid(stack.uid) !== null;
   if (inStash) {
@@ -153,7 +159,7 @@ export function describeCurrency(stack: CurrencyStack): ItemDescription {
     subtitle: null,
     tone: 'currency',
     iconId: iconIdForCurrency(stack.currencyId),
-    classLabel: isMap ? 'Map Currency' : 'Currency',
+    classLabel: scarab ? 'Scarab' : isMap ? 'Map Currency' : 'Currency',
     size: { w: 1, h: 1 },
     headerLines: [inStash
       ? `Crafting Stash ${formatCount(stack.count)} / ${formatCount(CURRENCY_STASH_MAX)}`

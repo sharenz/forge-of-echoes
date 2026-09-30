@@ -936,6 +936,15 @@
     radial-gradient(circle, rgba(232, 102, 42, 0.06) 0 36%, transparent 37%),
     radial-gradient(circle, #151012 0 58%, #0a0708 70%, transparent 71%);
 }
+.fe-device__sockets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) 90px repeat(2, minmax(0, 1fr)); gap: 8px; align-items: center; padding: 8px 0; }
+.fe-device__sockets .fe-device__circle { width: 90px; height: 90px; }
+.fe-scarab-socket { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.fe-scarab-socket .fe-device-slot { width: 46px; height: 46px; }
+.fe-scarab-remove { background: none; border: 0; color: var(--ash); cursor: pointer; padding: 0; }
+.fe-device__scarab-picker summary { cursor: pointer; color: var(--ash); }
+.fe-device__scarab-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding-top: 8px; }
+.fe-device__scarab-choice { display: flex; align-items: center; gap: 8px; padding: 6px; text-align: left; background: #120e10; border: 1px solid var(--bronze); color: var(--ash); cursor: pointer; }
+.fe-device__scarab-choice:disabled { opacity: 0.45; cursor: default; }
 @media (min-width: 1600px) and (min-height: 910px) {
   .fe-device__circle {
     width: 200px;

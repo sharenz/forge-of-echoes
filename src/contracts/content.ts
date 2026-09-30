@@ -65,6 +65,8 @@ export const EQUIPMENT_CURRENCY_IDS = [
   'echoShard',      // Roll each unprotected affix value twice and keep the higher roll
   'crownFragment',  // Reroll a unique's numeric modifiers, preserving its special behaviour
 ] as const;
+export const SCARAB_IDS = ['hasteScarab1', 'hasteScarab2', 'hasteScarab3', 'hasteScarab4', 'invasionScarab1', 'invasionScarab2', 'invasionScarab3', 'invasionScarab4'] as const;
+export type ScarabId = (typeof SCARAB_IDS)[number];
 export const MAP_CURRENCY_IDS = [
   'mapDust',        // normal → magic, or reroll a magic/rare map's mods
   'threatGlyph',    // add one danger mod (danger paired with reward)
@@ -75,6 +77,7 @@ export const MAP_CURRENCY_IDS = [
   'twinInk',        // Add a second distinct reward-only modifier
   'voidSplinter',   // Remove corruption and its marked mods, sacrificing all quality
   'gildedKey', 'blackKey', 'huntingKey', 'riftKey', // sealed Atlas destinations
+  ...SCARAB_IDS,
 ] as const;
 export const CURRENCY_IDS = [...EQUIPMENT_CURRENCY_IDS, ...MAP_CURRENCY_IDS] as const;
 export type CurrencyId = (typeof CURRENCY_IDS)[number];

@@ -93,6 +93,8 @@ export interface MonsterScaling {
 }
 
 export interface WaveConfig {
+  /** On entry spawn every monster from waves 1 through this wave (default 1). */
+  startWave?: number;
   count: number;              // number of waves (6)
   baseMonsters: number;       // monsters in wave 1 (before countMultiplier)
   monstersPerWave: number;    // added per wave
@@ -161,6 +163,8 @@ export interface DropSpec {
    * false: must be clicked (equipment, and anything a player dropped on the floor).
    */
   autoPickup: boolean;
+  /** Optional independent toss seed for bonus drops; does not advance world generation RNG. Server-only. */
+  scatterSeed?: number;
   label: string;
   tone: DropTone;
   sprite: DropSprite;

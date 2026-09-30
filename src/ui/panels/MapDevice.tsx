@@ -9,8 +9,8 @@ import { mapEventOdds } from '../../game/progression/map-events';
 import { useMemo, useState } from 'preact/hooks';
 import { PORTALS_PER_MAP } from '../../contracts/net';
 import type { PortalInfo } from '../../contracts/net';
-import { Button, cx } from '../components/common';
-import { MapDeviceSlotView } from '../items/Containers';
+import { Button, PixelIcon, cx } from '../components/common';
+import { MapDeviceSlotView, ScarabSlotView } from '../items/Containers';
 import { safe } from '../items/hooks';
 import { useLocal } from '../local';
 import { formatLuck, possessive } from '../lib/format';
@@ -27,6 +27,8 @@ import { monsterLevelForTier } from '../../game/progression/maps';
 import { keystoneRewards } from '../../game/progression/keystones';
 import { MapTreeView } from './MapTree';
 import { mapTreePoints } from '../../game/progression/map-tree';
+import { SCARABS } from '../../data/scarabs';
+import { currencyStashUid } from '../../contracts/items';
 
 function PortalNote({ portal, own }: { portal: PortalInfo; own: boolean }) {
   const spent = portal.remaining === 0;
@@ -159,9 +161,24 @@ export function MapDevicePanel() {
                 {ITEM_CLASSES.map(id => <option key={id} value={id} disabled={!!map && !Object.values(BASES).some(b => b.itemClass === id && b.levelRequirement <= monsterLevelForTier(map.tier))}>{CLASS_LABEL[id]}</option>)}
               </select>
             </label>}
-            <div class={cx('fe-device__circle', map && 'fe-device__circle--charged', picking && 'fe-device__circle--compact')}>
-              <MapDeviceSlotView disabled={false} />
+            <div class="fe-device__sockets">
+              <ScarabSlotView index={0} /><ScarabSlotView index={1} />
+              <div class={cx('fe-device__circle', map && 'fe-device__circle--charged')}><MapDeviceSlotView disabled={false} /></div>
+              <ScarabSlotView index={2} /><ScarabSlotView index={3} />
             </div>
+            <p class="fe-panel__note ui-type-caption">One map + up to four scarabs. One of each type, regardless of tier. Drag or Ctrl-click to load. Activation consumes them.</p>
+            <details class="fe-device__scarab-picker">
+              <summary class="ui-type-secondary">Scarabs in stash · {SCARABS.reduce((n, s) => n + (ch.currencyStash[s.id] ?? 0), 0)}</summary>
+              <div class="fe-device__scarab-list">{SCARABS.map(s => {
+                const count = ch.currencyStash[s.id] ?? 0;
+                const index = Array.from({ length: 4 }, (_, i) => ch.mapScarabs?.[i] ?? null).findIndex(s => !s);
+                const duplicate = ch.mapScarabs?.some(i => i && SCARABS.find(s => s.id === i.currencyId)!.family === s.family);
+                return <button key={s.id} class="fe-device__scarab-choice" disabled={!count || index < 0 || duplicate} title={s.description}
+                  onClick={() => store.actions.moveItem(currencyStashUid(s.id), { kind: 'scarabSlot', index })}>
+                  <PixelIcon id={`icon/currency/${s.id}`} width={32} height={32} /><span class="ui-type-caption">{s.name}<br />T{s.tier} · {count} owned</span>
+                </button>;
+              })}</div>
+            </details>
             {!map && !picking && (
               <p class="fe-device__empty">
                 Drag a map onto the device, or Ctrl-click one in your inventory. Activating it opens {PORTALS_PER_MAP} portals here; every

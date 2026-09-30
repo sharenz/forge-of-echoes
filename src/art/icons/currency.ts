@@ -2,6 +2,7 @@
 // siblings: the five essences share one crystal-in-a-cage shape and differ only by colour, everything else has its
 // own silhouette.
 import type { PixelImage } from '../../contracts/art';
+import { SCARABS } from '../../data/scarabs';
 import type { Frame } from '../frame';
 import { C, RAMPS, type Color, type Ramp } from '../palette';
 import { Sculpt, hash2, type PrimStyle } from '../shade';
@@ -574,7 +575,26 @@ function voidSplinter(): Frame {
   sparkle(f, 7, 15, C.voidGlow, 2); sparkle(f, 25, 20, C.voidLight, 1); return f;
 }
 
+function scarab(haste: boolean, tier: number): Frame {
+  const f = newIcon(), s = new Sculpt();
+  const shell = haste ? RAMPS.frost : RAMPS.void;
+  for (const side of [-1, 1]) for (let leg = 0; leg < 3; leg++) {
+    line(f, 16 + side * 6, 12 + leg * 5, 16 + side * 12, 9 + leg * 7, C.gold);
+    line(f, 16 + side * 12, 9 + leg * 7, 16 + side * 13, 12 + leg * 7, C.goldHi);
+  }
+  s.ell(16, 18, 8, 10, style(shell, 0.3));
+  s.ell(16, 7, 4, 4, style(RAMPS.gold, 0.25));
+  s.render(f.c, f.e);
+  line(f, 16, 10, 16, 26, C.ink);
+  for (let n = 0; n < tier; n++) gem(f, 16 + (n - (tier - 1) / 2) * 5, 29, 1, 1, RAMPS.gold);
+  if (haste) { line(f, 12, 15, 14, 12, C.ice); line(f, 14, 12, 14, 21, C.ice); }
+  else { gem(f, 12, 17, 2, 3, RAMPS.gold); gem(f, 20, 17, 2, 3, RAMPS.gold); }
+  if (tier === 4) sparkle(f, 21, 10, C.goldHi, 1);
+  return f;
+}
+
 export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
+  ...Object.fromEntries(SCARABS.map(s => [`icon/currency/${s.id}`, () => finishIcon(scarab(s.durationLess > 0, s.tier), s.durationLess > 0 ? C.ice : C.voidGlow)])),
   'icon/currency/scarBalm': () => finishIcon(scarBalm()),
   'icon/currency/anneal': () => finishIcon(anneal(), C.hot),
   'icon/currency/graft': () => finishIcon(graft(), C.vitalLight),

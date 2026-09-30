@@ -6,7 +6,8 @@
 // in the instance may click them. Only `spec.autoPickup` drops of a living owner are collected by
 // walking over them; equipment and public drops wait for a click (requestPickup). Kill XP is awarded
 // immediately and shared with every living player in the instance.
-import { hashU32 } from '../core/rng';
+import { createRng, hashU32 } from '../core/rng';
+import type { Rng } from '../contracts/rng';
 import { PICKUP_REACH, type DropSpec, type PickupResult } from '../contracts/sim';
 import {
   DROP_EDGE_MARGIN, DROP_GRAVITY, DROP_PICKUP_DELAY, DROP_PROP_RADIUS, DROP_TOUCH_RADIUS, DT, FLOOR_TOSS_ANGLE_MAX,
@@ -49,24 +50,33 @@ function airborneDrop(w: World, spec: DropSpec, x: number, y: number, vx: number
  */
 export function spawnDrops(w: World, specs: readonly DropSpec[], x: number, y: number, fountain: boolean): void {
   const rng = w.worldRng;
+  const launch = (spec: DropSpec, ang: number, tossRng: Rng): void => {
+    const speed = fountain ? tossRng.range(45, 100) : tossRng.range(22, 55);
+    const vx = Math.cos(ang) * speed;
+    const vy = Math.sin(ang) * speed;
+    const vz = fountain ? tossRng.range(170, 230) : tossRng.range(110, 150);
+    w.drops.push(airborneDrop(w, spec, x, y, vx, vy, vz));
+    w.events.push({ t: 'dropSpawn', owner: spec.owner, tone: spec.tone, x, y, label: spec.label });
+  };
+  // Bonus loot must not reroll future packs or move the ordinary loot ring just by appearing.
+  const ordinary = specs.filter(spec => spec.scatterSeed === undefined);
   const owners: number[] = [];
-  for (const spec of specs) if (!owners.includes(spec.owner)) owners.push(spec.owner);
+  for (const spec of ordinary) if (!owners.includes(spec.owner)) owners.push(spec.owner);
   for (const owner of owners) {
     let n = 0;
-    for (const spec of specs) if (spec.owner === owner) n++;
+    for (const spec of ordinary) if (spec.owner === owner) n++;
     const base = rng.range(0, TAU);
     let k = 0;
-    for (const spec of specs) {
+    for (const spec of ordinary) {
       if (spec.owner !== owner) continue;
       const ang = n > 1 ? base + (k / n) * TAU + rng.range(-0.35, 0.35) : base;
       k++;
-      const speed = fountain ? rng.range(45, 100) : rng.range(22, 55);
-      const vx = Math.cos(ang) * speed;
-      const vy = Math.sin(ang) * speed;
-      const vz = fountain ? rng.range(170, 230) : rng.range(110, 150);
-      w.drops.push(airborneDrop(w, spec, x, y, vx, vy, vz));
-      w.events.push({ t: 'dropSpawn', owner: spec.owner, tone: spec.tone, x, y, label: spec.label });
+      launch(spec, ang, rng);
     }
+  }
+  for (const spec of specs) if (spec.scatterSeed !== undefined) {
+    const tossRng = createRng(spec.scatterSeed);
+    launch(spec, tossRng.range(0, TAU), tossRng);
   }
 }
 

@@ -42,6 +42,7 @@ export function heldUids(ch: CharacterSave): Set<string> {
   for (const tab of ch.stash) for (const e of tab.grid.entries) out.add(e.item.uid);
   for (const item of Object.values(ch.equipment)) if (item) out.add(item.uid);
   if (ch.mapDevice) out.add(ch.mapDevice.uid);
+  for (const s of ch.mapScarabs ?? []) if (s) out.add(s.uid);
   if (Array.isArray(ch.mapStash)) for (const m of ch.mapStash) out.add(m.uid);
   return out;
 }

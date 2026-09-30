@@ -1,3 +1,4 @@
+import { findScarab } from '../../data/scarabs';
 // Map rules: effects of tier, quality, implicits and mods; monster scaling and waves for the sim;
 // item quantity/rarity with breakdowns; map tooltips; and map currencies (GAME_SPEC §6–§7).
 //
@@ -769,6 +770,7 @@ export function voidOutcomes(map: MapItem): { id: VoidOutcomeId; label: string; 
 
 /** Player-facing reason why a map currency cannot be applied to this map, or null. */
 export function mapCraftError(map: MapItem, currencyId: CurrencyId): string | null {
+  if (findScarab(currencyId)) return 'Place scarabs in the Map Device scarab sockets.';
   const keyArea = findAtlasArea(atlasKeyDestination(currencyId));
   if (keyArea) return `Select ${keyArea.name} in the Map Device to use this key.`;
   const name = currencyName(currencyId);

@@ -43,6 +43,8 @@ function whereText(loc: ItemLocation, ch: CharacterSave): string {
       return 'On your flask belt';
     case 'mapDevice':
       return 'In the map device';
+    case 'scarabSlot':
+      return 'In a scarab socket';
     case 'currencyStash':
       return 'In your Crafting Stash';
     case 'mapStash':

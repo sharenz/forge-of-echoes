@@ -11,6 +11,8 @@ import type {
 import { BELT_SLOTS, CURRENCY_STASH_MAX, MAP_STASH_CAPACITY, MAX_STASH_TABS, STASH_TAB_SIZE } from '../../contracts/items';
 import type { CurrencyId, EquipSlot } from '../../contracts/content';
 import type { Result } from '../../contracts/game';
+import { SCARAB_SLOTS } from '../../contracts/items';
+import { findScarab } from '../../data/scarabs';
 import {
   BELT_SLOT_CAPACITY, FLASK_STACK, STASH_TAB_NAME_MAX, findBase, findCurrency,
 } from '../../data/items';
@@ -288,6 +290,10 @@ export function findItem(ch: CharacterSave, uid: string): FoundItem | null {
     if (item && item.uid === uid) return { item, location: { kind: 'equipment', slot } };
   }
   if (ch.mapDevice && ch.mapDevice.uid === uid) return { item: ch.mapDevice, location: { kind: 'mapDevice' } };
+  for (let index = 0; index < SCARAB_SLOTS; index++) {
+    const item = ch.mapScarabs?.[index];
+    if (item?.uid === uid) return { item, location: { kind: 'scarabSlot', index } };
+  }
   for (const m of mapStashOf(ch)) if (m.uid === uid) return { item: m, location: { kind: 'mapStash' } };
   return null;
 }
@@ -306,6 +312,7 @@ export function allItems(ch: CharacterSave): FoundItem[] {
     if (item) out.push({ item, location: { kind: 'equipment', slot } });
   }
   if (ch.mapDevice) out.push({ item: ch.mapDevice, location: { kind: 'mapDevice' } });
+  ch.mapScarabs?.forEach((item, index) => { if (item) out.push({ item, location: { kind: 'scarabSlot', index } }); });
   for (const m of mapStashOf(ch)) out.push({ item: m, location: { kind: 'mapStash' } });
   return out;
 }
@@ -324,6 +331,11 @@ export function replaceItemAt(ch: CharacterSave, location: ItemLocation, item: I
     return { ...ch, equipment: { ...ch.equipment, [location.slot]: item } };
   }
   if (location.kind === 'mapDevice' && item.kind === 'map') return { ...ch, mapDevice: item };
+  if (location.kind === 'scarabSlot' && item.kind === 'currency' && findScarab(item.currencyId) && item.count === 1) {
+    const mapScarabs = Array.from({ length: SCARAB_SLOTS }, (_, i) => ch.mapScarabs?.[i] ?? null);
+    mapScarabs[location.index] = item;
+    return { ...ch, mapScarabs };
+  }
   if (location.kind === 'belt' && item.kind === 'flask') {
     const belt = beltSlots(ch);
     belt[location.index] = { flaskId: item.flaskId, count: item.count };
@@ -368,6 +380,10 @@ export function removeItemAt(ch: CharacterSave, location: ItemLocation, uid: str
     return i < 0 ? ch : withMapStash(ch, mapStashOf(ch).filter((_, j) => j !== i));
   }
   if (location.kind === 'mapDevice') return ch.mapDevice ? { ...ch, mapDevice: null } : ch;
+  if (location.kind === 'scarabSlot') {
+    const mapScarabs = Array.from({ length: SCARAB_SLOTS }, (_, i) => i === location.index ? null : ch.mapScarabs?.[i] ?? null);
+    return { ...ch, mapScarabs };
+  }
   return ch;
 }
 
@@ -470,6 +486,12 @@ function reattach(ch: CharacterSave, loc: ItemLocation, item: Item): CharacterSa
     return { ...ch, belt };
   }
   if (loc.kind === 'mapDevice') return item.kind === 'map' ? { ...ch, mapDevice: item } : null;
+  if (loc.kind === 'scarabSlot') {
+    const def = item.kind === 'currency' ? findScarab(item.currencyId) : undefined;
+    if (!def || item.kind !== 'currency' || item.count !== 1) return null;
+    if (ch.mapScarabs?.some((s, i) => i !== loc.index && s && findScarab(s.currencyId)!.family === def.family)) return null;
+    return replaceItemAt(ch, loc, item);
+  }
   if (loc.kind === 'mapStash') {
     const maps = mapStashOf(ch);
     return item.kind === 'map' && maps.length < MAP_STASH_CAPACITY ? withMapStash(ch, [...maps, item]) : null;
@@ -752,6 +774,25 @@ function moveToBelt(ch: CharacterSave, found: FoundItem, index: number, limit?: 
   return c2 ? ok(c2) : fail('There is no room for the flasks being replaced.');
 }
 
+function moveToScarabSlot(ch: CharacterSave, found: FoundItem, index: number): Result<CharacterSave> {
+  if (!Number.isInteger(index) || index < 0 || index >= SCARAB_SLOTS) return fail('Invalid scarab socket.');
+  const item = found.item;
+  const def = item.kind === 'currency' ? findScarab(item.currencyId) : undefined;
+  if (!def || item.kind !== 'currency' || item.count < 1) return fail('This socket only accepts scarabs.');
+  if (found.location.kind === 'scarabSlot' && found.location.index === index) return ok(ch);
+  if (ch.mapScarabs?.[index]) return fail('Remove the scarab in this socket first.');
+  if (ch.mapScarabs?.some(s => s && s.uid !== item.uid && findScarab(s.currencyId)!.family === def.family))
+    return fail(`Only one ${def.family === 'haste' ? 'Haste' : 'Invasion'} Scarab can be used per map, regardless of tier.`);
+  let next = setStackCount(ch, found, item.count - 1);
+  let uid = item.uid;
+  if (item.count > 1 || found.location.kind === 'currencyStash') {
+    const minted = mintUid(next);
+    next = minted.character;
+    uid = minted.uid;
+  }
+  return ok(replaceItemAt(next, { kind: 'scarabSlot', index }, { ...item, uid, count: 1 }));
+}
+
 function moveToMapDevice(ch: CharacterSave, found: FoundItem): Result<CharacterSave> {
   if (found.item.kind !== 'map') return fail('The Map Device only accepts maps.');
   if (found.location.kind === 'mapDevice') return ok(ch);
@@ -796,6 +837,8 @@ export function moveItem(ch: CharacterSave, uid: string, to: ItemLocation, count
       return moveToBelt(ch, found, to.index, n);
     case 'mapDevice':
       return moveToMapDevice(ch, found);
+    case 'scarabSlot':
+      return moveToScarabSlot(ch, found, to.index);
     case 'currencyStash':
       return moveToCurrencyStash(ch, found, n);
     case 'mapStash':
@@ -806,7 +849,7 @@ export function moveItem(ch: CharacterSave, uid: string, to: ItemLocation, count
 }
 
 const LOCATION_KINDS: ReadonlySet<string> = new Set<ItemLocation['kind']>([
-  'backpack', 'stash', 'equipment', 'belt', 'mapDevice', 'currencyStash', 'mapStash',
+  'backpack', 'stash', 'equipment', 'belt', 'mapDevice', 'scarabSlot', 'currencyStash', 'mapStash',
 ]);
 
 /**
@@ -823,6 +866,7 @@ function isLocation(to: unknown): to is ItemLocation {
     case 'stash': return num(loc.tab) && num(loc.x) && num(loc.y);
     case 'equipment': return typeof loc.slot === 'string';
     case 'belt': return num(loc.index);
+    case 'scarabSlot': return num(loc.index);
     default: return true;
   }
 }
@@ -938,6 +982,9 @@ export function quickMove(ch: CharacterSave, uid: string, ctx: QuickMoveContext)
     }
     case 'mapDevice':
       if (special === 'maps') return moveToMapStash(ch, found);
+      return transferToGrid(ch, found, backpack, 'Your backpack is full.', count);
+    case 'scarabSlot':
+      if (special) return moveToCurrencyStash(ch, found, count);
       return transferToGrid(ch, found, backpack, 'Your backpack is full.', count);
     case 'stash':
     case 'equipment':
@@ -1113,6 +1160,7 @@ export function clearNewFlags(ch: CharacterSave): CharacterSave {
     }),
     equipment,
     mapDevice: ch.mapDevice ? stripNew(ch.mapDevice) : null,
+    ...(ch.mapScarabs ? { mapScarabs: ch.mapScarabs.map(s => s ? stripNew(s) : null) } : {}),
     mapStash: maps.some((m) => m.isNew) ? maps.map(stripNew) : Array.isArray(ch.mapStash) ? ch.mapStash : [],
   };
 }

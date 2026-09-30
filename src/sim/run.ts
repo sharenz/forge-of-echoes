@@ -1,3 +1,4 @@
+import { PARTY_BUDGET_PER_PLAYER } from './constants';
 // Run assembly: builds the World for a RunConfig, lets players join and leave, and advances it one
 // fixed tick at a time.
 import type {
@@ -56,6 +57,13 @@ function validate(config: RunConfig): number {
 
 export function createWorld(config: RunConfig, capacities: StoreCapacities = defaultCapacities(config.mode)): World {
   const R = validate(config);
+  // An Invasion opening bypasses streaming's soft cap: reserve its full four-player budget so
+  // dense crafted maps cannot silently discard monsters (and their rewards) at store capacity.
+  if (config.mode === 'map' && (config.waves.startWave ?? 1) > 1) {
+    const waves = Math.min(5, config.waves.count, config.waves.startWave!);
+    const budget = waves * config.waves.baseMonsters + waves * (waves - 1) / 2 * config.waves.monstersPerWave;
+    capacities = { ...capacities, monsters: Math.max(capacities.monsters, Math.ceil(budget * config.monsters.countMultiplier * (1 + PARTY_BUDGET_PER_PLAYER * (MAX_PLAYERS - 1))) + MONSTER_CAPACITY) };
+  }
   const combatRng = createRng(config.seed >>> 0);
   const lootRng = combatRng.fork(LOOT_SALT);
   const worldRng = combatRng.fork(WORLD_SALT);

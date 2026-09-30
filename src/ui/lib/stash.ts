@@ -70,12 +70,16 @@ export const CURRENCY_SHELVES: Readonly<Record<'currency' | 'mapCurrency', reado
   mapCurrency: [
     { title: 'Map crafting', ids: ['mapDust', 'threatGlyph', 'rewardInk', 'voidNeedle'] },
     { title: 'Advanced map crafting', ids: ['compass', 'twinInk', 'voidSplinter'] },
+    { title: 'Haste Scarabs', ids: ['hasteScarab1', 'hasteScarab2', 'hasteScarab3', 'hasteScarab4'] },
+    { title: 'Invasion Scarabs', ids: ['invasionScarab1', 'invasionScarab2', 'invasionScarab3', 'invasionScarab4'] },
     { title: 'Atlas keys', ids: ['reliquaryKey', 'gildedKey', 'blackKey', 'huntingKey', 'riftKey'] },
   ],
 };
 
 /** Slot labels (the full name is in the slot's tooltip). */
 export const CURRENCY_SHORT: Readonly<Record<CurrencyId, string>> = {
+  hasteScarab1: 'Haste I', hasteScarab2: 'Haste II', hasteScarab3: 'Haste III', hasteScarab4: 'Haste IV',
+  invasionScarab1: 'Invasion I', invasionScarab2: 'Invasion II', invasionScarab3: 'Invasion III', invasionScarab4: 'Invasion IV',
   kindling: 'Kindling',
   scrap: 'Scrap',
   reforge: 'Reforge',

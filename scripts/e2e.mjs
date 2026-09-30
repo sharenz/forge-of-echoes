@@ -73,6 +73,7 @@ const ATLAS_ONLY = opt('only', 'all') === 'atlas';
 const INGREDIENTS_ONLY = opt('only', 'all') === 'ingredients';
 const UNIQUES_ONLY = opt('only', 'all') === 'uniques';
 const TREE_ONLY = opt('only', 'all') === 'tree';
+const SCARABS_ONLY = opt('only', 'all') === 'scarabs';
 const EVENTS_ONLY = opt('only', 'all') === 'events';
 const MAPS_ONLY = opt('only', 'all') === 'maps';
 const ECONOMY_ONLY = opt('only', 'all') === 'economy';
@@ -2229,6 +2230,89 @@ async function craftingScenario({ A, port }) {
   });
 }
 
+async function scarabsScenario({ A, port }) {
+  const { tsImport } = await import('tsx/esm/api');
+  const { SCARABS } = await tsImport('../src/data/scarabs.ts', import.meta.url);
+  const openDevice = async () => {
+    await closePanels(A);
+    const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'mapDevice', 10), 'map device');
+    await clickWorld(A, at, 'map device'); await A.page.waitForSelector('.fe-device');
+  };
+  await step('prepare rare scarabs in a disposable shared stash', async () => {
+    outage = true; await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const row = db.prepare('SELECT account_id, data FROM account_storage').get(), shared = JSON.parse(row.data);
+    for (const scarab of SCARABS) shared.currencyStash[scarab.id] = 3;
+    db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), row.account_id);
+    const char = db.prepare('SELECT id, data FROM characters').get(), ch = JSON.parse(char.data);
+    ch.mapDevice = { kind: 'map', uid: 'scarab-map:i1', baseId: 'ashenForge', tier: 1, quality: 0, rarity: 'normal', mods: [], corrupted: false };
+    ch.backpack.entries = []; ch.level = 99; ch.allocated = { str: 490, dex: 0, int: 0 };
+    db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(ch), char.id);
+    db.close(); await startGameServer(port);
+    await A.waitFor('scarabs after reconnect', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.currencyStash.hasteScarab4 === 3, undefined, 30000);
+    outage = false;
+  });
+  await step('inspect every scarab tier, load from stash and remove through the device', async () => {
+    await openDevice();
+    assert(await A.page.locator('[data-drop="scarabSlot"]').count() === 4, 'expected four sockets beside one map');
+    await A.page.locator('.fe-device__scarab-picker summary').click();
+    await A.shot(`scarabs-picker-${VW}x${VH}`);
+    for (const scarab of SCARABS) {
+      await A.page.locator('.fe-device__scarab-choice').filter({ hasText: scarab.name }).click();
+      await A.waitFor('scarab loaded', id => window.__foe.store.get().character.mapScarabs?.[0]?.currencyId === id, scarab.id);
+      await A.page.locator('[data-drop="scarabSlot"][data-index="0"] .fe-item').hover();
+      await A.shot(`scarab-${scarab.id}-${VW}x${VH}`);
+      await A.page.getByRole('button', { name: 'Remove scarab 1', exact: true }).click();
+      await A.waitFor('scarab removed', () => !window.__foe.store.get().character.mapScarabs?.[0]);
+    }
+    assert(await A.eval(() => Object.entries(window.__foe.store.get().character.currencyStash).filter(([id]) => id.includes('Scarab')).every(([, count]) => count === 2)), 'socketting did not take exactly one');
+    await A.page.locator('.fe-device__scarab-picker summary').click();
+  });
+  await step('drag and Ctrl-click load distinct types and reject a second tier of the same type', async () => {
+    const uid = await A.eval(() => window.__foe.store.get().character.backpack.entries.find(e => e.item.currencyId === 'hasteScarab4').item.uid);
+    const source = A.page.locator(`[data-drop="backpack"] .fe-item[data-uid="${uid}"]`);
+    const target = A.page.locator('[data-drop="scarabSlot"][data-index="2"]');
+    await target.scrollIntoViewIfNeeded();
+    const a = await source.boundingBox(), b = await target.boundingBox();
+    assert(a && b, 'scarab drag targets missing');
+    await A.page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await A.page.mouse.down();
+    await A.page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 }); await A.page.mouse.up();
+    await A.waitFor('dragged scarab loaded', () => window.__foe.store.get().character.mapScarabs?.[2]?.currencyId === 'hasteScarab4');
+    for (const id of ['hasteScarab1', 'invasionScarab4']) {
+      const uid = await A.eval(id => window.__foe.store.get().character.backpack.entries.find(e => e.item.currencyId === id).item.uid, id);
+      await A.page.locator(`[data-drop="backpack"] .fe-item[data-uid="${uid}"]`).click({ modifiers: ['Control'] });
+      if (id === 'invasionScarab4') await A.waitFor('Ctrl-click scarab loaded', id => window.__foe.store.get().character.mapScarabs?.some(i => i?.currencyId === id), id);
+    }
+    assert(await A.eval(() => window.__foe.store.get().character.mapScarabs.filter(Boolean).length === 2), 'duplicate scarab type accepted');
+    await A.page.locator('.fe-device__scarab-picker summary').click();
+    for (const scarab of SCARABS) assert(await A.page.locator('.fe-device__scarab-choice').filter({ hasText: scarab.name }).isDisabled(), 'duplicate tier remains selectable');
+    await A.page.locator('.fe-device__scarab-picker summary').click();
+    await A.shot(`scarabs-loaded-${VW}x${VH}`);
+    const summary = A.page.getByText('Scarab wave duration', { exact: true }); await summary.scrollIntoViewIfNeeded();
+    assert((await A.page.locator('.fe-device__summary').innerText()).includes('30s'), 'combined wave duration missing');
+    await A.shot(`scarabs-readout-${VW}x${VH}`);
+    const bounds = await A.page.locator('.fe-device__activate').boundingBox();
+    assert(bounds && bounds.y + bounds.height <= VH, 'activation exceeds viewport');
+  });
+  await step('loaded sockets survive restart, activation consumes once, and the map opens on wave five', async () => {
+    const before = await A.eval(() => window.__foe.store.get().character.mapScarabs);
+    outage = true; await stopGameServer(); await startGameServer(port);
+    await A.waitFor('loaded sockets restored', () => window.__foe.store.get().connection === 'online', undefined, 30000); outage = false;
+    assert(isDeepStrictEqual(before, await A.eval(() => window.__foe.store.get().character.mapScarabs)), 'loaded scarabs lost at restart');
+    await openDevice(); await A.page.locator('.fe-device__activate').click();
+    await A.waitFor('scarabs consumed', () => !!window.__foe.store.get().hud?.portal && !window.__foe.store.get().character.mapDevice && !window.__foe.store.get().character.mapScarabs.some(Boolean));
+    await clickPortal(A);
+    await A.waitFor('wave five opening', () => window.__foe.store.get().hud?.run?.wave === 5, undefined, 20000);
+    assert(await A.eval(() => window.__foe.store.get().hud.run.monstersAlive >= 380), 'opening omitted earlier-wave monsters');
+    assert(await A.eval(() => window.__foe.world.view.run.waveDuration === 30), 'shortened wave timer missing');
+    await A.shot(`scarabs-wave-five-${VW}x${VH}`);
+    outage = true; await stopGameServer(); await startGameServer(port);
+    await A.waitFor('scarab expedition restored', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().zone === 'map', undefined, 30000); outage = false;
+    assert(await A.eval(() => window.__foe.store.get().run.scarabs.length === 2 && !window.__foe.store.get().character.mapScarabs.some(Boolean)), 'expedition restarted without its paid scarabs');
+  });
+}
+
 async function mapTreeScenario({ A, port }) {
   const { tsImport } = await import('tsx/esm/api');
   const { ATLAS_AREA_IDS } = await tsImport('../src/contracts/atlas.ts', import.meta.url);
@@ -2737,9 +2821,10 @@ async function main() {
   if (INGREDIENTS_ONLY) await ingredientsScenario({ A, port });
   if (UNIQUES_ONLY) await uniquesScenario({ A, port });
   if (TREE_ONLY) await mapTreeScenario({ A, port });
+  if (SCARABS_ONLY) await scarabsScenario({ A, port });
   if (EVENTS_ONLY) await eventsScenario({ A, port });
   if (CRAFTING_ONLY) await craftingScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY) {
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -2748,7 +2833,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

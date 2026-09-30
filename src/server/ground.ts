@@ -103,7 +103,7 @@ export class GroundService {
     const where = found.location.kind;
     // Every stash tab counts: the normal tabs and the Map Stash (a Crafting Stash slot is refused by the rules).
     if (isStashLocation(found.location) && inst.kind !== 'hideout') return fail('Stash items can only be dropped in a hideout.');
-    if (where === 'mapDevice' && (inst.kind !== 'hideout' || inst.ownerId !== s.characterId)) return fail('The map device is in your own hideout.');
+    if ((where === 'mapDevice' || where === 'scarabSlot') && (inst.kind !== 'hideout' || inst.ownerId !== s.characterId)) return fail('The map device is in your own hideout.');
     if (found.item.kind === 'flask' && found.item.count <= 0) return fail('That belt slot is empty.');
     if (inst.groundItems.size >= MAX_GROUND_ITEMS) return fail('There are too many items on the ground here. Pick some up first.');
     const view = inst.viewOf(s);

@@ -190,6 +190,8 @@ export function resolveTarget(x: number, y: number, d: DragState, store: UiStore
     loc = { kind: 'belt', index: Number(dropEl.dataset.index) };
   } else if (kind === 'mapDevice') {
     loc = { kind: 'mapDevice' };
+  } else if (kind === 'scarabSlot') {
+    loc = { kind: 'scarabSlot', index: Number(dropEl.dataset.index) };
   } else if (kind === 'currencyStash') {
     // Either Crafting Stash tab (its button or its page): a currency always files into its own slot.
     loc = { kind: 'currencyStash' };

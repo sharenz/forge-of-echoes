@@ -15,7 +15,7 @@
 //   • a pair of reference characters clears Tiers 2 and 3 of every map type.
 // The results table prints with the test (run with --silent=false).
 import { beforeAll, describe, expect, it } from 'vitest';
-import { MAP_BASE_IDS, type MapBaseId } from '../../src/contracts/content';
+import { MAP_BASE_IDS, SCARAB_IDS, type MapBaseId } from '../../src/contracts/content';
 import type { CharacterSave } from '../../src/contracts/items';
 import { SIM_DT, type SimEvent, type WorldView } from '../../src/contracts/sim';
 import { rules } from '../../src/game';
@@ -78,7 +78,16 @@ describe.runIf(enabled)('Tier 1–3 across map types (BALANCE=1)', () => {
 
   beforeAll(() => {
     const snaps = new Map<number, CharacterSave[]>();
-    for (const seed of [...SEEDS, 501]) snaps.set(seed, playProgression(seed, 10).characters);
+    // Keep the calibration characters' loot policy stable: collecting optional map modifiers can
+    // reroute the bot and change later equipment, despite contributing nothing to its combat build.
+    // Only this reference preparation omits scarabs. The measured fights below and the separate
+    // progression suite still run with the complete loot pool and unchanged balance thresholds.
+    for (const seed of [...SEEDS, 501]) snaps.set(seed, playProgression(seed, 10, {
+      tweakConfig: cfg => {
+        const roll = cfg.hooks.rollKillLoot;
+        cfg.hooks.rollKillLoot = (...args) => roll(...args).filter(d => !SCARAB_IDS.some(id => d.iconId === `icon/currency/${id}`));
+      },
+    }).characters);
     for (const seed of SEEDS) {
       for (const tier of TIERS) for (const theme of MAP_BASE_IDS) solo.push(play([onLevel(snaps.get(seed)!, tier)], theme, tier, seed));
     }
