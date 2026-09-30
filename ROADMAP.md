@@ -7,13 +7,25 @@ Last reprioritised: 2026-09-29.
 **Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
 verify the resulting game and deploy it to production. QoL (P0.1–4), account storage, Atlas, the first events,
 Prefix/Suffix Runes, advanced bases, economy sinks and the six-map roster (P1.1–7) are done and deployed.
-P1.8's nine ingredients and four remaining encounters are also deployed. Deeper Atlas routes, remaining
-special areas, boss-specific unique pools and the map tree (P1.8–9) remain part of this delivery until verified.
+P1.8's ingredients, encounters and 25-area Atlas expansion are also deployed. Boss-specific unique pools
+and the map tree (P1.8–9) remain part of this delivery until verified.
 
-**Current order:** deeper Atlas routes, special areas and unique pools → map tree.
+**Current order:** boss-specific unique pools → map tree.
 Priorities follow current usability problems, then progression dependencies.
 
-**Latest release: Done — `20260930-000009-9d1f0e0` (2026-09-30).** Nine ingredients with targeted sources:
+**Latest release: Done — `20260930-004633-78ba155` (2026-09-30).** The Atlas now has 25 areas, with two
+approaches through T11/T13/T15, all remaining dead ends and sealed destinations, four new tradeable keys,
+fixed encounter chains and chosen-class Hunting Ground rewards. Pending Atlas awards survive closed maps
+and restarts, and sealed areas require their full objective before granting completion credit.
+Build/typecheck and 1,936 checks covered across the full balance-enabled suite and focused reruns pass.
+Full Chromium clears cover Black Pit, Hunting Ground, Rift Nexus, Pit of Echoes and Shrine Field. Entry,
+key/fee payments and graph layout pass at 1024×600 and 1280×720; route lines avoid unrelated area cards.
+Live protocol 13 and exact public JS/CSS matches are verified. Production-copy audits before/after preserve
+all 457 physical items across 4 accounts / 7 characters, with unique IDs, no duplicate storage, idempotent
+reload and healthy integrity. Post-drain backup: `/var/lib/forge/backups/pre-release-20260930-004633-78ba155.db`.
+Boss-specific unique pools and P1.9 remain open.
+
+**Previous release: Done — `20260930-000009-9d1f0e0` (2026-09-30).** Nine ingredients with targeted sources:
 Scar Balm, Anneal, Graft, Transmute, Compass, Echo Shard, Twin Ink, Void Splinter and Crown Fragment.
 Blackout, Vaultbreakers, the Wound and Second Crown add beacons, fleeing carriers, optional eruptions and
 independent twin bosses. Exact crafting previews, stash access, preserved item history and save/reload rules
@@ -253,9 +265,9 @@ reopen tuning for a specific problem rather than starting another general balanc
    **Ingredients/events: Done, deployed as `20260930-000009-9d1f0e0`.** All nine ingredient operations and
    targeted sources are live, along with Blackout, Vaultbreakers, Second Crown and the Wound. Independent
    twin-boss state, timed carrier rewards/escape, crafting preservation, exact previews, stash access and
-   save/reload behavior are verified, including browser playthroughs at both sizes. Deeper routes, remaining
-   rare/dead-end areas and expanded exclusive unique pools are still outstanding; this does not complete P1.8.
-   **Atlas expansion verified, awaiting deployment:** 25 areas with two approaches through T11/T13/T15, all
+   save/reload behavior are verified, including browser playthroughs at both sizes. Expanded exclusive unique
+   pools remain outstanding; this does not complete P1.8.
+   **Atlas expansion: Done, deployed as `20260930-004633-78ba155`.** 25 areas with two approaches through T11/T13/T15, all
    remaining dead ends and sealed destinations, four new keys, fixed encounter chains, chosen-class hunter
    rewards and durable pending Atlas credit. Build/typecheck and 1,936 checks covered across the full suite
    and focused reruns pass. Full browser clears cover Black Pit, Hunting Ground, Rift Nexus, Pit of Echoes
@@ -325,7 +337,7 @@ decide"), informed by an ARPG-designer agent review. Owner can overrule any of t
   Sketches: Sealed Reliquary (boss twin, unique + Crown Fragment), Gilded Vault (3 Vaultbreaker carriers, 3x
   currency), Black Pit (Blackout + Wound, Twin Ink), Hunting Ground (3 Hunted rares, 3 chosen-class rare bases),
   Rift Nexus (chain of 3 Echo Rifts, event-only ingredients). Parallel rewards; they never unlock tiers.
-- **Content reality:** 12 areas of about 6 types, built from 6 map themes sharing 3 monster families, with
+- **Content reality:** 25 areas of 6 types, built from 6 map themes sharing 3 monster families, with
   distinct arena layouts, implicits, event tables and drop preferences.
 - **Other decisions:** no carry bonus for the map owner; keystone bosses drop their own uniques; events are not
   shown before entry; stash is account-wide.
