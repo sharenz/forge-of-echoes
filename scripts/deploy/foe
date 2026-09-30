@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Forge of Echoes admin CLI, installed as /usr/local/bin/foe (+ foe-cli, debug_merch) by `npm run deploy`.
+#   ssh -t crafty-prod foe              interactive menu (-t gives it a terminal)
+#   ssh crafty-prod foe online --json   scriptable
+# Runs as the service user `forge` (so SQLite files, backups and the admin socket keep the right owner).
+set -euo pipefail
+APP_DIR="${FORGE_APP_DIR:-/opt/forge}/current"
+export DB_PATH="${DB_PATH:-${FORGE_DATA_DIR:-/var/lib/forge}/forge.db}"
+export NODE_OPTIONS="${NODE_OPTIONS:-} --disable-warning=ExperimentalWarning"
+cd "$APP_DIR"
+if [ "$(id -u)" = "0" ] && id forge >/dev/null 2>&1; then
+  exec runuser -u forge -- env SUDO_USER="${SUDO_USER:-root}" node --import tsx src/cli/main.ts "$@"
+fi
+exec node --import tsx src/cli/main.ts "$@"

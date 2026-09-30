@@ -1,7 +1,6 @@
-import { MAP_EVENT_NAMES } from '../../data/progression/map-events';
-import type { MapEventKind } from '../../contracts/map-events';
+import { MAP_EVENT_COLORS, MAP_EVENT_NAMES, MAP_EVENT_TEXT } from '../../data/progression/map-events';
+import { MAP_EVENT_GRADE_NAMES, type MapEventKind, type MapEventView } from '../../contracts/map-events';
 import { findAtlasArea } from '../../data/progression/atlas';
-import { CLASS_LABEL } from '../../data/items';
 // Top of the screen, laid out as one grid over the part of the screen no docked panel covers (see
 // `.fe-hudarea` in hud.css):
 //   left   party frames, party invites, trade requests and the open-trade chip
@@ -23,6 +22,7 @@ import { visiblePanels } from '../lib/panels';
 import { zoneLabel } from '../lib/zone';
 import { locationText } from '../lib/party';
 import { shallowEqual, useStore, useUi } from '../store';
+import { EventGlyph } from './EventGlyph';
 import { MonsterHover } from './MonsterHover';
 
 function allyEq(a: HudAlly[], b: HudAlly[]): boolean {
@@ -154,11 +154,11 @@ function TradeChip() {
 
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 
-function BossBar({ boss }: { boss: NonNullable<HudRun['boss']> }) {
+function BossBar({ boss, rival }: { boss: NonNullable<HudRun['boss']>; rival?: boolean }) {
   const f = fraction(boss.life, boss.maxLife);
   const name = eliteDisplayName(boss.name);
   return (
-    <div class="fe-boss" role="status" aria-label={`${name}, phase ${boss.phase}`}>
+    <div class={cx('fe-boss', rival && 'fe-boss--rival')} role="status" aria-label={`${name}, phase ${boss.phase}`}>
       <div class="fe-boss__name">
         <span class="fe-boss__skull" />
         {name}
@@ -230,52 +230,93 @@ function WaveCard() {
   );
 }
 
-function MapEventCard() {
-  const event = useUi(s => s.hud?.run?.event ?? null, shallowEqual);
-  const setup = useUi(s => s.run);
+const EMPTY_EVENTS: MapEventView[] = [];
+
+function seconds(n: number): string {
+  return `${Math.max(0, Math.ceil(n))}s`;
+}
+
+/** One live map event: glyph, name, projected grade, one bar per objective, timers and one hint line (all text from MAP_EVENT_TEXT). */
+function MapEventCard({ event, area, compact }: { event: MapEventView; area: string | null; compact?: boolean }) {
+  const text = MAP_EVENT_TEXT[event.kind];
+  const over = event.phase === 'complete' || event.phase === 'failed';
+  const grade = MAP_EVENT_GRADE_NAMES[event.grade];
+  const kicker = event.phase === 'available' ? `${text.phases.available} · ${area}` : text.phases[event.phase];
+  const [r, g, b] = MAP_EVENT_COLORS[event.kind];
+  return (
+    <div class={cx('fe-event', over && 'fe-event--over', compact && 'fe-event--compact', `fe-event--grade${event.grade}`)} role="status" aria-label={MAP_EVENT_NAMES[event.kind]}
+      style={{ '--event-color': `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})` }}>
+      <div class="fe-event__head">
+        <EventGlyph kind={event.kind} />
+        <b class="ui-type-body">{MAP_EVENT_NAMES[event.kind]}</b>
+        {event.phase !== 'available' && event.phase !== 'warning' && (
+          <span class={cx('fe-event__grade ui-type-caption', `fe-event__grade--${event.grade}`)}>{over ? (event.grade > 0 ? `${grade} Trophy` : 'Lost') : `On track: ${grade}`}</span>
+        )}
+      </div>
+      {event.phase !== 'active' && <div class="fe-event__kicker ui-type-caption">{kicker}</div>}
+      {!over && event.objectives.map((o) => (
+        <div class="fe-event__bar" key={`o${o.id}`}>
+          <span class="ui-type-caption">{text.objectives[o.id] ?? ''}</span>
+          <i><u style={{ width: `${o.max > 0 ? Math.min(100, (o.cur / o.max) * 100) : 0}%` }} /></i>
+          <em class="ui-type-caption">{o.cur} / {o.max}</em>
+        </div>
+      ))}
+      {!over && event.timers.map((t) => (
+        <div class="fe-event__timer ui-type-caption" key={`t${t.id}`}>
+          <span>{text.timers[t.id] ?? ''}</span><em>{seconds(t.seconds)}</em>
+        </div>
+      ))}
+      {!over && !compact && <div class="fe-event__hint ui-type-secondary">{text.hints[event.hint] ?? ''}</div>}
+    </div>
+  );
+}
+
+/** The parchment omen strip (3 s) when an event appears: "Something is following you." Never blocks the wave tell. */
+function EventOmen({ events }: { events: MapEventView[] }) {
+  const seen = useRef(new Set<number>());
+  const [shown, setShown] = useState<{ kind: MapEventKind; n: number } | null>(null);
+  const seq = useRef(0);
+  useEffect(() => {
+    for (const e of events) {
+      if (seen.current.has(e.uid) || e.phase === 'complete' || e.phase === 'failed') continue;
+      seen.current.add(e.uid);
+      const n = ++seq.current;
+      setShown({ kind: e.kind, n });
+      const id = setTimeout(() => setShown((cur) => (cur && cur.n === n ? null : cur)), 3000);
+      return () => clearTimeout(id);
+    }
+    return undefined;
+  }, [events]);
+  if (!shown) return null;
+  return (
+    <div class="fe-event-omen" role="alert" key={shown.n} style={{ '--event-color': `rgb(${MAP_EVENT_COLORS[shown.kind].map((c) => Math.round(c * 255)).join(', ')})` }}>
+      <EventGlyph kind={shown.kind} />
+      <span class="ui-type-title">{MAP_EVENT_TEXT[shown.kind].omen}</span>
+    </div>
+  );
+}
+
+function MapEventCards() {
+  const events = useUi((s) => s.hud?.run?.events ?? EMPTY_EVENTS, (a, b) => a === b || JSON.stringify(a) === JSON.stringify(b));
+  const setup = useUi((s) => s.run);
   const area = findAtlasArea(setup?.atlasAreaId);
-  if (!event) return null;
-  const optional = area?.encounters ? 'required to complete this area' : 'optional';
-  const available: Record<MapEventKind, string> = {
-    hunted: '', echoRift: `Approach the rift to awaken it · ${optional}`, blackout: 'Approach the beacon and defeat its guards to restore light',
-    vaultbreakers: '', secondCrown: '', wound: `Approach to open the Wound · three packs and eruptions · ${optional}`,
-  };
-  const active: Record<MapEventKind, string> = {
-    hunted: 'Defeat the pursuing hunter for a rare item', echoRift: `${event.total - event.remaining} / ${event.total} echoes defeated · crafting materials`,
-    blackout: `${Math.floor((event.total - event.remaining) / 3)} / 3 beacons restored · Binding Seal and Scrap`,
-    vaultbreakers: `${event.remaining} carriers left · ${event.seconds ?? 40}s to escape · each drops currency, 20% Twin Ink`,
-    secondCrown: `${event.remaining} crowns remain · defeat both for a Crown Fragment`,
-    wound: `${event.total - event.remaining} / ${event.total} guardians defeated · dodge eruptions · Void Splinter`,
-  };
-  const done: Record<MapEventKind, string> = {
-    hunted: 'Hunter defeated · rare item dropped', echoRift: 'Rift sealed · crafting materials dropped',
-    blackout: 'Light restored · Binding Seal and Scrap dropped', vaultbreakers: 'All carriers defeated · materials dropped',
-    secondCrown: 'Both crowns defeated · Crown Fragment dropped', wound: 'Wound closed · Void Splinter dropped',
-  };
-  if (area?.chosenClass && setup?.lootClass) {
-    active.hunted = `Defeat this hunter for a Rare ${CLASS_LABEL[setup.lootClass]} base`;
-    done.hunted = `Hunter defeated · Rare ${CLASS_LABEL[setup.lootClass]} base dropped`;
-  }
-  if (area?.id === 'blackPit') done.wound = 'Wound closed · Twin Ink and Void Splinter dropped';
-  if (area?.id === 'riftNexus') done.echoRift = 'Rift sealed · event ingredient and crafting materials dropped';
-  const text = event.phase === 'complete' ? done[event.kind]
-    : event.phase === 'failed' ? `${event.remaining} carriers escaped · collected rewards are yours`
-    : event.phase === 'available' ? available[event.kind]
-    : event.phase === 'warning' ? event.kind === 'secondCrown' ? 'A second boss is arriving · both must fall'
-      : event.kind === 'vaultbreakers' ? 'Three carriers are escaping · 40 seconds to catch them'
-      : event.kind === 'hunted' ? 'A rare hunter is approaching' : 'Guardians are awakening'
-    : active[event.kind];
-  return <div class="fe-map-event" role="status" aria-label={MAP_EVENT_NAMES[event.kind]}>
-    <b>{MAP_EVENT_NAMES[event.kind]}</b><span>{text}</span>
-  </div>;
+  if (events.length === 0) return null;
+  const note = area?.encounters ? 'Required to complete this area' : 'Optional';
+  return (
+    <>
+      <EventOmen events={events} />
+      {events.map((e, k) => <MapEventCard key={e.uid} event={e} area={note} compact={events.length > 1 && k < events.length - 1} />)}
+    </>
+  );
 }
 
 function RunBars() {
-  const bars = useUi((s) => ({ lt: s.hud?.run?.lieutenant ?? null, boss: s.hud?.run?.boss ?? null }), shallowEqual);
+  const bars = useUi((s) => ({ lt: s.hud?.run?.lieutenant ?? null, boss: s.hud?.run?.boss ?? null, boss2: s.hud?.run?.boss2 ?? null }), shallowEqual);
   return (
     <>
       {bars.lt && <LieutenantBar lt={bars.lt} />}
       {bars.boss && <BossBar boss={bars.boss} />}
+      {bars.boss2 && <BossBar boss={bars.boss2} rival />}
     </>
   );
 }
@@ -611,7 +652,7 @@ export function TopHud() {
           <WaveCard />
           <ZoneChip />
           <RunBars />
-          <MapEventCard />
+          <MapEventCards />
           <MonsterHover />
           <TellBanner />
           <ZoneBanner />

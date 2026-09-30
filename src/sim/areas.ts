@@ -30,7 +30,7 @@
 import type { PlayerDebuff } from '../contracts/bestiary';
 import type { AreaKind, RootSource } from '../contracts/sim';
 import { ICE_PRISON_END_FRACTION, WISP_FREEZE_FRACTION, areaContains, encodeAreaId, quantizeAreaAngle } from './area-geometry';
-import { damageMonster, damagePlayer, isHittable } from './combat';
+import { damageMonster, damageMonsterFraction, damagePlayer, isHittable } from './combat';
 import { DT, FIRE_TRAIL_TICK, PLAYER_RADIUS } from './constants';
 import { applyDebuff } from './debuffs';
 import { areaEffect } from './effects';
@@ -70,6 +70,8 @@ export interface AreaOptions {
   target?: number;
   /** Handle of a registered area effect (effects.ts). */
   effect?: number;
+  /** hurts 'all': share of a monster's max life dealt (halved for rares, none for bosses). */
+  damageFrac?: number;
 }
 
 /** Debuff each kind applies to the players it damages or touches unless AreaOptions.debuff says otherwise. */
@@ -108,6 +110,7 @@ export function spawnArea(
     age: 0,
     duration,
     damage: opts.damage ?? 0,
+    damageFrac: opts.damageFrac ?? 0,
     dtype: opts.dtype ?? DAMAGE_INDEX.fire,
     hurts: opts.hurts ?? 'none',
     tickInterval,
@@ -307,10 +310,11 @@ function riderFor(a: Area, p: PlayerState): PlayerDebuff | null {
 }
 
 function applyAreaDamage(w: World, a: Area, ticking: boolean): void {
+  if (a.hurts === 'all') hurtMonstersByFraction(w, a);
   if (a.hurts !== 'monsters') {
     // Telegraphs and hostile ground act on every living player standing in them: damage when they
     // hurt players, their rider either way (see the header).
-    const damage = a.hurts === 'player' ? a.damage : 0;
+    const damage = a.hurts === 'player' || a.hurts === 'all' ? a.damage : 0;
     if (damage <= 0 && !a.debuff) return;
     const living = w.living;
     const pad = PLAYER_RADIUS * 0.5;
@@ -340,5 +344,19 @@ function applyAreaDamage(w: World, a: Area, ticking: boolean): void {
       }
       damageMonster(w, i, a.damage, a.dtype, 0, 1.5, 0, 0, 0, 0, false, a.source); // burning ground, not a hit
     }
+  }
+}
+
+/** hurts 'all' (the Fault): every hittable monster inside takes `damageFrac` of its max life (rares half, bosses none). */
+function hurtMonstersByFraction(w: World, a: Area): void {
+  if (a.damageFrac <= 0) return;
+  const m = w.monsters;
+  const out = w.scratch2;
+  const reach = a.radius + w.grid.maxRadius;
+  const n = w.grid.query(a.x - reach, a.y - reach, a.x + reach, a.y + reach, out);
+  for (let k = 0; k < n; k++) {
+    const i = out[k];
+    if (!isHittable(w, i) || !areaContains(a, m.x[i], m.y[i], m.radius[i])) continue;
+    damageMonsterFraction(w, i, a.damageFrac, a.dtype);
   }
 }

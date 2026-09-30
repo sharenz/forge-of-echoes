@@ -11,6 +11,7 @@
 // Loot rolls run per kill per player, so gear luck is cached per CharacterSave object and the map's
 // multipliers per map snapshot. Both rely on the rules' contract that saves are never mutated in place
 // (every change is a new object) — a server must not edit a CharacterSave's equipment directly.
+import { treeContextOf } from './atlas-rules';
 import type { MapSummaryLine, RunSetup } from '../../contracts/game';
 import type { CharacterSave, StatBreakdown, StatModifier } from '../../contracts/items';
 import type { GearLuck } from './maps';
@@ -64,7 +65,7 @@ const MORE = new WeakMap<RunSetup, { quantity: number; rarity: number }>();
 function mapMore(setup: RunSetup): { quantity: number; rarity: number } {
   let m = MORE.get(setup);
   if (!m) {
-    const luck = mapLuck(setup.map, null, setup.mapTree);
+    const luck = mapLuck(setup.map, null, setup.mapTree, treeContextOf(setup));
     const prod = (more: number[]) => more.reduce((p, v) => p * (1 + v / 100), 1);
     m = { quantity: prod(luck.quantity.more), rarity: prod(luck.rarity.more) };
     MORE.set(setup, m);
@@ -89,7 +90,7 @@ export function lootLuck(setup: RunSetup, looter: CharacterSave | null): Luck {
 function personalLine(
   label: string, stat: 'itemQuantity' | 'itemRarity', value: number, setup: RunSetup, gear: readonly StatModifier[],
 ): MapSummaryLine {
-  const map = mapLuck(setup.map, null, setup.mapTree)[stat === 'itemQuantity' ? 'quantity' : 'rarity'];
+  const map = mapLuck(setup.map, null, setup.mapTree, treeContextOf(setup))[stat === 'itemQuantity' ? 'quantity' : 'rarity'];
   const lines = [
     ...map.sources.map((m) => summarySourceLine(m)),
     ...gear.map((m) => summarySourceLine(m)),

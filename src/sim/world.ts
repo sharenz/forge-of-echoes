@@ -90,13 +90,14 @@ export interface PlayerState {
   hitTime: number;
   hitFlash: number;
   dead: boolean;
+  /** Movement slow of a carried event object (Ember Relay), 0..1; the wire carries it so prediction agrees. */
+  eventSlow: number;
+  /** Champion's Ring vow: flasks cannot be used (a restriction, never a power-up). */
+  noFlasks: boolean;
   prevHeld: boolean[];
   /** Per loadout slot: seconds before a still-held instant skill may fire again. */
   slotLock: Float32Array;
   focusWarnCd: number;
-  /** Rolling window of melee damage per tick (contact cap). */
-  meleeWindow: Float32Array;
-  meleeSum: number;
   trailTimer: number;
   /** Push from bodies the player can't shove (heavy monsters, the dummy) accumulated this tick. */
   pushX: number;
@@ -129,7 +130,10 @@ export interface Area extends AreaView {
   damage: number;
   /** DAMAGE_TYPES index. */
   dtype: number;
-  hurts: 'player' | 'monsters' | 'none';
+  /** 'all' (the Fault): players take `damage`, monsters take `damageFrac` of their max life. */
+  hurts: 'player' | 'monsters' | 'none' | 'all';
+  /** hurts 'all': share of a monster's max life dealt (halved for rares, none for bosses). */
+  damageFrac: number;
   /** 0 = resolves once at expiry (telegraph); > 0 = damage every interval while alive. */
   tickInterval: number;
   tickTimer: number;
@@ -221,6 +225,8 @@ export interface WavePlan {
   families: MonsterKind[];
   lieutenant: boolean;
   boss: boolean;
+  /** A Pact Altar's Ambush: the packs arrive together on a ring round the party, already hunting. */
+  ambush?: boolean;
 }
 
 export interface StreamState {
@@ -267,6 +273,8 @@ export interface BossRuntime {
   /** Remaining seconds of the phase-change roar (0 = not roaring). */
   roar: number;
   state: unknown;
+  /** Rival Crowns: the boss never leaves this phase (its phase-1 kit only). */
+  lockPhase?: number;
 }
 
 export interface World {
@@ -294,7 +302,13 @@ export interface World {
   readonly props: Prop[];
   readonly packs: Pack[];
   readonly director: Director;
-  readonly mapEvent: import('./map-events').MapEventState | null;
+  readonly mapEvent: import('./events/types').EventDirector | null;
+  /** The Pact Altar's pact for one wave (null = none); planWave, spawnMonster and the kill loot context read it. */
+  pact: import('../contracts/map-events').WavePact | null;
+  /** A second pact, chosen while the first one's wave runs (it shapes the wave after). */
+  pactNext: import('../contracts/map-events').WavePact | null;
+  /** Fraction of every player's resistances lost while a Cinder Curse wave lasts (0 = none). */
+  pactResist: number;
   /** This map's monsters (THEME_ROSTER by RunConfig.theme; the hideout gets the Ashen Forge's). */
   readonly roster: Roster;
   /** Primary boss alias, retained for the HUD and single-boss fixtures. */
@@ -324,4 +338,9 @@ export interface World {
   readonly scratch: Int32Array;
   readonly scratch2: Int32Array;
   readonly scratchT: Float32Array;
+}
+
+/** The pact shaping `wave` (the running one or the one chosen for the wave after it), or null. */
+export function pactForWave(w: Pick<World, 'pact' | 'pactNext'>, wave: number): import('../contracts/map-events').WavePact | null {
+  return w.pact && w.pact.wave === wave ? w.pact : w.pactNext && w.pactNext.wave === wave ? w.pactNext : null;
 }

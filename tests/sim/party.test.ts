@@ -339,25 +339,6 @@ describe('targeting', () => {
     stepN(a.run, 2);
     expect(a.world.monsters.target[i]).toBe(2);
   });
-
-  it('contact damage caps apply per player', () => {
-    const a = makeArena({ stats: makeStats({ maxLife: 1000, evasion: 0 }) });
-    joinArena(a, 2, 300, 0, makeStats({ maxLife: 1000, evasion: 0 }));
-    for (const [cx, n] of [[0, 20], [300, 20]] as const) {
-      for (let k = 0; k < n; k++) {
-        const ang = (k / n) * Math.PI * 2;
-        const i = placeMonster(a.world, 'ashling', cx + Math.cos(ang) * 14, Math.sin(ang) * 14, { still: false });
-        a.world.monsters.damage[i] = 500;
-        a.world.monsters.attackCd[i] = 0;
-      }
-    }
-    stepN(a.run, 20);
-    // Each player lost at most 35% within the first 0.5 s window — independently.
-    expect(pv(a.run, 1).life).toBeGreaterThanOrEqual(650 - 1e-3);
-    expect(pv(a.run, 2).life).toBeGreaterThanOrEqual(650 - 1e-3);
-    expect(pv(a.run, 1).life).toBeLessThan(1000);
-    expect(pv(a.run, 2).life).toBeLessThan(1000);
-  });
 });
 
 describe('death in a party', () => {

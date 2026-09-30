@@ -20,6 +20,7 @@ const SPEC_STABILITY: Record<BaseId, number> = {
   emberRing: 7, rimeBand: 7, stormLoop: 7, voidSignet: 7,
   emberheartWand: 9, stormglassSceptre: 8, echoingFocus: 9, bastionHelm: 10, duskweaveRobe: 9,
   forgemasterGloves: 10, wayfarerGreaves: 9, ironweaveGirdle: 10, prismaticAmulet: 8, dusksteelRing: 8,
+  scaleCowl: 8, quiltedJerkin: 8, wardedVestment: 8, studdedGloves: 8, ironshodBoots: 9, studdedBelt: 8,
 };
 
 const SPEC_SIZE: Record<ItemClass, [number, number]> = {
@@ -33,7 +34,7 @@ function lineHasTemplate(line: ModLineDef): boolean {
 }
 
 describe('bases', () => {
-  it('defines all 32 bases with the spec stability, class footprint and slots', () => {
+  it('defines all 38 bases with the spec stability, class footprint and slots', () => {
     expect(Object.keys(BASES).sort()).toEqual([...BASE_IDS].sort());
     for (const id of BASE_IDS) {
       const b = BASES[id];
@@ -243,7 +244,7 @@ describe('uniques, scars, flasks, names', () => {
   });
 
   it('exposes plain ContentInfo records', () => {
-    expect(Object.keys(BASE_INFO)).toHaveLength(32);
+    expect(Object.keys(BASE_INFO)).toHaveLength(38);
     expect(Object.keys(CURRENCY_INFO).sort()).toEqual([...CURRENCY_IDS].sort());
     expect(Object.keys(FLASK_INFO)).toHaveLength(2);
     expect(Object.keys(UNIQUE_INFO)).toHaveLength(16);

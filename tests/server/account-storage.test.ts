@@ -206,6 +206,16 @@ describe('account-wide storage', () => {
     expect(mergeLegacyStorage([]).stash).toEqual([createStashTab('Main'), createStashTab('Maps')]);
   });
 
+  it('redraws the Atlas tree once for an account row saved with the old 15-node allocation', () => {
+    const ch = namespaceItems(rules.createCharacter('Old Tree', 4));
+    const storage = mergeLegacyStorage([ch]);
+    const legacy = { ...storage, atlas: { discovered: ['cinderCrossing', 'emberRoad'], completed: ['cinderCrossing', 'emberRoad'], clears: 2, nodes: ['trailblazer', 'chartKeeper'] } };
+    const once = parseAccountStorage(JSON.stringify(legacy)).atlas!;
+    expect(once).toMatchObject({ nodes: [], redrawn: true, treeVersion: 2, completed: ['cinderCrossing', 'emberRoad'] });
+    expect(parseAccountStorage(JSON.stringify({ ...storage, atlas: once })).atlas).toEqual(once); // the next load changes nothing
+    expect(parseAccountStorage(JSON.stringify({ ...storage, atlas: { ...once, nodes: ['waypoint'] } })).atlas!.nodes).toEqual(['waypoint']);
+  });
+
   it('refuses damaged shared storage rather than silently clamping a balance or discarding a duplicate item', () => {
     const ch = namespaceItems(rules.createCharacter('Saved Stash', 4));
     const storage = mergeLegacyStorage([ch]);

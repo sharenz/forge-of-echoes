@@ -7,6 +7,7 @@ import type { MonsterKind } from '../contracts/content';
 import { PORTALS_PER_MAP } from '../contracts/net';
 import type { PortalInfo, ZoneInfo } from '../contracts/net';
 import { PLAYER_DEBUFFS } from '../contracts/bestiary';
+import { cloneMapEvents } from '../net/map-event-codec';
 import type { PlayerView, WorldView } from '../contracts/sim';
 import type { HudAlly, HudFlask, HudRun, HudSlot, HudState } from '../contracts/ui';
 
@@ -155,8 +156,9 @@ export function hudRun(input: HudInput): HudRun | null {
     monstersAlive: r.monstersAlive,
     kills: r.kills,
     elapsed: r.elapsed,
-    event: r.event ? { ...r.event } : null,
+    events: cloneMapEvents(r.events),
     boss: r.boss ? { ...r.boss } : null,
+    boss2: r.boss2 ? { ...r.boss2 } : null,
     lieutenant: r.lieutenant ? { ...r.lieutenant } : null,
     tell: tell ? { wave: tell.wave, families: tell.families, lieutenant: tell.lieutenant, boss: tell.boss } : null,
     itemQuantity: input.luck?.itemQuantity ?? 100,

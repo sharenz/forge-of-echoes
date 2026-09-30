@@ -54,6 +54,7 @@ export function isImmediateEvent(e: SimEvent, local: number): boolean {
     case 'portal':
       return e.kind === 'open' || e.playerId === local;
     case 'areaResolve':
+    case 'mapEvent':
     case 'chestOpen':
     case 'cleared':
     case 'waveTell':

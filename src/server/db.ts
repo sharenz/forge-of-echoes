@@ -112,6 +112,8 @@ export interface AtlasCreditRow {
   characterId: string;
   areaId: string;
   seed: number;
+  /** Tier of the map that earned the credit (0 = unknown, from a receipt queued before tiers earned points). */
+  tier: number;
 }
 
 /** Where a character stood when its session was last recorded inside a map. */
@@ -217,6 +219,8 @@ const MIGRATIONS: readonly string[] = [
   `CREATE TABLE debug_merchants (
     character_id TEXT PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE
   );`,
+  // 5 → 6: Atlas tree points: the credit receipt remembers the cleared map tier (first clear of each tier earns a point).
+  `ALTER TABLE atlas_credit_queue ADD COLUMN tier INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
@@ -542,8 +546,8 @@ export class GameDatabase {
   }
 
   saveAtlasCredit(r: AtlasCreditRow): void {
-    this.run('INSERT OR IGNORE INTO atlas_credit_queue (map_id, account_id, character_id, area_id, seed) VALUES (?, ?, ?, ?, ?)',
-      r.mapId, r.accountId, r.characterId, r.areaId, r.seed);
+    this.run('INSERT OR IGNORE INTO atlas_credit_queue (map_id, account_id, character_id, area_id, seed, tier) VALUES (?, ?, ?, ?, ?, ?)',
+      r.mapId, r.accountId, r.characterId, r.areaId, r.seed, r.tier);
   }
 
   deleteAtlasCredit(mapId: string, accountId: string): void {
@@ -552,7 +556,7 @@ export class GameDatabase {
 
   loadAtlasCredits(): AtlasCreditRow[] {
     return this.all('SELECT * FROM atlas_credit_queue ORDER BY map_id, account_id').map(r => ({
-      mapId: str(r.map_id), accountId: str(r.account_id), characterId: str(r.character_id), areaId: str(r.area_id), seed: num(r.seed),
+      mapId: str(r.map_id), accountId: str(r.account_id), characterId: str(r.character_id), areaId: str(r.area_id), seed: num(r.seed), tier: num(r.tier),
     }));
   }
 

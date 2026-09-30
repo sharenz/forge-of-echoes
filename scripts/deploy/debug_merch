@@ -1,5 +1,3 @@
 #!/usr/bin/env bash
-set -euo pipefail
-cd "${FORGE_APP_DIR:-/opt/forge}/current"
-export DB_PATH="${DB_PATH:-${FORGE_DATA_DIR:-/var/lib/forge}/forge.db}"
-exec node --import tsx src/server/debug-merch-cli.ts "$@"
+# Compatibility wrapper: `debug_merch <account> <character> enable|disable|status` == `foe merchant ...`.
+exec "$(dirname "$(readlink -f "$0")")/foe" merchant "$@"

@@ -412,6 +412,8 @@ export class MonsterPainter {
       }
       if (x < v.x0 - 50 || x > v.x1 + 50 || y < v.y0 - 10 || y > v.y1 + 90) continue;
       const ail = m.ailments[i];
+      // A map-event fixture (a bloom, the Time Prism, a wheel): the event painter draws the prop; the body stays hidden.
+      if (ail & AILMENT_BIT.fixture) continue;
       const spawning = anim === MONSTER_ANIM.spawn;
       const spawnK = spawning ? clamp01(at / 0.5) : 1;
 
@@ -477,7 +479,23 @@ export class MonsterPainter {
       if (spawning) o.alpha = spawnK;
       // The ghost drifts translucent, its opacity breathing a little.
       if (look.ghost) o.alpha = (o.alpha ?? 1) * (0.74 + 0.08 * Math.sin(time * 2.6 + this.phase[i] * TAU));
-      if (ail & (AILMENT_BIT.chilled | AILMENT_BIT.shocked | AILMENT_BIT.burning | AILMENT_BIT.empowered)) {
+      // Map events: a shimmering, broken-translucent event monster (the Stalker, echoes): always readable and targetable.
+      if (ail & AILMENT_BIT.spectral) {
+        const flicker = Math.sin(time * 9 + this.phase[i] * TAU) + 0.5 * Math.sin(time * 23 + i);
+        o.alpha = (o.alpha ?? 1) * (flicker > 1.1 ? 0.5 : 0.78);
+        o.emissive = Math.max(o.emissive ?? 0, 0.22);
+      }
+      // Exposed (a whiffed Stalker): a gold pulse says it takes extra damage now.
+      if (ail & AILMENT_BIT.exposed) {
+        o.flash = Math.max(o.flash ?? 0, 0.2 + 0.1 * Math.sin(time * 14));
+        o.flashColor = C.gold;
+      }
+      // A frozen statue (Stasis Host): the first frame, held, in ice.
+      if (ail & AILMENT_BIT.frozen) {
+        frame = 0;
+        o.emissive = Math.max(o.emissive ?? 0, 0.12);
+      }
+      if (ail & (AILMENT_BIT.chilled | AILMENT_BIT.shocked | AILMENT_BIT.burning | AILMENT_BIT.empowered | AILMENT_BIT.spectral | AILMENT_BIT.frozen)) {
         tint[0] = 1;
         tint[1] = 1;
         tint[2] = 1;
@@ -498,6 +516,15 @@ export class MonsterPainter {
         if (ail & AILMENT_BIT.empowered) {
           tint[1] *= 0.86;
           tint[2] *= 0.8;
+        }
+        if (ail & AILMENT_BIT.spectral) {
+          tint[0] *= 0.86;
+          tint[1] *= 0.8;
+        }
+        if (ail & AILMENT_BIT.frozen) {
+          tint[0] = 0.58;
+          tint[1] = 0.8;
+          tint[2] = 1;
         }
         o.tint = tint;
       }

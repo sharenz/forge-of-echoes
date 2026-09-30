@@ -42,7 +42,7 @@ export interface HudFlask {
 }
 
 export interface HudRun {
-  event?: import('./map-events').MapEventView | null;
+  events: import('./map-events').MapEventView[];
   mapName: string;
   tier: number;
   /** Authoritative monster level from the server's run setup. */
@@ -55,6 +55,8 @@ export interface HudRun {
   kills: number;
   elapsed: number;
   boss: { name: string; life: number; maxLife: number; phase: number } | null;
+  /** Rival Crowns: the rival's own bar under the first. */
+  boss2?: { name: string; life: number; maxLife: number; phase: number } | null;
   lieutenant: { name: string; life: number; maxLife: number } | null;
   /** Upcoming wave preview during the "Tell" phase. */
   tell: { wave: number; families: MonsterKind[]; lieutenant: boolean; boss: boolean } | null;

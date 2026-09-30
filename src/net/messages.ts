@@ -9,7 +9,8 @@
 //           null): the rest of the batch still plays, and a server running a newer roster than this bundle costs
 //           only the events this bundle could not draw.
 import { PLAYER_DEBUFFS } from '../contracts/bestiary';
-import { ATLAS_AREA_IDS, MAP_TREE_NODE_IDS } from '../contracts/atlas';
+import { ATLAS_AREA_IDS } from '../contracts/atlas';
+import { MAP_TREE_NODE_IDS } from '../data/progression/map-tree';
 import { ATTRIBUTES, EQUIP_SLOTS, ITEM_CLASSES, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
 import {
   BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_SLOTS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
@@ -17,6 +18,7 @@ import {
 import type { ItemLocation, SpecialStashTab } from '../contracts/items';
 import { TRADE_MAX_ITEMS } from '../contracts/net';
 import type { ClientMessage, Command, ServerMessage } from '../contracts/net';
+import { MAP_EVENT_BEATS, MAP_EVENT_KINDS } from '../contracts/map-events';
 import { AREA_KINDS, PROJECTILE_KINDS } from '../contracts/sim';
 import type { SimEvent } from '../contracts/sim';
 import { HELD_MASK_ALL } from './input';
@@ -51,7 +53,7 @@ export const SIM_EVENT_TYPES = [
   'cast', 'nova', 'dash', 'ward', 'chain', 'hit', 'evade', 'projectileEnd', 'death', 'monsterAttack', 'debuff',
   'cleanse', 'blocked', 'pull', 'monsterSpawn', 'ailment', 'areaResolve', 'dropSpawn', 'pickup', 'mote', 'flask',
   'waveTell', 'waveStart', 'bossSpawn', 'bossPhase', 'cleared', 'chestOpen', 'portal', 'playerDeath', 'playerJoin',
-  'notEnoughFocus',
+  'notEnoughFocus', 'mapEvent',
 ] as const satisfies readonly SimEvent['t'][];
 
 type MonsterAttack = Extract<SimEvent, { t: 'monsterAttack' }>['attack'];
@@ -570,6 +572,10 @@ function simEvent(e: unknown): void {
       break;
     case 'areaResolve':
       oneOf(e.kind, 'areaResolve.kind', AREA_KINDS);
+      break;
+    case 'mapEvent':
+      oneOf(e.kind, 'mapEvent.kind', MAP_EVENT_KINDS);
+      oneOf(e.beat, 'mapEvent.beat', MAP_EVENT_BEATS);
       break;
     case 'waveTell':
       for (const f of arr(e.families, 'waveTell.families', MONSTER_KINDS.length * 4)) oneOf(f, 'waveTell.families[]', MONSTER_KINDS);

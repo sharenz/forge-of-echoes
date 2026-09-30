@@ -26,7 +26,13 @@ import type { AreaKind, Dir4, DropSprite, DropTone, PlayerAnim, PropKind, RootSo
  */
 // v6 adds the revealed map-event state behind run flag bit 8.
 // v7 adds an optional event countdown and four encounter kinds.
-export const SNAPSHOT_VERSION = 7;
+// v8 widens the monster elite-mod mask to u16 (elemental proofs and behavioural rare mods).
+// v9: the run carries up to three concurrent map-event views (objectives, timers, zones, markers) instead of one; areas gain
+//     echoMark and faultWedge; monster ailments gain exposed and spectral bits; SimEvent gains 'mapEvent'.
+// v10 (map events, wave 2): monster ailments widen to u16 (frozen, fixture); every player record carries eventSlow (a carried Ember slows
+//     the carrier, predicted by the client); the run header carries a second boss bar (flag bit 4); event zones carry `n` and markers `w`;
+//     areas gain voidTide; the map-event kinds, zones, icons and beats grow (append-only).
+export const SNAPSHOT_VERSION = 10;
 
 /** Drop flag byte: tone in bits 0–2, sprite in bits 3–4, then these (bit 7 is spare). */
 export const DROP_BLOCKED_BIT = 32;

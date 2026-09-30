@@ -131,7 +131,12 @@ export type MapStat =
   | 'playerFocusRegen' | 'playerResist'
   | 'itemQuantity' | 'itemRarity'
   | 'mapDropChance' | 'essenceDropChance' | 'emberEssenceChance' | 'rimeEssenceChance'
-  | 'armourStability' | 'echoWave';
+  | 'armourStability' | 'echoWave'
+  // Atlas tree only (data/progression/map-tree.ts): never rolled on a map mod.
+  | 'magicPackChance' | 'rarePackChance' | 'eventChance' | 'chestUpgradeChance' | 'chestQuality' | 'droppedMapQuality'
+  | 'scarabDropChance' | 'rareQuantity' | 'normalQuantity' | 'equipmentStability' | 'equipmentDropChance' | 'bossIngredientChance'
+  | 'bossLife' | 'bossUnique' | 'bossLoot' | 'chestLoot' | 'chestRareChance' | 'chestCurrency'
+  | 'waveDuration' | 'territoryFee' | 'revealChance' | 'dangerModStrength' | 'corruptedModStrength';
 
 export interface MapEffectDef {
   stat: MapStat;

@@ -36,7 +36,8 @@
 // cue of their own (the thrall's whirling hook, the Chainmaster's aim line, Varkus's lane) are drawn from their
 // areas / poses; the cues mark the releases:
 //   pitHound         'melee' (the bite; from meleeHit)
-//   chainThrall      'hook' (release; the windup pose is the whirling hook), 'melee' (rake)
+//   chainThrall      'hook' (release; the windup pose is the whirling hook), 'melee' (rake), 'leap' (the gap-closing
+//                    hop: a crouch with a leapWarning disc on the landing spot, then 0.25 s airborne, ANIM.leap)
 //   ironCrossbowman  'aim' (the aim line appears) → 'bolt' (release)
 //   shieldbearer     'bash' (the strike), 'melee' (a bash that reaches); a 'blocked' event per stopped projectile
 //   tarSlinger       'tar' (release; tarSplat is the tarGlob's 'projectileEnd')

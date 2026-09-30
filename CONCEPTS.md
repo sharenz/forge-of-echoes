@@ -21,7 +21,7 @@ The game identity stays the same:
 2. **Luck is felt, rare is rare.** Most drops are materials; a rare item is an event, a great rare is memorable. Normal and magic items matter as crafting bases. Loot volume never replaces loot quality — prevent spam instead of building a loot filter.
 3. **Waves create mounting pressure.** Dense hordes, escalating waves, and risk/reward fixed *before* entry by the crafted map item. No temporary between-wave power-ups. All power comes from level, skills, gear and crafting.
 4. **Understandable build depth.** Every number is explainable in the UI. Never hide odds that can be calculated. Never require a wiki.
-5. **From deliberate to spectacular, but always readable.** VFX never hide enemies, drops, or lethal attacks. Don't balance around one-shots.
+5. **From deliberate to spectacular, but always readable.** VFX never hide enemies, drops, or lethal attacks. One-shots are legitimate: a hit (or several) may kill a character whose defences are too weak for the tier. Tier 1 stays forgiving through level scaling, not damage caps.
 
 Guardrails: no mandatory uniques or passives. Every crafting material must be a distinct decision. No permanent meta-progression that trivialises the item hunt.
 

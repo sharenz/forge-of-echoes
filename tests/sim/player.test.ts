@@ -55,7 +55,7 @@ describe('flasks', () => {
 describe('live player updates', () => {
   it('level-up restore, new stats, extra charges and loadout changes', () => {
     const rift = makeSkill('riftStep', 1);
-    const { run, player } = makeArena({ skills: [makeSkill('emberLance', 1), rift], loadout: ['emberLance', null, null, null, null, 'riftStep'] });
+    const { run, player } = makeArena({ level: 1, skills: [makeSkill('emberLance', 1), rift], loadout: ['emberLance', null, null, null, null, 'riftStep'] });
     player.life = 10;
     player.focus = 5;
     expect(pv(run).level).toBe(1);

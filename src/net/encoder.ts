@@ -1,11 +1,11 @@
 // Server-side snapshot encoder: WorldView (+ viewer id + acked input seq) → one compact binary message.
 // Layout: see the table at the top of snapshot.ts. One encoder may serve any number of viewers and instances;
 // it only keeps a reusable output buffer between calls.
-import { MAP_EVENT_KINDS, MAP_EVENT_PHASES } from '../contracts/map-events';
 import { AOI_HALF_HEIGHT, AOI_HALF_WIDTH } from '../contracts/net';
 import type { SnapshotEncoder } from '../contracts/net';
 import type { AreaView, DropView, PlayerView, WorldView } from '../contracts/sim';
 import { ByteWriter } from './bytes';
+import { writeMapEvents } from './map-event-codec';
 import {
   AIM_SCALE, ANIM_TIME_SCALE, AOI_MARGIN, AREA_KIND_CODE, AREA_RADIUS_SCALE, AREA_TIER, AREA_TIER_COUNT, DEBUFF_CODE,
   DIR4_CODE, DROP_AUTO_PICKUP_BIT, DROP_BLOCKED_BIT, DROP_SPRITE_CODE, DROP_TONE_CODE, DYNAMIC_PROP_KINDS, FLASK_CODE,
@@ -151,6 +151,7 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
     w.u16(ms16(p.wardDuration));
     w.u16(ms16(p.invulnTime));
     w.u8(clampInt(p.hitFlash * 255, 0, 255));
+    w.u8(clampInt((p.eventSlow ?? 0) * 100, 0, 100));
     // Debuffs of every player (overlays on allies, the HUD row of the viewer). Unknown ids are skipped.
     const debuffs = p.debuffs;
     const nDebuffs = debuffs ? debuffs.length : 0;
@@ -381,12 +382,18 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
     w.u32(clampInt(run.kills, 0, 0xffffffff));
     w.u16(clampInt(run.monstersAlive, 0, 0xffff));
     w.u8(clampInt(run.playersAlive, 0, 255));
-    w.u8((run.boss ? 1 : 0) | (run.lieutenant ? 2 : 0) | (run.portalOpen ? 4 : 0) | (run.event ? 8 : 0));
+    w.u8((run.boss ? 1 : 0) | (run.lieutenant ? 2 : 0) | (run.portalOpen ? 4 : 0) | (run.events.length > 0 ? 8 : 0) | (run.boss2 ? 16 : 0));
     if (run.boss) {
       w.str(run.boss.name);
       w.f32(run.boss.life);
       w.f32(run.boss.maxLife);
       w.u8(clampInt(run.boss.phase, 0, 255));
+    }
+    if (run.boss2) {
+      w.str(run.boss2.name);
+      w.f32(run.boss2.life);
+      w.f32(run.boss2.maxLife);
+      w.u8(clampInt(run.boss2.phase, 0, 255));
     }
     if (run.lieutenant) {
       w.str(run.lieutenant.name);
@@ -394,13 +401,7 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
       w.f32(run.lieutenant.maxLife);
     }
 
-    if (run.event) {
-      w.u8(MAP_EVENT_KINDS.indexOf(run.event.kind));
-      w.u8(MAP_EVENT_PHASES.indexOf(run.event.phase));
-      w.f32(run.event.x); w.f32(run.event.y);
-      w.u8(run.event.remaining); w.u8(run.event.total);
-      w.u8(run.event.seconds ?? 255);
-    }
+    if (run.events.length > 0) writeMapEvents(w, run.events);
 
     // --- players (all of them; the viewer's own record carries the HUD data) ---
     const nPlayers = Math.min(players.length, MAX_WIRE_PLAYERS);
@@ -450,8 +451,8 @@ export function createSnapshotEncoder(): NetSnapshotEncoder {
       w.u8(lifeQ);
       w.u8(clampInt(r * RADIUS_SCALE, 0, 255));
       if (extras) {
-        w.u8(ailments);
-        w.u8(mods);
+        w.u16(ailments);
+        w.u16(mods);
       }
       if (hasMax) {
         // Rares, lieutenants and bosses are few and show real numbers: exact life.

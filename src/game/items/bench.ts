@@ -399,7 +399,7 @@ export function benchServices(ch: CharacterSave, targetUid: string): BenchServic
   const locked = item.corrupted ? 'Corrupted maps cannot be changed.' : null;
   const services: BenchService[] = [service('bench:bounty', 'Commission Bounty',
     BOUNTY_COMMISSION.base + BOUNTY_COMMISSION.perTier * item.tier, [
-      'Turns this into a Bounty map: The Hunted is guaranteed in wave 2 or 4, replacing the random encounter roll.',
+      'Turns this into a Bounty map: The Stalker is guaranteed in wave 2 or 4, replacing the random encounter roll.',
       'Defeat its rare pursuer for a guaranteed Rare item per living player. The commission travels with this map and can be traded.',
     ], locked ?? (item.bounty ? 'This map already has a Bounty commission.' : null))];
   const pool = replacementMods(item);
@@ -433,7 +433,7 @@ function applyBenchService(ch: CharacterSave, targetUid: string, serviceId: stri
       repairCount: historyCount(historyCount(item.repairCount) + 1), history: appendHistory(item.history, [message]) };
   } else if (item.kind === 'map' && serviceId === 'bench:bounty') {
     item = { ...item, bounty: true };
-    message = 'Bounty commissioned: The Hunted is guaranteed in this map';
+    message = 'Bounty commissioned: The Stalker is guaranteed in this map';
   } else if (item.kind === 'map') {
     const id = serviceId.slice('bench:map:'.length);
     const rng = createRng(ch.rngState >>> 0);

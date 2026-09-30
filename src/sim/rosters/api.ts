@@ -21,6 +21,7 @@ export {
   empowerMult, extraProjectiles, faceTarget, fireHostile, fireHostileFrom, meleeHit, memoryOf, moveAlong, muzzleOffset, setAnim, steer,
   stop, toChase, turnToward, wander,
 } from '../behaviour';
+export { aimAtPlayer, byLevel, interceptTime, levelExtraShots, projectileRamp } from '../behaviour';
 export { MFLAG } from '../stores';
 export { DT, HASTE_BONUS, PLAYER_RADIUS, PULL_MAX_DISTANCE, ROOT_DURATION } from '../constants';
 export { DAMAGE_INDEX, TAU, clamp } from '../math';

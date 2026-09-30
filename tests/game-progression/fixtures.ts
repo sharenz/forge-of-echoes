@@ -5,6 +5,7 @@ import type {
 } from '../../src/contracts/items';
 import { BACKPACK_SIZE, BELT_SLOTS, STASH_TAB_SIZE } from '../../src/contracts/items';
 import type { CurrencyId, MapBaseId } from '../../src/contracts/content';
+import type { EventRewardContext, MapEventGrade, MapEventKind } from '../../src/contracts/map-events';
 import type { KillLootContext } from '../../src/contracts/sim';
 import { createRng } from '../../src/core/rng';
 import { buildEquipment, generateUnique, placeItem } from '../../src/game/items';
@@ -96,6 +97,11 @@ export function setupFor(m: MapItem, ch: CharacterSave = bareCharacter()): RunSe
 
 export function kill(overrides: Partial<KillLootContext> = {}): KillLootContext {
   return { kind: 'ashling', summoned: false, rarity: 'normal', isLieutenant: false, isBoss: false, wave: 1, x: 0, y: 0, ...overrides };
+}
+
+/** The payout context of one map event (Event Director v2): Bronze by default. */
+export function eventCtx(kind: MapEventKind, grade: MapEventGrade = 1, o: Partial<EventRewardContext> = {}): EventRewardContext {
+  return { kind, grade, choice: 0, tally: 0, x: 0, y: 0, wave: 2, ingredientBonus: 0, multiplier: 1, ...o };
 }
 
 /** A magic amulet with item rarity and/or item quantity (the two luck affixes). */

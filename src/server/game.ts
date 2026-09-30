@@ -27,8 +27,9 @@ import type { Rng } from '../contracts/rng';
 import { createRng, hashString } from '../core/rng';
 import type { AtlasAreaId } from '../contracts/atlas';
 import { ATLAS_RARE_DOOR_CHANCE, ATLAS_START, findAtlasArea } from '../data/progression/atlas';
-import { discoverAfterBoss, newAtlas, paidTerritoryFee } from '../game/progression/atlas';
+import { atlasCreditFor, creditEventCompletion, discoverAfterBoss, newAtlas, paidTerritoryFee } from '../game/progression/atlas';
 import { paidEntranceKey } from '../game/progression/runs';
+import { atlasEventIdOf } from '../game/progression/map-event-rules';
 import { PORTALS_PER_MAP, PROTOCOL_VERSION } from '../contracts/net';
 import type { Command, PartyInfo, PartyMemberInfo, PortalInfo, RunSummaryInfo, ServerMessage } from '../contracts/net';
 import { SIM_HZ } from '../contracts/sim';
@@ -1124,6 +1125,21 @@ export class Game implements InstanceHost {
       case 'waveStart':
       case 'chestOpened':
         break;
+      case 'eventComplete': {
+        // First completion of an encounter kind (any grade) is one Atlas point for every present account. The credit is an
+        // idempotent set insertion on the account's progress, so a restart or a repeat cannot double it.
+        const id = atlasEventIdOf(o.kind);
+        if (!id || !(inst instanceof MapInstance)) break;
+        for (const s of [...inst.members.values()]) {
+          const atlas = s.record.ch.atlas ?? newAtlas();
+          const next = creditEventCompletion(atlas, id);
+          if (next === atlas) continue;
+          this.store.set(s.record, { ...s.record.ch, atlas: next });
+          s.toast('Atlas point earned: a new encounter completed.', 'good');
+          s.pushCharacter('soon');
+        }
+        break;
+      }
     }
   }
 
@@ -1146,7 +1162,7 @@ export class Game implements InstanceHost {
       try {
         if (rec.accountId !== accountId) { this.db.deleteAtlasCredit(map.mapKey, accountId); map.atlasPendingCredits.delete(accountId); this.persistMap(map); continue; }
         const rng = createRng(map.setup.seed ^ hashString(accountId));
-        const result = discoverAfterBoss(rec.ch.atlas ?? newAtlas(), areaId, rng.chance(ATLAS_RARE_DOOR_CHANCE));
+        const result = discoverAfterBoss(rec.ch.atlas ?? newAtlas(), areaId, rng.chance(ATLAS_RARE_DOOR_CHANCE), atlasCreditFor(areaId, map.setup.map.tier, rng.next()));
         const credited = new Set(map.atlasCredits).add(accountId);
         const pending = new Map(map.atlasPendingCredits);
         pending.delete(accountId);
@@ -1182,7 +1198,7 @@ export class Game implements InstanceHost {
           this.db.deleteAtlasCredit(receipt.mapId, receipt.accountId); continue;
         }
         const rng = createRng(receipt.seed ^ hashString(receipt.accountId));
-        const result = discoverAfterBoss(rec.ch.atlas ?? newAtlas(), area.id, rng.chance(ATLAS_RARE_DOOR_CHANCE));
+        const result = discoverAfterBoss(rec.ch.atlas ?? newAtlas(), area.id, rng.chance(ATLAS_RARE_DOOR_CHANCE), atlasCreditFor(area.id, receipt.tier, rng.next()));
         if (this.store.commit(rec, { ...rec.ch, atlas: result.progress }, () => this.db.deleteAtlasCredit(receipt.mapId, receipt.accountId)))
           this.sessions.get(receipt.characterId)?.pushCharacter('soon');
       } finally { if (rec) this.store.release(rec); }
@@ -1438,7 +1454,7 @@ export class Game implements InstanceHost {
       this.store.writeTogether(owner ? [owner] : [], () => {
         this.db.saveOpenMap(row);
         if (map.setup.atlasAreaId) for (const [accountId, characterId] of map.atlasPendingCredits)
-          this.db.saveAtlasCredit({ mapId: map.mapKey, accountId, characterId, areaId: map.setup.atlasAreaId, seed: map.setup.seed });
+          this.db.saveAtlasCredit({ mapId: map.mapKey, accountId, characterId, areaId: map.setup.atlasAreaId, seed: map.setup.seed, tier: map.setup.map.tier });
       });
       map.persisted = true;
     } catch (err) {
@@ -1585,7 +1601,7 @@ export class Game implements InstanceHost {
           const credited = new Set(Array.isArray(saved.atlasCredits) ? saved.atlasCredits : []);
           for (const pair of saved.atlasPendingCredits) if (Array.isArray(pair) && pair.length === 2
             && pair.every(id => typeof id === 'string') && !credited.has(pair[0]) && this.db.accountById(pair[0])) {
-            this.db.saveAtlasCredit({ mapId: row.mapId, accountId: pair[0], characterId: pair[1], areaId: saved.atlasAreaId as string, seed });
+            this.db.saveAtlasCredit({ mapId: row.mapId, accountId: pair[0], characterId: pair[1], areaId: saved.atlasAreaId as string, seed, tier: isRecord(saved.map) && typeof saved.map.tier === 'number' ? saved.map.tier : 0 });
           }
         }
         this.db.deleteOpenMap(row.mapId);

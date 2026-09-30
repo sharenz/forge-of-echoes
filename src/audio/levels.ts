@@ -103,6 +103,12 @@ export const SFX_TRIM_DB: Partial<Record<SfxId, number>> = {
   executionMark: -5.1,
   arenaSpikes: -7.7,
   crowdRoar: -8.6,
+  // map events (Event Director v2, waves 1 and 2): calibrated offline with the recipes as they stand
+  eventOmen: -10.2, eventOnset: -7.5, eventStep: -5.1, eventLock: -2.7, eventWhiff: -8.9, eventHit: -12.1, eventReturn: -10.4, eventSeal: -4.4, eventErupt: -9.6,
+  eventBronze: -3.4, eventSilver: -4.7, eventGold: -3.2, eventFail: -1.4, eventBeat: -11.2,
+  eventHum: -1.6, wheelBreak: -6.3, shieldBreak: -6.6, pactStone: -11.1, pactSeal: -7.9, pactWave: -7.9, bloomGrow: -6, bloomHarvest: -5.6, bloomBite: -5.2, bloomWither: -2.2,
+  ringRise: -10.6, ringChain: -3, ringSlam: -3.2, hostThaw: -3.1, prismShatter: -10.5, hostWake: -9.5, anvilStrike: -6.2, anvilCharged: -6.3, anvilForge: -10.2,
+  bellToll: -9.7, cantorFall: -4.3, dirge: -7.1, voidTide: -7.7, voidSurge: -6.5, heartCrack: -10,
 };
 
 /**

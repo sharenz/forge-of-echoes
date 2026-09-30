@@ -132,7 +132,7 @@ export interface MapItem {
   /** 0–20 (% increased item quantity & map drop chance). */
   quality: number;
   corrupted: boolean;
-  /** A paid commission: guarantees The Hunted when this map is opened. */
+  /** A paid commission: guarantees The Stalker when this map is opened. */
   bounty?: boolean;
   /** Compass: the progression map in the completion chest upgrades by one tier. */
   charted?: boolean;

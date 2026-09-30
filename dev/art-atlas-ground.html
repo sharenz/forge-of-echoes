@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8" /><title>Atlas ground</title>
+<style>html,body{margin:0;background:#0d0b0e}canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+import { generateSprites } from '/src/art/index.ts';
+import { bakeChart } from '/src/art/atlas/ground.ts';
+import { rasterToCanvas } from '/src/art/atlas/canvas.ts';
+const q = new URLSearchParams(location.search);
+const Z = Number(q.get('z') ?? 2), which = q.get('layer') ?? 'known';
+const t0 = performance.now();
+const L = bakeChart(generateSprites());
+console.log('bake ms', Math.round(performance.now() - t0));
+const c = document.getElementById('c'); c.width = 640*Z; c.height = 360*Z;
+const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.scale(Z, Z);
+ctx.drawImage(rasterToCanvas(which === 'unknown' ? L.unknown : L.known), 0, 0);
+if (which === 'known') { ctx.drawImage(rasterToCanvas(L.glow), 0, 0); }
+ctx.drawImage(rasterToCanvas(L.frame), 0, 0);
+</script></body></html>

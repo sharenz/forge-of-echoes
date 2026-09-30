@@ -37,12 +37,13 @@ const TICKS = 3000;
  *    213161676 in 17553 ticks. 4242 is unchanged (its 3000 ticks end before the Herald arrives).
  */
 /** record(4242): digests after ticks 1000, 2000 and 3000. */
-// Re-pinned 2026-09-30 for the bot's pillar-navigation fix: static props no longer stop pursuit.
-const GOLDEN_4242 = [3862589358, 962656964, 3095429188];
+// Re-pinned 2026-09-30 for the bot's pillar-navigation fix: static props no longer stop pursuit, and again for
+// level-scaled enemy projectile speed and intercept aim.
+const GOLDEN_4242 = [3614022833, 970621829, 3211910776];
 /** The whole tier-5 map at seed 9001 (the bot clears it and takes the return portal): its final digest and length. */
 // Re-pinned 2026-09-30 after removing the wave-3 lieutenant and fixing bot pursuit around pillars.
 // The complete intent recording still replays to identical intermediate and final digests below.
-const GOLDEN_9001 = { digest: 329571751, ticks: 18075 };
+const GOLDEN_9001 = { digest: 1934722132, ticks: 16456 };
 const strong = { stats: strongStats(), skills: strongSkills(), loadout: STRONG_LOADOUT };
 
 function soloRun(seed: number, extra: Partial<ConfigOptions> = {}): SimRun {

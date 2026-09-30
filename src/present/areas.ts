@@ -23,6 +23,7 @@
 // telegraph and light budgets.
 import type { RGB } from '../contracts/render';
 import type { AreaView } from '../contracts/sim';
+import { FAULT_WEDGE_HALF_ANGLE, areaAngle, voidTideInner } from '../sim/area-geometry';
 import { BestiaryAreaPainter, type AreaAppear } from './bestiary-areas';
 import { C } from './colors';
 import { CHARGE_MAX_RADIUS, LIGHT_CAPS, type FrameCtx } from './context';
@@ -36,6 +37,8 @@ const SLAM: RGB = [1, 0.16, 0.1];
 const LEAP: RGB = [1, 0.38, 0.14];
 const ERUPT: RGB = [1, 0.46, 0.12];
 const METEOR: RGB = [1, 0.28, 0.08];
+const STORM: RGB = [0.5, 0.72, 1];
+const REND: RGB = [0.78, 0.06, 0.16];
 const POOL_DEEP: RGB = [0.55, 0.08, 0.03];
 const POOL_CORE: RGB = [0.95, 0.35, 0.08];
 const TRAIL: RGB = [1, 0.5, 0.16];
@@ -127,6 +130,14 @@ export class AreaPainter {
           this.telegraph(pen, f, ar, METEOR, 1);
           this.meteor(pen, f, ar);
           break;
+        case 'stormStrike':
+          this.telegraph(pen, f, ar, STORM, 1, [0.85, 0.93, 1]);
+          this.crosshair(pen, ar, STORM);
+          break;
+        case 'rendStrike':
+          this.telegraph(pen, f, ar, REND, 1);
+          this.crosshair(pen, ar, REND);
+          break;
         case 'firePool':
           this.firePool(pen, f, ar);
           break;
@@ -135,6 +146,15 @@ export class AreaPainter {
           break;
         case 'heraldAura':
           this.aura(pen, f, ar);
+          break;
+        case 'echoMark':
+          this.echoMark(pen, f, ar);
+          break;
+        case 'faultWedge':
+          this.faultWedge(pen, f, ar);
+          break;
+        case 'voidTide':
+          this.voidTide(pen, f, ar);
           break;
         default:
           this.bestiary?.draw(pen, f, ar);
@@ -217,6 +237,95 @@ export class AreaPainter {
     rim.thickness = thickness;
     r.ring(a.x, a.y, a.radius, rim);
     if (lightK > 0) this.groundLight(pen, f, a.x, a.y, a.radius * 1.3 + 12, col, (0.18 + 0.35 * p) * lightK, 0.1);
+  }
+
+  /** A harmless shimmer where an echo, guardian or escort is about to appear: a violet ring closing on the spot (never a hazard). */
+  private echoMark(pen: Pen, f: FrameCtx, a: AreaView): void {
+    const p = a.duration > 0 ? clamp01(a.age / a.duration) : 1;
+    const r = pen.r;
+    const col: RGB = [0.62, 0.42, 0.9];
+    const ring = pen.shape(col, 0.7 * (1 - p * 0.4), 'decal');
+    ring.additive = true;
+    ring.emissive = 0.8;
+    ring.thickness = 1;
+    r.ring(a.x, a.y, Math.max(2, a.radius * (1.6 - 0.6 * p)), ring);
+    const core = pen.shape(col, 0.12 + 0.2 * p, 'decal');
+    core.additive = true;
+    r.circle(a.x, a.y, a.radius * 0.5 * p, core);
+    this.groundLight(pen, f, a.x, a.y, a.radius * 2.2, col, 0.2 + 0.2 * p, 0.2);
+  }
+
+  /**
+   * One wedge of the Fault field: a 90-degree sector telegraph. It fills outward from the centre as the eruption nears
+   * (rays on 'decal'), its two edges and outer arc are hard rims on 'fx', and the last quarter blinks: standing in it when it
+   * resolves hurts players and monsters alike. Same telegraph budget as the round ones.
+   */
+  private faultWedge(pen: Pen, f: FrameCtx, a: AreaView): void {
+    const r = pen.r;
+    const p = a.duration > 0 ? clamp01(a.age / a.duration) : 1;
+    const late = p > 0.75 ? 0.5 + 0.5 * Math.sin(f.time * 40) : 1;
+    const ang = areaAngle(a);
+    const half = FAULT_WEDGE_HALF_ANGLE;
+    const col: RGB = [1, 0.22, 0.14];
+    // Fill: rays out to the growing edge.
+    const rays = 22;
+    const reach = a.radius * (0.25 + 0.75 * p);
+    const step = (half * 2) / rays;
+    const fill = pen.shape(col, 0.09 + 0.07 * p, 'decal');
+    fill.thickness = Math.max(3, (a.radius * step) * 1.15);
+    fill.emissive = 0.6;
+    for (let s = 0; s < rays; s++) {
+      const u = ang - half + (s + 0.5) * step;
+      r.line(a.x + Math.cos(u) * 12, a.y + Math.sin(u) * 12, a.x + Math.cos(u) * reach, a.y + Math.sin(u) * reach, fill);
+    }
+    // Rims: the two straight edges and the outer arc, all above the horde.
+    const rim = pen.shape(col, 0.85 * late, 'fx');
+    rim.additive = true;
+    rim.emissive = 1;
+    rim.thickness = 2;
+    const a0 = ang - half, a1 = ang + half;
+    r.line(a.x, a.y, a.x + Math.cos(a0) * a.radius, a.y + Math.sin(a0) * a.radius, rim);
+    r.line(a.x, a.y, a.x + Math.cos(a1) * a.radius, a.y + Math.sin(a1) * a.radius, rim);
+    let px = a.x + Math.cos(a0) * a.radius, py = a.y + Math.sin(a0) * a.radius;
+    for (let s = 1; s <= 16; s++) {
+      const u = a0 + (a1 - a0) * s / 16;
+      const x = a.x + Math.cos(u) * a.radius, y = a.y + Math.sin(u) * a.radius;
+      r.line(px, py, x, y, rim);
+      px = x; py = y;
+    }
+    const cx = a.x + Math.cos(ang) * a.radius * 0.55, cy = a.y + Math.sin(ang) * a.radius * 0.55;
+    this.groundLight(pen, f, cx, cy, a.radius * 0.8, col, (0.15 + 0.3 * p) * late, 0.2);
+  }
+
+  /**
+   * One band of the Void Breach's tide (a ring from the safe radius out past the arena rim). The shaded void (concentric rings on
+   * 'decal', under the horde) floods inward from the rim as the telegraph nears its end; the danger line at the inner edge is a
+   * hard additive rim on 'fx' that blinks in the last quarter. Standing in it when it resolves hurts players and monsters alike.
+   */
+  private voidTide(pen: Pen, f: FrameCtx, a: AreaView): void {
+    const r = pen.r;
+    const p = a.duration > 0 ? clamp01(a.age / a.duration) : 1;
+    const late = p > 0.75 ? 0.5 + 0.5 * Math.sin(f.time * 40) : 1;
+    const inner = voidTideInner(a);
+    const theme = f.theme;
+    const col: RGB = theme === 'rimedOssuary' || theme === 'choralCrypt' ? [0.45, 0.6, 1] : theme === 'ironColiseum' || theme === 'chainworks' ? [0.85, 0.2, 0.3] : [0.85, 0.35, 0.75];
+    // The visible part of the band: only as far out as the arena (the rest is off the map).
+    const edge = Math.min(a.radius, f.world.arenaRadius + 30);
+    const step = 14;
+    const flood = (edge - inner) * (0.25 + 0.75 * p);
+    const fill = pen.shape(col, 0.07 + 0.08 * p, 'decal');
+    fill.thickness = step * 1.1;
+    fill.emissive = 0.5;
+    for (let q = edge; q > inner; q -= step) {
+      if (edge - q > flood) break;
+      r.ring(a.x, a.y, q - step * 0.5, fill);
+    }
+    const rim = pen.shape(col, 0.9 * late, 'fx');
+    rim.additive = true;
+    rim.emissive = 1;
+    rim.thickness = 2.5;
+    r.ring(a.x, a.y, inner, rim);
+    this.groundLight(pen, f, a.x + (inner + 30), a.y, 120, col, (0.12 + 0.25 * p) * late, 0.3);
   }
 
   /** A ground danger light through the per-frame proximity budget and the area light cap. */

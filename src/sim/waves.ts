@@ -6,7 +6,7 @@
 // portal).
 import type { MonsterKind } from '../contracts/content';
 import type { MonsterRarity } from '../contracts/sim';
-import { KIND_INDEX, MAGIC_MODS, RARE_MODS, packWeight } from './archetypes';
+import { KIND_INDEX, MAGIC_MODS, packWeight, rollRareMods } from './archetypes';
 import { removeHostileAreas, spawnArea } from './areas';
 import { startBoss } from './bosses';
 import { DT_FIRE, killMonster } from './combat';
@@ -18,13 +18,16 @@ import {
   STREAM_WINDOW, VIEW_HALF_H, VIEW_HALF_W, WAVE_DAMAGE_GROWTH,
 } from './constants';
 import { DAMAGE_INDEX, GOLDEN_ANGLE, TAU } from './math';
-import { requiredEventPending } from './map-events';
+import { eventHoldsWaveTell, requiredEventPending } from './map-events';
 import { monsterDef, monsterDefs } from './rosters';
 import { nearestLiving } from './player';
 import { clearHostileProjectiles } from './projectiles';
 import { spawnClearRewards } from './props';
 import { allocPack, partySize, spawnGroup, spawnMonster } from './spawn';
-import type { Director, PlannedPack, PlayerState, WavePlan, World } from './world';
+import { pactForWave, type Director, type PlannedPack, type PlayerState, type WavePlan, type World } from './world';
+
+/** How far from the party's centre an Ambush pact places its packs. */
+const AMBUSH_RADIUS = 330;
 
 /** Wave budget for `wave` with `players` living players: base × countMultiplier × (1 + 0.25·(n−1)). */
 export function waveBudget(w: World, wave: number, players: number): number {
@@ -71,18 +74,17 @@ export function updateDirector(w: World): void {
     refreshPhase(w);
     return;
   }
-  const eventHolding = (w.mapEvent?.grace ?? 0) > 0 && (w.mapEvent?.view?.phase === 'warning' || w.mapEvent?.view?.phase === 'active');
+  // Events overlay the waves; only a boss-time event may hold the next wave TELL (never a spawn), for a few seconds.
+  const eventHolding = d.tellWave > 0 && eventHoldsWaveTell(w);
   if (d.tellWave > 0 && !eventHolding) {
     d.tellTimer -= DT;
     if (d.tellTimer <= 0) startWave(w, d.tellWave);
   }
   if (d.wave > 0) {
-    if (!eventHolding) {
-      d.waveTime += DT;
-      updateStream(w);
-    }
+    d.waveTime += DT;
+    updateStream(w);
     updateHazards(w);
-    if (d.tellWave === 0 && !eventHolding) {
+    if (d.tellWave === 0) {
       const cleared = waveCleared(w);
       if (d.wave < cfg.count) {
         // The boss wave holds until the boss falls; other waves advance on clear or on time.
@@ -134,8 +136,10 @@ export function planWave(w: World, wave: number): WavePlan {
   const boss = wave === cfg.bossWave;
   const lieutenant = wave === cfg.lieutenantWave;
   const n = partySize(w);
+  // A Pact Altar's pact for this wave (the seam: budget, pack rarity, ambush; life and loot are read at spawn / kill).
+  const pact = pactForWave(w, wave);
   // The full budget every wave (the boss wave too: her summons ride on top of a real horde).
-  const budget = waveBudget(w, wave, n);
+  const budget = Math.round(waveBudget(w, wave, n) * (pact?.monsters ?? 1));
   const elite = 1 + PARTY_ELITE_PER_PLAYER * (n - 1);
 
   const defs = monsterDefs();
@@ -143,7 +147,7 @@ export function planWave(w: World, wave: number): WavePlan {
   const weights = family.map((kind) => ({ kind, weight: packWeight(defs[KIND_INDEX[kind]], wave) })).filter((e) => e.weight > 0);
   if (weights.length === 0) weights.push({ kind: family[0], weight: 1 });
   const packBudget = Math.round(budget * PACK_SHARE);
-  const streamCount = budget - packBudget;
+  const streamCount = pact?.ambush ? Math.round((budget - packBudget) * 0.4) : budget - packBudget;
 
   const packs: PlannedPack[] = [];
   const perPack = new Map<MonsterKind, number>();
@@ -179,9 +183,12 @@ export function planWave(w: World, wave: number): WavePlan {
     let mods = 0;
     if (rng.next() < s.rarePackChance * elite) {
       rarity = 'rare';
-      const two = rng.shuffle(RARE_MODS).slice(0, 2);
-      mods = two[0] | two[1];
+      mods = rollRareMods(rng, s.level);
     } else if (rng.next() < s.magicPackChance * elite) {
+      rarity = 'magic';
+      mods = rng.pick(MAGIC_MODS);
+    }
+    if (pact?.magic && rarity === 'normal') {
       rarity = 'magic';
       mods = rng.pick(MAGIC_MODS);
     }
@@ -195,7 +202,7 @@ export function planWave(w: World, wave: number): WavePlan {
   for (const pk of packs) for (const k of pk.members) present.add(k);
   if (streamCount > 0) for (const e of streamWeights) present.add(e.kind);
   const families = family.filter((k) => present.has(k));
-  return { wave, packs, streamCount, streamWeights, families, lieutenant, boss };
+  return { wave, packs, streamCount, streamWeights, families, lieutenant, boss, ...(pact?.ambush ? { ambush: true } : {}) };
 }
 
 /**
@@ -303,6 +310,23 @@ function placePacks(w: World, plan: WavePlan): void {
   if (n === 0) return;
   const R = w.arenaRadius;
   const rng = w.worldRng;
+  if (plan.ambush && w.living.length > 0) {
+    // Ambush: every pack arrives at once from a ring round the party (already hunting).
+    let cx = 0, cy = 0;
+    for (const p of w.living) { cx += p.x / w.living.length; cy += p.y / w.living.length; }
+    const rot = rng.range(0, TAU);
+    const lim = R - 60;
+    for (let k = 0; k < n; k++) {
+      const a = rot + (k / n) * TAU;
+      let x = cx + Math.cos(a) * AMBUSH_RADIUS, y = cy + Math.sin(a) * AMBUSH_RADIUS;
+      const l = Math.hypot(x, y);
+      if (l > lim) { x *= lim / l; y *= lim / l; }
+      const planned = plan.packs[k];
+      const pack = allocPack(w, x, y, plan.wave, false, planned.rarity, true);
+      spawnGroup(w, planned.members, x, y, pack, planned.rarity, planned.mods, plan.wave);
+    }
+    return;
+  }
   const total = n * 3 + 6;
   const rot = rng.range(0, TAU);
   const pts: { x: number; y: number }[] = [];

@@ -1370,4 +1370,404 @@ export const SFX: Record<SfxId, SfxDef> = {
       for (const t of [0.12, 0.6, 1.08]) v.drum({ at: t, f: [80, 44, 0.15], gain: 0.4, d: 0.35, slap: 0.4, slapF: 380, wet: 0.3 });
     },
   },
+  // ---------------------------------------------------------------------------
+  // Map events (Event Director v2): every event speaks with the same small vocabulary.
+  // ---------------------------------------------------------------------------
+  eventOmen: {
+    group: 'flow', target: -19, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.55, priority: 2, impact: 0.3,
+    duck: { music: 2, hold: 1.2, release: 0.8 },
+    build(v) {
+      // A rising fifth on a low bell (D3 to A3) over a breath of wind: "something is here".
+      v.noise({ color: 'pink', gain: 0.8, env: { pts: [[0.3, 1], [0.36, 0]] }, filter: { type: 'bandpass', f: [240, 1100, 0.3], q: 1.6 }, wet: 0.4 });
+      v.bell({ at: 0.0, f: midi(50), partials: P.church, gain: 0.22, decay: 2.2, wet: 0.5, fixed: true });
+      v.bell({ at: 0.3, f: midi(57), partials: P.church, gain: 0.26, decay: 2.8, wet: 0.55, fixed: true });
+      v.tone({ at: 0.28, type: 'triangle', f: midi(45), fixed: true, gain: 0.07, env: { pad: true, a: 0.2, h: 0.5, r: 1.0 }, filter: { type: 'lowpass', f: 900, fixed: true }, wet: 0.4 });
+    },
+  },
+  eventOnset: {
+    group: 'flow', target: -16, maxVoices: 1, minInterval: 0.6, pitchVar: 0, reverb: 0.4, priority: 2,
+    duck: { music: 3, hold: 0.8, release: 0.8 },
+    build(v) {
+      v.drum({ f: [110, 50, 0.3], gain: 0.9, d: 0.6, slap: 1.0, slapF: 600, wet: 0.3 });
+      v.bell({ at: 0.02, f: midi(45), partials: P.gong, gain: 0.14, decay: 1.6, wet: 0.45, fixed: true });
+      v.noise({ color: 'brown', gain: 0.9, env: { a: 0.01, d: 0.3 }, filter: { type: 'lowpass', f: 300 } });
+    },
+  },
+  eventStep: {
+    // Each objective step is one note higher (the D minor pentatonic of the mote ladder), like the level-up ladder.
+    group: 'flow', target: -21, maxVoices: 3, minInterval: 0.08, pitchVar: 0, reverb: 0.4, priority: 1, burst: 'defer',
+    build(v) {
+      // The presenter passes the ladder step as a pitch ratio (2^(semitones / 12)) over a D4 base.
+      v.bell({ f: midi(62), partials: P.chime, gain: 0.3, decay: 1.1, wet: 0.35, echo: 0.15 });
+      v.click({ gain: 0.25, f: 2400, d: 0.02 });
+    },
+  },
+  eventLock: {
+    // The Stalker's disc locks: a short rising whoosh and a tick, the heartbeat doubles.
+    group: 'flow', target: -18, maxVoices: 1, minInterval: 0.5, pitchVar: 0.03, reverb: 0.25, priority: 2,
+    build(v) {
+      v.noise({ color: 'pink', gain: 1.1, env: { pts: [[0.28, 1], [0.34, 0]] }, filter: { type: 'bandpass', f: [400, 3400, 0.28], q: 2.2 } });
+      v.click({ at: 0.0, gain: 0.5, f: 1600, d: 0.03 });
+      v.thump({ at: 0.0, f: [150, 70, 0.1], gain: 0.5, d: 0.16 });
+      v.thump({ at: 0.14, f: [130, 60, 0.1], gain: 0.55, d: 0.2 });
+    },
+  },
+  eventWhiff: {
+    group: 'flow', target: -17, maxVoices: 1, minInterval: 0.5, pitchVar: 0.03, reverb: 0.35, priority: 2, impact: 0.02,
+    build(v) {
+      // A hollow thud: a low body knock, a dry clack and a puff of dust.
+      v.thump({ f: [96, 38, 0.2], gain: 0.9, d: 0.5, drive: 1.4 });
+      v.click({ gain: 0.5, f: 700, d: 0.05 });
+      v.noise({ color: 'brown', gain: 1.0, env: { a: 0.005, d: 0.22 }, filter: { type: 'lowpass', f: 700 } });
+      v.bell({ at: 0.03, f: midi(43), partials: BONE, gain: 0.18, decay: 0.6, wet: 0.3, fixed: true });
+    },
+  },
+  eventHit: {
+    group: 'flow', target: -17, maxVoices: 1, minInterval: 0.5, pitchVar: 0.03, reverb: 0.3, priority: 2,
+    build(v) {
+      v.thump({ f: [140, 45, 0.25], gain: 1.0, d: 0.55, drive: 2 });
+      v.noise({ color: 'pink', gain: 1.0, env: { a: 0.002, d: 0.14 }, filter: { type: 'lowpass', f: 2200 } });
+    },
+  },
+  eventReturn: {
+    group: 'flow', target: -21, maxVoices: 2, minInterval: 0.2, pitchVar: 0, reverb: 0.5, priority: 1, burst: 'defer',
+    build(v) {
+      // An echo reaches the anchor: a bell one step up the ladder (pitch ratio from the presenter), a soft violet swell.
+      v.bell({ f: midi(50), partials: P.church, gain: 0.3, decay: 1.8, wet: 0.5 });
+      v.tone({ type: 'sine', f: midi(38), gain: 0.08, env: { pad: true, a: 0.05, h: 0.2, r: 0.6 }, wet: 0.4 });
+    },
+  },
+  eventSeal: {
+    group: 'flow', target: -16, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.55, priority: 2,
+    duck: { music: 4, hold: 1.2, release: 1 },
+    build(v) {
+      // A full chord and a violet ring pulse: the rift closes.
+      for (const [n, dt] of [[50, -5], [57, 4], [62, 0], [66, 3]] as const) {
+        v.tone({ type: 'triangle', f: midi(n), fixed: true, detune: dt, gain: 0.09, env: { pad: true, a: 0.06, h: 0.6, r: 1.3 }, filter: { type: 'lowpass', f: 2200, fixed: true }, wet: 0.5 });
+      }
+      v.bell({ f: midi(74), partials: P.glass, gain: 0.16, decay: 2.0, wet: 0.5, fixed: true });
+      v.drum({ f: [90, 48, 0.3], gain: 0.5, d: 0.6, slap: 0.4, slapF: 400, wet: 0.35 });
+    },
+  },
+  eventErupt: {
+    group: 'flow', target: -15, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.5, priority: 2,
+    duck: { music: 6, hold: 2, release: 1.5 },
+    build(v) {
+      // A slow downward drone under a swelling rumble: it is about to break.
+      v.tone({ type: 'sawtooth', f: [110, 42, 2.2], gain: 0.16, env: { pad: true, a: 0.3, h: 1.6, r: 0.8 }, filter: { type: 'lowpass', f: 420, fixed: true }, wet: 0.35 });
+      v.noise({ color: 'brown', gain: 1.6, env: { pad: true, a: 1.4, h: 0.6, r: 0.6 }, filter: { type: 'lowpass', f: 240 } });
+      v.thump({ at: 2.1, f: [70, 24, 0.9], gain: 0.9, d: 0.9, drive: 2 });
+    },
+  },
+  eventBronze: {
+    group: 'flow', target: -18, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.4, priority: 2, impact: 0.1,
+    duck: { music: 3, hold: 1, release: 0.8 },
+    build(v) {
+      [62, 69].forEach((n, i) => v.bell({ at: 0.1 + i * 0.12, f: midi(n), partials: P.coin, gain: 0.18, decay: 1.4, wet: 0.35, fixed: true }));
+      v.tone({ at: 0.08, type: 'triangle', f: midi(50), fixed: true, gain: 0.06, env: { pad: true, a: 0.1, h: 0.4, r: 0.8 }, wet: 0.4 });
+    },
+  },
+  eventSilver: {
+    group: 'flow', target: -17, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.45, priority: 2, impact: 0.1,
+    duck: { music: 4, hold: 1.2, release: 0.9 },
+    build(v) {
+      [62, 69, 74].forEach((n, i) => v.bell({ at: 0.1 + i * 0.1, f: midi(n), partials: P.silver, gain: 0.2, decay: 1.7, wet: 0.4, fixed: true }));
+      for (const n of [50, 57, 62]) v.tone({ at: 0.08, type: 'triangle', f: midi(n), fixed: true, gain: 0.05, env: { pad: true, a: 0.1, h: 0.5, r: 1.0 }, wet: 0.45 });
+    },
+  },
+  eventGold: {
+    group: 'flow', target: -15, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.5, priority: 2, impact: 0.2,
+    duck: { music: 6, hold: 1.6, release: 1.1 },
+    build(v) {
+      // The level-up ladder's bigger sibling: a D-major bell arpeggio, a warm pad and a spray of sparkles.
+      v.noise({ color: 'pink', gain: 1.0, env: { pts: [[0.2, 1], [0.26, 0]] }, filter: { type: 'bandpass', f: [600, 4800, 0.2], q: 1.4 } });
+      [62, 66, 69, 74, 78, 81].forEach((n, i) => v.bell({ at: 0.2 + i * 0.08, f: midi(n), partials: P.chime, gain: 0.2, decay: 1.9 - i * 0.1, pan: (i - 2.5) * 0.16, wet: 0.4, echo: 0.2, fixed: true }));
+      for (const n of [50, 57, 62, 66]) v.tone({ at: 0.18, type: 'triangle', f: midi(n), fixed: true, gain: 0.06, env: { pad: true, a: 0.2, h: 0.8, r: 1.2 }, wet: 0.45 });
+      v.shimmer({ at: 0.5, dur: 1.2, count: 12, notes: [86, 90, 93, 98], gain: 0.045 });
+    },
+  },
+  eventFail: {
+    // Never harsh: a slow deflate.
+    group: 'flow', target: -20, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.4, priority: 2,
+    build(v) {
+      v.tone({ type: 'triangle', f: [midi(57), midi(45), 1.0], fixed: true, gain: 0.12, env: { pad: true, a: 0.04, h: 0.35, r: 0.8 }, filter: { type: 'lowpass', f: 1200, fixed: true }, wet: 0.4 });
+      v.noise({ color: 'pink', gain: 0.5, env: { a: 0.01, d: 0.6 }, filter: { type: 'lowpass', f: 500 } });
+    },
+  },
+  eventBeat: {
+    // The Stalker's heartbeat: lub-dub. The presenter plays it faster as the pounce nears.
+    group: 'flow', target: -24, maxVoices: 2, minInterval: 0.25, pitchVar: 0.02, reverb: 0.2, priority: 1,
+    build(v) {
+      v.thump({ f: [78, 40, 0.12], gain: 0.9, d: 0.22 });
+      v.thump({ at: 0.16, f: [68, 36, 0.12], gain: 0.7, d: 0.24 });
+    },
+  },
+  eventHum: {
+    // The Echoing's choir hum: one 2.4 s swell of a low D-minor chord, sung on two vowels (the formant filters stay put while the
+    // presenter's pitch ratio lifts the voices with every Resonance). Replayed every 2 s, the overlaps blend into one held chord.
+    group: 'flow', target: -26, maxVoices: 2, minInterval: 1, pitchVar: 0, reverb: 0.6, priority: 1, burst: 'loudest',
+    build(v) {
+      const env = { pad: true, a: 0.9, h: 0.8, r: 0.7 } as const;
+      for (const [n, dt, formant] of [[38, -6, 700], [45, 5, 1100], [50, -3, 700], [53, 4, 450]] as const) {
+        v.tone({ type: 'sawtooth', f: midi(n), detune: dt, gain: 0.05, env, filter: { type: 'bandpass', f: formant, q: 2.4, fixed: true }, wet: 0.5 });
+      }
+      v.tone({ type: 'triangle', f: midi(26), gain: 0.05, env, filter: { type: 'lowpass', f: 300, fixed: true }, wet: 0.3 });
+      v.noise({ color: 'pink', gain: 0.22, env, filter: { type: 'bandpass', f: 1600, q: 1.4, fixed: true }, wet: 0.5 });
+    },
+  },
+  wheelBreak: {
+    // A cartwheel gives way: a wooden crack, a splintering rattle and a low thud as the axle drops.
+    group: 'flow', target: -17, maxVoices: 2, minInterval: 0.3, pitchVar: 0.05, reverb: 0.25, priority: 2, impact: 0.0,
+    build(v) {
+      v.click({ gain: 0.7, f: 900, d: 0.04 });
+      v.noise({ color: 'pink', gain: 1.0, env: { a: 0.002, d: 0.22 }, filter: { type: 'bandpass', f: [1800, 500, 0.2], q: 1.4 } });
+      v.crackle({ at: 0.03, dur: 0.35, gain: 0.25, hp: 1500 });
+      v.thump({ at: 0.06, f: [110, 42, 0.2], gain: 0.8, d: 0.35, drive: 1.3 });
+      v.bell({ at: 0.04, f: midi(41), partials: BONE, gain: 0.12, decay: 0.5, wet: 0.2, fixed: true });
+    },
+  },
+  shieldBreak: {
+    // The shield line drops: a glassy ring that shatters downward, a cold chime of release.
+    group: 'flow', target: -19, maxVoices: 1, minInterval: 0.4, pitchVar: 0.03, reverb: 0.4, priority: 2,
+    build(v) {
+      v.bell({ f: midi(86), partials: P.glass, gain: 0.2, decay: 0.9, wet: 0.45, fixed: true });
+      v.bell({ at: 0.05, f: midi(79), partials: P.glass, gain: 0.18, decay: 1.0, wet: 0.45, fixed: true });
+      v.noise({ color: 'white', gain: 0.6, env: { a: 0.002, d: 0.3 }, filter: { type: 'highpass', f: 3500, fixed: true }, wet: 0.3 });
+      v.crackle({ at: 0.0, dur: 0.3, gain: 0.2, hp: 4500 });
+      v.tone({ at: 0.02, type: 'triangle', f: [midi(62), midi(50), 0.4], fixed: true, gain: 0.08, env: { pad: true, a: 0.02, h: 0.15, r: 0.4 }, wet: 0.3 });
+    },
+  },
+  pactStone: {
+    // A stone grinding under a foot: dry scrape, a low knock and a faint bell that settles.
+    group: 'flow', target: -24, maxVoices: 1, minInterval: 0.3, pitchVar: 0.03, reverb: 0.4, priority: 1,
+    build(v) {
+      v.noise({ color: 'brown', gain: 1.2, env: { a: 0.02, d: 0.5 }, filter: { type: 'lowpass', f: [420, 160, 0.5] } });
+      v.noise({ color: 'pink', gain: 0.5, env: { pts: [[0.1, 0.8], [0.45, 0]] }, filter: { type: 'bandpass', f: [900, 400, 0.4], q: 2 } });
+      v.thump({ at: 0.02, f: [90, 48, 0.2], gain: 0.6, d: 0.3 });
+      v.bell({ at: 0.05, f: midi(52), partials: P.church, gain: 0.1, decay: 1.4, wet: 0.5, fixed: true });
+    },
+  },
+  pactSeal: {
+    // The bargain is struck: a gong, a low fifth under it and a closing tick. Deep and final, never bright.
+    group: 'flow', target: -17, maxVoices: 1, minInterval: 0.6, pitchVar: 0, reverb: 0.5, priority: 2, impact: 0.02,
+    duck: { music: 3, hold: 0.9, release: 0.8 },
+    build(v) {
+      v.bell({ f: midi(40), partials: P.gong, gain: 0.3, decay: 2.6, wet: 0.5, fixed: true });
+      v.bell({ at: 0.04, f: midi(47), partials: P.gong, gain: 0.16, decay: 2.0, wet: 0.5, fixed: true });
+      v.drum({ f: [100, 46, 0.3], gain: 0.6, d: 0.5, slap: 0.5, slapF: 500, wet: 0.3 });
+      v.click({ at: 0.0, gain: 0.4, f: 1800, d: 0.03 });
+    },
+  },
+  pactWave: {
+    // The pact takes hold: a slow low drone that swells under a soft drum, like a door closing on the wave.
+    group: 'flow', target: -18, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.5, priority: 2,
+    duck: { music: 3, hold: 1.0, release: 0.9 },
+    build(v) {
+      v.tone({ type: 'sawtooth', f: [82, 62, 1.2], gain: 0.1, env: { pad: true, a: 0.3, h: 0.7, r: 0.6 }, filter: { type: 'lowpass', f: 380, fixed: true }, wet: 0.4 });
+      v.noise({ color: 'brown', gain: 1.0, env: { pad: true, a: 0.5, h: 0.4, r: 0.5 }, filter: { type: 'lowpass', f: 220 } });
+      v.drum({ at: 0.8, f: [90, 44, 0.25], gain: 0.7, d: 0.5, slap: 0.4, slapF: 420, wet: 0.3 });
+    },
+  },
+  bloomGrow: {
+    // A bloom ripens a stage: a soft wooden pluck and a warm bell. The presenter passes the ladder step as the pitch ratio.
+    group: 'flow', target: -24, maxVoices: 3, minInterval: 0.15, pitchVar: 0, reverb: 0.35, priority: 1, burst: 'defer',
+    build(v) {
+      v.bell({ f: midi(64), partials: P.chime, gain: 0.22, decay: 0.9, wet: 0.35, echo: 0.1 });
+      v.tone({ type: 'triangle', f: midi(52), gain: 0.08, env: { a: 0.004, d: 0.3 }, wet: 0.3 });
+      v.noise({ color: 'pink', gain: 0.3, env: { a: 0.002, d: 0.07 }, filter: { type: 'bandpass', f: 1800, q: 1.5 } });
+    },
+  },
+  bloomHarvest: {
+    // A harvest: a rustle of leaves, a pop and two rising bells.
+    group: 'flow', target: -19, maxVoices: 2, minInterval: 0.3, pitchVar: 0.03, reverb: 0.35, priority: 2,
+    build(v) {
+      v.noise({ color: 'pink', gain: 0.9, env: { pts: [[0.03, 1], [0.3, 0]] }, filter: { type: 'bandpass', f: [1400, 3800, 0.25], q: 1.2 } });
+      v.click({ gain: 0.5, f: 1200, d: 0.03 });
+      [62, 69].forEach((n, i) => v.bell({ at: 0.06 + i * 0.1, f: midi(n), partials: P.coin, gain: 0.2, decay: 1.2, wet: 0.35, fixed: true }));
+    },
+  },
+  bloomBite: {
+    // A monster gnaws the bloom: a short wet crunch. Cheap and low, it repeats.
+    group: 'flow', target: -27, maxVoices: 2, minInterval: 0.12, pitchVar: 0.08, reverb: 0.15, priority: 0, glue: true,
+    build(v) {
+      v.noise({ color: 'brown', gain: 1.0, env: { a: 0.002, d: 0.09 }, filter: { type: 'lowpass', f: 900 } });
+      v.noise({ color: 'pink', gain: 0.6, env: { a: 0.001, d: 0.03 }, filter: { type: 'bandpass', f: 2600, q: 1.5 } });
+      v.thump({ f: [140, 70, 0.08], gain: 0.4, d: 0.1 });
+    },
+  },
+  bloomWither: {
+    // A bloom is lost: a dry exhale and a falling tone. Never harsh.
+    group: 'flow', target: -22, maxVoices: 1, minInterval: 0.4, pitchVar: 0.03, reverb: 0.35, priority: 1,
+    build(v) {
+      v.noise({ color: 'pink', gain: 0.6, env: { a: 0.01, d: 0.5 }, filter: { type: 'lowpass', f: [1800, 400, 0.5] } });
+      v.tone({ type: 'triangle', f: [midi(60), midi(48), 0.6], fixed: true, gain: 0.1, env: { pad: true, a: 0.02, h: 0.2, r: 0.4 }, filter: { type: 'lowpass', f: 1200, fixed: true }, wet: 0.35 });
+    },
+  },
+  ringRise: {
+    // The chains stand: a low iron grind under a rising run of links and a dull gong (the arena closes).
+    group: 'flow', target: -16, maxVoices: 1, minInterval: 1, pitchVar: 0.02, reverb: 0.45, priority: 2,
+    duck: { music: 3, hold: 1, release: 0.8 },
+    build(v) {
+      v.noise({ color: 'brown', gain: 1.5, env: { pad: true, a: 0.5, h: 0.5, r: 0.5 }, filter: { type: 'lowpass', f: { pts: [[0, 160], [1.2, 420]] } }, wet: 0.3 });
+      for (let k = 0; k < 9; k++) v.click({ at: 0.1 + k * 0.1, gain: 0.35, f: 900 + k * 140, d: 0.03 });
+      for (let k = 0; k < 7; k++) v.bell({ at: 0.15 + k * 0.12, f: midi(74 + (k % 3) * 2), partials: P.anvil, gain: 0.06, decay: 0.3, wet: 0.2, fixed: true });
+      v.bell({ at: 0.95, f: midi(38), partials: P.gong, gain: 0.2, decay: 1.8, wet: 0.45, fixed: true });
+      v.thump({ at: 0.95, f: [90, 38, 0.25], gain: 0.8, d: 0.5, drive: 1.6 });
+    },
+  },
+  ringChain: {
+    // A vow is taken / the chains drop: a rattle of links and one heavy clank.
+    group: 'flow', target: -19, maxVoices: 2, minInterval: 0.4, pitchVar: 0.04, reverb: 0.3, priority: 2,
+    build(v) {
+      for (let k = 0; k < 6; k++) v.click({ at: k * 0.045, gain: 0.45 - k * 0.04, f: 1500 + v.rr(-300, 300), d: 0.025 });
+      v.bell({ f: midi(50), partials: P.anvil, gain: 0.28, decay: 0.7, wet: 0.25, fixed: true });
+      v.noise({ color: 'pink', gain: 0.6, env: { a: 0.002, d: 0.18 }, filter: { type: 'bandpass', f: 2600, q: 1.4 } });
+    },
+  },
+  ringSlam: {
+    // The Champion commits (a lane charge or a slam is telegraphed): a short rising whoosh, a chain snap and a heavy low knock.
+    group: 'flow', target: -17, maxVoices: 1, minInterval: 0.6, pitchVar: 0.03, reverb: 0.3, priority: 2,
+    build(v) {
+      v.noise({ color: 'pink', gain: 1.0, env: { pts: [[0.32, 1], [0.4, 0]] }, filter: { type: 'bandpass', f: [300, 2600, 0.3], q: 2 } });
+      v.thump({ at: 0.0, f: [120, 50, 0.15], gain: 0.8, d: 0.25 });
+      v.click({ at: 0.3, gain: 0.5, f: 1200, d: 0.03 });
+      v.bell({ at: 0.3, f: midi(43), partials: P.anvil, gain: 0.16, decay: 0.5, wet: 0.2, fixed: true });
+    },
+  },
+  hostThaw: {
+    // One statue wakes: an ice crack, a small glassy tick and a breath of rime. Up to two dozen of them: short and soft.
+    group: 'flow', target: -24, maxVoices: 3, minInterval: 0.12, pitchVar: 0.08, reverb: 0.35, priority: 1, burst: 'defer',
+    build(v) {
+      v.click({ gain: 0.6, f: 3200, d: 0.02 });
+      v.crackle({ at: 0.01, dur: 0.25, gain: 0.18, hp: 3500 });
+      v.bell({ at: 0.02, f: midi(86 + Math.round(v.rr(-3, 3))), partials: P.glass, gain: 0.12, decay: 0.6, wet: 0.4 });
+      v.noise({ color: 'pink', gain: 0.5, env: { a: 0.01, d: 0.3 }, filter: { type: 'highpass', f: 2500 } });
+    },
+  },
+  prismShatter: {
+    // The Time Prism breaks: a bright burst of glass, a cascade of falling shards and a deep boom under it.
+    group: 'flow', target: -14, maxVoices: 1, minInterval: 1, pitchVar: 0.02, reverb: 0.5, priority: 2, impact: 0.02,
+    duck: { music: 5, hold: 1.5, release: 1 },
+    build(v) {
+      v.noise({ color: 'white', gain: 1.1, env: { a: 0.002, d: 0.3 }, filter: { type: 'highpass', f: 3000 }, wet: 0.3 });
+      v.thump({ f: [110, 34, 0.35], gain: 1.0, d: 0.8, drive: 2 });
+      for (let k = 0; k < 10; k++) v.bell({ at: 0.03 + k * 0.05, f: midi(98 - k * 2 + Math.round(v.rr(-1, 1))), partials: P.glass, gain: 0.12, decay: 0.9, wet: 0.45, pan: v.rr(-0.6, 0.6), fixed: true });
+      v.crackle({ at: 0.05, dur: 0.9, gain: 0.2, hp: 4500 });
+    },
+  },
+  hostWake: {
+    // The shockwave lands and the whole host thaws at once: a swelling rumble, a chorus of cracks and a low horn-like drone.
+    group: 'flow', target: -15, maxVoices: 1, minInterval: 1, pitchVar: 0.02, reverb: 0.5, priority: 2,
+    duck: { music: 6, hold: 2, release: 1.4 },
+    build(v) {
+      v.noise({ color: 'brown', gain: 1.6, env: { pad: true, a: 0.3, h: 0.6, r: 0.9 }, filter: { type: 'lowpass', f: 300 } });
+      v.tone({ type: 'sawtooth', f: [70, 48, 1.4], gain: 0.14, env: { pad: true, a: 0.2, h: 0.9, r: 0.7 }, filter: { type: 'lowpass', f: 380, fixed: true }, wet: 0.35 });
+      for (let k = 0; k < 14; k++) v.click({ at: 0.05 + k * 0.045 + v.rr(0, 0.03), gain: 0.4, f: v.rr(2200, 4200), d: 0.02 });
+      v.crackle({ at: 0.05, dur: 0.8, gain: 0.22, hp: 3000 });
+      v.thump({ at: 0.0, f: [80, 30, 0.4], gain: 0.9, d: 0.9, drive: 1.8 });
+    },
+  },
+  anvilStrike: {
+    // A kill near the anvil: a hammer tick on hot iron. The presenter climbs the pentatonic ladder as it charges.
+    group: 'flow', target: -23, maxVoices: 2, minInterval: 0.1, pitchVar: 0, reverb: 0.3, priority: 1, burst: 'defer', fixedPitch: true,
+    build(v) {
+      v.click({ gain: 0.5, f: 2600, d: 0.02 });
+      v.bell({ f: midi(62), partials: P.coin, gain: 0.22, decay: 0.7, wet: 0.3 });
+      v.thump({ f: [200, 90, 0.05], gain: 0.4, d: 0.12 });
+    },
+  },
+  anvilCharged: {
+    // Charged: three hammer blows rising, then a white-hot ring.
+    group: 'flow', target: -17, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.45, priority: 2,
+    duck: { music: 3, hold: 1, release: 0.8 },
+    build(v) {
+      [0, 0.16, 0.32].forEach((t, k) => {
+        v.thump({ at: t, f: [180 + k * 30, 80, 0.06], gain: 0.7, d: 0.18 });
+        v.click({ at: t, gain: 0.5, f: 2200 + k * 300, d: 0.02 });
+      });
+      v.bell({ at: 0.34, f: midi(74), partials: P.gong, gain: 0.2, decay: 2.2, wet: 0.5, fixed: true });
+      v.bell({ at: 0.36, f: midi(86), partials: P.chime, gain: 0.14, decay: 1.6, wet: 0.45, fixed: true });
+      v.noise({ color: 'pink', gain: 0.6, env: { a: 0.3, d: 0.4 }, filter: { type: 'bandpass', f: [900, 5200, 0.35], q: 1.4 } });
+    },
+  },
+  anvilForge: {
+    // A boon is forged: a heavy strike, a hiss of quench and a warm bell.
+    group: 'flow', target: -16, maxVoices: 1, minInterval: 0.6, pitchVar: 0, reverb: 0.45, priority: 2, impact: 0.02,
+    duck: { music: 3, hold: 1, release: 0.8 },
+    build(v) {
+      v.thump({ f: [150, 50, 0.1], gain: 1.0, d: 0.4, drive: 1.8 });
+      v.click({ gain: 0.6, f: 1800, d: 0.04 });
+      v.noise({ color: 'white', gain: 0.5, env: { a: 0.02, d: 0.6 }, filter: { type: 'highpass', f: 4200, fixed: true } });
+      [57, 64, 69].forEach((n, k) => v.bell({ at: 0.1 + k * 0.08, f: midi(n), partials: P.church, gain: 0.2, decay: 1.8, wet: 0.45, fixed: true }));
+    },
+  },
+  bellToll: {
+    // The great bell: a deep strike and a long church-bell tail. The presenter detunes it a little lower for each Dirge stack.
+    group: 'boss', target: -15, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.6, priority: 2, impact: 0.02,
+    duck: { music: 5, hold: 1.4, release: 1.2 },
+    build(v) {
+      v.drum({ f: [95, 46, 0.3], gain: 0.7, d: 0.5, slap: 0.5, slapF: 500, wet: 0.35 });
+      v.bell({ f: midi(38), partials: P.church, gain: 0.34, decay: 4.2, wet: 0.6, fixed: true });
+      v.bell({ at: 0.01, f: midi(50), partials: P.church, gain: 0.26, decay: 3.4, wet: 0.55, fixed: true });
+      v.bell({ at: 0.02, f: midi(57), partials: P.gong, gain: 0.14, decay: 2.6, wet: 0.5, fixed: true });
+      v.noise({ color: 'brown', gain: 0.8, env: { a: 0.01, d: 0.4 }, filter: { type: 'lowpass', f: 320 } });
+    },
+  },
+  cantorFall: {
+    // A cantor falls silent: a choir note that breaks into a fading fall and a soft bell.
+    group: 'flow', target: -18, maxVoices: 2, minInterval: 0.4, pitchVar: 0.03, reverb: 0.5, priority: 2,
+    build(v) {
+      v.tone({ type: 'triangle', f: [midi(62), midi(50), 0.9], fixed: true, gain: 0.14, env: { pad: true, a: 0.03, h: 0.25, r: 0.7 }, filter: { type: 'lowpass', f: 1600, fixed: true }, wet: 0.5 });
+      v.bell({ at: 0.05, f: midi(69), partials: P.chime, gain: 0.2, decay: 1.4, wet: 0.45, fixed: true });
+      v.noise({ color: 'pink', gain: 0.4, env: { a: 0.01, d: 0.3 }, filter: { type: 'lowpass', f: 900 } });
+    },
+  },
+  dirge: {
+    // The Dirge: a low choir drone swelling under the tolls, dark and slow.
+    group: 'flow', target: -24, maxVoices: 1, minInterval: 0.6, pitchVar: 0.02, reverb: 0.5, priority: 1,
+    build(v) {
+      for (const [n, dt] of [[38, -6], [45, 5], [50, 0]] as const) {
+        v.tone({ type: 'sawtooth', f: midi(n), fixed: true, detune: dt, gain: 0.06, env: { pad: true, a: 0.8, h: 1.2, r: 1.2 }, filter: { type: 'lowpass', f: 420, fixed: true }, wet: 0.45 });
+      }
+      v.noise({ color: 'brown', gain: 0.6, env: { pad: true, a: 0.9, h: 0.8, r: 1.0 }, filter: { type: 'lowpass', f: 200 } });
+    },
+  },
+  voidTide: {
+    // The void tide advances: a falling groan under a rushing wash, then a low thud as the band closes in.
+    group: 'flow', target: -15, maxVoices: 1, minInterval: 1, pitchVar: 0, reverb: 0.55, priority: 2,
+    duck: { music: 5, hold: 2, release: 1.4 },
+    build(v) {
+      v.tone({ type: 'sawtooth', f: [140, 46, 1.8], gain: 0.14, env: { pad: true, a: 0.25, h: 1.3, r: 0.7 }, filter: { type: 'lowpass', f: 380, fixed: true }, wet: 0.4 });
+      v.tone({ type: 'sine', f: [97, 52, 1.8], detune: 14, gain: 0.1, env: { pad: true, a: 0.3, h: 1.2, r: 0.7 }, wet: 0.4 });
+      v.noise({ color: 'brown', gain: 1.4, env: { pad: true, a: 1.2, h: 0.6, r: 0.6 }, filter: { type: 'lowpass', f: { pts: [[0, 200], [1.6, 700], [2.4, 260]] } } });
+      v.noise({ color: 'pink', gain: 0.5, env: { pad: true, a: 1.0, h: 0.6, r: 0.7 }, filter: { type: 'bandpass', f: { pts: [[0, 600], [1.6, 2200], [2.4, 900]] }, q: 1.8 }, wet: 0.4 });
+      v.thump({ at: 1.9, f: [80, 28, 0.6], gain: 0.8, d: 0.7, drive: 1.6 });
+    },
+  },
+  voidSurge: {
+    // A surge of the void: a dissonant rising cluster over a crackle, then a short dull blow.
+    group: 'flow', target: -17, maxVoices: 1, minInterval: 1, pitchVar: 0.02, reverb: 0.45, priority: 2,
+    duck: { music: 3, hold: 1, release: 0.8 },
+    build(v) {
+      for (const [n, dt] of [[45, -8], [46, 9], [52, 0]] as const) {
+        v.tone({ type: 'triangle', f: [midi(n), midi(n + 7), 0.9], detune: dt, gain: 0.08, env: { pad: true, a: 0.3, h: 0.4, r: 0.5 }, filter: { type: 'lowpass', f: 1800, fixed: true }, wet: 0.4 });
+      }
+      v.crackle({ at: 0.3, dur: 0.8, gain: 0.14, hp: 2500, wet: 0.3 });
+      v.noise({ color: 'pink', gain: 0.7, env: { pts: [[0.7, 1], [0.78, 0]] }, filter: { type: 'bandpass', f: [300, 2600, 0.7], q: 1.6 } });
+      v.thump({ at: 0.85, f: [100, 40, 0.2], gain: 0.8, d: 0.35, drive: 1.4 });
+    },
+  },
+  heartCrack: {
+    // The Void Heart: its ward drops or it breaks. A glassy crack, a hollow bell and a low body blow.
+    group: 'flow', target: -16, maxVoices: 1, minInterval: 0.6, pitchVar: 0.03, reverb: 0.5, priority: 2, impact: 0.02,
+    duck: { music: 4, hold: 1.2, release: 1 },
+    build(v) {
+      v.click({ gain: 0.7, f: 3200, d: 0.03 });
+      v.noise({ color: 'white', gain: 0.6, env: { a: 0.002, d: 0.16 }, filter: { type: 'highpass', f: 3000 } });
+      v.bell({ at: 0.02, f: midi(57), partials: P.glass, gain: 0.2, decay: 1.6, wet: 0.5, fixed: true });
+      v.bell({ at: 0.06, f: midi(64), partials: P.glass, gain: 0.14, decay: 1.2, wet: 0.5, fixed: true });
+      v.thump({ f: [110, 34, 0.25], gain: 0.9, d: 0.6, drive: 1.6 });
+      v.crackle({ at: 0.05, dur: 0.5, gain: 0.1, hp: 4000 });
+    },
+  },
 };

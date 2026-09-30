@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8" /><title>Atlas art sheet</title>
+<style>html,body{margin:0;background:#0d0b0e}canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+import { nodeFrame, doorFrame, crownFrame, pipFrame, sealFrame, gemFrame, newFlagFrame, chainFrame, plumeFrame, lanternFrame, haloRaster } from '/src/art/atlas/plates.ts';
+import { emblem } from '/src/art/atlas/emblems.ts';
+import { MATERIALS, KEY_COLOUR } from '/src/art/atlas/geometry.ts';
+import { frameToSurface, drawFrameSurface, rasterToCanvas } from '/src/art/atlas/canvas.ts';
+import { hexToColor } from '/src/art/palette.ts';
+const q = new URLSearchParams(location.search);
+const Z = Number(q.get('z') ?? 4);
+const themes = ['ashenForge','cinderChapel','rimedOssuary','choralCrypt','ironColiseum','chainworks'];
+const c = document.getElementById('c');
+c.width = 6*48*Z + 20; c.height = (5*48 + 130)*Z; 
+const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.fillStyle = '#1a1619'; ctx.fillRect(0,0,c.width,c.height);
+ctx.scale(Z, Z);
+themes.forEach((t, ti) => MATERIALS.forEach((m, mi) => {
+  const rivets = (ti % 3) + 1;
+  const x = 4 + ti*48, y = 4 + mi*48;
+  const halo = rasterToCanvas(haloRaster(hexToColor({ashenForge:'#e8662a',cinderChapel:'#e0b04a',rimedOssuary:'#7fc6e8',choralCrypt:'#c07bff',ironColiseum:'#c2683a',chainworks:'#9a919c'}[t])));
+  ctx.globalCompositeOperation='lighter'; ctx.drawImage(halo, x-11, y-11); ctx.globalCompositeOperation='source-over';
+  drawFrameSurface(ctx, frameToSurface(nodeFrame(m, rivets, t)), x, y);
+}));
+let y0 = 5*48 + 6;
+let x = 4;
+for (const [k, col] of Object.entries(KEY_COLOUR)) { for (const ajar of [false, true]) { drawFrameSurface(ctx, frameToSurface(doorFrame(hexToColor(col), ajar)), x, y0); x += 42; } }
+x = 4; y0 += 54;
+for (const f of [crownFrame(), pipFrame(true,'gilt'), pipFrame(false,'gilt'), sealFrame(), gemFrame(), newFlagFrame(), chainFrame(), plumeFrame(0), plumeFrame(1), lanternFrame(0), lanternFrame(1)]) { drawFrameSurface(ctx, frameToSurface(f), x, y0); x += f.w + 6; }
+</script></body></html>

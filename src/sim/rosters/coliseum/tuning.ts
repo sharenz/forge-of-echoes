@@ -49,6 +49,19 @@ export const THRALL = {
   rakeMult: 0.65,
 } as const;
 
+/**
+ * Chain Thrall leap (rosters/pressure.ts gapLeap; pairs are [tier-1 map, full ramp], behaviour.ts byLevel): the hunter's
+ * gap-closer between hooks (none while a hook is about to fly or its victim is being reeled in). Tier 1: one short, light
+ * hop every ~12 s from 50-90 units out, landing where the player stands. Full ramp: every ~5.5 s from up to 170 out,
+ * a 0.4 s crouch, landing where a steadily walking player will be (60% of the lead), 130 units of reach.
+ */
+export const THRALL_LEAP = {
+  minRange: 50, maxRange: [90, 170] as readonly [number, number], cooldown: [12, 5.5] as readonly [number, number], jitter: 1.5,
+  windup: [0.6, 0.4] as readonly [number, number], recover: [0.6, 0.4] as readonly [number, number],
+  hop: [60, 130] as readonly [number, number], aim: [0, 0.6] as readonly [number, number], radius: 18,
+  mult: [0.6, 1] as readonly [number, number],
+} as const;
+
 /** Iron Crossbowman: a locked aim line per bolt (family.ts brainCrossbowman). */
 export const CROSSBOW = {
   near: 150,
@@ -59,6 +72,9 @@ export const CROSSBOW = {
   cooldown: 5,
   jitter: 1,
   boltSpeed: 480,
+  /** Intercept share of the locked aim line [tier 1, full ramp] (the line shows where the bolt goes); fallback lead in s. */
+  aim: [0.25, 1] as readonly [number, number],
+  fallbackLead: 0.25,
   boltRange: 420,
   boltRadius: 3.5,
   /**

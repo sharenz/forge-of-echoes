@@ -140,6 +140,14 @@ export interface KillLootContext {
   wave: number;
   x: number;
   y: number;
+  /**
+   * Percent more item quantity / rarity on top of the map's own (a Pact Altar wave, a Stasis Host statue). Absent = none.
+   * The rules add it to the looter's personal luck for this one kill.
+   */
+  quantityMore?: number;
+  rarityMore?: number;
+  /** The rival boss of Rival Crowns: the rules roll its own theme's exclusive unique; the number multiplies that chance (1 = base). */
+  rival?: number;
 }
 
 /** Max distance (world units) between a player and a drop for a click pickup. */
@@ -177,14 +185,24 @@ export interface RunHooks {
    * instance (instanced loot) and returns all drops, each tagged with its owner. Must use the provided rng.
    */
   rollKillLoot(ctx: KillLootContext, playerIds: readonly number[], rng: Rng): DropSpec[];
-  /** Called once when the completion chest is opened (by the first player to touch it): drops for every player present. */
-  rollChestLoot(playerIds: readonly number[], rng: Rng): DropSpec[];
+  /**
+   * Called once when a map event pays out (grade decided by the sim; Bronze is the classic payout). Optional: without it
+   * events pay nothing. Same instancing rules as rollKillLoot.
+   */
+  rollEventReward?(ctx: import('./map-events').EventRewardContext, playerIds: readonly number[], rng: Rng): DropSpec[];
+  /**
+   * Called once when the completion chest is opened (by the first player to touch it): drops for every player present.
+   * `boons` are the Wayside Anvil's boons for the chest's equipment (absent = none).
+   */
+  rollChestLoot(playerIds: readonly number[], rng: Rng, boons?: import('./map-events').ChestBoons): DropSpec[];
   /** `playerId` touched their own drop. Return false if it cannot be picked up (inventory full) — the drop stays. */
   tryPickup(playerId: number, token: number): boolean;
 }
 
 export interface RunConfig {
   event?: import('./map-events').MapEventPlan | null;
+  /** Tree / mod / scarab lenses on the events of this map (all optional; see MapEventModifiers). */
+  eventModifiers?: import('./map-events').MapEventModifiers;
   bossLifeMultiplier?: number;
   bossDamageMultiplier?: number;
   mode: 'hideout' | 'map';
@@ -221,10 +239,16 @@ export type MonsterAnimCode = (typeof MONSTER_ANIM)[keyof typeof MONSTER_ANIM];
 export const RARITY_CODE = { normal: 0, magic: 1, rare: 2, lieutenant: 3, boss: 4 } as const;
 
 /** Elite modifier bits in WorldView.monsters.mods (magic packs share one; rare leaders have two). */
-export const ELITE_BIT = { swift: 1, stout: 2, fierce: 4, juggernaut: 8, frenzied: 16, emberTouched: 32, warded: 64 } as const;
+export const ELITE_BIT = { swift: 1, stout: 2, fierce: 4, juggernaut: 8, frenzied: 16, emberTouched: 32, warded: 64,
+  // Rare-only: near-immunity to one element (fireProof…) and telegraphed behavioural strikes (stormcalled, rending).
+  fireProof: 128, coldProof: 256, lightningProof: 512, stormcalled: 1024, rending: 2048 } as const;
 
 /** Ailment bits in WorldView.monsters.ailments. */
-export const AILMENT_BIT = { burning: 1, chilled: 2, shocked: 4, shielded: 8, empowered: 16 } as const;
+export const AILMENT_BIT = { burning: 1, chilled: 2, shocked: 4, shielded: 8, empowered: 16,
+  /** Map events: takes +40% damage (a whiffed Stalker) / a translucent event monster (Stalker, echoes). */
+  exposed: 32, spectral: 64,
+  /** Map events, wave 2: a frozen statue (Stasis Host: invulnerable and inert) / a fixture (a destructible prop the presenter draws itself). */
+  frozen: 128, fixture: 256 } as const;
 
 export const PROJECTILE_KINDS = [
   'emberLance', 'novaFlame', 'flameWave', 'rimeShard', // player
@@ -242,6 +266,11 @@ export const AREA_KINDS = [
   'fireTrail',        // player's burning ground (Cinderwalkers) hurting monsters
   'heraldAura',       // lieutenant's empowering aura
   ...NEW_AREA_KINDS,  // Ossuary / Coliseum rosters (see contracts/bestiary.ts for each kind's meaning)
+  'stormStrike',      // stormcalled rare: lightning bolt telegraph on a player (shocks)
+  'rendStrike',       // rending rare: raking strike telegraph on a player (bleeds)
+  'echoMark',         // map events: a harmless shimmer where an echo, guardian or escort is about to appear
+  'faultWedge',       // map events: a 90-degree wedge of the Fault field (heading = wedge centre); hurts everything inside
+  'voidTide',         // map events: the Void Breach's tide, a ring band (radius = outer radius, heading field = inner radius); hurts everything inside
 ] as const;
 export type AreaKind = (typeof AREA_KINDS)[number];
 
@@ -299,6 +328,11 @@ export interface PlayerView {
   invulnTime: number;
   hitFlash: number;           // 0..1 decays after taking damage
   dead: boolean;
+  /**
+   * Movement slow of a carried map-event object (Ember Relay: 0.12), a fraction like `slow` in movePlayer. It is on the wire and
+   * combined into the prediction so the carrier never rubber-bands. 0 = none.
+   */
+  eventSlow?: number;
   /** Active debuffs (empty when none). Chilled/frozen/rooted change movement & casting in the sim. */
   debuffs: PlayerDebuffView[];
   slots: SlotView[];          // LOADOUT_SLOTS
@@ -321,8 +355,8 @@ export interface MonsterStoreView {
   animTime: Float32Array;     // seconds since anim started
   life: Float32Array; maxLife: Float32Array;
   hitFlash: Float32Array;     // 0..1
-  ailments: Uint8Array;       // AILMENT_BIT mask
-  mods: Uint8Array;           // ELITE_BIT mask
+  ailments: Uint16Array;      // AILMENT_BIT mask
+  mods: Uint16Array;          // ELITE_BIT mask
 }
 
 export interface ProjectileStoreView {
@@ -391,8 +425,8 @@ export interface PropView {
 export type RunPhase = 'hideout' | 'tell' | 'fight' | 'boss' | 'cleared' | 'failed';
 
 export interface RunView {
-  /** Null until a map event reveals itself. */
-  event?: import('./map-events').MapEventView | null;
+  /** Revealed map events (at most three run at once); empty until one reveals itself. */
+  events: import('./map-events').MapEventView[];
   phase: RunPhase;
   wave: number;               // 1-based, 0 before the first wave
   waveCount: number;
@@ -402,6 +436,8 @@ export interface RunView {
   kills: number;
   monstersAlive: number;
   boss: { name: string; life: number; maxLife: number; phase: number } | null;
+  /** The second boss (Rival Crowns' rival) while both live: its own bar under the first. */
+  boss2?: { name: string; life: number; maxLife: number; phase: number } | null;
   lieutenant: { name: string; life: number; maxLife: number } | null;
   portalOpen: boolean;        // hideout portal or post-clear return portal
   /** Number of living players in the instance. */
@@ -467,7 +503,9 @@ export type SimEvent =
   | { t: 'portal'; playerId: number; x: number; y: number; kind: 'open' | 'enter' }
   | { t: 'playerDeath'; playerId: number; x: number; y: number }
   | { t: 'playerJoin'; playerId: number; x: number; y: number }
-  | { t: 'notEnoughFocus'; playerId: number };
+  | { t: 'notEnoughFocus'; playerId: number }
+  /** A map event beat: `n` is a per-beat number (step index, resonance, grade). */
+  | { t: 'mapEvent'; kind: import('./map-events').MapEventKind; beat: import('./map-events').MapEventBeat; x: number; y: number; n: number };
 
 // ---------------------------------------------------------------------------
 // Outcomes (authoritative; never dropped; consumed by the app)
@@ -483,6 +521,8 @@ export type SimOutcome =
   | { t: 'waveStart'; wave: number }
   | { t: 'bossDefeated' }
   | { t: 'cleared' }            // final wave done (boss dead); chest + return portal spawn
+  /** A map event finished with a payout (Bronze or better): the hook for the account's first-completion Atlas point. */
+  | { t: 'eventComplete'; kind: import('./map-events').MapEventKind; grade: number }
   | { t: 'chestOpened'; playerId: number }
   | { t: 'playerDied'; playerId: number }
   | { t: 'enterPortal'; playerId: number }   // hideout portal entered → server moves the player into the map

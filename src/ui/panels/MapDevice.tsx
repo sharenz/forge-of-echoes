@@ -1,34 +1,44 @@
 import { MAP_EVENT_KINDS } from '../../contracts/map-events';
-import { MAP_EVENT_NAMES } from '../../data/progression/map-events';
-// Map Device (own hideout only): the map slot, the rules' map readout with breakdowns, the player's
-// personal luck (map + own gear, via rules.lootLuck on a preview of the run setup), portal status and the
-// ember "Activate" button, then a picker over the Map Stash (tier tiles and map rows: click, Ctrl-click or drag a
-// map into the device; drag the device's map back onto the picker to file it). In a party member's hideout it
-// shows THEIR open portal instead (read-only).
+// Map Device (own hideout only), now the Cartography Table (brief A): a full-screen Atlas chart with an inspector rail,
+// the always-visible device dock (course, map slot, scarab sockets, price, Activate), a Stash drawer that re-houses
+// the Map Stash picker and the scarab list, and the Codex tab that hosts the Atlas tree. The panel keeps its id so
+// hotkeys and drag targets keep working. In a party member's hideout it shows THEIR open portal instead (read-only).
 import { mapEventOdds } from '../../game/progression/map-events';
-import { useMemo, useState } from 'preact/hooks';
-import { PORTALS_PER_MAP } from '../../contracts/net';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { PortalInfo } from '../../contracts/net';
-import { Button, PixelIcon, cx } from '../components/common';
-import { MapDeviceSlotView, ScarabSlotView } from '../items/Containers';
+import { Button, Frame, cx } from '../components/common';
 import { safe } from '../items/hooks';
 import { useLocal } from '../local';
-import { formatLuck, possessive } from '../lib/format';
+import { possessive } from '../lib/format';
 import { useStore, useUi } from '../store';
 import { PanelShell } from './PanelShell';
-import { MapStashView } from './StashSpecial';
-import { AtlasView } from './Atlas';
+import { AtlasChart } from './Atlas';
 import type { AtlasAreaId } from '../../contracts/atlas';
-import { ATLAS_START, atlasTierCeiling, findAtlasArea } from '../../data/progression/atlas';
-import { newAtlas, territoryEntryFee } from '../../game/progression/atlas';
+import { ATLAS_AREAS, ATLAS_START, findAtlasArea } from '../../data/progression/atlas';
+import { newAtlas } from '../../game/progression/atlas';
 import { ITEM_CLASSES, type ItemClass } from '../../contracts/content';
-import { BASES, CLASS_LABEL, CURRENCIES } from '../../data/items';
+import { BASES, CLASS_LABEL } from '../../data/items';
 import { monsterLevelForTier } from '../../game/progression/maps';
-import { keystoneRewards } from '../../game/progression/keystones';
 import { MapTreeView } from './MapTree';
-import { mapTreePoints } from '../../game/progression/map-tree';
-import { SCARABS } from '../../data/scarabs';
-import { currencyStashUid } from '../../contracts/items';
+import { mapTreeFreePoints } from '../../game/progression/map-tree';
+import { AtlasRail } from '../atlas/Rail';
+import { Dock, type DeviceReadout } from '../atlas/Dock';
+import { StashDrawer } from '../atlas/StashDrawer';
+import { chartedCount, nodeModel } from '../atlas/model';
+
+/** Narrow or short windows (the 1024x600 minimum) turn the rail into a drawer and the dock into one slim row. */
+function useCompact(): boolean {
+  const query = '(max-width: 1179px), (max-height: 679px)';
+  const [compact, setCompact] = useState(() => { try { return window.matchMedia(query).matches; } catch { return false; } });
+  useEffect(() => {
+    let mq: MediaQueryList;
+    try { mq = window.matchMedia(query); } catch { return; }
+    const on = (): void => setCompact(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return compact;
+}
 
 function PortalNote({ portal, own }: { portal: PortalInfo; own: boolean }) {
   const spent = portal.remaining === 0;
@@ -65,19 +75,19 @@ export function MapDevicePanel() {
   const owner = useUi((s) => s.hud?.zoneOwnerName ?? '');
   const portal = useUi((s) => s.hud?.portal ?? null);
   const zoneIsOwn = useUi((s) => s.hud?.zoneIsOwn ?? true);
-  const [openLine, setOpenLine] = useState<string | null>(null);
+  const compact = useCompact();
   const [areaId, selectArea] = useState<AtlasAreaId>(ch?.atlas?.completed.at(-1) ?? ATLAS_START);
-  const [showAtlas, setShowAtlas] = useState(false);
-  const [showTree, setShowTree] = useState(false);
+  const [inspected, inspect] = useState<AtlasAreaId>(areaId);
+  const [tab, setTab] = useState<'chart' | 'codex'>('chart');
+  const [stashOpen, setStashOpen] = useState(() => !!ch && !ch.mapDevice && (ch.mapStash?.length ?? 0) > 0);
+  const [railOpen, setRailOpen] = useState(false);
   const [lootClass, chooseClass] = useState<ItemClass>('wand');
   const area = findAtlasArea(areaId)!;
+  const viewArea = findAtlasArea(inspected)!;
   const map = ch?.mapDevice ?? null;
-  const keystone = keystoneRewards(areaId, map?.tier ?? null);
-  const stashed = ch?.mapStash?.length ?? 0;
-  // An empty device with maps in the stash: the picker is the way in, so it gets the room.
-  const picking = !map && stashed > 0;
+  const progress = ch?.atlas ?? newAtlas();
 
-  const readout = useMemo(() => {
+  const readout: DeviceReadout | null = useMemo(() => {
     if (!ch || !map) return null;
     const effective = { ...map, baseId: area.baseId };
     const desc = safe(() => store.rules.describeItem(effective, ch), null);
@@ -86,11 +96,34 @@ export function MapDevicePanel() {
     const summary = preview?.ok ? preview.value.setup.summary : safe(() => store.rules.mapSummary(ch, effective), []);
     const luck = preview && preview.ok ? safe(() => store.rules.lootLuck(preview.value.setup, ch), null) : null;
     const mapLuck = preview && preview.ok ? { q: preview.value.setup.itemQuantity, r: preview.value.setup.itemRarity } : null;
-    return { desc, summary, luck, mapLuck, events: mapEventOdds(effective, areaId, ch.atlas?.nodes), error: preview && !preview.ok ? preview.error : null };
+    return { desc, summary, luck, mapLuck, events: mapEventOdds(effective, areaId, ch.atlas?.nodes), error: preview && !preview.ok ? preview.error : null } as unknown as DeviceReadout;
   }, [ch, map, store, areaId, lootClass]);
 
-  if (!ch) return null;
+  // Odds for the area being inspected (not necessarily the course): the rail shows them beside the fights and drops.
+  const railOdds = useMemo(() => (ch && map ? safe(() => mapEventOdds({ ...map, baseId: viewArea.baseId }, inspected, ch.atlas?.nodes), null) : null), [ch, map, inspected, viewArea]);
+  const keys = useMemo(() => {
+    const out = new Set<string>();
+    if (!ch) return out;
+    for (const [id, n] of Object.entries(ch.currencyStash)) if ((n ?? 0) > 0) out.add(id);
+    for (const e of ch.backpack.entries) if (e.item.kind === 'currency') out.add(e.item.currencyId);
+    return out;
+  }, [ch]);
+
   const disabled = !own || zone !== 'hideout';
+  // Esc closes the innermost layer first (readout popover in the dock, then the Stash drawer, then the compact
+  // inspector) whatever holds focus, and only then the whole table. Capture phase, so it runs before the game's Esc.
+  useEffect(() => {
+    if (!ch || disabled) return;
+    const onEsc = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      if (stashOpen) { e.stopImmediatePropagation(); e.preventDefault(); setStashOpen(false); }
+      else if (compact && railOpen) { e.stopImmediatePropagation(); e.preventDefault(); setRailOpen(false); }
+    };
+    window.addEventListener('keydown', onEsc, true);
+    return () => window.removeEventListener('keydown', onEsc, true);
+  }, [!!ch, disabled, stashOpen, railOpen, compact]);
+
+  if (!ch) return null;
   const ownPortal = portal && zoneIsOwn ? portal : null;
   const hostPortal = portal && !zoneIsOwn && zone === 'hideout' ? portal : null;
   // Gear share of the personal luck: the character sheet's % increased from gear (DerivedStats).
@@ -114,17 +147,11 @@ export function MapDevicePanel() {
     activate();
   };
 
-  return (
-    <PanelShell panel="mapDevice" title={showTree ? 'Map Tree' : showAtlas ? 'Atlas' : 'Map Device'} class={cx('fe-device', (showAtlas || showTree) && 'fe-device--atlas')}>
-      {showTree && !disabled ? <MapTreeView onBack={() => setShowTree(false)} /> : showAtlas && !disabled ? <AtlasView progress={ch.atlas ?? newAtlas()} selected={areaId} tier={map?.tier ?? null}
-        onBack={() => setShowAtlas(false)} onSelect={(id) => { selectArea(id); setShowAtlas(false); }} /> : disabled ? (
+  if (disabled) {
+    return (
+      <PanelShell panel="mapDevice" title="Map Device" class="fe-device">
         <div class="fe-device__locked">
-          <div
-            class={cx(
-              'fe-device__circle',
-              hostPortal && hostPortal.remaining > 0 ? 'fe-device__circle--charged' : 'fe-device__circle--cold',
-            )}
-          >
+          <div class={cx('fe-device__circle', hostPortal && hostPortal.remaining > 0 ? 'fe-device__circle--charged' : 'fe-device__circle--cold')}>
             <span class="fe-device__socket" aria-hidden="true" />
           </div>
           {hostPortal && <PortalNote portal={hostPortal} own={false} />}
@@ -134,158 +161,84 @@ export function MapDevicePanel() {
               : 'The map device can only be used in your own hideout.'}
           </p>
           {zone === 'hideout' && (
-            <Button
-              onClick={() => {
-                store.actions.goHome();
-                store.actions.closePanel('mapDevice');
-              }}
-            >
-              Go to your hideout
-            </Button>
+            <Button onClick={() => { store.actions.goHome(); store.actions.closePanel('mapDevice'); }}>Go to your hideout</Button>
           )}
         </div>
-      ) : (
-        <>
-          <button class="fe-device__destination" onClick={() => setShowAtlas(true)}>
-            <span class="ui-type-caption">Atlas destination · up to Tier {atlasTierCeiling(area)}</span>
-            <strong class="ui-type-body">{area.name}</strong>
-            <span class="ui-type-caption">Choose area →</span>
+      </PanelShell>
+    );
+  }
+
+  const ctx = { discovered: new Set<string>(progress.discovered), completed: new Set<string>(progress.completed), tier: map?.tier ?? null, keys, fresh: new Set<string>(), corrupted: !!map?.corrupted };
+  const viewModel = nodeModel(viewArea, ctx);
+  const unspent = mapTreeFreePoints(ch.atlas); // earned minus the cost of every allocated node (keystones cost 2)
+  const close = (): void => { store.actions.uiSound('close'); store.actions.closePanel('mapDevice'); };
+  const ready = !!map && !readout?.error;
+  const onKeyDown = (e: KeyboardEvent): void => {
+    const target = e.target as HTMLElement;
+    // Keyboard use of the table: the game normally swallows Enter/Space on buttons, so let them through here, and
+    // E lights the device when it is ready (brief 6.4)
+    if ((e.key === 'Enter' || e.key === ' ') && target.closest?.('button, summary, [role="tab"]')) { e.stopPropagation(); return; }
+    if ((e.key === 'e' || e.key === 'E') && !e.ctrlKey && !e.metaKey && !e.altKey && !(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) {
+      e.stopPropagation();
+      if (ready) { e.preventDefault(); confirmActivate(); }
+      return;
+    }
+  };
+  const setCourse = (): void => { store.actions.uiSound('click'); selectArea(inspected); };
+  const stashToggle = (): void => { store.actions.uiSound('click'); setStashOpen((v) => !v); };
+
+  return (
+    <Frame class={cx('fe-panel fe-solid fe-panel--left fe-device fe-device--table', compact && 'fe-device--compact')} role="region" aria-label="Atlas" data-panel="mapDevice" onKeyDown={onKeyDown as never}>
+      <header class="fe-table__head">
+        <div class="fe-table__tabs" role="tablist" aria-label="Cartography Table">
+          <button role="tab" aria-selected={tab === 'chart'} class={cx('fe-table__tab ui-type-body', tab === 'chart' && 'fe-table__tab--on')} onClick={() => { store.actions.uiSound('click'); setTab('chart'); }}>Chart</button>
+          <button role="tab" aria-selected={tab === 'codex'} class={cx('fe-table__tab ui-type-body', tab === 'codex' && 'fe-table__tab--on')} onClick={() => { store.actions.uiSound('click'); setTab('codex'); }}>
+            Codex{unspent > 0 && <span class="fe-table__badge ui-type-caption">{unspent}</span>}
           </button>
-          <Button class="fe-device__tree" onClick={() => setShowTree(true)}>Map tree · {mapTreePoints(ch.atlas) - (ch.atlas?.nodes?.length ?? 0)} unspent</Button>
-          <div class={cx('fe-device__scroll', !picking && 'fe-scrollfade', picking && 'fe-device__scroll--picking')}>
-            <p class="fe-panel__note ui-type-caption">Your map supplies tier, quality and mods. The area supplies enemies and rewards.</p>
-            <p class="fe-panel__note ui-type-secondary">{area.description}</p>
-            {keystone && <p class="fe-panel__note ui-type-secondary">Keystone rewards: {keystone.pool.map(i => `${i.name} (T${i.minTier}+)`).join(' · ')}.</p>}
-            {area.chosenClass && <label class="fe-device__class ui-type-body">Hunter rewards
-              <select aria-label="Hunter reward class" value={lootClass} onChange={e => chooseClass(e.currentTarget.value as ItemClass)}>
-                {ITEM_CLASSES.map(id => <option key={id} value={id} disabled={!!map && !Object.values(BASES).some(b => b.itemClass === id && b.levelRequirement <= monsterLevelForTier(map.tier))}>{CLASS_LABEL[id]}</option>)}
-              </select>
-            </label>}
-            <div class="fe-device__sockets">
-              <ScarabSlotView index={0} /><ScarabSlotView index={1} />
-              <div class={cx('fe-device__circle', map && 'fe-device__circle--charged')}><MapDeviceSlotView disabled={false} /></div>
-              <ScarabSlotView index={2} /><ScarabSlotView index={3} />
-            </div>
-            <p class="fe-panel__note ui-type-caption">One map + up to four scarabs. One of each type, regardless of tier. Drag or Ctrl-click to load. Activation consumes them.</p>
-            <details class="fe-device__scarab-picker">
-              <summary class="ui-type-secondary">Scarabs in stash · {SCARABS.reduce((n, s) => n + (ch.currencyStash[s.id] ?? 0), 0)}</summary>
-              <div class="fe-device__scarab-list">{SCARABS.map(s => {
-                const count = ch.currencyStash[s.id] ?? 0;
-                const index = Array.from({ length: 4 }, (_, i) => ch.mapScarabs?.[i] ?? null).findIndex(s => !s);
-                const duplicate = ch.mapScarabs?.some(i => i && SCARABS.find(s => s.id === i.currencyId)!.family === s.family);
-                return <button key={s.id} class="fe-device__scarab-choice" disabled={!count || index < 0 || duplicate} title={s.description}
-                  onClick={() => store.actions.moveItem(currencyStashUid(s.id), { kind: 'scarabSlot', index })}>
-                  <PixelIcon id={`icon/currency/${s.id}`} width={32} height={32} /><span class="ui-type-caption">{s.name}<br />T{s.tier} · {count} owned</span>
-                </button>;
-              })}</div>
-            </details>
-            {!map && !picking && (
-              <p class="fe-device__empty">
-                Drag a map onto the device, or Ctrl-click one in your inventory. Activating it opens {PORTALS_PER_MAP} portals here; every
-                entry, by anyone in your party, uses one.
-              </p>
-            )}
-            {map && readout?.desc && (
-              <div class="fe-device__readout">
-                <div class={cx('fe-device__mapname', `fe-tone-${readout.desc.tone}`)}>{readout.desc.title}</div>
-                <div class="fe-device__maptier">{readout.desc.headerLines.join(' · ')}</div>
-                {readout.desc.affixes.length > 0 && (
-                  <ul class="fe-device__mods">
-                    {readout.desc.affixes.map((l, i) => (
-                      <li
-                        key={i}
-                        class={cx(
-                          l.negative ? 'fe-device__mod--danger' : 'fe-device__mod--reward',
-                          l.kind === 'corrupted' && 'fe-device__mod--corrupt',
-                        )}
-                      >
-                        {l.text}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {readout.luck && (
-                  <div class="fe-device__luck">
-                    <div class="fe-device__luck-cell">
-                      <span class="fe-device__luck-label">Your item quantity</span>
-                      <span class="fe-device__luck-value">{formatLuck(readout.luck.itemQuantity)}</span>
-                      {readout.mapLuck && (
-                        <span class="fe-device__luck-src">
-                          map {formatLuck(readout.mapLuck.q)}
-                          {gear && `, your gear ${formatLuck(gear.q)}`}
-                        </span>
-                      )}
-                    </div>
-                    <div class="fe-device__luck-cell">
-                      <span class="fe-device__luck-label">Your item rarity</span>
-                      <span class="fe-device__luck-value">{formatLuck(readout.luck.itemRarity)}</span>
-                      {readout.mapLuck && (
-                        <span class="fe-device__luck-src">
-                          map {formatLuck(readout.mapLuck.r)}
-                          {gear && `, your gear ${formatLuck(gear.r)}`}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-                <p class="ui-type-caption">{area.encounters ? `Guaranteed encounters: ${area.encounters.map(e => MAP_EVENT_NAMES[e.kind]).join(' · ')}${map.bounty && !area.encounters.some(e => e.kind === 'hunted') ? ' · additional Bounty hunter' : ''}. Resolve them to complete the area.`
-                  : `Encounter chance: ${MAP_EVENT_KINDS.filter(k => readout.events[k] > 0).map(k => `${MAP_EVENT_NAMES[k]} ${Math.round(readout.events[k] * 1000) / 10}%`).join(' · ')}. At most one; discovered during the map.`}</p>
-                <div class="fe-device__summary">
-                  {keystone && <p class="ui-type-caption">Exclusive unique chance: {Math.round((keystoneRewards(areaId, map.tier, readout.luck?.itemRarity ?? 100, ch.atlas?.nodes)?.chance ?? 0) * 1000) / 10}% {readout.luck ? 'per boss for you' : 'base per boss, multiplied by your item rarity when entry is available'}. Equal weight among eligible uniques; ordinary drops and boss guarantees also apply.</p>}
-                  {readout.summary.map((l) => {
-                    const isOpen = openLine === l.label;
-                    return (
-                      <div key={l.label} class={cx('fe-sheet__line', isOpen && 'fe-sheet__line--open')}>
-                        <button
-                          class="fe-sheet__row"
-                          aria-expanded={isOpen}
-                          disabled={!l.breakdown.length}
-                          onClick={() => setOpenLine(isOpen ? null : l.label)}
-                        >
-                          <span class="fe-sheet__chev" />
-                          <span class="fe-sheet__label">{l.label}</span>
-                          <span class="fe-sheet__dots" />
-                          <span class="fe-sheet__value">{l.value}</span>
-                        </button>
-                        {isOpen && (
-                          <ul class="fe-sheet__breakdown">
-                            {l.breakdown.map((b, i) => (
-                              <li key={i}>{b}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {stashed > 0 && (
-              <section class={cx('fe-device__stash', picking && 'fe-device__stash--grow')} aria-label="Map Stash">
-                <div class="fe-section-title">
-                  From your Map Stash
-                  <span class="fe-device__stash-hint">
-                    {map ? 'Click a map to swap it in' : `Click a map to load it · opens ${PORTALS_PER_MAP} portals`}
-                  </span>
-                </div>
-                <MapStashView mode="device" />
-              </section>
-            )}
-          </div>
-          {/* Outside the scroll area: the open portal is what Activate would replace, so it stays in view. */}
-          {ownPortal && <PortalNote portal={ownPortal} own />}
-          <div class="fe-device__actions">
-            {map && <span class="ui-type-caption">Territory fee: {territoryEntryFee(map.tier, areaId)} Scrap</span>}
-            {readout?.error && <span class="fe-atlas__error ui-type-secondary" role="status">{readout.error}</span>}
-            <Button variant="ember" size="large" class="fe-device__activate" disabled={!map || !!readout?.error} onClick={confirmActivate}>
-              Activate
-            </Button>
-            <span class="fe-device__cost ui-type-caption">
-              {map ? `Consumes the map${area.entranceKey ? ` and one ${CURRENCIES[area.entranceKey].name}` : ''}; opens ${PORTALS_PER_MAP} portals` : 'Place a map to activate'}
-            </span>
-          </div>
-        </>
-      )}
-    </PanelShell>
+          <button aria-expanded={stashOpen} class={cx('fe-table__tab ui-type-body', stashOpen && 'fe-table__tab--on')} onClick={stashToggle}>Stash</button>
+        </div>
+        <h2 class="fe-table__title">The Atlas</h2>
+        <div class="fe-table__meta ui-type-secondary">
+          <span>{chartedCount(ctx.discovered)} / {ATLAS_AREAS.length} areas charted</span>
+          <span class="fe-table__points">Points {Math.max(0, unspent)}</span>
+        </div>
+        <button class="fe-btn fe-btn--icon fe-btn--ghost fe-head__close fe-table__close" aria-label="Close" title="Close (Esc)" onClick={close}><span class="fe-x" /></button>
+      </header>
+      <div class="fe-table__body">
+        {tab === 'codex' && <div class="fe-codex"><MapTreeView onBack={() => setTab('chart')} areaId={areaId} /></div>}
+        <AtlasChart
+          tab={tab}
+          progress={progress}
+          inspected={inspected}
+          courseId={areaId}
+          tier={map?.tier ?? null}
+          corrupted={!!map?.corrupted}
+          keys={keys}
+          drawerOpen={stashOpen}
+          compactRail={compact}
+          railOpen={railOpen}
+          onInspect={(id) => { inspect(id); if (compact) setRailOpen(true); }}
+          onSetCourse={(id) => { store.actions.uiSound('click'); selectArea(id); inspect(id); }}
+          rail={() => (
+            <AtlasRail
+              area={viewArea} model={viewModel} tier={map?.tier ?? null} map={map} odds={railOdds} courseId={areaId}
+              blocked={viewModel.blocker} onSetCourse={setCourse} onOpenStash={() => setStashOpen(true)}
+              motion={!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches} compact={compact} onClose={() => setRailOpen(false)}
+            />
+          )}
+        />
+        <StashDrawer ch={ch} open={stashOpen} hasMap={!!map} onClose={() => setStashOpen(false)} />
+      </div>
+      {ownPortal && <PortalNote portal={ownPortal} own />}
+      <Dock area={area} map={map} readout={readout} gear={gear} activate={confirmActivate} compact={compact} onOpenStash={() => setStashOpen(true)} stashOpen={stashOpen} onCourse={() => { inspect(areaId); if (compact) setRailOpen(true); }}>
+        {area.chosenClass && (
+          <label class="fe-device__class ui-type-secondary fe-dock__class">Hunter rewards
+            <select aria-label="Hunter reward class" value={lootClass} onChange={(e) => chooseClass(e.currentTarget.value as ItemClass)}>
+              {ITEM_CLASSES.map((id) => <option key={id} value={id} disabled={!!map && !Object.values(BASES).some((b) => b.itemClass === id && b.levelRequirement <= monsterLevelForTier(map.tier))}>{CLASS_LABEL[id]}</option>)}
+            </select>
+          </label>
+        )}
+      </Dock>
+    </Frame>
   );
 }

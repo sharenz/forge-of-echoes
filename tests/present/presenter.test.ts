@@ -42,7 +42,7 @@ function denseWorld(): WorldView {
     capacity: M, count: 800, alive: new Uint8Array(M), id: new Uint32Array(M), kind: new Uint8Array(M), rarity: new Uint8Array(M),
     x: new Float32Array(M), y: new Float32Array(M), prevX: new Float32Array(M), prevY: new Float32Array(M), radius: new Float32Array(M),
     facing: new Int8Array(M), anim: new Uint8Array(M), animTime: new Float32Array(M), life: new Float32Array(M), maxLife: new Float32Array(M),
-    hitFlash: new Float32Array(M), ailments: new Uint8Array(M), mods: new Uint8Array(M),
+    hitFlash: new Float32Array(M), ailments: new Uint16Array(M), mods: new Uint16Array(M),
   };
   for (let i = 0; i < 800; i++) {
     const a = i * 2.39996;
@@ -129,7 +129,7 @@ function denseWorld(): WorldView {
     monsters: mon, projectiles: proj, motes, areas, drops, props,
     run: {
       phase: 'fight', wave: 5, waveCount: 6, waveTime: 10, waveDuration: 60, elapsed: 250, kills: 400, monstersAlive: 801,
-      boss: { name: 'Cinder Matriarch', life: 5000, maxLife: 7000, phase: 2 }, lieutenant: null, portalOpen: false, playersAlive: 2,
+      boss: { name: 'Cinder Matriarch', life: 5000, maxLife: 7000, phase: 2 }, lieutenant: null, portalOpen: false, playersAlive: 2, events: [],
     },
   };
 }

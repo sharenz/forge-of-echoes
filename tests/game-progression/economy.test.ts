@@ -8,6 +8,7 @@ import { rules, withItemLocks } from '../../src/game';
 import { benchCurrency, craftEquipment, findItem, stabilityRepairCost } from '../../src/game/items';
 import { itemCraftCount } from '../../src/game/items/crafting-history';
 import { mapEventOdds, rollMapEvent } from '../../src/game/progression/map-events';
+import { MAP_EVENT_KINDS } from '../../src/contracts/map-events';
 import { normalizeCharacter, normalizeItem } from '../../src/game/progression/save';
 import { restoreRunSetup } from '../../src/game/progression/runs';
 import { currency, equip, expectOk, makeCharacter, map, withBackpack } from '../game-items/fixtures';
@@ -93,15 +94,15 @@ describe('map Scrap services', () => {
     }
   });
 
-  it('commissions a tradeable Bounty item, persists it, and guarantees only The Hunted across seeds and restarts', () => {
+  it('commissions a tradeable Bounty item, persists it, and guarantees only The Stalker across seeds and restarts', () => {
     const source = craftedMap();
     const ch = funded(source);
     const result = expectOk(rules.applyBenchRecipe(ch, source.uid, 'bench:bounty')).character;
     const bounty = findItem(result, source.uid)!.item as MapItem;
     expect(bounty).toEqual({ ...source, bounty: true });
     expect(benchCurrency(result, 'scrap')).toBe(1003 - 18);
-    expect(rules.describeItem(bounty).headerLines).toContain('Bounty: The Hunted guaranteed');
-    expect(mapEventOdds(bounty, 'glassSepulchre')).toEqual({ hunted: 1, echoRift: 0, blackout: 0, vaultbreakers: 0, secondCrown: 0, wound: 0 });
+    expect(rules.describeItem(bounty).headerLines).toContain('Bounty: The Stalker guaranteed');
+    expect(mapEventOdds(bounty, 'glassSepulchre')).toEqual({ ...Object.fromEntries(MAP_EVENT_KINDS.map(k => [k, 0])), hunted: 1 });
     for (let seed = 0; seed < 100; seed++) {
       expect(rollMapEvent(bounty, seed, 'glassSepulchre')?.kind).toBe('hunted');
     }

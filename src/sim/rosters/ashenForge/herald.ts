@@ -1,7 +1,7 @@
 // The Ashbound Herald (Cinder Chapel final boss).
 import { DT, HERALD_AURA_RADIUS } from '../../constants';
 import {
-  DAMAGE_INDEX, MONSTER_ANIM as ANIM, MSTATE, PROJ, TAU, empowerMult, extraProjectiles, faceTarget, fieldFull, fireHostile, moveAlong,
+  DAMAGE_INDEX, MONSTER_ANIM as ANIM, MSTATE, PROJ, TAU, aimAtPlayer, byLevel, empowerMult, levelExtraShots, extraProjectiles, faceTarget, fieldFull, fireHostile, moveAlong,
   setAnim, spawnArea, spawnMonster, steer, stop, summon, toChase, wander, type PlayerState, type World,
 } from '../api';
 import { BEHAVIOUR } from './tuning';
@@ -45,12 +45,13 @@ export function brainHerald(
         if (!fieldFull(w)) summon(w, i, 'ashling', B.summonCount, 26, 56);
       }
       else if (t) {
-        const count = B.orbCount + extraProjectiles(w);
-        const base = Math.atan2(dy, dx);
+        const count = B.orbCount + extraProjectiles(w) + levelExtraShots(w, B.orbExtra);
+        const speed = byLevel(w, B.orbSpeed);
+        const base = aimAtPlayer(w, i, t, speed, B.orbRange, byLevel(w, B.orbAim), B.orbFallbackLead);
         const dmg = m.damage[i] * empowerMult(w, i);
         for (let k = 0; k < count; k++) {
           const a = count === 1 ? base : base - B.orbSpread / 2 + (B.orbSpread * k) / (count - 1);
-          fireHostile(w, i, PROJ.heraldOrb, a, B.orbSpeed, B.orbRange, B.orbRadius, dmg, DAMAGE_INDEX.void);
+          fireHostile(w, i, PROJ.heraldOrb, a, speed, B.orbRange, B.orbRadius, dmg, DAMAGE_INDEX.void);
         }
         w.events.push({ t: 'monsterAttack', kind: 'ashboundHerald', x: m.x[i], y: m.y[i], attack: 'orb' });
       }

@@ -146,6 +146,8 @@ export interface RunSetup {
   scarabs?: import('./content').ScarabId[];
   /** Opening account’s map nodes, frozen for the whole expedition and all party members. */
   mapTree?: MapTreeNodeId[];
+  /** Tree edition of `mapTree` (absent on expeditions frozen before the Codex redraw: their ids are the legacy tree). */
+  mapTreeV?: number;
   /** Creation roll, omitted from client projections; absent on pre-event maps. */
   event?: import('./map-events').MapEventPlan | null;
   map: MapItem;         // effective map: item tier/quality/mods with the Atlas area's theme/implicit
@@ -307,7 +309,10 @@ export interface GameRulesApi {
   lootLuck(setup: RunSetup, looter: CharacterSave): { itemQuantity: number; itemRarity: number };
   /** Instanced loot for ONE player (uses lootLuck(setup, looter)). */
   rollKillLoot(setup: RunSetup, ctx: KillLootContext, rng: Rng, looter: CharacterSave): Item[];
-  rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave): Item[];
+  /** `boons`: the Wayside Anvil's boons for the chest's equipment (absent = the ordinary chest). */
+  rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave, boons?: import('./map-events').ChestBoons): Item[];
+  /** What one map event pays ONE player (Event Director v2; Bronze = the classic payout). */
+  rollEventReward(setup: RunSetup, ctx: import('./map-events').EventRewardContext, rng: Rng, looter: CharacterSave): Item[];
   /**
    * Describe a ground drop (label/tone/sprite/icon/autoPickup) — token and owner are assigned by the caller.
    * autoPickup: equipment false, everything else true; `playerDropped` forces false (anything thrown on the floor).

@@ -16,6 +16,8 @@ import { CLOSE_BAD_AUTH, CLOSE_POLICY, CLOSE_PROTOCOL, CLOSE_SERVER_ERROR, CLOSE
 import type { GameOptions } from './game';
 import { DEFAULT_HTTP_LIMITS, createApiHandler, sendJson } from './http-api';
 import type { HttpLimits } from './http-api';
+import { startAdminChannel } from './admin';
+import type { AdminChannel } from './admin';
 import { createConsoleLogger } from './log';
 import type { Logger } from './log';
 import { clientIp, isLoopback } from './net-address';
@@ -59,6 +61,8 @@ export interface ServerOptions {
    * Default 0 (tests); main.ts passes DRAIN_SECONDS.
    */
   drainSeconds?: number;
+  /** Directory for the local admin socket and token used by the `foe` CLI (src/server/admin.ts). Default: off. */
+  adminDir?: string | null;
 }
 
 export interface ServerHandle {
@@ -132,6 +136,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<ServerHandl
   /** Open sockets per client address. */
   const openPerIp = new Map<string, number>();
   const pingSentAt = new WeakMap<WebSocket, number>();
+  let admin: AdminChannel | null = null;
 
   httpServer.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     let path = '';
@@ -193,6 +198,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<ServerHandl
       if (!/^[A-Za-z0-9_:.\-]{1,64}$/.test(characterId) || store.ownerOf(characterId) !== account.id) {
         return conn.close(CLOSE_BAD_AUTH, 'That character does not belong to this account.');
       }
+      if (admin?.isLocked(account.id, characterId)) return conn.close(CLOSE_POLICY, 'An administrator is working on this account. Please try again in a minute.');
       if (game.charactersInPlay(account.id, characterId) >= maxCharactersPerAccount) {
         return conn.close(CLOSE_POLICY, `At most ${maxCharactersPerAccount} characters of one account can play at once.`);
       }
@@ -241,6 +247,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<ServerHandl
   const address = httpServer.address();
   const port = typeof address === 'object' && address ? address.port : (opts.port ?? 8787);
   game.start();
+  admin = opts.adminDir ? await startAdminChannel({ dir: opts.adminDir, game, db, log, now }) : null;
   log.info('listening', { port, db: dbPath, static: opts.staticDir ?? 'off', purgedSessions: purged, threadPool: Number(process.env.UV_THREADPOOL_SIZE ?? 4) });
   log.info('limits', {
     registrationsPerHour: Math.round((limits.registrationsPerIp * 3_600_000) / limits.registrationWindowMs),
@@ -276,6 +283,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<ServerHandl
       }
       clearInterval(heartbeat);
       clearInterval(sessionSweep);
+      await admin?.close();
       game.shutdown();
       // Let the 4004 close frames go out, then drop whatever is left.
       const deadline = Date.now() + 1000;

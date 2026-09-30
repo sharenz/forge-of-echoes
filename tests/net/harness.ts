@@ -18,7 +18,7 @@ import type { PlayerAnim, PlayerDebuffView, PropView, RootSource, SimEvent, Worl
 import type { PlayerDebuff } from '../../src/contracts/bestiary';
 import { createClientWorld, createEventTimeline, createInputQueue, createSnapshotEncoder, heldToMask, moveVector } from '../../src/net';
 import type { EventTimeline, InputQueue, NetClientWorld } from '../../src/net';
-import { CAST_SLOW, PLAYER_CHILL_SLOW, movePlayer, playerSlow, resolvePlayerAt } from '../../src/sim/movement';
+import { CAST_SLOW, PLAYER_CHILL_SLOW, combineSlow, movePlayer, playerSlow, resolvePlayerAt } from '../../src/sim/movement';
 import { PLAYER_RADIUS, PULL_TIME } from '../../src/sim/constants';
 import { makePlayer, makeView, makeZone, setTick } from './fixtures';
 
@@ -301,7 +301,8 @@ export class NetHarness {
       this.tickDebuffs();
     } else {
       const castSlow = this.castSlow ? CAST_SLOW : 0;
-      const slow = playerSlow(castSlow, this.debuffSlow(), this.groundSlow());
+      // A carried event object (the Ember) slows her too: PlayerView.eventSlow, set by a hook.
+      const slow = combineSlow(playerSlow(castSlow, this.debuffSlow(), this.groundSlow()), this.player.eventSlow ?? 0);
       const next = movePlayer({ x: p.x, y: p.y }, this.currentMove, {
         speed: this.opts.moveSpeed, arenaRadius: this.opts.arenaRadius, props: this.opts.props, slow,
       }, SIM_DT);

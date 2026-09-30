@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8" /><title>Atlas emblems</title>
+<style>html,body{margin:0;background:#0d0b0e}canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+import { emblem } from '/src/art/atlas/emblems.ts';
+import { frameToSurface, drawFrameSurface } from '/src/art/atlas/canvas.ts';
+const themes = ['ashenForge','cinderChapel','rimedOssuary','choralCrypt','ironColiseum','chainworks'];
+const Z = 10, c = document.getElementById('c'); c.width = 6*28*Z/1; c.height = 28*Z;
+const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.fillStyle = '#12090c'; ctx.fillRect(0,0,c.width,c.height); ctx.scale(Z,Z);
+themes.forEach((t,i)=>drawFrameSurface(ctx, frameToSurface(emblem(t)), 2+i*28, 2));
+</script></body></html>

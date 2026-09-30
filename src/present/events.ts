@@ -27,6 +27,7 @@ import type { CameraRig } from './camera';
 import type { Tethers } from './chain';
 import { C, IMPACT_COLOR, TONE_COLOR } from './colors';
 import { CHARGE_MAX_RADIUS, playerById, type FrameCtx } from './context';
+import { eventColor, type MapEventPainter } from './map-events';
 import { DEBUFF_WORD, debuffColor, findDebuff, type DebuffPainter } from './debuffs';
 import { NUM_STYLE_PLAYER_BLEED, NUM_STYLE_PLAYER_BURN, NUM_STYLE_PLAYER_HURT, sparks, type Effects } from './fx';
 import { ImpactHeat } from './heat';
@@ -126,6 +127,7 @@ export interface EventKit {
   monsters?: MonsterPainter;
   debuffs?: DebuffPainter;
   tethers?: Tethers;
+  mapEvents?: MapEventPainter;
 }
 
 export class EventFx {
@@ -525,6 +527,9 @@ export class EventFx {
       case 'pull':
         this.pull(e, f);
         return;
+      case 'mapEvent':
+        this.mapEvent(e, f);
+        return;
       case 'waveTell':
         post.flash(FLASH_TELL, 0.08, 0.6, this.k.impactDelay('waveTell'));
         return;
@@ -632,6 +637,165 @@ export class EventFx {
         return;
       }
     }
+  }
+
+  /**
+   * One map-event beat (Event Director v2): a ring and a light pulse in the event's colour, and per beat its own moment: a
+   * whiff slows time for 80 ms with a dust puff and a hollow "Whiff", a hit shakes, the payoff lands with a 60 ms hit-stop and a
+   * grade trophy (gold flashes and fountains). Nothing here covers a telegraph or a drop (rings and pulses sit under the numbers).
+   */
+  private mapEvent(e: Extract<SimEvent, { t: 'mapEvent' }>, f: FrameCtx): void {
+    const { fx, post } = this.k;
+    this.k.mapEvents?.beat(e);
+    const col = eventColor(e.kind);
+    switch (e.beat) {
+      case 'omen':
+        fx.pulses.spawn(e.x, e.y, 90, 1.2, col, 0.6);
+        fx.rings.spawn(e.x, e.y, 6, 60, 1.0, col, 1, 0.6, 0.6);
+        return;
+      case 'onset':
+        fx.rings.spawn(e.x, e.y, 10, 120, 0.9, col, 2, 0.8, 1);
+        fx.pulses.spawn(e.x, e.y, 140, 0.8, col, 0.8);
+        post.flash(col, 0.08, 0.35);
+        this.shake(0.1);
+        return;
+      case 'step':
+      case 'pulse':
+        fx.rings.spawn(e.x, e.y, 4, 34, 0.35, col, 1, 0.7, 0.3);
+        // Rival Crowns: the survivor's crown flares (the spoils).
+        if (e.kind === 'secondCrown' && e.n === 1) {
+          fx.rings.spawn(e.x, e.y - 30, 8, 90, 0.8, C.gold, 2, 0.9, 1.2);
+          fx.pulses.spawn(e.x, e.y - 30, 140, 0.8, C.gold, 0.8);
+          fx.texts.spawn('Empowered', e.x, e.y - 70, C.gold, 1.4, 1, 12);
+          this.shake(0.15);
+        }
+        return;
+      case 'arrive':
+        fx.rings.spawn(e.x, e.y, 8, 90, 0.8, col, 2, 0.8, 0.8);
+        this.shake(0.12);
+        return;
+      case 'whiff':
+        // A hollow thud: a beat of slow motion, dust and the word.
+        post.slowMo(0.3, 0.08);
+        this.dustPuff(e.x, e.y, 10);
+        fx.rings.spawn(e.x, e.y, 3, 40, 0.4, col, 1, 0.7);
+        fx.texts.spawn(`Whiff ${e.n}`, e.x, e.y - 30, col, 0.9, 1, 10);
+        this.shake(0.2);
+        return;
+      case 'hit':
+        if (e.kind === 'orchard') { fx.rings.spawn(e.x, e.y, 3, 26, 0.3, col, 1, 0.6); return; } // a bite, not a blow
+        this.shake(0.3);
+        fx.rings.spawn(e.x, e.y, 4, 50, 0.4, C.lifeLight, 2, 0.7);
+        return;
+      case 'return':
+        fx.rings.spawn(e.x, e.y, 20, 60, 0.6, col, 1, 0.8, 0.8);
+        fx.pulses.spawn(e.x, e.y, 110, 0.5, col, 0.6);
+        return;
+      case 'lit':
+        this.fountain(e.x, e.y - 8, 24, C.hot, C.flame, 60, 130);
+        fx.rings.spawn(e.x, e.y, 6, 80, 0.6, C.flame, 2, 0.9, 1);
+        fx.texts.spawn(`Brazier ${e.n} lit`, e.x, e.y - 30, C.flame, 1.2, 1, 12);
+        return;
+      case 'lost':
+        fx.texts.spawn(e.kind === 'orchard' ? 'Bloom lost' : 'Ember lost', e.x, e.y - 30, col, 1.1, 1, 10);
+        this.dustPuff(e.x, e.y, 8);
+        return;
+      case 'lock':
+        // The Stalker's disc locked: the leap is coming (0.4 s), a tight red ring closing on the spot.
+        if (e.kind === 'hunted' || e.kind === 'ring') {
+          fx.rings.spawn(e.x, e.y, 36, 8, 0.4, col, 2, 0.9);
+          return;
+        }
+        fx.rings.spawn(e.x, e.y - 8, 6, 60, 0.6, C.gold, 2, 1, 1.4);
+        this.fountain(e.x, e.y - 10, 26, C.hot, C.gold, 90, 170);
+        fx.texts.spawn(['Coffer', 'Reliquary', "Cartographer's Tube"][e.n] ?? 'Lock', e.x, e.y - 34, C.gold, 1.2, 1, 12);
+        this.shake(0.15);
+        return;
+      case 'seal':
+        fx.rings.spawn(e.x, e.y, 10, 160, 1.0, col, 3, 0.9, 1.4);
+        fx.pulses.spawn(e.x, e.y, 200, 0.9, col, 0.9);
+        return;
+      case 'erupt':
+        fx.pulses.spawn(e.x, e.y, 180, 1.5, col, 0.5);
+        this.shake(0.15);
+        return;
+      case 'complete': {
+        // Payoff: the flash and the hit-stop land on the grade chord's transient (impact alignment).
+        const grade = e.n;
+        const sfx = grade >= 3 ? 'eventGold' : grade === 2 ? 'eventSilver' : 'eventBronze';
+        const delay = this.k.impactDelay(sfx);
+        const tone = grade >= 3 ? C.gold : grade === 2 ? C.ice : C.ochre;
+        post.after(delay, () => {
+          post.slowMo(0.05, 0.06);
+          post.flash(tone, grade >= 3 ? 0.22 : 0.12, 0.7);
+          fx.rings.spawn(e.x, e.y, 8, grade >= 3 ? 170 : 110, 1.0, tone, 2, 0.9, 1.4);
+          fx.pulses.spawn(e.x, e.y - 10, grade >= 3 ? 220 : 150, 0.9, tone, 1.2);
+          this.fountain(e.x, e.y - 10, grade >= 3 ? 44 : 28, C.hot, tone, 90, 190);
+        });
+        fx.texts.spawn(['', 'Bronze Trophy', 'Silver Trophy', 'Gold Trophy'][grade] ?? '', e.x, e.y - 44, tone, 2.2, 1.4, 14, true);
+        this.shake(0.2);
+        return;
+      }
+      case 'failed':
+        fx.rings.spawn(e.x, e.y, 30, 6, 0.8, col, 1, 0.5);
+        fx.texts.spawn('Lost', e.x, e.y - 30, col, 1.2, 1, 8);
+        return;
+      // Wave 2 of events: choices and objectives. Rings and pulses sit under the numbers; nothing covers a telegraph.
+      case 'pick':
+        fx.rings.spawn(e.x, e.y, 6, 70, 0.7, col, 2, 0.9, 1);
+        fx.pulses.spawn(e.x, e.y - 6, 120, 0.7, col, 0.7);
+        this.shake(0.08);
+        return;
+      case 'harvest':
+        this.fountain(e.x, e.y - 8, 22, C.hot, col, 60, 130);
+        fx.rings.spawn(e.x, e.y, 6, 60, 0.6, col, 2, 0.9, 1);
+        return;
+      case 'shatter':
+        post.flash(col, 0.1, 0.4);
+        fx.rings.spawn(e.x, e.y, 10, 170, 0.9, col, 3, 0.9, 1.4);
+        fx.pulses.spawn(e.x, e.y - 10, 200, 0.8, col, 1);
+        this.fountain(e.x, e.y - 8, 34, C.hot, col, 80, 170);
+        this.shake(0.3);
+        return;
+      case 'thaw':
+        fx.rings.spawn(e.x, e.y, 4, 40, 0.5, col, 1, 0.7, 0.5);
+        this.dustPuff(e.x, e.y, 5);
+        return;
+      case 'toll':
+        fx.pulses.spawn(e.x, e.y - 20, 160, 0.9, col, 0.8);
+        fx.rings.spawn(e.x, e.y, 12, 90, 0.8, col, 2, 0.8, 0.8);
+        this.shake(0.22);
+        return;
+      case 'forge':
+        this.fountain(e.x, e.y - 10, 30, C.hot, C.flame, 80, 170);
+        fx.rings.spawn(e.x, e.y, 8, 80, 0.7, C.flame, 2, 0.9, 1.2);
+        fx.pulses.spawn(e.x, e.y - 8, 140, 0.7, C.flame, 0.9);
+        this.shake(0.12);
+        return;
+      case 'tide':
+        fx.pulses.spawn(e.x, e.y, 220, 1.2, col, 0.5);
+        this.shake(0.15);
+        return;
+      case 'crack':
+        if (e.kind === 'vaultbreakers') {
+          // n 0: a wheel breaks (splinters); n 1: a lock's shield line drops.
+          if (e.n === 0) {
+            this.dustPuff(e.x, e.y, 10);
+            fx.texts.spawn('Wheel broken', e.x, e.y - 26, col, 1.1, 1, 10);
+            this.shake(0.2);
+          } else {
+            fx.rings.spawn(e.x, e.y - 6, 10, 50, 0.6, C.ice, 2, 0.9, 1);
+            fx.texts.spawn('Shield down', e.x, e.y - 30, C.ice, 1.1, 1, 10);
+          }
+          return;
+        }
+        if (e.kind === 'bellwatch') fx.texts.spawn(`Cantor falls ${e.n}/4`, e.x, e.y - 30, col, 1.3, 1, 11);
+        fx.rings.spawn(e.x, e.y, 6, 50, 0.5, col, 1, 0.7);
+        this.dustPuff(e.x, e.y, 8);
+        this.shake(0.12);
+        return;
+    }
+    void f;
   }
 
   /** Level-up celebration for player `id` at (x, y). */
@@ -844,6 +1008,24 @@ export class EventFx {
         if (full) fx.pulses.spawn(e.x, e.y - 10, e.radius * 2.5 + 40, 0.45, C.flame, 0.9 * k);
         fx.decals.spawn(e.x, e.y, e.radius / 13, 14, 1);
         if (full) this.shake((meteor ? 0.45 : 0.3) * near);
+        return;
+      }
+      case 'stormStrike':
+        // A bolt lands: a pale ring and a spray of sparks.
+        fx.rings.spawn(e.x, e.y, e.radius * 0.3, e.radius * 1.3, 0.3, C.storm, 1, 0.8, 0.5);
+        sparks(pen, e.x, e.y - 8, 10, C.lightning, C.storm, 40, 140, 0.25);
+        fx.pulses.spawn(e.x, e.y - 8, e.radius * 2.2, 0.25, C.lightning, 0.6);
+        this.shake(0.12 * near);
+        return;
+      case 'rendStrike': {
+        // Raking claws: a red flash and blood flung out of the mark.
+        fx.rings.spawn(e.x, e.y, e.radius * 0.3, e.radius * 1.15, 0.3, C.blood, 1, 0.7, 0.4);
+        pen.burst(e.x, e.y - 4, 10, C.lifeLight, C.blood);
+        pen.speed(30, 110);
+        pen.life(0.25, 0.5);
+        pen.size(0.8, 1.4);
+        pen.emit();
+        this.shake(0.12 * near);
         return;
       }
       case 'frostNovaWarning': {

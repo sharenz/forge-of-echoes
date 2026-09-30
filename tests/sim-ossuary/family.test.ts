@@ -8,7 +8,7 @@ import { damageMonster } from '../../src/sim/combat';
 import { PLAYER_RADIUS } from '../../src/sim/constants';
 import { DAMAGE_INDEX } from '../../src/sim/math';
 import { MSTATE } from '../../src/sim/stores';
-import { interceptTime } from '../../src/sim/rosters/ossuary/brains';
+import { aimAtPlayer, byLevel, interceptTime, projectileRamp } from '../../src/sim/behaviour';
 import { GOLEM, SHADE, WEAVER, WISP } from '../../src/sim/rosters/ossuary/tuning';
 import { idleIntent } from '../sim/fixtures';
 import { makeArena, placeMonster, pv, walkIntent } from '../sim/helpers';
@@ -144,7 +144,8 @@ describe('Frost Weaver', () => {
     }, idleIntent(), log);
     expect(root, 'never rooted').toBeDefined();
     expect(attacks(log, 'frostWeaver', 'web').length).toBeGreaterThan(0);
-    expect(speed).toBeCloseTo(WEAVER.speed, 3);
+    expect(speed).toBeCloseTo(byLevel(a.world, WEAVER.speed), 3);
+    expect(speed).toBeLessThan(200); // an arena at level 12: still a slow web
     // The web was in the air (on screen) for most of a second before it landed.
     expect(a.world.time - firstSeen).toBeGreaterThan(0.8);
     const rooted = pv(a.run).debuffs.find((d) => d.id === 'rooted');
@@ -181,21 +182,48 @@ describe('Frost Weaver', () => {
   });
 
   it('solves the intercept: head-on, standing, and a crossing it cannot catch within range', () => {
-    const max = (WEAVER.range - 10) / WEAVER.speed;
+    const speed = WEAVER.speed[0];
+    const max = (WEAVER.range - 10) / speed;
     // Standing still: the flight time over the gap beyond the muzzle.
-    expect(interceptTime(200, 0, 0, 0, WEAVER.speed, 10, max)).toBeCloseTo(190 / WEAVER.speed, 6);
+    expect(interceptTime(200, 0, 0, 0, speed, 10, max)).toBeCloseTo(190 / speed, 6);
     // Walking straight at it at 110: they close at 230 units/s.
-    expect(interceptTime(200, 0, -110, 0, WEAVER.speed, 10, max)).toBeCloseTo(190 / 230, 6);
+    expect(interceptTime(200, 0, -110, 0, speed, 10, max)).toBeCloseTo(190 / 230, 6);
     // Squarely across at 110 from 200 away: the meeting (≈ 4.2 s, 500 units) lies far beyond the web's range.
-    expect(interceptTime(200, 0, 0, 110, WEAVER.speed, 10, max)).toBe(-1);
+    expect(interceptTime(200, 0, 0, 110, speed, 10, max)).toBe(-1);
     // Walking away at 110: the web gains 10 units/s — out of range too.
-    expect(interceptTime(200, 0, 110, 0, WEAVER.speed, 10, max)).toBe(-1);
+    expect(interceptTime(200, 0, 110, 0, speed, 10, max)).toBe(-1);
     // Any meeting it returns is a real one: the web and the walker arrive at the same point.
     const [dx, dy, vx, vy] = [150, -60, -40, 90];
-    const t = interceptTime(dx, dy, vx, vy, WEAVER.speed, 10, max);
+    const t = interceptTime(dx, dy, vx, vy, speed, 10, max);
     expect(t).toBeGreaterThan(0);
-    expect(Math.hypot(dx + vx * t, dy + vy * t)).toBeCloseTo(10 + WEAVER.speed * t, 6);
+    expect(Math.hypot(dx + vx * t, dy + vy * t)).toBeCloseTo(10 + speed * t, 6);
   });
+
+  it('ramps web speed and lead accuracy with monster level, and falls back to a partial lead', () => {
+    const a = makeArena({ stats: tough() });
+    const set = (level: number) => { a.world.config.monsters.level = level; };
+    set(4);
+    expect(projectileRamp(a.world)).toBe(0);
+    expect(byLevel(a.world, WEAVER.speed)).toBe(120);
+    set(400);
+    expect(projectileRamp(a.world)).toBe(1);
+    expect(byLevel(a.world, WEAVER.speed)).toBe(300);
+    expect(byLevel(a.world, WEAVER.speed)).toBeGreaterThanOrEqual(110 * 2.5);
+    expect(byLevel(a.world, WEAVER.speed)).toBeLessThanOrEqual(110 * 3.5);
+    set(22);
+    const mid = byLevel(a.world, WEAVER.speed);
+    expect(mid).toBeGreaterThan(120);
+    expect(mid).toBeLessThan(300);
+    // Full accuracy at the meeting point vs. none at all (aims at the current position).
+    const i = placeMonster(a.world, 'frostWeaver', 0, 0, { life: 1e6, still: true });
+    const t = { x: 200, y: 0, vx: 0, vy: 110 } as never;
+    expect(aimAtPlayer(a.world, i, t, 300, 300, 0)).toBeCloseTo(0, 6);
+    expect(aimAtPlayer(a.world, i, t, 300, 300, 1)).toBeGreaterThan(0.2);
+    // Crossing outpaces a slow web (no intercept in range): only the fallback lead applies, still ahead of the player.
+    expect(aimAtPlayer(a.world, i, t, 120, 300, 1)).toBeGreaterThan(0);
+    expect(aimAtPlayer(a.world, i, t, 120, 300, 1, 0.5)).toBeGreaterThan(aimAtPlayer(a.world, i, t, 120, 300, 1, 0.25));
+  });
+
 
   it('can be dodged: a player who steps aside when it spits is never caught', () => {
     const a = makeArena({ stats: tough() });

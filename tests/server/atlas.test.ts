@@ -39,6 +39,7 @@ it('credits present party accounts once, shares with alts, and does not grant a 
   server.game.handleOutcomes(map, [{ t: 'bossDefeated' }]);
   for (const p of [a, b, alt]) {
     expect(p.session.record.ch.atlas!.clears).toBe(1);
+    expect(p.session.record.ch.atlas!.bossesSeen).toEqual(['cinderMatriarch']); // the first kill of a final boss is a tree point
     expect(p.session.record.ch.atlas!.discovered).toEqual(expect.arrayContaining(['emberRoad', 'boneApproach']));
   }
   expect(map.atlasCredits.size).toBe(2);
@@ -54,6 +55,48 @@ it('credits present party accounts once, shares with alts, and does not grant a 
   server.game.handleOutcomes(restored, [{ t: 'bossDefeated' }]);
   expect(a.session.record.ch.atlas).toEqual(first);
   expect(b.session.record.ch.atlas!.clears).toBe(1);
+});
+
+it('credits the cleared map tier once per account (a tree point) through the same receipt, and keeps it across a restart', async () => {
+  const { clock, path } = await boot();
+  const aId = createLocalCharacter(server, 'Tier Alice');
+  const a = new LocalPlayer(server, aId);
+  openMap(a);
+  walkIntoProp(a, 'portal', clock, []);
+  const map = a.session.instance as MapInstance;
+  (map.setup.map as { tier: number }).tier = 3; // the tier the receipt remembers
+  server.game.handleOutcomes(map, [{ t: 'bossDefeated' }]);
+  expect(a.session.record.ch.atlas!.tiersCleared).toEqual([3]);
+  expect(a.session.record.ch.atlas!.bossesSeen).toEqual(['cinderMatriarch']);
+  const first = a.session.record.ch.atlas;
+  server.game.handleOutcomes(map, [{ t: 'bossDefeated' }]);
+  expect(a.session.record.ch.atlas).toEqual(first);
+  await server.close();
+  await boot(path);
+  expect(new LocalPlayer(server, aId).session.record.ch.atlas!.tiersCleared).toEqual([3]);
+});
+
+it('credits a first event completion to every present account once, persists it, and ignores kinds the tree does not know', async () => {
+  const { clock, path } = await boot();
+  const aId = createLocalCharacter(server, 'Event Alice');
+  const bId = createLocalCharacter(server, 'Event Bram');
+  const a = new LocalPlayer(server, aId), b = new LocalPlayer(server, bId);
+  partyUp(a, b);
+  openMap(a);
+  walkIntoProp(a, 'portal', clock, [b]);
+  enterMapOf(b, a, clock, [a]);
+  const map = a.session.instance as MapInstance;
+  server.game.handleOutcomes(map, [{ t: 'eventComplete', kind: 'hunted', grade: 1 }]);
+  for (const p of [a, b]) expect(p.session.record.ch.atlas!.eventsSeen).toEqual(['stalker']);
+  const before = a.session.record.ch.atlas;
+  server.game.handleOutcomes(map, [{ t: 'eventComplete', kind: 'hunted', grade: 3 }]);
+  expect(a.session.record.ch.atlas).toEqual(before); // idempotent
+  server.game.handleOutcomes(map, [{ t: 'eventComplete', kind: 'wound', grade: 2 }, { t: 'eventComplete', kind: 'secondCrown', grade: 1 }]);
+  expect(a.session.record.ch.atlas!.eventsSeen).toEqual(['stalker', 'fault', 'rivalCrowns']);
+  await server.close();
+  await boot(path);
+  const again = new LocalPlayer(server, aId);
+  expect([...again.session.record.ch.atlas!.eventsSeen!].sort()).toEqual(['fault', 'rivalCrowns', 'stalker']);
 });
 
 it('retries a failed discovery transaction without recording half of the account/run handover', async () => {

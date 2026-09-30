@@ -2,11 +2,12 @@
 // Wisp. (The Bone Thrall and the Ossuary Golem are kit brains configured in ./index.ts.)
 import { killMonster } from '../../combat';
 import {
-  DAMAGE_INDEX, DT, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, attackEvent, extraProjectiles, faceTarget, fireHostile, hitPlayer,
-  monsterDamage, moveAlong, muzzleOffset, registerAreaEffect, setAnim, spawnArea, steer, stop, toChase, wander, type Area,
+  DAMAGE_INDEX, DT, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, aimAtPlayer, attackEvent, byLevel, extraProjectiles, faceTarget, fireHostile, hitPlayer,
+  levelExtraShots, monsterDamage, moveAlong, registerAreaEffect, setAnim, spawnArea, steer, stop, toChase, wander, type Area,
   type PlayerState, type World,
 } from '../api';
-import { SHADE, WEAVER, WISP } from './tuning';
+import { markerDropper } from '../pressure';
+import { SHADE, WEAVER, WEAVER_MARK, WISP } from './tuning';
 
 /**
  * Rimeshade: a drifting ghost. It weaves toward its player (it passes through other monsters and props:
@@ -66,54 +67,27 @@ export function brainRimeshade(w: World, i: number, t: PlayerState | null, dx: n
   }
 }
 
-/**
- * Seconds until a shot at `speed`, leaving `off` ahead of its shooter, meets a target at (dx, dy) from the
- * shooter moving steadily at (vx, vy): the smallest t ≥ 0 with |D + V·t| = off + speed·t. -1 when there is
- * no such meeting within `maxTime` (the target outpaces the shot, or the meeting lies beyond its range).
- */
-export function interceptTime(dx: number, dy: number, vx: number, vy: number, speed: number, off: number, maxTime: number): number {
-  const c = dx * dx + dy * dy - off * off;
-  if (c <= 0) return 0; // already inside the muzzle
-  const a = vx * vx + vy * vy - speed * speed;
-  const b = 2 * (dx * vx + dy * vy - off * speed);
-  let t = -1;
-  if (Math.abs(a) < 1e-9) {
-    if (b < 0) t = -c / b;
-  } else {
-    const disc = b * b - 4 * a * c;
-    if (disc >= 0) {
-      const r = Math.sqrt(disc);
-      const t1 = (-b - r) / (2 * a);
-      const t2 = (-b + r) / (2 * a);
-      const lo = Math.min(t1, t2);
-      const hi = Math.max(t1, t2);
-      t = lo >= 0 ? lo : hi;
-    }
-  }
-  return t >= 0 && t <= maxTime ? t : -1;
-}
+/** The weaver's rime marker on where its player will be (drops now and then; a held player is spared). */
+const markWeb = markerDropper(WEAVER_MARK);
 
 /** The web leaves: aimed at the intercept (WEAVER in ./tuning.ts), or with the short fallback lead. */
 function spitWeb(w: World, i: number, t: PlayerState): void {
   const m = w.monsters;
-  const off = muzzleOffset(w, i);
-  const dx = t.x - m.x[i];
-  const dy = t.y - m.y[i];
-  const meet = interceptTime(dx, dy, t.vx, t.vy, WEAVER.speed, off, (WEAVER.range - off) / WEAVER.speed);
-  const lead = meet >= 0 ? meet * WEAVER.aim : WEAVER.fallbackLead;
-  const base = Math.atan2(dy + t.vy * lead, dx + t.vx * lead);
-  const n = 1 + extraProjectiles(w);
+  const speed = byLevel(w, WEAVER.speed);
+  const base = aimAtPlayer(w, i, t, speed, WEAVER.range, byLevel(w, WEAVER.aim), WEAVER.fallbackLead);
+  const n = 1 + extraProjectiles(w) + levelExtraShots(w, WEAVER.extraShots);
   const dmg = monsterDamage(w, i) * WEAVER.mult;
   for (let k = 0; k < n; k++) {
     // webShot's default rider roots (source 'web').
-    fireHostile(w, i, PROJ.webShot, base + (k - (n - 1) / 2) * WEAVER.spread, WEAVER.speed, WEAVER.range, WEAVER.radius, dmg, m.dtype[i]);
+    fireHostile(w, i, PROJ.webShot, base + (k - (n - 1) / 2) * WEAVER.spread, speed, WEAVER.range, WEAVER.radius, dmg, m.dtype[i]);
   }
   attackEvent(w, i, 'web');
+  markWeb(w, i, t);
 }
 
 /**
  * Frost Weaver: a spindly bone spider that keeps 150–230 from its player — backs off inside, closes in
- * beyond, strafes in between — and spits a slow web (120 units/s) after a 0.6 s windup: 'web' as it
+ * beyond, strafes in between — and spits a web (120 units/s on a tier-1 map, up to 300 at high tiers) after a 0.6 s windup: 'web' as it
  * leaves (anim windup, then attack). The web roots (source 'web') whoever it touches; see WEAVER for
  * where it aims.
  */

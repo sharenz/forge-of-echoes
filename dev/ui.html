@@ -31,6 +31,7 @@
       //   ?screen=loading|auth|characters|disconnected|game   &fatal=1 &error=text &busy=1 &nochars=1
       //   ?panels=inventory,character,skills,stash,party,mapDevice,merchant,craftingBench,trade,menu,help
       //   ?zone=hideout|visit|map|partymap  &boss=1 &lieutenant=1 &tell=1 &cleared=1 &dead=1 &portal=0
+      //   ?zone=map&event=pactAltar,orchard,host (map-event HUD cards, up to three; &eventphase=available|warning|active|complete|failed)
       //   ?tooltip=first-rare|first-unique|first-magic|first-normal|first-map|first-currency|first-flask|equipped|belt|skill|stash-unique
       //            |crafted|bench-socket|palette|palette-bad|trade-theirs|trade-yours
       //   ?armed=scrap (hovers the first valid target)   ?affix=seal|catalyst|fractureCore
@@ -46,6 +47,8 @@
       //   ?tooltip=map-row|cslot|cslot-empty|tier|debuff|debuff-rooted|stab-maps|stab-currency (special tab / HUD hovers)
       //   ?drag=deposit|withdraw|mapdeposit (drag a currency onto the Crafting Stash, a slot to the backpack, a map in)
       //   ?device=empty (the map device starts empty: its panel opens on the Map Stash picker)
+      //   ?atlas=fresh|mid|late|full (Atlas progress for the Cartography Table; panels=mapDevice)
+      //   ?tree=open|mid|full (Codex preset: all 60 points earned, none / 14 / all spent; with panels=mapDevice, then the Codex tab)
       //   ?drag=mapload (with panels=mapDevice: drag a backpack map onto the picker, which loads it into the device)
       import { generateArt } from '/src/art/index.ts';
       import { mountUi } from '/src/ui/index.ts';
@@ -133,6 +136,8 @@
         screen: q.get('screen') ?? 'game',
         panels,
         zone,
+        event: q.get('event'),
+        eventPhase: q.get('eventphase') ?? undefined,
         boss: flag('boss'),
         lieutenant: flag('lieutenant'),
         tell: flag('tell'),
@@ -162,6 +167,8 @@
         stash: stashTab,
         specialStash: q.get('specialstash') !== '0',
         emptyDevice: q.get('device') === 'empty',
+        atlas: q.get('atlas') ?? undefined,
+        tree: q.get('tree') ?? undefined,
         debuffs,
         theme: mapTheme,
       });

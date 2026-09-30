@@ -45,6 +45,7 @@ import type {
 import type { ClientWorld } from '../contracts/net';
 import { ByteReader, StringInterner } from './bytes';
 import { SnapshotClock } from './clock';
+import { cloneMapEvents } from './map-event-codec';
 import { CHILL_CAST_FACTOR, LocalPredictor, createPredictionEnv } from './prediction';
 import type { PredictionEnv, PredictionHints } from './prediction';
 import { DYNAMIC_PROP_KINDS } from './protocol';
@@ -155,7 +156,7 @@ function createMonsterStore(capacity: number): MonsterStoreView {
     alive: new Uint8Array(capacity), id: new Uint32Array(capacity), kind: new Uint8Array(capacity),
     rarity: new Uint8Array(capacity), x: f(), y: f(), prevX: f(), prevY: f(), radius: f(),
     facing: new Int8Array(capacity), anim: new Uint8Array(capacity), animTime: f(), life: f(), maxLife: f(),
-    hitFlash: f(), ailments: new Uint8Array(capacity), mods: new Uint8Array(capacity),
+    hitFlash: f(), ailments: new Uint16Array(capacity), mods: new Uint16Array(capacity),
   };
 }
 
@@ -241,7 +242,7 @@ function hasDebuff(p: PlayerView, id: PlayerDebuffView['id']): boolean {
   return false;
 }
 
-function copyRun(src: RunView, dst: RunView, boss: NonNullable<RunView['boss']>, lieutenant: NonNullable<RunView['lieutenant']>): void {
+function copyRun(src: RunView, dst: RunView, boss: NonNullable<RunView['boss']>, boss2: NonNullable<RunView['boss2']>, lieutenant: NonNullable<RunView['lieutenant']>): void {
   dst.phase = src.phase;
   dst.wave = src.wave;
   dst.waveCount = src.waveCount;
@@ -259,7 +260,14 @@ function copyRun(src: RunView, dst: RunView, boss: NonNullable<RunView['boss']>,
     boss.phase = src.boss.phase;
     dst.boss = boss;
   } else dst.boss = null;
-  dst.event = src.event ? { ...src.event } : null;
+  if (src.boss2) {
+    boss2.name = src.boss2.name;
+    boss2.life = src.boss2.life;
+    boss2.maxLife = src.boss2.maxLife;
+    boss2.phase = src.boss2.phase;
+    dst.boss2 = boss2;
+  } else dst.boss2 = null;
+  dst.events = cloneMapEvents(src.events);
   if (src.lieutenant) {
     lieutenant.name = src.lieutenant.name;
     lieutenant.life = src.lieutenant.life;
@@ -289,6 +297,7 @@ export function createClientWorld(): NetClientWorld {
   const props: PropView[] = [];
   const run = createRunView();
   const runBoss = { name: '', life: 0, maxLife: 0, phase: 1 };
+  const runBoss2 = { name: '', life: 0, maxLife: 0, phase: 1 };
   const runLieutenant = { name: '', life: 0, maxLife: 0 };
   const view: WorldView = {
     tick: 0, time: 0, arenaRadius: 0, theme: 'hideout',
@@ -379,7 +388,7 @@ export function createClientWorld(): NetClientWorld {
     areaAttached.clear();
     for (const l of areaLookups) l.serial = -1;
     const fresh = createRunView();
-    copyRun(fresh, run, runBoss, runLieutenant);
+    copyRun(fresh, run, runBoss, runBoss2, runLieutenant);
     view.tick = 0;
     view.time = 0;
   }
@@ -851,6 +860,7 @@ export function createClientWorld(): NetClientWorld {
     o.invulnTime = b.invulnTime;
     o.hitFlash = a ? flashAt(a.hitFlash, b.hitFlash, t) : b.hitFlash;
     o.dead = b.dead;
+    o.eventSlow = b.eventSlow;
     debuffShift = renderSec - B.tick * SIM_DT;
     writeDebuffs(o.debuffs, b.dead ? NO_DEBUFFS : b.debuffs, shiftedLeft);
   }
@@ -874,6 +884,7 @@ export function createClientWorld(): NetClientWorld {
     o.wardTime = Math.max(0, n.wardTime - liveElapsed);
     o.invulnTime = Math.max(0, n.invulnTime - liveElapsed);
     o.hitFlash = Math.max(0, n.hitFlash - liveElapsed * PLAYER_HIT_FLASH_DECAY);
+    o.eventSlow = n.eventSlow ?? 0;
     if (n.dead) writeDebuffs(o.debuffs, NO_DEBUFFS, shiftedLeft);
     else if (predictor.hasBase) writeDebuffs(o.debuffs, n.debuffs, predictedLeft, 0);
     else {
@@ -1231,7 +1242,7 @@ export function createClientWorld(): NetClientWorld {
     writeMotes(A, B, extrap);
     writeDrops(A, B, N, extrap, alpha, renderSec);
     writeAreas(N, liveElapsed, A, B, t);
-    copyRun(N.run, run, runBoss, runLieutenant);
+    copyRun(N.run, run, runBoss, runBoss2, runLieutenant);
     return alpha < 0 ? 0 : alpha > 1 ? 1 : alpha;
   }
 

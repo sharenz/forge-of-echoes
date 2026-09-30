@@ -2,13 +2,13 @@
 // through MonsterScaling, per-wave growth, elite modifiers and the party size.
 import type { MonsterKind } from '../contracts/content';
 import { MONSTER_ANIM, RARITY_CODE, type MonsterRarity } from '../contracts/sim';
-import { KIND_INDEX, RARITY_STRENGTH, RARITY_XP, eliteDamageMult, eliteLifeMult, eliteSpeedMult } from './archetypes';
+import { KIND_INDEX, RARITY_STRENGTH, RARITY_XP, eliteDamageMult, eliteLifeMult, eliteResist, eliteSpeedMult } from './archetypes';
 import { PARTY_LIFE_PER_PLAYER, SPAWN_ANIM_TIME, WAVE_DAMAGE_GROWTH, WAVE_LIFE_GROWTH } from './constants';
 import { DAMAGE_INDEX, GOLDEN_ANGLE, TAU } from './math';
 import { nearestLiving } from './player';
 import { monsterDefs } from './rosters';
 import { MFLAG } from './stores';
-import type { Pack, World } from './world';
+import { pactForWave, type Pack, type World } from './world';
 
 /** Party size used for scaling: the living players (at least 1). */
 export function partySize(w: World): number {
@@ -45,7 +45,7 @@ export function spawnMonster(w: World, kind: MonsterKind, x: number, y: number, 
   const isDummy = kind === 'trainingDummy';
   const strength = RARITY_STRENGTH[opts.boss || opts.lieutenant || isDummy ? 'normal' : rarity];
   // Life scales with the party present at spawn time (a later join doesn't buff living monsters).
-  const lifeMult = isDummy ? 1 : s.lifeMultiplier * (1 + WAVE_LIFE_GROWTH * (wave - 1)) * eliteLifeMult(mods) * partyLifeMult(w) * strength.life * (opts.boss ? w.config.bossLifeMultiplier ?? 1 : 1);
+  const lifeMult = isDummy ? 1 : s.lifeMultiplier * (1 + WAVE_LIFE_GROWTH * (wave - 1)) * eliteLifeMult(mods) * partyLifeMult(w) * strength.life * (opts.boss ? w.config.bossLifeMultiplier ?? 1 : 1) * (opts.boss ? 1 : pactForWave(w, wave)?.life ?? 1);
   const dmgMult = s.damageMultiplier * (1 + WAVE_DAMAGE_GROWTH * (wave - 1)) * eliteDamageMult(mods) * strength.damage * (opts.boss ? w.config.bossDamageMultiplier ?? 1 : 1);
   const rng = w.worldRng;
   const animate = opts.animate ?? true;
@@ -80,7 +80,7 @@ export function spawnMonster(w: World, kind: MonsterKind, x: number, y: number, 
     (opts.lieutenant ? MFLAG.lieutenant : 0) | (opts.boss ? MFLAG.boss : 0) | (isDummy ? MFLAG.unpushable : 0) | (heavy ? MFLAG.heavy : 0) |
     (a.ghost ? MFLAG.ghost : 0) | (a.block ? MFLAG.guard : 0);
   m.wave[i] = Math.min(255, wave);
-  for (let k = 0; k < 5; k++) m.res[i * 5 + k] = a.resist[k] + (isDummy ? 0 : s.resistBonus);
+  for (let k = 0; k < 5; k++) m.res[i * 5 + k] = eliteResist(mods, k, a.resist[k] + (isDummy ? 0 : s.resistBonus));
   if (opts.pack !== undefined && opts.pack >= 0) {
     m.pack[i] = opts.pack;
     w.packs[opts.pack].alive++;

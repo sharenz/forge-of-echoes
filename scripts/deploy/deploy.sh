@@ -102,9 +102,10 @@ echo "--> healthy: $(curl -fsS http://127.0.0.1:$APP_PORT/api/health)"
 ls -1dt "$APP_DIR"/releases/* | tail -n +$((KEEP + 1)) | xargs -r rm -rf
 REMOTE
 
-echo "--> installing testing-merchant CLI"
+echo "--> installing admin CLI (foe, foe-cli, debug_merch)"
+scp -q scripts/deploy/foe "$DEPLOY_HOST:/tmp/forge-foe"
 scp -q scripts/deploy/debug_merch "$DEPLOY_HOST:/tmp/forge-debug_merch"
-ssh "$DEPLOY_HOST" 'install -m 755 /tmp/forge-debug_merch /usr/local/bin/debug_merch'
+ssh "$DEPLOY_HOST" 'install -m 755 /tmp/forge-foe /usr/local/bin/foe && install -m 755 /tmp/forge-debug_merch /usr/local/bin/debug_merch && ln -sfn /usr/local/bin/foe /usr/local/bin/foe-cli && install -d -m 750 -o forge -g forge /var/lib/forge/backups && chown -R forge:forge /var/lib/forge/backups'
 
 echo "--> public check"
 for i in $(seq 1 20); do

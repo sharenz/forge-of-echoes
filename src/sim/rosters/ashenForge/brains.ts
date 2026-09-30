@@ -3,12 +3,13 @@ import { MONSTER_KINDS } from '../../../contracts/content';
 import { SPIT_FLIGHT } from '../../constants';
 import {
   DAMAGE_INDEX, DT, MFLAG, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, empowerMult, extraProjectiles, faceTarget, fireHostile,
-  meleeHit, moveAlong, muzzleOffset, setAnim, spawnArea, steer, stop, toChase, wander, type PlayerState, type World,
+  meleeHit, moveAlong, muzzleOffset, setAnim, spawnArea, steer, stop, toChase, wander, type Brain, type PlayerState, type World,
 } from '../api';
+import { gapLeap, markerDropper } from '../pressure';
 import { BEHAVIOUR } from './tuning';
 
-/** Ashling: walks at its player; a short windup, then a lunge-bite. */
-export function brainAshling(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
+/** The plain Ashling: walks at its player; a short windup, then a lunge-bite. */
+function meleeAshling(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
   const m = w.monsters;
   const B = BEHAVIOUR.ashling;
   const st = m.state[i];
@@ -51,6 +52,9 @@ export function brainAshling(w: World, i: number, t: PlayerState | null, dx: num
   }
 }
 
+/** Ashling: the plain melee, plus a short telegraphed gap-closing leap at mid range (BEHAVIOUR.ashlingLeap). */
+export const brainAshling: Brain = gapLeap(meleeAshling, BEHAVIOUR.ashlingLeap);
+
 /** Ember Skitter: fast, zig-zagging in bursts; quick bites without windup. */
 export function brainSkitter(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
   const m = w.monsters;
@@ -83,6 +87,9 @@ export function brainSkitter(w: World, i: number, t: PlayerState | null, dx: num
   }
 }
 
+/** The spitter's ember marker on where its player will be (drops now and then; a held player is spared). */
+const markSpit = markerDropper(BEHAVIOUR.spitterMark);
+
 /**
  * Cinder Spitter: keeps 140–220 away and lobs fire spit every 2.4 s. The spit is a true lob:
  * it flies for exactly SPIT_FLIGHT seconds toward where its player is heading and bursts where
@@ -114,6 +121,7 @@ export function brainSpitter(w: World, i: number, t: PlayerState | null, dx: num
         fireHostile(w, i, PROJ.cinderSpit, a, speed, dist, B.radius, dmg, DAMAGE_INDEX.fire, SPIT_FLIGHT);
       }
       w.events.push({ t: 'monsterAttack', kind: MONSTER_KINDS[m.kind[i]], x: m.x[i], y: m.y[i], attack: 'spit' });
+      markSpit(w, i, t);
       setAnim(w, i, ANIM.attack);
       m.state[i] = MSTATE.attack;
       m.stateTime[i] = 0.25;

@@ -215,6 +215,34 @@ export const BASES: Record<BaseId, BaseDef> = {
     properties: [],
   }),
 
+  // --- armour economy: hybrids and armoured variants for every armour slot ---------------------
+  // Armour / Evasion hybrids give roughly half of each; the Warded Vestment keeps a robe's focus
+  // identity but carries a little armour so caster chests can still invest in armour.
+  scaleCowl: base('scaleCowl', {
+    name: 'Scale Cowl', itemClass: 'helmet', levelRequirement: 4, maxStability: 8, materialNote: PLAIN,
+    implicits: [imp('maxLife', 'flat', 8, 14)], properties: [armour(6, 0.3), evasion(6, 0.3)],
+  }),
+  quiltedJerkin: base('quiltedJerkin', {
+    name: 'Quilted Jerkin', itemClass: 'chest', levelRequirement: 6, maxStability: 8, materialNote: PLAIN,
+    implicits: [imp('maxLife', 'flat', 14, 22)], properties: [armour(10, 0.55), evasion(10, 0.55)],
+  }),
+  wardedVestment: base('wardedVestment', {
+    name: 'Warded Vestment', itemClass: 'chest', levelRequirement: 10, maxStability: 8, materialNote: PLAIN,
+    implicits: [imp('maxFocus', 'flat', 10, 16)], properties: [armour(6, 0.3), evasion(8, 0.55)],
+  }),
+  studdedGloves: base('studdedGloves', {
+    name: 'Studded Gloves', itemClass: 'gloves', levelRequirement: 4, maxStability: 8, materialNote: PLAIN,
+    implicits: [imp('maxLife', 'flat', 6, 10)], properties: [armour(4, 0.2), evasion(4, 0.2)],
+  }),
+  ironshodBoots: base('ironshodBoots', {
+    name: 'Ironshod Boots', itemClass: 'boots', levelRequirement: 8, maxStability: 9, materialNote: IRON_BOUND,
+    implicits: [imp('moveSpeed', 'increased', 4, 7)], properties: [armour(9, 0.45)],
+  }),
+  studdedBelt: base('studdedBelt', {
+    name: 'Studded Belt', itemClass: 'belt', levelRequirement: 8, maxStability: 8, materialNote: PLAIN,
+    implicits: [imp('maxLife', 'flat', 10, 16)], properties: [armour(8, 0.4)],
+  }),
+
   // --- jewellery -------------------------------------------------------------------------------
   cinderPendant: base('cinderPendant', {
     name: 'Cinder Pendant',

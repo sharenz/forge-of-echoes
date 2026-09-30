@@ -5,19 +5,19 @@
 //
 //   header   u8 version · u32 tick · u32 ackSeq · u8 viewerId · u8 theme · f32 arenaRadius · f32 originX · f32 originY
 //   run      u8 phase · u8 wave · u8 waveCount · f32 waveTime · f32 waveDuration · f32 elapsed · u32 kills
-//            · u16 monstersAlive · u8 playersAlive · u8 flags(boss|lieutenant<<1|portalOpen<<2|event<<3)
-//            · [boss: str name · f32 life · f32 maxLife · u8 phase] · [lieutenant: str name · f32 life · f32 maxLife]
+//            · u16 monstersAlive · u8 playersAlive · u8 flags(boss|lieutenant<<1|portalOpen<<2|event<<3|boss2<<4)
+//            · [boss: str name · f32 life · f32 maxLife · u8 phase] · [boss2: the same] · [lieutenant: str name · f32 life · f32 maxLife]
 //            · [event: u8 kind · u8 phase · f32 x · f32 y · u8 remaining · u8 total · u8 seconds(255=none)]
 //   players  u8 n · n × { u8 id · u8 bits(facing:2|anim:3|dead|full|casting) · u8 level · str name · f32 x · f32 y
 //            · f32 vx · f32 vy · i16 aimDx·8 · i16 aimDy·8 · f32 animTime · [u8 skill · u16 progress·65535]
-//            · f32 life · f32 maxLife · u16 wardTime ms · u16 wardDuration ms · u16 invuln ms · u8 hitFlash·255
+//            · f32 life · f32 maxLife · u16 wardTime ms · u16 wardDuration ms · u16 invuln ms · u8 hitFlash·255 · u8 eventSlow·100
 //            · u8 nDebuffs × {u8 debuff:4|rootSource+1:4 · u8 stacks · u16 remaining ms · u16 duration ms}
 //            · full: f32 focus · f32 maxFocus · u8 nSlots × {u8 skill+1 · u8 usable · u16 cd ms · u16 cdTotal ms
 //              · u8 charges · u8 maxCharges · f32 focusCost} · u8 nFlasks × {u8 flask+1 · [u8 count · u8 resource
 //              · u16 active ms · u16 duration ms]} }
 //   monsters u16 n · n × 13 B { u32 slot:12|gen:8|kind:6|rarity:3|east:1|spare:2 · i16 x · i16 y
 //            · u8 anim:3|hasExtras|hitFlash:4 · u16 animTime ticks · u8 life/maxLife·255 · u8 radius·4
-//            · [hasExtras: u8 ailments · u8 mods] · [rarity ≥ rare: f32 maxLife · f32 life] }
+//            · [hasExtras: u16 ailments · u16 mods] · [rarity ≥ rare: f32 maxLife · f32 life] }
 //   projs    u16 n · n × 14 B { u32 slot:12|gen:8|kind:6|hostile|lobbed|wideAge|spare:3 · i16 x · i16 y · i16 vx·8
 //            · i16 vy·8 · u8 radius·4 · (wideAge ? u16 : u8) age ticks · [u8 life ticks] }
 //   motes    u16 n · n × 7 B { u16 slot · u8 size · i16 x · i16 y }
@@ -32,13 +32,13 @@
 //
 // Enum fields are indices into the append-only tables of protocol.ts (MONSTER_KINDS, PROJECTILE_KINDS, AREA_KINDS,
 // PLAYER_DEBUFFS, …); the decoder rejects any index past the end of its table.
-import { MAP_EVENT_KINDS, MAP_EVENT_PHASES } from '../contracts/map-events';
 import type { SkillId, Theme } from '../contracts/content';
 import { BELT_SLOTS, LOADOUT_SLOTS } from '../contracts/items';
 import type {
   AreaView, DropView, FlaskSlotView, PlayerDebuffView, PlayerView, PropView, RunView, SlotView,
 } from '../contracts/sim';
 import { ByteReader, SnapshotDecodeError, StringInterner } from './bytes';
+import { readMapEvents } from './map-event-codec';
 import {
   AIM_SCALE, ANIM_TIME_SCALE, AREA_KINDS, AREA_RADIUS_SCALE, DEBUFF_CODES, DIR4_CODES, DROP_AUTO_PICKUP_BIT,
   DROP_BLOCKED_BIT, DROP_SPRITE_CODES, DROP_TONE_CODES, FLASK_IDS, MAX_WIRE_SLOT, MONSTER_KINDS, PLAYER_ANIM_CODES,
@@ -70,8 +70,8 @@ export class MonsterRecords {
   life = new Float32Array(0);
   maxLife = new Float32Array(0);
   hitFlash = new Float32Array(0);
-  ailments = new Uint8Array(0);
-  mods = new Uint8Array(0);
+  ailments = new Uint16Array(0);
+  mods = new Uint16Array(0);
 
   constructor(cap = 128) {
     this.reserve(cap);
@@ -94,8 +94,8 @@ export class MonsterRecords {
     this.life = new Float32Array(cap);
     this.maxLife = new Float32Array(cap);
     this.hitFlash = new Float32Array(cap);
-    this.ailments = new Uint8Array(cap);
-    this.mods = new Uint8Array(cap);
+    this.ailments = new Uint16Array(cap);
+    this.mods = new Uint16Array(cap);
   }
 }
 
@@ -180,7 +180,7 @@ export function createPlayerView(id = 0): PlayerView {
     id, name: '', level: 1,
     x: 0, y: 0, prevX: 0, prevY: 0, vx: 0, vy: 0, facing: 'south', aimX: 0, aimY: 0, anim: 'idle', animTime: 0,
     castSkill: null, castProgress: 0, life: 0, maxLife: 0, focus: 0, maxFocus: 0, wardTime: 0, wardDuration: 0,
-    invulnTime: 0, hitFlash: 0, dead: false, debuffs: [], slots, flasks,
+    invulnTime: 0, hitFlash: 0, dead: false, eventSlow: 0, debuffs: [], slots, flasks,
   };
 }
 
@@ -208,7 +208,7 @@ export function createPropView(): PropView {
 export function createRunView(): RunView {
   return {
     phase: 'hideout', wave: 0, waveCount: 0, waveTime: 0, waveDuration: 0, elapsed: 0, kills: 0, monstersAlive: 0,
-    boss: null, lieutenant: null, portalOpen: false, playersAlive: 0,
+    boss: null, boss2: null, lieutenant: null, portalOpen: false, playersAlive: 0, events: [],
   };
 }
 
@@ -240,6 +240,7 @@ export class Snapshot {
 
   readonly run: RunView = createRunView();
   private readonly bossSlot = { name: '', life: 0, maxLife: 0, phase: 1 };
+  private readonly boss2Slot = { name: '', life: 0, maxLife: 0, phase: 1 };
   private readonly lieutenantSlot = { name: '', life: 0, maxLife: 0 };
 
   readonly playerPool = new Pool<PlayerRecord>(createPlayerRecord);
@@ -334,6 +335,14 @@ export class Snapshot {
       b.phase = r.u8();
       run.boss = b;
     } else run.boss = null;
+    if (flags & 16) {
+      const b = this.boss2Slot;
+      b.name = r.str(interner);
+      b.life = r.f32();
+      b.maxLife = r.f32();
+      b.phase = r.u8();
+      run.boss2 = b;
+    } else run.boss2 = null;
     if (flags & 2) {
       const l = this.lieutenantSlot;
       l.name = r.str(interner);
@@ -341,13 +350,8 @@ export class Snapshot {
       l.maxLife = r.f32();
       run.lieutenant = l;
     } else run.lieutenant = null;
-    if (flags & 8) {
-      run.event = { kind: enumAt(MAP_EVENT_KINDS, r.u8(), 'map event'),
-        phase: enumAt(MAP_EVENT_PHASES, r.u8(), 'map event phase'),
-        x: r.f32(), y: r.f32(), remaining: r.u8(), total: r.u8() };
-      const seconds = r.u8();
-      if (seconds !== 255) run.event.seconds = seconds;
-    } else run.event = null;
+    if (flags & 8) readMapEvents(r, run.events, enumAt);
+    else run.events.length = 0;
   }
 
   private decodePlayers(r: ByteReader, interner: StringInterner): void {
@@ -385,6 +389,7 @@ export class Snapshot {
       p.wardDuration = r.u16() / 1000;
       p.invulnTime = r.u16() / 1000;
       p.hitFlash = r.u8() / 255;
+      p.eventSlow = r.u8() / 100;
       decodeDebuffs(r, p);
       if (p.full) {
         p.focus = r.f32();
@@ -473,8 +478,8 @@ export class Snapshot {
       const lifeQ = r.u8();
       m.radius[i] = r.u8() / RADIUS_SCALE;
       if (extras) {
-        m.ailments[i] = r.u8();
-        m.mods[i] = r.u8();
+        m.ailments[i] = r.u16();
+        m.mods[i] = r.u16();
       } else {
         m.ailments[i] = 0;
         m.mods[i] = 0;

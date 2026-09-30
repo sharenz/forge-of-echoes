@@ -42,6 +42,17 @@ const GROUPS: { key: SfxGroup[]; title: string; accent: string; ids: SfxId[] }[]
     key: ['monster', 'combat', 'boss'], title: 'Iron Coliseum', accent: 'var(--rust-bright)',
     ids: ['houndBite', 'chainThrow', 'crossbowAim', 'crossbowShot', 'shieldBlock', 'tarSplat', 'chainWhirl', 'varkusCharge', 'varkusWhirl', 'executionMark', 'arenaSpikes', 'crowdRoar'],
   },
+  {
+    key: ['flow'], title: 'Map events', accent: 'var(--bone)',
+    ids: ['eventOmen', 'eventOnset', 'eventStep', 'eventLock', 'eventWhiff', 'eventHit', 'eventReturn', 'eventSeal', 'eventErupt', 'eventBronze', 'eventSilver', 'eventGold', 'eventFail', 'eventBeat',
+      'eventHum', 'wheelBreak', 'shieldBreak'],
+  },
+  {
+    key: ['flow'], title: 'Map events: choices and wave 2', accent: 'var(--bone)',
+    ids: ['pactStone', 'pactSeal', 'pactWave', 'bloomGrow', 'bloomHarvest', 'bloomBite', 'bloomWither', 'ringRise', 'ringChain', 'ringSlam',
+      'hostThaw', 'prismShatter', 'hostWake', 'anvilStrike', 'anvilCharged', 'anvilForge', 'bellToll', 'cantorFall', 'dirge',
+      'voidTide', 'voidSurge', 'heartCrack'],
+  },
 ];
 
 const LABELS: Record<SfxId, string> = {
@@ -64,6 +75,14 @@ const LABELS: Record<SfxId, string> = {
   houndBite: 'Hound bite', chainThrow: 'Chain hook', crossbowAim: 'Crossbow aim', crossbowShot: 'Crossbow shot', shieldBlock: 'Shield block',
   tarSplat: 'Tar splat', chainWhirl: 'Chain whirl', varkusCharge: 'Varkus charge', varkusWhirl: 'Whirlwind', executionMark: 'Execution Mark',
   arenaSpikes: 'Arena spikes', crowdRoar: 'Crowd roar',
+  eventOmen: 'Event omen', eventOnset: 'Event onset', eventStep: 'Event step', eventLock: 'Pounce lock', eventWhiff: 'Whiff', eventHit: 'Event hit',
+  eventReturn: 'Echo returns', eventSeal: 'Rift sealed', eventErupt: 'Rift erupts', eventBronze: 'Bronze', eventSilver: 'Silver', eventGold: 'Gold',
+  eventFail: 'Event failed', eventBeat: 'Heartbeat',
+  eventHum: 'Choir hum', wheelBreak: 'Wheel breaks', shieldBreak: 'Shield line breaks', pactStone: 'Pact stone', pactSeal: 'Pact sealed',
+  pactWave: 'Pact wave', bloomGrow: 'Bloom grows', bloomHarvest: 'Bloom harvested', bloomBite: 'Bloom gnawed', bloomWither: 'Bloom withers',
+  ringRise: 'Ring rises', ringChain: 'Chain wall', ringSlam: 'Champion slam', hostThaw: 'Statue thaws', prismShatter: 'Prism shatters',
+  hostWake: 'Host wakes', anvilStrike: 'Anvil strike', anvilCharged: 'Anvil charged', anvilForge: 'Boon forged', bellToll: 'Bell toll',
+  cantorFall: 'Cantor falls', dirge: 'Dirge', voidTide: 'Void tide', voidSurge: 'Void surge', heartCrack: 'Heart cracks',
 };
 
 const TRACK_LABELS: Record<MusicId, { name: string; note: string }> = {

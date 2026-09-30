@@ -13,7 +13,7 @@ import {
 } from './constants';
 import { digestWorld } from './digest';
 import { EventBuffer } from './events';
-import { createMapEvent, updateMapEvent } from './map-events';
+import { createEventDirector, updateMapEvent } from './map-events';
 import { PropGrid, SpatialGrid } from './grid';
 import { createHookErrorLog } from './hooks';
 import { removeDrop, removePlayerDrops, requestPickup, spawnFloorDrop, updateDrops } from './loot';
@@ -83,9 +83,11 @@ export function createWorld(config: RunConfig, capacities: StoreCapacities = def
     kills: 0,
     monstersAlive: 0,
     boss: null,
+    boss2: null,
     lieutenant: null,
     portalOpen: false,
     playersAlive: 0,
+    events: [],
   };
   const areas: World['areas'] = [];
   const drops: World['drops'] = [];
@@ -126,7 +128,10 @@ export function createWorld(config: RunConfig, capacities: StoreCapacities = def
     props,
     packs: [],
     director,
-    mapEvent: config.mode === 'map' ? createMapEvent(config.event) : null,
+    mapEvent: createEventDirector(config),
+    pact: null,
+    pactNext: null,
+    pactResist: 0,
     roster: rosterFor(config.theme),
     boss: { phase: 1, roar: 0, state: null },
     bossStates: new Map(),
@@ -149,6 +154,7 @@ export function createWorld(config: RunConfig, capacities: StoreCapacities = def
     scratchT: new Float32Array(monsters.capacity),
   };
 
+  if (w.mapEvent) run.events = w.mapEvent.views;
   if (config.mode === 'hideout') {
     layoutHideout(w);
     const d = hideoutDummyPosition(R);
@@ -300,7 +306,6 @@ function syncView(w: World): void {
   const d = w.director;
   const r = v.run;
   const m = w.monsters;
-  r.event = w.mapEvent?.view ?? null;
   r.wave = d.wave;
   r.waveTime = d.waveTime;
   r.elapsed = w.time;
@@ -313,6 +318,20 @@ function syncView(w: World): void {
     r.boss.maxLife = m.maxLife[bossSlot];
     r.boss.phase = w.boss.phase;
   } else r.boss = null;
+  // Rival Crowns: the second living boss gets its own bar under the first.
+  let boss2Slot = -1, boss2Runtime: typeof w.boss | undefined;
+  if (w.bossStates.size > 1) {
+    for (const [id, st] of w.bossStates) {
+      const j = id !== d.bossId ? m.slotOf(id) : -1;
+      if (j >= 0) { boss2Slot = j; boss2Runtime = st; break; }
+    }
+  }
+  if (boss2Slot >= 0) {
+    if (!r.boss2) r.boss2 = { name: monsterDefs()[m.kind[boss2Slot]].name, life: 0, maxLife: 0, phase: 1 };
+    r.boss2.life = Math.max(0, m.life[boss2Slot]);
+    r.boss2.maxLife = m.maxLife[boss2Slot];
+    r.boss2.phase = boss2Runtime!.phase;
+  } else r.boss2 = null;
   const lieutenantSlot = d.lieutenantId >= 0 ? m.slotOf(d.lieutenantId) : -1;
   if (lieutenantSlot >= 0) {
     if (!r.lieutenant) r.lieutenant = { name: monsterDefs()[m.kind[lieutenantSlot]].name, life: 0, maxLife: 0 };

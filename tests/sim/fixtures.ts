@@ -1,6 +1,7 @@
 // Realistic fixtures for sim tests (numbers follow GAME_SPEC §3–§4 so the sim is exercised with
 // the same shapes the rules will hand it).
 import type { SkillId, Theme } from '../../src/contracts/content';
+import type { EventRewardContext } from '../../src/contracts/map-events';
 import type { Rng } from '../../src/contracts/rng';
 import type {
   DropSpec, DropSprite, FlaskRuntime, KillLootContext, MonsterScaling, PlayerCombatStats, PlayerIntent, PlayerJoin, PlayerRuntime, RunConfig,
@@ -175,6 +176,8 @@ export interface KillRoll {
 export interface HookLog {
   killRolls: KillRoll[];
   chestRolls: number[][];
+  /** Every map-event payout the sim asked for (Event Director v2). */
+  eventRolls: { ctx: EventRewardContext; playerIds: number[] }[];
   /** Tokens picked up, in order (any player). */
   pickups: number[];
   pickupsBy: { playerId: number; token: number }[];
@@ -211,7 +214,7 @@ const TONES: DropSpec['tone'][] = ['normal', 'magic', 'rare', 'currency', 'map',
  * handed in (instanced), tokens are minted here and resolved on pickup.
  */
 export function makeHooks(opts: HookOptions = {}): { hooks: RunHooks; log: HookLog } {
-  const log: HookLog = { killRolls: [], chestRolls: [], pickups: [], pickupsBy: [], blocked: 0, specs: [] };
+  const log: HookLog = { killRolls: [], chestRolls: [], eventRolls: [], pickups: [], pickupsBy: [], blocked: 0, specs: [] };
   let token = 1;
   const spec = (rng: Rng, owner: number): DropSpec => {
     const tone = rng.pick(TONES);
@@ -238,6 +241,12 @@ export function makeHooks(opts: HookOptions = {}): { hooks: RunHooks; log: HookL
       log.chestRolls.push([...playerIds]);
       const out: DropSpec[] = [];
       for (const id of playerIds) for (let k = 0; k < 6; k++) out.push(spec(rng, id));
+      return out;
+    },
+    rollEventReward(ctx, playerIds, rng) {
+      log.eventRolls.push({ ctx, playerIds: [...playerIds] });
+      const out: DropSpec[] = [];
+      for (const id of playerIds) out.push(spec(rng, id));
       return out;
     },
     tryPickup(playerId, t) {
@@ -273,8 +282,11 @@ export function makeRuntime(o: PlayerOptions = {}): PlayerRuntime {
   };
 }
 
+/** Test players default to a level above every fixture's monster level, so the character-vs-monster level-gap bonus stays out of unrelated tests. */
+export const DEFAULT_PLAYER_LEVEL = 40;
+
 export function makeJoin(id: number, o: PlayerOptions = {}): PlayerJoin {
-  const join: PlayerJoin = { id, name: o.name ?? `Sorceress${id}`, level: o.level ?? 1, runtime: makeRuntime(o) };
+  const join: PlayerJoin = { id, name: o.name ?? `Sorceress${id}`, level: o.level ?? DEFAULT_PLAYER_LEVEL, runtime: makeRuntime(o) };
   if (o.x !== undefined) join.x = o.x;
   if (o.y !== undefined) join.y = o.y;
   return join;
@@ -288,6 +300,9 @@ export interface ConfigOptions {
   scaling?: Partial<MonsterScaling>;
   waves?: Partial<WaveConfig>;
   hooks?: RunHooks;
+  /** Hidden event plan(s) of the map (Event Director v2). */
+  event?: RunConfig['event'];
+  eventModifiers?: RunConfig['eventModifiers'];
 }
 
 const MAP_NAMES: Record<Theme, string> = {
@@ -307,6 +322,8 @@ export function makeConfig(o: ConfigOptions = {}): RunConfig {
     monsters: makeScaling(o.scaling),
     waves: makeWaves(o.waves),
     hooks: o.hooks ?? makeHooks().hooks,
+    ...(o.event !== undefined ? { event: o.event } : {}),
+    ...(o.eventModifiers ? { eventModifiers: o.eventModifiers } : {}),
   };
 }
 

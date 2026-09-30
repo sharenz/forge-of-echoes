@@ -19,20 +19,58 @@ export const MAX_MAP_QUALITY = 20;
 export const MONSTER_LEVEL = { base: -2, perTier: 6, cap: 90 } as const;
 
 /**
- * Monster stats scale with monster level, not tier (Path of Exile style): life and damage compound per level
- * above `referenceLevel` (the level at which the sim's base monster table applies unchanged), and below it
- * they shrink the same way. Applied as "more" multipliers so the map breakdown stays honest.
- * Tuned with the balance playthroughs (tests/game-progression/balance*.test.ts).
+ * Monster stats scale with monster level, not tier (Path of Exile style), in three stretches around
+ * `referenceLevel` (the level at which the sim's base monster table applies unchanged):
+ *   - below it monsters shrink gently (`belowLife` / `belowDamage` per level), so Tier 1 stays forgiving;
+ *   - from there to `steep.level` life and damage compound at `life` / `damage` per level (Tier 2-3 stay fair
+ *     for an on-level character);
+ *   - beyond `steep.level` the curve bends: life and damage compound at `steep.life` / `steep.damage` and life
+ *     also gains a flat `steep.lifeFlat` (of base) per level, so trash needs several hits and one mistake costs
+ *     half a life bar on a map far above the character (Tier 5, level 28, against a level-17 character).
+ * Damage never grows slower than life. Applied as "more" multipliers so the map breakdown stays honest.
+ * Tuned with the balance playthroughs (tests/game-progression/balance*.test.ts) and the Eldurin analysis in
+ * ROADMAP.md.
  */
-export const MONSTER_LEVEL_SCALING = { life: 1.09, damage: 1.065, referenceLevel: 10 } as const;
+export const MONSTER_LEVEL_SCALING = {
+  life: 1.09, damage: 1.09, belowLife: 1.09, belowDamage: 1.065, referenceLevel: 10,
+  steep: { level: 16, life: 1.11, damage: 1.11, lifeFlat: 0.25 },
+} as const;
+
+/** Life multiplier of a monster level (1 at the reference level). */
+export function monsterLifeScale(level: number): number {
+  const S = MONSTER_LEVEL_SCALING;
+  const g = level - S.referenceLevel;
+  if (g <= 0) return S.belowLife ** g;
+  const past = Math.max(0, level - S.steep.level);
+  return S.life ** Math.min(g, S.steep.level - S.referenceLevel) * S.steep.life ** past + S.steep.lifeFlat * past;
+}
+
+/** Damage multiplier of a monster level (1 at the reference level). */
+export function monsterDamageScale(level: number): number {
+  const S = MONSTER_LEVEL_SCALING;
+  const g = level - S.referenceLevel;
+  if (g <= 0) return S.belowDamage ** g;
+  return S.damage ** Math.min(g, S.steep.level - S.referenceLevel) * S.steep.damage ** Math.max(0, level - S.steep.level);
+}
+
+/**
+ * Character-vs-monster level gap: once the monster level exceeds the character's by more than `grace`,
+ * monsters deal `perLevel` (fraction) more damage to that character for each further level, up to `cap`
+ * (fraction). Nothing for characters at or above the monster level. Mirrored by the sim
+ * (src/sim/constants.ts LEVEL_GAP_*), which applies it per player; tests/game-progression/maps.test.ts checks
+ * they stay equal.
+ */
+export const LEVEL_GAP = { grace: 3, perLevel: 0.05, cap: 1 } as const;
 
 /** Deeper maps require more resistance investment; the first two tiers have no penalty. */
 export const PLAYER_RESISTANCE_SCALING = { startLevel: 10, perLevel: 0.5, cap: 40 } as const;
 
 /** Tier still drives experience and item rarity; life and damage come from the monster level. */
 export const TIER_SCALING = {
-  /** Experience compounds per tier so deeper maps keep pace with the XP curve. */
+  /** Experience compounds per tier above 1 so deeper maps keep pace with the XP curve. */
   experience: 1.28,
+  /** Tier 1 is deliberately slow (half experience) so about ten T1 maps are needed before T2 is on-level. */
+  tierOneExperience: 0.5,
   /** Additive % increased item rarity per tier above 1. */
   itemRarity: 5,
 } as const;

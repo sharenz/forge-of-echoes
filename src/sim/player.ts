@@ -10,7 +10,7 @@ import type {
 import { areaSlowAt } from './area-geometry';
 import {
   ALLY_PUSH_MAX, ALLY_PUSH_RATE, CROWD_CONE_COS, CROWD_CONTACT_PAD, CROWD_SLOW_FLOOR, CROWD_SLOW_PER_MONSTER, DT, HIT_FLASH_DECAY,
-  INSTANT_RETRIGGER, MELEE_CAP_WINDOW_TICKS, NOT_ENOUGH_FOCUS_REPEAT, PLAYER_KNOCKBACK_MAX, PLAYER_KNOCKBACK_RATE, PLAYER_RADIUS,
+  INSTANT_RETRIGGER, NOT_ENOUGH_FOCUS_REPEAT, PLAYER_KNOCKBACK_MAX, PLAYER_KNOCKBACK_RATE, PLAYER_RADIUS,
   PULL_MAX_DISTANCE, PULL_TIME,
 } from './constants';
 import {
@@ -18,7 +18,7 @@ import {
   type DebuffCarry,
 } from './debuffs';
 import { clamp, dirFromVector, finiteOr } from './math';
-import { CAST_SLOW, playerSlow, readMove, resolvePlayerAt, slowedSpeed } from './movement';
+import { CAST_SLOW, combineSlow, playerSlow, readMove, resolvePlayerAt, slowedSpeed } from './movement';
 import { releaseSkill, tickFireTrail, tickPendingNovas, tickWard } from './skills';
 import { MFLAG, MSTATE } from './stores';
 import type { FlaskState, PlayerState, SkillChargeState, World } from './world';
@@ -97,12 +97,10 @@ export function createPlayer(join: SimPlayerJoin, x: number, y: number): PlayerS
     ward: { time: 0, duration: 0, reduction: 0, pulse: 0, damage: 0, critChance: 0, critMultiplier: 1.5, ailmentChance: 0, radius: 40,
       dtype: 1, focusOnPulse: false, renewOnHit: false },
     invulnTime: 0, dashTime: 0, hitTime: 0, hitFlash: 0,
-    dead: false,
+    dead: false, eventSlow: 0, noFlasks: false,
     prevHeld: new Array<boolean>(LOADOUT_SLOTS).fill(false),
     slotLock: new Float32Array(LOADOUT_SLOTS),
     focusWarnCd: 0,
-    meleeWindow: new Float32Array(MELEE_CAP_WINDOW_TICKS),
-    meleeSum: 0,
     trailTimer: 0,
     pushX: 0, pushY: 0,
     pendingNovas: [],
@@ -179,6 +177,8 @@ export function applyPlayerUpdate(p: PlayerState, u: SimPlayerUpdate): void {
 }
 
 function useFlask(w: World, p: PlayerState, slot: number): void {
+  // Champion's Ring, Bare Hands: a restriction the player took on (never a power-up); the press is refused quietly.
+  if (p.noFlasks) return;
   const f = p.flasks[slot];
   if (!f || f.count <= 0 || f.active > 0) return;
   f.count--;
@@ -298,11 +298,6 @@ function updateCasting(w: World, p: PlayerState): void {
 /** Everything one player does in a tick (before monsters act). */
 export function updatePlayer(w: World, p: PlayerState): void {
   const intent = p.intent;
-  // Roll the melee-cap window forward one tick.
-  const wi = w.tick % MELEE_CAP_WINDOW_TICKS;
-  p.meleeSum = Math.max(0, p.meleeSum - p.meleeWindow[wi]);
-  p.meleeWindow[wi] = 0;
-
   p.invulnTime = Math.max(0, p.invulnTime - DT);
   p.dashTime = Math.max(0, p.dashTime - DT);
   p.hitTime = Math.max(0, p.hitTime - DT);
@@ -353,7 +348,7 @@ export function updatePlayer(w: World, p: PlayerState): void {
     my = dir.y;
     const ml = dir.len;
     const castSlow = p.cast && p.cast.def.id !== 'emberLance' ? CAST_SLOW : 0;
-    const base = playerSlow(castSlow, moveSlowOf(p), areaSlowAt(w.areas, p.x, p.y));
+    const base = combineSlow(playerSlow(castSlow, moveSlowOf(p), areaSlowAt(w.areas, p.x, p.y)), p.eventSlow);
     const crowd = ml > 0.05 && base < 1 ? crowdFactor(w, p, mx / ml, my / ml) : 1;
     // Uncrowded, the slow is exactly what a predicting client passes (see movement.ts playerSlow).
     const slow = crowd === 1 ? base : 1 - (1 - base) * crowd;
@@ -576,7 +571,7 @@ export function createPlayerView(id: number): PlayerView {
     id, name: '', level: 1,
     x: 0, y: 0, prevX: 0, prevY: 0, vx: 0, vy: 0, facing: 'south', aimX: 0, aimY: 0, anim: 'idle', animTime: 0,
     castSkill: null, castProgress: 0, life: 0, maxLife: 0, focus: 0, maxFocus: 0, wardTime: 0, wardDuration: 0,
-    invulnTime: 0, hitFlash: 0, dead: false, debuffs: [], slots, flasks,
+    invulnTime: 0, hitFlash: 0, dead: false, eventSlow: 0, debuffs: [], slots, flasks,
   };
 }
 
@@ -590,7 +585,7 @@ export function writePlayerView(p: PlayerState): void {
   v.life = Math.max(0, p.life); v.maxLife = p.stats.maxLife;
   v.focus = Math.max(0, p.focus); v.maxFocus = p.stats.maxFocus;
   v.wardTime = p.ward.time; v.wardDuration = p.ward.duration;
-  v.invulnTime = p.invulnTime; v.hitFlash = p.hitFlash; v.dead = p.dead;
+  v.invulnTime = p.invulnTime; v.hitFlash = p.hitFlash; v.dead = p.dead; v.eventSlow = p.eventSlow;
   writeDebuffViews(p);
   for (let k = 0; k < LOADOUT_SLOTS; k++) {
     const sv = v.slots[k];

@@ -1,6 +1,6 @@
 // FNV-1a digest over the authoritative world state (exact float bits), for determinism tests.
 import { AREA_KINDS, type RunPhase } from '../contracts/sim';
-import { MAP_EVENT_KINDS, MAP_EVENT_PHASES } from '../contracts/map-events';
+import { MAP_EVENT_KINDS, MAP_EVENT_PHASES, PACT_IDS } from '../contracts/map-events';
 import type { World } from './world';
 
 const f32 = new Float32Array(1);
@@ -44,19 +44,27 @@ export function digestWorld(w: World): number {
     }
   }
   const event = w.mapEvent;
-  if (event) {
-    h.int(MAP_EVENT_KINDS.indexOf(event.plan.kind) + 1); h.int(event.plan.wave); h.float(event.plan.angle);
-    h.int(event.finished ? 1 : 0); h.float(event.timer); h.float(event.grace); h.int(event.pulses);
-    if (event.plan.kind === 'vaultbreakers') h.float(event.deadline);
-    if (event.plan.required || event.plan.next) {
-      for (let plan: typeof event.plan | undefined = event.plan; plan; plan = plan.next) {
-        h.int(MAP_EVENT_KINDS.indexOf(plan.kind) + 1); h.int(plan.wave); h.float(plan.angle); h.int(plan.required ? 1 : 0);
-      }
-      h.int(0);
+  if (event?.planned) {
+    h.int(event.pending.length);
+    for (const plan of event.pending) { h.int(MAP_EVENT_KINDS.indexOf(plan.kind) + 1); h.int(plan.wave); h.float(plan.angle); h.int(plan.variant ?? 0); }
+    h.int(event.live.length);
+    for (const e of event.live) {
+      h.int(e.uid); h.int(MAP_EVENT_KINDS.indexOf(e.kind) + 1); h.int(MAP_EVENT_PHASES.indexOf(e.phase) + 1); h.int(e.stage);
+      h.float(e.age); h.float(e.timer); h.int(e.tally); h.int(e.grade); h.int(e.members.size);
+      for (const id of e.members) h.int(id);
+      h.float(e.view.x); h.float(e.view.y);
+      for (const o of e.view.objectives) { h.int(o.cur); h.int(o.max); }
     }
-    for (const id of event.members) h.int(id);
-    h.int(event.view ? MAP_EVENT_PHASES.indexOf(event.view.phase) + 1 : 0);
-    if (event.view) { h.float(event.view.x); h.float(event.view.y); h.int(event.view.remaining); }
+    h.int(event.killLog.length);
+    h.int(event.rng.state());
+    // Wave 2 of events: the pact seam, the anvil's boons, the dirge and the carried-object slow.
+    for (const pact of [w.pact, w.pactNext]) { h.int(pact ? PACT_IDS.indexOf(pact.id) + 1 : 0); h.int(pact ? pact.wave : 0); }
+    h.float(w.pactResist);
+    h.float(event.monsterSpeed);
+    const boons = event.boons;
+    h.int(boons ? 1 + (boons.keen ? 2 : 0) + (boons.recast ? 4 : 0) : 0);
+    h.int(boons ? boons.stability : 0);
+    for (const p of w.players) h.float(p.eventSlow);
   }
   const m = w.monsters;
   h.int(m.count);

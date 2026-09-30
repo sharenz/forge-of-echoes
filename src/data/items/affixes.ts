@@ -34,6 +34,8 @@ function ladder(ranges: readonly (readonly [number, number])[]): AffixTierDef[] 
 // Class sets ------------------------------------------------------------------------------------
 const WEAPON: ItemClass[] = ['wand', 'sceptre'];
 const ARMOUR: ItemClass[] = ['helmet', 'chest', 'gloves', 'boots'];
+/** Armour and Evasion lines also fit belts that carry the matching base property. */
+const DEFENCE_CLASSES: ItemClass[] = [...ARMOUR, 'belt'];
 const JEWEL: ItemClass[] = ['amulet', 'ring'];
 const CASTER_GEAR: ItemClass[] = [...WEAPON, 'focus', ...JEWEL];
 
@@ -118,19 +120,19 @@ export const AFFIXES: readonly AffixDef[] = [
   }),
   affix('armourFlat', {
     name: 'Plated', kind: 'prefix', stat: 'armor', mode: 'flat', tags: ['defense'],
-    classes: ARMOUR, requiresProperty: 'armor', tiers: DEFENCE_FLAT,
+    classes: DEFENCE_CLASSES, requiresProperty: 'armor', tiers: DEFENCE_FLAT,
   }),
   affix('evasionFlat', {
     name: 'Lithe', kind: 'prefix', stat: 'evasion', mode: 'flat', tags: ['defense'],
-    classes: ARMOUR, requiresProperty: 'evasion', tiers: DEFENCE_FLAT,
+    classes: DEFENCE_CLASSES, requiresProperty: 'evasion', tiers: DEFENCE_FLAT,
   }),
   affix('armourPercent', {
     name: 'Ironclad', kind: 'prefix', stat: 'armor', mode: 'increased', tags: ['defense'],
-    classes: ARMOUR, requiresProperty: 'armor', tiers: DEFENCE_PCT,
+    classes: DEFENCE_CLASSES, requiresProperty: 'armor', tiers: DEFENCE_PCT,
   }),
   affix('evasionPercent', {
     name: 'Elusive', kind: 'prefix', stat: 'evasion', mode: 'increased', tags: ['defense'],
-    classes: ARMOUR, requiresProperty: 'evasion', tiers: DEFENCE_PCT,
+    classes: DEFENCE_CLASSES, requiresProperty: 'evasion', tiers: DEFENCE_PCT,
   }),
   affix('itemRarity', {
     name: 'Fortunate', kind: 'prefix', stat: 'itemRarity', mode: 'increased', tags: ['luck'],

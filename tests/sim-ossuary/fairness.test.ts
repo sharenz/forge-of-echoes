@@ -19,7 +19,10 @@ describe('fair by construction', () => {
     // The prison takes 2 s to close: a walking player is out of its shrinking ring in under half a second.
     expect(WARDEN.prison.close).toBeGreaterThanOrEqual(1.5);
     // The web crawls (a Cinder Spitter lob is 150 units/s): 1.7 s to cross 200 units.
-    expect(WEAVER.speed).toBeLessThanOrEqual(130);
+    expect(WEAVER.speed[0]).toBeLessThanOrEqual(130);
+    // …faster at high tiers, but never past 3.5x the walk, and the 0.6 s windup stays.
+    expect(WEAVER.speed[1]).toBeLessThanOrEqual(110 * 3.5);
+    expect(WEAVER.windup).toBeGreaterThanOrEqual(0.6);
     // Choir rings expand a little slower than a player walks (≈ 105 vs 110 units/s): walking out ahead of
     // a ring while working round to a gap always works. A player who is already Chilled walks 77 and can
     // be caught short of a gap — the rings only chill and nip (never root or freeze), so that costs her a
@@ -85,8 +88,9 @@ describe('whole Ossuary maps, played carelessly', () => {
   }, 60_000);
 
   it('Tier 1: the same for a careless new-ish character', () => {
-    // Two maps: a Tier 1 Warden falls fast, so one map may end before any of her Ice Prisons closes.
-    const runs = [3, 4].map((seed) => playOssuary(seed, newishPlayer(), { ...TIER1_OSSUARY }, { sloppy: SLOPPY }));
+    // Three maps: a Tier 1 Warden falls fast, so a map may end before any of her Ice Prisons closes, and a route may
+    // dodge every wisp core (which maps freeze her shifts with any change to the monsters' rolls).
+    const runs = [3, 4, 5].map((seed) => playOssuary(seed, newishPlayer(), { ...TIER1_OSSUARY }, { sloppy: SLOPPY }));
     for (const r of runs) expect(r.unfair).toEqual([]);
     expect(runs.reduce((n, r) => n + r.roots, 0), 'no root to check').toBeGreaterThan(0);
     expect(runs.reduce((n, r) => n + r.freezes, 0), 'no freeze to check').toBeGreaterThan(0);

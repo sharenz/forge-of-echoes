@@ -46,7 +46,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 
 1. **Title:** create or select a Sorceress. You start in the hideout with the starting kit.
 2. **Hideout:** a small, lit, walkable ritual courtyard with these objects:
-   - **Map Device:** the map slot, a summary panel and an "Activate" button that opens the portal.
+   - **Map Device (the Atlas table):** a full-screen Ember Chart (canvas ground, roads and plates, one button per area), an inspector rail with "Set course", a Codex tab, a Stash drawer (maps in the pack, the Map Stash, scarabs from stash and pack) and an always-visible dock with the course, the map slot, four scarab sockets, the readout and an "Activate" button that opens the portal.
    - **Stash:** tabs; opens alongside the inventory.
    - **Rook the merchant:** maps, flasks and gambling.
    - **Crafting Bench:** an anvil workbench with a coal forge (§12).
@@ -287,10 +287,10 @@ rejected without spending the rune, Stability or RNG. Previews show preserved af
 | Graft | Winter Throne boss, T5+, 20% |
 | Transmute | Ember Vault boss, T3, 15% |
 | Compass | Champion's Approach boss, T5+, 20% |
-| Echo Shard | Echo Rift completion, T3+, 50% |
+| Echo Shard | The Echoing: Bronze T3+ 50%, Silver 1, Gold 2 |
 | Twin Ink | Each defeated Vaultbreaker carrier, T3+, 20% |
 | Void Splinter | Wound completion, T3+, guaranteed |
-| Crown Fragment | Second Crown completion, T5+, guaranteed |
+| Crown Fragment | Rival Crowns completion, T5+: Bronze 1, Silver 2 |
 
 All are tradeable, have Crafting Stash slots and stay out of ordinary currency rolls. Graft, Transmute and
 Echo Shard use the ordinary scar rule and break seals after protection applies. Transmute's scar risk uses
@@ -309,7 +309,7 @@ Every craft appends a line to `item.history`, so the item carries its own story.
 |---|---|---|
 | Repair 1 Stability | `8 + 3 × lifetime crafts + 6 × previous repairs²` | Restores exactly one point, even on Finished equipment. Keeps all affixes, seals, fractures and scars. Cannot exceed maximum Stability; uniques cannot be repaired. |
 | Reroll a chosen map danger mod | `3 + map tier` | Replaces just that danger/reward pair with a different eligible mod. Keeps every other mod, rarity, tier, quality and Bounty commission. Exact family odds and magnitude range are shown. |
-| Commission Bounty | `8 + 2 × map tier` | Attaches a Bounty commission to the map item. Guarantees The Hunted in wave 2 or 4 instead of the random event roll; its rare pursuer guarantees a Rare per living player. The map remains tradeable. |
+| Commission Bounty | `8 + 2 × map tier` | Attaches a Bounty commission to the map item. Guarantees The Stalker in wave 2 instead of the random event roll; its trophy guarantees at least a Rare per living player. The map remains tradeable. |
 
 Map services reject corrupted maps, duplicate commissions and invalid targets without payment. Services spend
 backpack Scrap first, then the Crafting Stash, respecting trade locks. Repair prices use durable per-item craft
@@ -347,7 +347,7 @@ Hard currencies (Reforging Ember, Tempering Catalyst and Fracture Core) retain t
 | Rimed Ossuary | Frosted bone-tiles, cold blue light, ice crystals | 900 | Rime Essences 3× as likely; +20% monster life; +15% item rarity |
 | Iron Coliseum | Rusted iron plates, sand, torchlight | 650 | +25% monster count; armour bases +2 stability |
 
-**Tier and monster level:** tiers 1–15. Monster level = `min(90, 6·tier − 2)` (Tier 1 = 4, Tier 4 = 22, Tier 15 = 88), and it is the item level of every drop. **Monster stats scale with monster level, not tier** (Path of Exile style): life ×1.09 and damage ×1.065 per level above the reference level 10 (the level at which the sim's base monster table applies unchanged), and the same factors as fractions below it, shown as "more" or "less" from "Monster level N" in the readout. Tier still drives experience (×1.28 per tier above 1) and +5% item rarity per tier (additive).
+**Tier and monster level:** tiers 1–15. Monster level = `min(90, 6·tier − 2)` (Tier 1 = 4, Tier 4 = 22, Tier 15 = 88), and it is the item level of every drop. **Monster stats scale with monster level, not tier** (Path of Exile style): life ×1.09 and damage ×1.09 per level above the reference level 10 (the level at which the sim's base monster table applies unchanged) up to monster level 16, then life ×1.11 and damage ×1.11 per level beyond it with life also gaining a flat +0.25 (of base) per level past 16; below the reference level monsters shrink gently (life ×1.09, damage ×1.065 per level), shown as "more" or "less" from "Monster level N" in the readout. **Level gap:** a monster more than 3 levels above the character it hits deals +5% damage per further level, up to +100% (nothing when the character is at or above monster level; damage over time is not scaled twice); shown in the map tooltip. Tier still drives experience (Tier 1 gives ×0.5, then ×1.28 per tier above 1: T2 ×1.28, T3 ×1.64, T4 ×2.10, T5 ×2.68) and +5% item rarity per tier (additive). Tier 1 experience is deliberately halved so a new character needs about ten Tier 1 maps to reach level 10, where Tier 2 is on-level; a fresh character is expected at level 4 after the first Tier 1 clear, 6 after three, 9 after eight.
 
 **Defences scale with monster level too.** Evade chance = `rating / (rating + 30 × monster level)` (at most 75%): the same evasion rating avoids fewer hits from higher-level monsters, so roughly half of all hits can only be avoided with focused high-end gear. Monster accuracy is the `30 × monster level` term. Armour retains its hit-size formula (`armor / (armor + 10 × damage)`): higher-level hits already reduce its effectiveness, so there is no second armour penalty. The sheet's example physical hit scales from 20 at monster level 10 with the same damage curve.
 
@@ -416,7 +416,7 @@ The new maps have separate floor tiles, decals, lighting, landmark layouts and m
   Legacy runs have no fee to refund. Ordinary deaths, abandonment and voluntary map replacement do not refund fees.
 
 **Scarabs (four optional Map Device sockets beside the map).** Each socket takes one scarab, split from its
-backpack or shared Crafting Stash stack (maximum stack 20). Drag, Ctrl-click or use the device's stash picker;
+backpack or shared Crafting Stash stack (maximum stack 20). Use the Stash drawer of the Atlas table (it lists both);
 remove before activation to recover it. Successful activation consumes the map and all loaded scarabs once.
 Failed activation consumes nothing. The expedition records its scarabs for party play and restarts; guests'
 scarabs do not stack. An unrestorable server-side expedition refunds its scarabs with its map, key and fee.
@@ -441,19 +441,46 @@ cannot drop them. Both families share the listed tier weights. Eligibility uses 
 lower tier remains in the pool at high levels. Item rarity does not improve scarab tier. Ordinary maps retain
 their 60-second baseline and start on wave 1. Exact combined timing and starting wave appear before activation.
 
-**Map tree v0 (account-wide).** Open it from the Map Device. There are 15 nodes in five three-node paths. Each first completion of a different Atlas area grants one map point, capped at 10; existing completions count immediately. Repeated clears do not grant more points. Points are independent of attributes and skills, and no node changes character stats. Each node costs one point and requires the previous node on its path. Refund a leaf node for 5 Scrap from backpack, normal stash or Crafting Stash, excluding trade offers; currency payment and account allocation commit atomically. Refund later nodes first. Changes are allowed only in your own hideout and appear on all online alts.
+**Atlas tree, "the Codex" (account-wide).** Open it from the Map Device. It is a wheel of 145 nodes around one origin (the Cinder Crossing brazier): six branches (Cartography, Foundry, Bounty, Fortune, Echoes, Peril), eighteen bridge nodes, five tier-bonus nodes in the inner ring and six theme seals on the outer belt. Every node changes map rules only: no node touches character stats, map tier or monster level, and none grants a temporary power-up. The full node list with every number is in `docs/atlas-rework/tree-nodes.md` (generated from `src/data/progression/map-tree.ts`; `tests/game-progression/spec-sync.test.ts` keeps it in step).
 
-The opener's selected nodes are copied into the expedition at activation. They affect the whole party's map rules, with each player still adding their own gear luck. Guest trees do not stack. Respec, switching characters or a restart cannot change an existing expedition's selections. Legacy open maps have no nodes. Map Device readouts and personal luck breakdowns include the tree's sources. The map item itself remains unchanged and tradeable maps carry no account bonuses.
+| Class | Count | Cost | Refund (Scrap) | Job |
+|---|---|---|---|---|
+| Small | 85 (incl. 18 bridge and 6 belt nodes) | 1 | 5 | one plain number, at most one small scar; forms the paths |
+| Notable | 22 branch notables plus 12 encounter lenses | 1 | 15 | one idea, often a behaviour |
+| Tier bonus | 5 | 1 | 15 | effect scales with the tier of the opened map |
+| Theme seal | 6 | 1 | 15 | effects only on maps of one base (theme) |
+| Keystone | 14 | 2 | 40 | a rule that changes how a run plays, with a real downside |
 
-| Path | First node | Second node | Final node |
-|---|---|---|---|
-| Cartography | **Trailblazer:** +20% ordinary map drop chance | **Chart Keeper:** +30% ordinary map drop chance | **Far Horizon:** chest-map upgrade chance 25% → 40%; Compass and Tier 15 cap retained |
-| Crafting | **Essence Seeker:** +25% Essence weight | **Sound Foundations:** non-unique armour drops with +1 maximum Stability | **Deep Seams:** 50% more Essence weight; monsters have 10% more life |
-| Hunting | **Marked Prey:** +20% magic/rare pack chance | **Crowded Grounds:** +10% monsters, +5% item quantity | **Apex Hunt:** +40% magic/rare pack chance, +15% item rarity; monsters deal 5% more damage |
-| Fortune | **Scavenger:** +5% item quantity | **Discerning Eye:** +15% item rarity | **Crowned Challenge:** final bosses have 25% more life; separate world/exclusive unique rolls gain 50% more chance, capped at 100% after personal rarity |
-| Encounters | **Strange Signs:** +5 percentage points random-event chance | **Echo Compass:** +5 percentage points random-event chance | **Beyond the Veil:** +10 percentage points random-event chance, +5% item quantity; monsters have 10% more life |
+Allocation needs a path: a node must touch the origin or an allocated node, and a node can be refunded only while the rest stays connected to the origin (refund the outer nodes first). Four hard exclusion pairs: Wagered Charts and Dead-End Devotee, Empty Halls and Overrun Doctrine, Kingslayer's Tithe and Blank Slate, Twin Omens and Sworn to the Veil. A finished 60-point build ends with two or three keystones. The encounter engine is live: the six lenses of the encounters that exist (Stalker, Echoing, Caravan, Rival Crowns, Fault, Ember Relay), the three encounter smalls, Twin Omens and Sworn to the Veil are allocatable, and their rules reach the Event Director through the frozen expedition (`map-event-rules.ts`). A node whose engine is not live yet (the six lenses of encounters not built yet, Voidtouched Atlas, the sim nodes Warded Hunts and Stragglers' Cull, the Map Device nodes Lantern-Bearer, Fifth Socket, Twinned Sockets and Single-Minded Furnace, and the item node Wagered Charts) is fully specified but cannot be allocated: it shows "Awaits ..." instead of a price.
 
-Percent bonuses without “more” are increased modifiers in the shared resolver; the two map-drop nodes sum to +50%, and pack bonuses sum with map implicits/mods. Essence bonuses reweight ordinary currency tables, never add currency drops or change special ingredient/key sources. Encounter bonuses add to the total after the area's normal odds/cap, preserving relative event weights and capped at 100%; Bounty and fixed chains are unchanged. Crowned Challenge multiplies the boss's own 8% and exclusive 12% rolls, not the rarity of ordinary equipment, guaranteed Reliquary uniques, or chest/gamble rewards; item-level gates still apply. Its life modifier also affects each twin boss and compounds with area boss modifiers. Existing boss damage is unchanged unless an explicitly selected tree node raises general monster damage.
+**Atlas points (60, all first-time, account-wide).** 25 for the first credited clear of each Atlas area, 14 for the first clear of each map tier 2 to 15 (any area), 12 for the first completion of each of the twelve encounter kinds, 6 for the first kill of each of the six final bosses (Cinder Matriarch, Hollow Warden, Varkus, Ashbound Herald, Bone Chorister, Chainmaster) and 3 for charting 50%, 75% and 100% of the areas (13, 19 and 25). Points are a pure function of the account's Atlas progress (`atlas.completed`, `tiersCleared`, `eventsSeen`, `bossesSeen`), credited through the same per-run receipt as discovery (the receipt remembers the cleared tier), so a restart or failed save can neither lose nor double one. Repeated clears earn nothing. Points are independent of attributes and skills.
+
+**Respec.** Only in your own hideout. A refund pays by class (small 5, notable, tier bonus and theme seal 15, keystone 40 Forge Scrap) from backpack, normal stash or Crafting Stash, excluding trade offers; the currency payment and the account allocation commit atomically. The first 6 refunds an account ever makes are free. One respec session never costs more than 120 Scrap (the counter resets when a map is opened). The old 15-node tree was replaced: an account saved with it has its allocation refunded free, once, and keeps every point earned (the Codex notice); the tree edition is stored as `atlas.treeVersion`, and `SAVE_VERSION` is unchanged.
+
+The opener's selected nodes are copied into the expedition at activation and resolved into one frozen rules object per map (`resolveAtlasRules`). They affect the whole party's map rules, with each player still adding their own gear luck. Guest trees do not stack. Respec, switching characters or a restart cannot change an existing expedition's selections; a run frozen before the redraw keeps its old numbers through legacy ids. Map Device readouts and personal luck breakdowns list every tree source as "Atlas: <node>". The map item itself remains unchanged and tradeable maps carry no account bonuses.
+
+**Value ledger and caps.** One unit (u) of reward is about +3% item quantity, +4% item rarity, +10% magic/rare pack chance, +8% map or essence weight, +12% scarab chance, +1.5 percentage points of encounter chance or 6% boss unique chance; one unit of danger is about +6.5% monster life (2.5% as "more"), +3.5% monster damage (2.2% more), +5% monster count, +4% speed or -4.4 player resistance. A small node nets about 1u, a notable about 3.5u, a keystone about 6u for its intended build, a tier bonus 1u at Tier 3 to 4.5u at Tier 15. The tree alone is capped at: +45% increased item quantity, +60% rarity, +100% pack chance, +80% map drop chance, +60% increased essence weight (and one "more" essence source), +12 percentage points encounter chance, +13 percentage points chest upgrade chance (10 base plus 3 from Ladder's Reward), x1.6 total "more" monster life; wave duration never drops below 25 seconds whatever Haste, Twinned Sockets and Overrun Doctrine add. Tooltips mark a capped source "(capped)". Only one "more" per reward category per branch.
+
+**Keystones.**
+
+| Keystone | Branch | Upside | Downside | Excludes | Status |
+|---|---|---|---|---|---|
+| **Wagered Charts** | Cartography | From Tier 4 completion chests always upgrade your map one tier | the chest map is a Rare with 3 danger mods, 0 quality and is account-bound; dropped maps cannot roll above your tier | Dead-End Devotee | awaits map crafting |
+| **Twinned Sockets** | Cartography | two scarabs of one family (the second at 50%) | monsters 6% more Life per loaded scarab | none | awaits Map Device |
+| **Dead-End Devotee** | Cartography | dead-end and sealed areas: 24% more quantity, 30% more boss ingredient chances | through-route areas 25% less quantity; bosses reveal one neighbour, not two | Wagered Charts | active |
+| **Single-Minded Furnace** | Foundry | one Essence family x4 (attuned at the device) | other Essences 75% less, Scrap 30% less | none | awaits Map Device |
+| **Blank Slate** | Foundry | all equipment drops Normal with +2 maximum Stability and 45% more equipment drops | Item Rarity no longer affects equipment; no Magic or Rare equipment (chest too) | Kingslayer's Tithe | active |
+| **Rare or Nothing** | Bounty | no magic packs, rare pack chance 2.2 times as high, rare monsters drop 60% more quantity | about half the horde's loot is gone; more rare walls | none | active |
+| **Empty Halls** | Bounty | 50% fewer monsters, each 80% more quantity | monsters 60% more Life and 35% more damage | Overrun Doctrine | active |
+| **Kingslayer's Tithe** | Fortune | boss and chest loot doubled, boss unique chances doubled | final bosses 40% more Life; ordinary monsters drop 15% less | Blank Slate | active |
+| **Early Crown** | Fortune | the final boss arrives on wave 3 | the map has 12% more monsters | none | active |
+| **Twin Omens** | Echoes | a second encounter slot | encounter rewards 25% smaller (the Backlash pack on failure is not built yet) | Sworn to the Veil | active |
+| **Sworn to the Veil** | Echoes | every map has an encounter, rewards 30% higher | encounters become mandatory (90 s soft timeout) | Twin Omens | active |
+| **Thrill of the Hex** | Peril | danger mods 40% stronger on both sides, 12% more quantity and rarity | more ways to die (the fifth danger mod awaits the crafting bench) | none | active |
+| **Overrun Doctrine** | Peril | waves 30% shorter, 30% increased quantity | monsters 6% faster; waves overlap more | Empty Halls | active |
+| **Voidtouched Atlas** | Peril | corrupted mods 50% stronger on both sides; corrupted maps roll a Void Breach | uncorrupted maps 10% less quantity | none | awaits encounters |
+
+Other numbers are pinned by data: Far Horizon (+10 percentage points chest upgrade, 25% to 35%), Crowned Challenge (final bosses 25% more Life, world/exclusive unique chances 50% more, capped at 100% after personal rarity: it multiplies the boss's own 8% and exclusive 12% rolls, not ordinary equipment, guaranteed Reliquary uniques or chest/gamble rewards), Sound Foundations (+1 maximum Stability on armour), Deep Seams (40% more Essence weight, monsters 5% more Life), Kingmaker's Cache (each completion chest equipment is Rare 30% of the time), Deep Pockets (one more chest currency roll), Master Surveyor (35% chance of one more revealed neighbour), Ledgerline (territory fee 1 Scrap lower, never below 0). Essence and currency bonuses reweight ordinary currency tables, never add drops or change special ingredient and key sources. Encounter bonuses add to the total after the area's normal odds and cap (at most +12 percentage points from the tree), preserving relative event weights; Bounty and fixed chains are unchanged. Tier bonus nodes multiply their per-tier value by the opened map's tier.
 
 **Atlas (account-wide).** The Map Device opens maps at a chosen revealed destination. The item supplies
 tier, quality, mods and corruption; the destination supplies the theme, arena and implicit, plus weights for
@@ -501,61 +528,219 @@ Specialty chances replace that global chance. Sealed bosses do not drop entrance
 |---|---|---|
 | Hollow Ossuary | Glass Sepulchre dead end / T5 | 2× ring and amulet weights; 30% more item quantity |
 | Pit of Echoes | Iron March dead end; Bounty map / T5 | Bounty hunter, boss with 50% more life and 25% more damage, guaranteed seventh Echo wave with double kill quantity |
-| Shrine Field | Heart of the Forge dead end / T15 | No final boss; clear the normal waves for Atlas credit and the chest. Ordinary encounter odds ×3, capped at 100%; no Second Crown roll. An item's Echo wave is retained |
-| Sealed Reliquary | Reliquary Key / T7 | Second Crown; the last boss gives one extra Unique (Rare at T1) and one Crown Fragment at every tier |
-| Gilded Vault | Gilded Key / T9 | Three Vaultbreakers; triple ordinary currency; each carrier has 20% Twin Ink chance at every tier |
-| Black Pit | Black Key / T11 | Blackout followed by the Wound; the last guardian guarantees Twin Ink and Void Splinter at every tier |
-| Hunting Ground | Hunting Key / T11 | Three successive Hunted rares; each guarantees a Rare base of the owner's chosen equipment class for every living player |
-| Rift Nexus | Rift Key / T13 | Three successive Echo Rifts; each gives one event ingredient (Echo Shard / Twin Ink / Void Splinter, equal odds), plus its ordinary rift rewards |
+| Shrine Field | Heart of the Forge dead end / T15 | No final boss; clear the normal waves for Atlas credit and the chest. Ordinary encounter odds ×3, capped at 100%; no Rival Crowns roll. An item's Echo wave is retained |
+| Sealed Reliquary | Reliquary Key / T7 | Rival Crowns; the last boss gives one extra Unique (Rare at T1) and one Crown Fragment at every tier |
+| Gilded Vault | Gilded Key / T9 | One Laden Caravan with a double escort; triple ordinary currency; the Coffer lock has a 20% Twin Ink chance at every tier |
+| Black Pit | Black Key / T11 | Ember Relay followed by The Fault; The Fault always pays Twin Ink and a Void Splinter at every tier |
+| Hunting Ground | Hunting Key / T11 | Three successive Stalkers; each guarantees (Bronze or better) a Rare base of the owner's chosen equipment class for every living player |
+| Rift Nexus | Rift Key / T13 | Three successive Echoings; each gives one event ingredient (Echo Shard / Twin Ink / Void Splinter, equal odds), plus its ordinary rewards |
 
 Gilded Keys drop from vault bosses at T3+ (12%); Black Keys from forge bosses at T3+ (8%); Hunting Keys from
 arena bosses at T3+ (8%); Rift Keys from crypt bosses at T5+ (6%). Every new key has separate art, a Crafting
 Stash slot and a source tooltip. Hunting Ground's class selector offers only classes with eligible bases at
 the map's item level. The choice is fixed at creation for the whole party and survives restart.
 
-Guaranteed area encounters form a fixed sequence. Required rifts/beacons remain available after the boss
-and both map completion and Atlas credit wait until the sequence resolves; an escaped Vaultbreaker counts as resolved without
-paying kill rewards. Bounty still guarantees a hunter: it precedes the area's sequence when no hunter is
+Guaranteed area encounters form a fixed sequence. Required events remain available after the boss
+and both map completion and Atlas credit wait until the sequence resolves; an escaped wagon counts as resolved (only locks
+already broken have paid). Bounty still guarantees a hunter: it precedes the area's sequence when no hunter is
 already included. Sequences, key receipts and the original source item survive restart; no event plan is
 sent in the client setup. Existing open maps keep their original event plan.
 
 The rules retain legacy map setups across a restart. A run that cannot be restored refunds its original
 map and entrance key together; discovery and its per-run receipt are also one transaction.
 
-**Map events.** At creation, ordinary maps privately roll at most one encounter. Bounty maps guarantee The Hunted;
-sealed areas use the fixed sequences above instead.
-Otherwise a 25% base chance is divided equally among eligible encounters: Hunted/Echo Rift at T1+, plus
-Blackout/Vaultbreakers/Wound at T3+, plus Second Crown at T5+. Mid-map events appear in wave 2 or 4; Second
-Crown appears with the final boss in wave 6. The server omits the plan from the client's setup; Map Device
-shows exact odds rather than the roll. Forge/arena areas add 5/10 percentage points to Hunted; crypt/vault
-add 10/5 to Echo Rift. Eligible T3+ events gain +5 Blackout in forges, +5 Wound in crypts, +10 Vaultbreakers in
-vaults; T5+ arenas add +5 Second Crown. Commanded adds +8 Hunted, Restless +5 Hunted, Teeming +5 Echo Rift,
-and Echoing +10 Echo Rift. Combined odds cap at 65% while preserving their proportions.
+**Map events (Event Director v2).** At creation a map privately draws a slate of 0 to 2 encounters (3 with Twin Omens):
+a 45% base chance for at least one, then a 30% chance of a second, concurrent one of a different kind in a different
+wave (a third is 15%). Bounty maps guarantee The Stalker; sealed areas use the fixed sequences above instead, and their
+encounters are required. The base 45% is divided equally among the eligible encounters; combined odds cap at 65%
+while preserving proportions. The server omits the plan from the client's setup; the Map Device shows exact odds, not
+the roll. Ids are stable (`hunted`, `echoRift`, `blackout`, `vaultbreakers`, `secondCrown`, `wound`, then the wave-2 events
+`pactAltar`, `orchard`, `ring`, `host`, `anvil`, `bellwatch` and `voidBreach`: new ids are only ever appended); the
+player-facing names are below. Every event has three roster skins (Ashen: Forge and Chapel; Ossuary: Ossuary and Crypt; Coliseum:
+Coliseum and Chainworks).
 
-- **The Hunted:** three-second warning, then one Swift/Fierce rare pursuer. Defeating it adds a Rare item per
-  living player, at the map's item level and using area preferences.
-- **Echo Rift:** optional violet sigil, activated within 70 units. A three-second warning precedes three
-  packs of three Swift magic monsters, two seconds between packs. Completion gives Reforging Ember and
-  Map Dust, plus a 50% Echo Shard chance on T3+.
-- **Blackout:** the floor dims while actors and attack cues retain their brightness. Three beacons appear
-  sequentially; approaching each warns for three seconds and releases three Swift magic guards. Defeat all
-  nine to restore the light and receive one Binding Seal and 4–6 Scrap per living player.
-- **Vaultbreakers:** a three-second warning reveals three Swift magic carriers. They flee for 40 seconds,
-  with ordinary collision, chill and knockback. Each kill adds one ordinary currency roll and a 20% Twin Ink
-  chance. Escaped carriers grant no XP or loot; partial rewards remain earned. Countdown and remaining
-  carriers are visible, and every timer freezes while the party is absent or dead.
-- **Second Crown:** the final boss's twin arrives after a three-second warning. Each has independent attack
-  timers, phases and summons. Both drop normal boss loot, but only the last death grants Atlas/map completion
-  and one Crown Fragment per living player. Killing the first during the warning cannot skip the second.
-- **The Wound:** optional red sigil with three warning seconds before the first of three packs of three.
-  The final pack includes a Swift/Fierce rare guardian. Each pulse warns for 1.5 seconds before eruptions at
-  players' previous positions; movement avoids them. The ninth kill gives one Void Splinter per living player.
+| Id | Name | From | Window (wave) | Play | Grade measure |
+|---|---|---|---|---|---|
+| hunted | The Stalker | T1 | 2 to 4 | a shimmering rare circles the party and pounces on the straggler | whiffs (0 Bronze, 1-2 Silver, 3+ Gold) |
+| echoRift | The Echoing | T2 | 2 to 4 | the kill log returns as Echoes walking home to an anchor | echoes intercepted (50 / 75 / 100%) |
+| vaultbreakers | Laden Caravan | T3 | 2 to 4 | a wagon crosses the arena; break its three locks | locks broken (1 / 2 / 3) |
+| wound | The Fault | T3 | 3 to 5 | four wedges erupt; lure monsters into the marked one | seal time (Ashen and Coliseum <= 45 s / <= 27 s, Ossuary <= 50 s / <= 30 s) |
+| blackout | Ember Relay | T3 | 2 to 4 | carry an Ember to three dark braziers | braziers lit, Embers lost and the pace (Gold: three lit, none lost, <= 56 s) |
+| secondCrown | Rival Crowns | T5 | boss wave | a rival boss of another roster joins the boss fight | fight time from the rival's arrival (<= 100 s / <= 52 s; x1.3 Ossuary, x1.5 Coliseum) |
+| pactAltar | Pact Altar | T4 | 2 to 4 | choose a pact for the next wave, twice | pacts kept (1 / 2 / 2 with no death and at most one wave run past its tell) |
+| orchard | Ashseed Orchard | T2 | 2 to 4 | grow and harvest three blooms while the horde gnaws them | harvested stages (3 / 6 / 9) |
+| ring | Champion's Ring | T4 | 3 to 5 | name a vow, then duel a Champion behind chains | kill time (<= 52 s / <= 38 s) |
+| host | Stasis Host | T6 | 3 to 5 | a frozen legion thaws; shatter the prism or let it wake in streams | time to the last statue (<= 90 s / <= 31 s; x1.15 Ossuary, x1.35 Coliseum) |
+| anvil | Wayside Anvil | T3 | 2 to 4 | fight around an anvil, then forge a boon for the completion chest | charge time (<= 90 s / <= 54 s) |
+| bellwatch | Bellwatch | T5 | 3 to 5 | silence four cantors before the bell tolls the arena to a frenzy | cantors cut down before toll 4 (2 / 3 / 4) |
+| voidBreach | Void Breach | T6, or forced | 3 to 4 | the arena shrinks under a void tide; seal the breach | seal time (<= 86 s / <= 61.5 s; x0.93 Ossuary, x0.85 Coliseum) |
 
-Ignored optional sigils and unfinished beacon paths close before the final boss. Active encounters give at
-most 20 seconds of breathing room before ordinary waves resume; they never indefinitely stall normal waves.
-Kill rewards are per living player, on top of ordinary loot, and cleanup/overkill never duplicate them.
-Completed encounter text remains for five seconds, including after the final boss. Restarts preserve hidden
-creation plans; legacy event-free maps stay event-free.
+Area bonuses are kept and extended: forge adds +5 Stalker and +5 Ember Relay (+3 Fault, +4 Wayside Anvil), arena +10 Stalker and
++5 Rival Crowns (+5 Champion's Ring), crypt +10 The Echoing and +5 Fault (+3 Stasis Host, +5 Bellwatch), vault +5 The Echoing and
++10 Laden Caravan (+5 Pact Altar), frontier +6 Ashseed Orchard; Commanded adds +8 Stalker, Restless +5 Stalker,
+Teeming +5 The Echoing and Echoing +10 The Echoing. Events **overlay** the waves: nothing pauses the wave clock, the
+stream or the wave tell (only a boss-time event may hold the next wave *tell*, never a spawn, for at most 8 s). At most
+three events are live at once, and no two begin their onset within 8 s of each other.
+
+**Grades.** Every event pays Bronze, Silver or Gold from a measurable on-screen quantity (thresholds are shown on the
+HUD card); failing loses upside, never progress. Bronze is the classic payout of the encounter. Rewards go to every
+living player through `RunHooks.rollEventReward(ctx, playerIds, rng)` (grade 0..3, choice, tally, position); the rules
+answer with `rollEventReward(setup, ctx, rng, looter)`. Kill-attached rewards no longer exist. The tree may shift a grade
+(`gradeShift`), add ingredient chance, or scale rewards (Twin Omens: x0.75, Sworn to the Veil: x1.3).
+
+| Event | Bronze | Silver | Gold |
+|---|---|---|---|
+| The Stalker | one Rare base (chosen class in the Hunting Ground) | + one currency from the map's table | two Rare bases, 25% Compass, T5+ 5% unique-eligible roll |
+| The Echoing | Reforging Ember + Map Dust (+50% Echo Shard on T3+) | + one Echo Shard | + another Echo Shard and one Rare base; an erupted rift pays Bronze only if its Warden dies |
+| Laden Caravan | (each lock pays at once) Coffer: three currency rolls, 20% Twin Ink on T3+; Reliquary: one equipment roll (magic or better); Cartographer's Tube: one map a tier higher | 2 locks | 3 locks: + 50% Twin Ink and a Compass |
+| The Fault | one Void Splinter (T3+; Black Pit also Twin Ink) | + Solvent or Catalyst | + a second Void Splinter and one Rare base |
+| Ember Relay | one Binding Seal and 4-6 Scrap | + 10% Suffix Rune | + 15% Fracture Core |
+| Rival Crowns | one Crown Fragment (T5+ or the Sealed Reliquary) | + a second Fragment | + one unique-eligible equipment roll |
+| Pact Altar | Scrap x3-5 (and 5 Scrap at once for declining with Ember Tax) | + one currency from the map's table | + one Binding Seal |
+| Ashseed Orchard | (each harvest pays at the bloom: stage 1 Scrap; stage 2 a currency of its kind; stage 3 two of it, often a rune or core) plus 1-2 Scrap | + one currency from the map's table | + one Void Splinter |
+| Champion's Ring | one Rare armour base; the vow adds an extra roll (Bare Hands 50%, Iron Pride and Crowd's Favour 30%) and a currency; 10% Fracture Core | + a currency roll, Fracture Core 20% | + 5% unique-eligible roll |
+| Stasis Host | (every statue drops its own loot with +60% quantity) 3-5 Scrap and a currency roll; a shattered prism adds a Rare ring or amulet base and a 35% Prefix or Suffix Rune | + Solvent or Catalyst (and a second currency if shattered) | + a Rare base and 25% Void Splinter |
+| Wayside Anvil | Scrap 3-5 and one boon on the completion chest | + a weighted currency roll | + a second boon and another currency roll (charged within 54 s) |
+| Bellwatch | (each Cantor pays a currency roll the moment it falls) two Cantors | three Cantors (or all four late): + 35% Prefix Rune | all four before toll 4: + 60% Prefix Rune and a Rare amulet or ring |
+| Void Breach | one Void Splinter and 3-5 Scrap | + 40% Twin Ink and one currency | + a second Void Splinter, one Rare base and 15% Fracture Core (seal <= 61.5 s from the opening); ignored or unfinished: 25% Void Splinter |
+
+- **The Stalker:** a three-second omen (amber eye at the rim, at least 320 units from every player), then a rare of the
+  roster's hunter role (Cinder Prowler / Hollow Wolf / Alpha Hound), Swift and Fierce, shimmering but always targetable. It
+  orbits the party at 260 to 340 units and every 9 s (7 s with 2 Hunt stacks) marks the **straggler** (the living player
+  furthest from the others, ties by id) with a shadow disc (radius 34, 1.2 s) that tracks until 0.4 s remain, then locks;
+  the Stalker leaps 0.25 s and deals damage only on landing. A prop in the flight line takes the leap. It never pounces on a
+  held (rooted, frozen or dragged) player and never has two discs out. A landing on a player is a **hit**: a Hunt stack
+  (+12% damage and speed, up to 3), 10% healing and the roster's rider (fire pool 3 s / chill / bleed). A landing on empty ground is a
+  **whiff**: 4 s Exposed (+40% damage taken), 2.5 s winded; into a pillar it is stunned 3 s. At 3 stacks it frenzies
+  (pounces every 4 s). Each whiff counts toward the trophy (Hunter's Patience doubles them, each danger mod adds 1). Its life is 16
+  times a rare's of the same kind: a matched build needs 20 to 40 s for the hunt, long enough for three pounces. Left alive for 120 s or into the boss
+  wave it turns rogue (pounces every 5 s, pays nothing).
+- **The Echoing:** an optional violet anchor (at least 250 units from every player and 200 from the rim); walking within 70
+  units wakes it after a three-second warning. The sim keeps a log of the last 24 notable kills (a pack's last member, every
+  magic or rare); the rift replays up to 12 of them, oldest first, every 1.6 s, as Echoes at the death spots (a 1 s
+  ground mark first; Ashen also lights a fire pool), 2.5 times a normal monster's life, the rare's mods, no loot. Echoes walk
+  home at 80 u/s and fight any player within 110 units. Each that arrives adds Resonance; 6 erupt the rift (5 s, radius 150 nova)
+  and a Rift Warden rare (3x life) appears. Ossuary echoes pass through monsters; Coliseum echoes come in chained pairs (killing one
+  slows the other). A log shorter than 6 is padded with ordinary family members. **Guard or roam:** an echo cut off on the way
+  counts whole toward the trophy, one caught at the door (within 150 units of the anchor) counts 80%; Bronze, Silver and Gold
+  are 50, 75 and 95% of the log. A hum at the anchor rises with every Resonance.
+- **The Fault:** an optional crack (at least 300 units from every player); walking within 70 units opens a field of
+  radius 240 in four numbered wedges. Four pulses (every 8 s, sooner once cleared) of 6 Swift magic guardians appear on the cracks
+  between wedges (a 1 s shimmer first); the fourth adds the Fault-born rare. 2 s after each pulse a wedge (the most
+  occupied, with the next two always shown) telegraphs 1.8 s and erupts: players take a hit, monsters 30% of their life
+  (15% rares, no bosses); cinders (Ashen), rime (Ossuary) or spikes with a bleed (Coliseum) remain. It never starts while a player is held. Guardians
+  are never shield-bearers. Seal time Gold <= 27 s (Ossuary 30 s), Silver <= 45 s (Ossuary 50 s). Past 75 s the field overflows (an
+  extra eruption and 4 monsters every 10 s; Bronze at best).
+- **Ember Relay:** three cold braziers at least 300 units apart; a rare Wickbearer drops the Ember, which a player
+  carries to a dark brazier and lights by standing there 2 s. The wick burns 30 s (each hit taken costs 2 s); a lost Ember
+  brings a new Wickbearer, three lost end the event. The carrier moves 12% slower (on the wire, so the client predicts it). The
+  dark hunts the flame: monsters near the carrier that stand outside lit ground run faster. The floor dims; actors and telegraphs
+  stay lit; each brazier has a thin beacon of light above it. Gold needs all three lit, no Ember lost and the last one lit within
+  56 s of the onset (the card shows the pace); the same clean run that is slower, or one lost Ember, is Silver.
+- **Laden Caravan:** a gold-chevron road, a wagon at 22 u/s under 8 escorts (16 in the Gilded Vault), invulnerable except through
+  three locks, and a telegraphed trample lane 250 units ahead (light damage, at least 1.5 s warning) that also knocks whoever it
+  catches 60 units sideways out of the lane. **Shield line:** each lock is guarded by an escort group (left column guards the
+  Coffer or Crucible, right column the Reliquary, the rear guard the Tube); a lock is invulnerable (shield ring) while more than one
+  of its group lives, so cutting down the escorts on its side opens it (a chime and "Shield down"). Lock life is measured in
+  bruisers (18, whatever the roster's bruiser is; a Chapel or Chainworks map uses a hunter as the unit). **Wheels:** two
+  destructible wheel hardpoints ride the rear axle (4 bruisers of life each); every wheel broken slows the wagon 30% (two: 49%
+  speed), which lengthens the window at the price of damage not spent on locks; a wheel pays nothing and does not count toward the
+  grade. Reinforcements (4) drop from the rim at 45% of the route and join the group of the nearest lock. The wagon leaves at the
+  far rim and takes unbroken locks with it. Ashen: a broken crucible spills a fire pool (harmless for its first second);
+  Ossuary: breaking the Reliquary lock releases a magic Rimeshade on the spot (after a 1 s shimmer).
+- **Rival Crowns:** the map's boss arrives as today; 20 s later a 3 s shimmer at the far rim (at least 350 units from every
+  player) announces the rival: the boss of another roster with 60% life and 80% damage, its phase-1 kit only. Whoever falls
+  first, the survivor heals 20% and is empowered (glow, +30% damage and speed). Killing the first boss during the wait cannot skip
+  the rival, and only the last death grants Atlas credit. **Feud:** while both bosses live, every 0.5 s each minion of one
+  roster within 70 units of a minion of the other trades 60% of its damage with its nearest foe (uncredited: no loot or XP; never
+  the boss bodies). **Telegraph budget:** at most two large (radius above 60) boss telegraphs at once; while two are up the
+  rival's next cast waits (at most 3 s per cast), the first boss's never does; the rival's timers start 1.5 s behind. **Exclusive
+  uniques:** each boss rolls the 12% exclusive unique of its own theme (Crown Rivalry x1.5) on top of its ordinary loot. Both
+  bosses enrage after 240 s of the rival's fight (+2% damage every 10 s). The rival has its own health bar under the first; the
+  empowered survivor's crown flares. Gold is 52 s or less, Silver 100 s or less (x1.3 when the map is Ossuary, x1.5 Coliseum: a fair bot
+  fights the pair in about 40 to 140 s; Gold about one run in three).
+- **Pact Altar:** from T4, waves 2 to 4. An altar at least 250 units from every player with a stone for each bargain: two distinct
+  bold pacts drawn from the event stream and always **Ember Tax** (decline: 5 Scrap at once, no pact); the Pact Broker lens adds a
+  fourth, always-hard stone. Standing on a stone for 1 s chooses it; the most-occupied stone wins when several are ready. The pact
+  chosen during wave n shapes wave n+1 through the wave-plan seam (chosen before the wave n+1 tell, or the round expires); a second
+  round opens when n+1 starts and shapes n+2 (never the boss wave), and is 35% stronger when round one was bold. Pacts: **Swarm**
+  (+70% monsters, +60% item quantity), **Blood Moon** (every pack magic or better, +15% monsters, +25% life, +70% quantity),
+  **Ironhide** (+120% monster life, +50% rarity), **Ambush** (the packs arrive together on a ring round the party already hunting,
+  stragglers cut by 60%, +25% monsters, +20% life, +40% quantity), **Cinder Curse** (all resistances -20 points for the wave, +20%
+  monsters and life, +35% rarity). Bonuses apply to the kills of that wave's monsters (every
+  living player's own luck). Grade = bold pacts whose wave ended: 1 Bronze, 2 Silver, both with no player death and at most one pact wave still running when the next is announced Gold;
+  two declines fail quietly. Stones are anvils (Ashen), bone plinths (Ossuary) or iron gongs (Coliseum).
+- **Ashseed Orchard:** from T2, waves 2 to 4. Three bloom fixtures 250 to 450 units apart (Essence, Seal and Metal bloom: cinder-blooms,
+  bone-lilies, tar-sprouts) burst out at least 250 units from every player and ripen to stage 1, 2 and 3 at 15, 35 and 60 s (Green
+  Thumb ripens faster). Standing within 32 units of a bloom of stage 1 or more for 1.5 s harvests it and pays at once by kind and stage
+  (stage 1 Scrap, stage 2 one currency of its kind, stage 3 two plus a rune or core chance). A bloom is a hittable, inert body with about
+  four bruisers' life; any monster within 220 units of a bloom and more than 140 units from every player turns on the weakest bloom
+  and gnaws it (a share of its own damage each second); a destroyed bloom pays nothing. Grade = the sum of harvested stages: 3 Bronze,
+  6 Silver, 9 (all three at stage 3) Gold, which adds a Void Splinter. Unharvested blooms wither at 90 s and with the boss wave.
+- **Champion's Ring (T4+, waves 3 to 5):** an optional altar (at least 300 units from every player) with three vow stones; standing
+  on one for 1 s takes the vow (the most-occupied stone wins in a party). After a 3 s warning a chain wall of radius 160 rises and keeps
+  every other monster OUT (they are pushed back to the wall; players walk through it freely) while one Champion (a rare, Fierce
+  bruiser of the roster that does not block shots, about 28 average family members of life) fights inside, confined to the ring. It
+  alternates a **lane charge** (a 230-unit chargeLine, telegraphed at least 1.8 s, the roster's rider: burn, chill or bleed) and a
+  **slam** (radius 55, 1.5 s) every 4.5 s and never starts either on a held player. Vows: **Bare Hands** (no flasks inside the ring;
+  reward x1.5), **Iron Pride** (monster projectiles are removed at the wall; the Champion has 40% more life; x1.3), **Crowd's Favour**
+  (arena spikes every 6 s, 1.3 s telegraph; x1.3). Standing outside the ring for 3 s forfeits the multiplier only. Waves go on outside.
+  Grade by kill time from the chains standing (shown on the card): Gold <= 38 s, Silver <= 52 s, else Bronze; at 60 s the ring
+  closes, the Champion joins the horde and nothing pays. Ashen maps get ember-red chains, Ossuary frost, Coliseum iron over blood sand.
+- **Stasis Host (T6+, waves 3 to 5):** a Time Prism (a destructible fixture with ten times a bruiser's life) inside two rings
+  of 24 frozen statues (a melee crowd of the roster: about 4 rares, some magic), at least 250 units from every player. Statues are
+  invulnerable and inert until thawed. The thaw bar rises 1% per second and 1.5% per credited kill on the map; every 1/24 of it wakes
+  the next statue (inner ring first). **Shattering the prism** starts a 2 s shockwave telegraph (radius 210, hurts players) after
+  which every remaining statue wakes at once, and the payout is doubled (a Rare jewellery base, a rune chance). Every statue drops as a
+  monster of its rarity with +60% item quantity. Grade by the time to the last statue: Gold <= 31 s (x1.15 Ossuary, x1.35 Coliseum; in practice only with the prism),
+  Silver <= 90 s, else Bronze; at the boss wave the rest are released into the horde (Bronze if 75% had fallen, else nothing; the prism
+  and any frozen statue are removed). Ashen statues are ember-warmed, Ossuary native ice, Coliseum marble.
+- **Wayside Anvil:** (T3+, waves 2 to 4) a cold anvil stands 200 or more units from every player, 0.1 to 0.5 of the arena radius
+  from the centre; after a three-second warning it counts every credited kill within 260 units of it (normal 1, magic 2, rare or
+  stronger 3; 28 needed, 34 with Anvil Blessing). The card shows the charge and the Gold timer (54 s; thresholds stretch with
+  Long Fuse and Quick Study). When charged, three boon stones ring the anvil (four with Anvil Blessing), drawn from Tempered (+1
+  maximum Stability), Keen (implicits rolled at their best), Attuned (a named item class; the stone shows which) and Recast (roll
+  twice, keep the better). Standing on a stone for one second chooses it; in a party the most-occupied stone wins, ties to the longest
+  dwell. Boons change only the ordinary (non-unique) equipment of the completion chest and persist after the event ends; they reach
+  the chest through `RunHooks.rollChestLoot(ids, rng, boons)` and `rules.rollChestLoot(setup, rng, looter, boons)`. Charged within
+  54 s is Gold and offers a second round (Silver up to 90 s, else Bronze, one boon). An uncharged anvil goes cold at the boss wave:
+  nothing is forged. Nothing about it is hostile. Skins: forge anvil (ember glow), frost-rimed (Ossuary), rust-stained (Coliseum).
+- **Bellwatch:** (T5+, waves 3 to 5) a bell on a scaffold stands near the arena centre (at least 340 units from every player where the
+  arena allows) with four Cantors (rares, Fierce, about 20 times a rare's life at the tuned default: Bellringer adds 15%): two on the outer ring
+  (230 units from the bell) and two inner ones (90 units). The two outer Cantors can always be hurt; the two inner ones are linked and
+  shielded (immune, shield ring, a line of light to the bell) while an outer Cantor lives. Cantors hold their posts and sing until a
+  player comes within 130 units. The bell tolls 6 s after the onset, then every 8 s (Bellringer x1.15; each fallen Cantor slows the cadence
+  25%): it swings for 1.5 s (a harmless warning circle at the bell) and then sends an expanding three-gap ring (radius 18 to 430 over
+  4.2 s, hits each player once outside a gap: burning in Ashen, chill in Ossuary, bleed in Coliseum). Each toll adds a Dirge stack (+8%
+  speed to every monster, up to 5; 8 tolls in all); every fallen Cantor removes one. After toll 8 the Dirge holds 60 s and the event
+  ends; surviving Cantors rejoin the horde unshielded. Grade: all four before toll 4 Gold, three (or four later) Silver, two Bronze,
+  fewer nothing. Each Cantor pays a currency roll as it falls; Silver adds a 35% Prefix Rune, Gold a 60% Prefix Rune and a Rare amulet or
+  ring. (The numbers were calibrated so that a matched fair bot reaches Gold on roughly a quarter of seeds.)
+- **Void Breach:** the arena shrinks. Built for the Voidtouched Atlas keystone (id `voidBreach`, never part of the ordinary draw: its public odds are zero; a corrupted map with the keystone always rolls it as its first encounter, at any tier, in wave 3 or 4; `MAP_EVENT_UNPOOLED`, slate `forced`). A violet tear opens near the arena's heart: walk within 70 units of it, or it opens by itself 20 s after it appears (it is never ignorable, but it never blocks the map and closes at the boss wave unless required). After the 3 s warning a **Void Heart** (a destructible fixture, about 14 times a bruiser's life) stands in it and the **tide** begins: a band from the safe radius out past the arena rim telegraphs for 2.2 s (radius above 60: at least 1.8 s), then hurts everything inside it once (a player a hit of void, riders burning / chilled / bleeding by roster; a monster 25% of its life, rares half, never a boss), and the same band is re-fired as a fresh telegraph every 6 s so the shrunk field stays shrunk. The safe radius starts at min(arena radius minus 40, 480) and drops every 14 s to 72%, 50% and 34% of it; a bright dashed ring on the ground shows the current edge and a dim one the next. One **Voidcaller** (a rare of the roster's artillery, Fierce, proof to the roster's element) appears per step for steps 1 to 3, a second after a ground mark and at least 250 units from the players where the shrinking field allows. The Heart is **warded** (invulnerable, shielded) until all three Voidcallers are dead; with the ward down it fires a 1.8 s void nova (radius 70) at the player nearest it, never on a held one and never two at once. Breaking the Heart seals the breach. The seal time from the opening is the trophy: Gold 61.5 s (x0.93 Ossuary, x0.85 Coliseum: a smaller arena seals sooner), Silver 86 s, Bronze after (the earliest possible seal is about 45 s; a matched fair bot seals in 52 to 64 s and earns Gold on about one run in five). Not sealed after 130 s it **overflows**: the tide re-fires every 4.5 s, every 12 s a surge of four magic monsters (and a fresh Voidcaller while fewer than three live) arrives, and Bronze is the best it can pay. Voidtouched Atlas adds its strength (percent, 50) to the tide's damage and to the extra-roll chances of the reward. Sounds: the tide step, the surge and the heart's crack or ward drop; glyph a violet tear.
+
+**Calibration (bot sweeps, tier 5).** `tests/sim-events/sweep.ts` plays each event on each roster family with the fair bot (and a
+policy per event that opens sites, stands on stones or picks Embers up; the Caravan and Rival Crowns use the plain bot). Gold on a matched
+bot lands on roughly a quarter of seeds for every event (mean over the three families, 20 seeds each: Stalker 27%, Echoing 22%, Fault
+22%, Relay 17%, Caravan 37% (nearly half of the plain bot's runs break no lock), Rival Crowns 25%, Pact Altar 38%, Orchard 30%,
+Champion's Ring 28%, Stasis Host 20%, Wayside Anvil 25%, Bellwatch 13%, Void Breach 20%). Deaths while an event runs stay at or below
+2% of runs except Void Breach (8%) and Rival Crowns (13%, the hardest encounter); the same map with no event loses 0 to 3% of runs, and
+later boss deaths after an event are flask attrition (the sweep's bot never refills). Time thresholds do not yet scale with party
+size (four fair builds earn Gold more often); a party of four plays every event without a softlock or error.
+
+**Fairness budget (tested).** F1 a hostile event area waits at least 1.0 s (1.8 s above radius 60) before it hurts; F2 no
+new hostile start on a held player; F3 anything solid is a real prop; F4 event monsters spawn at least 250 units from every
+living player (Stalker 320, Rival 350; Echoes and Fault guardians appear on a ground mark instead); F5 nothing spawns
+partially when the store is full (it waits); F6 a party wipe freezes every event timer; F7 grade thresholds are on the HUD.
+
+**Presentation.** Each event has a ground glyph (Stalker amber eye, Echoing broken violet rings, Fault blood-red star,
+Relay flame cups, Caravan gold chevrons, Rival twin crowns, Pact Altar scales over three stones, Orchard seed and leaves, Ring
+chain circle, Host cyan prism, Anvil hammer and anvil, Bellwatch bell, Void Breach violet tear), a HUD card (name, projected grade, objective bars, timers and
+one hint line from a keyed text table; the shared UI type scale), an omen banner, an off-screen pointer, its sounds (omen
+sting, onset hit, a pentatonic step ladder, whiff / hit / lock, returns, seal, erupt, Bronze / Silver / Gold chords, a
+never-harsh failure, and the Stalker's heartbeat that quickens as the pounce nears, and the Echoing's choir hum at its anchor, a held chord that rises a little with every Resonance), music at its top layer while an event is
+active, and a small residue mark on the ground for the rest of the map. Completed encounter text remains for five seconds,
+including after the final boss. Restarts preserve hidden creation plans, cancel a running event cleanly and leave event-free
+legacy maps event-free.
 
 ## 8. Waves & monsters (the sim owns these numbers)
 
@@ -595,8 +780,8 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 
 **Contact damage:**
 - Each monster type has an attack cooldown.
-- Player hit immunity after a melee hit is 0.25 s **per attacker**.
-- Total melee damage is capped at 35% of max life per 0.5 s window, so hordes are dangerous but never cause an unreadable one-frame death.
+- Player hit immunity after a melee hit is 0.25 s **per attacker** (a technical debounce against double-hits, not a balance rule).
+- There is no cap on damage per hit or per window: one-shots are legitimate when a character's defences are too low for the tier. Tier 1 stays forgiving through level scaling, not caps. The 0.25 s per-attacker immunity is only a technical debounce.
 
 **Performance target:** 800 live monsters + 600 projectiles at 60 Hz sim + 60 fps render, on a laptop.
 

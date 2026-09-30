@@ -153,7 +153,7 @@ export { gearLuck, lootLuck, lootLuckLines } from './luck';
 export type { Luck } from './luck';
 export {
   categoryChances, currencyWeightsFor, dropLabel, dropSpec, equipmentRarityOdds, killLuck, rollChestLoot, rollEquipmentRarity,
-  rollKillLoot,
+  rollEventReward, rollKillLoot,
 } from './loot';
 export type { KillLuck } from './loot';
 export { buyOffer, currencyOnHand, gambleOdds, merchantOffers, sellItems, sellQuote } from './merchant';

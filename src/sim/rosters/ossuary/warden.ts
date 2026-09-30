@@ -17,7 +17,7 @@
 // volleys fill the gaps. Every freeze is the Ice Prison closing — a ring shown for its whole 2 s.
 import {
   DAMAGE_INDEX, DT, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, TAU, areaAngle, areaLine, attackEvent, bossState, phaseOf, clamp,
-  clampToArena, extraProjectiles, faceTarget, fieldFull, fireHostile, fireHostileFrom, meleeHit, monsterDamage, moveAlong, nearestLiving,
+  aimAtPlayer, byLevel, clampToArena, extraProjectiles, levelExtraShots, faceTarget, fieldFull, fireHostile, fireHostileFrom, meleeHit, monsterDamage, moveAlong, nearestLiving,
   registerAreaEffect, setAnim, spawnArea, steer, stop, summonAt, toChase, type Area, type AreaOptions, type BossScript, type PlayerState, type World,
 } from '../api';
 import { WARDEN as W } from './tuning';
@@ -215,15 +215,16 @@ function release(w: World, i: number, s: WardenState, t: PlayerState | null): vo
   setAnim(w, i, ANIM.attack);
 }
 
-/** A fan of frost shards at where her player is heading (partial lead: walking across it dodges). */
+/** A fan of frost shards at the intercept of her player's walk (speed, share of the lead and fan size grow with level). */
 function shardVolley(w: World, i: number, t: PlayerState): void {
   const m = w.monsters;
   const V = W.volley;
-  const n = V.count[phaseIndex(w, i)] + extraProjectiles(w);
-  const base = Math.atan2(t.y + t.vy * V.lead - m.y[i], t.x + t.vx * V.lead - m.x[i]);
+  const n = V.count[phaseIndex(w, i)] + extraProjectiles(w) + levelExtraShots(w, V.extraShots);
+  const speed = byLevel(w, V.speed);
+  const base = aimAtPlayer(w, i, t, speed, V.range, byLevel(w, V.aim), V.fallbackLead);
   const dmg = monsterDamage(w, i) * V.mult;
   for (let k = 0; k < n; k++) {
-    fireHostile(w, i, PROJ.frostShard, base + (k - (n - 1) / 2) * V.spread, V.speed, V.range, V.radius, dmg, DAMAGE_INDEX.cold);
+    fireHostile(w, i, PROJ.frostShard, base + (k - (n - 1) / 2) * V.spread, speed, V.range, V.radius, dmg, DAMAGE_INDEX.cold);
   }
   attackEvent(w, i, 'orb');
 }

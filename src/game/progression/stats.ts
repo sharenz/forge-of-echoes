@@ -9,11 +9,12 @@ import { ATTRIBUTES, PLAYER_FLAGS } from '../../contracts/content';
 import type { PlayerCombatStats } from '../../contracts/sim';
 import { resolveStatBreakdown } from '../../core/modifiers';
 import { STAT_LABEL, UNIQUES, findBase } from '../../data/items';
-import { MONSTER_LEVEL_SCALING, getSkill } from '../../data/progression';
+import { MONSTER_LEVEL_SCALING, getSkill, monsterDamageScale } from '../../data/progression';
 import type { ClassDef } from '../../data/progression';
 import { formatNumber, formatSigned } from '../items';
 import { lootLuckLines } from './luck';
 import { mapPlayerModifiers } from './maps';
+import { treeContextOf } from './atlas-rules';
 import { attributeRuleText, buildPlayerModel, focusRegenBreakdown, maxFocusOf, PERCENT_STATS, spellPowerAt } from './model';
 import type { PlayerModel } from './model';
 import {
@@ -190,12 +191,12 @@ function defenceSection(c: Computed, model: PlayerModel): SheetSection {
   const monsterLevel = model.monsterLevel ?? MONSTER_LEVEL_SCALING.referenceLevel;
   // Armour already loses effectiveness against larger hits. Scale the example with monster damage,
   // rather than applying a second, hidden level penalty to the actual armour rating.
-  const sample = round1(20 * MONSTER_LEVEL_SCALING.damage ** (monsterLevel - MONSTER_LEVEL_SCALING.referenceLevel));
+  const sample = round1(20 * monsterDamageScale(monsterLevel));
   const armourNote = armor > 0
-    ? `A ${sample} damage physical hit is reduced by ${percent(armor / (armor + 10 * sample))}`
+    ? `A ${sample} damage physical hit is reduced by ${percent(armor / (armor + 10 * sample))}; a ${round1(sample * 3)} damage hit by ${percent(armor / (armor + 30 * sample))}`
     : 'Armour reduces physical hits: armour / (armour + 10 x damage)';
   const lines: SheetLine[] = [
-    line('Armour', String(armor), [...breakdownLines(b.armor!), armourNote, `Example hit at monster level ${monsterLevel}; larger hits receive less reduction`]),
+    line('Armour', String(armor), [...breakdownLines(b.armor!), armourNote, 'Armour applies to physical damage only', `Example hit at monster level ${monsterLevel}; larger hits receive less reduction`]),
     line('Evasion Rating', String(c.evasionRating), breakdownLines(b.evasion!)),
     line('Chance to Evade', percent(c.combat.evasion, 1), [
       `Evasion Rating ${c.evasionRating}`,
@@ -204,7 +205,7 @@ function defenceSection(c: Computed, model: PlayerModel): SheetSection {
       model.monsterLevel === null
         ? `Against monster level ${MONSTER_LEVEL_SCALING.referenceLevel}: ${cls.evasionPerMonsterLevel} per monster level`
         : `Against monster level ${model.monsterLevel}: ${cls.evasionPerMonsterLevel} per monster level`,
-      'Evasion avoids monster attacks and projectiles',
+      'Evasion avoids monster attacks and projectiles, not area hits',
     ]),
   ];
   const names: Record<Exclude<DamageType, 'physical'>, string> = { fire: 'Fire', cold: 'Cold', lightning: 'Lightning', void: 'Void' };
@@ -390,7 +391,7 @@ export function deriveFromModel(ch: CharacterSave, model: PlayerModel, setup: Ru
  * `setup` null / omitted = the hideout sheet. DerivedStats.itemQuantity / itemRarity stay gear-only.
  */
 export function deriveStats(ch: CharacterSave, setup: RunSetup | null = null): DerivedStats {
-  return deriveFromModel(ch, buildPlayerModel(ch, setup ? mapPlayerModifiers(setup.map, setup.monsterLevel) : [], undefined, setup?.monsterLevel ?? null), setup);
+  return deriveFromModel(ch, buildPlayerModel(ch, setup ? mapPlayerModifiers(setup.map, setup.monsterLevel, setup.mapTree, treeContextOf(setup)) : [], undefined, setup?.monsterLevel ?? null), setup);
 }
 
 /** @deprecated Same as deriveStats(ch, setup) — kept for callers written before deriveStats took a RunSetup. */

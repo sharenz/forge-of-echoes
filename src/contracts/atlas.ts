@@ -7,10 +7,18 @@ export const ATLAS_AREA_IDS = [
 ] as const;
 export type AtlasAreaId = (typeof ATLAS_AREA_IDS)[number];
 
-export const MAP_TREE_NODE_IDS = ['trailblazer', 'chartKeeper', 'farHorizon', 'essenceSeeker', 'soundFoundations', 'deepSeams',
-  'markedPrey', 'crowdedGrounds', 'apexHunt', 'scavenger', 'discerningEye', 'crownedChallenge',
-  'strangeSigns', 'echoCompass', 'beyondTheVeil'] as const;
-export type MapTreeNodeId = (typeof MAP_TREE_NODE_IDS)[number];
+/** Atlas tree node id (data-driven: the ~148 node ids live in data/progression/map-tree; `legacy:` ids belong to expeditions frozen before the Codex redraw). */
+export type MapTreeNodeId = string;
+
+/** Bumped when the tree is redrawn; an account below it gets one free refund of its old allocation. */
+export const ATLAS_TREE_VERSION = 2;
+
+/** The twelve encounter kinds that each grant one Atlas point on their first completion (brief C). */
+export const ATLAS_EVENT_KIND_IDS = [
+  'stalker', 'echoing', 'caravan', 'rivalCrowns', 'fault', 'emberRelay',
+  'pactAltar', 'orchard', 'ring', 'host', 'anvil', 'bellwatch',
+] as const;
+export type AtlasEventKindId = (typeof ATLAS_EVENT_KIND_IDS)[number];
 
 export interface AtlasProgress {
   /** Visible areas; unrevealed areas do not disclose their name, type or rewards. */
@@ -21,4 +29,18 @@ export interface AtlasProgress {
   clears: number;
   /** Account-wide map specialization. Missing on accounts that have not allocated a node. */
   nodes?: MapTreeNodeId[];
+  /** Tree edition of `nodes`; missing or old = the pre-Codex 15-node tree (migrated once, see normalizeAtlas). */
+  treeVersion?: number;
+  /** Map tiers (2..15) this account has cleared at least once: one Atlas point each. */
+  tiersCleared?: number[];
+  /** Encounter kinds completed at least once: one Atlas point each. */
+  eventsSeen?: AtlasEventKindId[];
+  /** Final bosses (monster kinds) killed at least once: one Atlas point each. */
+  bossesSeen?: string[];
+  /** Refunds ever made (the first ATLAS_FREE_REFUNDS cost nothing). */
+  refunds?: number;
+  /** Scrap paid for refunds in the current respec session (capped; reset when a map is opened). */
+  respecSpent?: number;
+  /** True once the old tree was refunded free by the Codex redraw (UI shows the notice). */
+  redrawn?: boolean;
 }

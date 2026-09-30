@@ -129,7 +129,7 @@ export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
   }),
   crownFragment: currency('crownFragment', {
     name: "Crown Fragment",
-    description: "Rerolls a Unique item’s numeric modifiers within their ranges. Preserves its base implicit, identity and special behaviour. Guaranteed from Second Crown encounters on Tier 5+ maps.",
+    description: "Rerolls a Unique item’s numeric modifiers within their ranges. Preserves its base implicit, identity and special behaviour. Guaranteed from Rival Crowns encounters on Tier 5+ maps.",
     family: 'refine', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
   }),
   compass: currency('compass', {

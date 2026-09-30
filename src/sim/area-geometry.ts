@@ -29,7 +29,11 @@
 //   tarPool         slows by TAR_SLOW while a player's feet are inside; roots on first contact.
 //   executionMark   follows its player until it locks (≈0.8 s before the strike), then stays put.
 //   whirlwind       follows its monster; ticking damage.
-//   frostNovaWarning, arenaSpikes, and every older kind: plain circles.
+//   faultWedge      a 90-degree wedge of a disc (map event The Fault): x/y = the field's centre, radius = the field's,
+//                   areaAngle = the wedge's CENTRE heading; it covers areaAngle +- FAULT_WEDGE_HALF_ANGLE.
+//   voidTide        a ring band of the Void Breach (map event): x/y = the breach's centre, radius = the OUTER radius; the inner
+//                   radius is radius * areaAngle / 2π (the heading byte read as a ratio, so it steps in 0.4% of the radius).
+//   frostNovaWarning, arenaSpikes, echoMark and every older kind: plain circles.
 import type { AreaKind, AreaView } from '../contracts/sim';
 
 const TAU = Math.PI * 2;
@@ -129,6 +133,40 @@ export function inChoirRing(a: Pick<AreaView, 'id' | 'x' | 'y' | 'radius'>, x: n
   return !inChoirGap(a, Math.atan2(dy, dx));
 }
 
+// --- faultWedge -------------------------------------------------------------------------------------
+
+/** Half-angle of one Fault wedge (four wedges make the field). */
+export const FAULT_WEDGE_HALF_ANGLE = Math.PI / 4;
+
+/** Whether a body of radius `pad` at (x, y) is inside the wedge (its centre point counts for the body). */
+export function inFaultWedge(a: Pick<AreaView, 'id' | 'x' | 'y' | 'radius'>, x: number, y: number, pad: number): boolean {
+  const dx = x - a.x;
+  const dy = y - a.y;
+  const d2 = dx * dx + dy * dy;
+  const r = a.radius + pad;
+  if (d2 > r * r) return false;
+  if (d2 < 1e-6) return true;
+  let rel = (Math.atan2(dy, dx) - areaAngle(a)) % TAU;
+  if (rel > Math.PI) rel -= TAU;
+  if (rel < -Math.PI) rel += TAU;
+  return Math.abs(rel) <= FAULT_WEDGE_HALF_ANGLE + (pad > 0 ? Math.atan2(pad, Math.sqrt(d2)) : 0);
+}
+
+// --- voidTide ----------------------------------------------------------------------------------------
+
+/** Inner radius of a voidTide band. */
+export function voidTideInner(a: Pick<AreaView, 'id' | 'radius'>): number {
+  return a.radius * areaAngle(a) / TAU;
+}
+
+/** Whether a body of radius `pad` at (x, y) touches the band (its centre point counts for the body). */
+export function inVoidTide(a: Pick<AreaView, 'id' | 'x' | 'y' | 'radius'>, x: number, y: number, pad: number): boolean {
+  const dx = x - a.x;
+  const dy = y - a.y;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  return d <= a.radius + pad && d + pad >= voidTideInner(a);
+}
+
 // --- the rest ----------------------------------------------------------------------------------------
 
 /** An ice prison closes to this share of its starting radius. */
@@ -148,6 +186,10 @@ export function areaContains(a: Pick<AreaView, 'id' | 'kind' | 'x' | 'y' | 'radi
       return inChargeLine(a, x, y, pad);
     case 'choirWave':
       return inChoirRing(a, x, y, pad);
+    case 'faultWedge':
+      return inFaultWedge(a, x, y, pad);
+    case 'voidTide':
+      return inVoidTide(a, x, y, pad);
     default: {
       const dx = x - a.x;
       const dy = y - a.y;

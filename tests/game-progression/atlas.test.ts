@@ -67,7 +67,7 @@ describe('Atlas routes and discovery', () => {
   it('normalizes saved discovery without duplicate IDs or invisible completed areas', () => {
     expect(normalizeAtlas(null)).toEqual(newAtlas());
     expect(normalizeAtlas({ discovered: ['bad', 'emberRoad', 'emberRoad'], completed: ['winterThrone', 1], clears: NaN })).toEqual({
-      discovered: ['cinderCrossing', 'emberRoad', 'winterThrone'], completed: ['winterThrone'], clears: 1,
+      discovered: ['cinderCrossing', 'emberRoad', 'winterThrone'], completed: ['winterThrone'], clears: 1, treeVersion: 2,
     });
   });
 });

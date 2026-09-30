@@ -927,6 +927,27 @@
   box-shadow: none;
 }
 
+.fe-boss--rival {
+  margin-top: 8px;
+}
+.fe-boss--rival .fe-boss__name {
+  font-size: var(--font-ui-secondary);
+  margin-bottom: 3px;
+}
+.fe-boss--rival .fe-boss__skull {
+  background: #d9812f;
+  box-shadow: 0 0 8px rgba(240, 150, 60, 0.9);
+}
+.fe-boss--rival .fe-boss__bar {
+  height: 12px;
+}
+.fe-boss--rival .fe-boss__fill {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 45%),
+    linear-gradient(90deg, #7a3a0c, #c8621c 70%, #f09a3a);
+  box-shadow: 0 0 12px rgba(230, 130, 40, 0.55);
+}
+
 .fe-lt {
   width: min(380px, 100%);
 }
@@ -1766,6 +1787,45 @@ button.fe-ally:hover { border-color: var(--bronze-light); }
 }
 
 /* Event status shares the existing top stack; it never covers an encounter health bar. */
-.fe-map-event { max-width: 380px; padding: 8px 14px; border: 1px solid #735b82; background: rgba(18, 13, 23, 0.94); display: grid; gap: 3px; text-align: center; }
-.fe-map-event b { color: #dfc6ed; font-size: var(--font-ui-body); }
-.fe-map-event span { color: var(--color-text-secondary, #c8c0b4); font-size: var(--font-ui-caption); }
+
+/* Map events (Event Director v2): one generic card per live event, driven by MapEventView; type scale tokens only. */
+.fe-event {
+  --event-color: #dfc6ed;
+  width: min(340px, 100%);
+  padding: 6px 12px 8px;
+  border: 1px solid color-mix(in srgb, var(--event-color) 55%, #000);
+  background: rgba(14, 10, 18, 0.92);
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+/* With several live events only the newest card keeps its hint line: the stack never covers the middle of the screen. */
+.fe-event--compact { padding: 4px 12px 5px; gap: 2px; }
+.fe-event--over { opacity: 0.92; }
+.fe-event--grade3 { box-shadow: 0 0 14px color-mix(in srgb, var(--event-color) 45%, transparent); }
+.fe-event__head { display: flex; align-items: center; gap: 8px; }
+.fe-event__head b { color: var(--event-color); flex: 1; }
+.fe-event__glyph { flex: none; }
+.fe-event__grade { padding: 0 6px; border: 1px solid currentColor; color: #d9b078; }
+.fe-event__grade--2 { color: #dbe6f0; }
+.fe-event__grade--3 { color: #ffd76a; }
+.fe-event__grade--0 { color: #b0a8a0; }
+.fe-event__kicker { color: var(--color-text-secondary, #c8c0b4); letter-spacing: 0.06em; text-transform: uppercase; }
+.fe-event__bar { display: grid; grid-template-columns: minmax(0, 6.5em) 1fr auto; align-items: center; gap: 8px; color: var(--color-text-secondary, #c8c0b4); }
+.fe-event__bar i { display: block; height: 6px; background: rgba(255, 255, 255, 0.1); }
+.fe-event__bar u { display: block; height: 100%; background: var(--event-color); transition: width 0.2s; }
+.fe-event__bar em, .fe-event__timer em { font-style: normal; color: #f0e6d2; }
+.fe-event__timer { display: flex; justify-content: space-between; color: var(--color-text-secondary, #c8c0b4); }
+.fe-event__hint { color: #e8dcc0; }
+.fe-event-omen {
+  --event-color: #dfc6ed;
+  display: flex; align-items: center; gap: 12px; justify-content: center;
+  max-width: 100%; padding: 8px 32px 10px;
+  background: radial-gradient(ellipse at center, rgba(232, 220, 192, 0.16) 0%, rgba(20, 14, 18, 0.72) 55%, transparent 80%);
+  border-top: 1px solid color-mix(in srgb, var(--event-color) 60%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--event-color) 60%, transparent);
+  color: #f3e6c6; font-family: var(--font-title); letter-spacing: 0.06em; text-align: center;
+  text-shadow: 0 2px 2px #000, 0 0 16px color-mix(in srgb, var(--event-color) 70%, transparent);
+  animation: fe-tell-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+@media (prefers-reduced-motion: reduce) { .fe-event-omen { animation: none; } }

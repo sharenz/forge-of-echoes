@@ -9,7 +9,7 @@ import { findScarab } from '../../data/scarabs';
 //     count toward rarity.
 //   • A mod's `value` is its rolled magnitude in percent of the nominal numbers (tier-scaled roll).
 import type { MapTreeNodeId } from '../../contracts/atlas';
-import { mapTreeNodes } from '../../data/progression/map-tree';
+import { atlasStat, flooredWaveDuration, resolveAtlasRules, type TreeContext } from './atlas-rules';
 import type { MapSummaryLine } from '../../contracts/game';
 import { atlasKeyDestination, findAtlasArea } from '../../data/progression/atlas';
 import type {
@@ -24,7 +24,7 @@ import { hashString } from '../../core/rng';
 import {
   BASE_MAGIC_PACK_CHANCE, BASE_RARE_PACK_CHANCE, CORRUPTED_MODS, DANGER_MODS, DEBUFFS, ECHO_MOD, HAZARD_AFFLICTION, MAP_AFFLICTIONS,
   MAP_BASES, MAP_DANGER_LIMITS, MAP_DUST_COUNTS, MAP_NAME_FIRST, MAP_NAME_SECOND, MAX_DANGER_MODS, MAX_MAP_TIER, MAX_REWARD_MODS,
-  MIN_MAP_TIER, MOD_VALUE_ROLL, MONSTER_LEVEL, MONSTER_LEVEL_SCALING, MONSTER_NAMES, MONSTER_PLURALS, MONSTER_SENTENCE_NAMES, PARTY_SCALING, REWARD_MODS,
+  LEVEL_GAP, MIN_MAP_TIER, MOD_VALUE_ROLL, MONSTER_LEVEL, monsterDamageScale, monsterLifeScale, MONSTER_NAMES, MONSTER_PLURALS, MONSTER_SENTENCE_NAMES, PARTY_SCALING, REWARD_MODS,
   PLAYER_RESISTANCE_SCALING, TIER_SCALING, VOID_NEEDLE_OUTCOMES, WAVES, findMapBase, getMapMod,
 } from '../../data/progression';
 import type { MapEffectDef, MapModDef, MapStat, VoidOutcomeId } from '../../data/progression';
@@ -226,6 +226,29 @@ const MAP_STAT_TEXT: Record<MapStat, Templates> = {
   rimeEssenceChance: { more: 'Rime Essences are {x} times as likely to drop' },
   armourStability: { flat: 'Armour bases drop with {+v} Stability' },
   echoWave: { flat: 'An Echo wave follows {boss}: a 7th wave with double loot' },
+  magicPackChance: { more: '{v}% {more} chance of Magic packs' },
+  rarePackChance: { more: '{v}% {more} chance of Rare packs' },
+  eventChance: { flat: '{+v} percentage points to random encounter chance' },
+  chestUpgradeChance: { flat: 'Completion chests upgrade the map one tier {+v} percentage points more often' },
+  chestQuality: { flat: 'The completion chest map has {+v} quality' },
+  droppedMapQuality: { flat: 'Dropped maps have {+v} quality' },
+  scarabDropChance: { increased: '{v}% {inc} chance to find Scarabs' },
+  rareQuantity: { increased: 'Rare monsters drop {v}% {inc} quantity', more: 'Rare monsters drop {v}% {more} quantity' },
+  normalQuantity: { more: 'Ordinary monsters drop {v}% {more} quantity' },
+  equipmentStability: { flat: 'Non-unique equipment drops with {+v} maximum Stability' },
+  equipmentDropChance: { more: '{v}% {more} equipment drops' },
+  bossIngredientChance: { more: 'Boss ingredient chances are {v}% {more} likely' },
+  bossLife: { more: 'Final bosses have {v}% {more} Life' },
+  bossUnique: { more: 'World-unique and exclusive-unique chances are {v}% {more} likely' },
+  bossLoot: { more: 'Boss loot is {v}% {more}' },
+  chestLoot: { more: 'Completion chest loot is {v}% {more}' },
+  chestRareChance: { flat: 'Completion chest equipment is Rare {v}% of the time' },
+  chestCurrency: { flat: 'The completion chest holds {+v} more currency roll{s}' },
+  waveDuration: { more: 'Waves last {v}% {more} time' },
+  territoryFee: { flat: 'Territory fee {+v} Scrap (minimum 0)' },
+  revealChance: { flat: 'A boss kill has a {v}% chance to reveal one more neighbour' },
+  dangerModStrength: { increased: 'Danger mods on your map are {v}% {inc} strong on both sides' },
+  corruptedModStrength: { increased: 'Corrupted mods are {v}% {inc} strong on both sides' },
 };
 
 /**
@@ -265,17 +288,19 @@ export function mapBaseImplicitText(baseId: MapBaseId): string {
 // ---------------------------------------------------------------------------------------------
 
 /** Every effect a map applies, labelled: tier, quality, base implicit and mods. */
-export function mapModifiers(map: MapItem, nodes: readonly MapTreeNodeId[] = []): MapModifier[] {
-  const out: MapModifier[] = mapTreeNodes(nodes).flatMap(n => (n.effects ?? []).map(e => ({ ...e, source: `Map tree: ${n.name}` })));
+export function mapModifiers(map: MapItem, nodes: readonly MapTreeNodeId[] = [], tree: TreeContext = {}): MapModifier[] {
+  const atlas = resolveAtlasRules(nodes, { tier: clampTier(map.tier), baseId: map.baseId, corrupted: map.corrupted, ...tree });
+  const out: MapModifier[] = atlas.modifiers.map(m => ({ ...m }));
+  const strengthOf = (stat: 'dangerModStrength' | 'corruptedModStrength') => 1 + atlas.modifiers.filter(m => m.stat === stat).reduce((n, m) => n + m.value, 0) / 100;
   const tier = clampTier(map.tier);
   const tierSource = `Tier ${tier}`;
   if (tier > 1) out.push({ stat: 'itemRarity', mode: 'increased', value: TIER_SCALING.itemRarity * (tier - 1), source: tierSource });
   // Monster stats follow the monster level (Path of Exile style): compounding "more" per level above the
   // reference level, "less" below it.
-  const levelGap = monsterLevelForTier(tier) - MONSTER_LEVEL_SCALING.referenceLevel;
+  const level = monsterLevelForTier(tier);
   const levelSource = `Monster level ${monsterLevelForTier(tier)}`;
-  out.push({ stat: 'monsterLife', mode: 'more', value: (MONSTER_LEVEL_SCALING.life ** levelGap - 1) * 100, source: levelSource });
-  out.push({ stat: 'monsterDamage', mode: 'more', value: (MONSTER_LEVEL_SCALING.damage ** levelGap - 1) * 100, source: levelSource });
+  out.push({ stat: 'monsterLife', mode: 'more', value: (monsterLifeScale(level) - 1) * 100, source: levelSource });
+  out.push({ stat: 'monsterDamage', mode: 'more', value: (monsterDamageScale(level) - 1) * 100, source: levelSource });
   const quality = clamp(Math.floor(map.quality || 0), 0, 20);
   if (quality > 0) {
     out.push({ stat: 'itemQuantity', mode: 'increased', value: quality, source: 'Quality' });
@@ -288,8 +313,10 @@ export function mapModifiers(map: MapItem, nodes: readonly MapTreeNodeId[] = [])
   for (const rolled of map.mods) {
     const def = getMapMod(rolled.modId);
     if (!def) continue;
+    // Hex Sculptor / Thrill of the Hex / Void Tithe strengthen the values on both sides of a mod, never its fixed flags.
+    const strength = def.kind === 'danger' ? strengthOf('dangerModStrength') : def.kind === 'corrupted' ? strengthOf('corruptedModStrength') : 1;
     for (const e of [...def.danger, ...def.reward]) {
-      out.push({ stat: e.stat, mode: e.mode, value: effectMagnitude(e, rolled.value), source: mapModName(def, map.baseId) });
+      out.push({ stat: e.stat, mode: e.mode, value: effectMagnitude(e, rolled.value) * (e.fixed ? 1 : strength), source: mapModName(def, map.baseId) });
     }
   }
   return out;
@@ -305,8 +332,8 @@ export function mapStat(mods: readonly MapModifier[], stat: MapStat, base: numbe
 }
 
 /** Monster scaling handed to the sim for this map. */
-export function monsterScaling(map: MapItem, nodes: readonly MapTreeNodeId[] = []): MonsterScaling {
-  const mods = mapModifiers(map, nodes);
+export function monsterScaling(map: MapItem, nodes: readonly MapTreeNodeId[] = [], tree: TreeContext = {}): MonsterScaling {
+  const mods = mapModifiers(map, nodes, tree);
   const tier = clampTier(map.tier);
   const pack = mapStat(mods, 'packRarity', 1);
   return {
@@ -315,8 +342,8 @@ export function monsterScaling(map: MapItem, nodes: readonly MapTreeNodeId[] = [
     damageMultiplier: mapStat(mods, 'monsterDamage', 1),
     speedMultiplier: mapStat(mods, 'monsterSpeed', 1),
     countMultiplier: mapStat(mods, 'monsterCount', 1),
-    magicPackChance: Math.min(1, BASE_MAGIC_PACK_CHANCE * pack),
-    rarePackChance: Math.min(1, BASE_RARE_PACK_CHANCE * pack),
+    magicPackChance: Math.min(1, mapStat(mods, 'magicPackChance', BASE_MAGIC_PACK_CHANCE * pack)),
+    rarePackChance: Math.min(1, mapStat(mods, 'rarePackChance', BASE_RARE_PACK_CHANCE * pack)),
     resistBonus: mapStat(mods, 'monsterResist', 0) / 100,
     xpMultiplier: experienceMultiplier(tier),
     extraProjectiles: Math.max(0, Math.round(mapStat(mods, 'monsterProjectiles', 0))),
@@ -324,9 +351,10 @@ export function monsterScaling(map: MapItem, nodes: readonly MapTreeNodeId[] = [
   };
 }
 
-/** Experience from monsters compounds per tier above 1 (×1.28 per tier), so deeper maps keep pace with the XP curve. */
+/** Tier 1 gives half experience (×0.5); tiers above 1 compound ×1.28 per tier above 1 (T2 1.28, T3 1.64). */
 export function experienceMultiplier(tier: number): number {
-  return TIER_SCALING.experience ** (clampTier(tier) - 1);
+  const t = clampTier(tier);
+  return t <= 1 ? TIER_SCALING.tierOneExperience : TIER_SCALING.experience ** (t - 1);
 }
 
 /** "1.6x", "31.7x": a multiplier with at most one decimal. */
@@ -335,15 +363,16 @@ function times(mult: number): string {
 }
 
 /** Six waves, only a final boss on 6; an Echo corruption adds a seventh after the boss. */
-export function waveConfig(map: MapItem): WaveConfig {
+export function waveConfig(map: MapItem, nodes: readonly MapTreeNodeId[] = [], tree: TreeContext = {}): WaveConfig {
+  const atlas = resolveAtlasRules(nodes, { tier: clampTier(map.tier), baseId: map.baseId, corrupted: map.corrupted, ...tree });
   return {
     count: WAVES.count + (hasEchoWave(map) ? 1 : 0),
     baseMonsters: WAVES.baseMonsters,
     monstersPerWave: WAVES.monstersPerWave,
-    waveDuration: WAVES.waveDuration,
+    waveDuration: flooredWaveDuration(atlasStat(atlas, 'waveDuration', WAVES.waveDuration)),
     tellDuration: WAVES.tellDuration,
     lieutenantWave: WAVES.lieutenantWave,
-    bossWave: WAVES.bossWave,
+    bossWave: atlas.bossWave || WAVES.bossWave,
   };
 }
 
@@ -353,11 +382,11 @@ export function echoWaveIndex(map: MapItem): number {
 }
 
 /** Player penalties of a map (Exhausting, Hexed, corruption) as ordinary player StatModifiers. */
-export function mapPlayerModifiers(map: MapItem, monsterLevel = monsterLevelForTier(map.tier)): StatModifier[] {
+export function mapPlayerModifiers(map: MapItem, monsterLevel = monsterLevelForTier(map.tier), nodes: readonly MapTreeNodeId[] = [], tree: TreeContext = {}): StatModifier[] {
   const out: StatModifier[] = [];
   const penalty = resistancePenaltyForLevel(monsterLevel);
   if (penalty > 0) out.push({ stat: 'allRes', mode: 'flat', value: -penalty, source: `Monster level ${monsterLevel}`, label: 'Map level resistance penalty' });
-  for (const m of mapModifiers(map)) {
+  for (const m of mapModifiers(map, nodes, tree)) {
     if (m.stat === 'playerFocusRegen') {
       out.push({ stat: 'focusRegen', mode: m.mode, value: m.value, source: `${m.source} (map)`, label: effectText(m.stat, m.mode, m.value) });
     } else if (m.stat === 'playerResist') {
@@ -378,8 +407,8 @@ export interface GearLuck {
  * implicit, mods), then — when `gear` is given — one "Your gear" source. `mapLuck(map, null)` is the
  * map-side luck of RunSetup; a looter's personal luck is lootLuck() in ./luck.
  */
-export function mapLuck(map: MapItem, gear: GearLuck | null, nodes: readonly MapTreeNodeId[] = []) {
-  const mods = mapModifiers(map, nodes);
+export function mapLuck(map: MapItem, gear: GearLuck | null, nodes: readonly MapTreeNodeId[] = [], tree: TreeContext = {}) {
+  const mods = mapModifiers(map, nodes, tree);
   const toStat = (stat: 'itemQuantity' | 'itemRarity'): StatModifier[] => {
     const out: StatModifier[] = ofStat(mods, stat).map((m) => ({ stat, mode: m.mode, value: m.value, source: m.source }));
     const g = gear ? gear[stat] : 0;
@@ -393,8 +422,8 @@ export function mapLuck(map: MapItem, gear: GearLuck | null, nodes: readonly Map
 }
 
 /** Drop-weight multipliers inside the loot tables (maps, essences). */
-export function mapDropMultipliers(map: MapItem, nodes: readonly MapTreeNodeId[] = []): { map: number; essence: number; emberEssence: number; rimeEssence: number; armourStability: number } {
-  const mods = mapModifiers(map, nodes);
+export function mapDropMultipliers(map: MapItem, nodes: readonly MapTreeNodeId[] = [], tree: TreeContext = {}): { map: number; essence: number; emberEssence: number; rimeEssence: number; armourStability: number } {
+  const mods = mapModifiers(map, nodes, tree);
   return {
     map: mapStat(mods, 'mapDropChance', 1),
     essence: mapStat(mods, 'essenceDropChance', 1),
@@ -453,11 +482,11 @@ function luckLine(label: string, bd: ReturnType<typeof mapLuck>['quantity'], not
  * sources. Map-side only (it is RunSetup.summary, shared by the whole party): each player's gear luck
  * comes on top for their own instanced drops — see lootLuck() / lootLuckLines() in ./luck.
  */
-export function buildMapSummary(map: MapItem, nodes: readonly MapTreeNodeId[] = []): MapSummaryLine[] {
-  const mods = mapModifiers(map, nodes);
+export function buildMapSummary(map: MapItem, nodes: readonly MapTreeNodeId[] = [], tree: TreeContext = {}): MapSummaryLine[] {
+  const mods = mapModifiers(map, nodes, tree);
   const tier = clampTier(map.tier);
   const level = monsterLevelForTier(tier);
-  const luck = mapLuck(map, null, nodes);
+  const luck = mapLuck(map, null, nodes, tree);
   const out: MapSummaryLine[] = [];
 
   out.push({
@@ -471,10 +500,10 @@ export function buildMapSummary(map: MapItem, nodes: readonly MapTreeNodeId[] = 
   out.push(luckLine('Map Item Quantity', luck.quantity, MAP_ONLY_NOTE('Item Quantity')));
   out.push(luckLine('Map Item Rarity', luck.rarity, MAP_ONLY_NOTE('Item Rarity')));
 
-  const waves = waveConfig(map);
+  const waves = waveConfig(map, nodes, tree);
   const bosses = mapBosses(map.baseId);
   const waveLines = [
-    `Each wave lasts up to ${WAVES.waveDuration} seconds; unfinished waves stack`,
+    `Each wave lasts up to ${oneDecimal(waves.waveDuration)} seconds; unfinished waves stack`,
     `Monsters: ${rosterText(map.baseId)}`,
     ...(waves.lieutenantWave > 0 ? [`Wave ${waves.lieutenantWave}: ${bosses.lieutenant.sentence}`] : []),
     `Wave ${waves.bossWave}: ${bosses.boss.sentence}`,
@@ -486,8 +515,8 @@ export function buildMapSummary(map: MapItem, nodes: readonly MapTreeNodeId[] = 
     value: times(experienceMultiplier(tier)),
     breakdown: [
       tier > 1
-        ? `${TIER_SCALING.experience}x per tier above 1 (Tier ${tier}: ${times(experienceMultiplier(tier))})`
-        : `Tier 1 is the base rate; each tier above it multiplies experience by ${TIER_SCALING.experience}`,
+        ? `${TIER_SCALING.experience}x per tier above 1, Tier 1 gives half (Tier ${tier}: ${times(experienceMultiplier(tier))})`
+        : `Tier 1 gives half experience (${times(TIER_SCALING.tierOneExperience)}); Tier 2 gives ${times(experienceMultiplier(2))} and each tier above multiplies it by ${TIER_SCALING.experience}`,
       'Magic monsters give 2x the experience, rare monsters 6x',
     ],
   });
@@ -539,7 +568,7 @@ export function buildMapSummary(map: MapItem, nodes: readonly MapTreeNodeId[] = 
   if (res.length) {
     out.push({ label: 'Your Resistances', value: signedPercent(resolveModes(0, res)), breakdown: res.map((m) => modifierLine(m)) });
   }
-  const drops = mapDropMultipliers(map, nodes);
+  const drops = mapDropMultipliers(map, nodes, tree);
   const dropLine = (label: string, mult: number, stat: MapStat) => {
     const list = ofStat(mods, stat);
     if (!list.length) return;
@@ -710,10 +739,14 @@ export function describeMap(map: MapItem, opts: MapDescribeOptions = {}): ItemDe
     text: `Players have -${formatNumber(levelPenalty)}% to all Resistances from monster level ${level}`,
     kind: 'implicit', negative: true,
   });
+  if (level > LEVEL_GAP.grace + 1) implicits.push({
+    text: `Characters ${LEVEL_GAP.grace + 1}+ levels below monster level ${level} take ${formatNumber(LEVEL_GAP.perLevel * 100)}% more damage per level of difference, up to ${formatNumber(LEVEL_GAP.cap * 100)}%`,
+    kind: 'implicit', negative: true,
+  });
   const affixes = map.mods.flatMap((m) => modLines(m, tier, mapBosses(map.baseId).boss.sentence, map.baseId));
 
   const headerLines = [`Tier ${tier} Map`];
-  if (map.bounty) headerLines.push('Bounty: The Hunted guaranteed');
+  if (map.bounty) headerLines.push('Bounty: The Stalker guaranteed');
   if (map.charted) headerLines.push(`Charted: completion chest guarantees a Tier ${Math.min(MAX_MAP_TIER, map.tier + 1)} map`);
   if (map.twinInked) headerLines.push('Twin Ink: two reward-mod slots');
   if (map.corrupted) headerLines.push('Corrupted');

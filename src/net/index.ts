@@ -25,7 +25,7 @@
 //   drop record repeats its label + icon id (~70 B), so the server should still cap live public drops per instance.
 //   SNAPSHOT_VERSION: bump on any layout OR meaning change. A stale bundle then fails to decode and reloads itself
 //   (client/connection.ts, MAX_SNAPSHOT_FAILURES); that is how open tabs pick up a deploy.
-//   13 B per ordinary monster (+2 with ailments/elite mods, +8 for rares/bosses), 14 B per projectile, 7 B per
+//   13 B per ordinary monster (+4 with ailments/elite mods, +8 for rares/bosses), 14 B per projectile, 7 B per
 //   mote, 19 B per area, 1 B per player + 6 B per active debuff; 200 monsters + a full HUD record ≈ 2.9 KB. A real
 //   2-player map run averages ~2.1 KB per snapshot. Kind fields hold 64 monster / 64 projectile / 256 area kinds
 //   (tables append-only). Areas go by priority (protocol.ts AREA_TIER): every telegraph / moving hazard in the AOI

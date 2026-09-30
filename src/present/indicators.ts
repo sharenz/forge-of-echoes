@@ -114,10 +114,11 @@ export class Indicators {
     // nearest rare leaders within hunting range.
     const v = f.view;
     this.placedCount = 0;
-    const event = f.world.run.event;
-    if (event && event.phase !== 'complete' && event.phase !== 'failed') {
-      this.mark(pen, f, event.x, event.y, MAP_EVENT_COLORS[event.kind],
-        MAP_EVENT_NAMES[event.kind], 5);
+    const events = f.world.run.events;
+    for (let k = 0; k < events.length; k++) {
+      const event = events[k];
+      if (event.phase === 'complete' || event.phase === 'failed') continue;
+      this.mark(pen, f, event.x, event.y, MAP_EVENT_COLORS[event.kind], MAP_EVENT_NAMES[event.kind], 5);
     }
     const near = this.near;
     near[0] = near[1] = near[2] = -1;

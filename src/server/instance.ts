@@ -19,6 +19,7 @@
 import type { Theme } from '../contracts/content';
 import type { RunSetup } from '../contracts/game';
 import type { Item, MapItem } from '../contracts/items';
+import type { ChestBoons, EventRewardContext } from '../contracts/map-events';
 import { MAX_PARTY_SIZE, PORTALS_PER_MAP, SNAPSHOT_EVERY } from '../contracts/net';
 import type { PortalInfo, ZoneInfo } from '../contracts/net';
 import { SIM_DT } from '../contracts/sim';
@@ -123,7 +124,8 @@ export abstract class Instance {
   ) {
     const hooks: RunHooks = {
       rollKillLoot: (ctx, ids, rng) => this.rollKillLoot(ctx, ids, rng),
-      rollChestLoot: (ids, rng) => this.rollChestLoot(ids, rng),
+      rollChestLoot: (ids, rng, boons) => this.rollChestLoot(ids, rng, boons),
+      rollEventReward: (ctx, ids, rng) => this.rollEventReward(ctx, ids, rng),
       tryPickup: (id, token) => this.tryPickup(id, token),
     };
     const config = rules.buildRunConfig(setup, hooks);
@@ -134,7 +136,8 @@ export abstract class Instance {
   }
 
   protected abstract rollKillLoot(ctx: KillLootContext, playerIds: readonly number[], rng: Rng): DropSpec[];
-  protected abstract rollChestLoot(playerIds: readonly number[], rng: Rng): DropSpec[];
+  protected abstract rollChestLoot(playerIds: readonly number[], rng: Rng, boons?: ChestBoons): DropSpec[];
+  protected abstract rollEventReward(ctx: EventRewardContext, playerIds: readonly number[], rng: Rng): DropSpec[];
   /** A player touched / clicked one of their OWN (instanced) drops. */
   protected abstract tryOwnPickup(playerId: number, token: number): boolean;
 
@@ -478,6 +481,10 @@ export class HideoutInstance extends Instance {
     return [];
   }
 
+  protected rollEventReward(): DropSpec[] {
+    return [];
+  }
+
   protected tryOwnPickup(): boolean {
     return false;
   }
@@ -638,13 +645,24 @@ export class MapInstance extends Instance {
     return out;
   }
 
-  protected rollChestLoot(playerIds: readonly number[], simRng: Rng): DropSpec[] {
+  protected rollChestLoot(playerIds: readonly number[], simRng: Rng, boons?: ChestBoons): DropSpec[] {
     const out: DropSpec[] = [];
     const rng = this.host.lootRng(simRng);
     for (const id of playerIds) {
       const s = this.members.get(id);
       if (!s) continue;
-      this.register(id, s, rules.rollChestLoot(this.setup, rng, s.record.ch), out);
+      this.register(id, s, rules.rollChestLoot(this.setup, rng, s.record.ch, boons), out);
+    }
+    return out;
+  }
+
+  protected rollEventReward(ctx: EventRewardContext, playerIds: readonly number[], simRng: Rng): DropSpec[] {
+    const out: DropSpec[] = [];
+    const rng = this.host.lootRng(simRng);
+    for (const id of playerIds) {
+      const s = this.members.get(id);
+      if (!s) continue;
+      this.register(id, s, rules.rollEventReward(this.setup, ctx, rng, s.record.ch), out);
     }
     return out;
   }

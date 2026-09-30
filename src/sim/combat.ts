@@ -6,13 +6,13 @@ import { ELITE, KIND_BY_INDEX, KIND_INDEX } from './archetypes';
 import { removeOwnedAreas, spawnArea } from './areas';
 import {
   CHILL_DURATION, EVASION_CAP, HIT_ANIM, IGNITE_DURATION, IGNITE_EVENT_INTERVAL, IGNITE_FRACTION,
-  CORPSE_LIFETIME, CORPSE_MEMORY, KNOCKBACK_MAX, KNOCKBACK_MIN, MELEE_CAP_FRACTION, MELEE_CAP_WINDOW_TICKS, RESIST_CAP, ROLL_MAX,
+  CORPSE_LIFETIME, CORPSE_MEMORY, LEVEL_GAP_CAP, LEVEL_GAP_GRACE, LEVEL_GAP_PER_LEVEL, KNOCKBACK_MAX, KNOCKBACK_MIN, MONSTER_RESIST_CAP, ROLL_MAX,
   ROLL_MIN,
   SHOCK_BONUS, SHOCK_DURATION, WARD_REDUCTION_CAP, WARDED_REDUCTION,
 } from './constants';
 import { applyDebuff, cleanseAll, clearDebuffs, effectiveResist, isActive, shockMult } from './debuffs';
 import { rollKillLoot } from './hooks';
-import { crownPending, mapEventKill } from './map-events';
+import { crownPending, exposedMult, mapEventKill, notePlayerHit } from './map-events';
 import { grantXp, spawnDrops } from './loot';
 import { DAMAGE_INDEX, damageTypeAt } from './math';
 import { refreshLiving } from './player';
@@ -33,7 +33,7 @@ const RARITY_NAMES: readonly MonsterRarity[] = ['normal', 'magic', 'rare', 'norm
 /** Whether a monster can currently be hit (alive, not spawning, not phase-immune). */
 export function isHittable(w: World, i: number): boolean {
   const m = w.monsters;
-  return m.alive[i] === 1 && m.spawnTime[i] <= 0 && (m.flags[i] & MFLAG.immune) === 0;
+  return m.alive[i] === 1 && m.spawnTime[i] <= 0 && (m.flags[i] & (MFLAG.immune | MFLAG.frozen)) === 0;
 }
 
 /**
@@ -62,7 +62,7 @@ export function damageMonster(
   }
   // Ailments build from the resisted hit; shock, Warded and armour apply to the hit itself (and
   // live, per tick, to the burn), so a brute's armour is the thing ignite gets around.
-  const resisted = dmg * (1 - Math.min(RESIST_CAP, m.res[i * 5 + dtype]));
+  const resisted = dmg * (1 - Math.min(MONSTER_RESIST_CAP, m.res[i * 5 + dtype]));
   if (ailmentChance > 0) applyAilment(w, i, resisted, dtype, ailmentChance, source);
   dmg = resisted * takenMult(w, i);
   if (hit && m.hitReduction[i] > 0) dmg *= 1 - m.hitReduction[i];
@@ -89,10 +89,24 @@ export function damageMonster(
   return applyMonsterDamage(w, i, dmg, dtype, crit, source);
 }
 
-/** Current damage-taken multiplier of a monster (shock, Warded). */
+/**
+ * Damage that is a share of the monster's max life (the Fault's eruptions): rares take half, bosses and lieutenants nothing, and
+ * neither armour nor resistance applies. A kill is credited to nobody (source 0) but still counts.
+ */
+export function damageMonsterFraction(w: World, i: number, frac: number, dtype: number): boolean {
+  if (!isHittable(w, i)) return false;
+  const m = w.monsters;
+  if (m.flags[i] & (MFLAG.boss | MFLAG.lieutenant)) return false;
+  const share = m.rarity[i] === 2 ? frac * 0.5 : frac;
+  m.hitFlash[i] = 1;
+  wakePack(w, i);
+  return applyMonsterDamage(w, i, m.maxLife[i] * share, dtype, false, 0);
+}
+
+/** Current damage-taken multiplier of a monster (shock, Warded, Exposed). */
 function takenMult(w: World, i: number): number {
   const m = w.monsters;
-  let f = 1;
+  let f = exposedMult(w, i);
   if (m.shockTime[i] > 0) f *= 1 + SHOCK_BONUS;
   if (m.flags[i] & MFLAG.shielded) f *= 1 - WARDED_REDUCTION;
   return f;
@@ -217,7 +231,9 @@ export function livingIds(w: World): number[] {
 export function killMonster(w: World, i: number, dtype: number, credited: boolean, source = 0): void {
   const m = w.monsters;
   if (!m.alive[i]) return;
-  const kind = KIND_BY_INDEX[m.kind[i]];
+  const kindIndex = m.kind[i];
+  const rarityCode = m.rarity[i];
+  const kind = KIND_BY_INDEX[kindIndex];
   const x = m.x[i];
   const y = m.y[i];
   const flags = m.flags[i];
@@ -240,10 +256,12 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
   }
   removeOwnedAreas(w, m.id[i]);
   if (w.memory.size > 0) w.memory.delete(m.id[i]);
-  const eventReward = mapEventKill(w, m.id[i], credited);
-  w.bossStates.delete(m.id[i]);
+  const id = m.id[i];
+  const packEmpty = pk < 0 || w.packs[pk].alive <= 0;
+  w.bossStates.delete(id);
   m.release(i);
   recordCorpse(w, kind, x, y);
+  const extras = mapEventKill(w, { id, kind: kindIndex, x, y, rarity: rarityCode, mods, credited, isBoss, source, summoned, isLieutenant, packEmpty, wave });
   let finalBoss = false;
   if (isBoss) {
     let survivor = -1;
@@ -278,11 +296,17 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
     // and leave by respawning). Summoned minions never roll loot: stalling a summoner would
     // otherwise be an endless farm.
     if (!summoned && w.living.length > 0) {
-      const specs = rollKillLoot(w, { kind, summoned, rarity, isLieutenant, isBoss, wave, x, y, ...(eventReward ? { eventReward } : {}) }, livingIds(w));
+      const specs = rollKillLoot(w, { kind, summoned, rarity, isLieutenant, isBoss, wave, x, y, ...(extras ?? {}) }, livingIds(w));
       if (specs.length > 0) spawnDrops(w, specs, x, y, isBoss || isLieutenant || rarity === 'rare');
     }
   }
   if (xp > 0) grantXp(w, xp);
+}
+
+/** Extra damage multiplier for a player whose level trails the monster level by more than the grace (1 otherwise). */
+export function levelGapMult(monsterLevel: number, playerLevel: number): number {
+  const over = monsterLevel - playerLevel - LEVEL_GAP_GRACE;
+  return over > 0 ? 1 + Math.min(LEVEL_GAP_CAP, over * LEVEL_GAP_PER_LEVEL) : 1;
 }
 
 export type PlayerHitKind = 'melee' | 'projectile' | 'area' | 'dot';
@@ -292,7 +316,7 @@ export type PlayerHitKind = 'melee' | 'projectile' | 'area' | 'dot';
  * an evaded hit carries no debuff either) → roll → armour (physical) → resistance (withered lowers
  * it) → damageTaken → shocked → Cinder Ward → melee window cap (per player). A hit that connects
  * applies `debuff` (with the damage dealt, which burning and bleeding scale with; `source` for
- * roots) — also a zero-damage hit such as a web shot, or one the melee cap absorbed. A hit that kills
+ * roots) — also a zero-damage hit such as a web shot. A hit that kills
  * applies nothing. Returns the damage dealt (0 when it didn't connect).
  */
 export function damagePlayer(
@@ -328,18 +352,13 @@ export function hitPlayer(
   let dmg = 0;
   const type: DamageType = DAMAGE_TYPES[dtype];
   if (damaging) {
-    dmg = kind === 'dot' ? amount : amount * rng.range(ROLL_MIN, ROLL_MAX);
+    // Damage over time derives from a hit that already carried the level gap, so it is not scaled again.
+    dmg = kind === 'dot' ? amount : amount * rng.range(ROLL_MIN, ROLL_MAX) * levelGapMult(w.config.monsters.level, p.level);
     if (dtype === DT_PHYSICAL && s.armor > 0) dmg *= 1 - s.armor / (s.armor + 10 * dmg);
-    dmg *= 1 - effectiveResist(p, type);
+    dmg *= 1 - (effectiveResist(p, type) - w.pactResist);
     if (Number.isFinite(s.damageTaken) && s.damageTaken >= 0) dmg *= s.damageTaken;
     if (isActive(p, 'shocked')) dmg *= shockMult(p);
     if (p.ward.time > 0) dmg *= 1 - Math.min(WARD_REDUCTION_CAP, Math.max(0, p.ward.reduction));
-    if (kind === 'melee') {
-      const allowed = MELEE_CAP_FRACTION * s.maxLife - p.meleeSum;
-      dmg = Math.min(dmg, Math.max(0, allowed));
-      p.meleeWindow[w.tick % MELEE_CAP_WINDOW_TICKS] += dmg;
-      p.meleeSum += dmg;
-    }
   }
   if (dmg > 0) {
     if (kind !== 'dot' && dtype === DT_PHYSICAL && p.ward.time > 0 && p.ward.renewOnHit)
@@ -350,6 +369,7 @@ export function hitPlayer(
     w.events.push({
       t: 'hit', playerId: p.id, x: p.x, y: p.y, amount: dmg, damageType: type, crit: false, target: 'player', killed: p.life <= 0,
     });
+    notePlayerHit(w, p, dmg);
     if (p.life <= 0) {
       killPlayer(w, p);
       return dmg;

@@ -195,6 +195,6 @@ export function ScarabSlotView({ index }: { index: number }) {
       {item ? <ItemView item={item} uid={item.uid} from={{ kind: 'scarabSlot', index }} mode="slot" class={drag?.uid === item.uid ? 'fe-item--lifted' : undefined} />
         : <span class="fe-device-slot__hint">Scarab<br />{index + 1}</span>}
     </div>
-    {item && <button class="ui-type-caption fe-scarab-remove" aria-label={`Remove scarab ${index + 1}`} onClick={() => store.actions.quickMove(item.uid)}>Remove</button>}
+    {item && <button class="ui-type-caption fe-scarab-remove" aria-label={`Remove scarab ${index + 1}`} onClick={() => store.actions.quickMove(item.uid)}><span class="fe-scarab-remove__word">Remove</span><span class="fe-scarab-remove__x" aria-hidden="true">×</span></button>}
   </div>;
 }

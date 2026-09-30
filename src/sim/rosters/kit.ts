@@ -17,7 +17,7 @@ import type { PlayerDebuff } from '../../contracts/bestiary';
 import type { DamageType } from '../../contracts/content';
 import type { AreaKind, ProjectileKind, RootSource } from '../../contracts/sim';
 import {
-  DAMAGE_INDEX, DT, MFLAG, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, attackEvent, extraProjectiles, faceTarget, fireHostile,
+  DAMAGE_INDEX, DT, aimAtPlayer, byLevel, levelExtraShots, MFLAG, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, attackEvent, extraProjectiles, faceTarget, fireHostile,
   fireHostileFrom, knockPlayer, lobAt, meleeHit, memoryOf, monsterDamage, moveAlong, muzzleOffset, phaseOf, quantizeAreaAngle, setAnim,
   setGuard, setProjectileDebuff,
   setProjectileEffect, setProjectilePull, setProjectileSplash, spawnArea, steer, stop, toChase, wander, type MonsterAttack,
@@ -167,7 +167,8 @@ export interface ShooterConfig {
   /** Random extra cooldown (0..jitter s, world rng). */
   jitter?: number;
   projectile: ProjectileKind;
-  speed: number;
+  /** Flat speed, or [tier-1 map, full ramp] (behaviour.ts byLevel). Lobs ignore it (they land after `flight`). */
+  speed: number | readonly [number, number];
   range: number;
   radius: number;
   mult?: number;
@@ -176,8 +177,15 @@ export interface ShooterConfig {
   /** Shots per volley (+ map-mod extra projectiles), `spread` radians apart. */
   count?: number;
   spread?: number;
-  /** Aim where the target will be after this many seconds (partial lead: walking dodges it). */
+  /** Aim where the target will be after this many seconds (partial lead: walking dodges it). Lobs and shots without `aim`. */
   lead?: number;
+  /**
+   * Flat shots: aim at the intercept of the target's walk instead, this share of the way (0..1, or [tier 1, full ramp]);
+   * `lead` (default 0.25 s) is the fallback lead when no intercept lies within range.
+   */
+  aim?: number | readonly [number, number];
+  /** Extra shots per volley at the full ramp (rounded down the ramp), on top of `count`. */
+  extraShots?: number;
   /** > 0: a lob that lands on the aim point after this many seconds. */
   flight?: number;
   splash?: number;
@@ -213,6 +221,7 @@ export function shooterBrain(cfg: ShooterConfig): Brain {
   const spread = cfg.spread ?? 0.15;
   const lead = cfg.lead ?? 0;
   const flight = cfg.flight ?? 0;
+  const pick = (v: number | readonly [number, number], w: World): number => (typeof v === 'number' ? v : byLevel(w, v));
   return (w, i, t, dx, dy, d, hunting) => {
     const m = w.monsters;
     if (m.state[i] === MSTATE.cast) {
@@ -227,7 +236,8 @@ export function shooterBrain(cfg: ShooterConfig): Brain {
       if (m.stateTime[i] > 0) return;
       const dtype = cfg.dtype ? DAMAGE_INDEX[cfg.dtype] : m.dtype[i];
       const dmg = monsterDamage(w, i) * mult;
-      const n = count + extraProjectiles(w);
+      const n = count + extraProjectiles(w) + (cfg.extraShots ? levelExtraShots(w, cfg.extraShots) : 0);
+      const speed = flight > 0 ? 0 : pick(cfg.speed, w);
       let base: number;
       let tx = t.x + t.vx * lead;
       let ty = t.y + t.vy * lead;
@@ -235,15 +245,16 @@ export function shooterBrain(cfg: ShooterConfig): Brain {
         base = m.sx[i];
         tx = m.x[i] + Math.cos(base) * cfg.range;
         ty = m.y[i] + Math.sin(base) * cfg.range;
-      } else base = Math.atan2(ty - m.y[i], tx - m.x[i]);
+      } else if (cfg.aim !== undefined && flight <= 0) base = aimAtPlayer(w, i, t, speed, cfg.range, pick(cfg.aim, w), cfg.lead ?? 0.25);
+      else base = Math.atan2(ty - m.y[i], tx - m.x[i]);
       for (let k = 0; k < n; k++) {
         const a = base + (k - (n - 1) / 2) * spread;
         let slot: number;
         if (flight > 0) {
           const dist = Math.hypot(tx - m.x[i], ty - m.y[i]);
           slot = lobAt(w, i, cfg.projectile, m.x[i] + Math.cos(a) * dist, m.y[i] + Math.sin(a) * dist, flight, cfg.radius, dmg, dtype, cfg.range);
-        } else if (cfg.aimLine) slot = fireHostileFrom(w, i, kind, m.tx[i], m.ty[i], a, cfg.speed, cfg.range, cfg.radius, dmg, dtype);
-        else slot = fireHostile(w, i, kind, a, cfg.speed, cfg.range, cfg.radius, dmg, dtype);
+        } else if (cfg.aimLine) slot = fireHostileFrom(w, i, kind, m.tx[i], m.ty[i], a, speed, cfg.range, cfg.radius, dmg, dtype);
+        else slot = fireHostile(w, i, kind, a, speed, cfg.range, cfg.radius, dmg, dtype);
         if (slot < 0) continue;
         if (cfg.debuff !== undefined) setProjectileDebuff(w, slot, cfg.debuff, cfg.rootSource);
         if (cfg.effect) setProjectileEffect(w, slot, cfg.effect);
@@ -293,8 +304,11 @@ export function shooterBrain(cfg: ShooterConfig): Brain {
       if (cfg.aimAttack) attackEvent(w, i, cfg.aimAttack);
       if (cfg.aimLine) {
         // Lock the (id-quantised) heading and the muzzle point: the shot follows exactly the line shown.
-        const a = quantizeAreaAngle(Math.atan2(t.y + t.vy * lead - m.y[i], t.x + t.vx * lead - m.x[i]));
         const off = muzzleOffset(w, i);
+        const raw = cfg.aim !== undefined && flight <= 0
+          ? aimAtPlayer(w, i, t, pick(cfg.speed, w), cfg.range, pick(cfg.aim, w), cfg.lead ?? 0.25)
+          : Math.atan2(t.y + t.vy * lead - m.y[i], t.x + t.vx * lead - m.x[i]);
+        const a = quantizeAreaAngle(raw);
         m.sx[i] = a;
         m.tx[i] = m.x[i] + Math.cos(a) * off;
         m.ty[i] = m.y[i] + Math.sin(a) * off;

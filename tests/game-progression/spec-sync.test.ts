@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { AFFIXES, BENCH_BEST_TIER, BENCH_MAX_CRAFTED, BENCH_STABILITY_COST, UNIQUES } from '../../src/data/items';
 import { PICKUP_REACH } from '../../src/contracts/sim';
-import { CHARACTER_NAME_MAX, CHARACTER_NAME_MIN, MONSTER_LEVEL, MONSTER_LEVEL_SCALING, PARTY_SCALING, SORCERESS, TIER_SCALING } from '../../src/data/progression';
+import { CHARACTER_NAME_MAX, CHARACTER_NAME_MIN, LEVEL_GAP, MONSTER_LEVEL, MONSTER_LEVEL_SCALING, PARTY_SCALING, SORCERESS, TIER_SCALING } from '../../src/data/progression';
 import { THEME_ROSTER } from '../../src/contracts/bestiary';
 import { CURRENCY_STASH_MAX, MAP_STASH_CAPACITY } from '../../src/contracts/items';
 import {
@@ -47,8 +47,12 @@ describe('GAME_SPEC matches the implemented numbers', () => {
     const s7 = section(7);
     expect(s7).toContain(`Monster level = \`min(${MONSTER_LEVEL.cap}, ${MONSTER_LEVEL.perTier}·tier − ${-MONSTER_LEVEL.base})\``);
     expect(s7).toContain(`life ×${MONSTER_LEVEL_SCALING.life} and damage ×${MONSTER_LEVEL_SCALING.damage} per level above the reference level ${MONSTER_LEVEL_SCALING.referenceLevel}`);
+    expect(s7).toContain(`monster level ${MONSTER_LEVEL_SCALING.steep.level}, then life ×${MONSTER_LEVEL_SCALING.steep.life} and damage ×${MONSTER_LEVEL_SCALING.steep.damage} per level beyond it with life also gaining a flat +${MONSTER_LEVEL_SCALING.steep.lifeFlat} (of base) per level past ${MONSTER_LEVEL_SCALING.steep.level}`);
+    expect(s7).toContain(`life ×${MONSTER_LEVEL_SCALING.belowLife}, damage ×${MONSTER_LEVEL_SCALING.belowDamage} per level`);
+    expect(s7).toContain(`more than ${LEVEL_GAP.grace} levels above the character it hits deals +${LEVEL_GAP.perLevel * 100}% damage per further level, up to +${LEVEL_GAP.cap * 100}%`);
     expect(s7).toContain(`Evade chance = \`rating / (rating + ${SORCERESS.evasionPerMonsterLevel} × monster level)\``);
-    expect(s7).toContain(`experience (×${TIER_SCALING.experience} per tier above 1) and +${TIER_SCALING.itemRarity}% item rarity per tier`);
+    expect(s7).toContain(`experience (Tier 1 gives ×${TIER_SCALING.tierOneExperience}, then ×${TIER_SCALING.experience} per tier above 1`);
+    expect(s7).toContain(`+${TIER_SCALING.itemRarity}% item rarity per tier`);
   });
 
   it('§12 Crafting Bench limits and click pickup reach', () => {

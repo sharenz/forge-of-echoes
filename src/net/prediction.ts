@@ -37,7 +37,7 @@ import type { AreaView, PlayerAnim, PlayerDebuffView, PropView } from '../contra
 // The movement module alone (not '../sim'): keeps the rest of the simulation out of the client bundle. It is where
 // the sim keeps every rule a predicting client must share (movePlayer, the cast / debuff / ground slows, the chill).
 import {
-  CAST_SLOW, PLAYER_CHILL_SLOW, areaSlowAt, debuffMoveSlow, movePlayer, playerSlow, predictionSlow, resolvePlayerAt,
+  CAST_SLOW, PLAYER_CHILL_SLOW, areaSlowAt, combineSlow, debuffMoveSlow, movePlayer, playerSlow, predictionSlow, resolvePlayerAt,
 } from '../sim/movement';
 // Plain numbers of the sim (a leaf module the movement rules import too): shared, never copied.
 import { PULL_TIME, WARD_DEBUFF_RATE } from '../sim/constants';
@@ -566,6 +566,8 @@ export class LocalPredictor {
   // Sub-tick render phase: estimated client time of the latest predicted input tick.
   private ticksSinceFrame = 0;
   private tickTime = Number.NaN;
+  /** The carried-object slow of the newest authoritative record (Ember Relay): held fixed across predicted ticks. */
+  private eventSlow = 0;
   private lastFrameNow = Number.NaN;
   private frac = 1;
 
@@ -703,7 +705,7 @@ export class LocalPredictor {
     const chilled = d.chilled;
     const castSlow = this.cast.step(held, frozen ? 0 : chilled ? CHILL_CAST_FACTOR : 1, !frozen);
     const ground = env.areas.length > 0 ? areaSlowAt(env.areas, x, y) : 0;
-    const slow = playerSlow(castSlow, debuffMoveSlow(chilled, frozen || d.rooted), ground);
+    const slow = combineSlow(playerSlow(castSlow, debuffMoveSlow(chilled, frozen || d.rooted), ground), this.eventSlow);
     d.endTick();
     return slow;
   }
@@ -712,7 +714,8 @@ export class LocalPredictor {
   private recordSlow(rec: PlayerRecord, env: PredictionEnv): number {
     const d = this.debuffs;
     const ground = env.areas.length > 0 ? areaSlowAt(env.areas, rec.x, rec.y) : 0;
-    return playerSlow(castSlowOf(rec), debuffMoveSlow(d.chilled, d.frozen || d.rooted), ground);
+    this.eventSlow = rec.eventSlow ?? 0;
+    return combineSlow(playerSlow(castSlowOf(rec), debuffMoveSlow(d.chilled, d.frozen || d.rooted), ground), this.eventSlow);
   }
 
   private recordSpeed(tick: number, speed: number): void {

@@ -20,6 +20,8 @@ export interface Arena {
 
 export interface ArenaOptions {
   seed?: number;
+  /** Character level of player 1 (default: fixtures' DEFAULT_PLAYER_LEVEL, no level-gap bonus). */
+  level?: number;
   stats?: PlayerCombatStats;
   skills?: SkillRuntimeDef[];
   loadout?: (SkillId | null)[];
@@ -39,7 +41,7 @@ export function makeArena(o: ArenaOptions = {}): Arena {
   world.propGrid.clear();
   const m = world.monsters;
   for (let i = 0; i < m.capacity; i++) if (m.alive[i]) m.release(i);
-  run.addPlayer(makeJoin(P1, { stats: o.stats, skills: o.skills, loadout: o.loadout, x: 0, y: 0 }));
+  run.addPlayer(makeJoin(P1, { level: o.level, stats: o.stats, skills: o.skills, loadout: o.loadout, x: 0, y: 0 }));
   run.drainEvents();
   return { run, world, log, player: world.players[0] };
 }

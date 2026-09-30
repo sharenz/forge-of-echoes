@@ -25,6 +25,19 @@ export const SFX_IDS = [
   'wardenNova', 'glacialSpikes', 'icePrison', 'blizzardLoop',
   'houndBite', 'chainThrow', 'crossbowAim', 'crossbowShot', 'shieldBlock', 'tarSplat',
   'chainWhirl', 'varkusCharge', 'varkusWhirl', 'executionMark', 'arenaSpikes', 'crowdRoar',
+  // map events (Event Director v2): omen, onset, ladder step, lock/whiff/hit, return, seal, erupt, grade chords, fail, heartbeat
+  'eventOmen', 'eventOnset', 'eventStep', 'eventLock', 'eventWhiff', 'eventHit', 'eventReturn', 'eventSeal', 'eventErupt',
+  'eventBronze', 'eventSilver', 'eventGold', 'eventFail', 'eventBeat',
+  // map events, wave 2: the Echoing's choir hum (a loop), Caravan wheels and shield line, Pact Altar, Ashseed Orchard, Champion's
+  // Ring, Stasis Host, Wayside Anvil, Bellwatch, Void Breach
+  'eventHum', 'wheelBreak', 'shieldBreak',
+  'pactStone', 'pactSeal', 'pactWave',
+  'bloomGrow', 'bloomHarvest', 'bloomBite', 'bloomWither',
+  'ringRise', 'ringChain', 'ringSlam',
+  'hostThaw', 'prismShatter', 'hostWake',
+  'anvilStrike', 'anvilCharged', 'anvilForge',
+  'bellToll', 'cantorFall', 'dirge',
+  'voidTide', 'voidSurge', 'heartCrack',
 ] as const;
 export type SfxId = (typeof SFX_IDS)[number];
 

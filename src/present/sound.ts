@@ -108,6 +108,18 @@ export const SFX_LIMITS: Partial<Record<SfxId, Limit>> = {
   varkusCharge: { perFrame: 1, interval: 0.3 },
   executionMark: { perFrame: 1, interval: 0.2 },
   arenaSpikes: { perFrame: 3, interval: 0 },
+  // map events
+  eventStep: { perFrame: 2, interval: 0.08 },
+  eventReturn: { perFrame: 2, interval: 0.2 },
+  eventBeat: { perFrame: 1, interval: 0.25 },
+  eventLock: { perFrame: 1, interval: 0.4 },
+  eventWhiff: { perFrame: 1, interval: 0.4 },
+  eventHum: { perFrame: 1, interval: 1 },
+  bloomBite: { perFrame: 2, interval: 0.15 },
+  bloomGrow: { perFrame: 2, interval: 0.2 },
+  pactStone: { perFrame: 1, interval: 0.2 },
+  anvilStrike: { perFrame: 2, interval: 0.1 },
+  dirge: { perFrame: 1, interval: 0.6 },
   crowdRoar: { perFrame: 1, interval: 1.2 },
 };
 
@@ -181,6 +193,9 @@ interface Voiced {
 /** Volume of sounds made by other players (allies) relative to your own. */
 export const ALLY_VOLUME = 0.6;
 
+/** Seconds between replays of the Echoing's choir hum (each is 2.4 s, so they overlap into one held chord). */
+const HUM_PERIOD = 2;
+
 export class SoundDirector {
   private readonly sink: SfxSink;
   private readonly frameCount = new Map<SfxId, number>();
@@ -237,6 +252,7 @@ export class SoundDirector {
     this.appeared.clear();
     this.whirls.clear();
     this.lastGust = -Infinity;
+    this.humAt = 0;
     this.raiseUntil = -Infinity;
   }
 
@@ -277,6 +293,8 @@ export class SoundDirector {
    */
   ambient(world: WorldView, lx: number, ly: number): void {
     const areas = world.areas;
+    this.heartbeat(world);
+    this.hum(world);
     const frame = this.frameNo;
     let storm = -1;
     let stormD = Infinity;
@@ -368,6 +386,98 @@ export class SoundDirector {
     this.lastPlayed.set(id, this.now);
     this.sink(id, x, y, volume, pitch);
     return true;
+  }
+
+  /**
+   * The Echoing's choir hum: a 2.4 s pad replayed every HUM_PERIOD s at the anchor while the rift recalls its dead (quietly while it
+   * wakes), rising a little with every Resonance (anchor zone v = percent of the rift's tolerance, about six steps). The erupt,
+   * warden and sealed stages have their own voices, so the hum stops there.
+   */
+  private humAt = 0;
+  private hum(world: WorldView): void {
+    const events = world.run.events;
+    for (let k = 0; k < events.length; k++) {
+      const e = events[k];
+      if (e.kind !== 'echoRift') continue;
+      const recall = e.phase === 'active' && e.hint === 1;
+      if (!recall && e.phase !== 'warning') continue;
+      if (this.now < this.humAt) continue;
+      const anchor = e.zones.find(z => z.kind === 'anchor');
+      const x = anchor ? anchor.x : e.x, y = anchor ? anchor.y : e.y;
+      const steps = anchor ? anchor.v / 100 * 6 : 0;
+      this.play('eventHum', x, y, recall ? 0.75 : 0.35, 1 + 0.04 * steps);
+      this.humAt = this.now + HUM_PERIOD;
+    }
+  }
+
+  /** The Stalker's heartbeat: 60 bpm while it stalks, quickening as its pounce nears (the sound encodes the pounce timer). */
+  private beatAt = 0;
+  private heartbeat(world: WorldView): void {
+    const events = world.run.events;
+    for (let k = 0; k < events.length; k++) {
+      const e = events[k];
+      if (e.kind !== 'hunted' || e.phase !== 'active' || e.timers.length === 0) continue;
+      const t = e.timers[0];
+      if (t.id !== 0 || this.now < this.beatAt) continue;
+      const near = t.total > 0 ? Math.max(0, Math.min(1, 1 - t.seconds / t.total)) : 0;
+      this.play('eventBeat', e.x, e.y, 0.5 + 0.4 * near, 1 + 0.15 * near);
+      this.beatAt = this.now + 1 - 0.55 * near;
+    }
+  }
+
+  /** One rung of the fixed-pitch progress ladder (D minor pentatonic, semitones over the base note). */
+  private ladder(n: number): number {
+    const steps = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22];
+    const octave = Math.floor(Math.max(0, n) / steps.length);
+    return Math.pow(2, (steps[Math.max(0, n) % steps.length] + 12 * Math.min(2, octave)) / 12);
+  }
+
+  /** Map-event beats (Event Director v2): omen sting, onset hit, ladder steps, whiff / hit / lock, returns, grade chords. */
+  private mapEvent(e: Extract<SimEvent, { t: 'mapEvent' }>): void {
+    switch (e.beat) {
+      case 'omen':
+        this.play('eventOmen', undefined, undefined, 1, 1);
+        if (e.kind === 'pactAltar') this.play('pactStone', e.x, e.y, 0.8, 1);
+        return;
+      case 'onset': this.play(e.kind === 'pactAltar' ? 'pactWave' : 'eventOnset', undefined, undefined, 1, 1); return;
+      case 'arrive': this.play(e.kind === 'voidBreach' ? 'voidSurge' : 'eventOnset', e.x, e.y, 0.8, 0.9); return;
+      case 'step':
+        if (e.kind === 'anvil') this.play('anvilStrike', e.x, e.y, 0.8, this.ladder(e.n));
+        else if (e.kind === 'orchard') this.play('bloomGrow', e.x, e.y, 0.8, this.ladder(e.n));
+        else this.play('eventStep', e.x, e.y, 0.9, this.ladder(e.n));
+        return;
+      case 'pulse': this.play('eventBeat', e.x, e.y, 0.8, 1.1); return;
+      case 'lock':
+        if (e.kind === 'hunted') this.play('eventLock', e.x, e.y, 1, 1);
+        else if (e.kind === 'ring') this.play('ringSlam', e.x, e.y, 1, e.n === 1 ? 0.85 : 1);
+        else { this.play('chestOpen', e.x, e.y, 0.9, 1); this.play('dropCurrency', e.x, e.y, 0.7, 1); }
+        return;
+      case 'whiff': this.play('eventWhiff', e.x, e.y, 1, this.jitter(0.05)); return;
+      case 'hit': this.play(e.kind === 'orchard' ? 'bloomBite' : 'eventHit', e.x, e.y, 1, this.jitter(0.05)); return;
+      case 'return': this.play('eventReturn', e.x, e.y, 0.9, this.ladder(e.n)); return;
+      case 'lit': this.play('eventReturn', e.x, e.y, 1, this.ladder(e.n + 4)); return;
+      case 'seal': this.play(e.kind === 'anvil' ? 'anvilCharged' : 'eventSeal', e.x, e.y, 1, 1); return;
+      case 'erupt': this.play('eventErupt', e.x, e.y, 1, 1); return;
+      case 'lost':
+        if (e.kind === 'orchard') { this.play('bloomWither', e.x, e.y, 0.9, 1); return; }
+        this.play('eventFail', undefined, undefined, 0.9, 1);
+        return;
+      case 'failed': this.play('eventFail', undefined, undefined, 0.9, 1); return;
+      // Wave 2 of events (per-kind voices: the recipes live in audio/sfx.ts).
+      case 'pick': this.play(e.kind === 'anvil' ? 'anvilForge' : e.kind === 'ring' ? 'ringChain' : 'pactSeal', e.x, e.y, 0.9, 1); return;
+      case 'harvest': this.play('bloomHarvest', e.x, e.y, 1, this.jitter(0.03)); return;
+      case 'shatter': this.play('prismShatter', e.x, e.y, 1, 1); return;
+      case 'thaw': this.play('hostThaw', e.x, e.y, 0.7, this.jitter(0.06)); return;
+      case 'toll':
+        // Each Dirge stack drags the bell a little lower and adds the drone.
+        this.play('bellToll', e.x, e.y, 1, Math.pow(2, -Math.max(0, e.n - 1) * 0.5 / 12));
+        if (e.n >= 2) this.play('dirge', e.x, e.y, Math.min(1, 0.4 + 0.15 * e.n), 1);
+        return;
+      case 'forge': this.play('anvilForge', e.x, e.y, 1, 1); return;
+      case 'tide': this.play('voidTide', e.x, e.y, 1, 1); return;
+      case 'crack': this.play(e.kind === 'vaultbreakers' ? (e.n === 0 ? 'wheelBreak' : 'shieldBreak') : e.kind === 'host' ? 'prismShatter' : e.kind === 'voidBreach' ? 'heartCrack' : e.kind === 'bellwatch' ? 'cantorFall' : 'ringSlam', e.x, e.y, 0.9, this.jitter(0.04)); return;
+      case 'complete': this.play(e.n >= 3 ? 'eventGold' : e.n === 2 ? 'eventSilver' : 'eventBronze', undefined, undefined, 1, 1); return;
+    }
   }
 
   private jitter(amount: number): number {
@@ -626,6 +736,12 @@ export class SoundDirector {
             this.play('bossSlam', e.x, e.y, 1, this.jitter(0.03));
             this.play('arenaSpikes', e.x, e.y, 0.8, 0.9);
             return;
+          case 'stormStrike':
+            this.play('hitLightning', e.x, e.y, 0.9, this.jitter(0.05));
+            return;
+          case 'rendStrike':
+            this.play('monsterSlam', e.x, e.y, 0.6, 1.15 * this.jitter(0.04));
+            return;
           case 'icePrison':
             // Closed or broken, the ice shatters (the capture itself is debuffFreeze on the one caught).
             this.play('hitCold', e.x, e.y, 0.55, 1.35);
@@ -681,6 +797,9 @@ export class SoundDirector {
         if (e.ailment === 'burning') this.play('hitFire', e.x, e.y, 0.3, 0.7);
         else if (e.ailment === 'chilled') this.play('hitCold', e.x, e.y, 0.35, 1.3);
         else this.play('hitLightning', e.x, e.y, 0.35, 1.25);
+        return;
+      case 'mapEvent':
+        this.mapEvent(e);
         return;
       case 'waveTell':
         this.play('waveTell', undefined, undefined, 1, 1);

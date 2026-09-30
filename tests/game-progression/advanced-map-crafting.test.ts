@@ -7,7 +7,7 @@ import { CORRUPTED_MODS, CURRENCY_DROPS, ECHO_MOD, REWARD_MODS } from '../../src
 import { rules } from '../../src/game';
 import { craftMap, mapCraftError, mapCraftPreview } from '../../src/game/progression/maps';
 import { normalizeItem } from '../../src/game/progression/save';
-import { bareCharacter, expectOk, kill, map, setupFor } from './fixtures';
+import { eventCtx, bareCharacter, expectOk, kill, map, setupFor } from './fixtures';
 
 const saved = (m: MapItem) => normalizeItem(JSON.parse(JSON.stringify(m)), m.uid);
 const rewards = (m: MapItem) => m.mods.filter(r => REWARD_MODS.some(d => d.id === r.modId));
@@ -114,16 +114,16 @@ describe('advanced ingredient sources', () => {
     expect(CURRENCY_DROPS.some(d => ids.includes(d.currencyId) || ['echoShard', 'twinInk', 'voidSplinter', 'crownFragment'].includes(d.currencyId))).toBe(false);
   });
 
-  it('Echo Rift gives Echo Shards at 50% only on Tier 3+, in addition to its existing materials', () => {
+  it('The Echoing (Bronze) gives Echo Shards at 50% only on Tier 3+, in addition to its existing materials', () => {
     const rng = createRng(481), setup = setupFor(map('ashenForge', 3)), low = setupFor(map('ashenForge', 2));
     let found = 0;
     for (let i = 0; i < 500; i++) {
-      const drops = rules.rollKillLoot(setup, kill({ eventReward: 'echoRift' }), rng, bareCharacter());
+      const drops = rules.rollEventReward(setup, eventCtx('echoRift'), rng, bareCharacter());
       const currencies = drops.filter(i => i.kind === 'currency').map(i => i.currencyId);
       expect(currencies).toEqual(expect.arrayContaining(['reforge', 'mapDust']));
       if (currencies.includes('echoShard')) found++;
-      if (i < 50) for (const other of [rules.rollKillLoot(low, kill({ eventReward: 'echoRift' }), rng, bareCharacter()),
-        rules.rollKillLoot(setup, kill({ eventReward: 'hunted' }), rng, bareCharacter())]) {
+      if (i < 50) for (const other of [rules.rollEventReward(low, eventCtx('echoRift'), rng, bareCharacter()),
+        rules.rollEventReward(setup, eventCtx('hunted'), rng, bareCharacter())]) {
         expect(other.some(i => i.kind === 'currency' && i.currencyId === 'echoShard')).toBe(false);
       }
     }

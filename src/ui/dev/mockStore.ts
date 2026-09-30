@@ -18,9 +18,18 @@ import { deriveRunStats, rules as gameRules, withItemLocks } from '../../game';
 import { currencyStack, flaskStack, generateEquipment, generateUnique, placeItem } from '../../game/items';
 import { rollMapWithRarity } from '../../game/progression';
 import { MONSTER_NAMES } from '../lib/content';
+import { ATLAS_AREA_IDS } from '../../contracts/atlas';
+import { withTree } from './mockTree';
 import { parseCurrencyStashUid } from '../lib/stash';
 
+import { MAP_EVENT_KINDS, type MapEventKind, type MapEventView } from '../../contracts/map-events';
+import { MAP_EVENT_TEXT } from '../../data/progression/map-events';
+
 export interface MockOptions {
+  /** Map-event kinds to show as live HUD cards (up to three), e.g. 'pactAltar,orchard'; 'all' cycles through every kind in threes. */
+  event?: string | null;
+  /** The phase the forced event cards show (default active). */
+  eventPhase?: 'available' | 'warning' | 'active' | 'complete' | 'failed';
   screen?: Screen;
   panels?: Panel[];
   zone?: 'hideout' | 'map' | 'visit' | 'partymap';
@@ -65,6 +74,10 @@ export interface MockOptions {
   specialStash?: boolean;
   /** The map device starts empty (its map is filed in the Map Stash): the device panel opens on its picker. */
   emptyDevice?: boolean;
+  /** Codex preset on top of the atlas: open (all points earned, none spent) | mid | full (see dev/mockTree.ts). */
+  tree?: 'open' | 'mid' | 'full';
+  /** Atlas progress preset for the Cartography Table: fresh | mid | late | full (default: fresh). */
+  atlas?: 'fresh' | 'mid' | 'late' | 'full' | 'keys';
   /** Active player debuffs on the HUD: true = a showcase set, or a list of ids. */
   debuffs?: boolean | PlayerDebuff[];
   /** Map theme of the run (zone=map): its tiles, roster, lieutenant and boss. */
@@ -92,6 +105,20 @@ function withLootLuck(r: GameRulesApi): GameRulesApi {
       return { itemQuantity: setup.itemQuantity + d.itemQuantity, itemRarity: setup.itemRarity + d.itemRarity };
     },
   };
+}
+
+/** Representative live views for the HUD card check (?event=kind[,kind] in dev/ui.html): every bar half full, every timer running, hint 0. */
+export function sampleEventViews(spec: string, phase: MapEventView['phase'] = 'active'): MapEventView[] {
+  const kinds = spec === 'all' ? [...MAP_EVENT_KINDS] : (spec.split(',').filter((k) => (MAP_EVENT_KINDS as readonly string[]).includes(k)) as MapEventKind[]);
+  return kinds.slice(0, 3).map((kind, n): MapEventView => {
+    const text = MAP_EVENT_TEXT[kind];
+    return {
+      uid: n + 1, kind, phase, x: 0, y: 0, grade: phase === 'complete' ? 3 : 2, hint: 0,
+      objectives: text.objectives.slice(0, 4).map((_, id) => ({ id, cur: id + 1, max: 2 * (id + 2) })),
+      timers: text.timers.slice(0, 3).map((_, id) => ({ id, seconds: 38 - id * 11, total: 60 })),
+      zones: [], markers: [],
+    };
+  });
 }
 
 function uidMaker(prefix: string): () => string {
@@ -144,7 +171,7 @@ function stashedMaps(rng: ReturnType<typeof createRng>, uid: () => string): MapI
 }
 
 /** A level 24 Sorceress with a full paperdoll and an inventory that shows every tooltip and crafting case. */
-function buildCharacter(r: GameRulesApi, specialStash: boolean, emptyDevice = false): CharacterSave {
+function buildCharacter(r: GameRulesApi, specialStash: boolean, emptyDevice = false, atlas?: MockOptions['atlas']): CharacterSave {
   const rng = createRng(20260928);
   const uid = uidMaker('m');
   const base = r.createCharacter(ME.name, 7);
@@ -303,9 +330,19 @@ function buildCharacter(r: GameRulesApi, specialStash: boolean, emptyDevice = fa
       { flaskId: 'focusFlask', count: 0 },
     ],
     mapDevice: emptyDevice ? null : deviceMap,
+    ...(atlas && atlas !== 'fresh' ? { atlas: mockAtlas(atlas) } : {}),
     currencyStash: specialStash ? { ...STASHED_CURRENCY } : {},
     mapStash: [...(specialStash ? stashedMaps(rng, uid) : []), ...(emptyDevice ? [deviceMap] : [])],
   };
+}
+
+/** Atlas progress presets for the dev sandbox (`?atlas=`): the Cartography Table needs charted areas to show anything. */
+function mockAtlas(kind: NonNullable<MockOptions['atlas']>): NonNullable<CharacterSave['atlas']> {
+  const mid = ['cinderCrossing', 'emberRoad', 'boneApproach', 'furnaceYard', 'glassSepulchre', 'ironMarch', 'emberVault'] as const;
+  const late = [...mid, 'shatteredForge', 'championsApproach', 'crownFoundry', 'winterThrone', 'emberCitadel', 'frozenPassage', 'hollowOssuary', 'pitOfEchoes', 'gildedVault', 'sealedReliquary'] as const;
+  if (kind === 'mid') return { discovered: [...mid, 'hollowOssuary'], completed: ['cinderCrossing', 'emberRoad', 'boneApproach', 'furnaceYard'], clears: 4 };
+  if (kind === 'late' || kind === 'keys') return { discovered: [...late], completed: ['cinderCrossing', 'emberRoad', 'boneApproach', 'furnaceYard', 'glassSepulchre', 'shatteredForge', 'crownFoundry'], clears: 7 };
+  return { discovered: [...ATLAS_AREA_IDS], completed: ATLAS_AREA_IDS.filter((id) => id !== 'sealedReliquary' && id !== 'heartOfForge' && id !== 'eternalArena' && id !== 'shrineField' && id !== 'riftNexus' && id !== 'huntingGround'), clears: 14 };
 }
 
 /** What a trade partner puts up: a rare amulet, magic boots, a rare ring, catalysts and a rare map. */
@@ -338,7 +375,8 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
   /** Plain rules: building the character and the trade swap (the server's tradeItems is not wrapped either). */
   const plainRules = withLootLuck(gameRules);
   const rules = withItemLocks(plainRules, offeredNow);
-  let ch = buildCharacter(plainRules, opts.specialStash !== false, !!opts.emptyDevice);
+  let ch = buildCharacter(plainRules, opts.specialStash !== false, !!opts.emptyDevice, opts.atlas);
+  if (opts.tree) ch = withTree(ch, opts.tree);
   const listeners = new Set<() => void>();
   let toastId = 0;
   let chatId = 0;
@@ -496,12 +534,18 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       wave: opts.tell ? 2 : wave,
       waveCount: 6,
       waveProgress: opts.still ? 0.42 : (t % 60) / 60,
+      events: opts.cleared || opts.tell ? [] : opts.event ? sampleEventViews(opts.event, opts.eventPhase) : [{ uid: 1, kind: 'hunted', phase: 'active', x: 0, y: 0, grade: 2, hint: 1,
+        objectives: [{ id: 0, cur: 1, max: 3 }, { id: 1, cur: 1, max: 3 }], timers: [{ id: 0, seconds: 4.2, total: 9 }], zones: [], markers: [] }],
       monstersAlive: opts.cleared ? 0 : Math.round(64 + 22 * Math.sin(t / 2)),
       kills: 612 + Math.floor(t * 3),
       elapsed: 382 + t,
       // The sim sends a plain name; the HUD shows the full title ("Varkus" → "Varkus, the Iron Champion").
       boss: opts.boss
         ? { name: MONSTER_NAMES[roster.boss].one, life: 21000 * (0.52 - ((t / 400) % 0.2)), maxLife: 21000, phase: bossPhase }
+        : null,
+      // Rival Crowns (?boss=1&event=secondCrown): the rival's own bar under the first.
+      boss2: opts.boss && String(opts.event ?? '').includes('secondCrown')
+        ? { name: MONSTER_NAMES[roster.boss === 'varkus' ? 'hollowWarden' : 'varkus'].one, life: 9000 * (0.7 - ((t / 500) % 0.3)), maxLife: 12600, phase: 1 }
         : null,
       lieutenant: opts.lieutenant
         ? { name: MONSTER_NAMES[roster.lieutenant].one, life: 3600 * (0.7 - ((t / 300) % 0.3)), maxLife: 3600 }

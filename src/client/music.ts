@@ -33,7 +33,9 @@ export function intensityFor(zone: 'hideout' | 'map' | null, run: RunView | null
   const progress = run.waveCount > 0 ? Math.min(1, Math.max(0, run.wave / run.waveCount)) : 0;
   const tell = run.phase === 'tell' ? 0.1 : 0;
   const lieutenant = run.lieutenant ? 0.2 : 0;
-  return Math.min(1, 0.2 + 0.45 * horde + 0.2 * progress + tell + lieutenant);
+  // A live map event lifts the music to its top layer for its whole window.
+  const event = run.events?.some((e) => e.phase === 'active') ? 0.95 : 0;
+  return Math.min(1, Math.max(event, 0.2 + 0.45 * horde + 0.2 * progress + tell + lieutenant));
 }
 
 /** Moves `current` toward `target` at `rate` per second (smooth, frame-rate independent enough for music). */

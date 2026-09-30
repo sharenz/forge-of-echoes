@@ -26,6 +26,8 @@ export const BASE_IDS = [
   'silkWraps', 'graspingGauntlets',
   'pathfinderBoots', 'ashenSandals',
   'chainBelt', 'runedSash',
+  // Armour-economy additions: hybrid / robe-with-armour / armour bases for every slot.
+  'scaleCowl', 'quiltedJerkin', 'wardedVestment', 'studdedGloves', 'ironshodBoots', 'studdedBelt',
   // jewellery
   'cinderPendant', 'boneTalisman',
   'emberRing', 'rimeBand', 'stormLoop', 'voidSignet',

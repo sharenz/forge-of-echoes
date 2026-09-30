@@ -3,19 +3,21 @@
 // (src/sim/rosters; bosses through the phase driver in bosses.ts), and integration (knockback,
 // props, arena, player bodies).
 import { AILMENT_BIT } from '../contracts/sim';
-import { ELITE } from './archetypes';
+import { ELITE, STRIKE_MASK } from './archetypes';
 import { MONSTER_ANIM as ANIM, MSTATE, setAnim, stop, turnToward } from './behaviour';
 import { driveBoss } from './bosses';
-import { driveEventMonster } from './map-events';
+import { driveEventMonster, eventAilments } from './map-events';
 import { tickIgnite } from './combat';
 import {
   AGGRO_RADIUS, CHILL_SLOW, DT, EMPOWER_BONUS, HASTE_BONUS, KNOCKBACK_RATE, LARGE_BODY_RADIUS, MEMBER_AGGRO_RADIUS,
   MONSTER_HIT_FLASH_DECAY, PACK_THINK_INTERVAL, PLAYER_RADIUS, PROP_SIDE_MEMORY, PROP_SLIDE_TIME, PROP_STUCK_PROGRESS, PROP_STUCK_TIME,
   RETARGET_RATIO,
   SEPARATION_MAX_STEP, SEPARATION_RELAX, SLEEP_RADIUS, WARDED_ALLY_RADIUS,
+  ELITE_STRIKE_DAMAGE, ELITE_STRIKE_PERIOD, ELITE_STRIKE_RANGE, ELITE_STRIKE_WINDUP,
 } from './constants';
 import { resolveProps } from './grid';
-import { TAU } from './math';
+import { DAMAGE_INDEX, TAU } from './math';
+import { spawnArea } from './areas';
 import { monsterDefs } from './rosters';
 import { MFLAG } from './stores';
 import type { PlayerState, World } from './world';
@@ -91,7 +93,17 @@ export function updateMonsters(w: World): void {
     if (m.shockTime[i] > 0) bits |= AILMENT_BIT.shocked;
     if (m.flags[i] & MFLAG.shielded) bits |= AILMENT_BIT.shielded;
     if (m.empowerTime[i] > 0) bits |= AILMENT_BIT.empowered;
+    if (m.flags[i] & MFLAG.frozen) bits |= AILMENT_BIT.frozen;
+    if (m.flags[i] & MFLAG.fixture) bits |= AILMENT_BIT.fixture;
+    if (w.mapEvent && (w.mapEvent.members.size > 0 || w.mapEvent.exposed.size > 0)) bits |= eventAilments(w, m.id[i]);
     m.ailments[i] = bits;
+
+    // Statues and fixtures are inert bodies: no brain, no movement, no attacks (they only stand there and can be pressed against).
+    if (m.flags[i] & (MFLAG.frozen | MFLAG.fixture)) {
+      stop(w, i);
+      integrate(w, i);
+      continue;
+    }
 
     if (m.spawnTime[i] > 0) {
       m.spawnTime[i] -= DT;
@@ -127,7 +139,8 @@ export function updateMonsters(w: World): void {
       continue;
     }
     if (m.mods[i] & ELITE.warded && (w.tick + i) % 10 === 0) updateWarded(w, i);
-    if (driveEventMonster(w, i, t)) { /* Carrier movement still uses normal integration below. */ }
+    if (m.mods[i] & STRIKE_MASK && hunting && t && !t.dead) eliteStrikes(w, i, t, d);
+    if (driveEventMonster(w, i, t)) { /* An event script owns this monster; normal integration still follows below. */ }
     else if (def.boss) driveBoss(w, i, def, t, dx, dy, d, hunting);
     else def.brain(w, i, t, dx, dy, d, hunting);
     // A guarding shield turns toward its target at its own pace (flanking is the counterplay); the
@@ -361,6 +374,7 @@ function integrate(w: World, i: number, hunting = false): void {
   if (m.chillTime[i] > 0) f *= 1 - CHILL_SLOW;
   if (m.empowerTime[i] > 0) f *= 1 + EMPOWER_BONUS;
   if (m.hasteTime[i] > 0) f *= 1 + HASTE_BONUS;
+  if (w.mapEvent && w.mapEvent.monsterSpeed !== 1) f *= w.mapEvent.monsterSpeed;
   const x0 = m.x[i];
   const y0 = m.y[i];
   let nx = x0 + vx * f * DT + sx;
@@ -574,4 +588,30 @@ function updateWarded(w: World, i: number): void {
   }
   if (allies >= 2) m.flags[i] |= MFLAG.shielded;
   else m.flags[i] &= ~MFLAG.shielded;
+}
+
+/**
+ * Stormcalled and Rending rares periodically mark the ground under their target (a stormStrike telegraph that
+ * shocks, a rendStrike that bleeds). Both are ordinary areas: the warning circle is the counterplay, and armour /
+ * resistance / evasion decide how much a hit that lands hurts. Staggered by slot; a rare with both alternates.
+ */
+function eliteStrikes(w: World, i: number, t: PlayerState, d: number): void {
+  const m = w.monsters;
+  const mods = m.mods[i];
+  if (d > ELITE_STRIKE_RANGE || m.spawnTime[i] > 0) return;
+  const phase = (w.tick + i * 41) % ELITE_STRIKE_PERIOD;
+  const storm = (mods & ELITE.stormcalled) !== 0;
+  const rend = (mods & ELITE.rending) !== 0;
+  let lightning: boolean;
+  if (storm && rend) {
+    if (phase !== 0 && phase !== ELITE_STRIKE_PERIOD / 2) return;
+    lightning = phase === 0;
+  } else {
+    if (phase !== 0) return;
+    lightning = storm;
+  }
+  spawnArea(w, lightning ? 'stormStrike' : 'rendStrike', t.x, t.y, lightning ? 30 : 26, ELITE_STRIKE_WINDUP, {
+    damage: m.damage[i] * ELITE_STRIKE_DAMAGE, dtype: lightning ? DAMAGE_INDEX.lightning : DAMAGE_INDEX.physical,
+    hurts: 'player', owner: m.id[i], debuff: lightning ? 'shocked' : 'bleeding',
+  });
 }

@@ -3,7 +3,7 @@ import type { PlayerDebuff } from '../contracts/bestiary';
 import { MONSTER_KINDS } from '../contracts/content';
 import { MONSTER_ANIM, type MonsterAnimCode, type RootSource } from '../contracts/sim';
 import { hitPlayer } from './combat';
-import { ATTACKER_IMMUNITY, DT, EMPOWER_BONUS, PLAYER_RADIUS } from './constants';
+import { ATTACKER_IMMUNITY, DT, EMPOWER_BONUS, PLAYER_RADIUS, PROJECTILE_SCALING } from './constants';
 import { TAU } from './math';
 import { projSpec, spawnProjectile } from './projectiles';
 import { MSTATE } from './stores';
@@ -208,4 +208,70 @@ export function toChase(w: World, i: number): void {
   const m = w.monsters;
   m.state[i] = MSTATE.chase;
   m.stateTime[i] = 0;
+}
+
+// --- aimed shots: level scaling and intercept aim ----------------------------------------------------
+
+/** How far this map's monster level has ramped from the forgiving tier-1 shots (0) to the full ones (1). */
+export function projectileRamp(w: World): number {
+  const S = PROJECTILE_SCALING;
+  const r = (w.config.monsters.level - S.levelFloor) / (S.levelFull - S.levelFloor);
+  return r <= 0 ? 0 : r >= 1 ? 1 : r;
+}
+
+/** A tuning pair [tier-1 value, full value] at this map's monster level. */
+export function byLevel(w: World, pair: readonly [number, number]): number {
+  return pair[0] + (pair[1] - pair[0]) * projectileRamp(w);
+}
+
+/** Extra shots per volley at this map's monster level: 0 at tier 1, up to `max` (rounded) at the full ramp. */
+export function levelExtraShots(w: World, max: number): number {
+  return Math.round(max * projectileRamp(w));
+}
+
+/**
+ * Seconds until a shot at `speed`, leaving `off` ahead of its shooter, meets a target at (dx, dy) from the
+ * shooter moving steadily at (vx, vy): the smallest t >= 0 with |D + V*t| = off + speed*t. -1 when there is
+ * no such meeting within `maxTime` (the target outpaces the shot, or the meeting lies beyond its range).
+ */
+export function interceptTime(dx: number, dy: number, vx: number, vy: number, speed: number, off: number, maxTime: number): number {
+  const c = dx * dx + dy * dy - off * off;
+  if (c <= 0) return 0; // already inside the muzzle
+  const a = vx * vx + vy * vy - speed * speed;
+  const b = 2 * (dx * vx + dy * vy - off * speed);
+  let t = -1;
+  if (Math.abs(a) < 1e-9) {
+    if (b < 0) t = -c / b;
+  } else {
+    const disc = b * b - 4 * a * c;
+    if (disc >= 0) {
+      const r = Math.sqrt(disc);
+      const t1 = (-b - r) / (2 * a);
+      const t2 = (-b + r) / (2 * a);
+      const lo = Math.min(t1, t2);
+      const hi = Math.max(t1, t2);
+      t = lo >= 0 ? lo : hi;
+    }
+  }
+  return t >= 0 && t <= maxTime ? t : -1;
+}
+
+/**
+ * Heading for a shot from monster `i` (its muzzle, from `fromX/fromY` when given) at player `t`: the intercept
+ * of a player who keeps walking as they are, `accuracy` (0..1) of the way (0 = the current position). With no
+ * intercept inside the shot's range (a player crossing squarely outpaces a slow shot) it falls back to
+ * `fallbackLead` seconds of lead, scaled by the same accuracy: a partial lead that catches slowing players.
+ */
+export function aimAtPlayer(
+  w: World, i: number, t: PlayerState, speed: number, range: number, accuracy: number, fallbackLead = 0.25, fromX?: number, fromY?: number,
+): number {
+  const m = w.monsters;
+  const ox = fromX ?? m.x[i];
+  const oy = fromY ?? m.y[i];
+  const dx = t.x - ox;
+  const dy = t.y - oy;
+  const off = fromX === undefined ? muzzleOffset(w, i) : 0;
+  const meet = speed > 0 ? interceptTime(dx, dy, t.vx, t.vy, speed, off, Math.max(0, range - off) / speed) : -1;
+  const lead = (meet >= 0 ? meet : fallbackLead) * accuracy;
+  return Math.atan2(dy + t.vy * lead, dx + t.vx * lead);
 }

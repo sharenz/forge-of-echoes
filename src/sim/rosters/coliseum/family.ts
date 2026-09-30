@@ -17,10 +17,11 @@ import { MONSTER_KINDS } from '../../../contracts/content';
 import { shooterBrain } from '../kit';
 import {
   DAMAGE_INDEX, DT, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, areaAngle, areaVariant, attackEvent, extraProjectiles, faceTarget,
-  fireHostile, fireHostileFrom, knockPlayer, meleeHit, monsterDamage, moveAlong, muzzleOffset, quantizeAreaAngle, registerProjectileEffect,
+  aimAtPlayer, byLevel, fireHostile, fireHostileFrom, knockPlayer, meleeHit, monsterDamage, moveAlong, muzzleOffset, quantizeAreaAngle, registerProjectileEffect,
   setAnim, setGuard, setProjectileEffect, spawnArea, steer, stop, toChase, wander, type Brain, type PlayerState, type World,
 } from '../api';
-import { CROSSBOW, HOUND, SHIELD, TAR, THRALL } from './tuning';
+import { gapLeap } from '../pressure';
+import { CROSSBOW, HOUND, SHIELD, TAR, THRALL, THRALL_LEAP } from './tuning';
 
 const CROSSBOWMAN = MONSTER_KINDS.indexOf('ironCrossbowman');
 const TAR_SLINGER = MONSTER_KINDS.indexOf('tarSlinger');
@@ -136,7 +137,7 @@ export function registerFamilyEffects(): void {
  * visible chainHook (sidestep it) that drags its victim 40 units toward the thrall and roots them. A hook
  * that connects sends the thrall rushing in; up close it rakes with the hook (a plain hit, no root).
  */
-export function brainChainThrall(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
+function hookAndRake(w: World, i: number, t: PlayerState | null, dx: number, dy: number, d: number, hunting: boolean): void {
   const m = w.monsters;
   const T = THRALL;
   if (m.timerA[i] > 0) m.timerA[i] -= DT;
@@ -210,6 +211,18 @@ export function brainChainThrall(w: World, i: number, t: PlayerState | null, dx:
   steer(w, i, dx, dy, d, m.timerB[i] > 0 ? T.reelSpeed : 1);
 }
 
+/**
+ * Chain Thrall with its gap-closing leap (THRALL_LEAP). The hook and the reel-in stay its openers: no leap starts while
+ * a hook is ready and in range, or while it is rushing a hooked victim.
+ */
+export const brainChainThrall: Brain = gapLeap(hookAndRake, {
+  ...THRALL_LEAP,
+  skip: (w, i, d) => {
+    const m = w.monsters;
+    return m.timerB[i] > 0 || (m.attackCd[i] <= 0 && d >= THRALL.hookMin && d <= THRALL.hookMax);
+  },
+});
+
 // --- Iron Crossbowman ------------------------------------------------------------------------------------
 
 /**
@@ -262,7 +275,7 @@ export function brainCrossbowman(w: World, i: number, t: PlayerState | null, dx:
   stop(w, i);
   faceTarget(w, i, t);
   attackEvent(w, i, 'aim');
-  const a = quantizeAreaAngle(Math.atan2(dy, dx));
+  const a = quantizeAreaAngle(aimAtPlayer(w, i, t, C.boltSpeed, C.boltRange, byLevel(w, C.aim), C.fallbackLead));
   const off = muzzleOffset(w, i);
   m.sx[i] = a;
   m.sy[i] = 1 + extraProjectiles(w);

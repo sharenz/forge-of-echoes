@@ -448,8 +448,8 @@ describe('chain hook drags against the real sim (Iron Coliseum)', () => {
   function coliseum(): RunConfig {
     const cfg = config();
     return {
-      ...cfg, theme: 'ironColiseum', mapName: 'Iron Coliseum', seed: 1, tier: 5,
-      monsters: { ...cfg.monsters, damageMultiplier: 0.05, countMultiplier: 1.5 },
+      ...cfg, theme: 'ironColiseum', mapName: 'Iron Coliseum', seed: 3, tier: 5,
+      monsters: { ...cfg.monsters, damageMultiplier: 0.05, countMultiplier: 1.5, rarePackChance: 0 }, // chain-hook test: no rare strike mods muddying pulls
       hooks: { rollKillLoot: () => [], rollChestLoot: () => [], tryPickup: () => false },
     };
   }

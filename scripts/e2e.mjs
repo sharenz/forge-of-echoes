@@ -3,7 +3,13 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5|qol|account|atlas|events|crafting|ingredients|economy|maps] [--smoke 30]
+//                        [--only wave5|qol|account|atlas|tree|scarabs|uniques|events|crafting|ingredients|economy|maps|selling|debugmerchant]
+//                        [--events hunted,wound,...] [--smoke 30]
+//
+// The Atlas is a full-screen Cartography Table (canvas chart, Set course, Codex tab, Stash drawer, dock); the helpers
+// openStashDrawer / slotPackMap / inspectArea / setCourse / codexFind drive it like a player. `--only atlas` walks every
+// destination at this window size, `--only tree` migrates an old 15-node account and allocates, refunds and restarts the
+// Codex, `--only events` plays events through the real sim and checks the first-completion Atlas point.
 //
 // --prod tests the production bundle instead of the Vite dev server: `vite build` (with VITE_FOE_DEBUG=1, so the
 // window.__foe hooks this script drives are compiled in) into a temp dir, served by the game server itself
@@ -11,7 +17,8 @@
 //
 // Flow (every user scenario of GAME_SPEC §11–§12, through the real UI where a player would use it):
 //   1. Both players register and create a character; both learn Ember Nova in the skill tree.
-//   2. A clicks the map device in the world, Ctrl-clicks a map into it and activates it (8 portals).
+//   2. A clicks the map device in the world (the Atlas table: canvas chart, Set course, Stash drawer), loads a map from the
+//      Stash drawer and activates it (8 portals).
 //   3. A invites B from the party panel; B joins from the invite card and visits A's hideout.
 //   4. B clicks Rook in A's hideout and BUYS Kindling with its own Scrap (A's currency untouched).
 //   5. Stash search: matches glow, the rest dims; Esc clears it.
@@ -52,6 +59,7 @@ import { spawn } from 'node:child_process';
 import { isDeepStrictEqual } from 'node:util';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer as createNetServer } from 'node:net';
+import * as os from 'node:os';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -275,6 +283,7 @@ class Player {
 
   async shot(name) {
     const file = join(SHOTS, `e2e-${name}.png`);
+    await this.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))).catch(() => {});
     await this.page.screenshot({ path: file });
     shots.push(file);
     return file;
@@ -513,6 +522,117 @@ async function clickPortal(p) {
   return at;
 }
 
+
+// --- The Cartography Table (Atlas + Map Device): helpers for the new flow -----------------------------------------------
+// Set course (not "Use this area"), a canvas chart with one DOM button per node, the Codex tab, and a Stash drawer that
+// replaced the backpack Ctrl-click into the device.
+
+/** An earlier map's portal that still has entries asks before it is replaced: confirm, and check the dialog is reachable above the table. */
+async function confirmNewMap(p) {
+  const confirm = p.page.locator('.fe-dialog__actions button:has-text("Activate")');
+  try { await confirm.waitFor({ state: 'visible', timeout: 2000 }); } catch { return false; }
+  const covered = await confirm.evaluate((b) => { const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !(e && (e === b || b.contains(e))); });
+  assert(!covered, 'the "Open a new map" dialog is hidden behind the Atlas table');
+  await confirm.click();
+  return true;
+}
+
+/** Open the Stash drawer of the Map Device table (maps in the pack, the Map Stash picker, scarabs in stash). */
+async function openStashDrawer(p) {
+  const open = () => p.page.evaluate(() => document.querySelector('[data-drawer]')?.classList.contains('fe-drawer--open') === true);
+  if (await open()) return;
+  await p.page.locator('.fe-table__tab', { hasText: 'Stash' }).click();
+  await p.page.waitForFunction(() => document.querySelector('[data-drawer]')?.classList.contains('fe-drawer--open') === true, undefined, { timeout: 3000 });
+  // the slide-in is a CSS transition: wait until the drawer stands inside the window (a busy first bake can stretch it)
+  await p.page.waitForFunction(() => document.querySelector('[data-drawer]')?.getBoundingClientRect().left >= -1, undefined, { timeout: 15000 });
+}
+
+async function closeStashDrawer(p) {
+  if (!(await p.page.evaluate(() => document.querySelector('[data-drawer]')?.classList.contains('fe-drawer--open') === true))) return;
+  await p.page.getByRole('button', { name: 'Close stash drawer', exact: true }).click();
+  await p.page.waitForFunction(() => document.querySelector('[data-drawer]')?.getBoundingClientRect().right <= 1, undefined, { timeout: 15000 });
+}
+
+/** Load a map from the pack into the device through the Stash drawer (first one, or the given uid). */
+async function slotPackMap(p, uid) {
+  await openStashDrawer(p);
+  const btn = uid ? p.page.locator(`.fe-drawer__mapbtn[data-uid="${uid}"]`) : p.page.locator('.fe-drawer__mapbtn').first();
+  await btn.click({ timeout: 5000 });
+  await p.waitFor('the map in the device', (u) => { const m = window.__foe.store.get().character?.mapDevice; return !!m && (!u || m.uid === u); }, uid, 5000);
+  await closeStashDrawer(p);
+}
+
+/** Newly charted areas play a discovery cinematic (every press skips it): a press on the empty chart corner ends it. */
+async function skipCinematic(p) {
+  for (let i = 0; i < 20; i++) {
+    // Areas under the fog while their discovery plays are known but disabled.
+    if ((await p.page.locator('.fe-atlas__node--known:disabled').count()) === 0) return;
+    const vp = await p.page.locator('.fe-chart').boundingBox();
+    if (process.env.E2E_DEBUG && vp) log('skip', JSON.stringify(vp), await p.page.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); return e ? `${e.tagName}.${e.className}` : 'none'; }, [vp.x + 6, vp.y + 6]));
+    if (vp) await p.page.mouse.click(vp.x + 6, vp.y + 6);
+    await sleep(500);
+  }
+}
+
+/** Select an area on the chart like a player: keyboard focus pans the chart to it, then a real click inspects it. */
+async function inspectArea(p, name) {
+  // The chart bakes its ground on first open ("Unrolling the chart..."); a focus before that cannot pan it.
+  await p.page.waitForSelector('.fe-chart__loading', { state: 'detached', timeout: 40000 });
+  await closeStashDrawer(p); // the drawer slides over the left of the chart (it opens by itself when the Map Stash holds maps)
+  // In a small window the inspector is a drawer over the right of the chart and covers the nodes under it: close it first.
+  const closeRail = p.page.getByRole('button', { name: 'Close inspector', exact: true });
+  if (await closeRail.isVisible().catch(() => false)) { await closeRail.click(); await sleep(300); }
+  await sleep(800); // a discovery cinematic starts a moment after the panel mounts
+  await skipCinematic(p);
+  const node = p.page.getByRole('button', { name: new RegExp(`^${name},`) });
+  await node.focus();
+  // The focus pans the chart to the node (an eased camera on requestAnimationFrame): wait until it stands inside the viewport.
+  await p.page.waitForFunction((n) => {
+    const el = document.querySelector(`[data-area="${n}"]`), vp = document.querySelector('.fe-chart');
+    if (!el || !vp) return false;
+    const a = el.getBoundingClientRect(), b = vp.getBoundingClientRect();
+    return a.left >= b.left && a.right <= b.right && a.top >= b.top && a.bottom <= b.bottom;
+  }, await node.getAttribute('data-area'), { timeout: 8000 }).catch(() => {});
+  await sleep(400);
+  if (process.env.E2E_DEBUG) log('inspect', name, JSON.stringify(await node.evaluate((n) => ({ node: n.getBoundingClientRect().toJSON(), chart: n.closest('.fe-chart').getBoundingClientRect().toJSON(), head: document.querySelector('.fe-table__head').getBoundingClientRect().toJSON(), world: n.closest('.fe-chart__world').style.transform }))));
+  await node.click();
+  await p.page.waitForFunction((n) => document.querySelector('[data-rail] .fe-rail__name')?.textContent === n, name, { timeout: 3000 });
+  await sleep(250);
+}
+
+/** Inspect an area and press Set course in the rail. */
+async function setCourse(p, name) {
+  await inspectArea(p, name);
+  await p.page.getByRole('button', { name: 'Set course', exact: true }).click();
+  await p.page.waitForFunction((n) => document.querySelector('.fe-device__destination')?.getAttribute('aria-label') === `Course: ${n}`, name, { timeout: 3000 });
+}
+
+/** The chart must be drawn; a frame or two of blank while it repaints is tolerated, more is reported. */
+async function assertChartDrawn(p, what, min = 12) {
+  const t = Date.now();
+  let n = await chartColours(p);
+  while (n <= min && Date.now() - t < 3000) { await sleep(40); n = await chartColours(p); }
+  const blank = Date.now() - t;
+  if (blank > 200) log(`chart was blank for ${blank} ms (${what}) [machine load ${os.loadavg()[0].toFixed(0)}]`);
+  assert(n > min, `${what}: the chart canvas stayed blank for ${blank} ms`);
+}
+
+/** Distinct colours in a coarse sample of the chart canvas: a blank or half-baked canvas has very few. */
+async function chartColours(p) {
+  return p.page.evaluate(() => {
+    const c = document.querySelector('canvas.fe-chart__canvas');
+    if (!c) return -1;
+    const small = document.createElement('canvas');
+    small.width = 64; small.height = 36;
+    const g = small.getContext('2d', { willReadFrequently: true });
+    g.drawImage(c, 0, 0, small.width, small.height);
+    const px = g.getImageData(0, 0, small.width, small.height).data;
+    const seen = new Set();
+    for (let i = 0; i < px.length; i += 4) seen.add(`${px[i] >> 4},${px[i + 1] >> 4},${px[i + 2] >> 4},${px[i + 3] > 0}`);
+    return seen.size;
+  });
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The scenario
 // ---------------------------------------------------------------------------------------------------------------
@@ -563,11 +683,9 @@ async function coreScenario({ A, B, nameA, nameB, port }) {
     return `clicked at ${Math.round(at.x)},${Math.round(at.y)}`;
   });
 
-  await step('A Ctrl-clicks a map into the device and activates it', async () => {
-    const map = A.page.locator('.fe-grid[data-drop="backpack"] .fe-item[data-kind="map"]').first();
-    await map.waitFor({ timeout: 5000 });
-    await map.click({ modifiers: ['Control'] });
-    await A.waitFor('the map in the device', () => !!window.__foe.store.get().character?.mapDevice, undefined, 5000);
+  await step('A loads a map from the Stash drawer of the Atlas table and activates it', async () => {
+    await slotPackMap(A);
+    assert(await chartColours(A) > 12, 'the Atlas chart canvas looks blank');
     await A.shot('02-map-device-A');
     await A.page.click('.fe-device__activate');
     await A.waitFor('the portal to open', () => {
@@ -1531,8 +1649,12 @@ async function buyFromRook(p, labels) {
   return bought;
 }
 
-async function wave5Scenario({ A }) {
+async function wave5Scenario({ A, port }) {
   const bought = {};
+  const { tsImport } = await import('tsx/esm/api');
+  const { ATLAS_AREAS } = await tsImport('../src/data/progression/atlas.ts', import.meta.url);
+  // The Atlas destination supplies the playable theme, so a map only plays its own roster at an area of that theme.
+  const areaFor = (theme) => ATLAS_AREAS.find((a) => a.baseId === theme && !a.sealed && !a.requiresBounty && !a.entranceKey && !a.noBoss && !a.chosenClass);
 
   await step('Map Stash: A takes a free Rimed Ossuary and Iron Coliseum map from Rook, then Ctrl-clicks every map into the Map Stash', async () => {
     const [ossuary, coliseum] = await buyFromRook(A, ['Rimed Ossuary (Tier 1)', 'Iron Coliseum (Tier 1)']);
@@ -1561,6 +1683,21 @@ async function wave5Scenario({ A }) {
     await settlePanels(A);
     await A.shot('w5-01-map-stash-A');
     return `${after.mapStash.length} maps filed (${after.mapStash.map((m) => `${m.baseId} T${m.tier}`).join(', ')})`;
+  });
+
+  await step('the Atlas is charted in a disposable database so each map can be opened at a destination of its own theme', async () => {
+    outage = true; await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const { tsImport } = await import('tsx/esm/api');
+    const { ATLAS_AREA_IDS } = await tsImport('../src/contracts/atlas.ts', import.meta.url);
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const row = db.prepare('SELECT account_id, data FROM account_storage').get();
+    const shared = JSON.parse(row.data);
+    shared.atlas = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 };
+    db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), row.account_id);
+    db.close(); await startGameServer(port);
+    await A.waitFor('charted Atlas after reconnect', (n) => { const s = window.__foe.store.get(); return s.connection === 'online' && s.character?.atlas.discovered.length === n; }, ATLAS_AREA_IDS.length, 30000);
+    outage = false;
   });
 
   await step('Crafting Stash: "Deposit all" files every backpack currency; Shift+Ctrl-click takes exactly 1, Ctrl-click a stack', async () => {
@@ -1643,6 +1780,7 @@ async function wave5Scenario({ A }) {
     const check = THEME_CHECKS[theme];
     const roster = contracts.rosters[theme];
     const { tag } = check;
+    const area = areaFor(theme);
 
     await step(`Map Stash → map device: A picks the ${check.name} map in the device's Map Stash picker and activates it`, async () => {
       const map = bought[theme];
@@ -1651,21 +1789,23 @@ async function wave5Scenario({ A }) {
       const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'mapDevice', 10), 'the map device');
       await clickWorld(A, at, 'the map device');
       await A.waitFor('the map device panel', () => window.__foe.store.get().openPanels.includes('mapDevice'), undefined, 5000);
+      await setCourse(A, area.name);
+      await openStashDrawer(A);
       await A.page.waitForSelector('.fe-mstash--device', { timeout: 5000 });
       const row = `.fe-mstash--device .fe-maprow[data-uid="${map.uid}"]`;
       if ((await A.page.locator(row).count()) === 0) await A.page.click(`.fe-mstash--device button[aria-label^="Tier ${map.tier}:"]`);
       await A.page.locator(row).click({ timeout: 5000 });
       await waitServer(A, `the ${check.name} map in the device`, (ch, u) => ch.mapDevice?.uid === u && !ch.mapStash.some((m) => m.uid === u), map.uid);
+      await closeStashDrawer(A);
       await settlePanels(A);
       await A.shot(`w5-06-device-${tag}-A`);
       await A.page.click('.fe-device__activate');
       // An earlier map's portal that still has entries asks first.
-      const confirm = A.page.locator('.fe-dialog__actions button:has-text("Activate")');
-      if (await confirm.isVisible({ timeout: 1000 }).catch(() => false)) await confirm.click();
+      await confirmNewMap(A);
       await A.waitFor(`the ${check.name} portal`, (name) => {
         const p = window.__foe.store.get().hud?.portal;
-        return !!p && p.remaining === 8 && p.mapName.includes(name);
-      }, check.name, 8000);
+        return !!p && p.remaining === 8 && p.mapName === name;
+      }, area.name, 8000);
       const portal = await A.state('s => s.hud.portal');
       return `${portal.mapName} T${portal.tier}: ${portal.remaining}/${portal.total} portals`;
     });
@@ -1867,23 +2007,37 @@ async function atlasScenario({ A, port }) {
   const { buildEquipment } = await tsImport('../src/game/items/index.ts', import.meta.url);
   const { createRng } = await tsImport('../src/core/rng.ts', import.meta.url);
   const openDevice = async () => {
-    await A.page.evaluate(() => window.__foe.store.actions.closeAllPanels());
-    let at = await propOnScreen(A, 'mapDevice');
-    for (let i = 0; i < 30 && at && (at.y < 90 || at.y > VH - 170); i++) {
-      const key = at.y < 90 ? 'w' : 's';
-      await A.page.keyboard.down(key); await sleep(180); await A.page.keyboard.up(key); await sleep(120);
-      at = await propOnScreen(A, 'mapDevice');
+    // Walking is timing-based: on a loaded machine the first click can land while the character is still on its way.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await A.page.evaluate(() => window.__foe.store.actions.closeAllPanels());
+      let at = await propOnScreen(A, 'mapDevice');
+      for (let i = 0; i < 30 && at && (at.y < 90 || at.y > VH - 170); i++) {
+        const key = at.y < 90 ? 'w' : 's';
+        await A.page.keyboard.down(key); await sleep(180); await A.page.keyboard.up(key); await sleep(120);
+        at = await propOnScreen(A, 'mapDevice');
+      }
+      assert(at && at.y >= 60 && at.y <= VH - 140, 'map device is not on screen');
+      await A.page.mouse.click(at.x, at.y);
+      if (await A.page.waitForSelector('.fe-device', { timeout: 9000 }).then(() => true, () => false)) return;
     }
-    assert(at && at.y >= 60 && at.y <= VH - 140, 'map device is not on screen');
-    await A.page.mouse.click(at.x, at.y);
-    await A.page.waitForSelector('.fe-device');
+    assert(false, 'the map device never opened');
   };
   await step('a fresh account sees one Atlas area and fog over every other destination', async () => {
+    // The first open bakes the chart (ground, plates, emblems): measure the longest main-thread stall and the time to a drawn chart.
+    await A.page.evaluate(() => {
+      window.__longTasks = [];
+      try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__longTasks.push(Math.round(e.duration)); }).observe({ entryTypes: ['longtask'] }); } catch { /* unsupported */ }
+    });
+    const openedAt = Date.now();
     await openDevice();
-    await A.page.locator('.fe-grid[data-drop="backpack"] .fe-item[data-kind="map"]').first().click({ modifiers: ['Control'] });
-    await A.waitFor('inserted map', () => !!window.__foe.store.get().character.mapDevice);
-    await A.page.locator('.fe-device__destination').click();
+    await A.page.waitForSelector('.fe-chart__loading', { state: 'detached', timeout: 20000 });
+    const bakeMs = Date.now() - openedAt;
+    const stalls = await A.page.evaluate(() => window.__longTasks);
+    log(`first Atlas open: chart ready ${bakeMs} ms after the click; long tasks (ms): ${stalls.join(', ') || 'none'}`);
+    assert(Math.max(0, ...stalls) < 2500, `the first Atlas bake stalls the main thread for ${Math.max(...stalls)} ms`);
+    await slotPackMap(A);
     assert(await A.page.locator('.fe-atlas__node--known').count() === 1, 'fresh Atlas has extra revealed areas');
+    assert(await chartColours(A) > 12, 'the Atlas chart canvas looks blank');
     assert(await A.page.locator('.fe-atlas__node:disabled').count() === ATLAS_AREA_IDS.length - 1, 'fog areas are not disabled');
     await A.shot(`atlas-fresh-${VW}x${VH}`);
   });
@@ -1914,10 +2068,9 @@ async function atlasScenario({ A, port }) {
     }, ATLAS_AREA_IDS.length, 30_000);
     outage = false;
     await openDevice();
-    await A.page.locator('.fe-device__destination').click();
-    await A.page.getByRole('button', { name: /^Cinder Crossing,/ }).click();
-    assert(await A.page.getByRole('button', { name: 'Use this area', exact: true }).isDisabled(), 'Tier 3 should not fit the starting area');
-    await A.page.getByRole('button', { name: /^Bone Approach,/ }).click();
+    await inspectArea(A, 'Cinder Crossing');
+    assert(await A.page.getByRole('button', { name: 'Set course', exact: true }).isDisabled(), 'Tier 3 should not fit the starting area');
+    await inspectArea(A, 'Bone Approach');
     const overlaps = await A.eval(() => {
       const nodes = [...document.querySelectorAll('.fe-atlas__node')].map(n => ({ name: n.textContent, r: n.getBoundingClientRect() }));
       return nodes.flatMap((a, i) => nodes.slice(i + 1).filter(b =>
@@ -1925,29 +2078,16 @@ async function atlasScenario({ A, port }) {
       ).map(b => `${a.name} / ${b.name}`));
     });
     assert(overlaps.length === 0, `Atlas area cards overlap: ${overlaps.join('; ')}`);
-    const falseEntrances = await A.eval(() => {
-      const nodes = [...document.querySelectorAll('.fe-atlas__node')].map(n => ({ id: n.dataset.area, r: n.getBoundingClientRect() }));
-      return [...document.querySelectorAll('.fe-atlas__routes path')].flatMap(path => {
-        const matrix = path.getScreenCTM(), length = path.getTotalLength();
-        for (let step = 1; step < 100; step++) {
-          const p = path.getPointAtLength(length * step / 100).matrixTransform(matrix);
-          const crossed = nodes.find(n => n.id !== path.dataset.from && n.id !== path.dataset.to
-            && p.x > n.r.left - 2 && p.x < n.r.right + 2 && p.y > n.r.top - 2 && p.y < n.r.bottom + 2);
-          if (crossed) return [`${path.dataset.from} → ${path.dataset.to} crosses ${crossed.id}`];
-        }
-        return [];
-      });
-    });
-    assert(falseEntrances.length === 0, `Atlas routes imply false entrances: ${falseEntrances.join('; ')}`);
+    // Roads are painted on the canvas now (their geometry is covered by tests/atlas/geometry.test.ts): the chart must be
+    // drawn (baked ground, plates and roads) once the whole Atlas is charted.
+    assert(await chartColours(A) > 20, 'the explored Atlas chart is not drawn');
     await A.shot(`atlas-explored-${VW}x${VH}`);
-    await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+    await A.page.getByRole('button', { name: 'Set course', exact: true }).click();
     assert((await A.page.locator('.fe-device__destination').innerText()).includes('Bone Approach'), 'area choice was not retained');
     await A.shot(`atlas-device-${VW}x${VH}`);
   });
   await step('the Sealed Reliquary consumes one key and opens the selected area', async () => {
-    await A.page.locator('.fe-device__destination').click();
-    await A.page.getByRole('button', { name: /^Sealed Reliquary,/ }).click();
-    await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+    await setCourse(A, 'Sealed Reliquary');
     await A.shot(`atlas-sealed-${VW}x${VH}`);
     await A.page.locator('.fe-device__activate').click();
     await A.waitFor('sealed area portal and key spent', () => {
@@ -1985,10 +2125,12 @@ async function atlasScenario({ A, port }) {
       await A.waitFor('new area fixture reconnect', (uid) => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.mapDevice?.uid === uid, saved.mapDevice.uid, 30000);
       outage = false;
       await openDevice();
-      await A.page.locator('.fe-device__destination').click();
-      await A.page.getByRole('button', { name: new RegExp(`^${area.name},`) }).click();
+      await inspectArea(A, area.name);
+      await assertChartDrawn(A, `${area.name} inspected`);
       await A.shot(`atlas-${areaId}-detail-${VW}x${VH}`);
-      await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+      await A.page.getByRole('button', { name: 'Set course', exact: true }).click();
+      await sleep(400);
+      await assertChartDrawn(A, `${area.name} course set`);
       if (area.chosenClass) await A.page.getByRole('combobox', { name: 'Hunter reward class' }).selectOption('ring');
       await A.shot(`atlas-${areaId}-device-${VW}x${VH}`);
       const currencyOnHand = id => {
@@ -1999,8 +2141,7 @@ async function atlasScenario({ A, port }) {
       const scrapBefore = await A.eval(currencyOnHand, 'scrap');
       const keyBefore = area.entranceKey ? await A.eval(currencyOnHand, area.entranceKey) : 0;
       await A.page.locator('.fe-device__activate').click();
-      const confirm = A.page.locator('.fe-dialog__actions button:has-text("Activate")');
-      if (await confirm.isVisible()) await confirm.click();
+      await confirmNewMap(A);
       await A.waitFor('selected area portal', (name) => window.__foe.store.get().hud?.portal?.mapName === name && !window.__foe.store.get().character.mapDevice, area.name);
       if (area.entranceKey) assert(await A.eval(currencyOnHand, area.entranceKey) === keyBefore - 1, 'wrong key payment');
       const fee = Math.max(0, Math.floor((tier - 1) / 3));
@@ -2194,22 +2335,20 @@ async function craftingScenario({ A, port }) {
     assert(at && at.y >= 60 && at.y <= VH - 140, 'map device is not on screen');
     await A.page.mouse.click(at.x, at.y);
     await A.page.waitForSelector('.fe-device');
-    await A.page.locator('.fe-device__destination').click();
     for (const [area, rune] of [['Glass Sepulchre', 'Prefix Rune'], ['Ember Vault', 'Suffix Rune']]) {
-      await A.page.getByRole('button', { name: new RegExp(`^${area},`) }).click();
-      const detail = await A.page.locator('.fe-atlas__detail').innerText();
+      await inspectArea(A, area);
+      const detail = await A.page.locator('[data-rail]').innerText();
       assert(detail.includes(rune) && detail.includes('25%'), 'missing ingredient source');
       await shot(`crafting-source-${rune.split(' ')[0]}`);
     }
   });
-  if (ECONOMY_ONLY) await step('the Map Device shows and spends the territory fee once and guarantees The Hunted', async () => {
-    await A.page.getByRole('button', { name: /^Glass Sepulchre,/ }).click();
-    await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
-    await A.page.locator('.fe-grid[data-drop="backpack"] .fe-item[data-uid="e2e-sink-map:i1"]').click({ modifiers: ['Control'] });
-    await A.waitFor('Bounty in device', () => window.__foe.store.get().character.mapDevice?.uid === 'e2e-sink-map:i1');
+  if (ECONOMY_ONLY) await step('the Map Device shows and spends the territory fee once and guarantees The Stalker', async () => {
+    await setCourse(A, 'Glass Sepulchre');
+    await slotPackMap(A, 'e2e-sink-map:i1');
+    await inspectArea(A, 'Glass Sepulchre');
     const text = await A.page.locator('.fe-device').innerText();
-    assert(text.includes('Territory fee: 1 Scrap'), 'missing upfront fee');
-    assert(text.includes('The Hunted 100%'), 'Bounty encounter odds are not guaranteed');
+    assert(text.includes('Territory fee 1 Scrap') || text.includes('Fee 1 Scrap'), 'missing upfront fee');
+    assert(text.includes('The Stalker 100%'), 'Bounty encounter odds are not guaranteed');
     const before = await A.eval(() => window.__foe.store.get().character.currencyStash.scrap);
     await shot('territory-fee');
     await A.page.locator('.fe-device__activate').click();
@@ -2437,6 +2576,7 @@ async function scarabsScenario({ A, port }) {
   await step('inspect every scarab tier, load from stash and remove through the device', async () => {
     await openDevice();
     assert(await A.page.locator('[data-drop="scarabSlot"]').count() === 4, 'expected four sockets beside one map');
+    await openStashDrawer(A);
     await A.page.locator('.fe-device__scarab-picker summary').click();
     await A.shot(`scarabs-picker-${VW}x${VH}`);
     for (const scarab of SCARABS) {
@@ -2450,29 +2590,27 @@ async function scarabsScenario({ A, port }) {
     assert(await A.eval(() => Object.entries(window.__foe.store.get().character.currencyStash).filter(([id]) => id.includes('Scarab')).every(([, count]) => count === 2)), 'socketting did not take exactly one');
     await A.page.locator('.fe-device__scarab-picker summary').click();
   });
-  await step('drag and Ctrl-click load distinct types and reject a second tier of the same type', async () => {
-    const uid = await A.eval(() => window.__foe.store.get().character.backpack.entries.find(e => e.item.currencyId === 'hasteScarab4').item.uid);
-    const source = A.page.locator(`[data-drop="backpack"] .fe-item[data-uid="${uid}"]`);
-    const target = A.page.locator('[data-drop="scarabSlot"][data-index="2"]');
-    await target.scrollIntoViewIfNeeded();
-    const a = await source.boundingBox(), b = await target.boundingBox();
-    assert(a && b, 'scarab drag targets missing');
-    await A.page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await A.page.mouse.down();
-    await A.page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 }); await A.page.mouse.up();
-    await A.waitFor('dragged scarab loaded', () => window.__foe.store.get().character.mapScarabs?.[2]?.currencyId === 'hasteScarab4');
-    for (const id of ['hasteScarab1', 'invasionScarab4']) {
-      const uid = await A.eval(id => window.__foe.store.get().character.backpack.entries.find(e => e.item.currencyId === id).item.uid, id);
-      await A.page.locator(`[data-drop="backpack"] .fe-item[data-uid="${uid}"]`).click({ modifiers: ['Control'] });
-      if (id === 'invasionScarab4') await A.waitFor('Ctrl-click scarab loaded', id => window.__foe.store.get().character.mapScarabs?.some(i => i?.currencyId === id), id);
+  await step('the Stash drawer loads distinct scarab types (stash or pack) and rejects a second tier of the same type', async () => {
+    // The table covers the inventory, so the drawer is where a player loads scarabs: it counts the pack and the stash together.
+    await openStashDrawer(A);
+    if (!(await A.page.locator('.fe-device__scarab-picker').evaluate((d) => d.open))) await A.page.locator('.fe-device__scarab-picker summary').click();
+    const choice = (scarab) => A.page.locator('.fe-device__scarab-choice').filter({ hasText: scarab.name });
+    const byId = (id) => SCARABS.find((x) => x.id === id);
+    for (const id of ['hasteScarab4', 'invasionScarab4']) {
+      await choice(byId(id)).click();
+      await A.waitFor('scarab loaded', (i) => window.__foe.store.get().character.mapScarabs?.some((x) => x?.currencyId === i), id);
     }
-    assert(await A.eval(() => window.__foe.store.get().character.mapScarabs.filter(Boolean).length === 2), 'duplicate scarab type accepted');
-    await A.page.locator('.fe-device__scarab-picker summary').click();
-    for (const scarab of SCARABS) assert(await A.page.locator('.fe-device__scarab-choice').filter({ hasText: scarab.name }).isDisabled(), 'duplicate tier remains selectable');
-    await A.page.locator('.fe-device__scarab-picker summary').click();
+    assert(await A.eval(() => window.__foe.store.get().character.mapScarabs.filter(Boolean).length === 2), 'expected exactly two loaded scarabs');
+    for (const scarab of SCARABS.filter((x) => x.family === byId('hasteScarab4').family || x.family === byId('invasionScarab4').family)) {
+      assert(await choice(scarab).isDisabled(), `${scarab.name}: a second tier of a loaded family remains selectable`);
+    }
+    await closeStashDrawer(A);
     await A.shot(`scarabs-loaded-${VW}x${VH}`);
+    await A.page.getByRole('button', { name: 'Full map readout', exact: true }).click();
     const summary = A.page.getByText('Scarab wave duration', { exact: true }); await summary.scrollIntoViewIfNeeded();
     assert((await A.page.locator('.fe-device__summary').innerText()).includes('30s'), 'combined wave duration missing');
     await A.shot(`scarabs-readout-${VW}x${VH}`);
+    await A.page.getByRole('button', { name: 'Close readout', exact: true }).click();
     const bounds = await A.page.locator('.fe-device__activate').boundingBox();
     assert(bounds && bounds.y + bounds.height <= VH, 'activation exceeds viewport');
   });
@@ -2494,95 +2632,160 @@ async function scarabsScenario({ A, port }) {
   });
 }
 
+/** Find a Codex node through the search box (it pans and selects), so every node is reachable at any window size. */
+async function codexFind(p, name) {
+  const input = p.page.locator('.fe-cx__search input');
+  await input.fill('');
+  await input.fill(name);
+  for (let i = 0; i < 12; i++) {
+    await input.press('Enter');
+    await sleep(120);
+    if ((await p.page.locator('.fe-cx__rail .fe-cx__name').first().innerText().catch(() => '')) === name) return;
+  }
+  throw new Error(`the Codex search never selected ${name}`);
+}
+
 async function mapTreeScenario({ A, port }) {
   const { tsImport } = await import('tsx/esm/api');
   const { ATLAS_AREA_IDS } = await tsImport('../src/contracts/atlas.ts', import.meta.url);
-  const { MAP_TREE, MAP_TREE_BRANCHES } = await tsImport('../src/data/progression/map-tree.ts', import.meta.url);
+  const tree = await tsImport('../src/data/progression/map-tree.ts', import.meta.url);
+  const { MAP_TREE, ATLAS_ORIGIN_ID, LEGACY_MAP_TREE_IDS, atlasNodeAllocatable, findAtlasNode } = tree;
+  const { mapTreeFreePoints, mapTreePoints } = await tsImport('../src/game/progression/map-tree.ts', import.meta.url);
+  /** Allocation order from the origin to `target` through nodes that can be allocated (BFS, like the tests' pathTo). */
+  const pathTo = (target) => {
+    const prev = new Map([[ATLAS_ORIGIN_ID, '']]);
+    const queue = [ATLAS_ORIGIN_ID];
+    while (queue.length && !prev.has(target)) {
+      const id = queue.shift();
+      for (const l of findAtlasNode(id).links) if (!prev.has(l) && (l === target || atlasNodeAllocatable(findAtlasNode(l)))) { prev.set(l, id); queue.push(l); }
+    }
+    const path = [];
+    for (let id = target; id !== ATLAS_ORIGIN_ID; id = prev.get(id)) path.unshift(id);
+    return path;
+  };
   const openDevice = async () => {
     await closePanels(A);
     const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'mapDevice', 10), 'map device');
     await clickWorld(A, at, 'map device'); await A.page.waitForSelector('.fe-device');
   };
-  await step('prepare a completed account Atlas and Scrap in a disposable database', async () => {
+  const openCodex = async () => {
+    await openDevice();
+    await A.page.getByRole('tab', { name: /^Codex/ }).click();
+    await A.page.waitForSelector('[data-codex]');
+    await A.page.waitForSelector('[data-map-node]', { timeout: 15000 });
+  };
+  const atlasOf = () => A.eval(() => window.__foe.store.get().character.atlas);
+  const freePoints = async () => Number(await A.page.locator('.fe-cx__points-num').innerText());
+  const allocate = async (id) => {
+    await codexFind(A, findAtlasNode(id).name);
+    await A.page.getByRole('button', { name: /^Allocate · / }).click();
+    await A.waitFor('node allocated', (n) => window.__foe.store.get().character.atlas.nodes?.includes(n), id, 8000);
+  };
+  const refund = async (id) => {
+    await codexFind(A, findAtlasNode(id).name);
+    await A.page.getByRole('button', { name: /^Refund · / }).click();
+    await A.waitFor('node refunded', (n) => !window.__foe.store.get().character.atlas.nodes?.includes(n), id, 8000);
+  };
+
+  await step('an old account (15-node tree, edition 1) is migrated: allocation refunded free once, every earned point kept', async () => {
     outage = true; await stopGameServer();
     const { DatabaseSync } = await import('node:sqlite');
     const db = new DatabaseSync(join(tmp, 'e2e.db'));
     const row = db.prepare('SELECT account_id, data FROM account_storage').get();
     const shared = JSON.parse(row.data);
-    shared.atlas = { discovered: [...ATLAS_AREA_IDS], completed: [...ATLAS_AREA_IDS], clears: 25 };
-    shared.currencyStash.scrap = 100;
+    // The fixture of an account saved before the redraw: the 15 old node ids, no treeVersion, no tiers/events/bosses seen.
+    assert(LEGACY_MAP_TREE_IDS.length === 15, 'the legacy fixture needs fifteen nodes');
+    shared.atlas = { discovered: [...ATLAS_AREA_IDS], completed: [...ATLAS_AREA_IDS], clears: 25, nodes: [...LEGACY_MAP_TREE_IDS] };
+    delete shared.atlas.treeVersion;
+    shared.currencyStash.scrap = 300;
     db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), row.account_id);
     const char = db.prepare('SELECT id, data FROM characters').get(), ch = JSON.parse(char.data);
-    ch.mapDevice = { kind: 'map', uid: 'tree-map:i1', baseId: 'ashenForge', tier: 1, quality: 0, rarity: 'normal', mods: [], corrupted: false };
+    ch.mapDevice = { kind: 'map', uid: 'tree-map:i1', baseId: 'ashenForge', tier: 3, quality: 0, rarity: 'normal', mods: [], corrupted: false };
     ch.backpack.entries = ch.backpack.entries.filter(e => e.item.kind !== 'currency');
     db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(ch), char.id);
     db.close(); await startGameServer(port);
-    await A.waitFor('completed Atlas after reconnect', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.atlas.completed.length === 25, undefined, 30000);
+    await A.waitFor('migrated Atlas after reconnect', () => { const s = window.__foe.store.get(); return s.connection === 'online' && s.character?.atlas.completed.length === 25; }, undefined, 30000);
     outage = false;
+    const atlas = await atlasOf();
+    assert(!atlas.nodes?.length, `the old allocation was not dropped: ${JSON.stringify(atlas.nodes)}`);
+    assert(atlas.redrawn === true && atlas.treeVersion >= 2, `migration flags missing: ${JSON.stringify({ r: atlas.redrawn, v: atlas.treeVersion })}`);
+    // 25 areas + 3 Atlas milestones are earned by this fixture; nothing was spent in the new tree.
+    assert(mapTreePoints(atlas) === 28 && mapTreeFreePoints(atlas) === 28, `the migrated account should hold 28 points, it holds ${mapTreePoints(atlas)} (${mapTreeFreePoints(atlas)} free)`);
+    return `nodes dropped, redrawn flag set, tree edition ${atlas.treeVersion}, 28 points kept`;
   });
-  await step('all fifteen nodes can be inspected, allocated and refunded through the UI', async () => {
-    await openDevice();
-    await A.page.locator('.fe-device__destination').click();
-    await A.page.getByRole('button', { name: /^Cinder Crossing,/ }).click();
-    await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
-    await A.page.getByRole('button', { name: /^Map tree/ }).click();
-    assert(await A.page.locator('[data-map-node]').count() === 15, 'expected fifteen map nodes');
-    await settlePanels(A); await A.shot(`tree-empty-${VW}x${VH}`);
-    for (const branch of MAP_TREE_BRANCHES) {
-      const path = MAP_TREE.filter(n => n.branch === branch);
-      for (const node of path) {
-        await A.page.locator(`[data-map-node="${node.id}"]`).click();
-        assert((await A.page.locator('.fe-maptree__detail').innerText()).includes(node.text), 'missing exact effect');
-        await A.page.getByRole('button', { name: 'Allocate point', exact: true }).click();
-        await A.waitFor('node allocated', id => window.__foe.store.get().character.atlas.nodes?.includes(id), node.id);
-      }
-      await settlePanels(A); await A.shot(`tree-${branch}-${VW}x${VH}`);
-      await A.page.locator(`[data-map-node="${path[0].id}"]`).click();
-      assert(await A.page.getByRole('button', { name: 'Refund · 5 Scrap', exact: true }).isDisabled(), 'parent refunded before child');
-      for (const node of [...path].reverse()) {
-        await A.page.locator(`[data-map-node="${node.id}"]`).click();
-        await A.page.getByRole('button', { name: 'Refund · 5 Scrap', exact: true }).click();
-        await A.waitFor('node refunded', id => !window.__foe.store.get().character.atlas.nodes?.includes(id), node.id);
-      }
-    }
-    assert(await A.eval(() => window.__foe.store.get().character.currencyStash.scrap === 25), 'refunds did not cost 75 Scrap');
-    for (const node of MAP_TREE.slice(0, 10)) {
-      await A.page.locator(`[data-map-node="${node.id}"]`).click();
-      await A.page.getByRole('button', { name: 'Allocate point', exact: true }).click();
-      await A.waitFor('node allocated', id => window.__foe.store.get().character.atlas.nodes?.includes(id), node.id);
-    }
-    await A.page.locator('[data-map-node="discerningEye"]').click();
-    assert(await A.page.getByRole('button', { name: 'Allocate point', exact: true }).isDisabled(), 'point budget bypass');
-    await A.shot(`tree-budget-${VW}x${VH}`);
-    const bounds = await A.page.getByRole('button', { name: 'Back', exact: true }).boundingBox();
-    assert(bounds && bounds.y + bounds.height <= VH, 'map-tree controls exceed viewport');
+
+  await step('the Codex tab shows the whole wheel, the point ledger and the redraw notice', async () => {
+    await openCodex();
+    const nodes = await A.page.locator('[data-map-node]').count();
+    assert(nodes === MAP_TREE.length + 1, `expected ${MAP_TREE.length + 1} Codex nodes (145 plus the origin), found ${nodes}`);
+    const free = await freePoints();
+    assert(free === mapTreeFreePoints(await atlasOf()), `the point counter shows ${free}, the rules say ${mapTreeFreePoints(await atlasOf())}`);
+    await settlePanels(A); await A.shot(`codex-open-${VW}x${VH}`);
+    await A.page.locator(`[data-map-node="${ATLAS_ORIGIN_ID}"]`).evaluate((n) => n.click());
+    const rail = await A.page.locator('.fe-cx__rail').innerText();
+    assert(/redrawn/i.test(rail), 'the redraw notice is missing on the origin');
+    return `${nodes} nodes, ${free} points free`;
   });
-  await step('the map readout includes choices, while respec only changes future expeditions', async () => {
-    await A.page.getByRole('button', { name: 'Back', exact: true }).click();
-    const summary = A.page.getByText('Map tree', { exact: true });
-    await summary.scrollIntoViewIfNeeded(); await summary.click();
-    assert((await A.page.locator('.fe-device__summary').innerText()).includes('Far Horizon'), 'map summary lacks allocated effects');
-    await A.shot(`tree-preview-${VW}x${VH}`);
-    await A.page.locator('.fe-device__activate').click();
-    await A.waitFor('new portal', () => !!window.__foe.store.get().hud?.portal && !window.__foe.store.get().character.mapDevice);
-    await clickPortal(A); await A.waitFor('entered tree expedition', () => window.__foe.store.get().zone === 'map');
-    assert(await A.eval(() => window.__foe.store.get().run.mapTree.length === 10), 'map did not snapshot nodes');
-    await A.eval(() => window.__foe.store.actions.leaveMap());
-    await A.waitFor('back in hideout', () => window.__foe.store.get().zone === 'hideout');
-    await openDevice(); await A.page.getByRole('button', { name: /^Map tree/ }).click();
-    await A.page.locator('[data-map-node="farHorizon"]').click();
-    await A.page.getByRole('button', { name: 'Refund · 5 Scrap', exact: true }).click();
-    await A.waitFor('respec applied', () => window.__foe.store.get().character.atlas.nodes.length === 9);
-    await clickPortal(A); await A.waitFor('reentered tree expedition', () => window.__foe.store.get().zone === 'map');
-    assert(await A.eval(() => window.__foe.store.get().run.mapTree.includes('farHorizon')), 'respec changed existing expedition');
+
+  await step('allocate a connected path to Twin Omens and a built lens; encounter nodes of unbuilt events and exclusions are refused', async () => {
+    const before = await freePoints();
+    const toTwin = pathTo('twinOmens');
+    for (const id of toTwin) await allocate(id);
+    const cost = toTwin.reduce((n, id) => n + findAtlasNode(id).cost, 0);
+    assert(await freePoints() === before - cost, `points did not drop by ${cost}`);
+    await settlePanels(A); await A.shot(`codex-allocated-${VW}x${VH}`);
+    await codexFind(A, 'Sworn to the Veil');
+    assert(await A.page.getByRole('button', { name: /^Allocate · / }).isDisabled(), 'Sworn to the Veil is allocatable beside Twin Omens');
+    await codexFind(A, 'Pact Broker');
+    assert(await A.page.getByRole('button', { name: /^Allocate · / }).isDisabled(), 'the lens of an unbuilt encounter is allocatable');
+    assert(await A.page.locator('[data-map-node="pactBroker"]').getAttribute('data-state') === 'gated', 'the unbuilt lens is not marked gated');
+    await codexFind(A, "Hunter's Patience");
+    const lens = await A.page.locator('.fe-cx__rail').innerText();
+    assert(/double/i.test(lens), 'the Stalker lens does not say what it does');
+    await allocate('hunterPatience');
+    return `${toTwin.length} nodes to Twin Omens (${cost} points), Hunter's Patience live`;
   });
-  await step('account choices, paid refunds and the original expedition survive server restart', async () => {
+
+  await step('refunds run outward only; the first six are free, then the class price', async () => {
+    const toTwin = pathTo('twinOmens');
+    const scrap0 = await A.eval(() => window.__foe.store.get().character.currencyStash.scrap);
+    await codexFind(A, findAtlasNode(toTwin[0]).name);
+    assert(await A.page.getByRole('button', { name: /^Refund · / }).isDisabled(), 'the inner node was refundable with nodes beyond it');
+    await refund('hunterPatience');
+    for (const id of [...toTwin].reverse()) await refund(id);
+    const scrap1 = await A.eval(() => window.__foe.store.get().character.currencyStash.scrap);
+    const paid = toTwin.length + 1 - 6;
+    assert(scrap0 - scrap1 > 0 && scrap0 - scrap1 >= paid * 5, `expected ${toTwin.length + 1 - 6} paid refunds, Scrap went ${scrap0} -> ${scrap1}`);
+    assert((await atlasOf()).refunds === toTwin.length + 1, 'the refund counter is wrong');
+    return `Scrap ${scrap0} -> ${scrap1} for ${toTwin.length + 1} refunds`;
+  });
+
+  await step('allocation reaches the expedition and survives a server restart', async () => {
+    const toTwin = pathTo('twinOmens');
+    for (const id of [...toTwin, 'hunterPatience']) await allocate(id);
+    // The badge on the Codex tab and the header count the same unspent points as the wheel does.
+    const badge = Number((await A.page.getByRole('tab', { name: /^Codex/ }).innerText()).replace(/\D/g, ''));
+    assert(badge === await freePoints(), `the Codex tab badge shows ${badge} unspent points, the wheel ${await freePoints()}`);
+    // A completed Rift Nexus is the default course (it needs a Rift Key): choose a course that fits the Tier 3 map.
+    await A.page.getByRole('tab', { name: 'Chart', exact: true }).click();
+    await setCourse(A, 'Bone Approach');
+    await A.page.getByRole('button', { name: 'Activate', exact: true }).click();
+    await confirmNewMap(A);
+    await A.waitFor('new portal', () => !!window.__foe.store.get().hud?.portal && !window.__foe.store.get().character.mapDevice, undefined, 10000);
+    await clickPortal(A); await A.waitFor('entered the expedition', () => window.__foe.store.get().zone === 'map', undefined, 15000);
+    const frozen = await A.eval(() => window.__foe.store.get().run.mapTree);
+    assert(frozen.includes('twinOmens') && frozen.includes('hunterPatience'), `the expedition did not freeze the event nodes: ${JSON.stringify(frozen)}`);
     const before = await A.eval(() => ({ atlas: window.__foe.store.get().character.atlas, scrap: window.__foe.store.get().character.currencyStash.scrap, nodes: window.__foe.store.get().run.mapTree }));
     outage = true; await stopGameServer(); await startGameServer(port);
     await A.waitFor('tree restart', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().zone === 'map', undefined, 30000); outage = false;
     const after = await A.eval(() => ({ atlas: window.__foe.store.get().character.atlas, scrap: window.__foe.store.get().character.currencyStash.scrap, nodes: window.__foe.store.get().run.mapTree }));
-    assert(isDeepStrictEqual(before, after), 'map-tree or currency state changed after restart');
-    await A.shot(`tree-restarted-${VW}x${VH}`);
+    // a zero `respecSpent` is written by opening a map and dropped again by normalisation: not a change
+    for (const x of [before, after]) if (!x.atlas.respecSpent) delete x.atlas.respecSpent;
+    assert(isDeepStrictEqual(before, after), `Codex allocation, refunds or the frozen expedition changed after restart: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+    await A.shot(`codex-restarted-${VW}x${VH}`);
+    await A.eval(() => window.__foe.store.actions.leaveMap());
+    await A.waitFor('back in hideout', () => window.__foe.store.get().zone === 'hideout');
+    return `${frozen.length} frozen nodes, ${after.atlas.nodes.length} allocated, Scrap ${after.scrap}`;
   });
 }
 
@@ -2647,16 +2850,17 @@ async function uniquesScenario({ A, port }) {
       ['Ember Citadel', 'Vigil of Ash', 'The Last Rite'], ['Frozen Passage', 'Choir of Glass', 'The Second Verse'],
       ['The Last Kiln', 'The Broken Link', 'Iron Refrain'], ['Eternal Arena', 'The Unbowed Crown', "Victor's Debt"],
     ]) {
-      await A.page.locator('.fe-device__destination').click();
-      await A.page.getByRole('button', { name: new RegExp(`^${name},`) }).click();
-      const detail = await A.page.locator('.fe-atlas__detail').innerText();
+      await inspectArea(A, name);
+      const detail = await A.page.locator('[data-rail]').innerText();
       assert(detail.includes(first) && detail.includes(second) && detail.includes('T8+') && detail.includes('T10+'), 'missing keystone eligibility');
       await settlePanels(A); await A.shot(`uniques-source-${name.replaceAll(' ', '-')}-${VW}x${VH}`);
-      await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+      await A.page.getByRole('button', { name: 'Set course', exact: true }).click();
+      await A.page.getByRole('button', { name: 'Full map readout', exact: true }).click();
       const chance = A.page.getByText(/^Exclusive unique chance:/);
       await chance.scrollIntoViewIfNeeded();
       assert(/Exclusive unique chance: [1-9]/.test(await chance.innerText()), 'eligible keystone has no drop chance');
       await A.shot(`uniques-chance-${name.replaceAll(' ', '-')}-${VW}x${VH}`);
+      await A.page.getByRole('button', { name: 'Close readout', exact: true }).click();
     }
   });
   await step('all twelve uniques survive a real server restart unchanged', async () => {
@@ -2758,6 +2962,8 @@ async function ingredientsScenario({ A, port }) {
 }
 
 async function eventsScenario({ A, port }) {
+  const { tsImport } = await import('tsx/esm/api');
+  const { ATLAS_EVENT_TO_KIND } = await tsImport('../src/game/progression/map-event-rules.ts', import.meta.url);
   const eventShot = async (name) => {
     await A.shot(`${name}-${VW}x${VH}`);
     if (VW !== 1024 || VH !== 600) {
@@ -2812,18 +3018,18 @@ async function eventsScenario({ A, port }) {
       await clickPortal(A);
       await A.waitFor('inside the event map', () => window.__foe.store.get().hud?.zone === 'map');
       assert(await A.eval(() => !Object.hasOwn(window.__foe.store.get().run, 'event')), 'event plan leaked in ZoneInfo');
-      assert(await A.eval(() => !window.__foe.world.view.run.event), 'event appeared before its wave');
+      assert(await A.eval(() => window.__foe.world.view.run.events.length === 0), 'event appeared before its wave');
       await A.eval(() => window.__foe.bot.enable({ returnPortal: false, collect: false }));
-      await A.waitFor('event discovery', () => !!window.__foe.world.view.run.event, undefined, 450000);
+      await A.waitFor('event discovery', () => window.__foe.world.view.run.events.length > 0, undefined, 450000);
       await A.eval(() => window.__foe.bot.disable());
-      await A.page.waitForSelector('.fe-map-event');
+      await A.page.waitForSelector('.fe-event');
       await eventShot(`events-${kind}-discovered`);
-      const e = await A.eval(() => window.__foe.world.view.run.event);
+      const e = await A.eval(() => window.__foe.world.view.run.events[0]);
       assert(e.kind === kind, 'wrong event');
       await A.eval(() => { window.__eventMaterialsBefore = Object.fromEntries(['seal', 'twinInk', 'voidSplinter', 'crownFragment'].map(id => [id, window.__foe.store.get().character.backpack.entries.reduce((n, e) => n + (e.item.kind === 'currency' && e.item.currencyId === id ? e.item.count : 0), 0)])); window.__eventEmbersBefore = window.__foe.store.get().character.backpack.entries.reduce((sum, e) => sum + (e.item.kind === 'currency' && e.item.currencyId === 'reforge' ? e.item.count : 0), 0); });
       await A.eval((event) => window.__foe.bot.enable({ returnPortal: false, collect: false, hold: ['echoRift', 'wound', 'blackout'].includes(event.kind) ? { x: event.x, y: event.y } : null }), e);
       await A.waitFor('completed event', () => {
-        const event = window.__foe.world.view.run.event;
+        const event = window.__foe.world.view.run.events[0];
         if (event?.phase === 'available') {
           const key = `${event.x},${event.y}`;
           if (window.__eventHold !== key) {
@@ -2831,22 +3037,25 @@ async function eventsScenario({ A, port }) {
             window.__foe.bot.enable({ returnPortal: false, collect: false, hold: { x: event.x, y: event.y } });
           }
         }
-        return event?.phase === 'complete' || (event?.kind === 'vaultbreakers' && event.phase === 'failed');
+        return event?.phase === 'complete' || event?.phase === 'failed';
       }, undefined, 300000);
-      const outcome = await A.eval(() => window.__foe.world.view.run.event);
+      const outcome = await A.eval(() => window.__foe.world.view.run.events[0]);
       await eventShot(`events-${kind}-${outcome.phase}`);
-      if (kind === 'vaultbreakers') {
-        assert(outcome.phase === 'complete' || (outcome.phase === 'failed' && outcome.seconds === 0 && outcome.remaining > 0), 'invalid escape outcome');
-        log(`Vaultbreakers result: ${outcome.total - outcome.remaining}/${outcome.total} defeated, ${outcome.phase}`);
-      }
-      const drops = await A.eval(() => window.__foe.world.view.drops.map(d => ({ tone: d.spec.tone, label: d.spec.label })));
-      const pickedEmbers = await A.eval(() => window.__foe.store.get().character.backpack.entries.reduce((sum, e) => sum + (e.item.kind === 'currency' && e.item.currencyId === 'reforge' ? e.item.count : 0), 0) > window.__eventEmbersBefore);
-      if (kind === 'hunted') assert(drops.some(d => d.tone === 'rare'), 'hunter reward missing');
-      else if (kind === 'echoRift') assert(drops.some(d => /Reforging Ember/.test(d.label)) || pickedEmbers, 'rift reward missing');
-      else if (kind !== 'vaultbreakers') {
-        const reward = { blackout: ['seal', 'Binding Seal'], wound: ['voidSplinter', 'Void Splinter'], secondCrown: ['crownFragment', 'Crown Fragment'] }[kind];
-        const picked = await A.eval(id => window.__foe.store.get().character.backpack.entries.reduce((n, e) => n + (e.item.kind === 'currency' && e.item.currencyId === id ? e.item.count : 0), 0) > window.__eventMaterialsBefore[id], reward[0]);
-        assert(drops.some(d => d.label.includes(reward[1])) || picked, `${reward[1]} reward missing`);
+      assert(['complete', 'failed'].includes(outcome.phase) && outcome.grade >= 0 && outcome.grade <= 3, `invalid outcome ${JSON.stringify(outcome)}`);
+      log(`${kind}: ${outcome.phase}, grade ${outcome.grade} (${['Failed', 'Bronze', 'Silver', 'Gold'][outcome.grade]})`);
+      if (outcome.phase === 'complete') {
+        // The Event Director reported the finished event: its first completion is one Atlas point for the account (server integration).
+        const atlasId = Object.entries(ATLAS_EVENT_TO_KIND).find(([, k]) => k === kind)?.[0];
+        await A.waitFor('first-completion Atlas credit', (id) => window.__foe.store.get().character.atlas.eventsSeen?.includes(id), atlasId, 10000);
+        const drops = await A.eval(() => window.__foe.world.view.drops.map(d => ({ tone: d.spec.tone, label: d.spec.label })));
+        const pickedEmbers = await A.eval(() => window.__foe.store.get().character.backpack.entries.reduce((sum, e) => sum + (e.item.kind === 'currency' && e.item.currencyId === 'reforge' ? e.item.count : 0), 0) > window.__eventEmbersBefore);
+        if (kind === 'hunted') assert(drops.some(d => d.tone === 'rare'), 'hunter reward missing');
+        else if (kind === 'echoRift') assert(drops.some(d => /Reforging Ember/.test(d.label)) || pickedEmbers, 'rift reward missing');
+        else if (kind !== 'vaultbreakers') {
+          const reward = { blackout: ['seal', 'Binding Seal'], wound: ['voidSplinter', 'Void Splinter'], secondCrown: ['crownFragment', 'Crown Fragment'] }[kind];
+          const picked = await A.eval(id => window.__foe.store.get().character.backpack.entries.reduce((n, e) => n + (e.item.kind === 'currency' && e.item.currencyId === id ? e.item.count : 0), 0) > window.__eventMaterialsBefore[id], reward[0]);
+          assert(drops.some(d => d.label.includes(reward[1])) || picked, `${reward[1]} reward missing`);
+        }
       }
       await A.eval(() => window.__foe.bot.disable());
       const leave = await A.eval(() => window.__foe.send({ c: 'leaveMap' }));
@@ -2896,21 +3105,21 @@ async function expandedMapsScenario({ A, port }) {
       const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'mapDevice', 10), 'the map device');
       await clickWorld(A, at, 'the map device');
       await A.page.waitForSelector('.fe-device');
-      await A.page.locator('.fe-device__destination').click();
-      await A.page.getByRole('button', { name: new RegExp(`^${area},`) }).click();
-      assert((await A.page.locator('.fe-atlas__detail').innerText()).includes(boss), 'Atlas does not name this encounter');
+      await inspectArea(A, area);
+      assert((await A.page.locator('[data-rail]').innerText()).includes(boss), 'Atlas does not name this encounter');
       await A.page.mouse.move(10, 10);
       await settlePanels(A);
       await A.shot(`new-maps-${theme}-atlas-${VW}x${VH}`);
-      await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+      await A.page.getByRole('button', { name: 'Set course', exact: true }).click();
+      await openStashDrawer(A);
       const uid = `e2e-${theme.toLowerCase()}:i1`;
       const row = A.page.locator(`.fe-mstash--device .fe-maprow[data-uid="${uid}"]`);
       if (await row.count() === 0) await A.page.locator('.fe-mstash--device button[aria-label^="Tier 1:"]').click();
       await row.click();
       await A.waitFor('new map in device', uid => window.__foe.store.get().character.mapDevice?.uid === uid, uid);
+      await closeStashDrawer(A);
       await A.page.locator('.fe-device__activate').click();
-      const confirm = A.page.locator('.fe-dialog__actions button:has-text("Activate")');
-      if (await confirm.isVisible().catch(() => false)) await confirm.click();
+      await confirmNewMap(A);
       await A.waitFor('new map portal', area => window.__foe.store.get().hud?.portal?.mapName === area, area);
       await closePanels(A);
       await clickPortal(A);
@@ -3016,7 +3225,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY) await wave5Scenario({ A, nameA, port });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

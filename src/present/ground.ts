@@ -229,8 +229,7 @@ export class Ground {
     const n = this.n;
     const size = this.size;
     const tint = this.tint;
-    const event = f.world.run.event;
-    const blackout = event?.kind === 'blackout' && event.phase !== 'complete' && event.phase !== 'failed';
+    const blackout = f.world.run.events.some(e => e.kind === 'blackout' && e.phase !== 'complete' && e.phase !== 'failed' && e.phase !== 'available');
     const kinds = this.cellKind;
     const shade = this.shade;
     const floorVar = this.floorVar;

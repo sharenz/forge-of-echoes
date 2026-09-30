@@ -11,6 +11,7 @@
 //               closes every socket with 4004 (clients reconnect on their own). Default 20 in production,
 //               0 otherwise (so `tsx watch` restarts stay instant). SIGINT, or a second signal, skips it.
 //               The systemd unit's TimeoutStopSec must exceed it (scripts/deploy/forge.service: 60 s).
+//   ADMIN_DIR   where the local admin socket/token for the `foe` CLI live (default: the database directory)
 //   UV_THREADPOOL_SIZE  defaults to 8 here (see threadpool.ts)
 import './threadpool';
 import { mkdirSync } from 'node:fs';
@@ -45,7 +46,7 @@ async function main(): Promise<void> {
   const drainSeconds = drainRaw === '' ? (production ? 20 : 0) : Number(drainRaw);
   if (!Number.isFinite(drainSeconds) || drainSeconds < 0 || drainSeconds > 600) throw new Error(`invalid DRAIN_SECONDS ${drainRaw} (0–600)`);
 
-  const server = await startServer({ port, dbPath, logger: log, staticDir, trustProxy, exemptLoopback: rateLimits === 'dev', drainSeconds });
+  const server = await startServer({ port, dbPath, logger: log, staticDir, trustProxy, exemptLoopback: rateLimits === 'dev', drainSeconds, adminDir: dbPath === ':memory:' ? null : process.env.ADMIN_DIR ?? dirname(resolve(dbPath)) });
   log.info('restart drain', { seconds: drainSeconds });
 
   let stopping = false;

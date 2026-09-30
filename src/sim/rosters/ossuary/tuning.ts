@@ -5,6 +5,18 @@
 /** Bone Thrall: a clattering skeleton — short windup, then a lunge-bite (the Ashling's rhythm). */
 export const THRALL = { reach: 10, windup: 0.26, recover: 0.2, cooldown: 1.2, lunge: 9 } as const;
 
+/**
+ * Bone Thrall leap (rosters/pressure.ts gapLeap; pairs are [tier-1 map, full ramp], behaviour.ts byLevel): the Ashling's
+ * gap-closer. Tier 1: one short, light hop every ~11 s from 60-100 units out, landing where the player stands. Full ramp:
+ * every ~4.5 s from up to 190 out, a 0.4 s crouch, landing where a steadily walking player will be, 150 units of reach.
+ */
+export const THRALL_LEAP = {
+  minRange: 60, maxRange: [100, 190] as readonly [number, number], cooldown: [11, 4.5] as readonly [number, number], jitter: 1.5,
+  windup: [0.6, 0.4] as readonly [number, number], recover: [0.6, 0.4] as readonly [number, number],
+  hop: [70, 150] as readonly [number, number], aim: [0, 0.7] as readonly [number, number], radius: 20,
+  mult: [0.5, 0.9] as readonly [number, number],
+} as const;
+
 /** Rimeshade: a ghost that drifts in on a slow weave, glides the last stretch, touches (chills) and fades back. */
 export const SHADE = {
   /** Weave while drifting in: amplitude (radians off the straight line) and frequency (rad/s). */
@@ -49,12 +61,30 @@ export const WEAVER = {
   near: 150, far: 230, fireRange: 280, windup: 0.6, cooldown: 3.4, jitter: 0.8,
   /** The spit's release pose (s). */
   recover: 0.25,
-  /** A slow, visible web: from 200 units away it takes 1.7 s to arrive. */
-  speed: 120, range: 300, radius: 6, mult: 0.4,
-  /** Share of the intercept lead used; seconds of lead when there's no intercept within range. */
-  aim: 1, fallbackLead: 0.25,
+  /**
+   * Web speed [tier-1 map, full ramp] (behaviour.ts byLevel): a slow, visible web at tier 1 (from 200 units away it
+   * takes 1.7 s to arrive), 2.7x the walk at high tiers (0.7 s). The 0.6 s windup is the tell either way.
+   */
+  speed: [120, 300] as readonly [number, number], range: 300, radius: 6, mult: 0.4,
+  /** Share of the intercept lead used [tier 1, full]; seconds of lead (× that share) when there's no intercept within range. */
+  aim: [0.85, 1] as readonly [number, number], fallbackLead: 0.25,
+  /** Extra webs per cast at the full ramp (a single web with a perfect intercept isn't trivial to sidestep). */
+  extraShots: 0,
   /** Extra webs (map mods) fan out this far apart (radians). */
   spread: 0.15,
+} as const;
+
+/**
+ * Frost Weaver's rime marker (rosters/pressure.ts markerDropper): after a web, a frostNovaWarning (damage only: the web is
+ * the only root, so no rider) drops on where the player will be `delay` s from now and leaves a small chilling storm.
+ * Tier 1: one every ~14 s, 1.6 s notice, on where they stand (40% lead), a 2 s storm. Full ramp: every ~6 s, 1.1 s notice,
+ * the full intercept, a 4 s storm.
+ */
+export const WEAVER_MARK = {
+  kind: 'frostNovaWarning', radius: 30, delay: [1.6, 1.1] as readonly [number, number],
+  cooldown: [14, 6] as readonly [number, number], jitter: 1.5, lead: [0.4, 1] as readonly [number, number],
+  mult: [0.5, 1] as readonly [number, number], debuff: null, spacing: 50,
+  linger: { kind: 'blizzard', mult: [0.3, 0.5] as readonly [number, number], duration: [2, 4] as readonly [number, number] },
 } as const;
 
 /** Glacial Wisp: weaves in, rushes the last stretch, pulses 0.7 s and shatters in a burst. */
@@ -147,7 +177,11 @@ export const WARDEN = {
     shardStart: 0.3,
   },
   /** Frost shard volley (all phases): a fan at her player. */
-  volley: { cast: 0.3, count: [5, 5, 7], spread: 0.14, speed: 170, range: 460, radius: 5, mult: 0.7, cd: [3.4, 3.0, 2.6], first: 1.5, lead: 0.3 },
+  volley: {
+    cast: 0.45, count: [5, 5, 7], spread: 0.14, range: 460, radius: 5, mult: 0.7, cd: [3.4, 3.0, 2.6], first: 1.5,
+    /** Shard speed and intercept share [tier 1, full ramp]; the fan grows by `extraShots` at the full ramp. */
+    speed: [170, 340] as readonly [number, number], aim: [0.5, 1] as readonly [number, number], fallbackLead: 0.3, extraShots: 2,
+  },
   /** Glacial Spikes (phase 2+): lines of spikes erupting in sequence toward players; a fan of three in phase 3. */
   spikes: {
     cast: 0.6, first: 0.8, step: 0.06, spacing: 24, radius: 15, mult: 1.8, cd: [7, 6.5, 5.5], range: 480, fan: 0.32,

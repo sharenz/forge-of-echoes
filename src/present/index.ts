@@ -85,7 +85,7 @@ import { EventFx } from './events';
 import { Effects } from './fx';
 import { Ground } from './ground';
 import { Indicators } from './indicators';
-import { drawMapEvent } from './map-events';
+import { MapEventPainter } from './map-events';
 import { clamp, clamp01 } from './math';
 import { MonsterPainter } from './monsters';
 import { Pen } from './pen';
@@ -135,6 +135,7 @@ class WorldPresenter implements Presenter {
   private readonly indicators = new Indicators();
   private readonly ambience = new Ambience();
   private readonly events: EventFx;
+  private readonly mapEvents = new MapEventPainter();
   private readonly sound: SoundDirector;
   private ctx: FrameCtx | null = null;
   private world: WorldView | null = null;
@@ -170,7 +171,7 @@ class WorldPresenter implements Presenter {
     }, this.debuffs);
     this.events = new EventFx({
       pen: this.pen, fx: this.fx, rig: this.rig, post: this.post, players: this.players, props: this.props, table: this.table,
-      impactDelay: sfxImpactDelay, monsters: this.monsters, debuffs: this.debuffs, tethers: this.tethers,
+      impactDelay: sfxImpactDelay, monsters: this.monsters, debuffs: this.debuffs, tethers: this.tethers, mapEvents: this.mapEvents,
     });
     this.areas.onAppear = (kind, x, y, radius, id) => this.events.areaAppear(kind, x, y, radius, id, this.ctx);
   }
@@ -195,6 +196,7 @@ class WorldPresenter implements Presenter {
     this.monsters.reset();
     this.drops.reset();
     this.areas.reset();
+    this.mapEvents.reset();
     this.projectiles.reset();
     this.sound.reset();
     this.tethers.clear();
@@ -301,7 +303,7 @@ class WorldPresenter implements Presenter {
     this.fx.decals.draw(pen, f);
     this.fx.corpses.draw(pen, f);
     this.areas.draw(pen, f);
-    drawMapEvent(pen, f);
+    this.mapEvents.draw(pen, f);
     this.props.draw(pen, f);
     this.drops.draw(pen, f);
     this.monsters.draw(pen, f);

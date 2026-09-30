@@ -25,6 +25,12 @@
 //   ?fragile=1           keep the rules' real life totals (default: bots get extra life so fast-forwards survive)
 //   ?at=X,Y              spawn the local player here · ?idle=1 the local player stands still (composition shots)
 //   ?zoom=Z              camera zoom for close-up inspection (the game itself always uses 1)
+//   ?event=<kind>[,<kind>]  force map event(s) on the first wave (hunted echoRift blackout vaultbreakers wound pactAltar orchard ring host
+//                        anvil bellwatch voidBreach; secondCrown = boss wave):
+//                        add ?variant=N to pick the plan variant. The Stalker with ?theme=rimedOssuary is the Hollow Wolf
+//   ?near=D              with ?event=: after the event reveals, put the party D units (default 40) from its focus point so an optional
+//                        site opens and the camera frames it; ?near=off leaves the party where it started. ?hold=S then steps S more
+//                        sim seconds (an event mid-play)
 //   ?local=N             which party member this client is (camera, name plates, own loot); default 1
 //   ?net=1               render through the real network path: every 2nd tick the sim view is encoded for the local
 //                        player (AOI culling, instanced drops), delivered after ?lat=MS (default 40) one-way latency
@@ -51,6 +57,7 @@ import { SNAPSHOT_EVERY, type ZoneInfo } from '../../contracts/net';
 import type { RunSetup } from '../../contracts/game';
 import type { CharacterSave, Item, MapItem } from '../../contracts/items';
 import type { Rng } from '../../contracts/rng';
+import { MAP_EVENT_KINDS, type ChestBoons, type EventRewardContext, type MapEventKind, type MapEventPlan } from '../../contracts/map-events';
 import {
   SIM_DT, type DropSpec, type KillLootContext, type PlayerIntent, type PlayerRuntime, type RunConfig, type RunHooks, type SimEvent,
   type SimRun, type WorldView,
@@ -194,12 +201,21 @@ const hooks: RunHooks = {
     }
     return out;
   },
-  rollChestLoot(ids: readonly number[], rng: Rng): DropSpec[] {
+  rollChestLoot(ids: readonly number[], rng: Rng, boons?: ChestBoons): DropSpec[] {
     if (!setup) return [];
     const out: DropSpec[] = [];
     for (const id of ids) {
       const ch = chars.get(id);
-      if (ch) out.push(...specsFor(rules.rollChestLoot(setup, rng, ch), id));
+      if (ch) out.push(...specsFor(rules.rollChestLoot(setup, rng, ch, boons), id));
+    }
+    return out;
+  },
+  rollEventReward(ctx: EventRewardContext, ids: readonly number[], rng: Rng): DropSpec[] {
+    if (!setup) return [];
+    const out: DropSpec[] = [];
+    for (const id of ids) {
+      const ch = chars.get(id);
+      if (ch) out.push(...specsFor(rules.rollEventReward(setup, ctx, rng, ch), id));
     }
     return out;
   },
@@ -220,6 +236,12 @@ const hooks: RunHooks = {
 };
 
 const config: RunConfig = rules.buildRunConfig(setup, hooks);
+// Dev switch: force one or two concurrent event plans (a hidden plan never exists here otherwise).
+const forced = (qs.get('event') ?? '').split(',').filter((k): k is MapEventKind => (MAP_EVENT_KINDS as readonly string[]).includes(k));
+if (forced.length > 0) {
+  const plans = forced.slice(0, 2).map((kind, k): MapEventPlan => ({ kind, wave: kind === 'secondCrown' ? 6 : 1 + k, angle: 0.9 + k * 2.2, variant: Number(qs.get('variant') ?? 0) || 0 }));
+  config.event = plans.length === 2 ? { ...plans[0], also: plans[1] } : plans[0];
+}
 const run = createRun(config);
 
 function runtimeFor(ch: CharacterSave): PlayerRuntime {
@@ -482,6 +504,24 @@ function fastForward(): void {
   for (let i = 0; i < Math.round(extraSeconds * 60); i++) stepSim(null);
 }
 fastForward();
+/** ?event= plus ?near=: step until the forced event shows itself, then stand the party beside its focus (an optional site opens). */
+function nearEvent(): void {
+  const w = worldOf(run);
+  const arg = qs.get('near');
+  if (!w || hideout || forced.length === 0 || arg === 'off' || qs.get('at')) return;
+  const d = arg ? Number(arg) || 40 : 40;
+  for (let i = 0; i < 60 * 40 && !(w.mapEvent && w.mapEvent.live.some((e) => !e.finished)); i++) stepSim(null);
+  const e = w.mapEvent?.live[0];
+  if (!e) return;
+  let k = 0;
+  for (const p of w.players) {
+    const a = 0.8 + k++ * 1.3;
+    p.x = p.prevX = p.view.x = p.view.prevX = e.view.x + Math.cos(a) * d;
+    p.y = p.prevY = p.view.y = p.view.prevY = e.view.y + Math.sin(a) * d;
+  }
+  for (let i = 0; i < Math.round(Number(qs.get('hold') ?? 0) * 60); i++) stepSim(null);
+}
+nearEvent();
 if (dropsDemo) spawnDemoDrops();
 if (killLocal) {
   kill(localId);
@@ -648,7 +688,7 @@ function kill(id = localId): void {
   const crushed = { ...rt.stats, maxLife: 1, lifeRegen: 0, armor: 0, evasion: 0, damageTaken: 50 };
   dying = id;
   for (let i = 0; i < 60 * 60 && !run.view.players.find((p) => p.id === id)?.dead; i++) {
-    // `restore` pins life to the new 1-point maximum (the melee cap is a share of max life, so it must shrink too).
+    // `restore` pins life to the new 1-point maximum.
     if (i % 20 === 0) run.updatePlayer(id, { stats: crushed, restore: true });
     stepSim(null);
   }

@@ -43,6 +43,12 @@ export const ICON_FOOTPRINT: Readonly<Record<string, readonly [number, number]>>
   'icon/base/stormglassSceptre': [2, 3],
   'icon/base/echoingFocus': [2, 2],
   'icon/base/bastionHelm': [2, 2],
+  'icon/base/scaleCowl': [2, 2],
+  'icon/base/quiltedJerkin': [2, 3],
+  'icon/base/wardedVestment': [2, 3],
+  'icon/base/studdedGloves': [2, 2],
+  'icon/base/ironshodBoots': [2, 2],
+  'icon/base/studdedBelt': [2, 1],
   'icon/base/duskweaveRobe': [2, 3],
   'icon/base/forgemasterGloves': [2, 2],
   'icon/base/wayfarerGreaves': [2, 2],
@@ -723,6 +729,43 @@ function bastionHelm(): Frame {
   return f;
 }
 
+function scaleCowl(): Frame {
+  const f = ritualCirclet();
+  for (const x of [22, 32, 42]) lineOn(f, x, 24, x, 36, C.metalHi);
+  return f;
+}
+
+function quiltedJerkin(): Frame {
+  const f = ashenRobe();
+  for (const y of [40, 54, 68]) lineOn(f, 20, y, 44, y, C.ochre);
+  return f;
+}
+
+function wardedVestment(): Frame {
+  const f = ashenRobe();
+  for (const x of [20, 44]) lineOn(f, x, 30, x, 76, C.metalHi);
+  bigGem(f, 32, 34, 3, 4, FROST);
+  return f;
+}
+
+function studdedGloves(): Frame {
+  const f = silkWraps();
+  for (const [x, y] of [[22, 28], [32, 26], [42, 28]] as const) bigGem(f, x, y, 2, 3, EMBER);
+  return f;
+}
+
+function ironshodBoots(): Frame {
+  const f = pathfinderBoots();
+  for (const [x, y] of [[25, 44], [43, 44]] as const) lineOn(f, x - 7, y, x + 6, y, C.metalHi);
+  return f;
+}
+
+function studdedBelt(): Frame {
+  const f = chainBelt();
+  for (const x of [14, 24, 40, 50]) bigGem(f, x, 16, 2, 3, EMBER);
+  return f;
+}
+
 function duskweaveRobe(): Frame {
   const f = ashenRobe();
   for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) {
@@ -987,6 +1030,12 @@ export const EQUIPMENT_ICONS: Record<string, () => PixelImage> = {
   'icon/base/stormglassSceptre': () => finishIcon(emberSceptre(true), C.lightning),
   'icon/base/echoingFocus': () => finishIcon(echoingFocus()),
   'icon/base/bastionHelm': () => finishIcon(bastionHelm()),
+  'icon/base/scaleCowl': () => finishIcon(scaleCowl()),
+  'icon/base/quiltedJerkin': () => finishIcon(quiltedJerkin()),
+  'icon/base/wardedVestment': () => finishIcon(wardedVestment()),
+  'icon/base/studdedGloves': () => finishIcon(studdedGloves()),
+  'icon/base/ironshodBoots': () => finishIcon(ironshodBoots()),
+  'icon/base/studdedBelt': () => finishIcon(studdedBelt()),
   'icon/base/duskweaveRobe': () => finishIcon(duskweaveRobe()),
   'icon/base/forgemasterGloves': () => finishIcon(forgemasterGloves()),
   'icon/base/wayfarerGreaves': () => finishIcon(wayfarerGreaves()),

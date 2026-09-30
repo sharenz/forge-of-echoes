@@ -4,11 +4,11 @@ import type { CharacterSave, MapItem, RolledMapMod } from '../../src/contracts/i
 import type { CurrencyId } from '../../src/contracts/content';
 import { createRng } from '../../src/core/rng';
 import { partyScalingLines, rules } from '../../src/game';
-import { MONSTER_LEVEL_SCALING, PARTY_SCALING, getMapMod } from '../../src/data/progression';
+import { LEVEL_GAP, MONSTER_LEVEL_SCALING, PARTY_SCALING, getMapMod, monsterDamageScale, monsterLifeScale } from '../../src/data/progression';
 import {
   craftMap, dangerModCount, mapCraftError, mapLuck, mapModName, monsterScaling, partyScaling, voidOutcomes, waveConfig,
 } from '../../src/game/progression';
-import { PARTY_BUDGET_PER_PLAYER, PARTY_ELITE_PER_PLAYER, PARTY_LIFE_PER_PLAYER } from '../../src/sim/constants';
+import { LEVEL_GAP_CAP, LEVEL_GAP_GRACE, LEVEL_GAP_PER_LEVEL, PARTY_BUDGET_PER_PLAYER, PARTY_ELITE_PER_PLAYER, PARTY_LIFE_PER_PLAYER } from '../../src/sim/constants';
 import { bareCharacter, currency, equip, expectErr, expectOk, map, withBackpack } from './fixtures';
 
 const dangerOf = (m: MapItem) => m.mods.filter((x) => getMapMod(x.modId)?.kind === 'danger');
@@ -211,15 +211,15 @@ describe('applyCurrency on maps', () => {
 });
 
 /** Monster stats follow the monster level: compounding per level around the reference level (GAME_SPEC §7). */
-const lifeAt = (level: number) => MONSTER_LEVEL_SCALING.life ** (level - MONSTER_LEVEL_SCALING.referenceLevel);
-const damageAt = (level: number) => MONSTER_LEVEL_SCALING.damage ** (level - MONSTER_LEVEL_SCALING.referenceLevel);
+const lifeAt = monsterLifeScale;
+const damageAt = monsterDamageScale;
 
 describe('monster scaling', () => {
   it('Tier 1 Ashen Forge: monster level 4, so its monsters are weaker than the base table', () => {
     const s = monsterScaling(map('ashenForge', 1));
     expect(s).toMatchObject({
       level: 4, speedMultiplier: 1, countMultiplier: 1,
-      magicPackChance: 0.1, rarePackChance: 0.03, resistBonus: 0.1, xpMultiplier: 1, extraProjectiles: 0, hazards: false,
+      magicPackChance: 0.1, rarePackChance: 0.03, resistBonus: 0.1, xpMultiplier: 0.5, extraProjectiles: 0, hazards: false,
     });
     expect(s.lifeMultiplier).toBeCloseTo(lifeAt(4), 10);
     expect(s.damageMultiplier).toBeCloseTo(damageAt(4), 10);
@@ -250,6 +250,7 @@ describe('monster scaling', () => {
     expect(s.damageMultiplier).toBeCloseTo(damageAt(28), 10);
     expect(s.xpMultiplier).toBeCloseTo(1.28 ** 4, 10);
     expect(monsterScaling(map('ironColiseum', 15)).level).toBe(88);
+    expect(monsterScaling(map('ironColiseum', 1)).xpMultiplier).toBe(0.5);
     expect(monsterScaling(map('ironColiseum', 1)).countMultiplier).toBeCloseTo(1.25, 10);
   });
 
@@ -307,11 +308,11 @@ describe('luck', () => {
     const at = (tier: number) => rules.mapSummary(bareCharacter(), map('ashenForge', tier)).find((l) => l.label === 'Experience')!;
     expect(at(1)).toEqual({
       label: 'Experience',
-      value: '1x',
-      breakdown: ['Tier 1 is the base rate; each tier above it multiplies experience by 1.28', 'Magic monsters give 2x the experience, rare monsters 6x'],
+      value: '0.5x',
+      breakdown: ['Tier 1 gives half experience (0.5x); Tier 2 gives 1.3x and each tier above multiplies it by 1.28', 'Magic monsters give 2x the experience, rare monsters 6x'],
     });
     expect(at(5).value).toBe('2.7x');
-    expect(at(5).breakdown[0]).toBe('1.28x per tier above 1 (Tier 5: 2.7x)');
+    expect(at(5).breakdown[0]).toBe('1.28x per tier above 1, Tier 1 gives half (Tier 5: 2.7x)');
     expect(at(15).value).toBe('31.7x');
     // The summary sits right after the waves, and the tooltip lists it too.
     const labels = rules.mapSummary(bareCharacter(), map('ashenForge', 3)).map((l) => l.label);
@@ -325,7 +326,7 @@ describe('map tooltip', () => {
     const d = rules.describeItem(map('ironColiseum', 2));
     expect(d).toMatchObject({ title: 'Iron Coliseum', subtitle: null, tone: 'map', classLabel: 'Map', iconId: 'icon/map/ironColiseum' });
     expect(d.headerLines).toEqual(['Tier 2 Map']);
-    expect(d.implicits.map((l) => l.text)).toEqual(['25% increased number of Monsters', 'Armour bases drop with +2 Stability', 'Small arena']);
+    expect(d.implicits.map((l) => l.text)).toEqual(['25% increased number of Monsters', 'Armour bases drop with +2 Stability', 'Small arena', 'Characters 4+ levels below monster level 10 take 5% more damage per level of difference, up to 100%']);
     expect(d.properties).toContainEqual({ label: 'Monster Level', value: '10' });
   });
 
@@ -440,5 +441,28 @@ describe('party scaling (applied by the sim, explained by the rules)', () => {
     expect(partyScalingLines(4).map((l) => l.value)).toEqual(['2.5x', '1.75x', '1.3x']);
     expect(lines[0].breakdown[0]).toBe('+50% per living player beyond the first (party of 3)');
     expect(partyScalingLines(1)[0]).toMatchObject({ value: '1x', breakdown: ['+50% per living player beyond the first (you are alone: no party scaling)', 'Set when a monster spawns'] });
+  });
+});
+
+describe('monster level curve and level gap (balance intent)', () => {
+  it('is gentle below the reference level and steep above it, damage never slower than life', () => {
+    expect(monsterLifeScale(MONSTER_LEVEL_SCALING.referenceLevel)).toBe(1);
+    expect(monsterDamageScale(MONSTER_LEVEL_SCALING.referenceLevel)).toBe(1);
+    expect(MONSTER_LEVEL_SCALING.damage).toBeGreaterThanOrEqual(MONSTER_LEVEL_SCALING.life);
+    // Tier 1 (level 4) stays forgiving; Tier 5 (level 28) is a wall for an under-levelled character.
+    expect(monsterDamageScale(4)).toBeGreaterThan(0.6);
+    expect(monsterDamageScale(28)).toBeGreaterThan(5);
+    expect(monsterLifeScale(28)).toBeGreaterThan(8);
+    let prev = 0;
+    for (let level = 1; level <= 90; level++) {
+      expect(monsterLifeScale(level)).toBeGreaterThan(prev);
+      prev = monsterLifeScale(level);
+    }
+  });
+
+  it('the sim mirrors the shared level-gap constants', () => {
+    expect(LEVEL_GAP.grace).toBe(LEVEL_GAP_GRACE);
+    expect(LEVEL_GAP.perLevel).toBe(LEVEL_GAP_PER_LEVEL);
+    expect(LEVEL_GAP.cap).toBe(LEVEL_GAP_CAP);
   });
 });

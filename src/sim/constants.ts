@@ -28,6 +28,14 @@ export const ALLY_PUSH_RATE = 0.25;
 /** …but never more than this many units per tick (a gentle nudge, never a shove). */
 export const ALLY_PUSH_MAX = 1;
 
+// --- monster projectile scaling ------------------------------------------------
+/**
+ * Aimed monster shots get faster and more accurate with monster level (a tier-1 map is level 4, tier n is
+ * 6n - 2): `floor` and below is the forgiving tier-1 feel, `full` and above the full-speed, full-intercept
+ * shots (about tier 7); linear in between. Each shooter's tuning gives its [tier-1, full] pair.
+ */
+export const PROJECTILE_SCALING = { levelFloor: 4, levelFull: 40 } as const;
+
 // --- capacities ------------------------------------------------------------
 /** Map instances: room for the densest waves (800+ monsters, 600+ projectiles). */
 export const MONSTER_CAPACITY = 2048;
@@ -105,13 +113,15 @@ export const ROLL_MIN = 0.8;
 export const ROLL_MAX = 1.2;
 if (Math.abs((ROLL_MIN + ROLL_MAX) / 2 - 1) > 1e-9) throw new Error('damage roll range must be symmetric around 1');
 export const RESIST_CAP = 0.75;
+/** Monsters may exceed the player cap so proof rares stay a wall without being a literal immunity. */
+export const MONSTER_RESIST_CAP = 0.9;
 export const WARD_REDUCTION_CAP = 0.6;
 export const EVASION_CAP = 0.75;
-/** A single attacker can hit a given player at most once per this many seconds. */
+/**
+ * A single attacker can hit a given player at most once per this many seconds. A technical debounce
+ * (no double-hit on the same tick), not a balance rule: one-shots are legitimate (CONCEPTS.md).
+ */
 export const ATTACKER_IMMUNITY = 0.25;
-/** Total melee damage per rolling window is capped at this fraction of max life (per player). */
-export const MELEE_CAP_FRACTION = 0.35;
-export const MELEE_CAP_WINDOW_TICKS = 30; // 0.5 s
 
 // --- ailments ----------------------------------------------------------------
 export const IGNITE_DURATION = 3;
@@ -209,6 +219,13 @@ export const SEPARATION_RELAX = 0.5;
 export const SEPARATION_MAX_STEP = 2.5;
 export const WAVE_LIFE_GROWTH = 0.08;
 export const WAVE_DAMAGE_GROWTH = 0.04;
+/**
+ * Character-vs-monster level gap (mirrors LEVEL_GAP in src/data/progression/maps.ts): a monster more than
+ * GRACE levels above the player it hits deals PER_LEVEL (fraction) more damage per further level, up to CAP.
+ */
+export const LEVEL_GAP_GRACE = 3;
+export const LEVEL_GAP_PER_LEVEL = 0.05;
+export const LEVEL_GAP_CAP = 1;
 export const EMPOWER_BONUS = 0.3;
 /** Haste auras (the Bone Chorister, GAME_SPEC §14): allies inside move this much faster (speed only). */
 export const HASTE_BONUS = 0.25;
@@ -225,6 +242,12 @@ export const PROP_SIDE_MEMORY = 1;
 export const HERALD_AURA_RADIUS = 110;
 export const WARDED_REDUCTION = 0.4;
 export const WARDED_ALLY_RADIUS = 90;
+/** Stormcalled / Rending rares: a telegraphed strike on their target every ELITE_STRIKE_PERIOD ticks (per mod when both). */
+export const ELITE_STRIKE_PERIOD = 60 * 6;
+export const ELITE_STRIKE_WINDUP = 1.1;
+export const ELITE_STRIKE_RANGE = 380;
+/** Strike damage as a multiple of the monster's own hit. */
+export const ELITE_STRIKE_DAMAGE = 1.6;
 /** Ironhide Brutes (MonsterDef.hitReduction) take this much less damage from hits (burning — ignite, trails, ward embers — ignores it). */
 export const ARMOURED_HIT_REDUCTION = 0.4;
 /** Minions summoned by the Herald/Matriarch roll no loot and carry this share of their XP. */

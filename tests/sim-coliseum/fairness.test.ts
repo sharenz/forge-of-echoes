@@ -15,7 +15,7 @@ import { STRONG_LOADOUT, TIER5, fairSkills, fairStats, makeConfig, makeJoin } fr
 /** The cues each Iron Coliseum monster may send (src/sim/rosters/coliseum/index.ts). */
 const CUES: Partial<Record<MonsterKind, readonly string[]>> = {
   pitHound: ['melee'],
-  chainThrall: ['hook', 'melee'],
+  chainThrall: ['hook', 'melee', 'leap'],
   ironCrossbowman: ['aim', 'bolt'],
   shieldbearer: ['bash', 'melee'],
   tarSlinger: ['tar'],
@@ -178,9 +178,9 @@ describe('Iron Coliseum fairness over whole maps', () => {
     expect(tarRoots).toBeGreaterThan(0);
   });
 
-  it('only Bleeding and Rooted (plus the Burning of an Ember-touched rare\'s telegraphed burst) ever land', () => {
+  it('only Bleeding and Rooted (plus the Burning/Shocked of a rare\'s telegraphed burst or strike) ever land', () => {
     for (const { a } of audits) {
-      for (const d of a.debuffs) expect(['bleeding', 'rooted', 'burning']).toContain(d);
+      for (const d of a.debuffs) expect(['bleeding', 'rooted', 'burning', 'shocked']).toContain(d);
       expect(a.debuffs.has('bleeding')).toBe(true);
       expect(a.debuffs.has('rooted')).toBe(true);
     }

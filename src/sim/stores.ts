@@ -68,6 +68,16 @@ export const MFLAG = {
    * shield is down (e.g. mid-bash) and set it again.
    */
   guard: 512,
+  /**
+   * Map events (wave 2): a statue of the Stasis Host. Invulnerable (not hittable) and inert (no brain, no movement) until thawed;
+   * a solid, unpushable body. Shown through AILMENT_BIT.frozen.
+   */
+  frozen: 1024,
+  /**
+   * Map events (wave 2): a destructible fixture (a bloom, the Time Prism, a wheel): an inert, hittable, unpushable body with no
+   * attacks. The presenter hides its body (AILMENT_BIT.fixture) and draws the prop from the event view.
+   */
+  fixture: 2048,
 } as const;
 
 /** Lower a store's high-water mark past the dead slots at its top (after releasing slot `slot`). */
@@ -99,9 +109,9 @@ export class MonsterStore implements MonsterStoreView {
   readonly life: Float32Array;
   readonly maxLife: Float32Array;
   readonly hitFlash: Float32Array;
-  readonly ailments: Uint8Array;
+  readonly ailments: Uint16Array;
   /** ELITE_BIT mask (magic packs share one mod; rare leaders carry two). */
-  readonly mods: Uint8Array;
+  readonly mods: Uint16Array;
   // --- internal ---
   readonly vx: Float32Array;
   readonly vy: Float32Array;
@@ -192,7 +202,7 @@ export class MonsterStore implements MonsterStoreView {
     this.animTime = f();
     this.life = f(); this.maxLife = f();
     this.hitFlash = f();
-    this.ailments = u8();
+    this.ailments = new Uint16Array(capacity);
     this.vx = f(); this.vy = f(); this.kbX = f(); this.kbY = f(); this.sepX = f(); this.sepY = f();
     this.target = u8(); this.igniteSrc = u8();
     this.speed = f(); this.damage = f(); this.attackCd = f();
@@ -205,7 +215,7 @@ export class MonsterStore implements MonsterStoreView {
     this.timerA = f(); this.timerB = f(); this.timerC = f(); this.timerD = f();
     this.knockback = f();
     this.pack = new Int32Array(capacity);
-    this.mods = u8(); this.flags = new Uint16Array(capacity); this.wave = u8();
+    this.mods = new Uint16Array(capacity); this.flags = new Uint16Array(capacity); this.wave = u8();
     this.dtype = u8(); this.hitReduction = new Float64Array(capacity); this.aim = f();
     this.res = new Float32Array(capacity * 5);
     this.zeroed = [

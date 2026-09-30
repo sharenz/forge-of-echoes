@@ -4,9 +4,9 @@
 // loot and takes the return portal. Several bots can play the same instance as a party.
 // Shared by the sim tests and dev/sim.html.
 import { MONSTER_KINDS } from '../../src/contracts/content';
-import { RARITY_CODE, type AreaView, type PlayerIntent, type WorldView } from '../../src/contracts/sim';
+import { AILMENT_BIT, RARITY_CODE, type AreaView, type PlayerIntent, type WorldView } from '../../src/contracts/sim';
 import {
-  CHARGE_LINE_HALF_WIDTH, CHOIR_RING_HALF_WIDTH, areaAngle, areaVariant, choirGapAngles, inChoirGap,
+  CHARGE_LINE_HALF_WIDTH, CHOIR_RING_HALF_WIDTH, FAULT_WEDGE_HALF_ANGLE, areaAngle, areaContains, areaVariant, choirGapAngles, inChoirGap, voidTideInner,
 } from '../../src/sim/area-geometry';
 
 export interface BotOptions {
@@ -45,6 +45,27 @@ function lanePush(a: AreaView, x: number, y: number): { x: number; y: number; w:
   return { x: -uy * s, y: ux * s, w: 4 * (1 - Math.abs(side) / clear) + 1 };
 }
 
+/** Steer out of a Fault wedge (toward its nearer straight edge) or a Void Breach tide band (inward, toward the breach), or null. */
+function fieldPush(a: AreaView, x: number, y: number): { x: number; y: number; w: number } | null {
+  if (!areaContains(a, x, y, 18)) return null;
+  const dx = x - a.x;
+  const dy = y - a.y;
+  const d = Math.hypot(dx, dy) || 1;
+  if (a.kind === 'voidTide') {
+    const inner = voidTideInner(a);
+    // Step in: toward the centre, past the inner edge.
+    return { x: -dx / d, y: -dy / d, w: 3 + Math.max(0, (d - inner) / 40) };
+  }
+  let rel = (Math.atan2(dy, dx) - areaAngle(a)) % (Math.PI * 2);
+  if (rel > Math.PI) rel -= Math.PI * 2;
+  if (rel < -Math.PI) rel += Math.PI * 2;
+  // Away from the wedge's centre line, perpendicular to the heading: out through the nearer edge.
+  const s = rel >= 0 ? 1 : -1;
+  const tx = -Math.sin(areaAngle(a)) * s, ty = Math.cos(areaAngle(a)) * s;
+  void FAULT_WEDGE_HALF_ANGLE;
+  return { x: tx, y: ty, w: 3.5 };
+}
+
 /** Steer along a choir ring toward its nearest gap while the band is about to reach us, or null. */
 function ringPush(a: AreaView, x: number, y: number): { x: number; y: number; w: number } | null {
   const dx = x - a.x;
@@ -79,9 +100,11 @@ export function createBot(opts: BotOptions = {}): Bot {
   let escape = 0;
   let escX = 0;
   let escY = 0;
+  let pinned = 0;
+  let lastCmd = false;
+  let escapeTurn = 0;
 
-  return {
-    intent(view: WorldView, playerId = view.players[0]?.id ?? 0): PlayerIntent {
+  const decide = (view: WorldView, playerId: number): PlayerIntent => {
       const p = view.players.find((q) => q.id === playerId);
       const out: PlayerIntent = {
         moveX: 0, moveY: 0, aimX: p ? p.x : 0, aimY: p ? p.y + 50 : 0, held: [false, false, false, false, false, false], flask: -1,
@@ -153,6 +176,9 @@ export function createBot(opts: BotOptions = {}): Bot {
         orbit = -orbit;
         stuck = 0;
       }
+      // Pinned: it was told to move last tick and went nowhere (scenery), as opposed to standing still on purpose.
+      pinned = lastCmd && moved < 0.4 ? pinned + 1 : 0;
+
       lastX = p.x;
       lastY = p.y;
 
@@ -170,6 +196,13 @@ export function createBot(opts: BotOptions = {}): Bot {
         }
         return best;
       };
+
+      if (view.run.phase !== 'cleared' && escape > 0) {
+        escape--;
+        out.moveX = escX;
+        out.moveY = escY;
+        return out;
+      }
 
       if (view.run.phase === 'cleared') {
         // Wedged on the way (no step closer for 2 s — e.g. the chest landed beside a standing stone and left a gap
@@ -222,6 +255,8 @@ export function createBot(opts: BotOptions = {}): Bot {
       let aimAltD = Infinity;
       for (let i = 0; i < m.capacity; i++) {
         if (!m.alive[i]) continue;
+        // Map-event statues and fixtures are scenery to a fair player: not threats, not targets.
+        if (m.ailments[i] & (AILMENT_BIT.frozen | AILMENT_BIT.fixture)) continue;
         const dx = m.x[i] - p.x;
         const dy = m.y[i] - p.y;
         const d = Math.hypot(dx, dy) || 1e-3;
@@ -263,6 +298,15 @@ export function createBot(opts: BotOptions = {}): Bot {
       }
       let inDanger = false;
       for (const a of view.areas) {
+        if (a.kind === 'faultWedge' || a.kind === 'voidTide') {
+          const push = fieldPush(a, p.x, p.y);
+          if (push) {
+            inDanger = true;
+            fx += push.x * push.w;
+            fy += push.y * push.w;
+          }
+          continue;
+        }
         if (a.kind === 'chargeLine' || a.kind === 'choirWave') {
           const push = a.kind === 'chargeLine' ? lanePush(a, p.x, p.y) : ringPush(a, p.x, p.y);
           if (push && push.w > 0) {
@@ -304,6 +348,19 @@ export function createBot(opts: BotOptions = {}): Bot {
       if (target >= 0) {
         out.aimX = m.x[target];
         out.aimY = m.y[target];
+      }
+
+      // Pinned against scenery for a long time with nothing close to fight (a pillar pair the side-step cannot clear): back off
+      // along a rotating heading for a moment instead of pushing at the same spot forever.
+      if (pinned > 240 && nearest >= 0 && nd > 200) {
+        pinned = 0;
+        escape = 50;
+        const a = escapeTurn++ * 2.4 + 0.7;
+        escX = Math.cos(a);
+        escY = Math.sin(a);
+        out.moveX = escX;
+        out.moveY = escY;
+        return out;
       }
 
       // Movement.
@@ -368,6 +425,13 @@ export function createBot(opts: BotOptions = {}): Bot {
             out.held[s] = nd < 200;
         }
       }
+      return out;
+  };
+
+  return {
+    intent(view: WorldView, playerId = view.players[0]?.id ?? 0): PlayerIntent {
+      const out = decide(view, playerId);
+      lastCmd = Math.hypot(out.moveX, out.moveY) > 0.5;
       return out;
     },
   };

@@ -184,7 +184,7 @@ export function emptyWorld(players: PlayerView[], cap = 256): WorldView {
     monsters: {
       capacity: cap, count: 0, alive: new Uint8Array(cap), id: new Uint32Array(cap), kind: new Uint8Array(cap), rarity: new Uint8Array(cap),
       x: f(), y: f(), prevX: f(), prevY: f(), radius: f(), facing: new Int8Array(cap), anim: new Uint8Array(cap), animTime: f(),
-      life: f(), maxLife: f(), hitFlash: f(), ailments: new Uint8Array(cap), mods: new Uint8Array(cap),
+      life: f(), maxLife: f(), hitFlash: f(), ailments: new Uint16Array(cap), mods: new Uint16Array(cap),
     },
     projectiles: {
       capacity: cap, count: 0, alive: new Uint8Array(cap), id: new Uint32Array(cap), kind: new Uint8Array(cap), hostile: new Uint8Array(cap),
@@ -194,7 +194,7 @@ export function emptyWorld(players: PlayerView[], cap = 256): WorldView {
     areas: [], drops: [], props: [],
     run: {
       phase: 'fight', wave: 3, waveCount: 6, waveTime: 10, waveDuration: 60, elapsed: 100, kills: 50, monstersAlive: 0,
-      boss: null, lieutenant: null, portalOpen: false, playersAlive: players.length,
+      boss: null, lieutenant: null, portalOpen: false, playersAlive: players.length, events: [],
     },
   };
 }

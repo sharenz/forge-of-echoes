@@ -66,6 +66,7 @@ export function startBoss(w: World, i: number, def: MonsterDef): void {
   w.bossStates.set(w.monsters.id[i], b);
   b.phase = 1;
   b.roar = 0;
+  b.lockPhase = undefined;
   b.state = def.boss ? def.boss.init(w, i) : null;
 }
 
@@ -98,6 +99,7 @@ export function driveBoss(
   const frac = m.life[i] / m.maxLife[i];
   let want = 1;
   for (let k = 0; k < script.phases.length; k++) if (frac <= script.phases[k]) want++;
+  if (b.lockPhase !== undefined) want = Math.min(want, b.lockPhase);
   // One phase per roar: a single huge hit past two thresholds still plays the phase-2 roar (event,
   // flash, hit-stop) and then the phase-3 one as soon as it ends.
   if (m.state[i] !== MSTATE.roar && want > b.phase) {

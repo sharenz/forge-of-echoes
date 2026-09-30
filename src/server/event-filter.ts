@@ -41,6 +41,7 @@ export function eventClass(e: SimEvent, viewer: number, vx: number, vy: number):
       return e.owner === 0 && inAoi(e.x, e.y, vx, vy) ? 0 : -1;
     case 'notEnoughFocus':
       return e.playerId === viewer ? 0 : -1;
+    case 'mapEvent': // an omen, a whiff, a lit brazier: the whole party plays it
     case 'waveTell':
     case 'waveStart':
     case 'bossSpawn':

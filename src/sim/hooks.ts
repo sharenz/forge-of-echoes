@@ -4,6 +4,7 @@
 // for the server (drainHookErrors in index.ts); the first one per instance is also logged, so a
 // server that never drains them still hears about it. Because a throwing tryPickup leaves the drop
 // on the ground, that hook must commit last and never throw after granting (see tryPickup below).
+import type { EventRewardContext } from '../contracts/map-events';
 import type { DropSpec, KillLootContext } from '../contracts/sim';
 import type { World } from './world';
 
@@ -79,12 +80,28 @@ export function rollKillLoot(w: World, ctx: KillLootContext, playerIds: readonly
 export function rollChestLoot(w: World, playerIds: readonly number[]): DropSpec[] {
   let specs: unknown;
   try {
-    specs = w.config.hooks.rollChestLoot(playerIds, w.lootRng);
+    // The Wayside Anvil's boons ride along (absent = the ordinary chest).
+    const boons = w.mapEvent?.boons ?? undefined;
+    specs = boons ? w.config.hooks.rollChestLoot(playerIds, w.lootRng, boons) : w.config.hooks.rollChestLoot(playerIds, w.lootRng);
   } catch (e) {
     report(w, 'rollChestLoot', e);
     return [];
   }
   return sanitize(w, 'rollChestLoot', specs, playerIds);
+}
+
+/** A map event's payout for every player in `playerIds` (none when the server has no rollEventReward). */
+export function rollEventRewardSpecs(w: World, ctx: EventRewardContext, playerIds: readonly number[]): DropSpec[] {
+  const hook = w.config.hooks.rollEventReward;
+  if (!hook) return [];
+  let specs: unknown;
+  try {
+    specs = hook.call(w.config.hooks, ctx, playerIds, w.lootRng);
+  } catch (e) {
+    report(w, 'rollEventReward', e);
+    return [];
+  }
+  return sanitize(w, 'rollEventReward', specs, playerIds);
 }
 
 /**

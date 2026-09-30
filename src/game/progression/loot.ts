@@ -16,19 +16,20 @@
 // requirement ≤ monster level); when none is, the drop becomes a rare.
 // Summoned minions (and the training dummy) never drop anything.
 import type { MapTreeNodeId } from '../../contracts/atlas';
-import { mapTreeBonuses } from '../../data/progression/map-tree';
+import { atlasCurrencyWeight, atlasStat, resolveAtlasRules, treeContextOf, type AtlasRules, type TreeContext } from './atlas-rules';
 import type { RunSetup } from '../../contracts/game';
 import { SCARABS, SCARAB_DROP_CHANCE } from '../../data/scarabs';
 import { hashString } from '../../core/rng';
 import type { CharacterSave, CurrencyStack, EquipmentItem, FlaskStack, Item, MapItem, Rarity } from '../../contracts/items';
 import type { CurrencyId, ItemClass, MapBaseId } from '../../contracts/content';
-import { MAP_BASE_IDS, iconIdForBase, iconIdForCurrency, iconIdForFlask, iconIdForMap, iconIdForUnique } from '../../contracts/content';
+import { ITEM_CLASSES, MAP_BASE_IDS, iconIdForBase, iconIdForCurrency, iconIdForFlask, iconIdForMap, iconIdForUnique } from '../../contracts/content';
 import type { DropSpec, DropSprite, DropTone, KillLootContext } from '../../contracts/sim';
+import type { ChestBoons, EventRewardContext } from '../../contracts/map-events';
 import type { Rng } from '../../contracts/rng';
 import {
   BOSS_LOOT, CATEGORY_CHANCE, CATEGORY_ORDER, CHEST_LOOT, CHEST_MAP_QUALITY, CURRENCY_DROPS, DROPPED_MAP_QUALITY,
   ECHO_WAVE_QUANTITY_MORE, ELITE_LOOT_MULTIPLIER, EQUIPMENT_RARITY_WEIGHTS, FLASK_DROPS, LIEUTENANT_LOOT, MAP_BASES,
-  MAP_DROP_TIER_OFFSETS, MAP_RARITY_WEIGHTS, MAX_MAP_TIER, MIN_MAP_TIER, MONSTER_LOOT_MULTIPLIERS,
+  MAP_DROP_TIER_OFFSETS, MAP_RARITY_WEIGHTS, MAX_MAP_QUALITY, MAX_MAP_TIER, MIN_MAP_TIER, MONSTER_LOOT_MULTIPLIERS,
 } from '../../data/progression';
 import type { CurrencyDropDef, LootCategory, RarityWeightDef } from '../../data/progression';
 import { ARMOUR_CLASSES, findCurrency, findFlask, getBase } from '../../data/items';
@@ -41,6 +42,8 @@ import {
   clampTier, echoWaveIndex, mapBaseName, mapDropMultipliers, mapTitle, monsterName, monsterSentenceName, rollMapWithRarity,
 } from './maps';
 import { asciiLabel, rollCountTable } from './util';
+import { flattenMapEvents } from './map-events';
+import { RING_VOW_REWARD } from '../../data/progression/events/ring';
 import { ATLAS_KEYS, ATLAS_GLOBAL_KEY_CHANCE, ATLAS_GLOBAL_KEY_MIN_TIER, findAtlasArea, KEYSTONE_UNIQUE_CHANCE, RELIQUARY_KEY_CHANCE, type AtlasAreaDef } from '../../data/progression/atlas';
 
 // ---------------------------------------------------------------------------------------------
@@ -96,6 +99,22 @@ interface LootContext {
   mapChance: number;
   currency: readonly CurrencyDropDef[];
   armourStability: number;
+  /** Atlas tree: resolved rules for this expedition and the multipliers read from them. */
+  atlas: AtlasRules;
+  equipmentStability: number;
+  equipmentDrop: number;
+  scarabDrop: number;
+  bossLoot: number;
+  chestLoot: number;
+  chestCurrency: number;
+  chestRareChance: number;
+  chestUpgrade: number;
+  chestQuality: number;
+  droppedMapQuality: number;
+  ingredientMore: number;
+  bossUniqueMore: number;
+  normalQuantity: number;
+  rareQuantity: number;
   echoWave: number;
   place: string;
   area?: AtlasAreaDef;
@@ -108,10 +127,11 @@ const CONTEXTS = new WeakMap<RunSetup, LootContext>();
 const ESSENCES: ReadonlySet<CurrencyId> = new Set<CurrencyId>(['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift']);
 
 /** Currency weights after map implicit and reward-mod multipliers (essences). */
-export function currencyWeightsFor(map: MapItem, nodes: readonly MapTreeNodeId[] = []): CurrencyDropDef[] {
-  const m = mapDropMultipliers(map, nodes);
+export function currencyWeightsFor(map: MapItem, nodes: readonly MapTreeNodeId[] = [], tree: TreeContext = {}): CurrencyDropDef[] {
+  const m = mapDropMultipliers(map, nodes, tree);
+  const atlas = resolveAtlasRules(nodes, { tier: clampTier(map.tier), baseId: map.baseId, corrupted: map.corrupted, ...tree });
   return CURRENCY_DROPS.map((d) => {
-    let weight = d.weight;
+    let weight = d.weight * atlasCurrencyWeight(atlas, d.currencyId);
     if (ESSENCES.has(d.currencyId)) weight *= m.essence;
     if (d.currencyId === 'essenceEmber') weight *= m.emberEssence;
     if (d.currencyId === 'essenceRime') weight *= m.rimeEssence;
@@ -124,17 +144,34 @@ function lootContext(setup: RunSetup): LootContext {
   if (ctx) return ctx;
   const map = setup.map;
   const tier = clampTier(map.tier);
-  const drops = mapDropMultipliers(map, setup.mapTree);
+  const tree = treeContextOf(setup);
+  const drops = mapDropMultipliers(map, setup.mapTree, tree);
+  const atlas = resolveAtlasRules(setup.mapTree, { tier, baseId: map.baseId, corrupted: map.corrupted, ...tree });
   const area = findAtlasArea(setup.atlasAreaId);
   let crownEncounter = false;
-  for (let e = setup.event; e; e = e.next) if (e.kind === 'secondCrown') crownEncounter = true;
+  crownEncounter = flattenMapEvents(setup.event).some(e => e.kind === 'secondCrown');
   ctx = {
     map,
     tier,
     monsterLevel: Math.max(1, Math.floor(setup.monsterLevel || 1)),
     mapChance: drops.map,
-    currency: currencyWeightsFor(map, setup.mapTree).map((d) => ({ ...d, weight: d.weight * (area?.currencyWeights?.[d.currencyId] ?? 1) })),
+    currency: currencyWeightsFor(map, setup.mapTree, tree).map((d) => ({ ...d, weight: d.weight * (area?.currencyWeights?.[d.currencyId] ?? 1) })),
     armourStability: drops.armourStability,
+    atlas,
+    equipmentStability: Math.round(atlasStat(atlas, 'equipmentStability', 0)),
+    equipmentDrop: Math.max(0, atlasStat(atlas, 'equipmentDropChance', 1)),
+    scarabDrop: Math.max(0, atlasStat(atlas, 'scarabDropChance', 1)),
+    bossLoot: Math.max(0, atlasStat(atlas, 'bossLoot', 1)),
+    chestLoot: Math.max(0, atlasStat(atlas, 'chestLoot', 1)),
+    chestCurrency: Math.max(0, Math.round(atlasStat(atlas, 'chestCurrency', 0))),
+    chestRareChance: Math.min(1, Math.max(0, atlasStat(atlas, 'chestRareChance', 0) / 100)),
+    chestUpgrade: Math.max(0, atlasStat(atlas, 'chestUpgradeChance', 0) / 100),
+    chestQuality: Math.max(0, atlasStat(atlas, 'chestQuality', 0)),
+    droppedMapQuality: Math.max(0, atlasStat(atlas, 'droppedMapQuality', 0)),
+    ingredientMore: Math.max(0, atlasStat(atlas, 'bossIngredientChance', 1)),
+    bossUniqueMore: Math.max(0, atlasStat(atlas, 'bossUnique', 1)),
+    normalQuantity: Math.max(0, atlasStat(atlas, 'normalQuantity', 1)),
+    rareQuantity: Math.max(0, atlasStat(atlas, 'rareQuantity', 1)),
     echoWave: echoWaveIndex(map),
     place: `${area?.name ?? mapBaseName(map.baseId)} (Tier ${tier})`,
     area,
@@ -158,7 +195,9 @@ function makeEquipment(ctx: LootContext, rng: Rng, rarity: Rarity, origin: strin
   }
   const baseId = pickRandomBase(rng, { itemLevel: ctx.monsterLevel, classWeights: ctx.area?.classWeights,
     ...(itemClass ? { classes: [itemClass] } : {}) }) ?? 'ashwoodWand';
-  const extraStability = ARMOUR_CLASSES.includes(getBase(baseId).itemClass) ? ctx.armourStability : 0;
+  // Blank Slate: every non-unique drop is Normal (its Item Rarity effect is gone with the magic and rare rolls).
+  if (ctx.atlas.equipmentNormalOnly) rarity = 'normal';
+  const extraStability = (ARMOUR_CLASSES.includes(getBase(baseId).itemClass) ? ctx.armourStability : 0) + ctx.equipmentStability;
   return generateEquipment(baseId, ctx.monsterLevel, rarity as Exclude<Rarity, 'unique'>, rng, { extraStability, origin, isNew: true });
 }
 
@@ -183,15 +222,15 @@ function makeMap(rng: Rng, tier: number, m: number, quality: number): MapItem {
   return rollMapWithRarity(rng, baseId, clampTier(tier), rarity, randomUid(rng), quality, true);
 }
 
-function droppedMapQuality(rng: Rng): number {
-  return rng.chance(DROPPED_MAP_QUALITY.chance) ? rng.int(DROPPED_MAP_QUALITY.min, DROPPED_MAP_QUALITY.max) : 0;
+function droppedMapQuality(rng: Rng, bonus = 0): number {
+  return Math.min(MAX_MAP_QUALITY, (rng.chance(DROPPED_MAP_QUALITY.chance) ? rng.int(DROPPED_MAP_QUALITY.min, DROPPED_MAP_QUALITY.max) : 0) + bonus);
 }
 
 /** A random map drop: same tier 60% · one lower 25% · one higher 15% (within 1–15). */
 function makeRandomMap(ctx: LootContext, rng: Rng, m: number): MapItem {
   const offset = rng.weighted(MAP_DROP_TIER_OFFSETS, (o) => o.weight)?.offset ?? 0;
   const tier = Math.max(MIN_MAP_TIER, Math.min(MAX_MAP_TIER, ctx.tier + offset));
-  return makeMap(rng, tier, m, droppedMapQuality(rng));
+  return makeMap(rng, tier, m, droppedMapQuality(rng, ctx.droppedMapQuality));
 }
 
 function rollCategory(cat: LootCategory, ctx: LootContext, rng: Rng, m: number, origin: string): Item {
@@ -227,16 +266,22 @@ export interface KillLuck {
 }
 
 function killLuckFrom(ctx: LootContext, personal: Luck, kill: KillLootContext): KillLuck {
-  const mult = kill.isBoss || kill.isLieutenant ? ELITE_LOOT_MULTIPLIER : (MONSTER_LOOT_MULTIPLIERS[kill.rarity] ?? MONSTER_LOOT_MULTIPLIERS.normal);
+  const elite = kill.isBoss || kill.isLieutenant;
+  const mult = elite ? ELITE_LOOT_MULTIPLIER : (MONSTER_LOOT_MULTIPLIERS[kill.rarity] ?? MONSTER_LOOT_MULTIPLIERS.normal);
   const echo = ctx.echoWave > 0 && kill.wave >= ctx.echoWave;
-  const quantity = personal.itemQuantity * mult.quantity * (echo ? 1 + ECHO_WAVE_QUANTITY_MORE / 100 : 1);
-  return { quantity, rarity: personal.itemRarity * mult.rarity, echo, personal };
+  // Atlas tree: Rare Blood / Rare or Nothing pay rare monsters, Kingslayer's Tithe taxes the ordinary ones.
+  const treeMore = elite ? 1 : kill.rarity === 'rare' ? ctx.rareQuantity : kill.rarity === 'normal' ? ctx.normalQuantity : 1;
+  // Map events: a Pact Altar wave and Stasis Host statues add percent quantity / rarity to this one kill.
+  const eventQuantity = 1 + Math.max(0, kill.quantityMore ?? 0) / 100;
+  const eventRarity = 1 + Math.max(0, kill.rarityMore ?? 0) / 100;
+  const quantity = personal.itemQuantity * mult.quantity * treeMore * (echo ? 1 + ECHO_WAVE_QUANTITY_MORE / 100 : 1) * eventQuantity;
+  return { quantity, rarity: personal.itemRarity * mult.rarity * eventRarity, echo, personal };
 }
 
 function chancesFrom(ctx: LootContext, luck: KillLuck): Record<LootCategory, number> {
   const out = {} as Record<LootCategory, number>;
   for (const cat of CATEGORY_ORDER) out[cat] = CATEGORY_CHANCE[cat] * (luck.quantity / 100)
-    * (cat === 'map' ? ctx.mapChance : cat === 'currency' ? ctx.area?.currencyMultiplier ?? 1 : 1);
+    * (cat === 'map' ? ctx.mapChance : cat === 'currency' ? ctx.area?.currencyMultiplier ?? 1 : cat === 'equipment' ? ctx.equipmentDrop : 1);
   return out;
 }
 
@@ -278,29 +323,10 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
   // An independent per-kill stream keeps ordinary currency/equipment rolls unchanged.
   // The main stream has advanced through the category rolls, even on a kill with no ordinary drops.
   const scarabRng = rng.fork(0x53434152);
-  if (scarabRng.chance(Math.min(1, SCARAB_DROP_CHANCE * luck.quantity / 100))) {
+  if (scarabRng.chance(Math.min(1, SCARAB_DROP_CHANCE * luck.quantity / 100 * ctx.scarabDrop))) {
     const scarab = scarabRng.weighted(SCARABS.filter(s => s.minMonsterLevel <= setup.monsterLevel), s => s.weight);
     if (scarab) out.push(currencyStack(scarab.id, 1, randomUid(scarabRng), true));
   }
-
-  if (kill.eventReward === 'hunted') out.push(makeEquipment(ctx, rng, 'rare', `Reward from The Hunted in ${ctx.place}`, ctx.area?.chosenClass ? ctx.lootClass : undefined));
-  if (kill.eventReward === 'echoRift') {
-    out.push(currencyStack('reforge', 1, randomUid(rng), true));
-    out.push(currencyStack('mapDust', 1, randomUid(rng), true));
-    if (ctx.tier >= 3 && rng.chance(0.5)) out.push(currencyStack('echoShard', 1, randomUid(rng), true));
-    if (ctx.area?.id === 'riftNexus') out.push(currencyStack(rng.pick(['echoShard', 'twinInk', 'voidSplinter'] as const), 1, randomUid(rng), true));
-  }
-  if (kill.eventReward === 'blackout') {
-    out.push(currencyStack('seal', 1, randomUid(rng), true));
-    out.push(currencyStack('scrap', rng.int(4, 6), randomUid(rng), true));
-  }
-  if (kill.eventReward === 'vaultbreakers') {
-    for (let n = 0; n < (ctx.area?.currencyMultiplier ?? 1); n++) out.push(makeCurrency(ctx, rng));
-    if ((ctx.tier >= 3 || ctx.area?.id === 'gildedVault') && rng.chance(0.2)) out.push(currencyStack('twinInk', 1, randomUid(rng), true));
-  }
-  if (kill.eventReward === 'wound' && (ctx.tier >= 3 || ctx.area?.id === 'blackPit')) out.push(currencyStack('voidSplinter', 1, randomUid(rng), true));
-  if (kill.eventReward === 'wound' && ctx.area?.id === 'blackPit') out.push(currencyStack('twinInk', 1, randomUid(rng), true));
-  if (kill.eventReward === 'secondCrown' && (ctx.tier >= 5 || ctx.area?.id === 'sealedReliquary')) out.push(currencyStack('crownFragment', 1, randomUid(rng), true));
 
   // Guarantees use the looter's personal rarity (the elite multiplier already boosts the ordinary roll above).
   const mapM = luck.personal.itemRarity / 100;
@@ -315,16 +341,21 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
   }
   if (kill.isBoss) {
     out.push(makeEquipment(ctx, rng, 'rare', origin));
-    for (let i = 0; i < BOSS_LOOT.extraEquipment; i++) out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, mapM, 'magic'), origin));
-    for (let i = 0; i < BOSS_LOOT.currency * (ctx.area?.currencyMultiplier ?? 1); i++) out.push(makeCurrency(ctx, rng));
-    if (rng.chance(Math.min(1, BOSS_LOOT.uniqueChance * mapM * mapTreeBonuses(setup.mapTree).bossUniqueMultiplier))) out.push(makeEquipment(ctx, rng, 'unique', origin));
-    if (ctx.area?.uniquePool === kill.kind && rng.chance(Math.min(1, KEYSTONE_UNIQUE_CHANCE * mapM * mapTreeBonuses(setup.mapTree).bossUniqueMultiplier))) {
+    for (let i = 0; i < Math.round(BOSS_LOOT.extraEquipment * ctx.bossLoot); i++) out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, mapM, 'magic'), origin));
+    for (let i = 0; i < Math.round(BOSS_LOOT.currency * (ctx.area?.currencyMultiplier ?? 1) * ctx.bossLoot); i++) out.push(makeCurrency(ctx, rng));
+    if (rng.chance(Math.min(1, BOSS_LOOT.uniqueChance * mapM * ctx.bossUniqueMore))) out.push(makeEquipment(ctx, rng, 'unique', origin));
+    if (ctx.area?.uniquePool === kill.kind && rng.chance(Math.min(1, KEYSTONE_UNIQUE_CHANCE * mapM * ctx.bossUniqueMore))) {
       const id = pickRandomUnique(rng, { bossSource: kill.kind, maxLevel: ctx.monsterLevel });
       if (id) out.push(generateUnique(id, rng, { itemLevel: ctx.monsterLevel, origin: `Keystone reward from ${monsterName(kill.kind)} in ${ctx.place}`, isNew: true }));
     }
+    // Rival Crowns: the rival boss rolls its own theme's exclusive unique (a pool the area never drops otherwise).
+    if (kill.rival !== undefined && rng.chance(Math.min(1, KEYSTONE_UNIQUE_CHANCE * kill.rival * mapM * ctx.bossUniqueMore))) {
+      const id = pickRandomUnique(rng, { bossSource: kill.kind, maxLevel: ctx.monsterLevel });
+      if (id) out.push(generateUnique(id, rng, { itemLevel: ctx.monsterLevel, origin: `Rival reward from ${monsterName(kill.kind)} in ${ctx.place}`, isNew: true }));
+    }
     if (ctx.area?.id === 'sealedReliquary' && (!ctx.crownEncounter || kill.eventReward === 'secondCrown')) out.push(makeEquipment(ctx, rng, 'unique', origin));
     for (const drop of ctx.area?.ingredientDrops ?? []) {
-      if (ctx.tier >= drop.minTier && rng.chance(drop.chance)) out.push(currencyStack(drop.currencyId, 1, randomUid(rng), true));
+      if (ctx.tier >= drop.minTier && rng.chance(Math.min(1, drop.chance * ctx.ingredientMore))) out.push(currencyStack(drop.currencyId, 1, randomUid(rng), true));
     }
     if (ctx.area && !ctx.area.sealed) {
       const chance = ctx.area.id === 'emberVault' ? RELIQUARY_KEY_CHANCE.vault
@@ -343,23 +374,245 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
 }
 
 /**
+ * What one map event pays ONE looter (Event Director v2). Bronze is the classic payout of the encounter; Silver and Gold add
+ * to it. `ctx.choice` is the Caravan lock (0 coffer, 1 reliquary, 2 cartographer's tube, 3 all-locks bonus).
+ * Grade 0 is a small consolation (never a punishment). Called once per living player, in a fixed order.
+ */
+export function rollEventReward(setup: RunSetup, ctx: EventRewardContext, rng: Rng, looter: CharacterSave | null): Item[] {
+  const lc = lootContext(setup);
+  const m = lootLuck(setup, looter).itemRarity / 100;
+  const out: Item[] = [];
+  const grade = ctx.grade;
+  const place = lc.place;
+  const rare = (origin: string, cls?: ItemClass) => out.push(makeEquipment(lc, rng, 'rare', origin, cls));
+  const cur = (id: CurrencyId, n = 1) => out.push(currencyStack(id, n, randomUid(rng), true));
+  const bonus = Math.min(1, Math.max(0, ctx.multiplier - 1));
+  switch (ctx.kind) {
+    case 'hunted': {
+      if (grade < 1) break;
+      const cls = lc.area?.chosenClass ? lc.lootClass : undefined;
+      rare(`Reward from The Stalker in ${place}`, cls);
+      if (grade >= 2) out.push(makeCurrency(lc, rng));
+      if (grade >= 3) {
+        rare(`Gold trophy of The Stalker in ${place}`, cls);
+        if (rng.chance(0.25 + ctx.ingredientBonus)) cur('compass');
+        if (lc.tier >= 5 && rng.chance(0.05)) out.push(makeEquipment(lc, rng, 'unique', `Gold trophy of The Stalker in ${place}`));
+      }
+      break;
+    }
+    case 'echoRift': {
+      cur('mapDust');
+      if (grade < 1) break;
+      cur('reforge');
+      if (lc.tier >= 3 && rng.chance(0.5 + ctx.ingredientBonus)) cur('echoShard');
+      if (lc.area?.id === 'riftNexus') cur(rng.pick(['echoShard', 'twinInk', 'voidSplinter'] as const));
+      if (grade >= 2) cur('echoShard');
+      if (grade >= 3) {
+        cur('echoShard');
+        rare(`Gold trophy of The Echoing in ${place}`);
+      }
+      break;
+    }
+    case 'blackout': {
+      if (grade < 1) { cur('scrap', rng.int(2, 3)); break; }
+      cur('seal');
+      cur('scrap', rng.int(4, 6));
+      if (grade >= 2 && rng.chance(0.1 + ctx.ingredientBonus)) cur('suffixRune');
+      if (grade >= 3 && rng.chance(0.15 + ctx.ingredientBonus)) cur('fractureCore');
+      break;
+    }
+    case 'vaultbreakers': {
+      if (ctx.choice === 0) {
+        for (let n = 0; n < 3 * (lc.area?.currencyMultiplier ?? 1); n++) out.push(makeCurrency(lc, rng));
+        if ((lc.tier >= 3 || lc.area?.id === 'gildedVault') && rng.chance(0.2 + ctx.ingredientBonus)) cur('twinInk');
+      } else if (ctx.choice === 1) {
+        out.push(makeEquipment(lc, rng, rollEquipmentRarity(rng, m, 'magic'), `Reliquary chest of the Laden Caravan in ${place}`));
+      } else if (ctx.choice === 2) {
+        out.push(makeMap(rng, Math.min(MAX_MAP_TIER, lc.tier + 1), m, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max)));
+      } else {
+        if (rng.chance(0.5 + ctx.ingredientBonus)) cur('twinInk');
+        cur('compass');
+      }
+      if (ctx.choice < 3 && rng.chance(bonus)) out.push(makeCurrency(lc, rng));
+      break;
+    }
+    case 'secondCrown': {
+      const fragment = lc.tier >= 5 || lc.area?.id === 'sealedReliquary';
+      if (grade < 1) break;
+      if (fragment) cur('crownFragment');
+      if (grade >= 2 && fragment) cur('crownFragment');
+      if (grade >= 3) out.push(makeEquipment(lc, rng, 'unique', `Gold trophy of Rival Crowns in ${place}`));
+      break;
+    }
+    case 'wound': {
+      const splinter = lc.tier >= 3 || lc.area?.id === 'blackPit';
+      if (grade < 1) { if (splinter && rng.chance(0.25)) cur('voidSplinter'); }
+      else {
+        if (splinter) cur('voidSplinter');
+        if (grade >= 2) cur(rng.pick(['solvent', 'catalyst'] as const));
+        if (grade >= 3) {
+          if (splinter) cur('voidSplinter');
+          rare(`Gold trophy of The Fault in ${place}`);
+        }
+      }
+      if (lc.area?.id === 'blackPit' && grade >= 1) cur('twinInk');
+      break;
+    }
+    // Wave 2 of events: each case is owned by its event (docs/atlas-rework/C-map-events.md 7, GAME_SPEC map events).
+    case 'pactAltar': {
+      // Ember Tax: a consolation at the choice (choice 10). The final payout follows the bold pacts kept (Bronze 1, Silver 2, Gold 2 without a death).
+      if (ctx.choice === 10) { cur('scrap', 5); break; }
+      if (grade < 1) break;
+      cur('scrap', rng.int(3, 5));
+      if (grade >= 2) out.push(makeCurrency(lc, rng));
+      if (grade >= 3) cur('seal');
+      break;
+    }
+    case 'orchard': {
+      // A harvest pays at the bloom: choice = kind * 4 + stage (kind 0 Essence, 1 Seal, 2 Metal); choice 0 is the final grade payout.
+      if (ctx.choice === 0) {
+        if (grade < 1) break;
+        cur('scrap', rng.int(1, 2));
+        if (grade >= 2) out.push(makeCurrency(lc, rng));
+        if (grade >= 3) cur('voidSplinter');
+        break;
+      }
+      const kind = Math.floor(ctx.choice / 4), stage = ctx.choice % 4;
+      if (stage <= 0) break;
+      const base = String(lc.map.baseId);
+      const essence: CurrencyId = base === 'rimedOssuary' || base === 'choralCrypt' ? 'essenceRime'
+        : base === 'ironColiseum' || base === 'chainworks' ? 'essenceStorm' : 'essenceEmber';
+      if (stage === 1) cur('scrap', rng.int(2, 3));
+      else if (kind === 0) cur(essence, stage === 3 ? 2 : 1);
+      else if (kind === 1) { cur('seal', stage === 3 ? 2 : 1); if (stage === 3 && rng.chance(0.4 + ctx.ingredientBonus)) cur('suffixRune'); }
+      else { cur(rng.pick(['solvent', 'catalyst'] as const), stage === 3 ? 2 : 1); if (stage === 3 && rng.chance(0.4 + ctx.ingredientBonus)) cur('catalyst'); }
+      break;
+    }
+    case 'ring': {
+      // Champion's Ring: a rare armour base; the vow taken multiplies it (choice 0 Bare Hands x1.5, 1 Iron Pride x1.3, 2 Crowd's
+      // Favour x1.3, 3 = left the ring: no multiplier) as extra rolls; Fracture Core chance; Gold adds a unique-eligible roll.
+      if (grade < 1) break;
+      const armour = () => rng.pick(['helmet', 'chest', 'gloves', 'boots'] as const);
+      rare(`Champion's reward in ${place}`, armour());
+      const more = Math.max(0, (RING_VOW_REWARD[ctx.choice] ?? 1) - 1);
+      if (rng.chance(more)) rare(`Champion's vow reward in ${place}`, armour());
+      if (more > 0) out.push(makeCurrency(lc, rng));
+      if (rng.chance((grade >= 2 ? 0.2 : 0.1) + ctx.ingredientBonus)) cur('fractureCore');
+      if (grade >= 2) out.push(makeCurrency(lc, rng));
+      if (grade >= 3 && rng.chance(0.05)) out.push(makeEquipment(lc, rng, 'unique', `Gold trophy of the Champion's Ring in ${place}`));
+      break;
+    }
+    case 'host': {
+      // Stasis Host: the statues dropped their own loot; this is the prism and the pace. choice 1 = the prism was shattered (pays double).
+      if (grade < 1) break;
+      const shattered = ctx.choice === 1;
+      cur('scrap', rng.int(3, 5));
+      out.push(makeCurrency(lc, rng));
+      if (shattered) {
+        out.push(makeEquipment(lc, rng, 'rare', `Shattered prism of the Stasis Host in ${place}`, rng.pick(['ring', 'amulet'] as const)));
+        if (rng.chance(0.35 + ctx.ingredientBonus)) cur(rng.pick(['prefixRune', 'suffixRune'] as const));
+      }
+      if (grade >= 2) { cur(rng.pick(['solvent', 'catalyst'] as const)); if (shattered) out.push(makeCurrency(lc, rng)); }
+      if (grade >= 3) {
+        rare(`Gold trophy of the Stasis Host in ${place}`);
+        if (rng.chance(0.25 + ctx.ingredientBonus)) cur('voidSplinter');
+      }
+      break;
+    }
+    case 'anvil': {
+      // The boon (chosen on the stones) is the reward and rides on the completion chest; the event itself pays a little on top:
+      // Scrap for Bronze, a weighted currency roll for Silver and Gold.
+      if (grade < 1) break;
+      cur('scrap', rng.int(3, 5));
+      if (grade >= 2) out.push(makeCurrency(lc, rng));
+      if (grade >= 3) out.push(makeCurrency(lc, rng));
+      break;
+    }
+    case 'bellwatch': {
+      // choice 0..3: one currency roll per fallen Cantor (paid the moment it falls); choice 4: the final payout by grade.
+      if (grade < 1) break;
+      if (ctx.choice < 4) { out.push(makeCurrency(lc, rng)); break; }
+      if (grade >= 2 && rng.chance(0.35 + ctx.ingredientBonus)) cur('prefixRune');
+      if (grade >= 3) {
+        if (rng.chance(0.6 + ctx.ingredientBonus)) cur('prefixRune');
+        rare(`Gold trophy of the Bellwatch in ${place}`, rng.pick(['amulet', 'ring'] as const));
+      }
+      break;
+    }
+    case 'voidBreach': {
+      // `ctx.choice` carries the Voidtouched Atlas strength (percent): it raises the extra-roll chances.
+      const strength = 1 + Math.max(0, ctx.choice) / 100;
+      if (grade < 1) { if (rng.chance(Math.min(1, 0.25 * strength))) cur('voidSplinter'); break; }
+      cur('voidSplinter');
+      cur('scrap', rng.int(3, 5));
+      if (grade >= 2) {
+        if (rng.chance(Math.min(1, (0.4 + ctx.ingredientBonus) * strength))) cur('twinInk');
+        out.push(makeCurrency(lc, rng));
+      }
+      if (grade >= 3) {
+        cur('voidSplinter');
+        rare(`Gold trophy of the Void Breach in ${place}`);
+        if (rng.chance(Math.min(1, (0.15 + ctx.ingredientBonus) * strength))) cur('fractureCore');
+      }
+      break;
+    }
+  }
+  if (grade >= 1 && ctx.kind !== 'vaultbreakers' && rng.chance(bonus)) out.push(makeCurrency(lc, rng));
+  // Twin Omens: every event pays less (each extra item has a chance to be lost; the first is always kept).
+  if (ctx.multiplier < 1) return out.filter((_, k) => k === 0 || rng.chance(Math.max(0, ctx.multiplier)));
+  return out;
+}
+
+const RARITY_RANK: Record<string, number> = { normal: 0, magic: 1, rare: 2, unique: 3 };
+
+/** How good a rolled item is (Recast keeps the better of two): rarity, affix count, affix tiers, then implicit strength. */
+function itemScore(item: EquipmentItem): number {
+  let s = (RARITY_RANK[item.rarity] ?? 0) * 10000 + item.affixes.length * 1000;
+  for (const a of item.affixes) s += Math.max(0, 6 - a.tier) * 40;
+  const implicits = getBase(item.baseId).implicits;
+  implicits.forEach((imp, k) => { s += imp.max > imp.min ? ((item.implicitValues[k] - imp.min) / (imp.max - imp.min)) * 30 : 0; });
+  return s;
+}
+
+/**
+ * One completion-chest equipment with the Wayside Anvil's boons: Tempered adds a maximum Stability, Keen rolls every implicit at
+ * its best, Attuned picks the class (ignored when no base of it exists at the item level), Recast rolls twice and keeps the better.
+ */
+function chestEquipment(ctx: LootContext, rng: Rng, rarity: Rarity, origin: string, boons?: ChestBoons): EquipmentItem {
+  if (!boons) return makeEquipment(ctx, rng, rarity, origin);
+  const c = boons.stability > 0 ? { ...ctx, equipmentStability: ctx.equipmentStability + Math.floor(boons.stability) } : ctx;
+  let itemClass = boons.itemClass && (ITEM_CLASSES as readonly string[]).includes(boons.itemClass) ? (boons.itemClass as ItemClass) : undefined;
+  if (itemClass && !pickRandomBase(rng.fork(0x61747475), { itemLevel: ctx.monsterLevel, classes: [itemClass] })) itemClass = undefined;
+  const make = (): EquipmentItem => {
+    const item = makeEquipment(c, rng, rarity, origin, itemClass);
+    if (boons.keen && item.rarity !== 'unique') item.implicitValues = getBase(item.baseId).implicits.map((imp) => imp.max);
+    return item;
+  };
+  if (!boons.recast) return make();
+  const a = make(), b = make();
+  return itemScore(b) > itemScore(a) ? b : a;
+}
+
+/**
  * The completion chest for ONE looter: equipment of at least magic rarity, currency, a flask and
  * a map at the current tier (25% chance of +1), rolled with the looter's personal rarity.
  */
-export function rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave | null): Item[] {
+export function rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave | null, boons?: ChestBoons): Item[] {
   const ctx = lootContext(setup);
   const m = lootLuck(setup, looter).itemRarity / 100;
   const origin = `Found in the reward chest of ${ctx.place}`;
   const out: Item[] = [];
-  for (let i = 0; i < CHEST_LOOT.equipment; i++) {
-    const min = i === CHEST_LOOT.equipment - 1 && rng.chance(CHEST_LOOT.lastRareChance) ? 'rare' : 'magic';
-    out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, m, min), origin));
+  for (let i = 0; i < Math.round(CHEST_LOOT.equipment * ctx.chestLoot); i++) {
+    // Kingmaker's Cache: each chest item is Rare with its own chance; otherwise the ordinary last-item rule.
+    const cache = ctx.chestRareChance > 0 && rng.chance(ctx.chestRareChance);
+    const min = cache || (i === Math.round(CHEST_LOOT.equipment * ctx.chestLoot) - 1 && rng.chance(CHEST_LOOT.lastRareChance)) ? 'rare' : 'magic';
+    out.push(chestEquipment(ctx, rng, rollEquipmentRarity(rng, m, min), origin, boons));
   }
-  const currency = rng.int(CHEST_LOOT.currency.min, CHEST_LOOT.currency.max) * (ctx.area?.currencyMultiplier ?? 1);
+  const currency = Math.round((rng.int(CHEST_LOOT.currency.min, CHEST_LOOT.currency.max) * (ctx.area?.currencyMultiplier ?? 1) + ctx.chestCurrency) * ctx.chestLoot);
   for (let i = 0; i < currency; i++) out.push(makeCurrency(ctx, rng));
   for (let i = 0; i < CHEST_LOOT.flasks; i++) out.push(makeFlask(rng));
-  const tier = Math.min(MAX_MAP_TIER, ctx.tier + ((setup.map.charted || rng.chance(CHEST_LOOT.mapTierUpgradeChance + mapTreeBonuses(setup.mapTree).chestUpgradeChance)) ? 1 : 0));
-  out.push(makeMap(rng, tier, m, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max)));
+  const tier = Math.min(MAX_MAP_TIER, ctx.tier + ((setup.map.charted || rng.chance(CHEST_LOOT.mapTierUpgradeChance + ctx.chestUpgrade)) ? 1 : 0));
+  out.push(makeMap(rng, tier, m, Math.min(MAX_MAP_QUALITY, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max) + Math.round(ctx.chestQuality))));
   if (rng.chance(CHEST_LOOT.extraMapChance)) out.push(makeRandomMap(ctx, rng, m));
   return out;
 }

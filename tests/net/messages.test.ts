@@ -77,7 +77,7 @@ describe('client message validation', () => {
       { c: 'setLoadoutSlot', slot: 1, skillId: 'emberNova' },
       { c: 'activateMapDevice' },
       { c: 'setMapTreeNode', nodeId: 'crownedChallenge', allocate: true },
-      { c: 'setMapTreeNode', nodeId: 'trailblazer', allocate: false },
+      { c: 'setMapTreeNode', nodeId: 'waypoint', allocate: false },
       { c: 'merchantOffers' },
       { c: 'buyOffer', offerId: 'gamble:wand' },
       { c: 'partyInvite', name: 'Mira' },
@@ -228,8 +228,11 @@ describe('client message validation', () => {
       cmd({ c: 'allocateAttribute', attr: 'luck' }),
       cmd({ c: 'rankUpSkill', skillId: 'fireball' }),
       cmd({ c: 'setMapTreeNode', nodeId: 'unknown', allocate: true }),
-      cmd({ c: 'setMapTreeNode', nodeId: 'trailblazer', allocate: 1 }),
-      cmd({ c: 'setMapTreeNode', nodeId: 'trailblazer', allocate: true, points: 99 }),
+      cmd({ c: 'setMapTreeNode', nodeId: 'origin', allocate: true }),
+      cmd({ c: 'setMapTreeNode', nodeId: 'legacy:trailblazer', allocate: true }),
+      cmd({ c: 'setMapTreeNode', nodeId: 'trailblazer', allocate: true }),
+      cmd({ c: 'setMapTreeNode', nodeId: 'waypoint', allocate: 1 }),
+      cmd({ c: 'setMapTreeNode', nodeId: 'waypoint', allocate: true, points: 99 }),
       cmd({ c: 'setLoadoutSlot', slot: 6, skillId: null }),
       cmd({ c: 'setLoadoutSlot', slot: 1 }),
       cmd({ c: 'partyRespond', inviteId: 'x', accept: 'yes' }),
@@ -396,6 +399,7 @@ function everyEvent(): SimEvent[] {
     { t: 'playerDeath', playerId: 1, x: 0, y: 0 },
     { t: 'playerJoin', playerId: 2, x: 0, y: 0 },
     { t: 'notEnoughFocus', playerId: 1 },
+    { t: 'mapEvent', kind: 'hunted', beat: 'whiff', x: 10, y: -4, n: 2 },
   ];
 }
 
@@ -419,6 +423,8 @@ describe('events channel', () => {
       { t: 'pull', playerId: 1, fromX: Number.NaN, fromY: 0, toX: 1, toY: 0 }, // NaN → null in JSON
       { t: 'blocked', x: 'left', y: 0 },
       { t: 'monsterAttack', kind: 'varkus', x: 0, y: 0, attack: 'dance' },
+      { t: 'mapEvent', kind: 'nope', beat: 'omen', x: 0, y: 0, n: 0 },
+      { t: 'mapEvent', kind: 'hunted', beat: 'dance', x: 0, y: 0, n: 0 },
     ];
     const mixed = [bad[0], good[0], ...bad.slice(1, 8), good[1], ...bad.slice(8), good[2]];
     const r = parseServerMessage(JSON.stringify({ t: 'events', tick: 12, events: mixed }));

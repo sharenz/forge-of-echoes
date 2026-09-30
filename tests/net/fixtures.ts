@@ -19,7 +19,7 @@ export function makeMonsterStore(cap = CAP): MonsterStoreView {
     capacity: cap, count: 0, alive: new Uint8Array(cap), id: new Uint32Array(cap), kind: new Uint8Array(cap),
     rarity: new Uint8Array(cap), x: f(cap), y: f(cap), prevX: f(cap), prevY: f(cap), radius: f(cap),
     facing: new Int8Array(cap), anim: new Uint8Array(cap), animTime: f(cap), life: f(cap), maxLife: f(cap),
-    hitFlash: f(cap), ailments: new Uint8Array(cap), mods: new Uint8Array(cap),
+    hitFlash: f(cap), ailments: new Uint16Array(cap), mods: new Uint16Array(cap),
   };
 }
 
@@ -56,7 +56,7 @@ export function makeView(over: Partial<WorldView> = {}): WorldView {
     projectiles: makeProjectileStore(), motes: makeMoteStore(), areas: [], drops: [], props: [],
     run: {
       phase: 'fight', wave: 2, waveCount: 6, waveTime: 12.5, waveDuration: 60, elapsed: 75.25, kills: 123,
-      monstersAlive: 42, boss: null, lieutenant: null, portalOpen: false, playersAlive: 1,
+      monstersAlive: 42, boss: null, lieutenant: null, portalOpen: false, playersAlive: 1, events: [],
     },
     ...over,
   };

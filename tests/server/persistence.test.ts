@@ -49,9 +49,9 @@ describe('persistence', () => {
       await server.close();
     }
 
-    // Version 5 adds per-character testing merchants; reopening changes nothing.
+    // Version 6 adds the cleared map tier to Atlas credit receipts (tree points); reopening changes nothing.
     const db = await GameDatabase.open(dbPath);
-    expect(db.schemaVersion).toBe(5);
+    expect(db.schemaVersion).toBe(6);
     expect(db.debugMerchantEnabled(p.characterId)).toBe(false);
     expect(db.loadAtlasCredits()).toEqual([]);
     expect(db.characterById(p.characterId)?.name).toBe('Keeper');
@@ -76,14 +76,14 @@ describe('persistence', () => {
     raw.close();
     const db = await GameDatabase.open(dbPath);
     try {
-      expect(db.schemaVersion).toBe(5);
+      expect(db.schemaVersion).toBe(6);
       expect(db.debugMerchantEnabled('c1')).toBe(false);
       expect(db.characterById('c1')).toMatchObject({ name: 'Old Timer', level: 7 });
       expect(db.loadParties()).toEqual([]);
       expect(db.loadOpenMaps()).toEqual([]);
       expect(db.characterMap('c1')).toBeNull();
       expect(db.loadAtlasCredits()).toEqual([]);
-      const credit = { mapId: 'old-map', accountId: 'a1', characterId: 'c1', areaId: 'cinderCrossing', seed: 23 };
+      const credit = { mapId: 'old-map', accountId: 'a1', characterId: 'c1', areaId: 'cinderCrossing', seed: 23, tier: 4 };
       db.saveAtlasCredit(credit);
       db.saveAtlasCredit(credit);
       expect(db.loadAtlasCredits()).toEqual([credit]);

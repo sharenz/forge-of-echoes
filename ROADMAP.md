@@ -4,6 +4,43 @@ Maintained at the owner's request. Ask "what's next" and it is read from here; i
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
 Last reprioritised: 2026-09-30.
 
+## Top of the list: Atlas, Codex and map events rework (owner verdict 2026-09-30; wave 1 built, uncommitted)
+
+Design briefs: `docs/atlas-rework/` (overview, A visuals, B tree, C events, `tree-events-interface.md`, generated `tree-nodes.md`).
+
+**Wave 1: built (working tree, not yet committed or deployed).**
+- **Ember Chart Atlas** (`src/ui/atlas`, `src/art/atlas`, `Atlas.tsx`, `MapDevice.tsx`): a full-screen chart on a canvas (baked ground,
+  roads, fog, 25 plates), an inspector rail with real boss and family sprites, a map dock (map, scarabs, readout, "Set course"),
+  a Stash drawer instead of the backpack Ctrl-click, and a Codex tab.
+- **Codex tree data and economy** (`src/data/progression/atlas-tree`, `atlas-rules.ts`): 145 nodes, 14 keystones, 60 points
+  from areas, tiers, first encounter completions, first boss kills and Atlas milestones; respec costs; one-time free respec and
+  refund of the old 15-node allocation on migration. The encounter engine is now live (lenses of the six existing encounters, the
+  three encounter smalls, Twin Omens and Sworn to the Veil are allocatable and reach the Event Director through the frozen
+  expedition). First event completions credit an Atlas point per account through the server.
+- **Event Director v2** (`src/sim/events`, `src/sim/map-events.ts`): multi-slot runtime, grades (Bronze/Silver/Gold), and the six
+  existing events rebuilt as distinct mechanics (Stalker, Echoing, Laden Caravan, The Fault, Ember Relay, Rival Crowns).
+
+**Wave 2: in progress (three parallel streams).** T: the new Codex tree UI (`src/ui/codex`, `MapTree.tsx`) and Atlas polish;
+E: six more encounters (Pact Altar, Orchard, Ring, Host, Anvil, Bellwatch); I: integration, e2e and real-client verification.
+When E lands, add its ids to `ATLAS_BUILT_EVENTS` (`src/data/progression/map-tree.ts`) and `ATLAS_EVENT_TO_KIND`
+(`map-event-rules.ts`); a test keeps the two in step, and their six lens nodes become allocatable.
+
+**Still gated (fully specified, "Awaits ..." in the Codex):** the six lenses of unbuilt encounters and Voidtouched Atlas (needs the
+Void Breach event); `sim` nodes Warded Hunts and Stragglers' Cull; `device` nodes Lantern-Bearer, Fifth Socket, Twinned Sockets and
+Single-Minded Furnace (scarab sockets and essence attunement at the Map Device); `items` node Wagered Charts (account-bound chest map).
+Twin Omens' Backlash pack on a failed encounter and Sworn to the Veil's "withhold the chest upgrade" price are not built (their text
+now says only what exists).
+
+**Open balance items (from the wave 1 bot harness and the owner's play):**
+- Player penetration is missing: elemental-proof and high-resistance monsters have no counterplay yet.
+- Offence versus gear power curve: damage growth from gear and levels against monster scaling needs a pass.
+- Flanker monsters: waves are frontal; add flankers so standing still is not a strategy.
+- Level gap in the monster hover: show the monster/player level gap and its damage/hit-chance effect.
+- Speed-clear tree tuning: every archetype currently clears slower than an empty tree, so no build "speeds up" a map. Retune
+  the clear-speed nodes (Haste, Overrun Doctrine, density) or the harness baseline before more nodes ship.
+- Rival Crowns Gold rate: too rare or too easy at Gold (verify against the 20 to 30% target for a matched player) and tune the
+  fight-time thresholds.
+
 **Owner delivery: Done (2026-09-30).** The whole QoL block (P0.1–4) and map-progression block (P1.1–9)
 are implemented, verified and deployed. This includes account storage, the 25-area Atlas, all six encounters,
 crafting ingredients, advanced bases, economy sinks, six map themes, twelve boss-exclusive uniques and the map tree.
@@ -260,6 +297,32 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
   1280×720 and 1024×600. Read-only migration audit of all 5 production characters preserves all 321 item IDs,
   including 148 equipment items / 258 affixes, with crafting metadata intact and no repeated migration.
 - Production backup: `/var/lib/forge/backups/pre-phase2-2026-09-29T19-00-57.502Z.db` (integrity check passed).
+
+**Phase 3: pacing (T1 experience halved, not deployed).** Owner decision: going up a tier must feel like progress, and
+about ten Tier 1 maps should be needed to reach level ~10, where Tier 2 (monster level 10) is on-level.
+`TIER_SCALING.tierOneExperience = 0.5`; tiers 2+ keep 1.28^(tier-1) (T2 1.28, T3 1.64, T4 2.10, T5 2.68). Measured with
+the balance bot (3 seeds, character level after N Tier 1 maps): after 1/3/5/8/10 maps level 4/6/7/9/10 (was 5/8/10/11/12).
+A fresh character still reaches level 4 (9 attribute + 3 skill points to spend) from the first clear, with 0-1 deaths.
+At level 7 (after 4 maps) T2 is clearable but costly (lowest life ~50%); at level 9-10 T2 is comfortable (lowest life
+50-70%, no deaths). Ladder test note: the on-level Tier 3 reference now allows four deaths and a 0.35 margin spread.
+
+**Phase 3 (in progress, not deployed): steeper monster curve and character-vs-monster level gap.**
+- Diagnosis on the owner's level-17 sorceress Eldurin at T5 (monster level 28): trash died to one Ember Lance,
+  an Ashling bite was 5.7% of her life, a Brute slam 21%, a Matriarch slam 34%, and nothing compared her level
+  with the map's. The curve was too flat above the reference level.
+- Curve (`MONSTER_LEVEL_SCALING`, `monsterLifeScale/monsterDamageScale` in `src/data/progression/maps.ts`): below
+  level 10 unchanged (life 1.09, damage 1.065 per level, so T1 is untouched); level 10-16 life and damage x1.09 per
+  level; beyond level 16 life and damage x1.11 per level plus a flat +0.25 (of base) life per level. Level 28 is now
+  life x8.9 / damage x5.9 (was x4.7 / x3.1); level 16 (T3) only x1.68 / x1.68 so on-level play is unchanged.
+- Level gap (`LEVEL_GAP` in the data file, mirrored by `LEVEL_GAP_*` and `levelGapMult` in the sim, applied per
+  player in `hitPlayer`): once the monster level exceeds the character's by more than 3, monsters deal +5% damage
+  per further level, capped at +100%; nothing at or above monster level, and damage over time is not scaled again.
+  Grace 3 matches "comfortable up to level + 3". Eldurin at level 28 gets +40%. Shown in the map tooltip.
+- Result for Eldurin at T5 wave 1: trash bite 15% of her life (~7 hits with 29% evasion), Brute slam 55%, rare
+  Brute slam 83%, Matriarch slam ~90%; Ashling 2.6 Ember Lance hits (was 1.3), rare Ashling 7.4 (was 4).
+- Bot intent pinned in `tests/sim/balance-curve.test.ts` (always on): fair gear at map level 16 mostly clears,
+  strong gear rushes level 22, level-22 fair gear fails level 28 and 34, strong gear at 28 is a coin flip and dies
+  at 40, and a level-14 character with the same gear does worse than a level-28 one at map level 28.
   Live health reports protocol 3; public JavaScript/CSS match the tested build. Live T1 remains level 4.
 
 ## P0: usability and combat readability — Done (2026-09-29)

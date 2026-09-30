@@ -1,31 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { SIM_DT } from '../../src/contracts/sim';
-import { damageMonster, damagePlayer } from '../../src/sim/combat';
+import { damageMonster, damagePlayer, levelGapMult } from '../../src/sim/combat';
 import { DAMAGE_INDEX } from '../../src/sim/math';
 import { idleIntent, makeSkill, makeStats } from './fixtures';
 import { hold, makeArena, ofType, placeMonster, pv, stepN, stepWith } from './helpers';
 
 describe('player defences', () => {
-  it('caps total melee damage at 35% of max life per 0.5 s window', () => {
+  it('does not cap melee damage: a strong enough hit one-shots a weak character', () => {
     const { run, world } = makeArena({ stats: makeStats({ maxLife: 1000, evasion: 0 }) });
-    // A ring of brutal attackers all ready to bite at once.
-    for (let k = 0; k < 24; k++) {
-      const a = (k / 24) * Math.PI * 2;
-      const i = placeMonster(world, 'ashling', Math.cos(a) * 14, Math.sin(a) * 14, { still: false });
-      world.monsters.damage[i] = 500;
-      world.monsters.attackCd[i] = 0;
-    }
-    const lifeAt: number[] = [];
-    for (let t = 0; t < 120; t++) {
-      stepWith(run, idleIntent());
-      lifeAt.push(pv(run).life);
-    }
-    const window = Math.round(0.5 / SIM_DT);
-    for (let t = window; t < lifeAt.length; t++) {
-      if (lifeAt[t] <= 0) break;
-      expect(lifeAt[t - window] - lifeAt[t]).toBeLessThanOrEqual(350 + 1e-3);
-    }
-    expect(pv(run).life).toBeLessThan(1000);
+    const i = placeMonster(world, 'ashling', 14, 0, { still: false });
+    world.monsters.damage[i] = 5000;
+    world.monsters.attackCd[i] = 0;
+    for (let t = 0; t < 60 && !pv(run).dead; t++) stepWith(run, idleIntent());
+    expect(pv(run).dead).toBe(true);
   });
 
   it('applies armour to physical hits, resistances to elemental hits, and damageTaken', () => {
@@ -218,6 +205,7 @@ describe('monster behaviour', () => {
     for (let k = 0; k < 120; k++) {
       const i = placeMonster(world, 'ashling', 200 + (k % 12) * 3, Math.floor(k / 12) * 3, { still: false });
       world.monsters.attackCd[i] = 1e9;
+      world.monsters.timerD[i] = 1e9; // no gap-closing leap: this is about crowding
       ids.push(i);
     }
     stepN(run, 600);
@@ -262,5 +250,24 @@ describe('monster behaviour', () => {
     const r = stepN(run, 60, () => ({ ...idleIntent(), moveX: -1 }));
     expect(ofType(r.events, 'areaResolve').some((e) => e.kind === 'slamWarning')).toBe(true);
     expect(world.players[0].life).toBe(1e6);
+  });
+});
+
+describe('character-vs-monster level gap', () => {
+  it('monsters deal +5% damage per level beyond a 3-level grace, capped at +100%, and nothing at or above their level', () => {
+    expect(levelGapMult(12, 12)).toBe(1);
+    expect(levelGapMult(12, 40)).toBe(1);
+    expect(levelGapMult(12, 9)).toBe(1);
+    expect(levelGapMult(28, 17)).toBeCloseTo(1.4, 10);
+    expect(levelGapMult(88, 1)).toBe(2);
+    const { world, player: p } = makeArena({ level: 4, stats: makeStats({ maxLife: 1e6, evasion: 0 }) }); // monster level 12 in the arena: 5 levels past the grace
+    const before = p.life;
+    damagePlayer(world, p, 100, DAMAGE_INDEX.void, 'area');
+    const lo = 80 * 1.25, hi = 120 * 1.25;
+    expect(before - p.life).toBeGreaterThanOrEqual(lo - 1e-6);
+    expect(before - p.life).toBeLessThanOrEqual(hi + 1e-6);
+    const b2 = p.life;
+    damagePlayer(world, p, 100, DAMAGE_INDEX.void, 'dot'); // damage over time is not scaled again
+    expect(b2 - p.life).toBeCloseTo(100, 6);
   });
 });

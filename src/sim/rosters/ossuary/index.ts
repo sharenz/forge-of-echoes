@@ -47,7 +47,8 @@ import { meleeBrain, slamBrain } from '../kit';
 import type { MonsterDef } from '../types';
 import { brainRimeshade, brainWeaver, brainWisp } from './brains';
 import { brainChorister, onChoristerSpawn } from './chorister';
-import { GOLEM, THRALL } from './tuning';
+import { gapLeap } from '../pressure';
+import { GOLEM, THRALL, THRALL_LEAP } from './tuning';
 import { WARDEN_SCRIPT, brainWarden } from './warden';
 
 /** Ossuary Golems are armoured like the Ironhide Brute, a little less (they are brittle to fire). */
@@ -59,7 +60,10 @@ export function ossuaryRoster(): MonsterDef[] {
       kind: 'boneThrall', name: 'Bone Thrall', role: 'swarmer',
       radius: 6, life: 21, speed: 48, damage: 6, xp: 3, damageType: 'physical', resist: [0, 0, 0.25, 0, 0], knockback: 1,
       fromWave: 1, weight: 10, weightGrowth: -0.06,
-      brain: meleeBrain({ reach: THRALL.reach, windup: THRALL.windup, recover: THRALL.recover, cooldown: THRALL.cooldown, lunge: THRALL.lunge }),
+      brain: gapLeap(
+        meleeBrain({ reach: THRALL.reach, windup: THRALL.windup, recover: THRALL.recover, cooldown: THRALL.cooldown, lunge: THRALL.lunge }),
+        THRALL_LEAP,
+      ),
     },
     {
       kind: 'rimeshade', name: 'Rimeshade', role: 'hunter',

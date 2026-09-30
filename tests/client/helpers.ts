@@ -15,7 +15,7 @@ export function monsterStore(capacity = 16): MonsterStoreView {
     alive: new Uint8Array(capacity), id: new Uint32Array(capacity), kind: new Uint8Array(capacity),
     rarity: new Uint8Array(capacity), x: f(), y: f(), prevX: f(), prevY: f(), radius: f(),
     facing: new Int8Array(capacity), anim: new Uint8Array(capacity), animTime: f(), life: f(), maxLife: f(),
-    hitFlash: f(), ailments: new Uint8Array(capacity), mods: new Uint8Array(capacity),
+    hitFlash: f(), ailments: new Uint16Array(capacity), mods: new Uint16Array(capacity),
   };
 }
 
@@ -71,7 +71,7 @@ export function player(id: number, name: string, x = 0, y = 0, p: Partial<Player
 export function runView(p: Partial<RunView> = {}): RunView {
   return {
     phase: 'fight', wave: 2, waveCount: 6, waveTime: 15, waveDuration: 60, elapsed: 75, kills: 40, monstersAlive: 30,
-    boss: null, lieutenant: null, portalOpen: false, playersAlive: 1, ...p,
+    boss: null, lieutenant: null, portalOpen: false, playersAlive: 1, events: [], ...p,
   };
 }
 

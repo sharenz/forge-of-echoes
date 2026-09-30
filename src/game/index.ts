@@ -73,7 +73,7 @@ import {
   MAP_BASE_INFO, SKILL_INFO, allocateAttribute, applyCurrency, applyRunEnd, buildRunConfig, buyOffer, canRankUpSkill,
   compareWithEquipped, consumeFlask, craftPreview, craftingTargetError, createCharacter, deriveStats, describeItem, dropSpec,
   grantXp, lootLuck, mapSummary, merchantOffers, sellItems, sellQuote, newSave, openMap, parseSave, playerRuntime, rankUpSkill, rollChestLoot,
-  rollKillLoot, serializeSave, setLoadoutSlot, skillSheetFor, xpToNext,
+  rollEventReward, rollKillLoot, serializeSave, setLoadoutSlot, skillSheetFor, xpToNext,
 } from './progression';
 
 const content: ContentInfo = {
@@ -150,6 +150,7 @@ export const rules: GameRulesApi = {
   lootLuck,
   rollKillLoot,
   rollChestLoot,
+  rollEventReward,
   dropSpec,
   consumeFlask,
   applyRunEnd,

@@ -1,3 +1,4 @@
+import type { MapEventView } from '../../src/contracts/map-events';
 import { describe, expect, it } from 'vitest';
 import { NEW_AREA_KINDS, NEW_MONSTER_KINDS, NEW_PROJECTILE_KINDS, PLAYER_DEBUFFS } from '../../src/contracts/bestiary';
 import { MONSTER_KINDS } from '../../src/contracts/content';
@@ -66,22 +67,43 @@ function richWorld() {
 }
 
 describe('snapshot codec', () => {
-  it('round-trips revealed event state and clears it on the next snapshot', () => {
+  it('round-trips concurrent event views (bars, timers, zones, markers) and clears them on the next snapshot', () => {
     const v = richWorld();
     const encoder = createSnapshotEncoder();
     const reader = new ByteReader(); const strings = new StringInterner(256); const snapshot = new Snapshot();
-    v.run.event = { kind: 'echoRift', phase: 'active', x: 345, y: -123, remaining: 6, total: 9 };
+    const echoing: MapEventView = { uid: 2, kind: 'echoRift', phase: 'active', x: 345.5, y: -123.25, grade: 2, hint: 1,
+      objectives: [{ id: 0, cur: 3, max: 6 }, { id: 1, cur: 9, max: 12 }], timers: [{ id: 0, seconds: 1.5, total: 2.5 }],
+      zones: [{ kind: 'anchor', x: 345.5, y: -123.25, r: 46, a: 0, v: 50, n: 0 }, { kind: 'stone', x: 10, y: 20, r: 26, a: 0, v: 255, n: 3 }],
+      markers: [{ icon: 'echoRare', x: 100, y: 50, v: 0, w: 0 }, { icon: 'echo', x: -40, y: 12, v: 7, w: 0 }, { icon: 'bloom', x: 5, y: 6, v: 2, w: 64 }] };
+    const fault: MapEventView = { uid: 3, kind: 'wound', phase: 'warning', x: 20, y: -40, grade: 0, hint: 0, objectives: [], timers: [],
+      zones: [{ kind: 'field', x: 20, y: -40, r: 240, a: Math.PI / 2, v: 1 }, { kind: 'wedgePlan', x: 20, y: -40, r: 240, a: 3.5, v: 2 }], markers: [] };
+    v.run.events = [echoing, fault];
     snapshot.decode(encoder.encode(v, 1, 1), reader, strings);
-    expect(snapshot.run.event).toEqual(v.run.event);
-    v.run.event = { kind: 'vaultbreakers', phase: 'active', x: 20, y: -40, remaining: 2, total: 3, seconds: 31 };
+    expect(snapshot.run.events).toHaveLength(2);
+    expect(snapshot.run.events[0]).toEqual(echoing);
+    expect(snapshot.run.events[1].zones[0]).toMatchObject({ kind: 'field', x: 20, y: -40, r: 240, v: 1 });
+    expect(snapshot.run.events[1].zones[1].a).toBeCloseTo(3.5, 3); // quantised to 1/65536 of a turn
+    v.run.events = [{ ...echoing, phase: 'complete', grade: 3, timers: [], objectives: [] }];
     snapshot.decode(encoder.encode(v, 1, 2), reader, strings);
-    expect(snapshot.run.event).toEqual(v.run.event);
-    v.run.event = { kind: 'secondCrown', phase: 'complete', x: 30, y: -50, remaining: 0, total: 2 };
+    expect(snapshot.run.events).toHaveLength(1);
+    expect(snapshot.run.events[0]).toMatchObject({ phase: 'complete', grade: 3, timers: [] }); // no stale countdown
+    v.run.events = [];
     snapshot.decode(encoder.encode(v, 1, 3), reader, strings);
-    expect(snapshot.run.event).toEqual(v.run.event); // No stale countdown from the previous event.
-    v.run.event = null;
+    expect(snapshot.run.events).toEqual([]);
+  });
+
+  it('round-trips the second boss bar (Rival Crowns) and drops it when the rival is gone', () => {
+    const v = richWorld();
+    const encoder = createSnapshotEncoder();
+    const reader = new ByteReader(); const strings = new StringInterner(256); const snapshot = new Snapshot();
+    v.run.boss = { name: 'Cinder Matriarch', life: 900, maxLife: 1000, phase: 2 };
+    v.run.boss2 = { name: 'Hollow Warden', life: 120.5, maxLife: 600, phase: 1 };
+    snapshot.decode(encoder.encode(v, 1, 1), reader, strings);
+    expect(snapshot.run.boss).toMatchObject({ name: 'Cinder Matriarch', life: 900, phase: 2 });
+    expect(snapshot.run.boss2).toMatchObject({ name: 'Hollow Warden', life: 120.5, maxLife: 600, phase: 1 });
+    v.run.boss2 = null;
     snapshot.decode(encoder.encode(v, 1, 2), reader, strings);
-    expect(snapshot.run.event).toBeNull();
+    expect(snapshot.run.boss2).toBeNull();
   });
 
   it('round-trips a rich world view', () => {
@@ -302,17 +324,17 @@ describe('snapshot codec', () => {
     expect(flagsOf(ground)).toBe(4 | (1 << 3));
   });
 
-  it('stamps version 7 and rejects older snapshots, so a stale bundle reloads instead of limping on', () => {
-    // Encounter countdowns change the v7 byte layout; older decoders must reload.
-    expect(SNAPSHOT_VERSION).toBe(7);
+  it('stamps version 10 and rejects older snapshots, so a stale bundle reloads instead of limping on', () => {
+    // v10: map events wave 2 (u16 ailments, eventSlow, a second boss bar, zone n / marker w); older decoders must reload.
+    expect(SNAPSHOT_VERSION).toBe(10);
     const v = richWorld();
     const buf = new Uint8Array(createSnapshotEncoder().encode(v, 1, 1));
-    expect(buf[0]).toBe(7);
-    for (const version of [3, 4, 5, 6]) {
+    expect(buf[0]).toBe(10);
+    for (const version of [3, 4, 5, 6, 7, 8, 9]) {
       const old = buf.slice();
       old[0] = version;
       expect(() => decodeSnapshot(old)).toThrow(SnapshotDecodeError);
-      expect(() => decodeSnapshot(old)).toThrow(`snapshot version ${version} != 7`);
+      expect(() => decodeSnapshot(old)).toThrow(`snapshot version ${version} != 10`);
     }
   });
 
@@ -611,7 +633,8 @@ describe('snapshot codec: bestiary rosters and player debuffs', () => {
     expect(MONSTER_KINDS.indexOf('trainingDummy')).toBe(7);
     expect(MONSTER_KINDS.slice(8)).toEqual([...NEW_MONSTER_KINDS]);
     expect(PROJECTILE_KINDS.slice(7)).toEqual([...NEW_PROJECTILE_KINDS]);
-    expect(AREA_KINDS.slice(7)).toEqual([...NEW_AREA_KINDS]);
+    expect(AREA_KINDS.slice(7, 7 + NEW_AREA_KINDS.length)).toEqual([...NEW_AREA_KINDS]);
+    expect(AREA_KINDS.slice(7 + NEW_AREA_KINDS.length)).toEqual(['stormStrike', 'rendStrike', 'echoMark', 'faultWedge', 'voidTide']);
   });
 
   it('round-trips every monster kind, rarity and facing, and every projectile kind with each flag', () => {

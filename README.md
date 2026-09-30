@@ -56,6 +56,74 @@ rarity colour alone does not set a fixed price. Payment goes into your account's
 in your backpack. Visitors sell their own gear and receive their own payment. Sales are permanent and survive
 restarts. Maps, flasks and currencies cannot be sold.
 
+## Admin CLI (`foe`)
+
+`foe` (also `foe-cli`) is the admin tool for accounts, characters and the testing merchant. The deploy installs it
+on the server next to the old `debug_merch` command, which still works and is now just `foe merchant`.
+
+```bash
+ssh -t crafty-prod foe            # interactive menu (-t gives it a terminal); alias: alias foe='ssh -t crafty-prod foe'
+ssh crafty-prod foe online        # anything else runs one command and exits
+# Local development against a dev database (DB_PATH, default data/dev.db)
+./scripts/foe accounts            # or: npm run foe -- accounts
+```
+
+**Interactive mode** (no arguments): type to fuzzy-search characters (by account, name, class, level) or
+accounts, arrow keys to move, enter to select, esc to go back. The preview under the list shows level, class, highest
+map tier, last played and online status. No dependencies: it uses raw terminal keys.
+
+| Command | What it does |
+| --- | --- |
+| `foe accounts [--search q]` | all accounts with character counts, created, last seen, online |
+| `foe chars [account]` | characters with class, level, tier, last played, online, testing merchant |
+| `foe online` | players in the running server: account, character, level, hideout/map, party |
+| `foe show <account> [character]` | read-only details (progress, stash tabs, party, open map, location) |
+| `foe merchant <account> <character> enable\|disable\|status` | the testing merchant (below), live, no restart |
+| `foe kick <account> [character]` | disconnect players from the running server |
+| `foe delete-char <account> <character>` | delete one character; the account's stash and Atlas stay |
+| `foe reset <account>` | delete ALL characters and progress of one account; the login stays |
+| `foe reset --all` | the same for every account |
+
+Every read command takes `--json` (`ssh crafty-prod foe chars sharenz --json | jq ...`). Online columns show `?`
+when the server cannot be asked. Options: `--db <path>`, `--dry-run`, `--yes --i-know`, `--confirm <phrase>`,
+`--force`, `--offline`.
+
+**What "progress" is.** A reset deletes, in one transaction: `characters` (saves: levels, equipment, backpack,
+map device, skills, flasks), `account_storage` (the shared stash tabs, currency and map stash, and the Atlas
+including tree points), `atlas_credit_queue` (pending Atlas awards), `open_maps`, `character_maps` (where
+characters stood, including visits to their hideouts), `party_members` / `parties` and `debug_merchants`. Accounts and login
+sessions stay. A party that keeps two members under a deleted leader gets a new leader; smaller ones dissolve.
+`foe delete-char` removes that character's rows but leaves the account stash/Atlas.
+
+**Safety of destructive commands** (`reset`, `delete-char`):
+
+1. A summary with row counts per table is always printed first; `--dry-run` stops there.
+2. The full database is copied to `<data dir>/backups/pre-reset-<time>.db` (SQLite backup API, verified,
+   mode 600) before anything is deleted; no backup, no reset.
+3. Typed confirmation: the account name (`reset <account>`), the character name (`delete-char`), or
+   `RESET-ALL-ACCOUNTS <number of characters>` (`reset --all`). Scripts pass `--confirm "<phrase>"`, or
+   `--yes --i-know` together (either alone is refused).
+4. It needs to know the server state: through the admin channel, or `--offline` when the server is stopped.
+   Affected players online block the command unless `--force`, which kicks them.
+5. While it runs the server refuses their logins; it then drops their sessions, parties and open maps from memory, the
+   CLI backs up, deletes the rows in one transaction (rolled back on any error), and lifts the lock.
+   Nobody needs to restart the server. A crashed CLI cannot leave a lock behind: it expires after 10 minutes.
+6. Every action (also refusals and dry runs) is appended as a JSON line to `<data dir>/admin-audit.log`
+   (`/var/lib/forge/admin-audit.log`: time, actor, account/characters, counts, backup path). If the log cannot be written, nothing is changed.
+
+```bash
+ssh crafty-prod foe reset sharenz --dry-run
+ssh -t crafty-prod foe reset sharenz                     # asks you to type: sharenz
+ssh crafty-prod foe reset --all --force --confirm "RESET-ALL-ACCOUNTS 14"
+ssh crafty-prod 'tail -5 /var/lib/forge/admin-audit.log'
+```
+
+**The admin channel** (`src/server/admin.ts`): the running server listens on a unix socket
+`<data dir>/admin.sock` (mode 600) and requires the secret in `<data dir>/admin.token` (mode 600, new on every start)
+in each request. There is no TCP listener and Caddy only proxies the game port, so it is not reachable from
+outside. The CLI runs as the `forge` service user (the wrapper switches from root), so file ownership stays correct.
+Set `ADMIN_DIR` to move the socket and token.
+
 ## Testing merchant
 
 Enable **Mira the Provisioner** in one character's hideout using the server CLI. The account must own the
@@ -63,12 +131,10 @@ character; names are case-insensitive. It updates live without restarting and pe
 
 ```bash
 # Local development (DB_PATH defaults to data/dev.db)
-./scripts/debug_merch sharenz eldurin enable
-# Equivalent npm command, including a custom database
-DB_PATH=/path/to/forge.db npm run debug_merch -- sharenz eldurin status
-# Production (the deploy installs debug_merch on the server)
-ssh crafty-prod debug_merch sharenz eldurin enable
-ssh crafty-prod debug_merch sharenz eldurin disable
+./scripts/foe merchant sharenz eldurin enable
+# Production (the deploy installs foe and debug_merch on the server)
+ssh crafty-prod foe merchant sharenz eldurin enable
+ssh crafty-prod debug_merch sharenz eldurin disable     # the old name still works
 ```
 
 Click Mira, south of Rook. Every visitor to that hideout can buy free scarabs (all tiers), crafting supplies,
@@ -88,7 +154,8 @@ disable and restart with two real browser clients and a disposable database.
 3. Party members can **visit each other's hideouts** from the party panel ("Visit hideout", and "Go home").
    Rook the merchant trades with everyone in any hideout, crafting works in any hideout, and the stash always opens
    your own stash.
-4. The hideout owner puts a map into the **Map Device** and presses Activate: **8 portals** open. Each entry, by
+4. The hideout owner opens the **Atlas** (click the Map Device in your hideout), sets a course on the chart, loads a map (the
+   **Stash** tab holds the maps in your pack and your Map Stash, and the scarabs) and presses Activate: **8 portals** open. Each entry, by
    anyone, uses one portal (re-entering after death too). Click the portal to go in.
 5. In the map, **loot is instanced**: everyone sees and picks up only their own drops. **XP is shared** by everyone
    alive in the map. Monsters get tougher and more numerous per extra player.
@@ -143,7 +210,7 @@ one to apply it to the bench item, with the odds preview.
 **Special stash tabs.** Next to your normal stash tabs are three icon tabs; they don't count towards the tab limit.
 - **Map Stash** (up to 400 maps): Ctrl-click or drag a map in and it files itself by tier and map type. Maps are
   listed by tier (click a tier) and grouped by map type, with their mods and a full tooltip. Drag one out, Ctrl-click
-  it to your backpack, or pick it straight from the **Map Device** panel, which lists your Map Stash.
+  it to your backpack, or pick it straight from the Atlas table's **Stash** drawer, which lists your Map Stash.
 - **Crafting Stash** (two tabs: equipment currency and map currency): one labelled slot per currency, up to 5,000
   each. Drop or Ctrl-click any currency stack onto either tab and it files into its slot; **Deposit all** empties your
   backpack's currency into it. Ctrl-click a slot to take a stack, Shift+Ctrl-click to take exactly one. Right-click a

@@ -9,7 +9,7 @@ import { mapEventOdds } from '../../src/game/progression/map-events';
 import { categoryChances, killLuck } from '../../src/game/progression/loot';
 import { currencyOnHand } from '../../src/game/progression/merchant';
 import { createRng } from '../../src/core/rng';
-import { bareCharacter, equip, expectOk, kill, map, withBackpack } from './fixtures';
+import { bareCharacter, equip, expectOk, kill, map, withBackpack, eventCtx } from './fixtures';
 
 const explored = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 };
 const character = (tier = 3) => bareCharacter({ atlas: explored, mapDevice: map('ashenForge', tier),
@@ -129,15 +129,15 @@ describe('special-area rewards', () => {
   it('gives all ten chosen classes their correct hunter reward and keeps keyed rewards eligible at low tiers', () => {
     for (const id of ITEM_CLASSES) {
       const setup = expectOk(rules.openMap(character(4), 'huntingGround', id)).setup;
-      const result = rules.rollKillLoot(setup, kill({ eventReward: 'hunted' }), createRng(99), bareCharacter()).at(-1)!;
+      const result = rules.rollEventReward(setup, eventCtx('hunted'), createRng(99), bareCharacter()).at(-1)!;
       expect(result.kind).toBe('equipment');
       if (result.kind === 'equipment') { expect(getBase(result.baseId).itemClass).toBe(id); expect(result.rarity).toBe('rare'); }
     }
-    const black = rules.rollKillLoot(expedition('blackPit', 1), kill({ eventReward: 'wound' }), createRng(4), bareCharacter());
+    const black = rules.rollEventReward(expedition('blackPit', 1), eventCtx('wound'), createRng(4), bareCharacter());
     expect(black).toEqual(expect.arrayContaining([expect.objectContaining({ currencyId: 'voidSplinter' }), expect.objectContaining({ currencyId: 'twinInk' })]));
     const nexus = expedition('riftNexus', 1), seen = new Set<string>();
     for (let seed = 0; seed < 90; seed++) {
-      const items = rules.rollKillLoot(nexus, kill({ eventReward: 'echoRift' }), createRng(seed), bareCharacter());
+      const items = rules.rollEventReward(nexus, eventCtx('echoRift'), createRng(seed), bareCharacter());
       const last = items.at(-1)!; expect(last.kind).toBe('currency');
       if (last.kind === 'currency') seen.add(last.currencyId);
     }
@@ -149,7 +149,7 @@ describe('special-area rewards', () => {
     expect(cfg.waves.bossWave).toBe(0);
     const odds = mapEventOdds(setup.map, 'shrineField');
     expect(odds.secondCrown).toBe(0);
-    expect(Object.values(odds).reduce((a, b) => a + b, 0)).toBeCloseTo(0.75);
+    expect(Object.values(odds).reduce((a, b) => a + b, 0)).toBeCloseTo(1); // triple the 45% base is certain
     expect(cfg.waves.count).toBe(6);
     const ch = character(5);
     const echo = expectOk(rules.openMap({ ...ch, mapDevice: { ...ch.mapDevice!, mods: [{ modId: 'echo', value: 100 }] } }, 'shrineField')).setup;
