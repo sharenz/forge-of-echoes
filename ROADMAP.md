@@ -7,13 +7,24 @@ Last reprioritised: 2026-09-29.
 **Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
 verify the resulting game and deploy it to production. QoL (P0.1–4), account storage, Atlas, the first events,
 Prefix/Suffix Runes, advanced bases, economy sinks and the six-map roster (P1.1–7) are done and deployed.
-P1.8's ingredients, encounters and 25-area Atlas expansion are also deployed. Twelve boss-exclusive uniques
-are implemented and in final release checks; the map tree (P1.9) remains part of this delivery.
+P1.8 is also done and deployed: ingredients, encounters, the 25-area Atlas and twelve boss-exclusive uniques.
+The map tree (P1.9) remains part of this delivery.
 
-**Current order:** boss-specific unique pools → map tree.
+**Current order:** map tree.
 Priorities follow current usability problems, then progression dependencies.
 
-**Latest release: Done — `20260930-004633-78ba155` (2026-09-30).** The Atlas now has 25 areas, with two
+**Latest release: Done — `20260930-011433-2f6f480` (2026-09-30).** Twelve boss-exclusive uniques bring the
+catalogue to sixteen. Six pools across eight Atlas areas unlock at T8/T10, each with a separate 12% roll
+scaled by personal item rarity. All twelve have distinctive art and skill behaviour; sources, eligibility and
+actual odds are shown in the Atlas, Map Device and item tooltips. Build/typecheck passes. The full balance-enabled
+run plus focused corrections/combination checks cover 1,947 passing checks. Chromium at 1024×600 and 1280×720
+verifies every item, equip/unequip, pool labels, odds and restart persistence; final source corrections pass at 1024×600.
+Live protocol 14 and exact public JS/CSS matches are verified. Fresh production-copy audits before and after
+preserve all 457 items on 7 characters across 4 accounts, with unique IDs, no duplicate storage, idempotent
+reload and healthy integrity. Post-drain backup: `/var/lib/forge/backups/pre-release-20260930-011433-2f6f480.db`.
+P1.8 is complete; P1.9 remains open.
+
+**Previous release: Done — `20260930-004633-78ba155` (2026-09-30).** The Atlas now has 25 areas, with two
 approaches through T11/T13/T15, all remaining dead ends and sealed destinations, four new tradeable keys,
 fixed encounter chains and chosen-class Hunting Ground rewards. Pending Atlas awards survive closed maps
 and restarts, and sealed areas require their full objective before granting completion credit.
@@ -272,14 +283,14 @@ reopen tuning for a specific problem rather than starting another general balanc
    and focused reruns pass. Full browser clears cover Black Pit, Hunting Ground, Rift Nexus, Pit of Echoes
    and Shrine Field; entry and graph layout are checked at both screen sizes. Boss-specific unique pools
    and the map tree remain outstanding.
-   **Boss uniques: implemented, not yet deployed.** Twelve new uniques cover all ten equipment classes,
+   **Boss uniques: Done, deployed as `20260930-011433-2f6f480`.** Twelve new uniques cover all ten equipment classes,
    two per boss, eligible at T8/T10. Six exclusive pools across eight Atlas areas roll separately at 12%
    times personal item rarity. New skill behaviour, individual art, source/odds labels and Crown rerolls
    are covered. The original four remain in ordinary loot/gambling. Full rules/simulation/balance testing
    plus focused reruns cover 1,947 checks; browser equip, source and restart flows pass at both screen sizes.
-   Final build/typecheck and the production-copy audit pass (457 items, 4 accounts, 7 characters;
-   conservation, unique IDs, no duplicate storage, idempotent reload and integrity). Deployment is pending.
-   P1.9 remains open.
+   Final build/typecheck and production-copy audits before/after pass (457 items, 4 accounts, 7 characters;
+   conservation, unique IDs, no duplicate storage, idempotent reload and integrity). Live protocol 14 and
+   public assets match the tested build. P1.8 is complete; P1.9 remains open.
 9. **Map tree v0** (15 nodes, map-only effects). Biggest scope trap: only once events and ingredients are proven.
 
 ## P2: character depth
