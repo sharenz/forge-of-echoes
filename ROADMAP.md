@@ -8,20 +8,29 @@ Last reprioritised: 2026-09-29.
 are implemented, verified and deployed. This includes account storage, the 25-area Atlas, all six encounters,
 crafting ingredients, advanced bases, economy sinks, six map themes, twelve boss-exclusive uniques and the map tree.
 
-**Current owner request (2026-09-30):** testing merchant, verified and awaiting deployment. A separate free merchant supplies all
-scarabs and other test items in a character's hideout, accessible to visitors. Enable/disable/status is managed
-per character through `debug_merch <account> <character> <action>`, with live updates and persistent activation.
-The full balance-enabled run plus the final 17-check rerun cover 1,976 passing checks. The command-list
-expectation now includes testing purchases; audio/performance checks pass in isolation without changing their
-limits (1.321 ms average simulation tick). Real CLI and two-player Chromium flows pass at 1024×600 and
-1280×720, including live enable/disable, stock options, guest ownership and restart persistence. Deployment
-rollback checks pass. A fresh host-local production-copy audit conserves all 475 physical items across
-4 accounts, 7 characters and 14 normal tabs, with unique IDs and healthy integrity.
-
-**Next priority after the testing merchant:** P2 — more Sorceress skills and a deeper skill tree, then the passive tree.
+**Next priority:** P2 — more Sorceress skills and a deeper skill tree, then the passive tree.
 Priorities follow current usability problems, then progression dependencies.
 
-**Latest release: Done — `20260930-082808-62ba497` (2026-09-30).** Scarabs: the Map Device has one
+**Latest release: Done — `20260930-085326-1dfa4a0` (2026-09-30).** Testing merchant requested by the owner.
+Mira the Provisioner supplies free scarabs (every tier), currencies/keys/ingredients, maps, equipment bases,
+uniques and flasks. Category/search, quantity, map tier, item level and applicable rarity are selectable.
+Every visitor to an enabled hideout can buy for their own inventory. The server CLI
+`debug_merch <account> <character> enable|disable|status` validates ownership and manages persistent,
+character-specific activation. Changes update live without a restart; disabling immediately blocks stale
+panels. Purchases respect trade locks and are saved atomically. No character is enabled by default.
+See `README.md` for local and production commands.
+
+Build/typecheck and deployment rollback checks pass. The full balance-enabled run plus the final 17-check
+rerun cover 1,976 passing checks. The command-list expectation now includes testing purchases;
+audio/performance checks pass in isolation without changing their limits (1.321 ms average simulation tick).
+Real CLI and two-player Chromium flows pass at 1024×600 and 1280×720, including live enable/disable,
+stock options, guest ownership and restart persistence. Live protocol 17 and exact public JS/CSS matches
+are verified. Fresh host-local production-copy audits before and after preserve all 475 physical items across
+4 accounts, 7 characters and 14 normal tabs, with unique IDs, no duplicate storage, idempotent reload and
+healthy integrity. The installed production CLI reports Eldurin disabled. Post-drain backup:
+`/var/lib/forge/backups/pre-release-20260930-085326-1dfa4a0.db`.
+
+**Previous release: Done — `20260930-082808-62ba497` (2026-09-30).** Scarabs: the Map Device has one
 map slot and four scarab sockets. Only one scarab of each type is allowed, regardless of tier. The first two
 types are Haste (15/25/35/50% less wave duration) and Invasion (start at wave 2/3/4/5 with every monster from
 all earlier waves already spawned). Four tiers unlock at monster levels 4/22/46/70, with declining weights;
