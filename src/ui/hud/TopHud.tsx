@@ -1,5 +1,7 @@
 import { MAP_EVENT_NAMES } from '../../data/progression/map-events';
 import type { MapEventKind } from '../../contracts/map-events';
+import { findAtlasArea } from '../../data/progression/atlas';
+import { CLASS_LABEL } from '../../data/items';
 // Top of the screen, laid out as one grid over the part of the screen no docked panel covers (see
 // `.fe-hudarea` in hud.css):
 //   left   party frames, party invites, trade requests and the open-trade chip
@@ -230,10 +232,13 @@ function WaveCard() {
 
 function MapEventCard() {
   const event = useUi(s => s.hud?.run?.event ?? null, shallowEqual);
+  const setup = useUi(s => s.run);
+  const area = findAtlasArea(setup?.atlasAreaId);
   if (!event) return null;
+  const optional = area?.encounters ? 'required to complete this area' : 'optional';
   const available: Record<MapEventKind, string> = {
-    hunted: '', echoRift: 'Approach the rift to awaken it · optional', blackout: 'Approach the beacon and defeat its guards to restore light',
-    vaultbreakers: '', secondCrown: '', wound: 'Approach to open the Wound · three packs and eruptions · optional',
+    hunted: '', echoRift: `Approach the rift to awaken it · ${optional}`, blackout: 'Approach the beacon and defeat its guards to restore light',
+    vaultbreakers: '', secondCrown: '', wound: `Approach to open the Wound · three packs and eruptions · ${optional}`,
   };
   const active: Record<MapEventKind, string> = {
     hunted: 'Defeat the pursuing hunter for a rare item', echoRift: `${event.total - event.remaining} / ${event.total} echoes defeated · crafting materials`,
@@ -247,6 +252,12 @@ function MapEventCard() {
     blackout: 'Light restored · Binding Seal and Scrap dropped', vaultbreakers: 'All carriers defeated · materials dropped',
     secondCrown: 'Both crowns defeated · Crown Fragment dropped', wound: 'Wound closed · Void Splinter dropped',
   };
+  if (area?.chosenClass && setup?.lootClass) {
+    active.hunted = `Defeat this hunter for a Rare ${CLASS_LABEL[setup.lootClass]} base`;
+    done.hunted = `Hunter defeated · Rare ${CLASS_LABEL[setup.lootClass]} base dropped`;
+  }
+  if (area?.id === 'blackPit') done.wound = 'Wound closed · Twin Ink and Void Splinter dropped';
+  if (area?.id === 'riftNexus') done.echoRift = 'Rift sealed · event ingredient and crafting materials dropped';
   const text = event.phase === 'complete' ? done[event.kind]
     : event.phase === 'failed' ? `${event.remaining} carriers escaped · collected rewards are yours`
     : event.phase === 'available' ? available[event.kind]

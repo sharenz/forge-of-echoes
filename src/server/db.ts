@@ -106,6 +106,14 @@ export interface OpenMapRow {
   updated: number;
 }
 
+export interface AtlasCreditRow {
+  mapId: string;
+  accountId: string;
+  characterId: string;
+  areaId: string;
+  seed: number;
+}
+
 /** Where a character stood when its session was last recorded inside a map. */
 export interface CharacterMapRow {
   characterId: string;
@@ -192,6 +200,17 @@ const MIGRATIONS: readonly string[] = [
     data         TEXT NOT NULL,
     save_version INTEGER NOT NULL,
     updated      INTEGER NOT NULL
+  );
+  `,
+  // 3 → 4: pending Atlas awards outlive the completed or replaced map that earned them.
+  `
+  CREATE TABLE atlas_credit_queue (
+    map_id TEXT NOT NULL,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    character_id TEXT NOT NULL,
+    area_id TEXT NOT NULL,
+    seed INTEGER NOT NULL,
+    PRIMARY KEY (map_id, account_id)
   );
   `,
 ];
@@ -506,6 +525,21 @@ export class GameDatabase {
       participants: str(r.participants),
       created: num(r.created),
       updated: num(r.updated),
+    }));
+  }
+
+  saveAtlasCredit(r: AtlasCreditRow): void {
+    this.run('INSERT OR IGNORE INTO atlas_credit_queue (map_id, account_id, character_id, area_id, seed) VALUES (?, ?, ?, ?, ?)',
+      r.mapId, r.accountId, r.characterId, r.areaId, r.seed);
+  }
+
+  deleteAtlasCredit(mapId: string, accountId: string): void {
+    this.run('DELETE FROM atlas_credit_queue WHERE map_id = ? AND account_id = ?', mapId, accountId);
+  }
+
+  loadAtlasCredits(): AtlasCreditRow[] {
+    return this.all('SELECT * FROM atlas_credit_queue ORDER BY map_id, account_id').map(r => ({
+      mapId: str(r.map_id), accountId: str(r.account_id), characterId: str(r.character_id), areaId: str(r.area_id), seed: num(r.seed),
     }));
   }
 

@@ -864,10 +864,10 @@
   background: radial-gradient(ellipse at 15% 35%, #45302388, transparent 65%),
     radial-gradient(ellipse at 75% 70%, #27374399, transparent 70%), #111315;
 }
-.fe-atlas__world { position: relative; width: 100%; min-width: 920px; height: 100%; min-height: 380px; }
+.fe-atlas__world { position: relative; width: 100%; min-width: 1900px; height: 100%; min-height: 650px; }
 .fe-atlas__routes { position: absolute; inset: 0; width: 100%; height: 100%; }
-.fe-atlas__routes line { stroke: #46423b; stroke-width: 0.3; stroke-dasharray: 1 1; }
-.fe-atlas__routes .fe-atlas__route--open { stroke: #b8884d; stroke-width: 0.5; stroke-dasharray: none; }
+.fe-atlas__routes path { fill: none; stroke: #46423b; stroke-width: 2px; vector-effect: non-scaling-stroke; stroke-dasharray: 4 4; }
+.fe-atlas__routes .fe-atlas__route--open { stroke: #b8884d; stroke-width: 3px; stroke-dasharray: none; }
 .fe-atlas__node {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -909,6 +909,8 @@
   margin: 0 -8px;
   padding: 0 8px 22px;
 }
+.fe-device__class { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.fe-device__class select { color: var(--parchment); background: #211b16; border: 1px solid #82623c; padding: 8px; font: inherit; font-size: var(--font-ui-body); }
 .fe-device__circle {
   position: relative;
   flex: none;

@@ -70,7 +70,7 @@ export const CURRENCY_SHELVES: Readonly<Record<'currency' | 'mapCurrency', reado
   mapCurrency: [
     { title: 'Map crafting', ids: ['mapDust', 'threatGlyph', 'rewardInk', 'voidNeedle'] },
     { title: 'Advanced map crafting', ids: ['compass', 'twinInk', 'voidSplinter'] },
-    { title: 'Atlas keys', ids: ['reliquaryKey'] },
+    { title: 'Atlas keys', ids: ['reliquaryKey', 'gildedKey', 'blackKey', 'huntingKey', 'riftKey'] },
   ],
 };
 
@@ -104,6 +104,7 @@ export const CURRENCY_SHORT: Readonly<Record<CurrencyId, string>> = {
   rewardInk: 'Reward Ink',
   voidNeedle: 'Void Needle',
   reliquaryKey: 'Reliquary Key',
+  gildedKey: 'Gilded Key', blackKey: 'Black Key', huntingKey: 'Hunting Key', riftKey: 'Rift Key',
 };
 
 /** The Crafting Stash tab that shows a currency. */

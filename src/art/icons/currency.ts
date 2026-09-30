@@ -479,6 +479,25 @@ function reliquaryKey(): Frame {
   return f;
 }
 
+/** Distinct bows and teeth identify each sealed destination even without its colour. */
+function atlasKey(kind: 'gilded' | 'black' | 'hunting' | 'rift'): Frame {
+  const f = newIcon(), s = new Sculpt();
+  const ramp = kind === 'gilded' ? RAMPS.gold : kind === 'rift' ? RAMPS.frost : RAMPS.metal;
+  if (kind === 'gilded') s.poly([[4, 9], [9, 3], [16, 7], [14, 15], [7, 17]], style(ramp, 0.5));
+  else if (kind === 'black') s.poly([[3, 6], [15, 5], [16, 17], [4, 16]], style(ramp));
+  else if (kind === 'hunting') s.poly([[4, 15], [5, 3], [10, 10], [16, 4], [15, 17]], style(ramp, 0.4));
+  else s.ell(9, 10, 6, 8, style(ramp, 0.4));
+  s.render(f.c, f.e);
+  const glow = kind === 'black' ? C.ember : kind === 'rift' ? C.voidGlow : C.goldHi;
+  gem(f, 9, 10, 2, 2, kind === 'black' ? EMBER : RAMPS.frost);
+  for (let n = 0; n < 3; n++) line(f, 11 + n, 13, 24 + n, 27, ramp[3 + (n % 2)]);
+  for (let n = 0; n < (kind === 'hunting' ? 3 : kind === 'rift' ? 1 : 2); n++) {
+    line(f, 19 + n * 3, 21 + n * 3, 16 + n * 3, 24 + n * 3, glow);
+  }
+  sparkle(f, 8, 5, glow, 1);
+  return f;
+}
+
 /** Matched stone tablets; the luminous bracket identifies which half is reforged. */
 function affixRune(prefix: boolean): Frame {
   const f = newIcon();
@@ -584,6 +603,10 @@ export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
   'icon/currency/rewardInk': () => finishIcon(rewardInk(), C.goldHi),
   'icon/currency/voidNeedle': () => finishIcon(voidNeedle(), C.voidGlow),
   'icon/currency/reliquaryKey': () => finishIcon(reliquaryKey(), C.goldHi),
+  'icon/currency/gildedKey': () => finishIcon(atlasKey('gilded'), C.goldHi),
+  'icon/currency/blackKey': () => finishIcon(atlasKey('black'), C.ember),
+  'icon/currency/huntingKey': () => finishIcon(atlasKey('hunting'), C.goldHi),
+  'icon/currency/riftKey': () => finishIcon(atlasKey('rift'), C.voidGlow),
   'icon/flask/lifeFlask': () => finishIcon(flask([C.wineDeep, C.lifeDark, C.blood, C.life, C.lifeLight, C.hot])),
   'icon/flask/focusFlask': () => finishIcon(flask([C.frostDeep, C.frostDark, C.frostMid, C.mana, C.frost, C.ice]), C.frost),
   'icon/map/ashenForge': () => finishIcon(mapIcon(MAP_FORGE), C.hot),

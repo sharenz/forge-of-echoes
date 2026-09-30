@@ -17,7 +17,7 @@
 // Summoned minions (and the training dummy) never drop anything.
 import type { RunSetup } from '../../contracts/game';
 import type { CharacterSave, CurrencyStack, EquipmentItem, FlaskStack, Item, MapItem, Rarity } from '../../contracts/items';
-import type { CurrencyId, MapBaseId } from '../../contracts/content';
+import type { CurrencyId, ItemClass, MapBaseId } from '../../contracts/content';
 import { MAP_BASE_IDS, iconIdForBase, iconIdForCurrency, iconIdForFlask, iconIdForMap, iconIdForUnique } from '../../contracts/content';
 import type { DropSpec, DropSprite, DropTone, KillLootContext } from '../../contracts/sim';
 import type { Rng } from '../../contracts/rng';
@@ -37,7 +37,7 @@ import {
   clampTier, echoWaveIndex, mapBaseName, mapDropMultipliers, mapTitle, monsterName, monsterSentenceName, rollMapWithRarity,
 } from './maps';
 import { asciiLabel, rollCountTable } from './util';
-import { findAtlasArea, RELIQUARY_KEY_CHANCE, type AtlasAreaDef } from '../../data/progression/atlas';
+import { ATLAS_KEYS, ATLAS_GLOBAL_KEY_CHANCE, ATLAS_GLOBAL_KEY_MIN_TIER, findAtlasArea, RELIQUARY_KEY_CHANCE, type AtlasAreaDef } from '../../data/progression/atlas';
 
 // ---------------------------------------------------------------------------------------------
 // Rarity weights
@@ -95,6 +95,8 @@ interface LootContext {
   echoWave: number;
   place: string;
   area?: AtlasAreaDef;
+  lootClass?: ItemClass;
+  crownEncounter: boolean;
 }
 
 const CONTEXTS = new WeakMap<RunSetup, LootContext>();
@@ -120,6 +122,8 @@ function lootContext(setup: RunSetup): LootContext {
   const tier = clampTier(map.tier);
   const drops = mapDropMultipliers(map);
   const area = findAtlasArea(setup.atlasAreaId);
+  let crownEncounter = false;
+  for (let e = setup.event; e; e = e.next) if (e.kind === 'secondCrown') crownEncounter = true;
   ctx = {
     map,
     tier,
@@ -130,6 +134,8 @@ function lootContext(setup: RunSetup): LootContext {
     echoWave: echoWaveIndex(map),
     place: `${area?.name ?? mapBaseName(map.baseId)} (Tier ${tier})`,
     area,
+    lootClass: setup.lootClass,
+    crownEncounter,
   };
   CONTEXTS.set(setup, ctx);
   return ctx;
@@ -139,14 +145,15 @@ function lootContext(setup: RunSetup): LootContext {
 // Item makers
 // ---------------------------------------------------------------------------------------------
 
-function makeEquipment(ctx: LootContext, rng: Rng, rarity: Rarity, origin: string): EquipmentItem {
+function makeEquipment(ctx: LootContext, rng: Rng, rarity: Rarity, origin: string, itemClass?: ItemClass): EquipmentItem {
   if (rarity === 'unique') {
     // Only uniques wearable at the drop's item level; with none (below level 12) the roll becomes a rare.
     const id = pickRandomUnique(rng, { maxLevel: ctx.monsterLevel });
     if (id) return generateUnique(id, rng, { itemLevel: ctx.monsterLevel, origin, isNew: true });
     rarity = 'rare';
   }
-  const baseId = pickRandomBase(rng, { itemLevel: ctx.monsterLevel, classWeights: ctx.area?.classWeights }) ?? 'ashwoodWand';
+  const baseId = pickRandomBase(rng, { itemLevel: ctx.monsterLevel, classWeights: ctx.area?.classWeights,
+    ...(itemClass ? { classes: [itemClass] } : {}) }) ?? 'ashwoodWand';
   const extraStability = ARMOUR_CLASSES.includes(getBase(baseId).itemClass) ? ctx.armourStability : 0;
   return generateEquipment(baseId, ctx.monsterLevel, rarity as Exclude<Rarity, 'unique'>, rng, { extraStability, origin, isNew: true });
 }
@@ -224,7 +231,8 @@ function killLuckFrom(ctx: LootContext, personal: Luck, kill: KillLootContext): 
 
 function chancesFrom(ctx: LootContext, luck: KillLuck): Record<LootCategory, number> {
   const out = {} as Record<LootCategory, number>;
-  for (const cat of CATEGORY_ORDER) out[cat] = CATEGORY_CHANCE[cat] * (luck.quantity / 100) * (cat === 'map' ? ctx.mapChance : 1);
+  for (const cat of CATEGORY_ORDER) out[cat] = CATEGORY_CHANCE[cat] * (luck.quantity / 100)
+    * (cat === 'map' ? ctx.mapChance : cat === 'currency' ? ctx.area?.currencyMultiplier ?? 1 : 1);
   return out;
 }
 
@@ -264,22 +272,24 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
     for (let i = 0; i < n; i++) out.push(rollCategory(cat, ctx, rng, m, origin));
   }
 
-  if (kill.eventReward === 'hunted') out.push(makeEquipment(ctx, rng, 'rare', `Reward from The Hunted in ${ctx.place}`));
+  if (kill.eventReward === 'hunted') out.push(makeEquipment(ctx, rng, 'rare', `Reward from The Hunted in ${ctx.place}`, ctx.area?.chosenClass ? ctx.lootClass : undefined));
   if (kill.eventReward === 'echoRift') {
     out.push(currencyStack('reforge', 1, randomUid(rng), true));
     out.push(currencyStack('mapDust', 1, randomUid(rng), true));
     if (ctx.tier >= 3 && rng.chance(0.5)) out.push(currencyStack('echoShard', 1, randomUid(rng), true));
+    if (ctx.area?.id === 'riftNexus') out.push(currencyStack(rng.pick(['echoShard', 'twinInk', 'voidSplinter'] as const), 1, randomUid(rng), true));
   }
   if (kill.eventReward === 'blackout') {
     out.push(currencyStack('seal', 1, randomUid(rng), true));
     out.push(currencyStack('scrap', rng.int(4, 6), randomUid(rng), true));
   }
   if (kill.eventReward === 'vaultbreakers') {
-    out.push(makeCurrency(ctx, rng));
-    if (ctx.tier >= 3 && rng.chance(0.2)) out.push(currencyStack('twinInk', 1, randomUid(rng), true));
+    for (let n = 0; n < (ctx.area?.currencyMultiplier ?? 1); n++) out.push(makeCurrency(ctx, rng));
+    if ((ctx.tier >= 3 || ctx.area?.id === 'gildedVault') && rng.chance(0.2)) out.push(currencyStack('twinInk', 1, randomUid(rng), true));
   }
-  if (kill.eventReward === 'wound' && ctx.tier >= 3) out.push(currencyStack('voidSplinter', 1, randomUid(rng), true));
-  if (kill.eventReward === 'secondCrown' && ctx.tier >= 5) out.push(currencyStack('crownFragment', 1, randomUid(rng), true));
+  if (kill.eventReward === 'wound' && (ctx.tier >= 3 || ctx.area?.id === 'blackPit')) out.push(currencyStack('voidSplinter', 1, randomUid(rng), true));
+  if (kill.eventReward === 'wound' && ctx.area?.id === 'blackPit') out.push(currencyStack('twinInk', 1, randomUid(rng), true));
+  if (kill.eventReward === 'secondCrown' && (ctx.tier >= 5 || ctx.area?.id === 'sealedReliquary')) out.push(currencyStack('crownFragment', 1, randomUid(rng), true));
 
   // Guarantees use the looter's personal rarity (the elite multiplier already boosts the ordinary roll above).
   const mapM = luck.personal.itemRarity / 100;
@@ -295,9 +305,9 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
   if (kill.isBoss) {
     out.push(makeEquipment(ctx, rng, 'rare', origin));
     for (let i = 0; i < BOSS_LOOT.extraEquipment; i++) out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, mapM, 'magic'), origin));
-    for (let i = 0; i < BOSS_LOOT.currency; i++) out.push(makeCurrency(ctx, rng));
+    for (let i = 0; i < BOSS_LOOT.currency * (ctx.area?.currencyMultiplier ?? 1); i++) out.push(makeCurrency(ctx, rng));
     if (rng.chance(Math.min(1, BOSS_LOOT.uniqueChance * mapM))) out.push(makeEquipment(ctx, rng, 'unique', origin));
-    if (ctx.area?.sealed) out.push(makeEquipment(ctx, rng, 'unique', origin));
+    if (ctx.area?.id === 'sealedReliquary' && (!ctx.crownEncounter || kill.eventReward === 'secondCrown')) out.push(makeEquipment(ctx, rng, 'unique', origin));
     for (const drop of ctx.area?.ingredientDrops ?? []) {
       if (ctx.tier >= drop.minTier && rng.chance(drop.chance)) out.push(currencyStack(drop.currencyId, 1, randomUid(rng), true));
     }
@@ -306,6 +316,12 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
         : ctx.tier < RELIQUARY_KEY_CHANCE.elsewhereMinTier ? 0
         : ctx.area.type === 'crypt' ? RELIQUARY_KEY_CHANCE.crypt : RELIQUARY_KEY_CHANCE.elsewhere;
       if (chance > 0 && rng.chance(chance)) out.push(currencyStack('reliquaryKey', 1, randomUid(rng), true));
+      for (const key of ATLAS_KEYS) {
+        if (key.currencyId === 'reliquaryKey') continue;
+        const keyChance = ctx.area.type === key.type && ctx.tier >= key.minTier ? key.chance
+          : ctx.tier >= ATLAS_GLOBAL_KEY_MIN_TIER ? ATLAS_GLOBAL_KEY_CHANCE : 0;
+        if (keyChance > 0 && rng.chance(keyChance)) out.push(currencyStack(key.currencyId, 1, randomUid(rng), true));
+      }
     }
   }
   return out;
@@ -324,7 +340,7 @@ export function rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave |
     const min = i === CHEST_LOOT.equipment - 1 && rng.chance(CHEST_LOOT.lastRareChance) ? 'rare' : 'magic';
     out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, m, min), origin));
   }
-  const currency = rng.int(CHEST_LOOT.currency.min, CHEST_LOOT.currency.max);
+  const currency = rng.int(CHEST_LOOT.currency.min, CHEST_LOOT.currency.max) * (ctx.area?.currencyMultiplier ?? 1);
   for (let i = 0; i < currency; i++) out.push(makeCurrency(ctx, rng));
   for (let i = 0; i < CHEST_LOOT.flasks; i++) out.push(makeFlask(rng));
   const tier = Math.min(MAX_MAP_TIER, ctx.tier + ((setup.map.charted || rng.chance(CHEST_LOOT.mapTierUpgradeChance)) ? 1 : 0));

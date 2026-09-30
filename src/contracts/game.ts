@@ -150,6 +150,10 @@ export interface RunSetup {
   atlasAreaId?: AtlasAreaId;
   /** Actual Scrap entry fee paid; absent on legacy/free maps. Returned only for server-side run loss. */
   entranceScrap?: number;
+  /** Exact key paid at entry, retained for atomic restart refunds. */
+  entranceKey?: import('./content').CurrencyId;
+  /** Owner's chosen Hunting Ground reward class, fixed for the expedition and its party. */
+  lootClass?: import('./content').ItemClass;
   seed: number;
   monsterLevel: number;
   /** Map-side item quantity % (100 = base): tier + mods + quality + implicit. Excludes any player's gear. */
@@ -281,7 +285,7 @@ export interface GameRulesApi {
   // --- maps & runs ---
   mapSummary(ch: CharacterSave, map: MapItem): MapSummaryLine[];
   /** Consume the map in the device and produce run parameters (map-side luck only). */
-  openMap(ch: CharacterSave, areaId?: AtlasAreaId): Result<{ character: CharacterSave; setup: RunSetup }>;
+  openMap(ch: CharacterSave, areaId?: AtlasAreaId, lootClass?: import('./content').ItemClass): Result<{ character: CharacterSave; setup: RunSetup }>;
   /** Build the instance sim config (players join separately via SimRun.addPlayer). `setup` null = hideout. */
   buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConfig;
   /** One player's resolved stats/skills/loadout/belt for an instance (after joining, level-ups, gear or flask changes). */

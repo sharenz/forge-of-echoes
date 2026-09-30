@@ -144,6 +144,64 @@ describe('The Hunted and Echo Rift', () => {
 });
 
 describe('expanded map encounters', () => {
+  it('keeps all three required rifts available after the boss falls and clears only after the final rift', () => {
+    const { world: w, event, log } = encounter('echoRift');
+    event.plan.required = true;
+    event.plan.next = { kind: 'echoRift', wave: 3, angle: 1, required: true,
+      next: { kind: 'echoRift', wave: 4, angle: 2, required: true } };
+    w.director.wave = 6; w.director.bossDefeated = true;
+    for (let rift = 0; rift < 3; rift++) {
+      updateMapEvent(w);
+      expect(event.view?.phase).toBe('available');
+      updateDirector(w); expect(w.director.cleared).toBe(false);
+      w.players[0].x = event.view!.x; w.players[0].y = event.view!.y;
+      tick(w);
+      for (let pulse = 0; pulse < 3; pulse++) { slay(w); if (pulse < 2) tick(w, 121); }
+      expect(event.view?.phase).toBe('complete');
+      updateDirector(w);
+      expect(w.director.cleared).toBe(rift === 2);
+      if (rift < 2) tick(w, 301);
+    }
+    expect(log.killRolls.filter(r => r.ctx.eventReward === 'echoRift')).toHaveLength(3);
+    expect(log.killRolls).toHaveLength(27);
+  });
+
+  it('does not award the first boss while a Bounty hunter precedes its required twin', () => {
+    const { world: w, event, run } = encounter('hunted');
+    event.plan.required = true;
+    event.plan.next = { kind: 'secondCrown', wave: 6, angle: 1, required: true };
+    w.director.wave = 6;
+    const original = spawnMonster(w, 'cinderMatriarch', 180, 0, { boss: true, animate: false });
+    w.director.bossId = w.monsters.id[original];
+    killMonster(w, original, DT_FIRE, true, 1);
+    expect(w.director.bossDefeated).toBe(false);
+    expect(run.drainOutcomes().filter(o => o.t === 'bossDefeated')).toHaveLength(0);
+    tick(w); slay(w); tick(w, 301); tick(w);
+    expect(event.plan.kind).toBe('secondCrown');
+    expect(event.members.size).toBe(1);
+    slay(w);
+    expect(w.director.bossDefeated).toBe(true);
+    expect(run.drainOutcomes().filter(o => o.t === 'bossDefeated')).toHaveLength(1);
+  });
+
+  it('empowers only boss monsters and completes a bossless final wave normally', () => {
+    const { world: normal } = encounter('hunted'), { world: harder } = encounter('hunted');
+    harder.config.bossLifeMultiplier = 1.5; harder.config.bossDamageMultiplier = 1.25;
+    for (const boss of [false, true]) {
+      const a = spawnMonster(normal, 'varkus', 180, 0, { boss, wave: 6 });
+      const b = spawnMonster(harder, 'varkus', 180, 0, { boss, wave: 6 });
+      expect(harder.monsters.maxLife[b]).toBeCloseTo(normal.monsters.maxLife[a] * (boss ? 1.5 : 1));
+      expect(harder.monsters.damage[b]).toBeCloseTo(normal.monsters.damage[a] * (boss ? 1.25 : 1));
+    }
+    const { run, world: w } = createRunInternal(makeConfig({ waves: { count: 6, bossWave: 0 } }));
+    run.addPlayer(makeJoin(1));
+    w.director.intro = 0; w.director.wave = 6;
+    updateDirector(w);
+    expect(w.director.cleared).toBe(true);
+    expect(run.drainOutcomes().filter(o => o.t === 'cleared')).toHaveLength(1);
+    expect(w.props.some(p => p.kind === 'chest')).toBe(true);
+  });
+
   it('Blackout moves between three guarded beacons and pays only after the last guard', () => {
     const { world: w, event, log } = encounter('blackout');
     updateMapEvent(w);

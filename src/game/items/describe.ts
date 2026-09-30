@@ -6,6 +6,7 @@ import type {
   CurrencyStack, EquipmentItem, FlaskStack, Item, ItemDescription, ItemTone, TooltipLine,
 } from '../../contracts/items';
 import type { FlaskId } from '../../contracts/content';
+import { atlasKeyDestination, findAtlasArea } from '../../data/progression/atlas';
 import { iconIdForBase, iconIdForCurrency, iconIdForFlask, iconIdForUnique } from '../../contracts/content';
 import {
   BELT_SLOT_CAPACITY, CLASS_LABEL, CURRENCY_FAMILY_LABEL, FLASK_STACK, TAG_LABEL, findBase, findCurrency, findFlask,
@@ -132,7 +133,8 @@ export function describeCurrency(stack: CurrencyStack): ItemDescription {
     ? 'Right-click to arm, then left-click a map in the hideout.'
     : 'Right-click to arm, then left-click an item in the hideout.';
   if (def?.needsAffixChoice) hint = 'Right-click to arm, left-click an item, then choose an affix.';
-  if (stack.currencyId === 'reliquaryKey') hint = 'Select the Sealed Reliquary in the Map Device. Activation consumes one key from your inventory or stash.';
+  const keyArea = findAtlasArea(atlasKeyDestination(stack.currencyId));
+  if (keyArea) hint = `Select ${keyArea.name} in the Map Device. Activation consumes one key from your inventory or stash.`;
   // A Crafting Stash slot (uid "cstash:<id>", see src/game/items/special-stash.ts).
   const inStash = parseCurrencyStashUid(stack.uid) !== null;
   if (inStash) {

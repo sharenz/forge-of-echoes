@@ -1102,8 +1102,8 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       }
     },
 
-    activateMapDevice(areaId) {
-      const r = rules.openMap(ch, areaId);
+    activateMapDevice(areaId, lootClass) {
+      const r = rules.openMap(ch, areaId, lootClass);
       if (!r.ok) {
         fail(r.error);
         return;

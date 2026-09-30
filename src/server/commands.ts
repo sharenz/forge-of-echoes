@@ -298,7 +298,7 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
 
     // --- hideout ---------------------------------------------------------------------------
     case 'activateMapDevice':
-      return game.activateMapDevice(s, cmd.areaId);
+      return game.activateMapDevice(s, cmd.areaId, cmd.lootClass);
     case 'merchantOffers':
       if (!inHideout(s)) return fail('Rook only trades in a hideout.');
       return { ok: true, offers: r.merchantOffers(ch) };

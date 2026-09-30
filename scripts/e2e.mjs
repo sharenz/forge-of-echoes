@@ -1856,6 +1856,11 @@ async function accountScenario({ A, B, nameB, port }) {
 }
 
 async function atlasScenario({ A, port }) {
+  const { tsImport } = await import('tsx/esm/api');
+  const { ATLAS_AREA_IDS } = await tsImport('../src/contracts/atlas.ts', import.meta.url);
+  const { ATLAS_AREAS, ATLAS_KEYS } = await tsImport('../src/data/progression/atlas.ts', import.meta.url);
+  const { buildEquipment } = await tsImport('../src/game/items/index.ts', import.meta.url);
+  const { createRng } = await tsImport('../src/core/rng.ts', import.meta.url);
   const openDevice = async () => {
     await A.page.evaluate(() => window.__foe.store.actions.closeAllPanels());
     let at = await propOnScreen(A, 'mapDevice');
@@ -1868,13 +1873,13 @@ async function atlasScenario({ A, port }) {
     await A.page.mouse.click(at.x, at.y);
     await A.page.waitForSelector('.fe-device');
   };
-  await step('a fresh account sees one Atlas area and fog over the other eleven', async () => {
+  await step('a fresh account sees one Atlas area and fog over every other destination', async () => {
     await openDevice();
     await A.page.locator('.fe-grid[data-drop="backpack"] .fe-item[data-kind="map"]').first().click({ modifiers: ['Control'] });
     await A.waitFor('inserted map', () => !!window.__foe.store.get().character.mapDevice);
     await A.page.locator('.fe-device__destination').click();
     assert(await A.page.locator('.fe-atlas__node--known').count() === 1, 'fresh Atlas has extra revealed areas');
-    assert(await A.page.locator('.fe-atlas__node:disabled').count() === 11, 'fog areas are not disabled');
+    assert(await A.page.locator('.fe-atlas__node:disabled').count() === ATLAS_AREA_IDS.length - 1, 'fog areas are not disabled');
     await A.shot(`atlas-fresh-${VW}x${VH}`);
   });
   await step('explored Atlas handles tier limits and an item from another theme', async () => {
@@ -1898,10 +1903,10 @@ async function atlasScenario({ A, port }) {
     db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(saved), character.id);
     db.close();
     await startGameServer(port);
-    await A.waitFor('explored Atlas after restart', () => {
+    await A.waitFor('explored Atlas after restart', (total) => {
       const s = window.__foe.store.get();
-      return s.connection === 'online' && s.character?.atlas?.discovered.length === 12;
-    }, undefined, 30_000);
+      return s.connection === 'online' && s.character?.atlas?.discovered.length === total;
+    }, ATLAS_AREA_IDS.length, 30_000);
     outage = false;
     await openDevice();
     await A.page.locator('.fe-device__destination').click();
@@ -1915,6 +1920,20 @@ async function atlasScenario({ A, port }) {
       ).map(b => `${a.name} / ${b.name}`));
     });
     assert(overlaps.length === 0, `Atlas area cards overlap: ${overlaps.join('; ')}`);
+    const falseEntrances = await A.eval(() => {
+      const nodes = [...document.querySelectorAll('.fe-atlas__node')].map(n => ({ id: n.dataset.area, r: n.getBoundingClientRect() }));
+      return [...document.querySelectorAll('.fe-atlas__routes path')].flatMap(path => {
+        const matrix = path.getScreenCTM(), length = path.getTotalLength();
+        for (let step = 1; step < 100; step++) {
+          const p = path.getPointAtLength(length * step / 100).matrixTransform(matrix);
+          const crossed = nodes.find(n => n.id !== path.dataset.from && n.id !== path.dataset.to
+            && p.x > n.r.left - 2 && p.x < n.r.right + 2 && p.y > n.r.top - 2 && p.y < n.r.bottom + 2);
+          if (crossed) return [`${path.dataset.from} → ${path.dataset.to} crosses ${crossed.id}`];
+        }
+        return [];
+      });
+    });
+    assert(falseEntrances.length === 0, `Atlas routes imply false entrances: ${falseEntrances.join('; ')}`);
     await A.shot(`atlas-explored-${VW}x${VH}`);
     await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
     assert((await A.page.locator('.fe-device__destination').innerText()).includes('Bone Approach'), 'area choice was not retained');
@@ -1931,6 +1950,96 @@ async function atlasScenario({ A, port }) {
       return s.hud?.portal?.mapName === 'Sealed Reliquary' && s.hud.portal.tier === 3 && !s.character.mapDevice && !s.character.currencyStash.reliquaryKey;
     });
   });
+  const play = opt('play-areas', '').split(',');
+  for (const areaId of ['heartOfForge', 'eternalArena', 'hollowOssuary', 'pitOfEchoes', 'shrineField', 'gildedVault', 'blackPit', 'huntingGround', 'riftNexus']) {
+    const area = ATLAS_AREAS.find(a => a.id === areaId);
+    const tier = ['heartOfForge', 'eternalArena'].includes(areaId) ? 15 : 3;
+    await step(`${area.name}: select destination, disclose costs and activate through the UI`, async () => {
+      outage = true;
+      await stopGameServer();
+      const { DatabaseSync } = await import('node:sqlite');
+      const db = new DatabaseSync(join(tmp, 'e2e.db'));
+      const row = db.prepare('SELECT account_id, data FROM account_storage').get();
+      const shared = JSON.parse(row.data);
+      shared.atlas = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 };
+      shared.currencyStash.scrap = 100;
+      for (const key of ATLAS_KEYS) shared.currencyStash[key.currencyId] = 2;
+      db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), row.account_id);
+      const ch = db.prepare('SELECT id, data FROM characters').get();
+      const saved = JSON.parse(ch.data);
+      saved.mapDevice = { kind: 'map', uid: `e2e-atlas:${areaId}`, baseId: 'ashenForge', tier, rarity: 'normal', quality: 0, corrupted: false, mods: [], ...(area.requiresBounty ? { bounty: true } : {}) };
+      saved.level = 60; saved.allocated = { str: 195, dex: 100, int: 195 };
+      saved.equipment.mainHand = buildEquipment({ uid: 'atlas-wand:i1', baseId: 'emberheartWand', itemLevel: 88, rarity: 'rare',
+        affixes: [{ affixId: 'spellDamage', tier: 1 }, { affixId: 'fireDamage', tier: 1 }, { affixId: 'addedSpellDamage', tier: 1 },
+          { affixId: 'castSpeed', tier: 1 }, { affixId: 'critChance', tier: 1 }, { affixId: 'critMultiplier', tier: 1 }] }, createRng(81));
+      for (const id of Object.keys(saved.skillRanks)) saved.skillRanks[id] = 20;
+      saved.loadout = ['emberLance', 'emberNova', 'arcChain', 'flameWave', 'cinderWard', 'riftStep'];
+      db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(saved), ch.id);
+      db.close();
+      await startGameServer(port);
+      await A.waitFor('new area fixture reconnect', (uid) => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.mapDevice?.uid === uid, saved.mapDevice.uid, 30000);
+      outage = false;
+      await openDevice();
+      await A.page.locator('.fe-device__destination').click();
+      await A.page.getByRole('button', { name: new RegExp(`^${area.name},`) }).click();
+      await A.shot(`atlas-${areaId}-detail-${VW}x${VH}`);
+      await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+      if (area.chosenClass) await A.page.getByRole('combobox', { name: 'Hunter reward class' }).selectOption('ring');
+      await A.shot(`atlas-${areaId}-device-${VW}x${VH}`);
+      const currencyOnHand = id => {
+        const ch = window.__foe.store.get().character;
+        return (ch.currencyStash[id] ?? 0) + [...ch.backpack.entries, ...ch.stash.flatMap(t => t.grid.entries)]
+          .reduce((n, e) => n + (e.item.kind === 'currency' && e.item.currencyId === id ? e.item.count : 0), 0);
+      };
+      const scrapBefore = await A.eval(currencyOnHand, 'scrap');
+      const keyBefore = area.entranceKey ? await A.eval(currencyOnHand, area.entranceKey) : 0;
+      await A.page.locator('.fe-device__activate').click();
+      const confirm = A.page.locator('.fe-dialog__actions button:has-text("Activate")');
+      if (await confirm.isVisible()) await confirm.click();
+      await A.waitFor('selected area portal', (name) => window.__foe.store.get().hud?.portal?.mapName === name && !window.__foe.store.get().character.mapDevice, area.name);
+      if (area.entranceKey) assert(await A.eval(currencyOnHand, area.entranceKey) === keyBefore - 1, 'wrong key payment');
+      const fee = Math.max(0, Math.floor((tier - 1) / 3));
+      assert(await A.eval(currencyOnHand, 'scrap') === scrapBefore - fee, 'wrong territory fee');
+      await closePanels(A);
+    });
+    if (!play.includes(areaId)) continue;
+    await step(`${area.name}: complete its real encounter chain and map objective`, async () => {
+      await clickPortal(A);
+      await A.waitFor('in the selected area', id => window.__foe.store.get().run?.atlasAreaId === id, areaId);
+      assert(await A.eval(() => !Object.hasOwn(window.__foe.store.get().run, 'event')), 'encounter chain leaked');
+      if (area.chosenClass) assert(await A.eval(() => window.__foe.store.get().run.lootClass === 'ring'), 'reward class was not retained');
+      await A.eval(() => {
+        window.__atlasPlay = { last: '', hold: '', resolved: [] };
+        window.__foe.bot.enable({ returnPortal: false, collect: false });
+      });
+      await A.waitFor('full area objective', () => {
+        const f = window.__foe, state = window.__atlasPlay, event = f.world.view.run.event;
+        const phase = event ? `${event.kind}:${event.phase}` : '';
+        if (phase !== state.last && event && ['complete', 'failed'].includes(event.phase)) state.resolved.push(event.kind);
+        state.last = phase;
+        if (event?.phase === 'available') {
+          const key = `${event.x},${event.y}`;
+          if (state.hold !== key) {
+            state.hold = key;
+            f.bot.enable({ returnPortal: false, collect: false, hold: { x: event.x, y: event.y } });
+          }
+        } else if (state.hold && event && ['complete', 'failed'].includes(event.phase)) {
+          state.hold = '';
+          f.bot.enable({ returnPortal: false, collect: false });
+        }
+        return f.world.view.run.phase === 'cleared';
+      }, undefined, 600000);
+      const resolved = await A.eval(() => window.__atlasPlay.resolved);
+      if (area.encounters) assert(isDeepStrictEqual(resolved, area.encounters.map(e => e.kind)), `wrong encounter sequence: ${resolved.join(', ')}`);
+      assert(await A.eval(id => window.__foe.store.get().character.atlas.completed.includes(id), areaId), 'Atlas credit missing');
+      await A.shot(`atlas-${areaId}-cleared-${VW}x${VH}`);
+      await A.eval(() => window.__foe.bot.disable());
+      const leave = await A.eval(() => window.__foe.send({ c: 'leaveMap' }));
+      assert(leave.ok, leave.error);
+      await A.waitFor('home after area clear', () => window.__foe.store.get().hud?.zone === 'hideout');
+      await closePanels(A);
+    });
+  }
 }
 
 async function craftingScenario({ A, port }) {

@@ -18,6 +18,7 @@ import {
   STREAM_WINDOW, VIEW_HALF_H, VIEW_HALF_W, WAVE_DAMAGE_GROWTH,
 } from './constants';
 import { DAMAGE_INDEX, GOLDEN_ANGLE, TAU } from './math';
+import { requiredEventPending } from './map-events';
 import { monsterDef, monsterDefs } from './rosters';
 import { nearestLiving } from './player';
 import { clearHostileProjectiles } from './projectiles';
@@ -90,7 +91,7 @@ export function updateDirector(w: World): void {
       } else {
         const hasBoss = cfg.bossWave > 0 && cfg.bossWave <= cfg.count;
         const done = hasBoss ? d.bossDefeated && (cfg.bossWave === cfg.count || cleared) : cleared;
-        if (done) {
+        if (done && !requiredEventPending(w)) {
           clearRun(w);
           return;
         }

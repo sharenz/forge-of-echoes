@@ -174,6 +174,26 @@ export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
     maxStack: RARE_CURRENCY_STACK,
     dropTier: 'rare',
   }),
+  gildedKey: currency('gildedKey', {
+    name: 'Gilded Key',
+    description: 'Opens one expedition into the Gilded Vault. Found from vault bosses on Tier 3+ maps (12%), or any ordinary Atlas boss on Tier 8+ maps (0.5%). Tradeable; never expires.',
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  blackKey: currency('blackKey', {
+    name: 'Black Key',
+    description: 'Opens one expedition into the Black Pit. Found from forge bosses on Tier 3+ maps (8%), or any ordinary Atlas boss on Tier 8+ maps (0.5%). Tradeable; never expires.',
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  huntingKey: currency('huntingKey', {
+    name: 'Hunting Key',
+    description: 'Opens one expedition into the Hunting Ground. Found from arena bosses on Tier 3+ maps (8%), or any ordinary Atlas boss on Tier 8+ maps (0.5%). Tradeable; never expires.',
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
+  riftKey: currency('riftKey', {
+    name: 'Rift Key',
+    description: 'Opens one expedition into the Rift Nexus. Found from crypt bosses on Tier 5+ maps (6%), or any ordinary Atlas boss on Tier 8+ maps (0.5%). Tradeable; never expires.',
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: RARE_CURRENCY_STACK, dropTier: 'rare',
+  }),
   reliquaryKey: currency('reliquaryKey', {
     name: 'Reliquary Key',
     description: 'Opens one expedition into the Sealed Reliquary. Found most often in the Ember Vault; tradeable and never expires.',

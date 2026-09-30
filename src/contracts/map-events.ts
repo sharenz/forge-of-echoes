@@ -6,6 +6,10 @@ export interface MapEventPlan {
   kind: MapEventKind;
   wave: number;
   angle: number;
+  /** Guaranteed area encounters remain available through the boss and must resolve before the map clears. */
+  required?: boolean;
+  /** Fixed creation sequence: up to three area encounters plus a commissioned Bounty hunter. */
+  next?: MapEventPlan;
 }
 
 export const MAP_EVENT_PHASES = ['available', 'warning', 'active', 'complete', 'failed'] as const;

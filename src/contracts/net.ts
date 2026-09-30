@@ -21,7 +21,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 10: durable crafting history, Scrap services, Bounty maps and refundable territory fees.
 // 11: six map themes, promoted final bosses, no wave-3 lieutenant and transferred completion rewards.
 // 12: advanced ingredients, map crafting flags, four more events and independent twin bosses.
-export const PROTOCOL_VERSION = 12;
+// 13: extended Atlas, sealed-area keys, fixed encounter chains and chosen-class rewards.
+export const PROTOCOL_VERSION = 13;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -108,7 +109,7 @@ export type Command =
   | { c: 'rankUpSkill'; skillId: SkillId }
   | { c: 'setLoadoutSlot'; slot: number; skillId: SkillId | null }
   // hideout
-  | { c: 'activateMapDevice'; areaId?: import('./atlas').AtlasAreaId }
+  | { c: 'activateMapDevice'; areaId?: import('./atlas').AtlasAreaId; lootClass?: import('./content').ItemClass }
   | { c: 'merchantOffers' }
   | { c: 'buyOffer'; offerId: string }
   // party & social

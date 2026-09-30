@@ -48,6 +48,12 @@ export function digestWorld(w: World): number {
     h.int(MAP_EVENT_KINDS.indexOf(event.plan.kind) + 1); h.int(event.plan.wave); h.float(event.plan.angle);
     h.int(event.finished ? 1 : 0); h.float(event.timer); h.float(event.grace); h.int(event.pulses);
     if (event.plan.kind === 'vaultbreakers') h.float(event.deadline);
+    if (event.plan.required || event.plan.next) {
+      for (let plan: typeof event.plan | undefined = event.plan; plan; plan = plan.next) {
+        h.int(MAP_EVENT_KINDS.indexOf(plan.kind) + 1); h.int(plan.wave); h.float(plan.angle); h.int(plan.required ? 1 : 0);
+      }
+      h.int(0);
+    }
     for (const id of event.members) h.int(id);
     h.int(event.view ? MAP_EVENT_PHASES.indexOf(event.view.phase) + 1 : 0);
     if (event.view) { h.float(event.view.x); h.float(event.view.y); h.int(event.view.remaining); }

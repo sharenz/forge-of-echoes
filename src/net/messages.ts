@@ -10,7 +10,7 @@
 //           only the events this bundle could not draw.
 import { PLAYER_DEBUFFS } from '../contracts/bestiary';
 import { ATLAS_AREA_IDS } from '../contracts/atlas';
-import { ATTRIBUTES, EQUIP_SLOTS, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
+import { ATTRIBUTES, EQUIP_SLOTS, ITEM_CLASSES, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
 import {
   BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_SLOTS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
 } from '../contracts/items';
@@ -234,8 +234,9 @@ function command(v: unknown): Command {
       shape(v, c, ['c']);
       return { c };
     case 'activateMapDevice': {
-      const o = shape(v, c, ['c'], ['areaId']);
-      return { c, ...(o.areaId === undefined ? {} : { areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS) }) };
+      const o = shape(v, c, ['c'], ['areaId', 'lootClass']);
+      return { c, ...(o.areaId === undefined ? {} : { areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS) }),
+        ...(o.lootClass === undefined ? {} : { lootClass: oneOf(o.lootClass, 'lootClass', ITEM_CLASSES) }) };
     }
     case 'usePortal': {
       const o = shape(v, c, ['c', 'propId']);

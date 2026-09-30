@@ -391,7 +391,9 @@ The Atlas shows area names/types/rewards only after discovery. It starts at Cind
 reveals two unexplored neighbours in a fixed order. Repeating an area can reveal any remaining neighbours.
 Every party member present at the kill receives credit (including a dead player); the owner receives no
 extra credit from the hideout. Two characters on one account earn one discovery. A receipt stored with the
-open run prevents a restart or repeated boss outcome from awarding the same account again.
+open run prevents a restart or repeated boss outcome from awarding the same account again. Pending awards
+also have a durable queue: closing/replacing a map or restarting during a failed account save cannot lose
+earned discovery. Applying progress and deleting its pending receipt are one transaction.
 
 | Depth | Areas | Highest map tier |
 |---|---|---|
@@ -401,24 +403,56 @@ open run prevents a restart or repeated boss outcome from awarding the same acco
 | 2, side route | Ember Vault (dead end from Ember Road) | 3 |
 | 3 | Shattered Forge, Champion's Approach | 7 |
 | 4 | Crown Foundry, Winter Throne (two approaches each) | 9 |
+| 5 | Ember Citadel, Frozen Passage | 11 |
+| 6 | The Last Kiln, Echo Bastion | 13 |
+| 7 | Heart of the Forge, Eternal Arena | 15 |
 | 3, rare destination | Sealed Reliquary | 7 |
 
-Any map item up to the area's tier ceiling is accepted, including low-tier maps in deep areas. Forged areas
+The 25-area graph has reciprocal ordinary routes; each Tier 10+ main destination remains reachable after
+any one other non-start area is removed. The map scrolls in both directions and centres the inspected area.
+Any map item up to the area's tier ceiling is accepted, including low-tier maps in deep areas; the Pit of
+Echoes additionally requires a Bounty commission. Forged areas
 favour caster bases; crypts favour jewellery; arenas favour armour and Fracture Cores. These change weights
-within the loot tables, not the total quantity. The Atlas displays the exact weight multipliers and the
+within the loot tables. Hollow Ossuary separately grants 30% more item quantity, including personal gear;
+Gilded Vault triples ordinary currency chances and boss/chest/carrier currency guarantees. Other categories
+and special ingredients are not tripled. The Atlas displays the exact weight multipliers and the
 theme's implicit. Ember Vault specialises in Ember Essences, Binding Seals and Reliquary Keys.
 
-An ordinary area's boss has a 1-in-8 chance to reveal the Sealed Reliquary in addition to normal neighbours.
-It never unlocks a tier route. Each expedition consumes one **Reliquary Key** from the backpack, normal stash
-or Crafting Stash, atomically with the map. Keys are tradeable, stack to 20 and do not expire. Boss key drop
+An ordinary area's boss (or Shrine Field completion) has a 1-in-8 chance to reveal the next undiscovered
+sealed destination in a fixed order. None unlock a tier route. Each expedition consumes its named key
+from the backpack, normal stash or Crafting Stash, atomically with the map. Keys are tradeable, stack to 20
+and do not expire. Boss Reliquary Key drop
 chances are 25% in Ember Vault at any tier; at Tier 3+, 8% in crypts and 2% elsewhere. The Reliquary does not
-drop its own key. Its boss guarantees an extra Unique when the item level allows one (Tier 2+), otherwise
-an extra Rare. Its twin-boss event and Crown Fragment arrive with the remaining event content.
+drop keys. Each new key below has a separate 0.5% chance from other ordinary Atlas bosses at Tier 8+.
+Specialty chances replace that global chance. Sealed bosses do not drop entrance keys.
+
+| Side destination | Entry / ceiling | Encounter and reward |
+|---|---|---|
+| Hollow Ossuary | Glass Sepulchre dead end / T5 | 2× ring and amulet weights; 30% more item quantity |
+| Pit of Echoes | Iron March dead end; Bounty map / T5 | Bounty hunter, boss with 50% more life and 25% more damage, guaranteed seventh Echo wave with double kill quantity |
+| Shrine Field | Heart of the Forge dead end / T15 | No final boss; clear the normal waves for Atlas credit and the chest. Ordinary encounter odds ×3, capped at 100%; no Second Crown roll. An item's Echo wave is retained |
+| Sealed Reliquary | Reliquary Key / T7 | Second Crown; the last boss gives one extra Unique (Rare at T1) and one Crown Fragment at every tier |
+| Gilded Vault | Gilded Key / T9 | Three Vaultbreakers; triple ordinary currency; each carrier has 20% Twin Ink chance at every tier |
+| Black Pit | Black Key / T11 | Blackout followed by the Wound; the last guardian guarantees Twin Ink and Void Splinter at every tier |
+| Hunting Ground | Hunting Key / T11 | Three successive Hunted rares; each guarantees a Rare base of the owner's chosen equipment class for every living player |
+| Rift Nexus | Rift Key / T13 | Three successive Echo Rifts; each gives one event ingredient (Echo Shard / Twin Ink / Void Splinter, equal odds), plus its ordinary rift rewards |
+
+Gilded Keys drop from vault bosses at T3+ (12%); Black Keys from forge bosses at T3+ (8%); Hunting Keys from
+arena bosses at T3+ (8%); Rift Keys from crypt bosses at T5+ (6%). Every new key has separate art, a Crafting
+Stash slot and a source tooltip. Hunting Ground's class selector offers only classes with eligible bases at
+the map's item level. The choice is fixed at creation for the whole party and survives restart.
+
+Guaranteed area encounters form a fixed sequence. Required rifts/beacons remain available after the boss
+and both map completion and Atlas credit wait until the sequence resolves; an escaped Vaultbreaker counts as resolved without
+paying kill rewards. Bounty still guarantees a hunter: it precedes the area's sequence when no hunter is
+already included. Sequences, key receipts and the original source item survive restart; no event plan is
+sent in the client setup. Existing open maps keep their original event plan.
 
 The rules retain legacy map setups across a restart. A run that cannot be restored refunds its original
 map and entrance key together; discovery and its per-run receipt are also one transaction.
 
-**Map events.** At creation, each map privately rolls at most one encounter. Bounty maps guarantee The Hunted.
+**Map events.** At creation, ordinary maps privately roll at most one encounter. Bounty maps guarantee The Hunted;
+sealed areas use the fixed sequences above instead.
 Otherwise a 25% base chance is divided equally among eligible encounters: Hunted/Echo Rift at T1+, plus
 Blackout/Vaultbreakers/Wound at T3+, plus Second Crown at T5+. Mid-map events appear in wave 2 or 4; Second
 Crown appears with the final boss in wave 6. The server omits the plan from the client's setup; Map Device

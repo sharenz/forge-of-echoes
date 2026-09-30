@@ -27,6 +27,7 @@ import { createRng, hashString } from '../core/rng';
 import type { AtlasAreaId } from '../contracts/atlas';
 import { ATLAS_RARE_DOOR_CHANCE, ATLAS_START, findAtlasArea } from '../data/progression/atlas';
 import { discoverAfterBoss, newAtlas, paidTerritoryFee } from '../game/progression/atlas';
+import { paidEntranceKey } from '../game/progression/runs';
 import { PORTALS_PER_MAP, PROTOCOL_VERSION } from '../contracts/net';
 import type { Command, PartyInfo, PartyMemberInfo, PortalInfo, RunSummaryInfo, ServerMessage } from '../contracts/net';
 import { SIM_HZ } from '../contracts/sim';
@@ -254,6 +255,7 @@ export class Game implements InstanceHost {
       for (const party of this.parties.list()) this.dirtyParties.add(party.id);
     }
     this.guard('ground expiry', () => this.ground.expire(now));
+    this.guard('closed-map atlas credit', () => this.awardClosedAtlasCredits());
     for (const inst of this.instances.list()) {
       if (!inst.disposed && inst instanceof MapInstance && inst.atlasPendingCredits.size) this.guard('atlas credit', () => this.awardAtlasCredit(inst));
       if (inst.disposed || inst.playerCount > 0) continue;
@@ -812,7 +814,7 @@ export class Game implements InstanceHost {
   }
 
   /** Open a new map from the device in the session's own hideout. */
-  activateMapDevice(s: PlayerSession, areaId: AtlasAreaId = ATLAS_START): { ok: true; message: string } | { ok: false; error: string } {
+  activateMapDevice(s: PlayerSession, areaId: AtlasAreaId = ATLAS_START, lootClass?: import('../contracts/content').ItemClass): { ok: true; message: string } | { ok: false; error: string } {
     const inst = s.instance;
     if (!inst || inst.kind !== 'hideout' || inst.ownerId !== s.characterId) {
       return { ok: false, error: 'Maps can only be opened at the map device in your own hideout.' };
@@ -826,7 +828,7 @@ export class Game implements InstanceHost {
     if (inUse > 0) {
       return { ok: false, error: `Your previous map is still in use (${inUse} player${inUse === 1 ? '' : 's'} inside).` };
     }
-    const opened = this.serverRules.openMap(s.record.ch, areaId);
+    const opened = this.serverRules.openMap(s.record.ch, areaId, lootClass);
     if (!opened.ok) return { ok: false, error: opened.error };
     if (old) this.closeMap(old, 'replaced');
     const map = this.instances.createMap(s.characterId, s.name, opened.value.setup, this.now(), randomUUID());
@@ -896,7 +898,7 @@ export class Game implements InstanceHost {
   private refundMap(map: MapInstance): void {
     const item = map.sourceItem;
     if (!item) return;
-    if (this.refundMapItem(map.ownerId, item, map.mapKey, () => this.db.deleteOpenMap(map.mapKey), !!findAtlasArea(map.setup.atlasAreaId)?.sealed, map.setup.entranceScrap)) map.sourceItem = null;
+    if (this.refundMapItem(map.ownerId, item, map.mapKey, () => this.db.deleteOpenMap(map.mapKey), paidEntranceKey(map.setup), map.setup.entranceScrap)) map.sourceItem = null;
   }
 
   /**
@@ -904,8 +906,8 @@ export class Game implements InstanceHost {
    * with `alsoWrite` (the deletion of the map's row). All or nothing: when the write fails (logged) the
    * character is unchanged and false is returned.
    */
-  private refundMapItem(ownerId: string, item: MapItem, mapKey: string, alsoWrite: () => void, refundKey = false, entranceScrap = 0): boolean {
-    const extra: Item[] = refundKey ? [{ kind: 'currency', currencyId: 'reliquaryKey', count: 1, uid: `refund-key:${mapKey}` }] : [];
+  private refundMapItem(ownerId: string, item: MapItem, mapKey: string, alsoWrite: () => void, refundKey?: import('../contracts/content').CurrencyId, entranceScrap = 0): boolean {
+    const extra: Item[] = refundKey ? [{ kind: 'currency', currencyId: refundKey, count: 1, uid: `refund-key:${mapKey}` }] : [];
     const fee = paidTerritoryFee(entranceScrap);
     if (fee) extra.push({ kind: 'currency', currencyId: 'scrap', count: fee, uid: `refund-scrap:${mapKey}` });
     return this.returnToOwner(ownerId, item, { what: 'map refund', done: 'map refunded' }, { map: mapKey }, alsoWrite, extra);
@@ -1088,20 +1090,16 @@ export class Game implements InstanceHost {
       case 'cleared':
         if (inst instanceof MapInstance && !inst.cleared) {
           inst.cleared = true;
+          const area = findAtlasArea(inst.setup.atlasAreaId);
+          if (area?.noBoss || area?.encounters) this.queueAtlasCredit(inst);
           for (const m of inst.members.values()) m.toast(`${inst.mapName} cleared!`, 'good');
           this.portalChanged(inst);
           this.log.info('map cleared', { map: inst.id, owner: inst.ownerName, seconds: Math.round(inst.run.view.time) });
         }
         break;
       case 'bossDefeated':
-        if (inst instanceof MapInstance && inst.setup.atlasAreaId) {
-          // Present party members all get credit, including a player waiting to respawn. The owner
-          // receives no extra credit from the hideout, and two alts do not reveal four neighbours.
-          for (const s of inst.members.values()) if (!inst.atlasCredits.has(s.record.accountId)) {
-            inst.atlasPendingCredits.set(s.record.accountId, s.characterId);
-          }
-          this.persistMap(inst);
-          this.awardAtlasCredit(inst);
+        if (inst instanceof MapInstance && inst.setup.atlasAreaId && !findAtlasArea(inst.setup.atlasAreaId)?.encounters) {
+          this.queueAtlasCredit(inst);
         }
         break;
       case 'enterPortal': {
@@ -1124,15 +1122,24 @@ export class Game implements InstanceHost {
     }
   }
 
+  /** Present party accounts receive one receipt, including dead members; the absent owner gets none. */
+  private queueAtlasCredit(map: MapInstance): void {
+    for (const s of map.members.values()) if (!map.atlasCredits.has(s.record.accountId)) {
+      map.atlasPendingCredits.set(s.record.accountId, s.characterId);
+    }
+    this.persistMap(map);
+    this.awardAtlasCredit(map);
+  }
+
   /** A pending account's progress and its run receipt commit together; failed writes retry in maintenance. */
   private awardAtlasCredit(map: MapInstance): void {
     const areaId = map.setup.atlasAreaId;
     if (!areaId) return;
     for (const [accountId, characterId] of map.atlasPendingCredits) {
       const rec = this.store.acquire(characterId);
-      if (!rec) { map.atlasPendingCredits.delete(accountId); this.persistMap(map); continue; }
+      if (!rec) { this.db.deleteAtlasCredit(map.mapKey, accountId); map.atlasPendingCredits.delete(accountId); this.persistMap(map); continue; }
       try {
-        if (rec.accountId !== accountId) { map.atlasPendingCredits.delete(accountId); this.persistMap(map); continue; }
+        if (rec.accountId !== accountId) { this.db.deleteAtlasCredit(map.mapKey, accountId); map.atlasPendingCredits.delete(accountId); this.persistMap(map); continue; }
         const rng = createRng(map.setup.seed ^ hashString(accountId));
         const result = discoverAfterBoss(rec.ch.atlas ?? newAtlas(), areaId, rng.chance(ATLAS_RARE_DOOR_CHANCE));
         const credited = new Set(map.atlasCredits).add(accountId);
@@ -1141,7 +1148,10 @@ export class Game implements InstanceHost {
         const owner = this.store.peek(map.ownerId);
         // Every write of an open run includes its owner's pending consumed-map state, even when the
         // recipient is a guest on a different account and an earlier owner save failed.
-        if (!this.store.commit(rec, { ...rec.ch, atlas: result.progress }, () => this.db.saveOpenMap(this.mapRow(map, credited, pending)), owner ? [owner] : [])) continue;
+        if (!this.store.commit(rec, { ...rec.ch, atlas: result.progress }, () => {
+          this.db.saveOpenMap(this.mapRow(map, credited, pending));
+          this.db.deleteAtlasCredit(map.mapKey, accountId);
+        }, owner ? [owner] : [])) continue;
         map.atlasCredits.add(accountId);
         map.atlasPendingCredits.delete(accountId);
         map.persisted = true;
@@ -1153,6 +1163,24 @@ export class Game implements InstanceHost {
       } finally {
         this.store.release(rec);
       }
+    }
+  }
+
+  /** Awards left by closed maps use the same deterministic reveal roll and commit with their receipt deletion. */
+  private awardClosedAtlasCredits(): void {
+    const active = new Set(this.instances.list().filter((i): i is MapInstance => i instanceof MapInstance).map(i => i.mapKey));
+    for (const receipt of this.db.loadAtlasCredits()) {
+      if (active.has(receipt.mapId)) continue;
+      const area = findAtlasArea(receipt.areaId), rec = this.store.acquire(receipt.characterId);
+      try {
+        if (!rec || rec.accountId !== receipt.accountId || !area) {
+          this.db.deleteAtlasCredit(receipt.mapId, receipt.accountId); continue;
+        }
+        const rng = createRng(receipt.seed ^ hashString(receipt.accountId));
+        const result = discoverAfterBoss(rec.ch.atlas ?? newAtlas(), area.id, rng.chance(ATLAS_RARE_DOOR_CHANCE));
+        if (this.store.commit(rec, { ...rec.ch, atlas: result.progress }, () => this.db.deleteAtlasCredit(receipt.mapId, receipt.accountId)))
+          this.sessions.get(receipt.characterId)?.pushCharacter('soon');
+      } finally { if (rec) this.store.release(rec); }
     }
   }
 
@@ -1402,7 +1430,11 @@ export class Game implements InstanceHost {
     const row = this.mapRow(map);
     const owner = this.store.peek(map.ownerId);
     try {
-      this.store.writeTogether(owner ? [owner] : [], () => this.db.saveOpenMap(row));
+      this.store.writeTogether(owner ? [owner] : [], () => {
+        this.db.saveOpenMap(row);
+        if (map.setup.atlasAreaId) for (const [accountId, characterId] of map.atlasPendingCredits)
+          this.db.saveAtlasCredit({ mapId: map.mapKey, accountId, characterId, areaId: map.setup.atlasAreaId, seed: map.setup.seed });
+      });
       map.persisted = true;
     } catch (err) {
       map.persisted = false;
@@ -1524,6 +1556,7 @@ export class Game implements InstanceHost {
         if (this.restoreMap(row, now)) maps++;
       });
     }
+    this.guard('closed-map atlas restore', () => this.awardClosedAtlasCredits());
     if (restored.length > 0 || mapRows.length > 0) this.log.info('restored after restart', { parties: restored.length, maps, mapRows: mapRows.length });
   }
 
@@ -1532,10 +1565,6 @@ export class Game implements InstanceHost {
    * deletion of the row are one transaction; if that fails, the row stays for the next start.
    */
   private restoreMap(row: OpenMapRow, now: number): boolean {
-    if (row.cleared) {
-      this.db.deleteOpenMap(row.mapId);
-      return false;
-    }
     let parsed: unknown = null;
     try {
       parsed = JSON.parse(row.setup);
@@ -1543,12 +1572,27 @@ export class Game implements InstanceHost {
       parsed = null;
     }
     const seed = isRecord(parsed) && typeof parsed.seed === 'number' ? parsed.seed : Number.NaN;
+    if (row.cleared) {
+      const saved = parsed;
+      this.db.transaction(() => {
+        // Backfill pending receipts from pre-queue releases before deleting a completed map.
+        if (isRecord(saved) && findAtlasArea(saved.atlasAreaId) && Number.isFinite(seed) && Array.isArray(saved.atlasPendingCredits)) {
+          const credited = new Set(Array.isArray(saved.atlasCredits) ? saved.atlasCredits : []);
+          for (const pair of saved.atlasPendingCredits) if (Array.isArray(pair) && pair.length === 2
+            && pair.every(id => typeof id === 'string') && !credited.has(pair[0]) && this.db.accountById(pair[0])) {
+            this.db.saveAtlasCredit({ mapId: row.mapId, accountId: pair[0], characterId: pair[1], areaId: saved.atlasAreaId as string, seed });
+          }
+        }
+        this.db.deleteOpenMap(row.mapId);
+      });
+      return false;
+    }
     const setup: RunSetup | null = restoreRunSetup(parsed, seed);
     const owner = this.db.characterById(row.ownerId);
     if (!setup || !owner || this.instances.activeMapOf(row.ownerId)) {
       // The run cannot come back: the map item goes back to its owner, if it is still a valid map.
       const item = restoreRunSetup(isRecord(parsed) ? (parsed.sourceMap ?? parsed.map) : null, 0)?.map ?? null;
-      if (owner && item) this.refundMapItem(row.ownerId, item, row.mapId, () => this.db.deleteOpenMap(row.mapId), isRecord(parsed) && parsed.atlasAreaId === 'sealedReliquary', isRecord(parsed) ? paidTerritoryFee(parsed.entranceScrap) : 0);
+      if (owner && item) this.refundMapItem(row.ownerId, item, row.mapId, () => this.db.deleteOpenMap(row.mapId), paidEntranceKey(parsed), isRecord(parsed) ? paidTerritoryFee(parsed.entranceScrap) : 0);
       else {
         this.db.deleteOpenMap(row.mapId);
         this.log.error('open map could not be restored', { map: row.mapId, owner: row.ownerName });

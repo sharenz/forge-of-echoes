@@ -255,6 +255,12 @@ reopen tuning for a specific problem rather than starting another general balanc
    twin-boss state, timed carrier rewards/escape, crafting preservation, exact previews, stash access and
    save/reload behavior are verified, including browser playthroughs at both sizes. Deeper routes, remaining
    rare/dead-end areas and expanded exclusive unique pools are still outstanding; this does not complete P1.8.
+   **Atlas expansion verified, awaiting deployment:** 25 areas with two approaches through T11/T13/T15, all
+   remaining dead ends and sealed destinations, four new keys, fixed encounter chains, chosen-class hunter
+   rewards and durable pending Atlas credit. Build/typecheck and 1,936 checks covered across the full suite
+   and focused reruns pass. Full browser clears cover Black Pit, Hunting Ground, Rift Nexus, Pit of Echoes
+   and Shrine Field; entry and graph layout are checked at both screen sizes. Boss-specific unique pools
+   and the map tree remain outstanding.
 9. **Map tree v0** (15 nodes, map-only effects). Biggest scope trap: only once events and ingredients are proven.
 
 ## P2: character depth

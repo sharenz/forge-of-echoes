@@ -45,8 +45,8 @@ export function spawnMonster(w: World, kind: MonsterKind, x: number, y: number, 
   const isDummy = kind === 'trainingDummy';
   const strength = RARITY_STRENGTH[opts.boss || opts.lieutenant || isDummy ? 'normal' : rarity];
   // Life scales with the party present at spawn time (a later join doesn't buff living monsters).
-  const lifeMult = isDummy ? 1 : s.lifeMultiplier * (1 + WAVE_LIFE_GROWTH * (wave - 1)) * eliteLifeMult(mods) * partyLifeMult(w) * strength.life;
-  const dmgMult = s.damageMultiplier * (1 + WAVE_DAMAGE_GROWTH * (wave - 1)) * eliteDamageMult(mods) * strength.damage;
+  const lifeMult = isDummy ? 1 : s.lifeMultiplier * (1 + WAVE_LIFE_GROWTH * (wave - 1)) * eliteLifeMult(mods) * partyLifeMult(w) * strength.life * (opts.boss ? w.config.bossLifeMultiplier ?? 1 : 1);
+  const dmgMult = s.damageMultiplier * (1 + WAVE_DAMAGE_GROWTH * (wave - 1)) * eliteDamageMult(mods) * strength.damage * (opts.boss ? w.config.bossDamageMultiplier ?? 1 : 1);
   const rng = w.worldRng;
   const animate = opts.animate ?? true;
 

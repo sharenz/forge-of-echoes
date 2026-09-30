@@ -8,7 +8,7 @@ import { getBase } from '../../src/data/items';
 import { bareCharacter, expectErr, expectOk, kill, map, withBackpack } from './fixtures';
 
 describe('Atlas routes and discovery', () => {
-  it('has twelve connected destinations, an optional dead end and a sealed door outside the tier routes', () => {
+  it('has connected destinations, optional dead ends and sealed doors outside the tier routes', () => {
     expect(ATLAS_AREAS.map((a) => a.id)).toEqual([...ATLAS_AREA_IDS]);
     const ordinary = ATLAS_AREAS.filter((a) => !a.sealed);
     const reached = new Set([ATLAS_START]);
@@ -19,7 +19,7 @@ describe('Atlas routes and discovery', () => {
       }
     }
     expect(reached.size).toBe(ordinary.length);
-    expect(Math.max(...ordinary.map(atlasTierCeiling))).toBe(9);
+    expect(Math.max(...ordinary.map(atlasTierCeiling))).toBe(15);
     const vault = findAtlasArea('emberVault')!;
     expect(vault.neighbours).toHaveLength(1);
     expect(atlasTierCeiling(vault)).toBe(atlasTierCeiling(findAtlasArea(vault.neighbours[0])!));
@@ -33,12 +33,12 @@ describe('Atlas routes and discovery', () => {
     expect(first.revealed).toEqual(['emberRoad', 'boneApproach']);
     expect(fresh.discovered).toEqual([ATLAS_START]);
     let progress = first.progress;
-    for (let round = 0; round < 5; round++) for (const id of [...progress.discovered]) {
+    for (let round = 0; round < ATLAS_AREAS.length; round++) for (const id of [...progress.discovered]) {
       const result = discoverAfterBoss(progress, id, false);
       expect(result.revealed.length).toBeLessThanOrEqual(2);
       progress = result.progress;
     }
-    expect(progress.discovered).toHaveLength(11);
+    expect(progress.discovered).toHaveLength(ATLAS_AREAS.filter(a => !a.sealed).length);
     expect(progress.discovered).toContain('crownFoundry');
     expect(progress.discovered).toContain('winterThrone');
     expect(progress.discovered).not.toContain('sealedReliquary');
@@ -140,7 +140,7 @@ describe('Atlas map expeditions', () => {
       const ch = { ...character(tier), currencyStash: { reliquaryKey: 1 } };
       const setup = expectOk(rules.openMap(ch, 'sealedReliquary')).setup;
       for (let seed = 1; seed <= 20; seed++) {
-        const drops = rules.rollKillLoot(setup, kill({ isBoss: true }), createRng(seed), bareCharacter());
+        const drops = rules.rollKillLoot(setup, kill({ isBoss: true, eventReward: 'secondCrown' }), createRng(seed), bareCharacter());
         expect(drops.at(-1)).toMatchObject({ kind: 'equipment', rarity: tier === 1 ? 'rare' : 'unique' });
         expect(drops.some((i) => i.kind === 'currency' && i.currencyId === 'reliquaryKey')).toBe(false);
       }

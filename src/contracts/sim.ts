@@ -181,6 +181,8 @@ export interface RunHooks {
 
 export interface RunConfig {
   event?: import('./map-events').MapEventPlan | null;
+  bossLifeMultiplier?: number;
+  bossDamageMultiplier?: number;
   mode: 'hideout' | 'map';
   seed: number;
   theme: Theme;

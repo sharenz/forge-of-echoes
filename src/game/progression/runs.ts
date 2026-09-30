@@ -4,6 +4,8 @@
 import type { MapSummaryLine, Result, RunSetup } from '../../contracts/game';
 import type { AtlasAreaId } from '../../contracts/atlas';
 import type { CharacterSave, MapItem } from '../../contracts/items';
+import { ITEM_CLASSES, type ItemClass } from '../../contracts/content';
+import { BASES, CURRENCIES } from '../../data/items';
 import type { MonsterScaling, PlayerRuntime, RunConfig, RunHooks, WaveConfig } from '../../contracts/sim';
 import { createRng, hashString, hashU32 } from '../../core/rng';
 import { HIDEOUT_ARENA_RADIUS, HIDEOUT_SEED, WAVES, findMapBase } from '../../data/progression';
@@ -14,7 +16,7 @@ import { normalizeMap } from './save';
 import { normalizeLoadout, playerSkills } from './skills';
 import { computeCombat } from './stats';
 import { clean, fail, ok } from './util';
-import { findAtlasArea } from '../../data/progression/atlas';
+import { atlasKeyDestination, findAtlasArea } from '../../data/progression/atlas';
 import { atlasAccessError, newAtlas, paidTerritoryFee, territoryEntryFee } from './atlas';
 import { spendCurrency } from './merchant';
 import { normalizeMapEvent, rollMapEvent } from './map-events';
@@ -34,19 +36,26 @@ function snapshotMap(map: MapItem): MapItem {
 }
 
 /** The run parameters of `map` (an already snapshotted map) with `seed`: map-side luck only. */
-function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId): RunSetup {
+function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass?: ItemClass): RunSetup {
   const area = findAtlasArea(areaId);
-  const map = area ? { ...source, baseId: area.baseId } : source;
+  let map = area ? { ...source, baseId: area.baseId } : source;
+  if (area?.echoWave && !map.mods.some(m => m.modId === 'echo')) map = { ...map, mods: [...map.mods, { modId: 'echo', value: 100 }] };
   const luck = mapLuck(map, null);
+  const summary = buildMapSummary(map);
+  if (area?.quantityMore) summary.push({ label: area.name, value: `${area.quantityMore}% more item quantity`, breakdown: ['Multiplies map and personal gear quantity.'] });
+  if (area?.currencyMultiplier) summary.push({ label: 'Area currency', value: `x${area.currencyMultiplier}`, breakdown: ['Ordinary currency chances and boss/chest currency guarantees. Special keys and ingredients are unchanged.'] });
+  if (area?.bossLifeMultiplier) summary.push({ label: 'Area boss', value: 'Empowered', breakdown: [`${(area.bossLifeMultiplier - 1) * 100}% more life`, `${((area.bossDamageMultiplier ?? 1) - 1) * 100}% more damage`] });
+  if (area?.noBoss) summary.push({ label: 'Area objective', value: `Clear ${waveConfig(map).count} waves`, breakdown: ['No final boss; the last wave grants Atlas completion and a reward chest.'] });
   return {
     map,
     event: rollMapEvent(map, seed, areaId),
     ...(area ? { atlasAreaId: area.id, sourceMap: source } : {}),
+    ...(area?.chosenClass && lootClass ? { lootClass } : {}),
     seed: seed >>> 0,
     monsterLevel: monsterLevelForTier(map.tier),
-    itemQuantity: clean(luck.quantity.value),
+    itemQuantity: clean(luck.quantity.value * (1 + (area?.quantityMore ?? 0) / 100)),
     itemRarity: clean(luck.rarity.value),
-    summary: buildMapSummary(map),
+    summary,
   };
 }
 
@@ -55,17 +64,23 @@ function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId): RunSetup
  * map-side luck (no gear — every player adds their own through lootLuck). Pure, so the UI may call it
  * as a preview.
  */
-export function openMap(ch: CharacterSave, areaId?: AtlasAreaId): Result<{ character: CharacterSave; setup: RunSetup }> {
+export function openMap(ch: CharacterSave, areaId?: AtlasAreaId, lootClass?: ItemClass): Result<{ character: CharacterSave; setup: RunSetup }> {
   const map = ch.mapDevice;
   if (!map) return fail('Place a map in the Map Device first.');
   if (!findMapBase(map.baseId)) return fail('This map can no longer be opened.');
   let next = ch;
+  const area = findAtlasArea(areaId);
   if (areaId !== undefined) {
     const error = atlasAccessError(ch.atlas ?? newAtlas(), areaId, map.tier);
     if (error) return fail(error);
-    if (findAtlasArea(areaId)?.sealed) {
-      const paid = spendCurrency(next, 'reliquaryKey', 1);
-      if (!paid) return fail('The Sealed Reliquary requires one Reliquary Key. Seek the Ember Vault or trade for one.');
+    if (area?.requiresBounty && !map.bounty) return fail(`${area.name} requires a Bounty map. Commission one at the crafting bench.`);
+    if (area?.chosenClass && (!lootClass || !ITEM_CLASSES.includes(lootClass)
+      || !Object.values(BASES).some(b => b.itemClass === lootClass && b.levelRequirement <= monsterLevelForTier(map.tier)))) {
+      return fail('Choose an equipment class available at this map’s item level.');
+    }
+    if (area?.entranceKey) {
+      const paid = spendCurrency(next, area.entranceKey, 1);
+      if (!paid) return fail(`${area.name} requires one ${CURRENCIES[area.entranceKey].name}. Find its source on the key tooltip or trade for one.`);
       next = paid;
     }
   }
@@ -77,8 +92,9 @@ export function openMap(ch: CharacterSave, areaId?: AtlasAreaId): Result<{ chara
   }
   const rng = createRng(ch.rngState >>> 0);
   const seed = Math.floor(rng.next() * 0x100000000) >>> 0;
-  const setup = setupFor(snapshotMap(map), seed, areaId);
+  const setup = setupFor(snapshotMap(map), seed, areaId, lootClass);
   if (fee > 0) setup.entranceScrap = fee;
+  if (area?.entranceKey) setup.entranceKey = area.entranceKey;
   return ok({ character: { ...next, mapDevice: null, rngState: rng.state() }, setup });
 }
 
@@ -115,13 +131,26 @@ export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
   const uid = typeof source.uid === 'string' && source.uid.length > 0 && source.uid.length <= 64 ? source.uid : 'restored-map';
   const map = normalizeMap(source, uid);
   if (!map || !findMapBase(map.baseId)) return null;
-  const setup = setupFor(snapshotMap(map), Math.floor(seed), area?.id);
+  const lootClass = area?.chosenClass && typeof wrapper?.lootClass === 'string' && (ITEM_CLASSES as readonly string[]).includes(wrapper.lootClass)
+    ? wrapper.lootClass as ItemClass : undefined;
+  if (area?.chosenClass && (!lootClass || !Object.values(BASES).some(b => b.itemClass === lootClass && b.levelRequirement <= monsterLevelForTier(map.tier)))) return null;
+  const setup = setupFor(snapshotMap(map), Math.floor(seed), area?.id, lootClass);
   // Preserve the creation decision; pre-event maps do not gain a surprise on restart.
   if (wrapper && 'event' in wrapper) setup.event = normalizeMapEvent(wrapper.event);
   else delete setup.event;
   const fee = paidTerritoryFee(wrapper?.entranceScrap);
   if (fee > 0) setup.entranceScrap = fee;
+  const key = paidEntranceKey(wrapper);
+  if (key) setup.entranceKey = key;
   return setup;
+}
+
+/** Legacy Reliquary runs predate explicit receipts. No other area infers a payment. */
+export function paidEntranceKey(raw: unknown): RunSetup['entranceKey'] {
+  if (!isRecord(raw)) return undefined;
+  if (typeof raw.entranceKey === 'string' && atlasKeyDestination(raw.entranceKey as NonNullable<RunSetup['entranceKey']>))
+    return raw.entranceKey as NonNullable<RunSetup['entranceKey']>;
+  return raw.entranceKey === undefined && raw.atlasAreaId === 'sealedReliquary' ? 'reliquaryKey' : undefined;
 }
 
 /**
@@ -202,13 +231,15 @@ export function buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConf
   return {
     mode: 'map',
     event: setup.event ?? null,
+    ...(area?.bossLifeMultiplier ? { bossLifeMultiplier: area.bossLifeMultiplier } : {}),
+    ...(area?.bossDamageMultiplier ? { bossDamageMultiplier: area.bossDamageMultiplier } : {}),
     seed: setup.seed >>> 0,
     theme: base?.theme ?? 'ashenForge',
     mapName: area?.name ?? mapTitle(map),
     tier: clampTier(map.tier),
     arenaRadius: (base?.arenaRadius ?? 900) * (area?.arenaScale ?? 1),
     monsters: monsterScaling(map),
-    waves: waveConfig(map),
+    waves: area?.noBoss ? { ...waveConfig(map), bossWave: 0 } : waveConfig(map),
     hooks,
   };
 }

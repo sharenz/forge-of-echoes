@@ -37,7 +37,19 @@ function arrivalPoint(w: World, angle: number): { x: number; y: number } {
 /** A first crown killed during the warning must not clear the map before its twin arrives. */
 export function crownPending(w: World): boolean {
   const e = w.mapEvent;
-  return !!e && !e.finished && e.plan.kind === 'secondCrown' && e.pulses === 0;
+  if (!e || e.finished) return false;
+  for (let plan: MapEventPlan | undefined = e.plan; plan; plan = plan.next)
+    if (plan.kind === 'secondCrown' && (plan !== e.plan || e.pulses === 0)) return true;
+  return false;
+}
+
+/** Keyed encounters cannot be bypassed by rushing the final boss before a later encounter appears. */
+export function requiredEventPending(w: World): boolean {
+  const e = w.mapEvent;
+  if (!e || e.finished) return false;
+  for (let plan: MapEventPlan | undefined = e.plan; plan; plan = plan.next)
+    if (plan.required && (plan !== e.plan || (e.view?.phase !== 'complete' && e.view?.phase !== 'failed'))) return true;
+  return false;
 }
 
 const pulsesFor = (kind: MapEventKind) => kind === 'echoRift' ? ECHO_RIFT_PULSES
@@ -124,7 +136,7 @@ export function updateMapEvent(w: World): void {
   }
   const v = e.view!;
   if (v.phase === 'available') {
-    if (w.director.wave >= w.config.waves.bossWave && w.config.waves.bossWave > 0) {
+    if (!e.plan.required && w.director.wave >= w.config.waves.bossWave && w.config.waves.bossWave > 0) {
       e.finished = true; e.view = null; return;
     }
     if (!w.living.some(p => Math.hypot(p.x - v.x, p.y - v.y) <= ECHO_RIFT_REACH)) return;
@@ -133,7 +145,10 @@ export function updateMapEvent(w: World): void {
   if (v.phase === 'warning' || v.phase === 'active') e.grace = Math.max(0, e.grace - DT);
   if (v.phase === 'complete' || v.phase === 'failed') {
     e.timer -= DT;
-    if (e.timer <= 0) { e.view = null; e.finished = true; }
+    if (e.timer <= 0) {
+      if (e.plan.next) Object.assign(e, createMapEvent(e.plan.next)!);
+      else { e.view = null; e.finished = true; }
+    }
     return;
   }
   if (v.phase === 'warning' || (v.phase === 'active' && e.members.size === 0)) {

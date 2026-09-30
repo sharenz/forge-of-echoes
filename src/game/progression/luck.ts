@@ -17,6 +17,7 @@ import type { GearLuck } from './maps';
 import { luckTotalLine, mapLuck, summarySourceLine } from './maps';
 import { buildPlayerModel } from './model';
 import { clean, finite, signedPercent } from './util';
+import { findAtlasArea } from '../../data/progression/atlas';
 
 /** Final item quantity / rarity in percent (100 = base). */
 export interface Luck {
@@ -80,7 +81,7 @@ export function lootLuck(setup: RunSetup, looter: CharacterSave | null): Luck {
   const gear = gearDetail(looter).luck;
   const more = mapMore(setup.map);
   return {
-    itemQuantity: clean(Math.max(0, finite(setup.itemQuantity, 100) + gear.itemQuantity * more.quantity)),
+    itemQuantity: clean(Math.max(0, finite(setup.itemQuantity, 100) + gear.itemQuantity * more.quantity * (1 + (findAtlasArea(setup.atlasAreaId)?.quantityMore ?? 0) / 100))),
     itemRarity: clean(Math.max(0, finite(setup.itemRarity, 100) + gear.itemRarity * more.rarity)),
   };
 }
@@ -93,6 +94,8 @@ function personalLine(
     ...map.sources.map((m) => summarySourceLine(m)),
     ...gear.map((m) => summarySourceLine(m)),
   ];
+  const area = findAtlasArea(setup.atlasAreaId);
+  if (stat === 'itemQuantity' && area?.quantityMore) lines.push(`${area.quantityMore}% more ${area.name}`);
   if (!lines.length) lines.push('No bonuses: 100% is the base rate');
   lines.push(luckTotalLine(value), 'Your drops only: each party member rolls their own loot with their own gear');
   return { label, value: signedPercent(value - 100), breakdown: lines };

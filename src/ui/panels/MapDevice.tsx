@@ -21,6 +21,9 @@ import { AtlasView } from './Atlas';
 import type { AtlasAreaId } from '../../contracts/atlas';
 import { ATLAS_START, atlasTierCeiling, findAtlasArea } from '../../data/progression/atlas';
 import { newAtlas, territoryEntryFee } from '../../game/progression/atlas';
+import { ITEM_CLASSES, type ItemClass } from '../../contracts/content';
+import { BASES, CLASS_LABEL, CURRENCIES } from '../../data/items';
+import { monsterLevelForTier } from '../../game/progression/maps';
 
 function PortalNote({ portal, own }: { portal: PortalInfo; own: boolean }) {
   const spent = portal.remaining === 0;
@@ -60,6 +63,7 @@ export function MapDevicePanel() {
   const [openLine, setOpenLine] = useState<string | null>(null);
   const [areaId, selectArea] = useState<AtlasAreaId>(ch?.atlas?.completed.at(-1) ?? ATLAS_START);
   const [showAtlas, setShowAtlas] = useState(false);
+  const [lootClass, chooseClass] = useState<ItemClass>('wand');
   const area = findAtlasArea(areaId)!;
   const map = ch?.mapDevice ?? null;
   const stashed = ch?.mapStash?.length ?? 0;
@@ -70,13 +74,13 @@ export function MapDevicePanel() {
     if (!ch || !map) return null;
     const effective = { ...map, baseId: area.baseId };
     const desc = safe(() => store.rules.describeItem(effective, ch), null);
-    const summary = safe(() => store.rules.mapSummary(ch, effective), []);
     // openMap is pure: preview the run setup to compute this player's personal luck exactly.
-    const preview = safe(() => store.rules.openMap(ch, areaId), null);
+    const preview = safe(() => store.rules.openMap(ch, areaId, lootClass), null);
+    const summary = preview?.ok ? preview.value.setup.summary : safe(() => store.rules.mapSummary(ch, effective), []);
     const luck = preview && preview.ok ? safe(() => store.rules.lootLuck(preview.value.setup, ch), null) : null;
     const mapLuck = preview && preview.ok ? { q: preview.value.setup.itemQuantity, r: preview.value.setup.itemRarity } : null;
     return { desc, summary, luck, mapLuck, events: mapEventOdds(effective, areaId), error: preview && !preview.ok ? preview.error : null };
-  }, [ch, map, store, areaId]);
+  }, [ch, map, store, areaId, lootClass]);
 
   if (!ch) return null;
   const disabled = !own || zone !== 'hideout';
@@ -87,7 +91,7 @@ export function MapDevicePanel() {
 
   const activate = (): void => {
     store.actions.uiSound('open');
-    store.actions.activateMapDevice(areaId);
+    store.actions.activateMapDevice(areaId, area.chosenClass ? lootClass : undefined);
   };
   const confirmActivate = (): void => {
     const next = area.name;
@@ -142,6 +146,12 @@ export function MapDevicePanel() {
           </button>
           <div class={cx('fe-device__scroll', !picking && 'fe-scrollfade', picking && 'fe-device__scroll--picking')}>
             <p class="fe-panel__note ui-type-caption">Your map supplies tier, quality and mods. The area supplies enemies and rewards.</p>
+            <p class="fe-panel__note ui-type-secondary">{area.description}</p>
+            {area.chosenClass && <label class="fe-device__class ui-type-body">Hunter rewards
+              <select aria-label="Hunter reward class" value={lootClass} onChange={e => chooseClass(e.currentTarget.value as ItemClass)}>
+                {ITEM_CLASSES.map(id => <option key={id} value={id} disabled={!!map && !Object.values(BASES).some(b => b.itemClass === id && b.levelRequirement <= monsterLevelForTier(map.tier))}>{CLASS_LABEL[id]}</option>)}
+              </select>
+            </label>}
             <div class={cx('fe-device__circle', map && 'fe-device__circle--charged', picking && 'fe-device__circle--compact')}>
               <MapDeviceSlotView disabled={false} />
             </div>
@@ -194,7 +204,8 @@ export function MapDevicePanel() {
                     </div>
                   </div>
                 )}
-                <p class="ui-type-caption">Encounter chance: {MAP_EVENT_KINDS.filter(k => readout.events[k] > 0).map(k => `${MAP_EVENT_NAMES[k]} ${Math.round(readout.events[k] * 1000) / 10}%`).join(' · ')}. At most one; discovered during the map.</p>
+                <p class="ui-type-caption">{area.encounters ? `Guaranteed encounters: ${area.encounters.map(e => MAP_EVENT_NAMES[e.kind]).join(' · ')}${map.bounty && !area.encounters.some(e => e.kind === 'hunted') ? ' · additional Bounty hunter' : ''}. Resolve them to complete the area.`
+                  : `Encounter chance: ${MAP_EVENT_KINDS.filter(k => readout.events[k] > 0).map(k => `${MAP_EVENT_NAMES[k]} ${Math.round(readout.events[k] * 1000) / 10}%`).join(' · ')}. At most one; discovered during the map.`}</p>
                 <div class="fe-device__summary">
                   {readout.summary.map((l) => {
                     const isOpen = openLine === l.label;
@@ -245,7 +256,7 @@ export function MapDevicePanel() {
               Activate
             </Button>
             <span class="fe-device__cost ui-type-caption">
-              {map ? `Consumes the map${area.sealed ? ' and one Reliquary Key' : ''}; opens ${PORTALS_PER_MAP} portals` : 'Place a map to activate'}
+              {map ? `Consumes the map${area.entranceKey ? ` and one ${CURRENCIES[area.entranceKey].name}` : ''}; opens ${PORTALS_PER_MAP} portals` : 'Place a map to activate'}
             </span>
           </div>
         </>

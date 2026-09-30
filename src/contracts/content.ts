@@ -71,6 +71,7 @@ export const MAP_CURRENCY_IDS = [
   'compass',        // Guarantee the completion chest's progression map is one tier higher
   'twinInk',        // Add a second distinct reward-only modifier
   'voidSplinter',   // Remove corruption and its marked mods, sacrificing all quality
+  'gildedKey', 'blackKey', 'huntingKey', 'riftKey', // sealed Atlas destinations
 ] as const;
 export const CURRENCY_IDS = [...EQUIPMENT_CURRENCY_IDS, ...MAP_CURRENCY_IDS] as const;
 export type CurrencyId = (typeof CURRENCY_IDS)[number];

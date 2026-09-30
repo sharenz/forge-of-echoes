@@ -594,3 +594,9 @@ it('validates optional quoted Scrap prices without changing legacy bench command
   expect(ok(cmd({ ...base, expectedScrap: 17 }))).toEqual(cmd({ ...base, expectedScrap: 17 }));
   for (const expectedScrap of [-1, 1.5, '17', null, 1e20]) expect(rejected(cmd({ ...base, expectedScrap }))).toBeTruthy();
 });
+
+it('validates the Hunting Ground reward class on map activation', () => {
+  const choice = { c: 'activateMapDevice', areaId: 'huntingGround', lootClass: 'ring' };
+  expect(ok(cmd(choice))).toEqual(cmd(choice));
+  for (const lootClass of ['sword', '', null, 3, ['ring']]) expect(rejected(cmd({ ...choice, lootClass }))).toBeTruthy();
+});

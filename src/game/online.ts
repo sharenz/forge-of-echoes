@@ -70,7 +70,7 @@ export function withServerEntropy(base: GameRulesApi, entropy: () => number): Ga
       base.applyCurrency(reseedCharacter(ch, entropy()), currencyUid, targetUid, affixIndex),
     applyBenchRecipe: (ch, targetUid, recipeId) => base.applyBenchRecipe(reseedCharacter(ch, entropy()), targetUid, recipeId),
     buyOffer: (ch, offerId) => base.buyOffer(reseedCharacter(ch, entropy()), offerId),
-    openMap: (ch, areaId) => base.openMap(reseedCharacter(ch, entropy()), areaId),
+    openMap: (ch, areaId, lootClass) => base.openMap(reseedCharacter(ch, entropy()), areaId, lootClass),
   };
 }
 
@@ -162,7 +162,7 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
       ch, [targetUid], (c) => base.clearCraftedAffix(c, targetUid), outcomeCharacter, withOutcomeCharacter,
     ),
     buyOffer: (ch, offerId) => guard(ch, [], (c) => base.buyOffer(c, offerId), outcomeCharacter, withOutcomeCharacter),
-    openMap: (ch, areaId) => guard(ch, [ch.mapDevice?.uid], (c) => base.openMap(c, areaId), outcomeCharacter, withOutcomeCharacter),
+    openMap: (ch, areaId, lootClass) => guard(ch, [ch.mapDevice?.uid], (c) => base.openMap(c, areaId, lootClass), outcomeCharacter, withOutcomeCharacter),
     craftingTargetError: (ch, currencyUid, targetUid) => {
       const locked = locksOf(ch);
       if (locked && (isLocked(locked, currencyUid) || isLocked(locked, targetUid))) return LOCKED_ITEM_ERROR;
