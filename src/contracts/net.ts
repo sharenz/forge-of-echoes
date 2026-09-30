@@ -22,7 +22,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 11: six map themes, promoted final bosses, no wave-3 lieutenant and transferred completion rewards.
 // 12: advanced ingredients, map crafting flags, four more events and independent twin bosses.
 // 13: extended Atlas, sealed-area keys, fixed encounter chains and chosen-class rewards.
-export const PROTOCOL_VERSION = 13;
+// 14: twelve boss-exclusive uniques, their icons and combat behaviours.
+export const PROTOCOL_VERSION = 14;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;

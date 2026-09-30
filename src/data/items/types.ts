@@ -4,7 +4,7 @@ import type {
   AffixKind, AffixTag, ModifierMode, StatId,
 } from '../../contracts/items';
 import type { BaseInfo, CurrencyInfo, FlaskInfo } from '../../contracts/game';
-import type { BaseId, ItemClass, PlayerFlag, UniqueId } from '../../contracts/content';
+import type { BaseId, ItemClass, MonsterKind, PlayerFlag, UniqueId } from '../../contracts/content';
 
 /**
  * What a rolled number does. One line may feed several stats with the same value
@@ -96,6 +96,8 @@ export interface UniqueDef {
   mods: readonly UniqueModDef[];
   flags: readonly UniqueFlagDef[];
   dropWeight: number;
+  /** Exclusive to this boss's marked Atlas keystone areas; never selected by world drops or gambling. */
+  bossSource?: MonsterKind;
 }
 
 export interface ScarDef extends ModLineDef, RangeDef {

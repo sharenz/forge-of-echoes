@@ -49,6 +49,16 @@ export const ICON_FOOTPRINT: Readonly<Record<string, readonly [number, number]>>
   'icon/base/ironweaveGirdle': [2, 1],
   'icon/unique/thePatientSpark': [1, 3],
   'icon/unique/cinderwalkers': [2, 2],
+  'icon/unique/everburn': [1, 3],
+  'icon/unique/sunkenSun': [2, 2],
+  'icon/unique/winterstride': [2, 2],
+  'icon/unique/stillwinter': [2, 3],
+  'icon/unique/vigilOfAsh': [2, 2],
+  'icon/unique/lastRite': [2, 3],
+  'icon/unique/secondVerse': [2, 2],
+  'icon/unique/brokenLink': [2, 1],
+  'icon/unique/ironRefrain': [2, 2],
+  'icon/unique/unbowedCrown': [2, 2],
 };
 
 /** A licking flame rising from (x, y): `h` px tall, `wide` px half-width at its base. */
@@ -844,7 +854,106 @@ function ruinheartBand(): Frame {
   return f;
 }
 
+/** Boss trophies retain their equipment silhouette, with a separate emblem and material treatment. */
+const KEYSTONE_ICONS: Record<string, () => PixelImage> = {
+  'icon/unique/everburn': () => {
+    const f = emberheartWand();
+    for (const t of [0.35, 0.55, 0.75]) {
+      const [x, y] = wandAt(t); flame(f, Math.round(x + 3), Math.round(y), 9, 2);
+      lineOn(f, x - 3, y + 2, x + 3, y, C.goldHi);
+    }
+    return finishIcon(f, C.hot, 0.55);
+  },
+  'icon/unique/sunkenSun': () => {
+    const f = cinderOrb();
+    ringBand(f, 32, 28, 16, 16, 2, RAMPS.gold);
+    bigGem(f, 32, 28, 9, 10, [C.ink, C.lavaDeep, C.lavaDark, C.ember, C.flame]);
+    for (let k = -2; k <= 2; k++) {
+      const a = -Math.PI / 2 + k * 0.45;
+      line(f, 32 + Math.cos(a) * 16, 28 + Math.sin(a) * 16, 32 + Math.cos(a) * 23, 28 + Math.sin(a) * 23, C.hot);
+    }
+    return finishIcon(f, C.flame, 0.55);
+  },
+  'icon/unique/winterstride': () => {
+    const f = wayfarerGreaves();
+    for (const [x, y] of [[23, 23], [42, 34]]) {
+      bigGem(f, x, y, 4, 6, FROST);
+      for (let k = -1; k <= 1; k++) lineOn(f, x + k * 5, y + 5, x + k * 5 - 2, y + 16, C.ice);
+    }
+    return finishIcon(f, C.ice, 0.6);
+  },
+  'icon/unique/stillwinter': () => {
+    const f = duskweaveRobe();
+    for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) {
+      const shade = VOID.indexOf(f.c.get(x, y));
+      if (shade >= 0) px(f, x, y, FROST[Math.min(FROST.length - 1, shade)]);
+    }
+    for (let k = 0; k < 6; k++) {
+      const a = k * Math.PI / 3;
+      lineOn(f, 32, 40, 32 + Math.cos(a) * 11, 40 + Math.sin(a) * 11, C.ice);
+    }
+    return finishIcon(f, C.ice, 0.55);
+  },
+  'icon/unique/vigilOfAsh': () => {
+    const f = forgemasterGloves();
+    for (const [x, y] of [[24, 28], [41, 42]]) {
+      ringBand(f, x, y, 8, 7, 1.5, RAMPS.gold);
+      bigGem(f, x, y, 3, 4, STORM);
+    }
+    return finishIcon(f, C.goldHi, 0.55);
+  },
+  'icon/unique/lastRite': () => {
+    const f = emberSceptre();
+    ringBand(f, 35, 21, 17, 17, 2, RAMPS.gold);
+    for (const x of [21, 35, 49]) flame(f, x, 17, x === 35 ? 12 : 8, 2);
+    return finishIcon(f, C.hot, 0.55);
+  },
+  'icon/unique/choirOfGlass': () => {
+    const f = pendant(FROST, RAMPS.gold);
+    for (const [x, y] of [[9, 21], [16, 25], [23, 21]]) bigGem(f, x, y, 2, 4, FROST);
+    return finishIcon(f, C.ice, 0.6);
+  },
+  'icon/unique/secondVerse': () => {
+    const f = echoingFocus();
+    ringBand(f, 32, 28, 21, 15, 1.5, RAMPS.gold);
+    bigGem(f, 18, 27, 5, 10, FROST); bigGem(f, 45, 27, 5, 10, FROST);
+    line(f, 24, 27, 39, 27, C.ice);
+    return finishIcon(f, C.ice, 0.55);
+  },
+  'icon/unique/brokenLink': () => {
+    const f = chainBelt();
+    ringBand(f, 26, 15, 8, 8, 2.5, RAMPS.gold);
+    ringBand(f, 41, 19, 8, 8, 2.5, RAMPS.metal);
+    lineOn(f, 30, 10, 35, 19, C.ink);
+    sparkle(f, 33, 13, C.hot, 2);
+    return finishIcon(f, C.goldHi, 0.5);
+  },
+  'icon/unique/ironRefrain': () => {
+    const f = ironVisor();
+    for (const x of [18, 46]) {
+      for (const y of [25, 33, 41]) ringBand(f, x, y, 3, 5, 1.3, RAMPS.metal);
+    }
+    bigGem(f, 32, 24, 5, 7, STORM);
+    return finishIcon(f, C.lightning, 0.55);
+  },
+  'icon/unique/unbowedCrown': () => {
+    const f = bastionHelm();
+    for (const [x, y] of [[19, 12], [32, 6], [45, 12]]) {
+      line2(f, x, y, x, 27, C.goldHi, C.ochre);
+      bigGem(f, x, y + 4, 3, 5, EMBER);
+    }
+    line2(f, 17, 27, 47, 27, C.goldHi, C.ochre);
+    return finishIcon(f, C.goldHi, 0.55);
+  },
+  'icon/unique/victorsDebt': () => finishIcon(ring(RAMPS.gold, EMBER, f => {
+    line2(f, 8, 5, 23, 25, C.metalHi, C.rust);
+    line2(f, 24, 5, 9, 25, C.metalHi, C.rust);
+    bigGem(f, 16, 12, 4, 5, EMBER);
+  }), C.hot, 0.55),
+};
+
 export const EQUIPMENT_ICONS: Record<string, () => PixelImage> = {
+  ...KEYSTONE_ICONS,
   'icon/base/ashwoodWand': () => finishIcon(ashwoodWand()),
   'icon/base/glassboneWand': () => finishIcon(glassboneWand(), C.ice),
   'icon/base/ironrootWand': () => finishIcon(ironrootWand()),

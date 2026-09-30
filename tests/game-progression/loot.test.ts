@@ -469,9 +469,9 @@ describe('uniques drop only where they can be worn (item level ≥ the unique\'s
     return out;
   }
 
-  /** The uniques wearable at a tier's item level (= its monster level), from the data. */
+  /** World-pool uniques wearable at a tier's item level (= its monster level). */
   const wearableAt = (tier: number) => Object.entries(UNIQUES)
-    .filter(([, u]) => u.levelRequirement <= monsterLevelForTier(tier))
+    .filter(([, u]) => !u.bossSource && u.levelRequirement <= monsterLevelForTier(tier))
     .map(([id]) => id).sort();
 
   it('a tier only rolls the uniques whose level requirement its item level meets', () => {
@@ -483,7 +483,7 @@ describe('uniques drop only where they can be worn (item level ≥ the unique\'s
 
   it('the lowest tiers have no unique to roll and the top tiers have all four', () => {
     expect(wearableAt(1)).toEqual([]);
-    expect(wearableAt(6)).toHaveLength(Object.keys(UNIQUES).length);
+    expect(wearableAt(15)).toEqual(wearableAt(6));
     expect(wearableAt(6)).toHaveLength(4);
   });
 

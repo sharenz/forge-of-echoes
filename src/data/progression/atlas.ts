@@ -1,5 +1,5 @@
 import type { AtlasAreaId } from '../../contracts/atlas';
-import type { CurrencyId, ItemClass, MapBaseId } from '../../contracts/content';
+import type { CurrencyId, ItemClass, MapBaseId, MonsterKind } from '../../contracts/content';
 import type { MapEventKind } from '../../contracts/map-events';
 
 export type AtlasAreaType = 'frontier' | 'forge' | 'crypt' | 'arena' | 'vault' | 'reliquary';
@@ -37,11 +37,15 @@ export interface AtlasAreaDef {
   eventMultiplier?: number;
   encounters?: readonly { kind: MapEventKind; wave: number }[];
   chosenClass?: boolean;
+  /** This destination's named boss has a separate exclusive unique roll. */
+  uniquePool?: MonsterKind;
 }
 
 export const ATLAS_START: AtlasAreaId = 'cinderCrossing';
 export const ATLAS_REVEALS_PER_BOSS = 2;
 export const ATLAS_RARE_DOOR_CHANCE = 1 / 8;
+/** Per living player, multiplied by personal item rarity, capped at 100%. */
+export const KEYSTONE_UNIQUE_CHANCE = 0.12;
 export const RELIQUARY_KEY_CHANCE = { vault: 0.25, crypt: 0.08, elsewhere: 0.02, elsewhereMinTier: 3 } as const;
 export const ATLAS_AREA_TYPE_LABELS: Record<AtlasAreaType, string> = {
   frontier: 'Frontier', forge: 'Forge', crypt: 'Crypt', arena: 'Arena', vault: 'Dead end', reliquary: 'Sealed area',
@@ -120,6 +124,7 @@ export const ATLAS_AREAS: readonly AtlasAreaDef[] = [
   },
   {
     id: 'crownFoundry', name: 'Crown Foundry', type: 'forge', baseId: 'ashenForge', depth: 4,
+    uniquePool: 'cinderMatriarch',
     ingredientDrops: [{ currencyId: 'anneal', chance: 0.20, minTier: 5 }],
     neighbours: ['shatteredForge', 'championsApproach', 'emberCitadel'], x: 45, y: 20,
     description: 'Caster bases and Tempering Catalysts at the gateway to the deep citadel.',
@@ -127,6 +132,7 @@ export const ATLAS_AREAS: readonly AtlasAreaDef[] = [
   },
   {
     id: 'winterThrone', name: 'Winter Throne', type: 'crypt', baseId: 'rimedOssuary', depth: 4,
+    uniquePool: 'hollowWarden',
     ingredientDrops: [{ currencyId: 'graft', chance: 0.20, minTier: 5 }],
     neighbours: ['championsApproach', 'shatteredForge', 'frozenPassage'], x: 45, y: 75,
     description: 'High-level jewellery and preserving seals in the frozen depths.',
@@ -140,36 +146,42 @@ export const ATLAS_AREAS: readonly AtlasAreaDef[] = [
   },
   {
     id: 'emberCitadel', name: 'Ember Citadel', type: 'forge', baseId: 'cinderChapel', depth: 5,
+    uniquePool: 'ashboundHerald',
     neighbours: ['crownFoundry', 'frozenPassage', 'lastKiln'], x: 55, y: 20,
     description: 'A deep ritual city. Caster bases and fire essences, with a crossing toward the frozen route.',
     classWeights: { wand: 2, sceptre: 2, focus: 2 }, currencyWeights: { essenceEmber: 3 }, arenaScale: 1.1,
   },
   {
     id: 'frozenPassage', name: 'Frozen Passage', type: 'crypt', baseId: 'choralCrypt', depth: 5,
+    uniquePool: 'boneChorister',
     neighbours: ['winterThrone', 'emberCitadel', 'echoBastion'], x: 55, y: 75,
     description: 'A sung passage between ancient tombs. Jewellery, Solvents and a crossing toward the citadel.',
     classWeights: { ring: 2, amulet: 2 }, currencyWeights: { solvent: 3 }, arenaScale: 1.05,
   },
   {
     id: 'lastKiln', name: 'The Last Kiln', type: 'forge', baseId: 'chainworks', depth: 6,
+    uniquePool: 'chainmaster',
     neighbours: ['emberCitadel', 'echoBastion', 'heartOfForge'], x: 65, y: 20,
     description: 'Armour bases and Catalysts in the final working furnace. The bastion provides another approach.',
     classWeights: { helmet: 2, chest: 2, gloves: 2, boots: 2 }, currencyWeights: { catalyst: 3 }, arenaScale: 1.15,
   },
   {
     id: 'echoBastion', name: 'Echo Bastion', type: 'crypt', baseId: 'rimedOssuary', depth: 6,
+    uniquePool: 'hollowWarden',
     neighbours: ['frozenPassage', 'lastKiln', 'eternalArena'], x: 65, y: 75,
     description: 'Binding Seals and jewellery beneath the last frozen battlements.',
     classWeights: { ring: 2, amulet: 2 }, currencyWeights: { seal: 3 }, arenaScale: 1.15,
   },
   {
     id: 'heartOfForge', name: 'Heart of the Forge', type: 'forge', baseId: 'ashenForge', depth: 7,
+    uniquePool: 'cinderMatriarch',
     neighbours: ['lastKiln', 'eternalArena', 'shrineField'], x: 75, y: 20,
     description: 'The deepest forge accepts Tier 15 maps. Caster projects and Reforging Embers.',
     classWeights: { wand: 2, sceptre: 2, focus: 2 }, currencyWeights: { reforge: 3 },
   },
   {
     id: 'eternalArena', name: 'Eternal Arena', type: 'arena', baseId: 'ironColiseum', depth: 7,
+    uniquePool: 'varkus',
     neighbours: ['echoBastion', 'heartOfForge'], x: 75, y: 75,
     description: 'The last champions guard the other Tier 15 approach. Armour and Fracture Cores.',
     classWeights: { helmet: 2, chest: 2, gloves: 2, boots: 2 }, currencyWeights: { fractureCore: 4 }, arenaScale: 1.1,

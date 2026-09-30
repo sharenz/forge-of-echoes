@@ -3,6 +3,7 @@ import type { AtlasAreaId, AtlasProgress } from '../../contracts/atlas';
 import { ATLAS_AREAS, ATLAS_AREA_TYPE_LABELS, atlasTierCeiling, findAtlasArea } from '../../data/progression/atlas';
 import { mapBaseImplicitText, mapBosses } from '../../game/progression/maps';
 import { MAP_BASES } from '../../data/progression/maps';
+import { keystoneRewards } from '../../game/progression/keystones';
 import { CLASS_LABEL, CURRENCIES } from '../../data/items';
 import { Button, cx } from '../components/common';
 
@@ -26,6 +27,7 @@ export function AtlasView({ progress, selected, tier, onSelect, onBack }: {
     return node.sealed ? 'Sealed area' : ATLAS_AREA_TYPE_LABELS[node.type];
   };
   const fits = tier === null || tier <= atlasTierCeiling(area);
+  const keystone = keystoneRewards(area.id, tier);
   const preferences = [
     ...Object.entries(area.classWeights ?? {}).map(([id, value]) => `${CLASS_LABEL[id as keyof typeof CLASS_LABEL]} bases ×${value}`),
     ...Object.entries(area.currencyWeights ?? {}).map(([id, value]) => `${CURRENCIES[id as keyof typeof CURRENCIES].name} ×${value}`),
@@ -68,6 +70,7 @@ export function AtlasView({ progress, selected, tier, onSelect, onBack }: {
         <strong class="ui-type-body">{area.name} · maps up to Tier {atlasTierCeiling(area)}</strong>
         <p class="ui-type-secondary">{area.description}</p>
         <p class="ui-type-caption">{MAP_BASES[area.baseId].name} · {area.noBoss ? 'No final boss' : `Boss: ${mapBosses(area.baseId).boss.name}`}</p>
+        {keystone && <p class="ui-type-secondary">Keystone uniques: {keystone.pool.map(i => `${i.name} (T${i.minTier}+)`).join(' · ')}. Separate 12% base chance per boss, multiplied by your item rarity; eligible items have equal weight.</p>}
         {area.entranceKey && <p class="ui-type-secondary">Entry: one {CURRENCIES[area.entranceKey].name}. {CURRENCIES[area.entranceKey].description}</p>}
         <p class="ui-type-caption">{mapBaseImplicitText(area.baseId)} {preferences.length > 0 && `Drop weighting: ${preferences.join(' · ')}.`}</p>
         {area.ingredientDrops?.map(d => <p key={d.currencyId} class="ui-type-caption">Boss ingredient: {CURRENCIES[d.currencyId].name} · {d.chance * 100}% chance on Tier {d.minTier}{atlasTierCeiling(area) > d.minTier ? '+' : ''} maps.</p>)}

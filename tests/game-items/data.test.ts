@@ -201,7 +201,7 @@ describe('currencies', () => {
 });
 
 describe('uniques, scars, flasks, names', () => {
-  it('defines the 4 uniques on real bases with valid flags', () => {
+  it('defines 16 uniques on real bases with valid flags', () => {
     expect(Object.keys(UNIQUES).sort()).toEqual([...UNIQUE_IDS].sort());
     for (const u of Object.values(UNIQUES)) {
       expect(BASES[u.baseId]).toBeDefined();
@@ -209,7 +209,7 @@ describe('uniques, scars, flasks, names', () => {
       for (const f of u.flags) expect(PLAYER_FLAGS).toContain(f.flag);
       for (const m of u.mods) {
         expect(m.min).toBeLessThanOrEqual(m.max);
-        expect(lineHasTemplate(m)).toBe(true);
+        expect(lineHasTemplate(m), `${u.id}: ${m.stats.join(',')}`).toBe(true);
       }
     }
     expect(UNIQUES.thePatientSpark.flags[0].flag).toBe('lancePierceAll');
@@ -246,7 +246,7 @@ describe('uniques, scars, flasks, names', () => {
     expect(Object.keys(BASE_INFO)).toHaveLength(32);
     expect(Object.keys(CURRENCY_INFO).sort()).toEqual([...CURRENCY_IDS].sort());
     expect(Object.keys(FLASK_INFO)).toHaveLength(2);
-    expect(Object.keys(UNIQUE_INFO)).toHaveLength(4);
+    expect(Object.keys(UNIQUE_INFO)).toHaveLength(16);
     expect(BASE_INFO.ashwoodWand).toEqual({
       id: 'ashwoodWand', name: 'Ashwood Wand', itemClass: 'wand', slots: ['mainHand'], size: { w: 1, h: 3 },
       levelRequirement: 1, maxStability: 8, materialNote: BASES.ashwoodWand.materialNote,

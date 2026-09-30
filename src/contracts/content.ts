@@ -36,7 +36,10 @@ export const BASE_IDS = [
 export type BaseId = (typeof BASE_IDS)[number];
 
 /** Uniques. Icon id is `icon/unique/<id>`. */
-export const UNIQUE_IDS = ['thePatientSpark', 'cinderwalkers', 'echoOfTheMatriarch', 'ruinheartBand'] as const;
+export const UNIQUE_IDS = ['thePatientSpark', 'cinderwalkers', 'echoOfTheMatriarch', 'ruinheartBand',
+  'everburn', 'sunkenSun', 'winterstride', 'stillwinter', 'vigilOfAsh', 'lastRite',
+  'choirOfGlass', 'secondVerse', 'brokenLink', 'ironRefrain', 'unbowedCrown', 'victorsDebt',
+] as const;
 export type UniqueId = (typeof UNIQUE_IDS)[number];
 
 /** Crafting currencies. Icon id is `icon/currency/<id>`. */
@@ -115,6 +118,8 @@ export const PLAYER_FLAGS = [
   'lancePierceAll',   // The Patient Spark: Ember Lance pierces all targets
   'fireTrail',        // Cinderwalkers: moving leaves burning ground that damages monsters
   'novaEcho',         // Echo of the Matriarch: Ember Nova repeats once after 0.4 s
+  'lanceIgnites', 'novaFan', 'riftChill', 'coldWard', 'wardFocus', 'flameRing',
+  'shardPierceAll', 'rimeEcho', 'riftCleanse', 'arcReturns', 'wardRenew', 'closeQuarters',
 ] as const;
 export type PlayerFlag = (typeof PLAYER_FLAGS)[number];
 

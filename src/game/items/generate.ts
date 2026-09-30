@@ -4,7 +4,7 @@ import type {
   AffixTag, CurrencyStack, EquipmentItem, FlaskStack, Rarity, RolledAffix, RolledScar,
 } from '../../contracts/items';
 import type { Rng } from '../../contracts/rng';
-import type { BaseId, CurrencyId, FlaskId, ItemClass, UniqueId } from '../../contracts/content';
+import type { BaseId, CurrencyId, FlaskId, ItemClass, MonsterKind, UniqueId } from '../../contracts/content';
 import { UNIQUE_IDS } from '../../contracts/content';
 import {
   AFFIX_LIMITS, AFFIX_VERSION, BASES, BENCH_BEST_TIER, BENCH_MAX_CRAFTED, FLASK_STACK, MAGIC_AFFIX_COUNTS, MAX_ITEM_LEVEL, MAX_SCARS, MIN_ITEM_LEVEL,
@@ -273,6 +273,8 @@ export function pickRandomBase(rng: Rng, opts: BasePickOptions = {}): BaseId | n
 export interface UniqueFilter {
   baseId?: BaseId;
   classes?: readonly ItemClass[];
+  /** Omitted selects only world uniques; a boss selects only its exclusive pool. */
+  bossSource?: MonsterKind;
   /**
    * Only uniques wearable at this level: the unique's own level requirement and its base's both ≤ it.
    * Drops pass the item level (monster level), the gamble the character's level (GAME_SPEC §5, §9),
@@ -291,6 +293,7 @@ export function uniqueLevelRequirement(id: UniqueId): number {
 export function uniqueIdsFor(filter: UniqueFilter = {}): UniqueId[] {
   return UNIQUE_IDS.filter((id) => {
     const u = UNIQUES[id];
+    if (u.bossSource !== filter.bossSource) return false;
     if (filter.baseId && u.baseId !== filter.baseId) return false;
     if (filter.classes && !filter.classes.includes(getBase(u.baseId).itemClass)) return false;
     if (filter.maxLevel !== undefined && !(uniqueLevelRequirement(id) <= filter.maxLevel)) return false;

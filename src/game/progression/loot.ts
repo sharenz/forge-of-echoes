@@ -37,7 +37,7 @@ import {
   clampTier, echoWaveIndex, mapBaseName, mapDropMultipliers, mapTitle, monsterName, monsterSentenceName, rollMapWithRarity,
 } from './maps';
 import { asciiLabel, rollCountTable } from './util';
-import { ATLAS_KEYS, ATLAS_GLOBAL_KEY_CHANCE, ATLAS_GLOBAL_KEY_MIN_TIER, findAtlasArea, RELIQUARY_KEY_CHANCE, type AtlasAreaDef } from '../../data/progression/atlas';
+import { ATLAS_KEYS, ATLAS_GLOBAL_KEY_CHANCE, ATLAS_GLOBAL_KEY_MIN_TIER, findAtlasArea, KEYSTONE_UNIQUE_CHANCE, RELIQUARY_KEY_CHANCE, type AtlasAreaDef } from '../../data/progression/atlas';
 
 // ---------------------------------------------------------------------------------------------
 // Rarity weights
@@ -307,6 +307,10 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
     for (let i = 0; i < BOSS_LOOT.extraEquipment; i++) out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, mapM, 'magic'), origin));
     for (let i = 0; i < BOSS_LOOT.currency * (ctx.area?.currencyMultiplier ?? 1); i++) out.push(makeCurrency(ctx, rng));
     if (rng.chance(Math.min(1, BOSS_LOOT.uniqueChance * mapM))) out.push(makeEquipment(ctx, rng, 'unique', origin));
+    if (ctx.area?.uniquePool === kill.kind && rng.chance(Math.min(1, KEYSTONE_UNIQUE_CHANCE * mapM))) {
+      const id = pickRandomUnique(rng, { bossSource: kill.kind, maxLevel: ctx.monsterLevel });
+      if (id) out.push(generateUnique(id, rng, { itemLevel: ctx.monsterLevel, origin: `Keystone reward from ${monsterName(kill.kind)} in ${ctx.place}`, isNew: true }));
+    }
     if (ctx.area?.id === 'sealedReliquary' && (!ctx.crownEncounter || kill.eventReward === 'secondCrown')) out.push(makeEquipment(ctx, rng, 'unique', origin));
     for (const drop of ctx.area?.ingredientDrops ?? []) {
       if (ctx.tier >= drop.minTier && rng.chance(drop.chance)) out.push(currencyStack(drop.currencyId, 1, randomUid(rng), true));

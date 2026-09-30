@@ -45,6 +45,9 @@ export interface WardState {
   critMultiplier: number;
   ailmentChance: number;
   radius: number;
+  dtype: number;
+  focusOnPulse: boolean;
+  renewOnHit: boolean;
 }
 
 export interface PendingNova {

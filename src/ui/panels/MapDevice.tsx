@@ -24,6 +24,7 @@ import { newAtlas, territoryEntryFee } from '../../game/progression/atlas';
 import { ITEM_CLASSES, type ItemClass } from '../../contracts/content';
 import { BASES, CLASS_LABEL, CURRENCIES } from '../../data/items';
 import { monsterLevelForTier } from '../../game/progression/maps';
+import { keystoneRewards } from '../../game/progression/keystones';
 
 function PortalNote({ portal, own }: { portal: PortalInfo; own: boolean }) {
   const spent = portal.remaining === 0;
@@ -66,6 +67,7 @@ export function MapDevicePanel() {
   const [lootClass, chooseClass] = useState<ItemClass>('wand');
   const area = findAtlasArea(areaId)!;
   const map = ch?.mapDevice ?? null;
+  const keystone = keystoneRewards(areaId, map?.tier ?? null);
   const stashed = ch?.mapStash?.length ?? 0;
   // An empty device with maps in the stash: the picker is the way in, so it gets the room.
   const picking = !map && stashed > 0;
@@ -147,6 +149,7 @@ export function MapDevicePanel() {
           <div class={cx('fe-device__scroll', !picking && 'fe-scrollfade', picking && 'fe-device__scroll--picking')}>
             <p class="fe-panel__note ui-type-caption">Your map supplies tier, quality and mods. The area supplies enemies and rewards.</p>
             <p class="fe-panel__note ui-type-secondary">{area.description}</p>
+            {keystone && <p class="fe-panel__note ui-type-secondary">Keystone rewards: {keystone.pool.map(i => `${i.name} (T${i.minTier}+)`).join(' · ')}.</p>}
             {area.chosenClass && <label class="fe-device__class ui-type-body">Hunter rewards
               <select aria-label="Hunter reward class" value={lootClass} onChange={e => chooseClass(e.currentTarget.value as ItemClass)}>
                 {ITEM_CLASSES.map(id => <option key={id} value={id} disabled={!!map && !Object.values(BASES).some(b => b.itemClass === id && b.levelRequirement <= monsterLevelForTier(map.tier))}>{CLASS_LABEL[id]}</option>)}
@@ -207,6 +210,7 @@ export function MapDevicePanel() {
                 <p class="ui-type-caption">{area.encounters ? `Guaranteed encounters: ${area.encounters.map(e => MAP_EVENT_NAMES[e.kind]).join(' · ')}${map.bounty && !area.encounters.some(e => e.kind === 'hunted') ? ' · additional Bounty hunter' : ''}. Resolve them to complete the area.`
                   : `Encounter chance: ${MAP_EVENT_KINDS.filter(k => readout.events[k] > 0).map(k => `${MAP_EVENT_NAMES[k]} ${Math.round(readout.events[k] * 1000) / 10}%`).join(' · ')}. At most one; discovered during the map.`}</p>
                 <div class="fe-device__summary">
+                  {keystone && <p class="ui-type-caption">Exclusive unique chance: {Math.round((keystoneRewards(areaId, map.tier, readout.luck?.itemRarity ?? 100)?.chance ?? 0) * 1000) / 10}% {readout.luck ? 'per boss for you' : 'base per boss, multiplied by your item rarity when entry is available'}. Equal weight among eligible uniques; ordinary drops and boss guarantees also apply.</p>}
                   {readout.summary.map((l) => {
                     const isOpen = openLine === l.label;
                     return (

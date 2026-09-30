@@ -187,7 +187,7 @@ Luck affixes (item quantity / rarity) are personal: they raise only their wearer
 
 **Saved equipment:** phase-2 affix revision 2 is stored per item. Older rolls migrate once to the best new tier unlocked by the old tier’s item-level gate (also bounded by the item’s level), preserving their relative roll within the range. Names, history, scars, stability, seals, fractures and bench-crafted marks survive. Lowest-tier values and the starting kit remain unchanged.
 
-**Uniques** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tier 1, item level 4: none; Tier 2, item level 10: The Patient Spark; Tier 3, item level 16: + Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5+: all four), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties. Only Crown Fragments can reroll their numeric modifiers; ordinary and bench crafts cannot change them:
+**World-pool uniques (4)** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tier 1, item level 4: none; Tier 2, item level 10: The Patient Spark; Tier 3, item level 16: + Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5+: all four), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties. Only Crown Fragments can reroll their numeric modifiers; ordinary and bench crafts cannot change them:
 
 | Unique | Base | Effects | Flavour |
 |---|---|---|---|
@@ -195,6 +195,37 @@ Luck affixes (item quantity / rarity) are personal: they raise only their wearer
 | **Cinderwalkers** (level 16) | Ashen Sandals | +(15–20)% move speed · +(20–30)% fire resistance · burning trail (`fireTrail`) | "Where she walked, the ash remembered." |
 | **Echo of the Matriarch** (level 20) | Cinder Pendant | +(15–25) max focus · Ember Nova repeats once after 0.4 s (`novaEcho`) · 8% reduced max life | "Her last command still rings in the embers." |
 | **Ruinheart Band** (level 24) | Void Signet | +1 projectile · +(20–30)% void resistance · 12% increased damage taken | "Power pours from the wound, not the hand." |
+
+
+**Keystone uniques (12):** boss-exclusive rewards, separate from the four world uniques above. Each matching final boss in the named Atlas areas has a `12% × personal item rarity / 100` chance (capped at 100%) to drop one eligible item from its two-item pool, equally weighted. Item quantity and the elite rarity multiplier do not affect this extra roll. The first item requires level 46 (Tier 8 / item level 46), the second level 58 (Tier 10 / item level 58). Below the pool's eligibility there is no extra drop. Ordinary equipment, chests, the ordinary boss unique roll and gambling never select these twelve. Each twin boss in an eligible area can roll independently. The Atlas, Map Device and item tooltip disclose sources and level gates.
+
+| Boss | Atlas sources | T8+ unique | T10+ unique |
+|---|---|---|---|
+| Cinder Matriarch | Crown Foundry (up to T9), Heart of the Forge | Everburn | The Sunken Sun |
+| Hollow Warden | Winter Throne (up to T9), Echo Bastion | Winterstride | Stillwinter |
+| Ashbound Herald | Ember Citadel | Vigil of Ash | The Last Rite |
+| Bone Chorister | Frozen Passage | Choir of Glass | The Second Verse |
+| The Chainmaster | The Last Kiln | The Broken Link | Iron Refrain |
+| Varkus | Eternal Arena | The Unbowed Crown | Victor's Debt |
+
+They retain their advanced base properties and implicits. Crown Fragments reroll numeric values while preserving identity, behaviour and sources.
+
+| Unique | Base | Effects | Flavour |
+|---|---|---|---|
+| **Everburn** (level 46) | Emberheart Wand | +(35–50)% fire damage · 10% reduced cast speed · Ember Lance always ignites | "A promise the flame refuses to forget." |
+| **The Sunken Sun** (level 58) | Echoing Focus | +(30–45)% spell damage · +(20–30) max focus · 20% reduced area · Ember Nova fires in a 150° forward fan | "All its light falls in one direction." |
+| **Winterstride** (level 46) | Wayfarer Greaves | +(8–12)% move speed · +(25–35)% cold resistance · −15% fire resistance · Rift Step chills enemies within 100 units of its landing for 2 seconds | "Every arrival is the first day of winter." |
+| **Stillwinter** (level 58) | Duskweave Robe | +(25–40) max life · +(35–50)% cold damage · −20% fire resistance · Cinder Ward deals Cold damage and always chills | "The cold does not end. It keeps watch." |
+| **Vigil of Ash** (level 46) | Forgemaster Gloves | +(30–45) max focus · +(15–25)% focus regen · 15% reduced spell damage · Cinder Ward deals no damage and restores 2 Focus per nearby enemy per pulse, capped at 6 | "The faithful feed the fire with their doubt." |
+| **The Last Rite** (level 58) | Stormglass Sceptre | +(45–60)% fire damage · +(10–15)% cast speed · 10% reduced max life · Flame Wave fires in a full circle | "No one stands outside the final circle." |
+| **Choir of Glass** (level 46) | Prismatic Amulet | +(35–50)% cold damage · +(8–12)% cast speed · 8% reduced max life · Rime Shards pierce all targets | "One note passes through every throat." |
+| **The Second Verse** (level 58) | Echoing Focus | +(30–45)% cold damage · +(20–30) max focus · 15% reduced cast speed · Rime Shards repeat once after 0.4 seconds at no additional Focus cost | "The answer comes from an empty choir." |
+| **The Broken Link** (level 46) | Ironweave Girdle | +(25–40) max life · +(12–18)% cooldown recovery · 20% reduced focus regen · Rift Step removes all harmful effects | "Freedom begins with one missing link." |
+| **Iron Refrain** (level 58) | Bastion Helm | +(35–50)% lightning damage · +(8–12)% cast speed · 8% reduced max life · Arc Chain may revisit earlier targets, never the same target on consecutive hits | "Every chain returns to its master." |
+| **The Unbowed Crown** (level 46) | Bastion Helm | +(30–45) max life · +(2–4) life regen · 8% reduced move speed · taking a Physical hit restores 0.5 seconds to an active Cinder Ward, capped at its original duration | "The crowd falls silent. The champion does not." |
+| **Victor's Debt** (level 58) | Dusksteel Ring | +(25–35)% spell damage · +(10–14)% all resistances · 10% increased damage taken · hits deal 25% more damage within 80 units, 25% less beyond 200 units | "Victory is paid for at arm’s length." |
+
+Echoes use the caster's current position and aim, preserve the cast's skill values, cost no extra Focus and never repeat recursively; death cancels pending echoes. The Nova fan can combine with Echo of the Matriarch, and the Rime echo with unlimited pierce. Ward snapshots its Cold/Focus/renewal behaviour at cast time; Focus mode suppresses damage and ailments even with Stillwinter. Renewal needs an actual positive Physical hit (not evaded, blocked by invulnerability or damage over time) and never revives an expired Ward. Victor's Debt uses distance at hit time; damage over time is unaffected.
 
 ## 6. Crafting (the heart)
 

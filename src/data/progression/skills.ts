@@ -64,7 +64,10 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     projectileSpeed: 420,
     range: 320,
     projectileNoun: 'bolt',
-    flagsFrom: [{ playerFlag: 'lancePierceAll', skillFlag: 'pierceAll', text: 'Pierces every enemy in its path (The Patient Spark)' }],
+    flagsFrom: [
+      { playerFlag: 'lancePierceAll', skillFlag: 'pierceAll', text: 'Pierces every enemy in its path (The Patient Spark)' },
+      { playerFlag: 'lanceIgnites', skillFlag: 'alwaysIgnite', text: 'Always ignites (Everburn)' },
+    ],
   }),
   emberNova: skill('emberNova', {
     name: 'Ember Nova',
@@ -90,7 +93,10 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     range: 170,
     areaScales: 'range',
     projectileNoun: 'flame',
-    flagsFrom: [{ playerFlag: 'novaEcho', skillFlag: 'echo', text: 'Repeats once after 0.4 seconds (Echo of the Matriarch)' }],
+    flagsFrom: [
+      { playerFlag: 'novaEcho', skillFlag: 'echo', text: 'Repeats once after 0.4 seconds (Echo of the Matriarch)' },
+      { playerFlag: 'novaFan', skillFlag: 'fan', text: 'Flames concentrate into a 150° fan toward the cursor (The Sunken Sun)' },
+    ],
   }),
   flameWave: skill('flameWave', {
     name: 'Flame Wave',
@@ -116,6 +122,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     radius: 14,
     areaScales: 'radius',
     projectileNoun: 'wave',
+    flagsFrom: [{ playerFlag: 'flameRing', skillFlag: 'circle', text: 'Waves spread in a full circle (The Last Rite)' }],
   }),
   rimeShards: skill('rimeShards', {
     name: 'Rime Shards',
@@ -138,6 +145,10 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     range: 260,
     spread: 0.35,
     projectileNoun: 'shard',
+    flagsFrom: [
+      { playerFlag: 'shardPierceAll', skillFlag: 'pierceAll', text: 'Pierces every enemy in its path (Choir of Glass)' },
+      { playerFlag: 'rimeEcho', skillFlag: 'echo', text: 'Repeats once after 0.4 seconds at no additional Focus cost (The Second Verse)' },
+    ],
   }),
   arcChain: skill('arcChain', {
     name: 'Arc Chain',
@@ -158,6 +169,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     chains: { lerp: [3, 8], round: 'floor' },
     range: 240,
     radius: 90,
+    flagsFrom: [{ playerFlag: 'arcReturns', skillFlag: 'revisit', text: 'Can revisit earlier targets, but never the same target twice in succession (Iron Refrain)' }],
   }),
   riftStep: skill('riftStep', {
     name: 'Rift Step',
@@ -177,6 +189,10 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     critChance: 0,
     ailmentChance: 0,
     distance: { lerp: [90, 120] },
+    flagsFrom: [
+      { playerFlag: 'riftChill', skillFlag: 'chillLanding', text: 'Chills enemies within 100 units of the landing for 2 seconds (Winterstride)' },
+      { playerFlag: 'riftCleanse', skillFlag: 'cleanse', text: 'Removes all harmful effects (The Broken Link)' },
+    ],
   }),
   cinderWard: skill('cinderWard', {
     name: 'Cinder Ward',
@@ -200,5 +216,10 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     radius: 40,
     pulseInterval: 0.5,
     areaScales: 'radius',
+    flagsFrom: [
+      { playerFlag: 'coldWard', skillFlag: 'cold', text: 'Deals Cold damage and always chills (Stillwinter)' },
+      { playerFlag: 'wardFocus', skillFlag: 'restoreFocus', text: 'Deals no damage; restores 2 Focus per nearby enemy per pulse, up to 6 (Vigil of Ash)' },
+      { playerFlag: 'wardRenew', skillFlag: 'renew', text: 'Physical hits restore 0.5 seconds, capped at original duration (The Unbowed Crown)' },
+    ],
   }),
 };

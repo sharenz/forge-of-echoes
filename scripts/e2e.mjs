@@ -71,6 +71,7 @@ const QOL_ONLY = opt('only', 'all') === 'qol';
 const ACCOUNT_ONLY = opt('only', 'all') === 'account';
 const ATLAS_ONLY = opt('only', 'all') === 'atlas';
 const INGREDIENTS_ONLY = opt('only', 'all') === 'ingredients';
+const UNIQUES_ONLY = opt('only', 'all') === 'uniques';
 const EVENTS_ONLY = opt('only', 'all') === 'events';
 const MAPS_ONLY = opt('only', 'all') === 'maps';
 const ECONOMY_ONLY = opt('only', 'all') === 'economy';
@@ -2227,6 +2228,87 @@ async function craftingScenario({ A, port }) {
   });
 }
 
+async function uniquesScenario({ A, port }) {
+  const { tsImport } = await import('tsx/esm/api');
+  const { UNIQUES, getBase } = await tsImport('../src/data/items/index.ts', import.meta.url);
+  const { ATLAS_AREA_IDS } = await tsImport('../src/contracts/atlas.ts', import.meta.url);
+  const { generateUnique, addToBackpack } = await tsImport('../src/game/items/index.ts', import.meta.url);
+  const { createRng } = await tsImport('../src/core/rng.ts', import.meta.url);
+  const defs = Object.values(UNIQUES).filter(u => u.bossSource);
+  await step('prepare the twelve boss uniques and explored destinations in a disposable account', async () => {
+    outage = true; await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const row = db.prepare('SELECT id, data FROM characters').get();
+    let ch = JSON.parse(row.data); ch.backpack.entries = []; ch.level = 80;
+    ch.allocated = { str: 150, dex: 150, int: 200 };
+    ch.mapDevice = { kind: 'map', uid: 'e2e-unique-map:i1', baseId: 'ashenForge', tier: 10, rarity: 'normal', quality: 0, mods: [], corrupted: false };
+    const sorted = [...defs].sort((a, b) => getBase(b.baseId).size.h - getBase(a.baseId).size.h);
+    for (const def of sorted) {
+      const placed = addToBackpack(ch, generateUnique(def.id, createRng(101), { uid: `e2e-${def.id.toLowerCase()}:i1`, itemLevel: 88 }));
+      assert(placed.ok, `no space for ${def.id}`); ch = placed.value;
+    }
+    db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(ch), row.id);
+    const account = db.prepare('SELECT account_id, data FROM account_storage').get();
+    const shared = JSON.parse(account.data);
+    shared.atlas = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 }; shared.currencyStash.scrap = 100;
+    db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), account.account_id);
+    db.close(); await startGameServer(port);
+    await A.waitFor('unique collection after reconnect', () => window.__foe.store.get().connection === 'online'
+      && window.__foe.store.get().character?.backpack.entries.filter(e => e.item.rarity === 'unique').length === 12, undefined, 30000);
+    outage = false;
+  });
+  await step('all twelve unique icons, sources, behavior tooltips and equipment swaps work', async () => {
+    await closePanels(A); await A.page.keyboard.press('i');
+    await A.page.waitForSelector('.fe-grid[data-drop="backpack"]');
+    for (const def of defs) {
+      const uid = `e2e-${def.id.toLowerCase()}:i1`;
+      const target = A.page.locator(`.fe-grid[data-drop="backpack"] .fe-item[data-uid="${uid}"]`);
+      await target.hover();
+      const tooltip = A.page.locator('.fe-tooltip-layer .fe-tt').first();
+      await tooltip.waitFor();
+      await A.waitFor('unique tooltip content', name => [...document.querySelectorAll('.fe-tt')].some(e => e.textContent.includes(name)), def.name);
+      const text = await tooltip.innerText();
+      assert(text.includes('Exclusive keystone drop') && text.includes(def.flags[0].text), `missing source or behavior for ${def.id}`);
+      await settlePanels(A); await A.shot(`uniques-${def.id}-${VW}x${VH}`);
+      const bounds = await tooltip.boundingBox();
+      assert(bounds && bounds.y >= -1 && bounds.y + bounds.height <= VH + 1, `${def.id} tooltip exceeds the viewport`);
+      await target.click({ modifiers: ['Control'] });
+      await A.waitFor('unique equipped', uid => Object.values(window.__foe.store.get().character.equipment).some(i => i?.uid === uid), uid);
+      assert(await A.eval(flag => window.__foe.store.rules.deriveStats(window.__foe.store.get().character).combat.flags.includes(flag), def.flags[0].flag), `missing equipped effect ${def.id}`);
+      await A.page.locator(`[data-drop="equip"] .fe-item[data-uid="${uid}"]`).click({ modifiers: ['Control'] });
+      await A.waitFor('unique returned to backpack', uid => window.__foe.store.get().character.backpack.entries.some(e => e.item.uid === uid), uid);
+    }
+  });
+  await step('the Atlas and Map Device disclose all six exclusive pools and their actual chances', async () => {
+    await closePanels(A);
+    const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'mapDevice', 10), 'map device');
+    await clickWorld(A, at, 'map device'); await A.page.waitForSelector('.fe-device');
+    for (const [name, first, second] of [
+      ['Heart of the Forge', 'Everburn', 'The Sunken Sun'], ['Echo Bastion', 'Winterstride', 'Stillwinter'],
+      ['Ember Citadel', 'Vigil of Ash', 'The Last Rite'], ['Frozen Passage', 'Choir of Glass', 'The Second Verse'],
+      ['The Last Kiln', 'The Broken Link', 'Iron Refrain'], ['Eternal Arena', 'The Unbowed Crown', "Victor's Debt"],
+    ]) {
+      await A.page.locator('.fe-device__destination').click();
+      await A.page.getByRole('button', { name: new RegExp(`^${name},`) }).click();
+      const detail = await A.page.locator('.fe-atlas__detail').innerText();
+      assert(detail.includes(first) && detail.includes(second) && detail.includes('T8+') && detail.includes('T10+'), 'missing keystone eligibility');
+      await settlePanels(A); await A.shot(`uniques-source-${name.replaceAll(' ', '-')}-${VW}x${VH}`);
+      await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+      const chance = A.page.getByText(/^Exclusive unique chance:/);
+      await chance.scrollIntoViewIfNeeded();
+      assert(/Exclusive unique chance: [1-9]/.test(await chance.innerText()), 'eligible keystone has no drop chance');
+      await A.shot(`uniques-chance-${name.replaceAll(' ', '-')}-${VW}x${VH}`);
+    }
+  });
+  await step('all twelve uniques survive a real server restart unchanged', async () => {
+    const before = await A.eval(() => window.__foe.store.get().character.backpack);
+    outage = true; await stopGameServer(); await startGameServer(port);
+    await A.waitFor('unique restart', () => window.__foe.store.get().connection === 'online', undefined, 30000); outage = false;
+    assert(isDeepStrictEqual(before, await A.eval(() => window.__foe.store.get().character.backpack)), 'unique collection changed after restart');
+  });
+}
+
 async function ingredientsScenario({ A, port }) {
   const ids = ['scarBalm', 'anneal', 'graft', 'transmute', 'echoShard', 'crownFragment', 'compass', 'twinInk', 'voidSplinter'];
   const names = ['Scar Balm', 'Anneal', 'Graft', 'Transmute', 'Echo Shard', 'Crown Fragment', 'Compass', 'Twin Ink', 'Void Splinter'];
@@ -2560,9 +2642,10 @@ async function main() {
   if (MAPS_ONLY) await expandedMapsScenario({ A, port });
   if (ATLAS_ONLY) await atlasScenario({ A, port });
   if (INGREDIENTS_ONLY) await ingredientsScenario({ A, port });
+  if (UNIQUES_ONLY) await uniquesScenario({ A, port });
   if (EVENTS_ONLY) await eventsScenario({ A, port });
   if (CRAFTING_ONLY) await craftingScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY) {
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -2571,7 +2654,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

@@ -7,8 +7,8 @@ Last reprioritised: 2026-09-29.
 **Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
 verify the resulting game and deploy it to production. QoL (P0.1–4), account storage, Atlas, the first events,
 Prefix/Suffix Runes, advanced bases, economy sinks and the six-map roster (P1.1–7) are done and deployed.
-P1.8's ingredients, encounters and 25-area Atlas expansion are also deployed. Boss-specific unique pools
-and the map tree (P1.8–9) remain part of this delivery until verified.
+P1.8's ingredients, encounters and 25-area Atlas expansion are also deployed. Twelve boss-exclusive uniques
+are implemented and in final release checks; the map tree (P1.9) remains part of this delivery.
 
 **Current order:** boss-specific unique pools → map tree.
 Priorities follow current usability problems, then progression dependencies.
@@ -260,8 +260,7 @@ reopen tuning for a specific problem rather than starting another general balanc
    before/after inventory audits are verified.
 8. **Rest of the content:** remaining events (Blackout, Vaultbreakers, Second Crown, Wound), remaining ingredients
    (Scar Balm, Anneal, Graft, Transmute, Compass; event-only Echo Shard, Twin Ink, Void Splinter, Crown Fragment),
-   remaining dead ends and rare barrier areas, keystone bosses with their own unique pools (needs many more
-   uniques; only 4 exist).
+   remaining dead ends and rare barrier areas, keystone bosses with their own unique pools.
    **Ingredients/events: Done, deployed as `20260930-000009-9d1f0e0`.** All nine ingredient operations and
    targeted sources are live, along with Blackout, Vaultbreakers, Second Crown and the Wound. Independent
    twin-boss state, timed carrier rewards/escape, crafting preservation, exact previews, stash access and
@@ -273,6 +272,14 @@ reopen tuning for a specific problem rather than starting another general balanc
    and focused reruns pass. Full browser clears cover Black Pit, Hunting Ground, Rift Nexus, Pit of Echoes
    and Shrine Field; entry and graph layout are checked at both screen sizes. Boss-specific unique pools
    and the map tree remain outstanding.
+   **Boss uniques: implemented, not yet deployed.** Twelve new uniques cover all ten equipment classes,
+   two per boss, eligible at T8/T10. Six exclusive pools across eight Atlas areas roll separately at 12%
+   times personal item rarity. New skill behaviour, individual art, source/odds labels and Crown rerolls
+   are covered. The original four remain in ordinary loot/gambling. Full rules/simulation/balance testing
+   plus focused reruns cover 1,947 checks; browser equip, source and restart flows pass at both screen sizes.
+   Final build/typecheck and the production-copy audit pass (457 items, 4 accounts, 7 characters;
+   conservation, unique IDs, no duplicate storage, idempotent reload and integrity). Deployment is pending.
+   P1.9 remains open.
 9. **Map tree v0** (15 nodes, map-only effects). Biggest scope trap: only once events and ingredients are proven.
 
 ## P2: character depth

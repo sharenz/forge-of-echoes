@@ -6,7 +6,7 @@ import type {
   CurrencyStack, EquipmentItem, FlaskStack, Item, ItemDescription, ItemTone, TooltipLine,
 } from '../../contracts/items';
 import type { FlaskId } from '../../contracts/content';
-import { atlasKeyDestination, findAtlasArea } from '../../data/progression/atlas';
+import { ATLAS_AREAS, atlasKeyDestination, atlasTierCeiling, findAtlasArea } from '../../data/progression/atlas';
 import { iconIdForBase, iconIdForCurrency, iconIdForFlask, iconIdForUnique } from '../../contracts/content';
 import {
   BELT_SLOT_CAPACITY, CLASS_LABEL, CURRENCY_FAMILY_LABEL, FLASK_STACK, TAG_LABEL, findBase, findCurrency, findFlask,
@@ -112,6 +112,11 @@ export function describeEquipment(item: EquipmentItem, opts: EquipmentDescribeOp
   };
   if (!isUnique) desc.stability = { current: item.stability, max: item.maxStability };
   if (!isUnique && base?.material) desc.description = base.materialNote;
+  if (unique?.bossSource) {
+    const minTier = Math.ceil((req + 2) / 6);
+    const sources = ATLAS_AREAS.filter(a => a.uniquePool === unique.bossSource && atlasTierCeiling(a) >= minTier);
+    desc.description = `Exclusive keystone drop in ${sources.map(a => a.name).join(' or ')}. Requires a Tier ${minTier}+ map.`;
+  }
   if (unique) desc.flavor = unique.flavor;
   if (requirements) desc.requirements = requirements;
   if (item.history.length) desc.history = [...item.history];

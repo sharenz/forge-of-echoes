@@ -5,7 +5,7 @@ import type { SkillId } from '../contracts/content';
 import type { SkillRuntimeDef } from '../contracts/sim';
 import { spawnArea } from './areas';
 import { damageMonster, isHittable } from './combat';
-import { cleanseDebuffs } from './debuffs';
+import { cleanseAll, cleanseDebuffs } from './debuffs';
 import {
   ARC_JUMP_RANGE, ARC_TARGET_RANGE, DASH_ANIM, DASH_INVULN, FIRE_TRAIL_DAMAGE, FIRE_TRAIL_DURATION, FIRE_TRAIL_INTERVAL, FIRE_TRAIL_RADIUS,
   FIRE_TRAIL_TICK, MUZZLE_OFFSET, NOVA_ECHO_DELAY, WARD_PULSE_INTERVAL,
@@ -64,14 +64,16 @@ export function releaseSkill(w: World, p: PlayerState, def: SkillRuntimeDef, aim
       break;
     case 'flameWave': {
       const count = Math.max(1, Math.floor(def.projectiles));
-      const spread = def.spread > 0 ? def.spread : DEFAULTS.flameWave.spread;
+      const spread = hasFlag(p, def, 'circle', 'flameRing') ? TAU * (count - 1) / count : def.spread > 0 ? def.spread : DEFAULTS.flameWave.spread;
       fireFan(w, p, def, PROJ.flameWave, angle, count, spread, DEFAULTS.flameWave, -1, def.radius > 0 ? def.radius : DEFAULTS.flameWave.radius);
       break;
     }
     case 'rimeShards': {
       const count = Math.max(1, Math.floor(def.projectiles));
       const spread = def.spread > 0 ? def.spread : DEFAULTS.rimeShards.spread;
-      fireFan(w, p, def, PROJ.rimeShard, angle, count, spread, DEFAULTS.rimeShards, Math.max(0, Math.floor(def.pierce)), DEFAULTS.rimeShards.radius);
+      fireFan(w, p, def, PROJ.rimeShard, angle, count, spread, DEFAULTS.rimeShards,
+        hasFlag(p, def, 'pierceAll', 'shardPierceAll') ? -1 : Math.max(0, Math.floor(def.pierce)), DEFAULTS.rimeShards.radius);
+      if (hasFlag(p, def, 'echo', 'rimeEcho')) p.pendingNovas.push({ at: w.time + NOVA_ECHO_DELAY, def });
       break;
     }
     case 'arcChain':
@@ -130,7 +132,9 @@ export function novaBurst(w: World, p: PlayerState, def: SkillRuntimeDef, angle:
   s.ailmentChance = def.ailmentChance;
   s.pierce = Math.max(0, Math.floor(def.pierce));
   for (let k = 0; k < count; k++) {
-    s.angle = angle + (k / count) * TAU;
+    s.angle = hasFlag(p, def, 'fan', 'novaFan')
+      ? angle + (count === 1 ? 0 : -Math.PI * 5 / 12 + Math.PI * 5 / 6 * k / (count - 1))
+      : angle + (k / count) * TAU;
     s.x = p.x;
     s.y = p.y;
     spawnProjectile(w, s);
@@ -196,7 +200,7 @@ function arcChain(w: World, p: PlayerState, def: SkillRuntimeDef, aimX: number, 
     let nextD = Infinity;
     for (let k = 0; k < nn; k++) {
       const i = cand[k];
-      if (!isHittable(w, i) || hitIds.includes(m.id[i])) continue;
+      if (!isHittable(w, i) || (hasFlag(p, def, 'revisit', 'arcReturns') ? i === cur : hitIds.includes(m.id[i]))) continue;
       const dx = m.x[i] - x;
       const dy = m.y[i] - y;
       const d2 = dx * dx + dy * dy;
@@ -232,7 +236,8 @@ function riftStep(w: World, p: PlayerState, def: SkillRuntimeDef, aimX: number, 
   w.events.push({ t: 'dash', playerId: p.id, fromX: p.x, fromY: p.y, toX: tx, toY: ty });
   // Rift Step is the answer to a root (GAME_SPEC §13): it breaks the root and a chain hook's drag.
   p.pullTime = 0;
-  cleanseDebuffs(w, p, RIFT_BREAKS);
+  if (hasFlag(p, def, 'cleanse', 'riftCleanse')) cleanseAll(w, p);
+  else cleanseDebuffs(w, p, RIFT_BREAKS);
   p.x = tx;
   p.y = ty;
   // A blink is a teleport: no interpolated slide between the two points.
@@ -240,6 +245,16 @@ function riftStep(w: World, p: PlayerState, def: SkillRuntimeDef, aimX: number, 
   p.prevY = ty;
   p.invulnTime = Math.max(p.invulnTime, DASH_INVULN);
   p.dashTime = DASH_ANIM;
+  if (hasFlag(p, def, 'chillLanding', 'riftChill')) {
+    const m = w.monsters, candidates = w.scratch;
+    const n = w.grid.query(tx - 100, ty - 100, tx + 100, ty + 100, candidates);
+    for (let k = 0; k < n; k++) {
+      const i = candidates[k];
+      if (!isHittable(w, i) || Math.hypot(m.x[i] - tx, m.y[i] - ty) > 100) continue;
+      m.chillTime[i] = Math.max(m.chillTime[i], 2);
+      w.events.low({ t: 'ailment', ailment: 'chilled', x: m.x[i], y: m.y[i] });
+    }
+  }
 }
 
 function cinderWard(w: World, p: PlayerState, def: SkillRuntimeDef): void {
@@ -254,6 +269,9 @@ function cinderWard(w: World, p: PlayerState, def: SkillRuntimeDef): void {
   ward.critMultiplier = def.critMultiplier;
   ward.ailmentChance = def.ailmentChance;
   ward.radius = def.radius > 0 ? def.radius : WARD_RADIUS;
+  ward.dtype = DAMAGE_INDEX[def.damageType];
+  ward.focusOnPulse = hasFlag(p, def, 'restoreFocus', 'wardFocus');
+  ward.renewOnHit = hasFlag(p, def, 'renew', 'wardRenew');
   w.events.push({ t: 'ward', playerId: p.id, x: p.x, y: p.y, duration });
 }
 
@@ -269,11 +287,12 @@ export function tickWard(w: World, p: PlayerState): void {
   ward.pulse -= DT;
   if (ward.pulse > 0) return;
   ward.pulse += WARD_PULSE_INTERVAL;
-  if (ward.damage <= 0) return;
+  if (ward.damage <= 0 && !ward.focusOnPulse) return;
   const m = w.monsters;
   const cand = w.scratch;
   const reach = ward.radius + w.grid.maxRadius;
   const n = w.grid.query(p.x - reach, p.y - reach, p.x + reach, p.y + reach, cand);
+  let focus = 0;
   for (let k = 0; k < n; k++) {
     const i = cand[k];
     if (!isHittable(w, i)) continue;
@@ -282,8 +301,10 @@ export function tickWard(w: World, p: PlayerState): void {
     const r = ward.radius + m.radius[i];
     if (dx * dx + dy * dy > r * r) continue;
     // Embers burn: not a hit, so armour doesn't blunt them.
-    damageMonster(w, i, ward.damage, DAMAGE_INDEX.fire, ward.critChance, ward.critMultiplier, ward.ailmentChance, dx, dy, 0.5, false, p.id);
+    if (ward.focusOnPulse) focus = Math.min(6, focus + 2);
+    else damageMonster(w, i, ward.damage, ward.dtype, ward.critChance, ward.critMultiplier, ward.ailmentChance, dx, dy, 0.5, false, p.id);
   }
+  if (focus) p.focus = Math.min(p.stats.maxFocus, p.focus + focus);
 }
 
 /** Cinderwalkers: while moving, leave burning ground behind that damages monsters. */
@@ -299,7 +320,7 @@ export function tickFireTrail(w: World, p: PlayerState, moving: boolean): void {
   });
 }
 
-/** Ember Nova echoes (0.4 s later, from wherever the player is then). */
+/** Nova and Shard echoes (0.4 s later, from wherever the player is then); echoes never queue echoes. */
 export function tickPendingNovas(w: World, p: PlayerState): void {
   const list = p.pendingNovas;
   if (list.length === 0) return;
@@ -307,8 +328,13 @@ export function tickPendingNovas(w: World, p: PlayerState): void {
   for (let k = 0; k < list.length; k++) {
     const e = list[k];
     if (p.dead) continue;
-    if (e.at <= w.time + 1e-9) novaBurst(w, p, e.def, aimAngle(p, p.aimX, p.aimY) + Math.PI / Math.max(1, e.def.projectiles));
-    else list[write++] = e;
+    if (e.at <= w.time + 1e-9) {
+      const angle = aimAngle(p, p.aimX, p.aimY), def = e.def;
+      if (def.id === 'rimeShards') fireFan(w, p, def, PROJ.rimeShard, angle, Math.max(1, Math.floor(def.projectiles)),
+        def.spread > 0 ? def.spread : DEFAULTS.rimeShards.spread, DEFAULTS.rimeShards,
+        hasFlag(p, def, 'pierceAll', 'shardPierceAll') ? -1 : Math.max(0, Math.floor(def.pierce)), DEFAULTS.rimeShards.radius);
+      else novaBurst(w, p, def, angle + (hasFlag(p, def, 'fan', 'novaFan') ? 0 : Math.PI / Math.max(1, def.projectiles)));
+    } else list[write++] = e;
   }
   list.length = write;
 }

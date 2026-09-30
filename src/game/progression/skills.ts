@@ -113,7 +113,7 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const def = getSkill(skillId);
   const rank = clampRank(def, rankIn);
   const rv = (v: SkillDef['projectiles']) => rankValue(v, rank, def.maxRank);
-  const type = def.runtimeDamageType;
+  const type = skillId === 'cinderWard' && model.flags.includes('coldWard') ? 'cold' : def.runtimeDamageType;
 
   // Damage
   const effectiveness = rv(def.effectiveness);
@@ -122,7 +122,8 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const moreMultiplier = damageMods.filter((m) => m.mode === 'more').reduce((p, m) => p * (1 + m.value / 100), 1);
   const added = model.breakdown('addedSpellDamage', 0).value;
   const basePower = spellPowerAt(model.cls, model.level) + added;
-  const damage = effectiveness > 0 ? Math.max(0, basePower * effectiveness * Math.max(0, 1 + increased / 100) * moreMultiplier) : 0;
+  const wardFocus = skillId === 'cinderWard' && model.flags.includes('wardFocus');
+  const damage = effectiveness > 0 && !wardFocus ? Math.max(0, basePower * effectiveness * Math.max(0, 1 + increased / 100) * moreMultiplier) : 0;
 
   // Speed & timing
   const castSpeed = Math.max(0.1, model.breakdown('castSpeed').value / 100);
@@ -134,7 +135,8 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const critChance = damage > 0 ? clamp(resolveStat(def.critChance, model.of('critChance')) / 100, 0, 1) : 0;
   const critMultiplier = Math.max(1, model.breakdown('critMultiplier').value / 100);
   const ailmentStat = AILMENT_STAT[type];
-  const ailmentChance = damage > 0 && ailmentStat
+  const ailmentChance = damage > 0 && ((skillId === 'emberLance' && model.flags.includes('lanceIgnites'))
+    || (skillId === 'cinderWard' && model.flags.includes('coldWard'))) ? 1 : damage > 0 && ailmentStat
     ? clamp(resolveModes(def.ailmentChance, model.of(ailmentStat)) / 100, 0, 1)
     : 0;
 
@@ -154,6 +156,8 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
       flagTexts.push(f.text);
     }
   }
+  if (damage > 0 && def.shape !== 'ward' && model.flags.includes('closeQuarters'))
+    flagTexts.push('Hits deal 25% more damage within 80 units of you, and 25% less beyond 200 units (Victor’s Debt); estimates assume the middle distance');
 
   const baseProjectiles = rv(def.projectiles);
   const projectiles = projectileSkill ? Math.max(1, baseProjectiles + extraProjectiles) : baseProjectiles;
@@ -173,7 +177,7 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
     pierce: projectileSkill ? rv(def.pierce) + extraPierce : rv(def.pierce),
     projectileSpeed: projectileSkill ? def.projectileSpeed * projSpeedMult : def.projectileSpeed,
     range: def.areaScales === 'range' ? def.range * areaRadiusMult : def.range,
-    spread: fanSpread(def, projectiles),
+    spread: flags.includes('fan') ? Math.PI * 5 / 6 : flags.includes('circle') ? Math.PI * 2 * (projectiles - 1) / projectiles : fanSpread(def, projectiles),
     radius: def.areaScales === 'radius' ? def.radius * areaRadiusMult : def.radius,
     duration: rv(def.duration) * (rv(def.duration) > 0 ? durationMult : 1),
     chains: Math.max(0, Math.floor(rv(def.chains))),
@@ -363,14 +367,16 @@ export function skillLines(r: ResolvedSkill): string[] {
   switch (def.shape) {
     case 'projectile':
       lines.push(`Deals ${damageRange(rt.damage)} ${type} damage`);
-      lines.push(rt.projectiles > 1
+      lines.push(rt.flags.includes('circle') ? `Fires ${plural(rt.projectiles, noun)} in a full circle` : rt.projectiles > 1
         ? `Fires ${plural(rt.projectiles, noun)} in a ${degrees(rt.spread)} fan`
         : `Fires ${plural(1, noun)} toward the cursor`);
       if (def.radius > 0) lines.push(`Each ${noun} is ${Math.round(rt.radius * 2)} units wide`);
       break;
     case 'nova':
       lines.push(`Deals ${damageRange(rt.damage)} ${type} damage`);
-      lines.push(`Bursts ${plural(rt.projectiles, noun)} outward in a ring reaching ${Math.round(rt.range)} units`);
+      lines.push(rt.flags.includes('fan')
+        ? `Fires ${plural(rt.projectiles, noun)} in a 150° fan reaching ${Math.round(rt.range)} units`
+        : `Bursts ${plural(rt.projectiles, noun)} outward in a ring reaching ${Math.round(rt.range)} units`);
       break;
     case 'chain':
       lines.push(`Deals ${damageRange(rt.damage)} ${type} damage`);

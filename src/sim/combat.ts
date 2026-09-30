@@ -52,7 +52,9 @@ export function damageMonster(
   if (!isHittable(w, i) || amount <= 0) return false;
   const m = w.monsters;
   const rng = w.combatRng;
-  let dmg = amount * rng.range(ROLL_MIN, ROLL_MAX);
+  const player = source > 0 ? w.playerById[source] : undefined;
+  const distance = hit && player?.flags.has('closeQuarters') ? Math.hypot(m.x[i] - player.x, m.y[i] - player.y) : 100;
+  let dmg = amount * (distance <= 80 ? 1.25 : distance > 200 ? 0.75 : 1) * rng.range(ROLL_MIN, ROLL_MAX);
   let crit = false;
   if (critChance > 0 && rng.next() < critChance) {
     crit = true;
@@ -340,6 +342,8 @@ export function hitPlayer(
     }
   }
   if (dmg > 0) {
+    if (kind !== 'dot' && dtype === DT_PHYSICAL && p.ward.time > 0 && p.ward.renewOnHit)
+      p.ward.time = Math.min(p.ward.duration, p.ward.time + 0.5);
     p.life -= dmg;
     p.hitFlash = 1;
     if (!p.cast && p.dashTime <= 0) p.hitTime = HIT_ANIM;
