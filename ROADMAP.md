@@ -374,6 +374,8 @@ reopen tuning for a specific problem rather than starting another general balanc
 
 ## P3: after the spine
 
+- **Character walking / footstep sounds** (owner, 2026-09-30). Audible footsteps when your character walks
+  in the hideout and maps, timed to movement and stopping when the character stands still.
 - **Echo Exchange (auction house),** specified in `GAME_SPEC.md` §15. After the sinks (P1.6). Decided: simulated
   liquidity with **fake players** that look real (no "house" label). Keep: a small cast of stable names, same
   listing rules and fees as real players, shrinking as real listings grow, priced in hard currencies, and tests
