@@ -4,16 +4,40 @@ Maintained at the owner's request. Ask "what's next" and it is read from here; i
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
 Last reprioritised: 2026-09-29.
 
-**Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
-verify the resulting game and deploy it to production. QoL (P0.1–4), account storage, Atlas, the first events,
-Prefix/Suffix Runes, advanced bases, economy sinks and the six-map roster (P1.1–7) are done and deployed.
-P1.8 is also done and deployed: ingredients, encounters, the 25-area Atlas and twelve boss-exclusive uniques.
-The map tree (P1.9) remains part of this delivery.
+**Owner delivery: Done (2026-09-30).** The whole QoL block (P0.1–4) and map-progression block (P1.1–9)
+are implemented, verified and deployed. This includes account storage, the 25-area Atlas, all six encounters,
+crafting ingredients, advanced bases, economy sinks, six map themes, twelve boss-exclusive uniques and the map tree.
 
-**Current order:** map tree.
+**Next priority:** P2 — more Sorceress skills and a deeper skill tree, then the passive tree.
 Priorities follow current usability problems, then progression dependencies.
 
-**Latest release: Done — `20260930-011433-2f6f480` (2026-09-30).** Twelve boss-exclusive uniques bring the
+**Latest release: Done — `20260930-013807-f32d033` (2026-09-30).** The account map tree has fifteen nodes in
+five paths and up to ten points from distinct Atlas completions. Leaf refunds cost 5 Scrap; expedition choices
+are frozen when opened and survive party play and restarts. Build/typecheck and all 1,957 balance-enabled tests
+pass, followed by 18 focused checks after final copy/layout changes. Tree allocation, refund, budget and restart
+flows pass in Chromium at 1024×600 and 1280×720; final compact layout, QoL regressions at both sizes and all
+compact Atlas entry/key flows also pass. Live protocol 15 and exact public JS/CSS matches are verified.
+Fresh host-local production-copy audits before and after preserve all 457 physical items across 4 accounts,
+7 characters and 14 normal stash tabs, with unique IDs, no duplicate storage, idempotent reload and healthy
+integrity. Post-drain backup: `/var/lib/forge/backups/pre-release-20260930-013807-f32d033.db`.
+
+**Delivery completion audit:** every P0/P1 requirement is mapped to shipped behavior and validation below.
+The final full suite covers current rules, simulation, server transactions and save/restart behavior.
+Browser checks use `scripts/e2e.mjs --prod --only <scenario> --size <viewport>` at 1024×600 and 1280×720;
+the release records retain which scenarios were repeated after later changes.
+
+| Scope | Shipped behavior | Verification |
+|---|---|---|
+| P0.1–4 | Readable layouts, automatic special-stash filing, elite hover, global/party chat and avatar menus | Typography, stash, hover and social tests; layout inspection and `qol` browser scenario |
+| P1.1 | Shared account storage with atomic transfers and legacy migration | Account-storage server tests, `account` browser/restart scenario and production-copy audits |
+| P1.2 | Account Atlas, discovery/party credit, destination selection and key entry | Atlas rules/server tests and `atlas` browser scenario |
+| P1.3–5 | Hunted/Echo Rift, Prefix/Suffix Runes and ten advanced bases | Event, rune, loot and crafting-progression tests; `events` and `crafting` browser scenarios |
+| P1.6 | Stability repair, selective map rerolls, Bounty commissions and territory fees | Economy/advanced-map-crafting tests and `economy` browser/restart scenario |
+| P1.7 | Six maps, one final boss each, wave-3 rewards moved to completion | Expanded-map and full balance-ladder tests; `maps` browser boss/chest clears |
+| P1.8 | Nine ingredients, four remaining encounters, 25 areas and twelve exclusive uniques | Advanced-crafting, Atlas-content and keystone-unique tests; `ingredients`, `events`, `atlas` and `uniques` browser scenarios, including special-area clears |
+| P1.9 | Fifteen map nodes, ten-point cap, paid refunds and frozen expedition choices | Map-tree rules/server tests and `tree` browser/restart scenario |
+
+**Previous release: Done — `20260930-011433-2f6f480` (2026-09-30).** Twelve boss-exclusive uniques bring the
 catalogue to sixteen. Six pools across eight Atlas areas unlock at T8/T10, each with a separate 12% roll
 scaled by personal item rarity. All twelve have distinctive art and skill behaviour; sources, eligibility and
 actual odds are shown in the Atlas, Map Device and item tooltips. Build/typecheck passes. The full balance-enabled
@@ -186,7 +210,7 @@ Production release: `20260929-182502-e64cfd2` (balance/data commit `e26fc9c`, ma
 (12 on-demand balance checks skipped; this release changes no combat tuning). The production-build browser
 scenario verifies two clients' global and party chat, right-click invitation/acceptance, avatar hideout travel
 and avatar trade with no client errors at both 1024×600 and 1280×720. Character/party layout and elite hover
-cards checked at both sizes. Protocol 5 refreshes old clients. The full map-progression block below remains outstanding.
+cards checked at both sizes. Protocol 5 refreshes old clients. The map-progression block was completed in subsequent releases below.
 
 1. **Fix known UI layout problems after the font bump.** "Intelligence" collides with its `+` button in the
    character panel; party row metadata ("Ashen Forge T3 / 6/8 portals") wraps unevenly. Verify these fixes at
@@ -206,7 +230,7 @@ cards checked at both sizes. Protocol 5 refreshes old clients. The full map-prog
    the screen; right-click an avatar for **Join hideout** and **Trade**, using the existing party/trade actions.
    Keep chat and avatar context menus readable and usable at both normal and small viewports.
 
-## P1: the spine (build in this order; each step playable and testable)
+## P1: the spine — Done (2026-09-30)
 
 Prioritise persistent map progression and reasons to craft. The Atlas can start with the current three map
 bases; expanding the map roster is not a prerequisite. Continue collecting balance feedback during this work;
@@ -269,20 +293,18 @@ reopen tuning for a specific problem rather than starting another general balanc
    6.1–7.9 minutes across the six maps. A bot pursuit bug around pillars was fixed without changing combat rules.
    All three new maps complete through their bosses and chests in both browser sizes; live assets and
    before/after inventory audits are verified.
-8. **Rest of the content:** remaining events (Blackout, Vaultbreakers, Second Crown, Wound), remaining ingredients
+8. **Rest of the content — Done:** remaining events (Blackout, Vaultbreakers, Second Crown, Wound), remaining ingredients
    (Scar Balm, Anneal, Graft, Transmute, Compass; event-only Echo Shard, Twin Ink, Void Splinter, Crown Fragment),
    remaining dead ends and rare barrier areas, keystone bosses with their own unique pools.
    **Ingredients/events: Done, deployed as `20260930-000009-9d1f0e0`.** All nine ingredient operations and
    targeted sources are live, along with Blackout, Vaultbreakers, Second Crown and the Wound. Independent
    twin-boss state, timed carrier rewards/escape, crafting preservation, exact previews, stash access and
-   save/reload behavior are verified, including browser playthroughs at both sizes. Expanded exclusive unique
-   pools remain outstanding; this does not complete P1.8.
+   save/reload behavior are verified, including browser playthroughs at both sizes.
    **Atlas expansion: Done, deployed as `20260930-004633-78ba155`.** 25 areas with two approaches through T11/T13/T15, all
    remaining dead ends and sealed destinations, four new keys, fixed encounter chains, chosen-class hunter
    rewards and durable pending Atlas credit. Build/typecheck and 1,936 checks covered across the full suite
    and focused reruns pass. Full browser clears cover Black Pit, Hunting Ground, Rift Nexus, Pit of Echoes
-   and Shrine Field; entry and graph layout are checked at both screen sizes. Boss-specific unique pools
-   and the map tree remain outstanding.
+   and Shrine Field; entry and graph layout are checked at both screen sizes.
    **Boss uniques: Done, deployed as `20260930-011433-2f6f480`.** Twelve new uniques cover all ten equipment classes,
    two per boss, eligible at T8/T10. Six exclusive pools across eight Atlas areas roll separately at 12%
    times personal item rarity. New skill behaviour, individual art, source/odds labels and Crown rerolls
@@ -290,17 +312,17 @@ reopen tuning for a specific problem rather than starting another general balanc
    plus focused reruns cover 1,947 checks; browser equip, source and restart flows pass at both screen sizes.
    Final build/typecheck and production-copy audits before/after pass (457 items, 4 accounts, 7 characters;
    conservation, unique IDs, no duplicate storage, idempotent reload and integrity). Live protocol 14 and
-   public assets match the tested build. P1.8 is complete; P1.9 remains open.
-9. **Map tree v0 — verified, awaiting deployment.** Fifteen map-only nodes across Cartography, Crafting, Hunting,
+   public assets match the tested build.
+9. **Map tree v0 — Done, deployed as `20260930-013807-f32d033`.** Fifteen map-only nodes across Cartography, Crafting, Hunting,
    Fortune and Encounters. First distinct Atlas completions award up to ten points; each node costs one and
    leaf refunds cost 5 Scrap atomically. Allocations are shared by alts and frozen into the opener's expedition,
    including for party members and restarts. Bonuses, prerequisites, costs and tradeoffs are shown in the
    tree and map readout. Build/typecheck and all 1,957 balance-enabled checks pass, with 18 focused checks
    after final copy/layout changes. Browser allocation/refund, budget, snapshot and restart flows pass at
    1024×600 and 1280×720; the final compact tree has all fifteen nodes visible even with the budget message.
-   QoL regressions pass at both sizes; all Atlas entry/key flows pass at 1024×600. Production-copy checks
+   QoL regressions pass at both sizes; all Atlas entry/key flows pass at 1024×600. Production-copy checks before and after deployment
    preserve all 457 physical items across 4 accounts / 7 characters, with unique IDs, no duplicate storage,
-   idempotent reload and healthy integrity. Deployment and post-deployment verification remain pending.
+   idempotent reload and healthy integrity. Live protocol 15 and exact public JS/CSS matches are verified.
 
 ## P2: character depth
 
