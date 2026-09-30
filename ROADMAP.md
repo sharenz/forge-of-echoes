@@ -7,12 +7,27 @@ Last reprioritised: 2026-09-29.
 **Active delivery (owner goal):** complete the whole QoL block (P0.1–4) and map-progression block (P1.1–9),
 verify the resulting game and deploy it to production. QoL (P0.1–4), account storage, Atlas, the first events,
 Prefix/Suffix Runes, advanced bases, economy sinks and the six-map roster (P1.1–7) are done and deployed.
-Remaining content and the map tree (P1.8–9) remain part of this delivery until individually completed and verified.
+P1.8's nine ingredients and four remaining encounters are also deployed. Deeper Atlas routes, remaining
+special areas, boss-specific unique pools and the map tree (P1.8–9) remain part of this delivery until verified.
 
-**Current order:** remaining events/ingredients/areas → map tree.
+**Current order:** deeper Atlas routes, special areas and unique pools → map tree.
 Priorities follow current usability problems, then progression dependencies.
 
-**Latest release: Done — `20260929-230651-931a5af` (2026-09-30).** Six map types (P1.7): Cinder Chapel,
+**Latest release: Done — `20260930-000009-9d1f0e0` (2026-09-30).** Nine ingredients with targeted sources:
+Scar Balm, Anneal, Graft, Transmute, Compass, Echo Shard, Twin Ink, Void Splinter and Crown Fragment.
+Blackout, Vaultbreakers, the Wound and Second Crown add beacons, fleeing carriers, optional eruptions and
+independent twin bosses. Exact crafting previews, stash access, preserved item history and save/reload rules
+are included. Build/typecheck passes. The full rules/simulation/balance run passed 1,912 checks; a pickup-test
+timing condition was corrected and all 133 server checks passed on rerun. A final Transmute scar-compatibility
+regression and the affected crafting suite pass (41 checks; 1,914 total checks covered across the suite/reruns).
+All nine crafting flows and all four encounters pass in Chromium at 1024×600 and 1280×720, including rewards
+and crafting persistence across restart. Live protocol 12 and exact public JS/CSS matches are verified.
+Production-copy audits before/after preserve all 457 physical items across 4 accounts / 7 characters, with
+unique IDs, no duplicate storage, idempotent reload and healthy integrity. Post-drain backup:
+`/var/lib/forge/backups/pre-release-20260930-000009-9d1f0e0.db`.
+This completes the ingredients/events portion of P1.8; the remaining areas, unique pools and P1.9 stay open.
+
+**Previous release: Done — `20260929-230651-931a5af` (2026-09-30).** Six map types (P1.7): Cinder Chapel,
 Choral Crypt and Chainworks promote the Herald, Chorister and Chainmaster into final bosses. Wave 3 now has
 ordinary packs on every map; its guaranteed rewards move to the completion chest. Original final-boss tuning
 is unchanged. New floor art, layouts, implicits, pack compositions, map icons and Atlas encounter labels are included.
@@ -235,10 +250,11 @@ reopen tuning for a specific problem rather than starting another general balanc
    (Scar Balm, Anneal, Graft, Transmute, Compass; event-only Echo Shard, Twin Ink, Void Splinter, Crown Fragment),
    remaining dead ends and rare barrier areas, keystone bosses with their own unique pools (needs many more
    uniques; only 4 exist).
-   **In progress, not deployed:** all nine ingredient operations and their targeted sources are implemented.
-   Blackout, Vaultbreakers, Second Crown and Wound are in validation, including independent twin-boss state,
-   timed escape rewards, crafting preservation and save/reload rules. Deeper routes, remaining rare/dead-end
-   areas and expanded exclusive unique pools are still outstanding; this does not complete P1.8.
+   **Ingredients/events: Done, deployed as `20260930-000009-9d1f0e0`.** All nine ingredient operations and
+   targeted sources are live, along with Blackout, Vaultbreakers, Second Crown and the Wound. Independent
+   twin-boss state, timed carrier rewards/escape, crafting preservation, exact previews, stash access and
+   save/reload behavior are verified, including browser playthroughs at both sizes. Deeper routes, remaining
+   rare/dead-end areas and expanded exclusive unique pools are still outstanding; this does not complete P1.8.
 9. **Map tree v0** (15 nodes, map-only effects). Biggest scope trap: only once events and ingredients are proven.
 
 ## P2: character depth
