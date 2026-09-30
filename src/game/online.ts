@@ -163,6 +163,7 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
       ch, [targetUid], (c) => base.clearCraftedAffix(c, targetUid), outcomeCharacter, withOutcomeCharacter,
     ),
     setMapTreeNode: (ch, id, allocate) => guard(ch, [], c => base.setMapTreeNode(c, id, allocate), plain, replace),
+    sellItems: (ch, uids, expectedScrap) => guard(ch, uids, c => base.sellItems(c, uids, expectedScrap), outcomeCharacter, withOutcomeCharacter),
     buyOffer: (ch, offerId) => guard(ch, [], (c) => base.buyOffer(c, offerId), outcomeCharacter, withOutcomeCharacter),
     buyDebugOffer: (ch, offerId, options) => guard(ch, [], c => base.buyDebugOffer(c, offerId, options), outcomeCharacter, withOutcomeCharacter),
     openMap: (ch, areaId, lootClass) => guard(ch, [ch.mapDevice?.uid], (c) => base.openMap(c, areaId, lootClass), outcomeCharacter, withOutcomeCharacter),

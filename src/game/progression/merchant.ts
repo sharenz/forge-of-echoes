@@ -5,11 +5,11 @@ import type { MerchantOffer, Result } from '../../contracts/game';
 import type { CharacterSave, CurrencyStack, Item, Rarity } from '../../contracts/items';
 import type { CurrencyId, ItemClass } from '../../contracts/content';
 import { createRng } from '../../core/rng';
-import { CLASS_LABEL, findCurrency, getFlask } from '../../data/items';
-import { GAMBLE, GAMBLE_OFFER_PREFIX, MERCHANT_NAME, MERCHANT_STOCK } from '../../data/progression';
+import { CLASS_LABEL, findCurrency, getFlask, getBase, getAffix, getUnique } from '../../data/items';
+import { EQUIPMENT_APPRAISAL, GAMBLE, GAMBLE_OFFER_PREFIX, MERCHANT_NAME, MERCHANT_STOCK } from '../../data/progression';
 import type { MerchantStockDef, PriceDef } from '../../data/progression';
 import {
-  addToBackpack, allItems, baseWeights, currencyStack, currencyStashItem, flaskStack, formatDistribution, generateEquipment,
+  addToBackpack, allItems, baseWeights, currencyStack, currencyStashItem, currencyStashCount, currencyStashRoom, withCurrencyStashCount, flaskStack, formatDistribution, generateEquipment,
   generateUnique, mintUid, pickRandomBase, setStackCount, uniqueIdsFor,
 } from '../items';
 import type { FoundItem } from '../items';
@@ -215,4 +215,69 @@ export function buyOffer(ch: CharacterSave, offerId: string): Result<{ character
   const placed = addToBackpack(pay(next, offer.price), item);
   if (!placed.ok) return fail(placed.error);
   return ok({ character: placed.value, item });
+}
+
+/** Appraise the actual base, item level and affixes. Rarity alone never sets the price. */
+export function sellQuote(item: Item): { scrap: number; lines: string[] } | null {
+  if (item.kind !== 'equipment') return null;
+  const pricing = EQUIPMENT_APPRAISAL, base = getBase(item.baseId);
+  const baseValue = pricing.base + base.levelRequirement * pricing.perBaseLevel;
+  const levelValue = item.itemLevel * pricing.perItemLevel;
+  const amount = (value: number) => `${(value / pricing.perScrap).toFixed(2)} Scrap`;
+  const lines = [`Base · ${base.name}: ${amount(baseValue)}`, `Item level ${item.itemLevel}: ${amount(levelValue)}`];
+  let points = baseValue + levelValue;
+  const unique = item.uniqueId ? getUnique(item.uniqueId) : null;
+  for (const [index, affix] of item.affixes.entries()) {
+    if (unique && affix.affixId === `unique:${unique.id}:${index}`) {
+      points += pricing.uniqueMod;
+      lines.push(`Unique modifier ${index + 1}: ${amount(pricing.uniqueMod)}`);
+    } else {
+      const def = getAffix(affix.affixId);
+      if (!def) continue;
+      const tier = def.tiers.find(t => t.tier === affix.tier);
+      if (!tier) continue;
+      const worst = Math.max(...def.tiers.map(t => t.tier));
+      const strength = worst === 1 ? 1 : (worst - tier.tier) / (worst - 1);
+      const value = Math.round(pricing.worstAffix + (pricing.bestAffix - pricing.worstAffix) * strength);
+      points += value;
+      lines.push(`${def.name} · T${tier.tier}: ${amount(value)}`);
+    }
+  }
+  if (unique?.flags.length) {
+    const value = unique.flags.length * pricing.uniqueFlag;
+    points += value;
+    lines.push(`Unique effects (${unique.flags.length}): ${amount(value)}`);
+  }
+  const scrap = Math.max(1, Math.ceil(points / pricing.perScrap));
+  lines.push(`Total: ${amount(points)} → ${scrap} Forge Scrap (rounded up)`);
+  return { scrap, lines };
+}
+
+/** Remove a confirmed backpack selection and pay in one pure operation. No partial sales. */
+export function sellItems(ch: CharacterSave, uids: readonly string[], expectedScrap: number): Result<{ character: CharacterSave; scrap: number }> {
+  if (!Array.isArray(uids) || !uids.length || uids.length > 60 || new Set(uids).size !== uids.length)
+    return fail('Choose distinct backpack items to sell.');
+  let scrap = 0;
+  for (const uid of uids) {
+    const item = ch.backpack.entries.find(e => e.item.uid === uid)?.item;
+    if (!item) return fail('An item is no longer in your backpack. Review the sale again.');
+    const quote = sellQuote(item);
+    if (quote === null) return fail('Rook only buys equipment. Maps, flasks and currencies cannot be sold.');
+    scrap += quote.scrap;
+  }
+  if (!Number.isInteger(expectedScrap) || scrap !== expectedScrap) return fail('The sale value changed. Review the payout again.');
+  const sold = new Set(uids);
+  let next = { ...ch, backpack: { ...ch.backpack, entries: ch.backpack.entries.filter(e => !sold.has(e.item.uid)) } };
+  const stashed = Math.min(scrap, currencyStashRoom(next, 'scrap'));
+  if (stashed) next = withCurrencyStashCount(next, 'scrap', currencyStashCount(next, 'scrap') + stashed);
+  // Overflow uses the space freed by the sale, respecting stack limits and trade-locked stacks.
+  for (let left = scrap - stashed; left > 0;) {
+    const count = Math.min(left, findCurrency('scrap')!.maxStack);
+    const minted = mintUid(next);
+    const added = addToBackpack(minted.character, currencyStack('scrap', count, minted.uid, true));
+    if (!added.ok) return fail('There is no room for the payout. Nothing was sold.');
+    next = added.value;
+    left -= count;
+  }
+  return ok({ character: next, scrap });
 }

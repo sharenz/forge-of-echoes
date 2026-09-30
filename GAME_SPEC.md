@@ -651,6 +651,31 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 - Map Dust (3 Scrap)
 - Gamble per class
 
+**Selling equipment to Rook:** Buy and Sell tabs share Rook's Stall. Sell accepts unequipped equipment in
+the seller's backpack. Select a row, Ctrl/⌘-click a backpack item (also opens Sell from Buy), or drag equipment
+into the Sell list. Selection highlights the inventory item but does not move it. Each item shows its appraised
+Scrap payout, with a hover/focus breakdown. The footer shows the batch total; confirmation states that the
+items will be permanently removed. Clear, Cancel, closing Rook or changing zones do not sell anything.
+
+**Appraisal:** calculate in hundredths of Scrap and round the final item total up to whole Scrap:
+
+- Base: `50 + base.levelRequirement`.
+- Item level: `itemLevel`.
+- Each ordinary affix: `round(35 + 65 × (worstTier − tier) / (worstTier − 1))`; T1 is best, and the
+  worst tier is specific to that affix's 7–10-tier ladder. A one-tier ladder uses the best-tier value (100).
+- Unique modifiers: 70 each; unique effects/flags: 50 each. Their fixed modifiers do not pretend to be T1 affixes.
+- Payout: `max(1, ceil(total / 100))`. No separate flat rarity bonus. For example, an ilvl88 Dusksteel Ring
+  with six T1 affixes is worth 8 Scrap; the same base/level with six bottom-tier affixes is worth 4.
+
+Rook buys equipment only: maps (including his free T1 maps), flasks and currencies cannot be sold. Gear in
+equipment slots, stash, another character's inventory or an open trade offer is refused. Sales work in any
+hideout and pay only the seller. The server recalculates every appraisal and rejects stale totals, missing
+items, duplicate UIDs, batches over 60 and any sale outside a hideout. No partial sale is allowed. Item removal
+and payout commit in one database transaction; failed saves leave both unchanged. Scrap fills the shared
+Crafting Stash first (up to 5,000), then backpack stacks; overflow respects trade locks and stack limits.
+Replaying a sale of already-removed items cannot pay again. Gamble prices remain unchanged: even the upper
+bound on expected resale at maximum item level and item rarity stays below the 6-Scrap gamble cost.
+
 **Testing merchant — Mira the Provisioner:** a separate NPC south of Rook, disabled by default. Server operators
 enable her per character with `debug_merch <account> <character> enable`; `disable` and `status` use the same
 arguments. The CLI verifies ownership and persists activation separately from character saves. Changes appear

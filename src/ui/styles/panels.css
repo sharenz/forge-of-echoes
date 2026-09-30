@@ -1617,3 +1617,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Rook's sell selection stays visible alongside the backpack. */
+.fe-rook .fe-panel__body { overflow: hidden; padding-bottom: 12px; mask-image: none; -webkit-mask-image: none; }
+.fe-rook .fe-merchant__scroll { min-height: 0; overflow-y: auto; }
+.fe-rook__tabs { display: flex; gap: 8px; flex-shrink: 0; }
+.fe-rook__tabs button { flex: 1; padding: 8px 12px; color: var(--ash); border: 1px solid var(--bronze); background: #120e10; font-size: var(--font-ui-body); cursor: pointer; }
+.fe-rook__tabs button[aria-selected="true"] { color: var(--parchment); border-color: var(--gold); background: #342319; }
+.fe-sell__intro { margin: 0; flex-shrink: 0; color: var(--ash); }
+.fe-sell__stock { flex: 1; min-height: 80px; overflow-y: auto; border: 1px solid var(--bronze); padding: 5px; }
+.fe-sell__stock--valid { border-color: #80ab63; }
+.fe-sell__stock--invalid { border-color: #c15c50; }
+.fe-sell__item { display: flex; gap: 4px; align-items: stretch; margin-bottom: 4px; border: 1px solid #36281f; background: #151014; }
+.fe-sell__item--selected { border-color: var(--gold); background: #392817; }
+.fe-sell__choose { display: grid; grid-template-columns: 32px minmax(0, 1fr) 16px; gap: 8px; flex: 1; min-width: 0; align-items: center; text-align: left; padding: 6px; color: var(--parchment); background: none; border: 0; cursor: pointer; }
+.fe-sell__choose:disabled { opacity: .5; cursor: default; }
+.fe-sell__name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-ui-secondary); }
+.fe-sell__meta { display: block; color: var(--ash); }
+.fe-sell__price { display: flex; gap: 4px; align-items: center; padding: 6px 8px; border: 0; border-left: 1px solid var(--bronze); background: #1e1713; color: var(--gold); cursor: help; }
+.fe-sell__footer { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+.fe-sell__total { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; color: var(--parchment); }
+.fe-sell__actions { display: flex; gap: 8px; }
+.fe-sell__actions > * { flex: 1; }

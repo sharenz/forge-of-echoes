@@ -53,6 +53,7 @@ export interface DropTarget {
   bench?: boolean;
   /** Pointer is over your side of the trade window (dropping adds the item to your offer). */
   offer?: boolean;
+  sale?: boolean;
 }
 
 export interface DragState {
@@ -84,7 +85,11 @@ export interface CursorHint {
   y: number;
 }
 
+export interface MerchantSale { uids: string[]; busy: boolean }
+
 export interface Local {
+  /** Selection only; items stay in the backpack until a confirmed sale. null = Buy tab. */
+  merchantSale: Signal<MerchantSale | null>;
   playerMenu: Signal<{ name: string; characterId?: string; x: number; y: number } | null>;
   tooltip: Signal<TooltipState | null>;
   drag: Signal<DragState | null>;
@@ -109,6 +114,7 @@ export function createLocal(): Local {
   let hintTimer: ReturnType<typeof setTimeout> | null = null;
   let hintId = 0;
   const local: Local = {
+    merchantSale: signal<MerchantSale | null>(null),
     playerMenu: signal<{ name: string; characterId?: string; x: number; y: number } | null>(null),
     tooltip,
     drag: signal<DragState | null>(null),

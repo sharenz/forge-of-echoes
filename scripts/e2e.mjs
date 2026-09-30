@@ -75,6 +75,7 @@ const UNIQUES_ONLY = opt('only', 'all') === 'uniques';
 const TREE_ONLY = opt('only', 'all') === 'tree';
 const SCARABS_ONLY = opt('only', 'all') === 'scarabs';
 const DEBUGMERCHANT_ONLY = opt('only', 'all') === 'debugmerchant';
+const SELLING_ONLY = opt('only', 'all') === 'selling';
 const EVENTS_ONLY = opt('only', 'all') === 'events';
 const MAPS_ONLY = opt('only', 'all') === 'maps';
 const ECONOMY_ONLY = opt('only', 'all') === 'economy';
@@ -2231,6 +2232,89 @@ async function craftingScenario({ A, port }) {
   });
 }
 
+async function sellingScenario({ A, B, port }) {
+  const open = async p => {
+    await closePanels(p);
+    const at = await walkUntilOnScreen(p, () => propOnScreen(p, 'merchant', 10), 'Rook');
+    await clickWorld(p, at, 'Rook'); await p.page.waitForSelector('.fe-rook');
+  };
+  const holdings = p => p.eval(() => {
+    const ch = window.__foe.store.get().character;
+    return { bag: JSON.stringify(ch.backpack), scrap: ch.currencyStash.scrap ?? 0 };
+  });
+  let uids, total, before;
+  await step('Rook keeps buying available and Ctrl-click selects equipment without selling it', async () => {
+    await open(A);
+    assert(await A.page.getByRole('tab', { name: 'Buy', exact: true }).getAttribute('aria-selected') === 'true', 'Buy should be the default');
+    assert(await A.page.locator('.fe-rook .fe-offer').count() > 0, 'Rook stock missing');
+    uids = await A.eval(() => window.__foe.store.get().character.backpack.entries.filter(e => e.item.kind === 'equipment').map(e => e.item.uid));
+    assert(uids.length >= 2, 'expected gear from the testing merchant scenario');
+    before = await holdings(A);
+    total = await A.eval(ids => {
+      const s = window.__foe.store; return ids.reduce((n, uid) => n + s.rules.sellQuote(s.get().character.backpack.entries.find(e => e.item.uid === uid).item).scrap, 0);
+    }, uids);
+    await A.page.locator(`[data-drop="backpack"] .fe-item[data-uid="${uids[0]}"]`).click({ modifiers: ['Control'] });
+    await A.page.waitForSelector('.fe-sell__item--selected');
+    assert(await A.page.getByRole('tab', { name: 'Sell', exact: true }).getAttribute('aria-selected') === 'true', 'Ctrl-click did not open Sell');
+    assert((await holdings(A)).bag === before.bag, 'selection removed an item');
+    assert(await A.page.locator('.fe-sell__item').count() === uids.length, 'non-equipment appeared in sale list');
+    await A.page.locator('.fe-sell__price').first().hover();
+    await A.page.getByText('Rook’s appraisal', { exact: true }).waitFor();
+    await A.shot(`selling-appraisal-${VW}x${VH}`);
+  });
+  await step('dragging selects a second item; payout and confirmation stay within the viewport', async () => {
+    const source = A.page.locator(`[data-drop="backpack"] .fe-item[data-uid="${uids[1]}"]`);
+    const target = A.page.locator('[data-drop="sale"]');
+    const a = await source.boundingBox(), b = await target.boundingBox();
+    assert(a && b, 'sale drag targets missing');
+    await A.page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await A.page.mouse.down();
+    await A.page.mouse.move(b.x + b.width / 2, b.y + 12, { steps: 12 }); await A.page.mouse.up();
+    for (const uid of uids.slice(2)) await A.page.locator(`[data-sell-uid="${uid}"] .fe-sell__choose`).click();
+    await A.waitFor('all gear selected', n => document.querySelectorAll('.fe-sell__item--selected').length === n, uids.length);
+    assert((await A.page.locator('.fe-sell__total').innerText()).includes(`${total} Forge Scrap`), 'appraisal total differs from rules');
+    const button = A.page.locator('.fe-sell__actions button').last(), bounds = await button.boundingBox();
+    assert(bounds && bounds.y + bounds.height <= VH, 'sale button outside viewport');
+    await A.page.mouse.move(VW / 2, 40); await A.shot(`selling-selected-${VW}x${VH}`);
+    await button.click(); await A.page.getByRole('dialog', { name: 'Sell equipment' }).waitFor();
+    await A.page.waitForFunction(() => getComputedStyle(document.querySelector('.fe-dialog-layer')).opacity === '1');
+    const dialogBox = await A.page.getByRole('dialog').boundingBox();
+    assert(dialogBox && dialogBox.y >= 0 && dialogBox.y + dialogBox.height <= VH, 'confirmation exceeds viewport');
+    await A.shot(`selling-confirm-${VW}x${VH}`);
+    await A.page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    assert(isDeepStrictEqual(await holdings(A), before), 'cancel changed items or Scrap');
+  });
+  await step('confirming removes the exact selection and pays the displayed total once', async () => {
+    await A.page.locator('.fe-sell__actions button').last().click();
+    await A.page.getByRole('dialog').getByRole('button', { name: `Sell for ${total} Scrap`, exact: true }).click();
+    await A.waitFor('sale paid', expected => window.__foe.store.get().character.currencyStash.scrap === expected, before.scrap + total);
+    assert(await A.eval(ids => !window.__foe.store.get().character.backpack.entries.some(e => ids.includes(e.item.uid)), uids), 'sold gear remains');
+    assert(await A.page.locator('.fe-sell__actions button').last().isDisabled(), 'empty sale can be repeated');
+    await A.shot(`selling-paid-${VW}x${VH}`);
+  });
+  await step('a visitor sells through the host Rook and only the visitor receives Scrap', async () => {
+    await closePanels(B); await B.page.keyboard.press('i'); await B.page.waitForSelector('.fe-inv');
+    const uid = await B.eval(() => window.__foe.store.get().character.equipment.chest.uid);
+    await B.page.locator(`.fe-inv .fe-item[data-uid="${uid}"]`).click({ modifiers: ['Control'] });
+    await B.waitFor('robe unequipped', uid => window.__foe.store.get().character.backpack.entries.some(e => e.item.uid === uid), uid);
+    const host = await holdings(A), guest = await holdings(B);
+    const price = await B.eval(uid => { const s = window.__foe.store; return s.rules.sellQuote(s.get().character.backpack.entries.find(e => e.item.uid === uid).item).scrap; }, uid);
+    await open(B); await B.page.getByRole('tab', { name: 'Sell', exact: true }).click();
+    await B.page.locator(`[data-sell-uid="${uid}"] .fe-sell__choose`).click();
+    await B.page.locator('.fe-sell__actions button').last().click();
+    await B.page.getByRole('dialog').getByRole('button', { name: `Sell for ${price} Scrap`, exact: true }).click();
+    await B.waitFor('visitor paid', expected => window.__foe.store.get().character.currencyStash.scrap === expected, guest.scrap + price);
+    assert(isDeepStrictEqual(await holdings(A), host), 'guest sale changed host holdings');
+    await B.shot(`selling-visitor-${VW}x${VH}`);
+  });
+  await step('sold items and payouts remain correct after a server restart', async () => {
+    const before = [await holdings(A), await holdings(B)];
+    outage = true; await stopGameServer(); await startGameServer(port);
+    for (const p of [A, B]) await p.waitFor('sale reload', () => window.__foe.store.get().connection === 'online', undefined, 30000);
+    outage = false;
+    assert(isDeepStrictEqual([await holdings(A), await holdings(B)], before), 'sale not durable');
+  });
+}
+
 async function debugMerchantScenario({ A, B, base, port, nameA, nameB, suffix }) {
   const cli = action => new Promise((resolve, reject) => {
     const proc = spawn(process.execPath, ['--import', 'tsx', 'src/server/debug-merch-cli.ts', `e2e_a_${suffix}`, nameA, action],
@@ -2919,10 +3003,11 @@ async function main() {
   if (UNIQUES_ONLY) await uniquesScenario({ A, port });
   if (TREE_ONLY) await mapTreeScenario({ A, port });
   if (SCARABS_ONLY) await scarabsScenario({ A, port });
-  if (DEBUGMERCHANT_ONLY) await debugMerchantScenario({ A, B, base, port, nameA, nameB, suffix });
+  if (DEBUGMERCHANT_ONLY || SELLING_ONLY) await debugMerchantScenario({ A, B, base, port, nameA, nameB, suffix });
+  if (SELLING_ONLY) await sellingScenario({ A, B, port });
   if (EVENTS_ONLY) await eventsScenario({ A, port });
   if (CRAFTING_ONLY) await craftingScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY) {
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -2931,7 +3016,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

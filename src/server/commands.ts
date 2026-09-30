@@ -319,6 +319,14 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       commit(game, s, bought.value.character, true);
       return { ok: true, message: `Bought ${rules.describeItem(bought.value.item, bought.value.character).title}.` };
     }
+    case 'sellItems': {
+      if (!inHideout(s)) return fail('Visit Rook in a hideout to sell equipment.');
+      const sold = r.sellItems(ch, cmd.uids, cmd.expectedScrap);
+      if (!sold.ok) return fail(sold.error);
+      if (!game.store.commit(s.record, sold.value.character)) return fail('The sale could not be saved. Nothing was sold; try again.');
+      s.pushCharacter('now');
+      return { ok: true, message: `Sold ${cmd.uids.length} item${cmd.uids.length === 1 ? '' : 's'} for ${sold.value.scrap} Forge Scrap.` };
+    }
     case 'buyDebugOffer': {
       const instance = s.instance;
       if (!instance || instance.kind !== 'hideout' || !game.db.debugMerchantEnabled(instance.ownerId))

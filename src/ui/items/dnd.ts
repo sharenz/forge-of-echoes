@@ -13,7 +13,7 @@ import type { DragState, DropTarget, Local } from '../local';
 import { cellAt, grabCell, placementOrigin, type Size } from '../lib/grid';
 import { locationKey, sameLocation } from '../lib/items';
 import { disturbsOffer, offerAddError } from '../lib/trade';
-import { LOCKED_REASON, benchAccepts, isTradeLocked, placeOnBench, safe, suppressNextClick, toggleOffer } from './hooks';
+import { LOCKED_REASON, saleItemError, selectForSale, benchAccepts, isTradeLocked, placeOnBench, safe, suppressNextClick, toggleOffer } from './hooks';
 
 const DRAG_THRESHOLD = 5;
 
@@ -105,6 +105,7 @@ function drop(d: DragState, target: DropTarget | null, store: UiStore, local: Lo
     store.actions.uiSound('click');
     return;
   }
+  if (target.sale) { selectForSale(store, local, d.uid, false, at); return; }
   if (target.bench) {
     placeOnBench(store, local, d.uid, d.item, at);
     return;
@@ -156,6 +157,10 @@ export function resolveTarget(x: number, y: number, d: DragState, store: UiStore
   }
   const kind = dropEl.dataset.drop;
   const s = store.get();
+  if (kind === 'sale') {
+    const reason = saleItemError(store, d.uid);
+    return { key: 'sale', loc: null, valid: !reason, reason, noop: false, sale: true };
+  }
   if (kind === 'bench') {
     const valid = benchAccepts(d.item, d.uid) && !isTradeLocked(s, d.uid);
     const reason = valid ? null : benchAccepts(d.item, d.uid) ? LOCKED_REASON : 'The bench works on gear and maps.';

@@ -72,7 +72,7 @@ import {
 import {
   MAP_BASE_INFO, SKILL_INFO, allocateAttribute, applyCurrency, applyRunEnd, buildRunConfig, buyOffer, canRankUpSkill,
   compareWithEquipped, consumeFlask, craftPreview, craftingTargetError, createCharacter, deriveStats, describeItem, dropSpec,
-  grantXp, lootLuck, mapSummary, merchantOffers, newSave, openMap, parseSave, playerRuntime, rankUpSkill, rollChestLoot,
+  grantXp, lootLuck, mapSummary, merchantOffers, sellItems, sellQuote, newSave, openMap, parseSave, playerRuntime, rankUpSkill, rollChestLoot,
   rollKillLoot, serializeSave, setLoadoutSlot, skillSheetFor, xpToNext,
 } from './progression';
 
@@ -156,6 +156,8 @@ export const rules: GameRulesApi = {
 
   // --- merchant ---
   merchantOffers,
+  sellItems,
+  sellQuote,
   buyOffer,
   buyDebugOffer,
 };

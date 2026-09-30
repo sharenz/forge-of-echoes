@@ -5,6 +5,12 @@ import type { GambleDef, MerchantStockDef } from './types';
 
 export const MERCHANT_NAME = 'Rook';
 
+/** Appraisal uses hundredths of Scrap, rounded up once at the end. */
+export const EQUIPMENT_APPRAISAL = {
+  base: 50, perBaseLevel: 1, perItemLevel: 1,
+  worstAffix: 35, bestAffix: 100, uniqueMod: 70, uniqueFlag: 50, perScrap: 100,
+} as const;
+
 export const MERCHANT_STOCK: readonly MerchantStockDef[] = [
   ...MAP_BASE_IDS.map((baseId): MerchantStockDef => ({ id: `map-t1-${baseId}`, kind: 'map', baseId, tier: 1, price: [] })),
   ...MAP_BASE_IDS.map((baseId): MerchantStockDef => ({

@@ -2,13 +2,22 @@
 
 Maintained at the owner's request. Ask "what's next" and it is read from here; ideas and decisions
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
-Last reprioritised: 2026-09-29.
+Last reprioritised: 2026-09-30.
 
 **Owner delivery: Done (2026-09-30).** The whole QoL block (P0.1–4) and map-progression block (P1.1–9)
 are implemented, verified and deployed. This includes account storage, the 25-area Atlas, all six encounters,
 crafting ingredients, advanced bases, economy sinks, six map themes, twelve boss-exclusive uniques and the map tree.
 
-**Next priority:** P2 — more Sorceress skills and a deeper skill tree, then the passive tree.
+**Highest priority (owner, 2026-09-30): selling found equipment to Rook — verified, awaiting deployment.**
+The Sell tab supports clicking, Ctrl/⌘-clicking and dragging backpack equipment into a selection. Visible
+appraisals use item level, base, affix count and tiers, with a breakdown for every price and a batch confirmation.
+Item removal and payment save together. Visitors sell their own gear; equipped and trade-locked items are
+protected. Scrap fills the account Crafting Stash, then the backpack. Build/typecheck and all 1,973 always-on
+tests pass (12 on-demand checks skipped). Two-player Chromium flows pass at 1024×600 and 1280×720,
+including cancellation, guest ownership and restart persistence. The pre-release production-copy audit
+preserves all 475 physical items across 4 accounts, 7 characters and 14 normal tabs.
+
+**Next priority after selling:** P2 — more Sorceress skills and a deeper skill tree, then the passive tree.
 Priorities follow current usability problems, then progression dependencies.
 
 **Latest release: Done — `20260930-085326-1dfa4a0` (2026-09-30).** Testing merchant requested by the owner.

@@ -87,6 +87,26 @@ export function placeOnBench(store: UiStore, local: Local, uid: string, item: It
   return true;
 }
 
+/** Select equipment for a later confirmed sale; never removes an item here. */
+export function saleItemError(store: UiStore, uid: string): string | null {
+  const s = store.get();
+  if (s.zone !== 'hideout') return 'Visit Rook in a hideout to sell equipment.';
+  if (isTradeLocked(s, uid)) return LOCKED_REASON;
+  const item = s.character?.backpack.entries.find(e => e.item.uid === uid)?.item;
+  if (!item) return 'Unequip the item and put it in your backpack first.';
+  return store.rules.sellQuote(item) ? null : 'Rook only buys equipment.';
+}
+
+export function selectForSale(store: UiStore, local: Local, uid: string, toggle = true, at?: { x: number; y: number }): void {
+  const sale = local.merchantSale.get();
+  const error = sale?.busy ? 'The sale is being saved.' : saleItemError(store, uid);
+  if (error) { local.flashHint(error, at?.x, at?.y); store.actions.uiSound('error'); return; }
+  const uids = sale?.uids ?? [];
+  local.merchantSale.set({ busy: false, uids: uids.includes(uid) ? (toggle ? uids.filter(id => id !== uid) : uids) : [...uids, uid] });
+  local.hideTooltip();
+  store.actions.uiSound('click');
+}
+
 /**
  * Ctrl/⌘-click, by the visible left panel: the trade window adds / removes backpack items to / from your offer,
  * the crafting bench takes gear and maps onto the bench, an open map device takes maps (also from the Map Stash
@@ -98,6 +118,7 @@ export function quickMoveItem(store: UiStore, local: Local, e: MouseEvent, uid: 
   const s = store.get();
   const left = visiblePanels(s.openPanels).left;
   const at = { x: e.clientX, y: e.clientY };
+  if (left === 'merchant') { selectForSale(store, local, uid, true, at); return; }
   if (left === 'trade' && s.trade && from.kind === 'backpack') {
     toggleOffer(store, local, uid, from, at);
     return;

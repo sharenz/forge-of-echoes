@@ -8,7 +8,7 @@ import type { Item, ItemLocation } from '../../contracts/items';
 import { PixelIcon, cx } from '../components/common';
 import { useLocal } from '../local';
 import { itemIconId, itemTone, stackCount } from '../lib/items';
-import { useStore, useUi } from '../store';
+import { useSignal, useStore, useUi } from '../store';
 import { beginPointerDrag } from './dnd';
 import { isTradeLocked, itemClick, itemContextMenu, safe, useCraftMark } from './hooks';
 import { useSearch } from './search';
@@ -35,6 +35,8 @@ export function ItemView({ item, uid, from, mode, x = 0, y = 0, class: klass }: 
   const store = useStore();
   const local = useLocal();
   const ref = useRef<HTMLDivElement>(null);
+  const sale = useSignal(local.merchantSale);
+  const selling = !!sale?.uids.includes(uid);
   const size = useMemo(() => safe(() => store.rules.itemSize(item), { w: 1, h: 1 }), [store, item]);
   const { mark } = useCraftMark(uid);
   const tone = itemTone(item);
@@ -81,6 +83,7 @@ export function ItemView({ item, uid, from, mode, x = 0, y = 0, class: klass }: 
         found === false && 'fe-item--dim',
         locked && 'fe-item--locked',
         benched && 'fe-item--benched',
+        selling && 'fe-item--selling',
         klass,
       )}
       style={style}
@@ -107,7 +110,8 @@ export function ItemView({ item, uid, from, mode, x = 0, y = 0, class: klass }: 
       />
       {count !== null && <span class="fe-item__count">{count}</span>}
       {tier !== null && <span class="fe-item__tier">T{tier}</span>}
-      {isNew && !locked && <span class="fe-item__new">new</span>}
+      {selling && <span class="fe-item__sale">sell</span>}
+      {isNew && !locked && !selling && <span class="fe-item__new">new</span>}
       {locked && <PixelIcon id="icon/ui/locked" class="fe-item__lock" width={16} height={16} />}
       {benched && !locked && <span class="fe-item__bench" title="On the crafting bench" />}
     </div>

@@ -1171,6 +1171,13 @@ export class GameSession {
       },
     });
   }
+  async sellItems(uids: string[], expectedScrap: number): Promise<boolean> {
+    const result = await this.command({ c: 'sellItems', uids, expectedScrap }, {
+      onOk: r => { this.deps.sound('buy'); this.toast(r.message ?? 'Items sold.', 'good'); },
+    });
+    return result.ok;
+  }
+
   buyDebugOffer(offerId: string, options: import('../contracts/game').DebugMerchantOptions): void {
     void this.command({ c: 'buyDebugOffer', offerId, options }, {
       onOk: r => { this.deps.sound('buy'); this.toast(r.message ?? 'Received test supplies.', 'good'); },

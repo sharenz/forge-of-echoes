@@ -319,6 +319,8 @@ export interface GameRulesApi {
 
   // --- merchant ---
   merchantOffers(ch: CharacterSave): MerchantOffer[];
+  sellQuote(item: Item): { scrap: number; lines: string[] } | null;
+  sellItems(ch: CharacterSave, uids: readonly string[], expectedScrap: number): Result<{ character: CharacterSave; scrap: number }>;
   buyOffer(ch: CharacterSave, offerId: string): Result<{ character: CharacterSave; item: Item }>;
   buyDebugOffer(ch: CharacterSave, offerId: string, options: DebugMerchantOptions): Result<{ character: CharacterSave; message: string }>;
 }

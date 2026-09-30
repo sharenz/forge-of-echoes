@@ -44,6 +44,18 @@ Other useful scripts:
 | `npm start` | Production mode: the server also serves `dist/` (build first) |
 | `npm run shot -- /dev/present.html?theme=rimedOssuary --out .shots/x.png` | Headless screenshot of any page; `dev/*.html` are per-module sandboxes |
 
+## Selling equipment
+
+Click **Rook → Sell** in any hideout. Select equipment from the list, Ctrl/⌘-click it in your backpack,
+or drag it into the Sell panel. Review the total, press **Sell**, then confirm. You can clear the selection
+or cancel without losing anything. Equipped gear must be unequipped first; gear offered in a trade is locked.
+
+Rook appraises the actual **item level, base, number of affixes and affix tiers**. Hover or focus a price
+for its breakdown. Better bases, higher item levels, more affixes and stronger tiers raise the appraisal;
+rarity colour alone does not set a fixed price. Payment goes into your account's Crafting Stash, with overflow
+in your backpack. Visitors sell their own gear and receive their own payment. Sales are permanent and survive
+restarts. Maps, flasks and currencies cannot be sold.
+
 ## Testing merchant
 
 Enable **Mira the Provisioner** in one character's hideout using the server CLI. The account must own the

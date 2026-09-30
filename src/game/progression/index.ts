@@ -156,7 +156,7 @@ export {
   rollKillLoot,
 } from './loot';
 export type { KillLuck } from './loot';
-export { buyOffer, currencyOnHand, gambleOdds, merchantOffers } from './merchant';
+export { buyOffer, currencyOnHand, gambleOdds, merchantOffers, sellItems, sellQuote } from './merchant';
 export { newSave, normalizeCharacter, normalizeCharacterReport, normalizeItem, normalizeSave, parseSave, serializeSave } from './save';
 export type { NormalizeReport } from './save';
 export { applyCurrency, craftPreview, craftingTargetError, describeItem } from './dispatch';

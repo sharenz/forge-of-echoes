@@ -26,7 +26,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 15: account map tree commands and frozen expedition modifiers.
 // 16: scarab items, map device sockets and frozen wave modifiers.
 // 17: CLI-activated testing merchant prop and purchase commands.
-export const PROTOCOL_VERSION = 17;
+// 18: vendor sales with a confirmed Scrap payout.
+export const PROTOCOL_VERSION = 18;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -117,6 +118,7 @@ export type Command =
   | { c: 'activateMapDevice'; areaId?: import('./atlas').AtlasAreaId; lootClass?: import('./content').ItemClass }
   | { c: 'merchantOffers' }
   | { c: 'buyOffer'; offerId: string }
+  | { c: 'sellItems'; uids: string[]; expectedScrap: number }
   | { c: 'buyDebugOffer'; offerId: string; options: import('./game').DebugMerchantOptions }
   // party & social
   | { c: 'partyInvite'; name: string }

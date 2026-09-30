@@ -1,6 +1,7 @@
 // Rook the merchant (any hideout — visitors pay with their own currency): maps, supplies and class gambles. Offers come from the shared rules
 // (actions.merchantOffers); buying is a server command.
-import { useMemo } from 'preact/hooks';
+import { useEffect, useMemo } from 'preact/hooks';
+import { MerchantSell } from './MerchantSell';
 import type { MerchantOffer } from '../../contracts/game';
 import { iconIdForBase, iconIdForCurrency } from '../../contracts/content';
 import { Button, PixelIcon, cx } from '../components/common';
@@ -8,7 +9,7 @@ import { safe } from '../items/hooks';
 import { useLocal } from '../local';
 import { itemIconId } from '../lib/items';
 import { formatInt } from '../lib/format';
-import { useStore, useUi } from '../store';
+import { useSignal, useStore, useUi } from '../store';
 import { currencyHoldings } from '../lib/stash';
 import { PanelShell } from './PanelShell';
 
@@ -21,6 +22,11 @@ const GROUPS: { kind: MerchantOffer['kind'][]; title: string }[] = [
 export function MerchantPanel() {
   const store = useStore();
   const local = useLocal();
+  const sale = useSignal(local.merchantSale);
+  useEffect(() => () => {
+    local.merchantSale.set(null);
+    if (local.dialog.get()?.title === 'Sell equipment') local.dialog.set(null);
+  }, [local]);
   const ch = useUi((s) => s.character);
   const inHideout = useUi((s) => s.zone === 'hideout');
   const offers = useMemo(() => (ch && inHideout ? safe(() => store.actions.merchantOffers(), []) : []), [ch, inHideout, store]);
@@ -55,7 +61,7 @@ export function MerchantPanel() {
     <PanelShell
       panel="merchant"
       title="Rook's Stall"
-      class="fe-merchant"
+      class="fe-merchant fe-rook"
       aside={
         <span
           class="fe-wallet"
@@ -66,9 +72,13 @@ export function MerchantPanel() {
         </span>
       }
     >
+      <div class="fe-rook__tabs" role="tablist" aria-label="Rook's services">
+        <button role="tab" aria-selected={!sale} disabled={sale?.busy} onClick={() => local.merchantSale.set(null)}>Buy</button>
+        <button role="tab" aria-selected={!!sale} disabled={sale?.busy} onClick={() => { if (!sale) local.merchantSale.set({ uids: [], busy: false }); }}>Sell</button>
+      </div>
       {!inHideout ? (
         <p class="fe-panel__note">Rook only trades in a hideout.</p>
-      ) : (
+      ) : sale ? <MerchantSell /> : (
         <div class="fe-merchant__scroll">
           {GROUPS.map((g) => {
             const list = offers.filter((o) => g.kind.includes(o.kind));

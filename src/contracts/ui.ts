@@ -226,6 +226,7 @@ export interface UiActions {
   /** Offers computed locally from the shared rules (display); buying goes to the server. */
   merchantOffers(): MerchantOffer[];
   buyOffer(offerId: string): void;
+  sellItems(uids: string[], expectedScrap: number): Promise<boolean>;
   buyDebugOffer(offerId: string, options: import('./game').DebugMerchantOptions): void;
 
   // party & social

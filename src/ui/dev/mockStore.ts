@@ -1123,6 +1123,13 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
     merchantOffers() {
       return rules.merchantOffers(ch);
     },
+    async sellItems(uids, expectedScrap) {
+      const result = rules.sellItems(ch, uids, expectedScrap);
+      if (!result.ok) { fail(result.error); return false; }
+      setCharacter(result.value.character);
+      toast(`Sold ${uids.length} items for ${result.value.scrap} Forge Scrap.`, 'good');
+      return true;
+    },
     buyDebugOffer(id, options) {
       const result = rules.buyDebugOffer(ch, id, options);
       if (!result.ok) { fail(result.error); return; }

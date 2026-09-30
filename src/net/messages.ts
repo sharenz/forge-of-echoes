@@ -278,6 +278,12 @@ function command(v: unknown): Command {
         skillId: nullable(o.skillId, (s) => oneOf(s, 'skillId', SKILL_IDS)),
       };
     }
+    case 'sellItems': {
+      const o = shape(v, c, ['c', 'uids', 'expectedScrap']);
+      const uids = arr(o.uids, 'uids', 60).map((uid, i) => token(uid, `uids[${i}]`));
+      if (!uids.length || new Set(uids).size !== uids.length) fail('Choose distinct items to sell.');
+      return { c, uids, expectedScrap: int(o.expectedScrap, 'expectedScrap', 1, 6000) };
+    }
     case 'buyOffer': {
       const o = shape(v, c, ['c', 'offerId']);
       return { c, offerId: token(o.offerId, 'offerId') };

@@ -1005,3 +1005,6 @@
   justify-content: space-between;
   padding: 6px 12px 0;
 }
+
+.fe-item--selling { outline: 2px solid var(--gold); outline-offset: -2px; }
+.fe-item__sale { position: absolute; left: 0; bottom: 0; z-index: 2; padding: 0 4px; background: #6b4920; color: var(--parchment); font-size: var(--font-ui-caption); }
