@@ -11,7 +11,7 @@ crafting ingredients, advanced bases, economy sinks, six map themes, twelve boss
 **Next priority:** P2 — more Sorceress skills and a deeper skill tree, then the passive tree.
 Priorities follow current usability problems, then progression dependencies.
 
-**Owner request: scarabs — implemented and verified, awaiting deployment (2026-09-30).** The Map Device has one
+**Latest release: Done — `20260930-082808-62ba497` (2026-09-30).** Scarabs: the Map Device has one
 map slot and four scarab sockets. Only one scarab of each type is allowed, regardless of tier. The first two
 types are Haste (15/25/35/50% less wave duration) and Invasion (start at wave 2/3/4/5 with every monster from
 all earlier waves already spawned). Four tiers unlock at monster levels 4/22/46/70, with declining weights;
@@ -25,10 +25,13 @@ drop placement and the world-generation stream. Cross-theme balance calibration 
 without optional scarabs so a bonus pickup cannot reroute their gear progression; measured fights and the
 separate progression suite retain the complete loot pool, with all balance limits unchanged. Chromium at
 1024×600 and 1280×720 verifies all eight scarabs, dragging, Ctrl-click, duplicate rejection, consumption and
-restart persistence. Compact Atlas entry/key regression checks also pass. A fresh host-local production-copy
-audit preserves all 460 physical items across 4 accounts, 7 characters and 14 normal stash tabs.
+restart persistence. Compact Atlas entry/key regression checks also pass. Live protocol 16 and exact public
+JS/CSS matches are verified. Fresh host-local production-copy audits before and after preserve all 460 physical
+items across 4 accounts, 7 characters and 14 normal stash tabs, with unique IDs, no duplicate storage,
+idempotent reload and healthy integrity. Post-drain backup:
+`/var/lib/forge/backups/pre-release-20260930-082808-62ba497.db`.
 
-**Latest release: Done — `20260930-013807-f32d033` (2026-09-30).** The account map tree has fifteen nodes in
+**Previous release: Done — `20260930-013807-f32d033` (2026-09-30).** The account map tree has fifteen nodes in
 five paths and up to ten points from distinct Atlas completions. Leaf refunds cost 5 Scrap; expedition choices
 are frozen when opened and survive party play and restarts. Build/typecheck and all 1,957 balance-enabled tests
 pass, followed by 18 focused checks after final copy/layout changes. Tree allocation, refund, budget and restart
