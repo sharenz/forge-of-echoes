@@ -8,19 +8,29 @@ Last reprioritised: 2026-09-30.
 are implemented, verified and deployed. This includes account storage, the 25-area Atlas, all six encounters,
 crafting ingredients, advanced bases, economy sinks, six map themes, twelve boss-exclusive uniques and the map tree.
 
-**Highest priority (owner, 2026-09-30): selling found equipment to Rook — verified, awaiting deployment.**
-The Sell tab supports clicking, Ctrl/⌘-clicking and dragging backpack equipment into a selection. Visible
-appraisals use item level, base, affix count and tiers, with a breakdown for every price and a batch confirmation.
-Item removal and payment save together. Visitors sell their own gear; equipped and trade-locked items are
-protected. Scrap fills the account Crafting Stash, then the backpack. Build/typecheck and all 1,973 always-on
-tests pass (12 on-demand checks skipped). Two-player Chromium flows pass at 1024×600 and 1280×720,
-including cancellation, guest ownership and restart persistence. The pre-release production-copy audit
-preserves all 475 physical items across 4 accounts, 7 characters and 14 normal tabs.
+**Owner's highest-priority request: Done (2026-09-30).** Equipment selling to Rook is deployed.
 
-**Next priority after selling:** P2 — more Sorceress skills and a deeper skill tree, then the passive tree.
+**Next priority:** P2 — more Sorceress skills and a deeper skill tree, then the passive tree.
 Priorities follow current usability problems, then progression dependencies.
 
-**Latest release: Done — `20260930-085326-1dfa4a0` (2026-09-30).** Testing merchant requested by the owner.
+**Latest release: Done — `20260930-100836-a1eea20` (2026-09-30).** Rook's Sell tab supports clicking,
+Ctrl/⌘-clicking and dragging backpack equipment into a selection. Appraisals use item level, base,
+affix count and each affix's tier, with a breakdown for every price and a batch confirmation. Rarity alone
+has no fixed price. Stronger rares pay more; the full formula and examples are in `GAME_SPEC.md` §9.
+Only equipment can be sold. Equipped and trade-locked items are protected, and visitors sell their own gear.
+Item removal and payment commit together, including rollback on database failure and protection against
+repeat payment. Scrap fills the account Crafting Stash, then the backpack. Gambling costs stay unchanged;
+the upper bound on expected resale remains below its purchase price, even with maximum item rarity.
+
+Build/typecheck and all 1,973 always-on tests pass (12 on-demand checks skipped). Two-player Chromium
+flows pass at 1024×600 and 1280×720, including appraisals, dragging/Ctrl-click, cancellation, exact payouts,
+guest ownership, confirmation layout and restart persistence. Live protocol 18 and exact public JS/CSS
+matches are verified. Fresh host-local production-copy audits before and after preserve all 475 physical
+items across 4 accounts, 7 characters and 14 normal tabs, with unique IDs, no duplicate storage,
+idempotent reload and healthy integrity. Post-drain backup:
+`/var/lib/forge/backups/pre-release-20260930-100836-a1eea20.db`.
+
+**Previous release: Done — `20260930-085326-1dfa4a0` (2026-09-30).** Testing merchant requested by the owner.
 Mira the Provisioner supplies free scarabs (every tier), currencies/keys/ingredients, maps, equipment bases,
 uniques and flasks. Category/search, quantity, map tier, item level and applicable rarity are selectable.
 Every visitor to an enabled hideout can buy for their own inventory. The server CLI
