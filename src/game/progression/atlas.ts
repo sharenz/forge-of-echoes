@@ -1,6 +1,7 @@
 import { MAX_TERRITORY_FEE } from '../../data/items/economy';
 import type { AtlasAreaId, AtlasProgress } from '../../contracts/atlas';
 import { ATLAS_AREAS, ATLAS_REVEALS_PER_BOSS, ATLAS_START, atlasTierCeiling, findAtlasArea } from '../../data/progression/atlas';
+import { normalizeMapTree } from './map-tree';
 
 export function newAtlas(): AtlasProgress {
   return { discovered: [ATLAS_START], completed: [], clears: 0 };
@@ -15,7 +16,8 @@ export function normalizeAtlas(raw: unknown): AtlasProgress {
   const completed = ids(value.completed);
   const discovered = [...new Set([ATLAS_START, ...ids(value.discovered), ...completed])];
   const clears = typeof value.clears === 'number' && Number.isFinite(value.clears) ? Math.max(0, Math.floor(value.clears)) : 0;
-  return { discovered, completed, clears: Math.max(completed.length, clears) };
+  const nodes = normalizeMapTree(value.nodes, completed.length);
+  return { discovered, completed, clears: Math.max(completed.length, clears), ...(Array.isArray(value.nodes) ? { nodes } : {}) };
 }
 
 /** Access depends on discovery and the inserted item's tier. The server checks/consumes a sealed-area key. */
@@ -50,7 +52,7 @@ export function discoverAfterBoss(progress: AtlasProgress, areaId: AtlasAreaId, 
     if (door) reveal(door.id);
   }
   return {
-    progress: { discovered: [...discovered], completed: [...new Set([...progress.completed, areaId])], clears: progress.clears + 1 },
+    progress: { ...progress, discovered: [...discovered], completed: [...new Set([...progress.completed, areaId])], clears: progress.clears + 1 },
     revealed,
   };
 }

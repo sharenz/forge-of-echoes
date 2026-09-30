@@ -9,7 +9,7 @@
 //           null): the rest of the batch still plays, and a server running a newer roster than this bundle costs
 //           only the events this bundle could not draw.
 import { PLAYER_DEBUFFS } from '../contracts/bestiary';
-import { ATLAS_AREA_IDS } from '../contracts/atlas';
+import { ATLAS_AREA_IDS, MAP_TREE_NODE_IDS } from '../contracts/atlas';
 import { ATTRIBUTES, EQUIP_SLOTS, ITEM_CLASSES, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
 import {
   BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_SLOTS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
@@ -233,6 +233,10 @@ function command(v: unknown): Command {
     case 'respawn':
       shape(v, c, ['c']);
       return { c };
+    case 'setMapTreeNode': {
+      const o = shape(v, c, ['c', 'nodeId', 'allocate']);
+      return { c, nodeId: oneOf(o.nodeId, 'nodeId', MAP_TREE_NODE_IDS), allocate: bool(o.allocate, 'allocate') };
+    }
     case 'activateMapDevice': {
       const o = shape(v, c, ['c'], ['areaId', 'lootClass']);
       return { c, ...(o.areaId === undefined ? {} : { areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS) }),

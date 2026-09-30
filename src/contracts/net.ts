@@ -23,7 +23,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 12: advanced ingredients, map crafting flags, four more events and independent twin bosses.
 // 13: extended Atlas, sealed-area keys, fixed encounter chains and chosen-class rewards.
 // 14: twelve boss-exclusive uniques, their icons and combat behaviours.
-export const PROTOCOL_VERSION = 14;
+// 15: account map tree commands and frozen expedition modifiers.
+export const PROTOCOL_VERSION = 15;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -110,6 +111,7 @@ export type Command =
   | { c: 'rankUpSkill'; skillId: SkillId }
   | { c: 'setLoadoutSlot'; slot: number; skillId: SkillId | null }
   // hideout
+  | { c: 'setMapTreeNode'; nodeId: import('./atlas').MapTreeNodeId; allocate: boolean }
   | { c: 'activateMapDevice'; areaId?: import('./atlas').AtlasAreaId; lootClass?: import('./content').ItemClass }
   | { c: 'merchantOffers' }
   | { c: 'buyOffer'; offerId: string }

@@ -25,6 +25,8 @@ import { ITEM_CLASSES, type ItemClass } from '../../contracts/content';
 import { BASES, CLASS_LABEL, CURRENCIES } from '../../data/items';
 import { monsterLevelForTier } from '../../game/progression/maps';
 import { keystoneRewards } from '../../game/progression/keystones';
+import { MapTreeView } from './MapTree';
+import { mapTreePoints } from '../../game/progression/map-tree';
 
 function PortalNote({ portal, own }: { portal: PortalInfo; own: boolean }) {
   const spent = portal.remaining === 0;
@@ -64,6 +66,7 @@ export function MapDevicePanel() {
   const [openLine, setOpenLine] = useState<string | null>(null);
   const [areaId, selectArea] = useState<AtlasAreaId>(ch?.atlas?.completed.at(-1) ?? ATLAS_START);
   const [showAtlas, setShowAtlas] = useState(false);
+  const [showTree, setShowTree] = useState(false);
   const [lootClass, chooseClass] = useState<ItemClass>('wand');
   const area = findAtlasArea(areaId)!;
   const map = ch?.mapDevice ?? null;
@@ -81,7 +84,7 @@ export function MapDevicePanel() {
     const summary = preview?.ok ? preview.value.setup.summary : safe(() => store.rules.mapSummary(ch, effective), []);
     const luck = preview && preview.ok ? safe(() => store.rules.lootLuck(preview.value.setup, ch), null) : null;
     const mapLuck = preview && preview.ok ? { q: preview.value.setup.itemQuantity, r: preview.value.setup.itemRarity } : null;
-    return { desc, summary, luck, mapLuck, events: mapEventOdds(effective, areaId), error: preview && !preview.ok ? preview.error : null };
+    return { desc, summary, luck, mapLuck, events: mapEventOdds(effective, areaId, ch.atlas?.nodes), error: preview && !preview.ok ? preview.error : null };
   }, [ch, map, store, areaId, lootClass]);
 
   if (!ch) return null;
@@ -110,8 +113,8 @@ export function MapDevicePanel() {
   };
 
   return (
-    <PanelShell panel="mapDevice" title={showAtlas ? 'Atlas' : 'Map Device'} class={cx('fe-device', showAtlas && 'fe-device--atlas')}>
-      {showAtlas && !disabled ? <AtlasView progress={ch.atlas ?? newAtlas()} selected={areaId} tier={map?.tier ?? null}
+    <PanelShell panel="mapDevice" title={showTree ? 'Map Tree' : showAtlas ? 'Atlas' : 'Map Device'} class={cx('fe-device', (showAtlas || showTree) && 'fe-device--atlas')}>
+      {showTree && !disabled ? <MapTreeView onBack={() => setShowTree(false)} /> : showAtlas && !disabled ? <AtlasView progress={ch.atlas ?? newAtlas()} selected={areaId} tier={map?.tier ?? null}
         onBack={() => setShowAtlas(false)} onSelect={(id) => { selectArea(id); setShowAtlas(false); }} /> : disabled ? (
         <div class="fe-device__locked">
           <div
@@ -146,6 +149,7 @@ export function MapDevicePanel() {
             <strong class="ui-type-body">{area.name}</strong>
             <span class="ui-type-caption">Choose area →</span>
           </button>
+          <Button class="fe-device__tree" onClick={() => setShowTree(true)}>Map tree · {mapTreePoints(ch.atlas) - (ch.atlas?.nodes?.length ?? 0)} unspent</Button>
           <div class={cx('fe-device__scroll', !picking && 'fe-scrollfade', picking && 'fe-device__scroll--picking')}>
             <p class="fe-panel__note ui-type-caption">Your map supplies tier, quality and mods. The area supplies enemies and rewards.</p>
             <p class="fe-panel__note ui-type-secondary">{area.description}</p>
@@ -210,7 +214,7 @@ export function MapDevicePanel() {
                 <p class="ui-type-caption">{area.encounters ? `Guaranteed encounters: ${area.encounters.map(e => MAP_EVENT_NAMES[e.kind]).join(' · ')}${map.bounty && !area.encounters.some(e => e.kind === 'hunted') ? ' · additional Bounty hunter' : ''}. Resolve them to complete the area.`
                   : `Encounter chance: ${MAP_EVENT_KINDS.filter(k => readout.events[k] > 0).map(k => `${MAP_EVENT_NAMES[k]} ${Math.round(readout.events[k] * 1000) / 10}%`).join(' · ')}. At most one; discovered during the map.`}</p>
                 <div class="fe-device__summary">
-                  {keystone && <p class="ui-type-caption">Exclusive unique chance: {Math.round((keystoneRewards(areaId, map.tier, readout.luck?.itemRarity ?? 100)?.chance ?? 0) * 1000) / 10}% {readout.luck ? 'per boss for you' : 'base per boss, multiplied by your item rarity when entry is available'}. Equal weight among eligible uniques; ordinary drops and boss guarantees also apply.</p>}
+                  {keystone && <p class="ui-type-caption">Exclusive unique chance: {Math.round((keystoneRewards(areaId, map.tier, readout.luck?.itemRarity ?? 100, ch.atlas?.nodes)?.chance ?? 0) * 1000) / 10}% {readout.luck ? 'per boss for you' : 'base per boss, multiplied by your item rarity when entry is available'}. Equal weight among eligible uniques; ordinary drops and boss guarantees also apply.</p>}
                   {readout.summary.map((l) => {
                     const isOpen = openLine === l.label;
                     return (

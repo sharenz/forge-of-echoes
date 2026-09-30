@@ -15,6 +15,8 @@
 // A unique is picked among those wearable at the drop's item level (the unique's and its base's level
 // requirement ≤ monster level); when none is, the drop becomes a rare.
 // Summoned minions (and the training dummy) never drop anything.
+import type { MapTreeNodeId } from '../../contracts/atlas';
+import { mapTreeBonuses } from '../../data/progression/map-tree';
 import type { RunSetup } from '../../contracts/game';
 import type { CharacterSave, CurrencyStack, EquipmentItem, FlaskStack, Item, MapItem, Rarity } from '../../contracts/items';
 import type { CurrencyId, ItemClass, MapBaseId } from '../../contracts/content';
@@ -104,8 +106,8 @@ const CONTEXTS = new WeakMap<RunSetup, LootContext>();
 const ESSENCES: ReadonlySet<CurrencyId> = new Set<CurrencyId>(['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift']);
 
 /** Currency weights after map implicit and reward-mod multipliers (essences). */
-export function currencyWeightsFor(map: MapItem): CurrencyDropDef[] {
-  const m = mapDropMultipliers(map);
+export function currencyWeightsFor(map: MapItem, nodes: readonly MapTreeNodeId[] = []): CurrencyDropDef[] {
+  const m = mapDropMultipliers(map, nodes);
   return CURRENCY_DROPS.map((d) => {
     let weight = d.weight;
     if (ESSENCES.has(d.currencyId)) weight *= m.essence;
@@ -120,7 +122,7 @@ function lootContext(setup: RunSetup): LootContext {
   if (ctx) return ctx;
   const map = setup.map;
   const tier = clampTier(map.tier);
-  const drops = mapDropMultipliers(map);
+  const drops = mapDropMultipliers(map, setup.mapTree);
   const area = findAtlasArea(setup.atlasAreaId);
   let crownEncounter = false;
   for (let e = setup.event; e; e = e.next) if (e.kind === 'secondCrown') crownEncounter = true;
@@ -129,7 +131,7 @@ function lootContext(setup: RunSetup): LootContext {
     tier,
     monsterLevel: Math.max(1, Math.floor(setup.monsterLevel || 1)),
     mapChance: drops.map,
-    currency: currencyWeightsFor(map).map((d) => ({ ...d, weight: d.weight * (area?.currencyWeights?.[d.currencyId] ?? 1) })),
+    currency: currencyWeightsFor(map, setup.mapTree).map((d) => ({ ...d, weight: d.weight * (area?.currencyWeights?.[d.currencyId] ?? 1) })),
     armourStability: drops.armourStability,
     echoWave: echoWaveIndex(map),
     place: `${area?.name ?? mapBaseName(map.baseId)} (Tier ${tier})`,
@@ -306,8 +308,8 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
     out.push(makeEquipment(ctx, rng, 'rare', origin));
     for (let i = 0; i < BOSS_LOOT.extraEquipment; i++) out.push(makeEquipment(ctx, rng, rollEquipmentRarity(rng, mapM, 'magic'), origin));
     for (let i = 0; i < BOSS_LOOT.currency * (ctx.area?.currencyMultiplier ?? 1); i++) out.push(makeCurrency(ctx, rng));
-    if (rng.chance(Math.min(1, BOSS_LOOT.uniqueChance * mapM))) out.push(makeEquipment(ctx, rng, 'unique', origin));
-    if (ctx.area?.uniquePool === kill.kind && rng.chance(Math.min(1, KEYSTONE_UNIQUE_CHANCE * mapM))) {
+    if (rng.chance(Math.min(1, BOSS_LOOT.uniqueChance * mapM * mapTreeBonuses(setup.mapTree).bossUniqueMultiplier))) out.push(makeEquipment(ctx, rng, 'unique', origin));
+    if (ctx.area?.uniquePool === kill.kind && rng.chance(Math.min(1, KEYSTONE_UNIQUE_CHANCE * mapM * mapTreeBonuses(setup.mapTree).bossUniqueMultiplier))) {
       const id = pickRandomUnique(rng, { bossSource: kill.kind, maxLevel: ctx.monsterLevel });
       if (id) out.push(generateUnique(id, rng, { itemLevel: ctx.monsterLevel, origin: `Keystone reward from ${monsterName(kill.kind)} in ${ctx.place}`, isNew: true }));
     }
@@ -347,7 +349,7 @@ export function rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave |
   const currency = rng.int(CHEST_LOOT.currency.min, CHEST_LOOT.currency.max) * (ctx.area?.currencyMultiplier ?? 1);
   for (let i = 0; i < currency; i++) out.push(makeCurrency(ctx, rng));
   for (let i = 0; i < CHEST_LOOT.flasks; i++) out.push(makeFlask(rng));
-  const tier = Math.min(MAX_MAP_TIER, ctx.tier + ((setup.map.charted || rng.chance(CHEST_LOOT.mapTierUpgradeChance)) ? 1 : 0));
+  const tier = Math.min(MAX_MAP_TIER, ctx.tier + ((setup.map.charted || rng.chance(CHEST_LOOT.mapTierUpgradeChance + mapTreeBonuses(setup.mapTree).chestUpgradeChance)) ? 1 : 0));
   out.push(makeMap(rng, tier, m, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max)));
   if (rng.chance(CHEST_LOOT.extraMapChance)) out.push(makeRandomMap(ctx, rng, m));
   return out;

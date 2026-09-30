@@ -7,6 +7,8 @@
 //   • Reward-only mods (Reward Ink, max 1; Twin Ink adds a second) and corrupted mods are extra lines that do not
 //     count toward rarity.
 //   • A mod's `value` is its rolled magnitude in percent of the nominal numbers (tier-scaled roll).
+import type { MapTreeNodeId } from '../../contracts/atlas';
+import { mapTreeNodes } from '../../data/progression/map-tree';
 import type { MapSummaryLine } from '../../contracts/game';
 import { atlasKeyDestination, findAtlasArea } from '../../data/progression/atlas';
 import type {
@@ -262,8 +264,8 @@ export function mapBaseImplicitText(baseId: MapBaseId): string {
 // ---------------------------------------------------------------------------------------------
 
 /** Every effect a map applies, labelled: tier, quality, base implicit and mods. */
-export function mapModifiers(map: MapItem): MapModifier[] {
-  const out: MapModifier[] = [];
+export function mapModifiers(map: MapItem, nodes: readonly MapTreeNodeId[] = []): MapModifier[] {
+  const out: MapModifier[] = mapTreeNodes(nodes).flatMap(n => (n.effects ?? []).map(e => ({ ...e, source: `Map tree: ${n.name}` })));
   const tier = clampTier(map.tier);
   const tierSource = `Tier ${tier}`;
   if (tier > 1) out.push({ stat: 'itemRarity', mode: 'increased', value: TIER_SCALING.itemRarity * (tier - 1), source: tierSource });
@@ -302,8 +304,8 @@ export function mapStat(mods: readonly MapModifier[], stat: MapStat, base: numbe
 }
 
 /** Monster scaling handed to the sim for this map. */
-export function monsterScaling(map: MapItem): MonsterScaling {
-  const mods = mapModifiers(map);
+export function monsterScaling(map: MapItem, nodes: readonly MapTreeNodeId[] = []): MonsterScaling {
+  const mods = mapModifiers(map, nodes);
   const tier = clampTier(map.tier);
   const pack = mapStat(mods, 'packRarity', 1);
   return {
@@ -375,8 +377,8 @@ export interface GearLuck {
  * implicit, mods), then — when `gear` is given — one "Your gear" source. `mapLuck(map, null)` is the
  * map-side luck of RunSetup; a looter's personal luck is lootLuck() in ./luck.
  */
-export function mapLuck(map: MapItem, gear: GearLuck | null) {
-  const mods = mapModifiers(map);
+export function mapLuck(map: MapItem, gear: GearLuck | null, nodes: readonly MapTreeNodeId[] = []) {
+  const mods = mapModifiers(map, nodes);
   const toStat = (stat: 'itemQuantity' | 'itemRarity'): StatModifier[] => {
     const out: StatModifier[] = ofStat(mods, stat).map((m) => ({ stat, mode: m.mode, value: m.value, source: m.source }));
     const g = gear ? gear[stat] : 0;
@@ -390,8 +392,8 @@ export function mapLuck(map: MapItem, gear: GearLuck | null) {
 }
 
 /** Drop-weight multipliers inside the loot tables (maps, essences). */
-export function mapDropMultipliers(map: MapItem): { map: number; essence: number; emberEssence: number; rimeEssence: number; armourStability: number } {
-  const mods = mapModifiers(map);
+export function mapDropMultipliers(map: MapItem, nodes: readonly MapTreeNodeId[] = []): { map: number; essence: number; emberEssence: number; rimeEssence: number; armourStability: number } {
+  const mods = mapModifiers(map, nodes);
   return {
     map: mapStat(mods, 'mapDropChance', 1),
     essence: mapStat(mods, 'essenceDropChance', 1),
@@ -450,11 +452,11 @@ function luckLine(label: string, bd: ReturnType<typeof mapLuck>['quantity'], not
  * sources. Map-side only (it is RunSetup.summary, shared by the whole party): each player's gear luck
  * comes on top for their own instanced drops — see lootLuck() / lootLuckLines() in ./luck.
  */
-export function buildMapSummary(map: MapItem): MapSummaryLine[] {
-  const mods = mapModifiers(map);
+export function buildMapSummary(map: MapItem, nodes: readonly MapTreeNodeId[] = []): MapSummaryLine[] {
+  const mods = mapModifiers(map, nodes);
   const tier = clampTier(map.tier);
   const level = monsterLevelForTier(tier);
-  const luck = mapLuck(map, null);
+  const luck = mapLuck(map, null, nodes);
   const out: MapSummaryLine[] = [];
 
   out.push({
@@ -536,7 +538,7 @@ export function buildMapSummary(map: MapItem): MapSummaryLine[] {
   if (res.length) {
     out.push({ label: 'Your Resistances', value: signedPercent(resolveModes(0, res)), breakdown: res.map((m) => modifierLine(m)) });
   }
-  const drops = mapDropMultipliers(map);
+  const drops = mapDropMultipliers(map, nodes);
   const dropLine = (label: string, mult: number, stat: MapStat) => {
     const list = ofStat(mods, stat);
     if (!list.length) return;
@@ -551,7 +553,7 @@ export function buildMapSummary(map: MapItem): MapSummaryLine[] {
   dropLine('Ember Essence Drops', drops.emberEssence, 'emberEssenceChance');
   dropLine('Rime Essence Drops', drops.rimeEssence, 'rimeEssenceChance');
   if (drops.armourStability > 0) {
-    out.push({ label: 'Armour Stability', value: formatSigned(drops.armourStability), breakdown: [`Armour bases drop with extra Stability (${mapBaseName(map.baseId)})`] });
+    out.push({ label: 'Armour Stability', value: formatSigned(drops.armourStability), breakdown: ofStat(mods, 'armourStability').map(m => modifierLine(m, '')) });
   }
   out.push(partySummaryLine());
   return out;

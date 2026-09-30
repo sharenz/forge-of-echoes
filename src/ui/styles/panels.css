@@ -894,6 +894,18 @@
 .fe-atlas__detail .ui-type-caption { color: var(--ash); }
 .fe-atlas__error { color: #f3a090; text-align: center; }
 .fe-atlas__actions { display: flex; justify-content: flex-end; gap: 12px; flex: none; }
+.fe-device__tree { flex: none; margin-top: -6px; }
+.fe-maptree__viewport { flex: 1; min-height: 130px; overflow: auto; padding: 4px; border: 1px solid #514333; background: #171717; }
+.fe-maptree__paths { display: grid; grid-template-columns: repeat(5, minmax(145px, 1fr)); gap: 16px; min-width: 790px; }
+.fe-maptree__path { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fe-maptree__path h3 { margin: 4px 0 0; text-align: center; color: var(--parchment); }
+.fe-maptree__node { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 58px; padding: 6px; border: 1px solid #82623c; background: #2a241d; color: var(--parchment); cursor: pointer; }
+.fe-maptree__node + .fe-maptree__node::before { content: ''; position: absolute; width: 2px; height: 12px; background: #82623c; top: -13px; left: 50%; }
+.fe-maptree__node--active { background: #283428; border-color: #91b88a; }
+.fe-maptree__node--locked { border-color: #514b43; background: #201e1c; color: #b5ac9e; }
+.fe-maptree__node[aria-pressed="true"], .fe-maptree__node:focus-visible { outline: 2px solid var(--flame); outline-offset: 2px; }
+.fe-maptree__detail { flex: none; max-height: 145px; overflow-y: auto; }
+.fe-maptree__detail p { margin: 5px 0 0; }
 .fe-device .fe-panel__body {
   align-items: stretch;
   overflow: hidden;

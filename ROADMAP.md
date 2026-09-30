@@ -291,7 +291,16 @@ reopen tuning for a specific problem rather than starting another general balanc
    Final build/typecheck and production-copy audits before/after pass (457 items, 4 accounts, 7 characters;
    conservation, unique IDs, no duplicate storage, idempotent reload and integrity). Live protocol 14 and
    public assets match the tested build. P1.8 is complete; P1.9 remains open.
-9. **Map tree v0** (15 nodes, map-only effects). Biggest scope trap: only once events and ingredients are proven.
+9. **Map tree v0 — verified, awaiting deployment.** Fifteen map-only nodes across Cartography, Crafting, Hunting,
+   Fortune and Encounters. First distinct Atlas completions award up to ten points; each node costs one and
+   leaf refunds cost 5 Scrap atomically. Allocations are shared by alts and frozen into the opener's expedition,
+   including for party members and restarts. Bonuses, prerequisites, costs and tradeoffs are shown in the
+   tree and map readout. Build/typecheck and all 1,957 balance-enabled checks pass, with 18 focused checks
+   after final copy/layout changes. Browser allocation/refund, budget, snapshot and restart flows pass at
+   1024×600 and 1280×720; the final compact tree has all fifteen nodes visible even with the budget message.
+   QoL regressions pass at both sizes; all Atlas entry/key flows pass at 1024×600. Production-copy checks
+   preserve all 457 physical items across 4 accounts / 7 characters, with unique IDs, no duplicate storage,
+   idempotent reload and healthy integrity. Deployment and post-deployment verification remain pending.
 
 ## P2: character depth
 

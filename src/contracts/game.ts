@@ -9,7 +9,7 @@ import type {
 } from './items';
 import type { DropSpec, KillLootContext, PlayerCombatStats, PlayerRuntime, RunConfig, RunHooks, SkillRuntimeDef } from './sim';
 import type { Rng } from './rng';
-import type { AtlasAreaId } from './atlas';
+import type { AtlasAreaId, MapTreeNodeId } from './atlas';
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -142,6 +142,8 @@ export interface MapSummaryLine {
 }
 
 export interface RunSetup {
+  /** Opening account’s map nodes, frozen for the whole expedition and all party members. */
+  mapTree?: MapTreeNodeId[];
   /** Creation roll, omitted from client projections; absent on pre-event maps. */
   event?: import('./map-events').MapEventPlan | null;
   map: MapItem;         // effective map: item tier/quality/mods with the Atlas area's theme/implicit
@@ -281,6 +283,8 @@ export interface GameRulesApi {
   applyBenchRecipe(ch: CharacterSave, targetUid: string, recipeId: string): Result<CraftOutcome>;
   /** Remove the target's bench-crafted affix (free; keeps stability spent). */
   clearCraftedAffix(ch: CharacterSave, targetUid: string): Result<CraftOutcome>;
+
+  setMapTreeNode(ch: CharacterSave, nodeId: MapTreeNodeId, allocate: boolean): Result<CharacterSave>;
 
   // --- maps & runs ---
   mapSummary(ch: CharacterSave, map: MapItem): MapSummaryLine[];

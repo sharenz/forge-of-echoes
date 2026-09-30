@@ -62,6 +62,7 @@
 //   lootLuckLines(setup, ch)  the two personal luck lines with every source (tooltips, HUD)
 //   gearLuck(ch)              % item quantity / rarity from gear alone
 //   deriveRunStats(ch, setup) deprecated alias of rules.deriveStats(ch, setup)
+import { setMapTreeNode } from './progression/map-tree';
 import type { ContentInfo, GameRulesApi } from '../contracts/game';
 import {
   BASE_INFO, CURRENCY_INFO, FLASK_INFO, UNIQUE_INFO, addStashTab, addToBackpack, applyBenchRecipe, benchRecipes, benchServices, canEquip,
@@ -140,6 +141,7 @@ export const rules: GameRulesApi = {
   clearCraftedAffix,
 
   // --- maps & runs ---
+  setMapTreeNode,
   mapSummary,
   openMap,
   buildRunConfig,

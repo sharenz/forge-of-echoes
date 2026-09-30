@@ -1,8 +1,11 @@
 // Runs: the map device readout, opening a map (RunSetup), the sim RunConfig of an instance (a hideout
 // or a map — players join it separately through SimRun.addPlayer), and one player's live runtime
 // (stats, skills, loadout, flasks).
+import { mapTreeBonuses, mapTreeNodes } from '../../data/progression/map-tree';
+import { normalizeMapTree } from './map-tree';
+import { CHEST_LOOT } from '../../data/progression/loot';
 import type { MapSummaryLine, Result, RunSetup } from '../../contracts/game';
-import type { AtlasAreaId } from '../../contracts/atlas';
+import type { AtlasAreaId, MapTreeNodeId } from '../../contracts/atlas';
 import type { CharacterSave, MapItem } from '../../contracts/items';
 import { ITEM_CLASSES, type ItemClass } from '../../contracts/content';
 import { BASES, CURRENCIES } from '../../data/items';
@@ -22,12 +25,11 @@ import { spendCurrency } from './merchant';
 import { normalizeMapEvent, rollMapEvent } from './map-events';
 
 /**
- * Map device readout: monster level, the map's own luck, waves, dangers and rewards. Map-side only —
- * the same lines as RunSetup.summary once the map is opened. A player's personal luck (map + own gear)
- * is lootLuck(setup, ch); the character is part of the contract signature but does not change the lines.
+ * Base map readout, including the opener's tree modifiers but no gear. The successful openMap preview
+ * adds destination and expedition details. Personal luck (map + own gear) is lootLuck(setup, ch).
  */
-export function mapSummary(_ch: CharacterSave, map: MapItem): MapSummaryLine[] {
-  return buildMapSummary(map);
+export function mapSummary(ch: CharacterSave, map: MapItem): MapSummaryLine[] {
+  return buildMapSummary(map, ch.atlas?.nodes);
 }
 
 function snapshotMap(map: MapItem): MapItem {
@@ -36,19 +38,24 @@ function snapshotMap(map: MapItem): MapItem {
 }
 
 /** The run parameters of `map` (an already snapshotted map) with `seed`: map-side luck only. */
-function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass?: ItemClass): RunSetup {
+function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass?: ItemClass, nodes: MapTreeNodeId[] = []): RunSetup {
   const area = findAtlasArea(areaId);
   let map = area ? { ...source, baseId: area.baseId } : source;
   if (area?.echoWave && !map.mods.some(m => m.modId === 'echo')) map = { ...map, mods: [...map.mods, { modId: 'echo', value: 100 }] };
-  const luck = mapLuck(map, null);
-  const summary = buildMapSummary(map);
+  const luck = mapLuck(map, null, nodes);
+  const summary = buildMapSummary(map, nodes);
   if (area?.quantityMore) summary.push({ label: area.name, value: `${area.quantityMore}% more item quantity`, breakdown: ['Multiplies map and personal gear quantity.'] });
   if (area?.currencyMultiplier) summary.push({ label: 'Area currency', value: `x${area.currencyMultiplier}`, breakdown: ['Ordinary currency chances and boss/chest currency guarantees. Special keys and ingredients are unchanged.'] });
   if (area?.bossLifeMultiplier) summary.push({ label: 'Area boss', value: 'Empowered', breakdown: [`${(area.bossLifeMultiplier - 1) * 100}% more life`, `${((area.bossDamageMultiplier ?? 1) - 1) * 100}% more damage`] });
   if (area?.noBoss) summary.push({ label: 'Area objective', value: `Clear ${waveConfig(map).count} waves`, breakdown: ['No final boss; the last wave grants Atlas completion and a reward chest.'] });
+  if (nodes.length) {
+    summary.push({ label: 'Map tree', value: `${nodes.length} allocated`, breakdown: mapTreeNodes(nodes).map(n => `${n.name}: ${n.text}`) });
+    summary.push({ label: 'Completion map upgrade', value: `${map.tier >= 15 ? 0 : map.charted ? 100 : Math.round((CHEST_LOOT.mapTierUpgradeChance + mapTreeBonuses(nodes).chestUpgradeChance) * 100)}%`, breakdown: ['Chance for the guaranteed chest map to be one tier higher; Tier 15 is capped.'] });
+  }
   return {
+    ...(nodes.length ? { mapTree: [...nodes] } : {}),
     map,
-    event: rollMapEvent(map, seed, areaId),
+    event: rollMapEvent(map, seed, areaId, nodes),
     ...(area ? { atlasAreaId: area.id, sourceMap: source } : {}),
     ...(area?.chosenClass && lootClass ? { lootClass } : {}),
     seed: seed >>> 0,
@@ -92,7 +99,7 @@ export function openMap(ch: CharacterSave, areaId?: AtlasAreaId, lootClass?: Ite
   }
   const rng = createRng(ch.rngState >>> 0);
   const seed = Math.floor(rng.next() * 0x100000000) >>> 0;
-  const setup = setupFor(snapshotMap(map), seed, areaId, lootClass);
+  const setup = setupFor(snapshotMap(map), seed, areaId, lootClass, normalizeMapTree(ch.atlas?.nodes, ch.atlas?.completed.length ?? 0));
   if (fee > 0) setup.entranceScrap = fee;
   if (area?.entranceKey) setup.entranceKey = area.entranceKey;
   return ok({ character: { ...next, mapDevice: null, rngState: rng.state() }, setup });
@@ -134,7 +141,7 @@ export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
   const lootClass = area?.chosenClass && typeof wrapper?.lootClass === 'string' && (ITEM_CLASSES as readonly string[]).includes(wrapper.lootClass)
     ? wrapper.lootClass as ItemClass : undefined;
   if (area?.chosenClass && (!lootClass || !Object.values(BASES).some(b => b.itemClass === lootClass && b.levelRequirement <= monsterLevelForTier(map.tier)))) return null;
-  const setup = setupFor(snapshotMap(map), Math.floor(seed), area?.id, lootClass);
+  const setup = setupFor(snapshotMap(map), Math.floor(seed), area?.id, lootClass, normalizeMapTree(wrapper?.mapTree));
   // Preserve the creation decision; pre-event maps do not gain a surprise on restart.
   if (wrapper && 'event' in wrapper) setup.event = normalizeMapEvent(wrapper.event);
   else delete setup.event;
@@ -228,17 +235,18 @@ export function buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConf
   const map = setup.map;
   const base = findMapBase(map.baseId);
   const area = findAtlasArea(setup.atlasAreaId);
+  const tree = mapTreeBonuses(setup.mapTree);
   return {
     mode: 'map',
     event: setup.event ?? null,
-    ...(area?.bossLifeMultiplier ? { bossLifeMultiplier: area.bossLifeMultiplier } : {}),
+    ...((area?.bossLifeMultiplier ?? 1) * tree.bossLifeMultiplier !== 1 ? { bossLifeMultiplier: (area?.bossLifeMultiplier ?? 1) * tree.bossLifeMultiplier } : {}),
     ...(area?.bossDamageMultiplier ? { bossDamageMultiplier: area.bossDamageMultiplier } : {}),
     seed: setup.seed >>> 0,
     theme: base?.theme ?? 'ashenForge',
     mapName: area?.name ?? mapTitle(map),
     tier: clampTier(map.tier),
     arenaRadius: (base?.arenaRadius ?? 900) * (area?.arenaScale ?? 1),
-    monsters: monsterScaling(map),
+    monsters: monsterScaling(map, setup.mapTree),
     waves: area?.noBoss ? { ...waveConfig(map), bossWave: 0 } : waveConfig(map),
     hooks,
   };

@@ -1102,6 +1102,10 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       }
     },
 
+    setMapTreeNode(nodeId, allocate) {
+      const r = rules.setMapTreeNode(ch, nodeId, allocate);
+      if (!r.ok) fail(r.error); else setCharacter(r.value);
+    },
     activateMapDevice(areaId, lootClass) {
       const r = rules.openMap(ch, areaId, lootClass);
       if (!r.ok) {

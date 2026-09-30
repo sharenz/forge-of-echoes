@@ -12,7 +12,7 @@
 // multipliers per map snapshot. Both rely on the rules' contract that saves are never mutated in place
 // (every change is a new object) — a server must not edit a CharacterSave's equipment directly.
 import type { MapSummaryLine, RunSetup } from '../../contracts/game';
-import type { CharacterSave, MapItem, StatBreakdown, StatModifier } from '../../contracts/items';
+import type { CharacterSave, StatBreakdown, StatModifier } from '../../contracts/items';
 import type { GearLuck } from './maps';
 import { luckTotalLine, mapLuck, summarySourceLine } from './maps';
 import { buildPlayerModel } from './model';
@@ -59,15 +59,15 @@ export function gearLuck(ch: CharacterSave): GearLuck {
 }
 
 /** The map's "more" luck multipliers (what gear "increased" is scaled by), cached per map snapshot. */
-const MORE = new WeakMap<MapItem, { quantity: number; rarity: number }>();
+const MORE = new WeakMap<RunSetup, { quantity: number; rarity: number }>();
 
-function mapMore(map: MapItem): { quantity: number; rarity: number } {
-  let m = MORE.get(map);
+function mapMore(setup: RunSetup): { quantity: number; rarity: number } {
+  let m = MORE.get(setup);
   if (!m) {
-    const luck = mapLuck(map, null);
+    const luck = mapLuck(setup.map, null, setup.mapTree);
     const prod = (more: number[]) => more.reduce((p, v) => p * (1 + v / 100), 1);
     m = { quantity: prod(luck.quantity.more), rarity: prod(luck.rarity.more) };
-    MORE.set(map, m);
+    MORE.set(setup, m);
   }
   return m;
 }
@@ -79,7 +79,7 @@ function mapMore(map: MapItem): { quantity: number; rarity: number } {
  */
 export function lootLuck(setup: RunSetup, looter: CharacterSave | null): Luck {
   const gear = gearDetail(looter).luck;
-  const more = mapMore(setup.map);
+  const more = mapMore(setup);
   return {
     itemQuantity: clean(Math.max(0, finite(setup.itemQuantity, 100) + gear.itemQuantity * more.quantity * (1 + (findAtlasArea(setup.atlasAreaId)?.quantityMore ?? 0) / 100))),
     itemRarity: clean(Math.max(0, finite(setup.itemRarity, 100) + gear.itemRarity * more.rarity)),
@@ -89,7 +89,7 @@ export function lootLuck(setup: RunSetup, looter: CharacterSave | null): Luck {
 function personalLine(
   label: string, stat: 'itemQuantity' | 'itemRarity', value: number, setup: RunSetup, gear: readonly StatModifier[],
 ): MapSummaryLine {
-  const map = mapLuck(setup.map, null)[stat === 'itemQuantity' ? 'quantity' : 'rarity'];
+  const map = mapLuck(setup.map, null, setup.mapTree)[stat === 'itemQuantity' ? 'quantity' : 'rarity'];
   const lines = [
     ...map.sources.map((m) => summarySourceLine(m)),
     ...gear.map((m) => summarySourceLine(m)),

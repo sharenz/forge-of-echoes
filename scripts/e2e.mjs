@@ -72,6 +72,7 @@ const ACCOUNT_ONLY = opt('only', 'all') === 'account';
 const ATLAS_ONLY = opt('only', 'all') === 'atlas';
 const INGREDIENTS_ONLY = opt('only', 'all') === 'ingredients';
 const UNIQUES_ONLY = opt('only', 'all') === 'uniques';
+const TREE_ONLY = opt('only', 'all') === 'tree';
 const EVENTS_ONLY = opt('only', 'all') === 'events';
 const MAPS_ONLY = opt('only', 'all') === 'maps';
 const ECONOMY_ONLY = opt('only', 'all') === 'economy';
@@ -2228,6 +2229,98 @@ async function craftingScenario({ A, port }) {
   });
 }
 
+async function mapTreeScenario({ A, port }) {
+  const { tsImport } = await import('tsx/esm/api');
+  const { ATLAS_AREA_IDS } = await tsImport('../src/contracts/atlas.ts', import.meta.url);
+  const { MAP_TREE, MAP_TREE_BRANCHES } = await tsImport('../src/data/progression/map-tree.ts', import.meta.url);
+  const openDevice = async () => {
+    await closePanels(A);
+    const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'mapDevice', 10), 'map device');
+    await clickWorld(A, at, 'map device'); await A.page.waitForSelector('.fe-device');
+  };
+  await step('prepare a completed account Atlas and Scrap in a disposable database', async () => {
+    outage = true; await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const row = db.prepare('SELECT account_id, data FROM account_storage').get();
+    const shared = JSON.parse(row.data);
+    shared.atlas = { discovered: [...ATLAS_AREA_IDS], completed: [...ATLAS_AREA_IDS], clears: 25 };
+    shared.currencyStash.scrap = 100;
+    db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), row.account_id);
+    const char = db.prepare('SELECT id, data FROM characters').get(), ch = JSON.parse(char.data);
+    ch.mapDevice = { kind: 'map', uid: 'tree-map:i1', baseId: 'ashenForge', tier: 1, quality: 0, rarity: 'normal', mods: [], corrupted: false };
+    ch.backpack.entries = ch.backpack.entries.filter(e => e.item.kind !== 'currency');
+    db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(ch), char.id);
+    db.close(); await startGameServer(port);
+    await A.waitFor('completed Atlas after reconnect', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.atlas.completed.length === 25, undefined, 30000);
+    outage = false;
+  });
+  await step('all fifteen nodes can be inspected, allocated and refunded through the UI', async () => {
+    await openDevice();
+    await A.page.locator('.fe-device__destination').click();
+    await A.page.getByRole('button', { name: /^Cinder Crossing,/ }).click();
+    await A.page.getByRole('button', { name: 'Use this area', exact: true }).click();
+    await A.page.getByRole('button', { name: /^Map tree/ }).click();
+    assert(await A.page.locator('[data-map-node]').count() === 15, 'expected fifteen map nodes');
+    await settlePanels(A); await A.shot(`tree-empty-${VW}x${VH}`);
+    for (const branch of MAP_TREE_BRANCHES) {
+      const path = MAP_TREE.filter(n => n.branch === branch);
+      for (const node of path) {
+        await A.page.locator(`[data-map-node="${node.id}"]`).click();
+        assert((await A.page.locator('.fe-maptree__detail').innerText()).includes(node.text), 'missing exact effect');
+        await A.page.getByRole('button', { name: 'Allocate point', exact: true }).click();
+        await A.waitFor('node allocated', id => window.__foe.store.get().character.atlas.nodes?.includes(id), node.id);
+      }
+      await settlePanels(A); await A.shot(`tree-${branch}-${VW}x${VH}`);
+      await A.page.locator(`[data-map-node="${path[0].id}"]`).click();
+      assert(await A.page.getByRole('button', { name: 'Refund · 5 Scrap', exact: true }).isDisabled(), 'parent refunded before child');
+      for (const node of [...path].reverse()) {
+        await A.page.locator(`[data-map-node="${node.id}"]`).click();
+        await A.page.getByRole('button', { name: 'Refund · 5 Scrap', exact: true }).click();
+        await A.waitFor('node refunded', id => !window.__foe.store.get().character.atlas.nodes?.includes(id), node.id);
+      }
+    }
+    assert(await A.eval(() => window.__foe.store.get().character.currencyStash.scrap === 25), 'refunds did not cost 75 Scrap');
+    for (const node of MAP_TREE.slice(0, 10)) {
+      await A.page.locator(`[data-map-node="${node.id}"]`).click();
+      await A.page.getByRole('button', { name: 'Allocate point', exact: true }).click();
+      await A.waitFor('node allocated', id => window.__foe.store.get().character.atlas.nodes?.includes(id), node.id);
+    }
+    await A.page.locator('[data-map-node="discerningEye"]').click();
+    assert(await A.page.getByRole('button', { name: 'Allocate point', exact: true }).isDisabled(), 'point budget bypass');
+    await A.shot(`tree-budget-${VW}x${VH}`);
+    const bounds = await A.page.getByRole('button', { name: 'Back', exact: true }).boundingBox();
+    assert(bounds && bounds.y + bounds.height <= VH, 'map-tree controls exceed viewport');
+  });
+  await step('the map readout includes choices, while respec only changes future expeditions', async () => {
+    await A.page.getByRole('button', { name: 'Back', exact: true }).click();
+    const summary = A.page.getByText('Map tree', { exact: true });
+    await summary.scrollIntoViewIfNeeded(); await summary.click();
+    assert((await A.page.locator('.fe-device__summary').innerText()).includes('Far Horizon'), 'map summary lacks allocated effects');
+    await A.shot(`tree-preview-${VW}x${VH}`);
+    await A.page.locator('.fe-device__activate').click();
+    await A.waitFor('new portal', () => !!window.__foe.store.get().hud?.portal && !window.__foe.store.get().character.mapDevice);
+    await clickPortal(A); await A.waitFor('entered tree expedition', () => window.__foe.store.get().zone === 'map');
+    assert(await A.eval(() => window.__foe.store.get().run.mapTree.length === 10), 'map did not snapshot nodes');
+    await A.eval(() => window.__foe.store.actions.leaveMap());
+    await A.waitFor('back in hideout', () => window.__foe.store.get().zone === 'hideout');
+    await openDevice(); await A.page.getByRole('button', { name: /^Map tree/ }).click();
+    await A.page.locator('[data-map-node="farHorizon"]').click();
+    await A.page.getByRole('button', { name: 'Refund · 5 Scrap', exact: true }).click();
+    await A.waitFor('respec applied', () => window.__foe.store.get().character.atlas.nodes.length === 9);
+    await clickPortal(A); await A.waitFor('reentered tree expedition', () => window.__foe.store.get().zone === 'map');
+    assert(await A.eval(() => window.__foe.store.get().run.mapTree.includes('farHorizon')), 'respec changed existing expedition');
+  });
+  await step('account choices, paid refunds and the original expedition survive server restart', async () => {
+    const before = await A.eval(() => ({ atlas: window.__foe.store.get().character.atlas, scrap: window.__foe.store.get().character.currencyStash.scrap, nodes: window.__foe.store.get().run.mapTree }));
+    outage = true; await stopGameServer(); await startGameServer(port);
+    await A.waitFor('tree restart', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().zone === 'map', undefined, 30000); outage = false;
+    const after = await A.eval(() => ({ atlas: window.__foe.store.get().character.atlas, scrap: window.__foe.store.get().character.currencyStash.scrap, nodes: window.__foe.store.get().run.mapTree }));
+    assert(isDeepStrictEqual(before, after), 'map-tree or currency state changed after restart');
+    await A.shot(`tree-restarted-${VW}x${VH}`);
+  });
+}
+
 async function uniquesScenario({ A, port }) {
   const { tsImport } = await import('tsx/esm/api');
   const { UNIQUES, getBase } = await tsImport('../src/data/items/index.ts', import.meta.url);
@@ -2643,9 +2736,10 @@ async function main() {
   if (ATLAS_ONLY) await atlasScenario({ A, port });
   if (INGREDIENTS_ONLY) await ingredientsScenario({ A, port });
   if (UNIQUES_ONLY) await uniquesScenario({ A, port });
+  if (TREE_ONLY) await mapTreeScenario({ A, port });
   if (EVENTS_ONLY) await eventsScenario({ A, port });
   if (CRAFTING_ONLY) await craftingScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY) {
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -2654,7 +2748,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY) await wave5Scenario({ A, nameA });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY) await wave5Scenario({ A, nameA });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

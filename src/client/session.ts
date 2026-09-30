@@ -1145,6 +1145,10 @@ export class GameSession {
 
   // --- hideout -----------------------------------------------------------------------------------
 
+  setMapTreeNode(nodeId: import('../contracts/atlas').MapTreeNodeId, allocate: boolean): void {
+    void this.command({ c: 'setMapTreeNode', nodeId, allocate });
+  }
+
   activateMapDevice(areaId?: import('../contracts/atlas').AtlasAreaId, lootClass?: import('../contracts/content').ItemClass): void {
     void this.command({ c: 'activateMapDevice', ...(areaId ? { areaId } : {}), ...(lootClass ? { lootClass } : {}) }, {
       onOk: (r) => {

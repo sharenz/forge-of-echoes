@@ -221,6 +221,7 @@ export interface UiActions {
   setLoadoutSlot(slot: number, skillId: SkillId | null): void;
 
   // hideout
+  setMapTreeNode(nodeId: import('./atlas').MapTreeNodeId, allocate: boolean): void;
   activateMapDevice(areaId?: import('./atlas').AtlasAreaId, lootClass?: import('./content').ItemClass): void;
   /** Offers computed locally from the shared rules (display); buying goes to the server. */
   merchantOffers(): MerchantOffer[];

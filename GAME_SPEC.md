@@ -406,7 +406,7 @@ Reward-only mods (Reward Ink):
 The new maps have separate floor tiles, decals, lighting, landmark layouts and map emblems. They reuse existing monster art and attack telegraphs. Area-specific arena scales and targeted drop weights still apply.
 
 **Map drops:**
-- The completion chest guarantees one map: 75% at the current tier, 25% one tier higher, capped at Tier 15.
+- The completion chest guarantees one map: normally 75% at the current tier, 25% one tier higher, capped at Tier 15. Far Horizon raises the upgrade chance to 40%; Compass guarantees it below the cap.
 - Random map drops are same tier 60%, one lower 25%, one higher 15% (within 1–15). Their rarity mirrors equipment (normal 70 · magic 22·m · rare 1.6·m^1.3); all six bases are equally likely.
 - The merchant always sells T1 (free) and T2 (4 Scrap).
 - **Atlas territory fee:** paid once by the map owner on activation, from inventory/stash Scrap. T1–T3 free;
@@ -414,6 +414,20 @@ The new maps have separate floor tiles, decals, lighting, landmark layouts and m
   Portal entry and restored runs do not charge it again. If a server failure makes the run unrestorable,
   its recorded fee, source map (including Bounty) and any entrance key are returned in one transaction.
   Legacy runs have no fee to refund. Ordinary deaths, abandonment and voluntary map replacement do not refund fees.
+
+**Map tree v0 (account-wide).** Open it from the Map Device. There are 15 nodes in five three-node paths. Each first completion of a different Atlas area grants one map point, capped at 10; existing completions count immediately. Repeated clears do not grant more points. Points are independent of attributes and skills, and no node changes character stats. Each node costs one point and requires the previous node on its path. Refund a leaf node for 5 Scrap from backpack, normal stash or Crafting Stash, excluding trade offers; currency payment and account allocation commit atomically. Refund later nodes first. Changes are allowed only in your own hideout and appear on all online alts.
+
+The opener's selected nodes are copied into the expedition at activation. They affect the whole party's map rules, with each player still adding their own gear luck. Guest trees do not stack. Respec, switching characters or a restart cannot change an existing expedition's selections. Legacy open maps have no nodes. Map Device readouts and personal luck breakdowns include the tree's sources. The map item itself remains unchanged and tradeable maps carry no account bonuses.
+
+| Path | First node | Second node | Final node |
+|---|---|---|---|
+| Cartography | **Trailblazer:** +20% ordinary map drop chance | **Chart Keeper:** +30% ordinary map drop chance | **Far Horizon:** chest-map upgrade chance 25% → 40%; Compass and Tier 15 cap retained |
+| Crafting | **Essence Seeker:** +25% Essence weight | **Sound Foundations:** non-unique armour drops with +1 maximum Stability | **Deep Seams:** 50% more Essence weight; monsters have 10% more life |
+| Hunting | **Marked Prey:** +20% magic/rare pack chance | **Crowded Grounds:** +10% monsters, +5% item quantity | **Apex Hunt:** +40% magic/rare pack chance, +15% item rarity; monsters deal 5% more damage |
+| Fortune | **Scavenger:** +5% item quantity | **Discerning Eye:** +15% item rarity | **Crowned Challenge:** final bosses have 25% more life; separate world/exclusive unique rolls gain 50% more chance, capped at 100% after personal rarity |
+| Encounters | **Strange Signs:** +5 percentage points random-event chance | **Echo Compass:** +5 percentage points random-event chance | **Beyond the Veil:** +10 percentage points random-event chance, +5% item quantity; monsters have 10% more life |
+
+Percent bonuses without “more” are increased modifiers in the shared resolver; the two map-drop nodes sum to +50%, and pack bonuses sum with map implicits/mods. Essence bonuses reweight ordinary currency tables, never add currency drops or change special ingredient/key sources. Encounter bonuses add to the total after the area's normal odds/cap, preserving relative event weights and capped at 100%; Bounty and fixed chains are unchanged. Crowned Challenge multiplies the boss's own 8% and exclusive 12% rolls, not the rarity of ordinary equipment, guaranteed Reliquary uniques, or chest/gamble rewards; item-level gates still apply. Its life modifier also affects each twin boss and compounds with area boss modifiers. Existing boss damage is unchanged unless an explicitly selected tree node raises general monster damage.
 
 **Atlas (account-wide).** The Map Device opens maps at a chosen revealed destination. The item supplies
 tier, quality, mods and corruption; the destination supplies the theme, arena and implicit, plus weights for

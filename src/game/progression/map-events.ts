@@ -1,4 +1,5 @@
-import type { AtlasAreaId } from '../../contracts/atlas';
+import { mapTreeBonuses } from '../../data/progression/map-tree';
+import type { AtlasAreaId, MapTreeNodeId } from '../../contracts/atlas';
 import type { MapItem } from '../../contracts/items';
 import { MAP_EVENT_KINDS, type MapEventKind, type MapEventPlan } from '../../contracts/map-events';
 import { createRng } from '../../core/rng';
@@ -6,7 +7,7 @@ import { findAtlasArea } from '../../data/progression/atlas';
 import { AREA_EVENT_BONUS, MAP_EVENT_BASE_CHANCE, MAP_EVENT_MAX_CHANCE, MAP_EVENT_MIN_TIER, MOD_EVENT_BONUS } from '../../data/progression/map-events';
 
 /** Public odds; the actual creation roll is server-only. */
-export function mapEventOdds(map: MapItem, areaId?: AtlasAreaId): Record<MapEventKind, number> {
+export function mapEventOdds(map: MapItem, areaId?: AtlasAreaId, nodes: readonly MapTreeNodeId[] = []): Record<MapEventKind, number> {
   const odds = Object.fromEntries(MAP_EVENT_KINDS.map(k => [k, 0])) as Record<MapEventKind, number>;
   const area = findAtlasArea(areaId);
   if (area?.encounters) {
@@ -22,12 +23,14 @@ export function mapEventOdds(map: MapItem, areaId?: AtlasAreaId): Record<MapEven
     + bonuses.reduce((sum, bonus) => sum + (bonus?.[kind] ?? 0), 0);
   const total = Object.values(odds).reduce((sum, n) => sum + n, 0);
   const scale = area?.eventMultiplier ? Math.min(area.eventMultiplier, 1 / total) : Math.min(1, MAP_EVENT_MAX_CHANCE / total);
-  for (const kind of MAP_EVENT_KINDS) odds[kind] *= scale;
+  const current = total * scale;
+  const boosted = Math.min(1, current + mapTreeBonuses(nodes).eventChance);
+  for (const kind of MAP_EVENT_KINDS) odds[kind] *= scale * (current > 0 ? boosted / current : 1);
   return odds;
 }
 
-export function rollMapEvent(map: MapItem, seed: number, areaId?: AtlasAreaId): MapEventPlan | null {
-  const odds = mapEventOdds(map, areaId);
+export function rollMapEvent(map: MapItem, seed: number, areaId?: AtlasAreaId, nodes: readonly MapTreeNodeId[] = []): MapEventPlan | null {
+  const odds = mapEventOdds(map, areaId, nodes);
   // Independent of combat, layout and loot rolls, fixed at map creation.
   const rng = createRng(seed).fork(0xe7e175);
   const area = findAtlasArea(areaId);

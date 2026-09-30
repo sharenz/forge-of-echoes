@@ -297,6 +297,14 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       return applyResult(game, s, rules.setLoadoutSlot(ch, cmd.slot, cmd.skillId), true);
 
     // --- hideout ---------------------------------------------------------------------------
+    case 'setMapTreeNode': {
+      if (!inOwnHideout(s)) return fail('Change your map tree in your own hideout.');
+      const changed = r.setMapTreeNode(ch, cmd.nodeId, cmd.allocate);
+      if (!changed.ok) return fail(changed.error);
+      if (!game.store.commit(s.record, changed.value)) return fail('The map tree could not be saved. No point or Scrap was spent; try again.');
+      s.pushCharacter('now');
+      return OK;
+    }
     case 'activateMapDevice':
       return game.activateMapDevice(s, cmd.areaId, cmd.lootClass);
     case 'merchantOffers':
