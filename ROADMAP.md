@@ -2,7 +2,33 @@
 
 Maintained at the owner's request. Ask "what's next" and it is read from here; ideas and decisions
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
-Last reprioritised: 2026-09-30.
+Last reprioritised: 2026-10-01.
+
+## Next up, in order (reprioritised 2026-10-01 after the first outside player review)
+
+1. **Onboarding follow-through and first-10-minutes verification.** The guide shipped (tracker, markers, cheat-sheet, Help, hints,
+   gentle first map). Watch real new players (the first reviewer needed 2 minutes to find the drag), then fix what they still trip on.
+   Open from the audit: Rook's price copy (F-17) and the short map tooltip (F-28), return portal/anvil off screen at 1024x600, e2e for
+   keyboard-only, reduced motion, parties and veterans.
+2. **Offence and gear power curve plus player penetration.** The endgame fantasy ("rush through with good gear") and the proof-rare
+   counterplay are missing: no penetration exists, damage growth from gear against monster scaling needs a pass, and every tree archetype
+   currently clears slower than an empty tree (retune Haste, Overrun Doctrine, density or the harness baseline).
+3. **Finish wave 3: beacons and sigils (B1), anchor-aware events (E1), polish (F1).** The Territory lens is a hidden stub; Lamp Oil's
+   sigil half, Tide sigils and the tree re-roles go with it. Also the map tooltip "Surge n/3 today" and a Re-chart entry on the tooltip.
+4. **Make the art keep its promises.** Lava cracks, ice lakes, hazard stripes and sand rings look like mechanics but are cosmetic. Add the
+   mechanics (flow zones are built: candidates are frost currents in Frozen Passage and Winter Throne, a slag channel, a lava rill, a
+   rotating sand ring, a tram road), plus flanker monsters so standing still is not a strategy and the level gap in the monster hover.
+5. **P2 character depth: more Sorceress skills and a deeper skill tree, then the passive tree** (about 250 nodes). Designed together
+   with the balance work in 2 so the new power has a curve to live in.
+
+Also pending: gated tree nodes (Voidtouched Atlas, Warded Hunts, Stragglers' Cull, Lantern-Bearer's siblings, Wagered Charts), Twin Omens'
+Backlash, dead drawer code and the Ctrl+Shift stash-to-bench shortcut, footsteps, Echo Exchange, leagues, more map bases, Barbarian.
+
+**Shipped 2026-10-01 (commits `9321c7d`, `64819c3`):** conveyor flow zones (random directions, telegraphed reversals), projectile cover
+(tall blocks, low passes, lobs fly over), animated Life/Focus globes and unspent-point badges, the Atlas area modal (click an area, map slot
+in the centre with scarab sockets around it, Open area), Rook as a plain vendor grid with a luck-driven board (6-hour rotation and
+level-up refresh, paid reroll), the onboarding guide and first-run UX fixes, the delivery rule (commit, push and deploy when finished).
+Protocol 25.
 
 ## Top of the list: Atlas, Codex and map events rework (owner verdict 2026-09-30; waves 1 and 2 shipped)
 
