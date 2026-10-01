@@ -43,7 +43,7 @@ export const LAST_KILN: AreaLayout = defineLayout({
   ],
   clusters: [
     // The kiln block: a ring of crates with the door to the south (bearings 155 .. 205 left open).
-    { id: 'kiln-ring', pattern: 'arc', at: [0, 0], params: { r: 180, count: 32, a0: 205, a1: 155 }, prop: 'crate' },
+    { id: 'kiln-ring', pattern: 'arc', at: [0, 0], params: { r: 180, count: 32, a0: 205, a1: 155 }, prop: 'crate', cover: 'tall' },
     { id: 'apron-braziers', pattern: 'ring', at: pol(563, 270), params: { r: 175, count: 4, rot: 45 }, prop: 'brazier' },
     { id: 'stock-ne', pattern: 'scatter', at: pol(560, 60), params: { r: 80, count: 5 }, prop: 'crate' },
     { id: 'stock-nw', pattern: 'scatter', at: pol(560, 315), params: { r: 70, count: 4 }, prop: 'crate' },
@@ -51,22 +51,26 @@ export const LAST_KILN: AreaLayout = defineLayout({
   walls: [
     // The outer rail ring: a gate at every gantry (120 u) and the wide boss gate at the south (190 u). Starts at the north, clockwise.
     {
-      id: 'outer-ring', path: circle(356), thickness: 24, prop: 'crate',
+      id: 'outer-ring', path: circle(356), thickness: 24, prop: 'crate', cover: 'low',
       gaps: [...GANTRIES.map((a) => ({ at: a / 360, width: 120 })), { at: 0.5, width: 190 }],
     },
     // The gantries: pairs of rails 120 u apart (a 96 u walkway) from the outer ring out to the rim yard.
     ...GANTRIES.flatMap((a) => [-60, 60].map((off) => ({
-      id: `gantry-${a}-${off < 0 ? 'l' : 'r'}`, path: [lane(a, 372, off), lane(a, 650, off)], thickness: 24, prop: 'crate' as const,
+      id: `gantry-${a}-${off < 0 ? 'l' : 'r'}`, path: [lane(a, 372, off), lane(a, 650, off)], thickness: 24, prop: 'crate' as const, cover: 'low' as const,
     }))),
   ],
   decals: [
-    { id: 'belt', kind: 'road', path: circle(ANNULUS), width: 120 },
     { id: 'hazard-in', kind: 'road', path: circle(200), width: 14 },
     { id: 'hazard-out', kind: 'road', path: circle(336), width: 14 },
     ...GANTRIES.map((a) => ({ id: `walkway-${a}`, kind: 'road' as const, path: [lane(a, 380, 0), lane(a, 660, 0)], width: 70 })),
     { id: 'door-apron', kind: 'road', path: [pol(190, 180), pol(560, 180)], width: 110 },
     { id: 'chimney', kind: 'light', at: [0, 0], r: 230 },
     { id: 'lamp-boss', kind: 'light', at: pol(520, 180), r: 190 },
+  ],
+  // The annulus is one flow zone (D 10.5a): 48 u/s round the kiln, clockwise or counter-clockwise by the run's flow seed, turning
+  // every 30 to 50 s with a 2 s telegraph and a 1 s ramp. The belt decal is drawn from this zone.
+  flows: [
+    { id: 'belt', shape: 'annulus', at: [0, 0], r0: ANNULUS - 60, r1: ANNULUS + 60, speed: 48, sense: 'random', reverse: { mode: 'pingpong', every: [30, 50] } },
   ],
   lanes: [
     { id: 'annulus', path: circle(ANNULUS, 15), width: 130, weight: 2.4, favours: ['fast', 'melee'] },

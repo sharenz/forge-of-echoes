@@ -16,7 +16,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Pause | None. The game is online: the `Esc` menu blocks local input, but the world keeps running. |
 | Rendering | **WebGL2**, own renderer. Low-resolution pixel-art world (about 360 px tall virtual resolution, integer upscale), dynamic coloured lights, emissive + bloom, vignette and grading. All art is **procedurally generated pixel art** (no image files). |
 | Audio | **Procedural WebAudio** (synthesised SFX and music), no audio files. |
-| UI | DOM + Preact over the canvas, with the 12/14/17/25 type scale enforced. Fonts: Cinzel (titles) and Alegreya Sans (text). |
+| UI | DOM + Preact over the canvas, with the 14/16/19/28 type scale enforced. Fonts: Cinzel (titles) and Alegreya Sans (text). |
 | Online | **Online-only, server-authoritative** (see §11). No offline or single-player mode: solo play is a party of one on the server. |
 | Trading | Direct, atomic player-to-player trades (§12). No market yet (§15 is planned). |
 | Persistence | Server-side SQLite (`node:sqlite`). Accounts with username and password. `localStorage` holds only the session token and client settings. |
@@ -118,6 +118,38 @@ Player modifiers on skills (resolved by the rules into the sim's numbers, so too
 - Ailment chance = the skill's base + flat ignite / chill / shock chance, by damage type.
 - Extra projectiles and pierce add to projectile skills (Lance, Nova, Flame Wave, Rime Shards). A single-bolt skill fans its extra bolts 0.12 rad apart (at most 0.6 rad).
 - Area of effect multiplies Nova range and Flame Wave / Cinder Ward radius by `sqrt(1 + area%)`; skill duration scales Cinder Ward.
+
+**Flow zones (conveyor belts).** Ground can carry whoever stands on it. Iron March (five W-E belts) and the Last Kiln (the conveyor annulus) are the first
+users; the format (`flows` in a layout, D-territory.md 10.5a) is generic, so currents or lava rivers can reuse it. The rules:
+- A belt adds its drift (48 u/s at full strength) to the body's own movement every tick, after slows: with the belt a player moves at about 158 u/s
+  (+44%), against it at about 62 u/s (-44%), standing still she is carried at 48 u/s. She is never stopped, rooted and frozen bodies are carried too,
+  dashes, leaps and knockbacks add on top, solid props still stop the sum (a belt pushing her into a crate rail slides her along it), and the edge of a belt
+  fades in over 8 u so crossing it never jerks. Projectiles, events and anchors are unaffected.
+- Monsters on a belt are carried the same way: ordinary walkers fully, heavy bodies and bosses by half, ghosts and fixtures not at all, and never more than
+  60% of the monster's own speed (so a slow walker can always gain ground against a belt). A sleeping pack far from every player does not drift.
+- **Directions are per run.** Each belt's starting direction is drawn from the run's flow seed (Iron March always has at least one belt each way; the
+  Kiln runs clockwise or counter-clockwise). It is the one deliberately seed-dependent part of an otherwise fixed layout. Belts also **reverse on a timer**
+  (every 28 to 48 s in Iron March, 30 to 50 s in the Kiln, staggered between belts): a 2 s telegraph in which the belt slows to a standstill (chevrons slow,
+  flicker, amber rails, a low metal clank), then it accelerates the other way over 1 s. Velocity never jumps.
+- Wide road decals in Chainworks areas (aprons, the Gilded Vault's gold road) are static deck plating and never show chevrons: only a flow zone draws
+  moving ones, so art, direction and mechanic cannot disagree.
+
+**Cover (props and shots).** Every solid prop has a cover height (`src/data/propCover.ts`): **tall** props stop straight-flying projectiles, **low** props are
+flown over (they still block walking), and props with radius 0 (walk-through decor, portals) never block anything. Tall: pillar, standing stone, ruin wall,
+vat, hoist, gate, obelisk, statue, sarcophagus, rib arch, ice column, map device. Low: brazier, rubble, bones, crystal, banner, crate, chain post, altar,
+bellows, choir stall, weapon rack, anvil, stash, merchant, chest. A layout can override the default per landmark, cluster or wall (a crate rail or a
+parapet is low, a crate stack or a full wall is tall); the presenter draws an overridden prop taller or lower than its art. The rules:
+- A straight shot, player's or monster's, stops at the first tall prop its path touches (a spark and dust puff, a dull knock); a piercing shot stops there
+  too (pierce counts bodies, never walls); a body in front of the wall is still hit first.
+- **Lobs fly over everything** (Cinder Spitter and Tar Slinger globs). **Ember Nova** rings burst over cover (a point-blank ring, not an aimed shot).
+  Ground telegraphs and areas (slams, pools, wards, fire trails) are never blocked. **Arc Chain** needs a clear line: it strikes the nearest enemy it can
+  see and each jump needs a clear line to the next target. Ember Lance, Flame Wave and Rime Shards are blocked.
+- A shot that starts inside a prop's footprint (a shooter pressed against a wall) leaves it instead of vanishing, and a muzzle that falls inside a tall
+  prop fires from the shooter's centre, so aiming into an adjacent wall hits the wall.
+- Monsters never spend a volley on a wall: archers, weavers, crossbowmen and thralls wait with a wall between them and their target and close in
+  (the nav flow field takes them round it) until the line is clear. Aim lines stop where the wall would stop the bolt, and a locked heading that
+  runs into a wall before the target is not drawn or fired. Boss patterns (Herald fan, Warden shards, Matriarch spiral, Chainmaster hook) are not held
+  back by cover, but their shots are stopped by tall props like any other. Leaps (Stalker pounce, hound and thrall leaps) go over props.
 
 ## 5. Items
 
@@ -1019,8 +1051,11 @@ blocks stale panels immediately. Clients cannot change activation.
 **UI:**
 - Blackened metal and dark leather panels with thin bronze/bone borders and ember accents. Everything is built with CSS gradients, borders and shadows; no image files except the pixel icons.
 - Cinzel titles; Alegreya Sans text.
-- The type scale is strictly 12/14/17/25 px.
+- The type scale is strictly 14/16/19/28 px (caption, secondary, body, title; see `AGENTS.md`).
 - Item icons are generated pixel art, upscaled with `image-rendering: pixelated`.
+- **Life and Focus globes** are liquid, painted per pixel on a small canvas (about 3 CSS px per art pixel) under a glass shell with curved specular, rim shade and a light that bleeds onto the frame. The liquid has a depth ramp (bright surface, dark bottom), a second swell behind the front surface and rising bubbles; Life adds embers, Focus arcane motes. The surface sloshes on a damped spring kicked by every change (hits harder than heals). A hit leaves a pale **damage trail** that waits about 0.4 s and then drains; a heal or regeneration lights a **flash** with a rising light band (the Focus refill shimmer). Below 30% Life the globe desaturates toward the edge and gives a slow double heartbeat that quickens as Life falls; **empty Focus** flickers with sputtering sparks and dims its numbers. Burning, bleeding, chilled, frozen (Life) and withered, shocked, chilled, frozen (Focus) tint the liquid. The globe pauses while the tab is hidden; with **Motion: calm** (the shared Atlas toggle, which follows `prefers-reduced-motion` on auto) the surface is flat, there are no bubbles, embers or flicker, and it only redraws while the value is still changing. The numbers use the type scale and keep a dark outline. Math: `src/ui/lib/globe-fx.ts` (pure, tested); painter: `src/ui/lib/globe-render.ts`.
+- **Points to spend.** While the character has unspent attribute points, skill points or (in a hideout) free Atlas tree points, a pulsing badge per kind straddles the top of the command deck beside the level gem (attribute: gold arrow, hotkey C; skill: violet star, K; Atlas: frost diamond), with a small "+" on the gem. The tooltip reads "N attribute points to spend (C)"; a click opens the panel (like the hotkey); a badge disappears at zero. A level-up (or a new Atlas point) pops the badge with a few sparks, but loading a character or reconnecting does not. Calm motion shows static badges. Counts come straight from the character save, so they are right after a level-up, after spending, after a reconnect and on a character load. Logic: `src/ui/lib/points.ts`.
+- Dev sandbox previews: `dev/ui.html?hud=lowlife,empty,full,play,nopoints,points,atlaspoints` (`&levelup=1`, `&debuffs=burning,withered`, `&motion=calm`).
 
 ## 11. Online: server, hideouts, parties, portals
 

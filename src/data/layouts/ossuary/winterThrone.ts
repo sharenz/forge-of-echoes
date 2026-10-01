@@ -44,7 +44,7 @@ export const WINTER_THRONE: AreaLayout = defineLayout({
   walls: [
     // The low dais wall: four arcs between the stair openings.
     ...[0, 90, 180, 270].map((a) => ({
-      id: `dais-${a}`, path: f.arc(DAIS_R, a + FLANK + 3, a + 90 - FLANK - 3, 10), thickness: 18,
+      id: `dais-${a}`, path: f.arc(DAIS_R, a + FLANK + 3, a + 90 - FLANK - 3, 10), thickness: 18, cover: 'low' as const,
     })),
   ],
   decals: [

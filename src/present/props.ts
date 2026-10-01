@@ -10,6 +10,7 @@
 import type { PropKind, PropView } from '../contracts/sim';
 import type { RGB } from '../contracts/render';
 import { LAYOUT_PROP_RADIUS } from '../data/layouts/schema';
+import { PROP_COVER } from '../data/propCover';
 import { C } from './colors';
 import { lightInView, type FrameCtx } from './context';
 import { hash1, TAU } from './math';
@@ -33,6 +34,9 @@ const PORTAL_HOVER: RGB = [1, 0.8, 0.5];
 /** Seconds between the Crafting Bench's spark strikes. */
 const ANVIL_BEAT = 2.2;
 const RETURN_HOVER: RGB = [0.72, 0.9, 1];
+
+/** Sprite height factor of a prop whose layout cover differs from its kind's default (src/data/propCover.ts). */
+const COVER_HEIGHT = { tall: 1.3, low: 0.72, none: 0.72 } as const;
 
 /** Blob shadow size (scaleX, scaleY of the 16x6 fx/shadow) per prop kind; 0 = none. */
 const SHADOW: Record<PropKind, readonly [number, number]> = {
@@ -259,11 +263,14 @@ export class PropPainter {
         else if (kind === 'chest') frame = p.state > 0 ? 1 : 0;
         else frame = p.variant % Math.max(1, meta.frames);
 
+        // Height reads as cover: a layout that overrides a kind's cover draws it taller (a crate STACK, tall) or lower (a rubble
+        // run, a rail, a parapet: low) than the kind's art, and its shadow follows. Kinds at their default cover are untouched.
+        const heightScale = p.cover !== undefined && p.radius > 0 && p.cover !== PROP_COVER[kind] ? COVER_HEIGHT[p.cover] : 1;
         const sh = SHADOW[kind];
         if (sh[0] > 0) {
           const so = pen.sprite('shadow');
           so.scaleX = sh[0];
-          so.scaleY = sh[1];
+          so.scaleY = sh[1] * (heightScale > 1 ? 1.25 : heightScale < 1 ? 0.8 : 1);
           so.alpha = 0.8;
           r.sprite('fx/shadow', 0, x, y - 1, so);
         }
@@ -271,7 +278,7 @@ export class PropPainter {
         const o = pen.sprite(kind === 'bones' ? 'decal' : 'world');
         // Pale bone would bleach under the player's light; keep it a step darker than the stonework.
         if (kind === 'bones') o.tint = BONE_TINT;
-        if (scaleY !== 1) o.scaleY = scaleY;
+        if (scaleY !== 1 || heightScale !== 1) o.scaleY = scaleY * heightScale;
         if (KIT_KINDS.has(kind)) {
           // A layout may resize a kit prop (`r`): the art follows its solid radius (walk-through decor keeps its size).
           const base = LAYOUT_PROP_RADIUS[kind];

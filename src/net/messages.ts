@@ -502,7 +502,7 @@ function portalInfo(v: unknown, what: string): void {
 }
 
 function propView(v: unknown): void {
-  const o = shape(v, 'prop', ['id', 'kind', 'x', 'y', 'radius', 'state', 'variant', 'interactive']);
+  const o = shape(v, 'prop', ['id', 'kind', 'x', 'y', 'radius', 'state', 'variant', 'interactive'], ['cover']);
   num(o.id, 'prop.id', 0, 0xffffffff);
   oneOf(o.kind, 'prop.kind', PROP_KIND_CODES);
   num(o.x, 'prop.x', -1e6, 1e6);
@@ -511,13 +511,14 @@ function propView(v: unknown): void {
   num(o.state, 'prop.state', -1e9, 1e9);
   num(o.variant, 'prop.variant', 0, 1e6);
   bool(o.interactive, 'prop.interactive');
+  if (o.cover !== undefined) oneOf(o.cover, 'prop.cover', ['tall', 'low', 'none'] as const);
 }
 
 function zoneInfo(v: unknown): void {
   const o = shape(v, 'zone', [
     'instanceId', 'kind', 'ownerCharacterId', 'ownerName', 'theme', 'arenaRadius', 'mapName', 'tier',
     'localPlayerId', 'props', 'setup', 'portal',
-  ]);
+  ], ['flowSeed']);
   str(o.instanceId, 'zone.instanceId');
   oneOf(o.kind, 'zone.kind', ZONE_KINDS);
   str(o.ownerCharacterId, 'zone.ownerCharacterId');
@@ -530,6 +531,7 @@ function zoneInfo(v: unknown): void {
   for (const p of arr(o.props, 'zone.props', 4096)) propView(p);
   if (o.setup !== null && !isObj(o.setup)) fail('zone.setup: expected an object');
   if (o.portal !== null) portalInfo(o.portal, 'zone.portal');
+  if (o.flowSeed !== undefined) num(o.flowSeed, 'zone.flowSeed', 0, 0xffffffff);
 }
 
 function partyInfo(v: unknown): void {

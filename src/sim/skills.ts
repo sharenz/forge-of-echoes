@@ -11,6 +11,7 @@ import {
   FIRE_TRAIL_TICK, MUZZLE_OFFSET, NOVA_ECHO_DELAY, WARD_PULSE_INTERVAL,
   WARD_RADIUS, WARD_REDUCTION_CAP, DT,
 } from './constants';
+import { coverBlocked, coverClip, insideCover } from './cover';
 import { DAMAGE_INDEX, TAU, clamp } from './math';
 import { resolvePlayerAt } from './movement';
 import { PROJ, projSpec, spawnProjectile } from './projectiles';
@@ -108,8 +109,12 @@ function fireFan(
   for (let k = 0; k < count; k++) {
     const a = count === 1 ? angle : angle - spread / 2 + (spread * k) / (count - 1);
     s.angle = a;
-    s.x = p.x + Math.cos(a) * MUZZLE_OFFSET;
-    s.y = p.y + Math.sin(a) * MUZZLE_OFFSET;
+    // A muzzle inside a tall prop (she stands against it) fires from her centre: the shot meets the prop, it does not skip it.
+    const mx = p.x + Math.cos(a) * MUZZLE_OFFSET;
+    const my = p.y + Math.sin(a) * MUZZLE_OFFSET;
+    const inside = insideCover(w.propGrid, mx, my);
+    s.x = inside ? p.x : mx;
+    s.y = inside ? p.y : my;
     spawnProjectile(w, s);
   }
 }
@@ -161,6 +166,8 @@ function arcChain(w: World, p: PlayerState, def: SkillRuntimeDef, aimX: number, 
     const dy = m.y[i] - p.y;
     const r = range + m.radius[i];
     if (dx * dx + dy * dy > r * r) continue;
+    // Lightning needs a line: a target behind tall cover is not struck.
+    if (coverBlocked(w, p.x, p.y, m.x[i], m.y[i], 0)) continue;
     const cx = m.x[i] - aimX;
     const cy = m.y[i] - aimY;
     const dc = cx * cx + cy * cy;
@@ -174,7 +181,8 @@ function arcChain(w: World, p: PlayerState, def: SkillRuntimeDef, aimX: number, 
   if (best < 0) {
     // Nothing in reach: the bolt forks harmlessly toward the cursor.
     const reach = Math.min(range * 0.6, Math.hypot(aimX - p.x, aimY - p.y));
-    points.push(p.x + dirX * Math.max(24, reach), p.y + dirY * Math.max(24, reach));
+    const fork = coverClip(w, p.x, p.y, Math.atan2(dirY, dirX), Math.max(24, reach), 0);
+    points.push(p.x + dirX * fork, p.y + dirY * fork);
     w.events.push({ t: 'chain', playerId: p.id, points, damageType: def.damageType });
     return;
   }
@@ -205,7 +213,7 @@ function arcChain(w: World, p: PlayerState, def: SkillRuntimeDef, aimX: number, 
       const dy = m.y[i] - y;
       const d2 = dx * dx + dy * dy;
       const r = jump + m.radius[i];
-      if (d2 <= r * r && d2 < nextD) {
+      if (d2 <= r * r && d2 < nextD && !coverBlocked(w, x, y, m.x[i], m.y[i], 0)) {
         nextD = d2;
         next = i;
       }

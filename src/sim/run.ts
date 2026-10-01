@@ -15,6 +15,7 @@ import { digestWorld } from './digest';
 import { EventBuffer } from './events';
 import { createEventDirector, updateMapEvent } from './map-events';
 import { PropGrid, SpatialGrid } from './grid';
+import { flowStep } from '../data/layouts/flow';
 import { applyLayout, layoutForConfig, layoutStart } from './layout';
 import { createHookErrorLog } from './hooks';
 import { removeDrop, removePlayerDrops, requestPickup, spawnFloorDrop, updateDrops } from './loot';
@@ -266,6 +267,8 @@ function snapshotPrev(w: World): void {
 export function stepWorld(w: World): void {
   w.tick++;
   w.time = w.tick * DT;
+  const flows = w.layout?.flows;
+  if (flows) flowStep(flows, w.time); // belts: the direction scale of this tick (D 10.5a)
   w.events.beginTick();
   if (w.players.length === 0) {
     w.view.tick = w.tick;

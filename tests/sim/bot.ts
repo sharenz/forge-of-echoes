@@ -8,6 +8,7 @@ import { AILMENT_BIT, RARITY_CODE, type AreaView, type PlayerIntent, type WorldV
 import {
   CHARGE_LINE_HALF_WIDTH, CHOIR_RING_HALF_WIDTH, FAULT_WEDGE_HALF_ANGLE, areaAngle, areaContains, areaVariant, choirGapAngles, inChoirGap, voidTideInner,
 } from '../../src/sim/area-geometry';
+import { coverOf } from '../../src/data/propCover';
 import { Nav } from './nav';
 
 export interface BotOptions {
@@ -84,6 +85,42 @@ function ringPush(a: AreaView, x: number, y: number): { x: number; y: number; w:
   }
   const s = bd >= 0 ? 1 : -1;
   return { x: (-dy / d) * s, y: (dx / d) * s, w: 3 };
+}
+
+/** Tall solid props of a view (cached per props array: they are static), as flat [x, y, r, ...]. */
+let tallFor: WorldView['props'] | null = null;
+let tallLen = -1;
+let tallList: number[] = [];
+function tallProps(props: WorldView['props']): number[] {
+  if (tallFor !== props || tallLen !== props.length) {
+    tallFor = props;
+    tallLen = props.length;
+    tallList = [];
+    for (const pr of props) if (pr.radius > 0 && coverOf(pr.kind, pr.radius, pr.cover) === 'tall') tallList.push(pr.x, pr.y, pr.radius);
+  }
+  return tallList;
+}
+
+/** A fair player sees tall cover: does a wall stand between (ax, ay) and (bx, by)? (A prop around the start never counts: it is leaving it.) */
+function behindCover(props: WorldView['props'], ax: number, ay: number, bx: number, by: number): boolean {
+  const t = tallProps(props);
+  const dx = bx - ax;
+  const dy = by - ay;
+  const a = dx * dx + dy * dy;
+  if (a < 1e-6) return false;
+  for (let k = 0; k < t.length; k += 3) {
+    const fx = ax - t[k];
+    const fy = ay - t[k + 1];
+    const rr = t[k + 2] + 2;
+    const c = fx * fx + fy * fy - rr * rr;
+    if (c <= 0) continue;
+    const hb = fx * dx + fy * dy;
+    if (hb >= 0) continue;
+    const disc = hb * hb - a * c;
+    if (disc < 0) continue;
+    if ((-hb - Math.sqrt(disc)) / a <= 1) return true;
+  }
+  return false;
 }
 
 export function createBot(opts: BotOptions = {}): Bot {
@@ -369,7 +406,24 @@ export function createBot(opts: BotOptions = {}): Bot {
 
       // Aim: the boss/lieutenant when reasonably close, else the nearest monster (unless its shield faces her).
       const shielded = nearest >= 0 && m.kind[nearest] === SHIELDBEARER && aimAlt >= 0 && aimAltD < 330;
-      const target = boss >= 0 && bd < 320 ? boss : shielded ? aimAlt : nearest;
+      let target = boss >= 0 && bd < 320 ? boss : shielded ? aimAlt : nearest;
+      // Straight shots stop at tall cover: aim at the nearest monster she can actually see instead, and hold the straight skills
+      // while none is in sight (a nova ring and the ward do not need a line).
+      let aimClear = true;
+      if (target >= 0 && behindCover(view.props, p.x, p.y, m.x[target], m.y[target])) {
+        let alt = -1;
+        let altD = 330;
+        for (let i = 0; i < m.capacity; i++) {
+          if (!m.alive[i] || m.ailments[i] & (AILMENT_BIT.frozen | AILMENT_BIT.fixture)) continue;
+          const d = Math.hypot(m.x[i] - p.x, m.y[i] - p.y);
+          if (d < altD && !behindCover(view.props, p.x, p.y, m.x[i], m.y[i])) {
+            altD = d;
+            alt = i;
+          }
+        }
+        if (alt >= 0) target = alt;
+        else aimClear = false;
+      }
       if (target >= 0) {
         out.aimX = m.x[target];
         out.aimY = m.y[target];
@@ -422,7 +476,7 @@ export function createBot(opts: BotOptions = {}): Bot {
 
       // Skills.
       const rooted = p.debuffs.some((d) => d.id === 'rooted');
-      out.held[0] = nd < 330;
+      out.held[0] = nd < 330; // the basic attack is free: keep it going (a wall just eats it) so the first clear line gets a bolt
       for (let s = 1; s < p.slots.length; s++) {
         const slot = p.slots[s];
         if (!slot.skillId || !slot.usable) continue;
@@ -431,13 +485,13 @@ export function createBot(opts: BotOptions = {}): Bot {
             out.held[s] = crowd120 >= 3 || bd < 140;
             break;
           case 'rimeShards':
-            out.held[s] = nd < 250;
+            out.held[s] = nd < 250 && aimClear;
             break;
           case 'arcChain':
-            out.held[s] = nd < 230;
+            out.held[s] = nd < 230 && aimClear;
             break;
           case 'flameWave':
-            out.held[s] = nd < 170;
+            out.held[s] = nd < 170 && aimClear;
             break;
           case 'cinderWard':
             out.held[s] = p.wardTime <= 0 && (crowd60 >= 2 || bd < 200);
@@ -451,7 +505,7 @@ export function createBot(opts: BotOptions = {}): Bot {
             }
             break;
           default:
-            out.held[s] = nd < 200;
+            out.held[s] = nd < 200 && aimClear;
         }
       }
       return out;

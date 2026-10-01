@@ -3,7 +3,8 @@
 // `addProp` calls, so prop ids are identical in every run of an area). Used by the sim (src/sim/layout.ts), the
 // validator, the lint script, the presenter's decals and dev/layouts.html.
 import { createRng, hashString } from '../../core/rng';
-import type { PropKind } from '../../contracts/sim';
+import type { PropCover, PropKind } from '../../contracts/sim';
+import { compileFlowZones, type CompiledFlow } from './flow';
 import {
   LANDMARK_KINDS, LAYOUT_PROP_RADIUS, bearingOf, resolvePt,
   type AreaLayout, type BossArrival, type DecalKind, type EventAnchorKind, type LandmarkKind, type LaneFavour, type LayoutCluster, type Pt,
@@ -27,6 +28,8 @@ export interface CompiledProp {
   y: number;
   radius: number;
   variant: number;
+  /** The layout's cover override, when it set one (the kind's default otherwise: src/data/propCover.ts). */
+  cover?: PropCover;
 }
 
 export interface CompiledLandmark { id: string; kind: PropKind | LandmarkKind; x: number; y: number; r: number; prop: boolean; solid: boolean }
@@ -49,6 +52,8 @@ export interface CompiledLayout {
   zones: CompiledZone[];
   bossStage: CompiledBossStage;
   anchors: CompiledAnchor[];
+  /** Flow zones (seed-free geometry; `buildFlowField` adds the run's directions and reversal schedule). */
+  flows: CompiledFlow[];
   rareSpots: { x: number; y: number; r: number; weight: number }[];
   light: { ambient: number; pools: { x: number; y: number; r: number; colour: string; flicker: number }[] } | null;
   scatter: AreaLayout['scatter'];
@@ -223,13 +228,13 @@ export function compileLayout(layout: AreaLayout, R: number): CompiledLayout {
     }
     const radius = l.r ?? LAYOUT_PROP_RADIUS[l.kind];
     landmarks.push({ id: l.id, kind: l.kind, x: at.x, y: at.y, r: radius > 0 ? radius : 8, prop: true, solid: radius > 0 });
-    props.push({ owner: l.id, source: 'landmark', kind: l.kind, x: at.x, y: at.y, radius, variant: l.variant ?? 0 });
+    props.push({ owner: l.id, source: 'landmark', kind: l.kind, x: at.x, y: at.y, radius, variant: l.variant ?? 0, ...(l.cover ? { cover: l.cover } : {}) });
   }
 
   for (const c of layout.clusters) {
     const radius = c.params.radius ?? LAYOUT_PROP_RADIUS[c.prop];
     clusterPoints(c, R, layout.areaId).forEach((p, k) => {
-      props.push({ owner: c.id, source: 'cluster', kind: c.prop, x: p.x, y: p.y, radius, variant: c.variant ?? k % 4 });
+      props.push({ owner: c.id, source: 'cluster', kind: c.prop, x: p.x, y: p.y, radius, variant: c.variant ?? k % 4, ...(c.cover ? { cover: c.cover } : {}) });
     });
   }
 
@@ -237,7 +242,7 @@ export function compileLayout(layout: AreaLayout, R: number): CompiledLayout {
     const kind = w.prop ?? 'ruinWall';
     const radius = w.thickness ? w.thickness / 2 : LAYOUT_PROP_RADIUS[kind];
     wallPieces(mapPath(w.path, R), radius, w.gaps ?? []).forEach((p, k) => {
-      props.push({ owner: w.id, source: 'wall', kind, x: p.x, y: p.y, radius, variant: k % 4 });
+      props.push({ owner: w.id, source: 'wall', kind, x: p.x, y: p.y, radius, variant: k % 4, ...(w.cover ? { cover: w.cover } : {}) });
     });
   }
 
@@ -273,6 +278,7 @@ export function compileLayout(layout: AreaLayout, R: number): CompiledLayout {
 
   const out: CompiledLayout = {
     areaId: layout.areaId, version: layout.version, R, start, props, landmarks, decals, lanes, zones, bossStage, anchors,
+    flows: compileFlowZones(layout.flows, R),
     rareSpots: (layout.rareSpots ?? []).map((s) => ({ ...resolvePt(s.at, R), r: s.r, weight: s.weight })),
     light, scatter: layout.scatter, signature: 0,
   };

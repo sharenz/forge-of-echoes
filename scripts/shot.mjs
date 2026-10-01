@@ -13,6 +13,8 @@
 //   --script <file.js>     Like --eval but read from a file.
 //   --keys "w:1500,space"  Hold/press keys after load: "key:holdMs" or "key" (tap). Sequential.
 //   --fullpage             Capture the full page
+//   --clip x,y,w,h         Capture only this region (CSS px); combine with --scale 3 to zoom in on pixel art
+//   --scale <n>            Device scale factor (default 1)
 //   --port <n>             Port for the dev server (default: random free port)
 //
 // Always prints console errors/warnings and page errors, and exits 1 if the page threw.
@@ -45,6 +47,8 @@ const wait = Number(opt('wait', '1500'));
 const evalSrc = opt('script', null) ? readFileSync(resolve(opt('script')), 'utf8') : opt('eval', null);
 const keys = opt('keys', null);
 const port = Number(opt('port', '0'));
+const clip = opt('clip', null)?.split(',').map(Number) ?? null;
+const scale = Number(opt('scale', '1'));
 
 mkdirSync(dirname(out), { recursive: true });
 
@@ -62,7 +66,7 @@ const browser = await chromium.launch({
 });
 let failed = false;
 try {
-  const page = await browser.newPage({ viewport: { width: w, height: h } });
+  const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: scale });
   page.on('console', (m) => {
     if (m.type() === 'error' || m.type() === 'warning') console.log(`[console.${m.type()}] ${m.text()}`);
     else if (m.text().startsWith('[shot]')) console.log(m.text());
@@ -94,7 +98,7 @@ try {
     }
   }
   const snap = async (file) => {
-    await page.screenshot({ path: file, fullPage: flag('fullpage') });
+    await page.screenshot({ path: file, fullPage: flag('fullpage'), ...(clip ? { clip: { x: clip[0], y: clip[1], width: clip[2], height: clip[3] } } : {}) });
     console.log(`[shot] saved ${file}`);
   };
   if (at) {

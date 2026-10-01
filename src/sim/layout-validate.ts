@@ -12,6 +12,10 @@
 //   5 cover       every Stalker perch has a solid cover prop on its line to the start, 140-380 u from the start
 //   6 anchors     >= 4 perches, >= 2 of each kind the area claims as native, >= 1 of every other kind
 //   7 determinism same seed -> same props; different seeds -> same landmarks/clusters/walls, different packs
+//   9 flows       flow zones (conveyor belts, currents; D 10.5a): inside bounds and sane (speed < the player's, reversal timing,
+//                 a random group never all one way); the landing and the boss stage stand on no flow; and for BOTH directions of
+//                 every zone and during its reversal (scales 1, 0.5, 0.2) a body carried passively for 3 s ends within 3 s of
+//                 ground off the belt (a belt never delivers anyone into a dead end he cannot leave against the flow)
 //   8 pockets     no standing ground (a player of PLAYER_RADIUS, exact) that is cut off from the landing: a player who is
 //                 knocked into a sealed pocket or a wedge could never leave it (flood fill on a 4 u grid); and every concave
 //                 corner (a standing spot touching two or more solids) can be slid out of with the real movement code
@@ -28,6 +32,7 @@ import {
   compileLayout, distToPath, distToSegment, pathLength, type CompiledLayout, type CompiledProp, type XY,
 } from '../data/layouts/compile';
 import { overrideLayout } from '../data/layouts';
+import { FLOW_PLAYER, FLOW_RAMP, FLOW_TELEGRAPH, buildFlowField, flowOut, flowVelocity } from '../data/layouts/flow';
 import { EVENT_ANCHOR_KINDS, type AreaLayout, type EventAnchorKind } from '../data/layouts/schema';
 import type { PropView } from '../contracts/sim';
 import { PLAYER_RADIUS } from './constants';
@@ -66,10 +71,21 @@ export const LAYOUT_RULES = {
   pocketMinArea: 150,
   stageClear: 30,
   anchorClear: PLAYER_RADIUS + 4,
+  /** Check 9: a flow zone's speed stays below this share of the player's 110 u/s (it can slow, never stop her). */
+  flowMaxSpeed: 66,
+  /** Check 9: a body carried passively for this long must be this close (in time) to ground off the belt. */
+  flowCarrySeconds: 3,
+  flowEscapeSeconds: 3,
+  /** Check 9: direction scales tested (a reversal passes through every one of them) and the sampling grids (u). */
+  flowScales: [1, 0.5, 0.2],
+  flowCell: 6,
+  flowStartStep: 18,
+  /** Check 9: the player's base move speed (u/s). */
+  flowPlayerSpeed: 110,
 } as const;
 
 export interface LayoutIssue {
-  check: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  check: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   /** Authoring id the issue is about (or 'layout'). */
   id: string;
   message: string;
@@ -454,6 +470,9 @@ export function validateLayout(layout: AreaLayout, opts: { R?: number } = {}): L
     add(8, tr.owner, `a player standing at (${Math.round(tr.x)}, ${Math.round(tr.y)}) cannot slide out of the concave corner there in any of 16 headings (nearest solid: ${tr.owner})`);
   }
 
+  // --- 9: flow zones
+  if (c.flows.length > 0) checkFlows(layout, c, idx, lim, add);
+
   return {
     areaId: layout.areaId, R, issues,
     stats: {
@@ -461,6 +480,224 @@ export function validateLayout(layout: AreaLayout, opts: { R?: number } = {}): L
       reachableCells: reach.reachable,
     },
   };
+}
+
+// --- 9: flow zones ----------------------------------------------------------------------------------------------------
+
+/** A binary min-heap of (key, value) pairs for the escape-time Dijkstra of check 9. */
+class MinHeap {
+  private readonly keys: number[] = [];
+  private readonly vals: number[] = [];
+  get size(): number { return this.keys.length; }
+  push(key: number, val: number): void {
+    let i = this.keys.length;
+    this.keys.push(key);
+    this.vals.push(val);
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (this.keys[p] <= this.keys[i]) break;
+      [this.keys[p], this.keys[i]] = [this.keys[i], this.keys[p]];
+      [this.vals[p], this.vals[i]] = [this.vals[i], this.vals[p]];
+      i = p;
+    }
+  }
+  pop(): { key: number; val: number } {
+    const top = { key: this.keys[0], val: this.vals[0] };
+    const lk = this.keys.pop()!;
+    const lv = this.vals.pop()!;
+    const n = this.keys.length;
+    if (n > 0) {
+      this.keys[0] = lk;
+      this.vals[0] = lv;
+      let i = 0;
+      for (;;) {
+        const l = i * 2 + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < n && this.keys[l] < this.keys[m]) m = l;
+        if (r < n && this.keys[r] < this.keys[m]) m = r;
+        if (m === i) break;
+        [this.keys[m], this.keys[i]] = [this.keys[i], this.keys[m]];
+        [this.vals[m], this.vals[i]] = [this.vals[i], this.vals[m]];
+        i = m;
+      }
+    }
+    return top;
+  }
+}
+
+/**
+ * Check 9 (D 10.5a). Structure first (bounds, sane numbers, reversal timing, a random group of two or more never runs one way for any
+ * of 32 sample flow seeds), then the landing and boss stage off every flow, then for each zone, each direction and each scale a
+ * reversal passes through: (a) bodies standing on the belt on an 18 u lattice are carried passively for 3 s through the real
+ * movement code (`resolvePlayerAt` + the shared `flowVelocity`), then (b) the end point must be within 3 s of ground OFF this zone,
+ * measured by a Dijkstra over the standing grid where a step in direction d from a cell with drift F runs at the speed s that solves
+ * |s d - F| = 110 (walking against the belt at net speed, with the belt at best): so a belt that carries a body into a dead-end pocket
+ * he cannot get out of against the flow in 3 s fails. Other zones are not counted (they are checked as zones of their own).
+ */
+function checkFlows(
+  layout: AreaLayout, c: CompiledLayout, idx: SolidIndex, lim: number, add: (check: LayoutIssue['check'], id: string, message: string) => void,
+): void {
+  const rules = LAYOUT_RULES;
+  const flows = layout.flows ?? [];
+  const seen = new Set<string>();
+  flows.forEach((f, k) => {
+    const z = c.flows[k];
+    if (seen.has(f.id)) add(9, f.id, `duplicate flow id "${f.id}"`);
+    seen.add(f.id);
+    if (!(f.speed > 0) || f.speed > rules.flowMaxSpeed) add(9, f.id, `flow ${f.id}: speed ${f.speed} u/s must be in (0, ${rules.flowMaxSpeed}] so a belt can slow the player but never stop her (110 u/s)`);
+    if (f.shape === 'band') {
+      if (!f.path || f.path.length < 2) add(9, f.id, `flow ${f.id}: a band needs a path of at least two points`);
+      if (!(z.width >= 2 * rules.corridor / 2)) add(9, f.id, `flow ${f.id}: band width ${z.width} u is narrower than a corridor (${rules.corridor} u)`);
+      for (const p of z.path) if (Math.sqrt(p.x * p.x + p.y * p.y) + z.width / 2 > lim + 1e-6) add(9, f.id, `flow ${f.id}: band point (${Math.round(p.x)}, ${Math.round(p.y)}) with its half width leaves ${rules.maxRadiusFrac} R`);
+    } else {
+      if (!(z.r1 > z.r0 && z.r0 >= 0)) add(9, f.id, `flow ${f.id}: an annulus needs 0 <= r0 < r1`);
+      if (Math.sqrt(z.cx * z.cx + z.cy * z.cy) + z.r1 > lim + 1e-6) add(9, f.id, `flow ${f.id}: annulus (centre ${Math.round(z.cx)}, ${Math.round(z.cy)}, r1 ${Math.round(z.r1)}) leaves ${rules.maxRadiusFrac} R`);
+    }
+    const rv = f.reverse;
+    if (rv) {
+      const tele = rv.telegraph ?? FLOW_TELEGRAPH;
+      const ramp = rv.ramp ?? FLOW_RAMP;
+      if (!(tele >= 0.5) || !(ramp >= 0.5)) add(9, f.id, `flow ${f.id}: telegraph and ramp must be >= 0.5 s (the warning must be readable)`);
+      if (!(rv.every[0] <= rv.every[1]) || rv.every[0] < tele + ramp + 4) add(9, f.id, `flow ${f.id}: reversals every ${rv.every[0]} to ${rv.every[1]} s need min >= telegraph + ramp + 4 = ${tele + ramp + 4} s`);
+    }
+  });
+  // Random groups always carry both directions.
+  const groups = new Map<string, number[]>();
+  c.flows.forEach((z, k) => { if (z.sense === 'random') groups.set(z.group, [...(groups.get(z.group) ?? []), k]); });
+  for (const [g, members] of groups) {
+    if (members.length < 2) continue;
+    for (let seed = 0; seed < 32; seed++) {
+      const field = buildFlowField(c.flows, layout.areaId, seed * 2654435761);
+      const dirs = new Set(members.map((k) => field.zones[k].sign0));
+      if (dirs.size < 2) {
+        add(9, g, `flow group ${g}: flow seed ${seed * 2654435761 >>> 0} runs every belt the same way (a group must always have both directions)`);
+        break;
+      }
+    }
+  }
+  // The landing and the boss stage stand on no flow.
+  const probe = buildFlowField(c.flows, layout.areaId, 0);
+  probe.scale.fill(1);
+  const flowAt = (x: number, y: number): boolean => flowVelocity(probe, x, y, FLOW_PLAYER);
+  for (let dy = -c.start.clear; dy <= c.start.clear; dy += 10) {
+    for (let dx = -c.start.clear; dx <= c.start.clear; dx += 10) {
+      if (dx * dx + dy * dy <= c.start.clear * c.start.clear && flowAt(c.start.x + dx, c.start.y + dy)) {
+        add(9, 'start', `a flow zone reaches the start clearing at (${Math.round(c.start.x + dx)}, ${Math.round(c.start.y + dy)}): the landing must stand still`);
+        dy = Infinity;
+        break;
+      }
+    }
+  }
+  if (flowAt(c.bossStage.x, c.bossStage.y)) add(9, 'bossStage', 'the boss stage centre stands on a flow zone');
+  if (c.bossStage.second && flowAt(c.bossStage.second.x, c.bossStage.second.y)) add(9, 'bossStage', 'the second boss stage stands on a flow zone');
+
+  // Dead ends: per zone, direction and scale.
+  const near = (x: number, y: number, reach: number): PropView[] => idx.within(x, y, reach) as unknown as PropView[];
+  const cell = rules.flowCell;
+  const V = rules.flowPlayerSpeed;
+  const dirs: [number, number, number][] = [];
+  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (i || j) dirs.push([i, j, Math.sqrt(i * i + j * j)]);
+  for (let zi = 0; zi < c.flows.length; zi++) {
+    const z = c.flows[zi];
+    const field = buildFlowField(c.flows, layout.areaId, 0);
+    const margin = 70;
+    const x0 = Math.floor((z.x0 - margin) / cell) * cell;
+    const y0 = Math.floor((z.y0 - margin) / cell) * cell;
+    const nx = Math.ceil((z.x1 + margin - x0) / cell) + 1;
+    const ny = Math.ceil((z.y1 + margin - y0) / cell) + 1;
+    const stand = new Uint8Array(nx * ny);
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        const x = x0 + (i + 0.5) * cell;
+        const y = y0 + (j + 0.5) * cell;
+        if (Math.sqrt(x * x + y * y) > c.R - PLAYER_RADIUS) continue;
+        if (idx.clearance(x, y, PLAYER_RADIUS + 1) >= PLAYER_RADIUS) stand[j * nx + i] = 1;
+      }
+    }
+    for (const sigma of [1, -1]) {
+      for (const mag of rules.flowScales) {
+        field.scale.fill(0);
+        field.scale[zi] = sigma * mag;
+        const drift = (x: number, y: number): boolean => flowVelocity(field, x, y, FLOW_PLAYER);
+        // Escape time from every cell to ground off the zone (multi-source Dijkstra over the reversed graph).
+        const dist = new Float64Array(nx * ny).fill(Infinity);
+        const fx = new Float64Array(nx * ny);
+        const fy = new Float64Array(nx * ny);
+        const heap = new MinHeap();
+        for (let j = 0; j < ny; j++) {
+          for (let i = 0; i < nx; i++) {
+            const k = j * nx + i;
+            if (!stand[k]) continue;
+            if (drift(x0 + (i + 0.5) * cell, y0 + (j + 0.5) * cell)) {
+              fx[k] = flowOut.vx;
+              fy[k] = flowOut.vy;
+            } else {
+              dist[k] = 0;
+              heap.push(0, k);
+            }
+          }
+        }
+        while (heap.size > 0) {
+          const { key, val: b } = heap.pop();
+          if (key > dist[b]) continue;
+          const bi = b % nx;
+          const bj = (b - bi) / nx;
+          for (const [di, dj, len] of dirs) {
+            const ai = bi - di;
+            const aj = bj - dj;
+            if (ai < 0 || aj < 0 || ai >= nx || aj >= ny) continue;
+            const a = aj * nx + ai;
+            if (!stand[a] || dist[a] === 0) continue;
+            if (di && dj && (!stand[bj * nx + ai] || !stand[aj * nx + bi])) continue;
+            // From a toward b the direction is (di, dj); the best ground speed along it against the drift at a.
+            const ux = di / len;
+            const uy = dj / len;
+            const df = ux * fx[a] + uy * fy[a];
+            const sp = df + Math.sqrt(Math.max(0, df * df - (fx[a] * fx[a] + fy[a] * fy[a]) + V * V));
+            const t = key + (len * cell) / Math.max(1, sp);
+            if (t < dist[a]) {
+              dist[a] = t;
+              heap.push(t, a);
+            }
+          }
+        }
+        // Carry bodies passively and look the end points up.
+        let worst = 0;
+        let worstAt: { x: number; y: number; px: number; py: number } | null = null;
+        const dt = 1 / 20;
+        for (let y = z.y0; y <= z.y1; y += rules.flowStartStep) {
+          for (let x = z.x0; x <= z.x1; x += rules.flowStartStep) {
+            if (!drift(x, y) || idx.clearance(x, y, PLAYER_RADIUS + 1) < PLAYER_RADIUS) continue;
+            let px = x;
+            let py = y;
+            for (let t = 0; t < rules.flowCarrySeconds; t += dt) {
+              if (!drift(px, py)) break;
+              const o = resolvePlayerAt(px + flowOut.vx * dt, py + flowOut.vy * dt, c.R, near(px, py, 60));
+              px = o.x;
+              py = o.y;
+            }
+            const ci = Math.floor((px - x0) / cell);
+            const cj = Math.floor((py - y0) / cell);
+            let best = Infinity;
+            for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+              const ii = ci + di;
+              const jj = cj + dj;
+              if (ii >= 0 && jj >= 0 && ii < nx && jj < ny) best = Math.min(best, dist[jj * nx + ii]);
+            }
+            if (best > worst) {
+              worst = best;
+              worstAt = { x, y, px, py };
+            }
+          }
+        }
+        if (worst > rules.flowEscapeSeconds && worstAt) {
+          const where = Number.isFinite(worst) ? `${worst.toFixed(1)} s` : 'no way';
+          add(9, z.id, `flow ${z.id} (${sigma > 0 ? 'as authored' : 'reversed'}, scale ${mag}): a body standing at (${Math.round(worstAt.x)}, ${Math.round(worstAt.y)}) is carried to (${Math.round(worstAt.px)}, ${Math.round(worstAt.py)}), ${where} from ground off the belt against the flow (limit ${rules.flowEscapeSeconds} s)`);
+        }
+      }
+    }
+  }
 }
 
 export interface Pocket { x: number; y: number; area: number; owner: string }

@@ -35,6 +35,7 @@ import { RARITY_CODE } from '../contracts/sim';
 import { AUDIBLE_RADIUS } from '../audio/mixing';
 import { CHAIN_REV, VARKUS_REV } from '../audio/sfx';
 import { areaVariant } from '../sim/area-geometry';
+import { flowFieldFor, flowPhaseAt, type FlowField } from '../data/layouts';
 import { MONSTER_LOOKS } from './bestiary';
 import { CHARGE_MAX_RADIUS } from './context';
 
@@ -295,6 +296,7 @@ export class SoundDirector {
     const areas = world.areas;
     this.heartbeat(world);
     this.hum(world);
+    if (world.flowSeed !== undefined) this.belts(world, lx, ly);
     const frame = this.frameNo;
     let storm = -1;
     let stormD = Infinity;
@@ -407,6 +409,56 @@ export class SoundDirector {
       const steps = anchor ? anchor.v / 100 * 6 : 0;
       this.play('eventHum', x, y, recall ? 0.75 : 0.35, 1 + 0.04 * steps);
       this.humAt = this.now + HUM_PERIOD;
+    }
+  }
+
+  /**
+   * Conveyor belts (layout flow zones): a reversal is voiced from the schedule itself (the field is built from the same area, radius and
+   * flow seed as the sim's): a low metal clank when the telegraph begins (the belt starts slowing) and a lower one when it stops and
+   * turns. Reuses `shieldBlock`; audible only near the belt (positional at its point nearest the listener).
+   */
+  private beltKey = '';
+  private beltField: FlowField | null = null;
+  private beltPhase: number[] = [];
+  private belts(world: WorldView, lx: number, ly: number): void {
+    const key = `${world.areaId ?? ''}:${world.arenaRadius}:${world.flowSeed}`;
+    if (key !== this.beltKey) {
+      this.beltKey = key;
+      this.beltField = flowFieldFor(world.areaId, world.arenaRadius, world.flowSeed ?? 0);
+      this.beltPhase = this.beltField ? this.beltField.zones.map(() => 0) : [];
+    }
+    const field = this.beltField;
+    if (!field) return;
+    const t = world.time;
+    for (let k = 0; k < field.zones.length; k++) {
+      const z = field.zones[k];
+      if (!z.reverse) continue;
+      const ph = flowPhaseAt(z, t);
+      const was = this.beltPhase[k];
+      this.beltPhase[k] = ph.phase;
+      const into = ph.phase === 2 ? ph.since - z.reverse.telegraph : ph.since;
+      if (ph.phase === was || into > 0.6) continue; // a cue only on the edge (never replayed for a belt already mid-reversal)
+      // The point of the zone nearest the listener.
+      let px = z.cx;
+      let py = z.cy;
+      if (z.shape === 'annulus') {
+        const d = Math.hypot(lx - z.cx, ly - z.cy) || 1;
+        const r = (z.r0 + z.r1) / 2;
+        px = z.cx + ((lx - z.cx) / d) * r;
+        py = z.cy + ((ly - z.cy) / d) * r;
+      } else {
+        let best = Infinity;
+        for (const s of z.segs) {
+          const al = Math.max(0, Math.min(s.len, (lx - s.ax) * s.ux + (ly - s.ay) * s.uy));
+          const qx = s.ax + s.ux * al;
+          const qy = s.ay + s.uy * al;
+          const d = Math.hypot(lx - qx, ly - qy);
+          if (d < best) { best = d; px = qx; py = qy; }
+        }
+      }
+      if (Math.hypot(lx - px, ly - py) > AUDIBLE_RADIUS) continue;
+      if (ph.phase === 1) this.play('shieldBlock', px, py, 0.9, 0.75);
+      else if (ph.phase === 2) this.play('shieldBlock', px, py, 1, 0.55);
     }
   }
 
@@ -756,7 +808,9 @@ export class SoundDirector {
         else if (e.kind === 'tarGlob') this.play('tarSplat', e.x, e.y, 0.9, this.jitter(0.06));
         return;
       case 'blocked':
-        this.play('shieldBlock', e.x, e.y, 0.9, this.jitter(0.06));
+        // A wall stopping a shot is a duller, lower knock than a shield's ring (same sample, pitched down, a step quieter).
+        if (e.cover) this.play('shieldBlock', e.x, e.y, 0.6, 0.62 * this.jitter(0.08));
+        else this.play('shieldBlock', e.x, e.y, 0.9, this.jitter(0.06));
         return;
       case 'pull':
         return; // the root it ends in is voiced by 'debuff'

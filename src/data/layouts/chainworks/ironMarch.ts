@@ -41,23 +41,29 @@ export const IRON_MARCH: AreaLayout = defineLayout({
   ],
   walls: [
     // Inner rails between the lanes: a 100 u cross-gap about every 0.35 R, staggered so no straight line crosses the field.
-    { id: 'rail-n1', path: [u(-322, -171), u(350, -171)], thickness: 24, prop: 'crate', gaps: [{ at: 0.47, width: 100 }, { at: 0.82, width: 100 }] },
-    { id: 'rail-n2', path: [u(-322, -57), u(350, -57)], thickness: 24, prop: 'crate', gaps: [{ at: 0.3, width: 100 }, { at: 0.65, width: 100 }] },
-    { id: 'rail-s2', path: [u(-322, 57), u(350, 57)], thickness: 24, prop: 'crate', gaps: [{ at: 0.3, width: 100 }, { at: 0.65, width: 100 }] },
-    { id: 'rail-s1', path: [u(-322, 171), u(350, 171)], thickness: 24, prop: 'crate', gaps: [{ at: 0.47, width: 100 }, { at: 0.82, width: 100 }] },
+    { id: 'rail-n1', path: [u(-322, -171), u(350, -171)], thickness: 24, prop: 'crate', cover: 'low', gaps: [{ at: 0.47, width: 100 }, { at: 0.82, width: 100 }] },
+    { id: 'rail-n2', path: [u(-322, -57), u(350, -57)], thickness: 24, prop: 'crate', cover: 'low', gaps: [{ at: 0.3, width: 100 }, { at: 0.65, width: 100 }] },
+    { id: 'rail-s2', path: [u(-322, 57), u(350, 57)], thickness: 24, prop: 'crate', cover: 'low', gaps: [{ at: 0.3, width: 100 }, { at: 0.65, width: 100 }] },
+    { id: 'rail-s1', path: [u(-322, 171), u(350, 171)], thickness: 24, prop: 'crate', cover: 'low', gaps: [{ at: 0.47, width: 100 }, { at: 0.82, width: 100 }] },
     // Outer rails: the lane field's north and south edge, two service gaps each.
-    { id: 'edge-n', path: [u(-546, -285), u(546, -285)], thickness: 24, prop: 'crate', gaps: [{ at: 0.34, width: 110 }, { at: 0.66, width: 110 }] },
-    { id: 'edge-s', path: [u(-546, 285), u(546, 285)], thickness: 24, prop: 'crate', gaps: [{ at: 0.34, width: 110 }, { at: 0.66, width: 110 }] },
+    { id: 'edge-n', path: [u(-546, -285), u(546, -285)], thickness: 24, prop: 'crate', cover: 'low', gaps: [{ at: 0.34, width: 110 }, { at: 0.66, width: 110 }] },
+    { id: 'edge-s', path: [u(-546, 285), u(546, 285)], thickness: 24, prop: 'crate', cover: 'low', gaps: [{ at: 0.34, width: 110 }, { at: 0.66, width: 110 }] },
   ],
   decals: [
-    // Conveyor bands (wide road decals) down every lane and hazard stripes (narrow ones) along the outer rails.
-    ...LANES.map((y) => ({ id: `belt-${y}`, kind: 'road' as const, path: [u(-322, y), u(350, y)], width: 90 })),
+    // Hazard stripes (narrow road decals) along the outer rails. The belts themselves are the `flows` below, drawn from that data.
     { id: 'hazard-n', kind: 'road', path: [u(-546, -262), u(546, -262)], width: 16 },
     { id: 'hazard-s', kind: 'road', path: [u(-546, 262), u(546, 262)], width: 16 },
     { id: 'dock-apron', kind: 'road', path: [u(-600, 0), u(-340, 0)], width: 120 },
     { id: 'gate-apron', kind: 'road', path: [u(352, 0), u(600, 0)], width: 120 },
     { id: 'lamp-boss', kind: 'light', at: u(560, 0), r: 170 },
   ],
+  // The five belts are real flow zones (D 10.5a): 48 u/s against the 110 u/s player (about +44% with the belt, -44% against, never
+  // stopped). Each belt's direction is drawn from the run's flow seed (a group: at least one belt always runs each way) and flips
+  // every 28 to 48 s with a 2 s telegraph (slows to a stop) and a 1 s ramp, staggered so the field never turns all at once.
+  flows: LANES.map((y) => ({
+    id: `belt-${y}`, shape: 'band' as const, path: [u(-322, y), u(350, y)], width: 90, speed: 48, sense: 'random' as const, group: 'lines',
+    reverse: { mode: 'pingpong' as const, every: [28, 48] as [number, number] },
+  })),
   lanes: [
     { id: 'lane-c', path: [u(-300, 0), u(340, 0)], width: 90, weight: 2.4, favours: ['fast'] },
     { id: 'lane-n1', path: [u(-300, -114), u(340, -114)], width: 90, weight: 1.6, favours: ['melee'] },

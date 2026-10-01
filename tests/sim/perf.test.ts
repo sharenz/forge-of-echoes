@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { PROJECTILE_KINDS, type PlayerIntent } from '../../src/contracts/sim';
 import { areaRadius, areaTheme } from '../../src/data/layouts/area';
+import { setCoverEnabled } from '../../src/data/propCover';
 import { navStats, setNavEnabled } from '../../src/sim/nav';
 import { createRunInternal } from '../../src/sim/run';
 import { projSpec, spawnProjectile } from '../../src/sim/projectiles';
@@ -64,9 +65,11 @@ function topUp(w: World, k: number): void {
 
 /** PERF_NAV=0 measures the layout cases without monster navigation (before/after comparison). */
 setNavEnabled(process.env.PERF_NAV !== '0');
+/** PERF_COVER=0 measures with cover off (every prop flown over) for a before/after comparison. */
+if (process.env.PERF_COVER === '0') setCoverEnabled(false);
 
 describe('performance', () => {
-  for (const layoutArea of [undefined, 'glassSepulchre', 'lastKiln'] as const) {
+  for (const layoutArea of [undefined, 'glassSepulchre', 'lastKiln', 'ironMarch'] as const) {
   it(`${MONSTERS} monsters (every roster) + ${PROJECTILES} projectiles with ${PLAYERS} players in a map${layoutArea ? ` with the ${layoutArea} layout (monster navigation live)` : ''}: avg < 3 ms per tick`, () => {
     const { run, world } = createRunInternal(
       makeConfig({

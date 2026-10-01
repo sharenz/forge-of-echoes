@@ -19,6 +19,7 @@ import {
   DAMAGE_INDEX, DT, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, areaAngle, areaVariant, attackEvent, extraProjectiles, faceTarget,
   aimAtPlayer, byLevel, fireHostile, fireHostileFrom, knockPlayer, meleeHit, monsterDamage, moveAlong, muzzleOffset, quantizeAreaAngle, registerProjectileEffect,
   setAnim, setGuard, setProjectileEffect, spawnArea, steer, stop, toChase, wander, type Brain, type PlayerState, type World,
+  shotClear, coverClip,
 } from '../api';
 import { gapLeap } from '../pressure';
 import { CROSSBOW, HOUND, SHIELD, TAR, THRALL, THRALL_LEAP } from './tuning';
@@ -200,7 +201,7 @@ function hookAndRake(w: World, i: number, t: PlayerState | null, dx: number, dy:
     }
     return;
   }
-  if (m.attackCd[i] <= 0 && d >= T.hookMin && d <= T.hookMax) {
+  if (m.attackCd[i] <= 0 && d >= T.hookMin && d <= T.hookMax && shotClear(w, i, t.x, t.y, T.hookRadius)) {
     m.state[i] = MSTATE.cast;
     m.stateTime[i] = T.windup;
     setAnim(w, i, ANIM.windup);
@@ -257,34 +258,45 @@ export function brainCrossbowman(w: World, i: number, t: PlayerState | null, dx:
     wander(w, i);
     return;
   }
-  if (d < C.near) moveAlong(w, i, -dx, -dy, 1);
+  // Tall cover between it and its target: it holds fire and closes in (the nav field routes it round) until the line opens.
+  const ready = m.attackCd[i] <= 0 && d < C.fireRange;
+  const clear = !ready || shotClear(w, i, t.x, t.y, C.boltRadius);
+  if (!clear) steer(w, i, dx, dy, d, 1);
+  else if (d < C.near) moveAlong(w, i, -dx, -dy, 1);
   else if (d > C.far) steer(w, i, dx, dy, d, 1);
   else {
     const side = m.offsetAngle[i] > Math.PI ? 1 : -1;
     moveAlong(w, i, -dy * side, dx * side, 0.4);
   }
-  if (m.attackCd[i] > 0 || d >= C.fireRange) return;
+  if (!ready || !clear) return;
   if (aimersAt(w, t.id) >= C.maxAimers) {
     m.attackCd[i] = w.worldRng.range(C.hold * 0.5, C.hold);
     return;
   }
-  // Aim: lock the (id-quantised) heading and the muzzle point, and draw one line per bolt.
+  // Aim: lock the (id-quantised) heading and the muzzle point, and draw one line per bolt. The locked line itself must reach the
+  // target: a heading that runs into a wall first (a lead round a corner) is no aim at all, so no line is drawn and no bolt flies.
+  const a = quantizeAreaAngle(aimAtPlayer(w, i, t, C.boltSpeed, C.boltRange, byLevel(w, C.aim), C.fallbackLead));
+  const off = muzzleOffset(w, i);
+  if (coverClip(w, m.x[i] + Math.cos(a) * off, m.y[i] + Math.sin(a) * off, a, d, C.boltRadius * 0.5) < d - 2) {
+    steer(w, i, dx, dy, d, 1);
+    return;
+  }
   m.state[i] = MSTATE.cast;
   m.stateTime[i] = C.windup;
   setAnim(w, i, ANIM.windup);
   stop(w, i);
   faceTarget(w, i, t);
   attackEvent(w, i, 'aim');
-  const a = quantizeAreaAngle(aimAtPlayer(w, i, t, C.boltSpeed, C.boltRange, byLevel(w, C.aim), C.fallbackLead));
-  const off = muzzleOffset(w, i);
   m.sx[i] = a;
   m.sy[i] = 1 + extraProjectiles(w);
   m.tx[i] = m.x[i] + Math.cos(a) * off;
   m.ty[i] = m.y[i] + Math.sin(a) * off;
   // Shown until the release tick itself (+ DT): each bolt leaves while its line is still on the ground.
   for (let k = 0; k < m.sy[i]; k++) {
-    spawnArea(w, 'chargeLine', m.tx[i], m.ty[i], C.boltRange, C.windup + DT, {
-      angle: boltAngle(w, i, k), variant: 0, owner: m.id[i], hurts: 'none', debuff: null,
+    // The line stops where a wall would stop the bolt: it never shows through cover.
+    const lineAngle = boltAngle(w, i, k);
+    spawnArea(w, 'chargeLine', m.tx[i], m.ty[i], coverClip(w, m.tx[i], m.ty[i], lineAngle, C.boltRange, C.boltRadius * 0.5), C.windup + DT, {
+      angle: lineAngle, variant: 0, owner: m.id[i], hurts: 'none', debuff: null,
     });
   }
 }

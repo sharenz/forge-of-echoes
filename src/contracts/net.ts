@@ -31,7 +31,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 20: area-bound maps (MapItem.areaId); activateMapDevice no longer picks an area (passageKey / pit / useSurge).
 // 21: account pins (pinArea), Rook's generated map offers (map:<area>:<tier>:<grade>), Re-chart services and benchRecycle.
 // 22: refillSurge (Hourglass Sand on one area / Grand Hourglass on all) and the daily surge ledger on the account Atlas (atlas.surge).
-export const PROTOCOL_VERSION = 22;
+// 23: ZoneInfo.flowSeed (conveyor-belt directions and reversal schedule of layout flow zones; a new optional field).
+export const PROTOCOL_VERSION = 23;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -213,6 +214,11 @@ export interface ZoneInfo {
   setup: RunSetup | null;
   /** Hideout zones: the owner's active map portal, if any. */
   portal: PortalInfo | null;
+  /**
+   * Map zones: the seed of the layout's flow zones (conveyor directions and reversal schedule, src/data/layouts/flow.ts). The server draws
+   * it per instance, independent of the run seed (which clients never see); prediction and the presenter derive the belts from it.
+   */
+  flowSeed?: number;
 }
 
 export interface PartyMemberInfo {

@@ -49,10 +49,10 @@ export const FURNACE_YARD: AreaLayout = defineLayout({
   ],
   walls: [
     // The four pipe walls of the vat square, each with a 120 u gate at its middle (the cross-shaped passage).
-    { id: 'pipe-n', path: [[-PIPE, -SQ], [PIPE, -SQ]], gaps: [{ at: 0.5, width: 120 }] },
-    { id: 'pipe-s', path: [[-PIPE, SQ], [PIPE, SQ]], gaps: [{ at: 0.5, width: 120 }] },
-    { id: 'pipe-w', path: [[-SQ, -PIPE], [-SQ, PIPE]], gaps: [{ at: 0.5, width: 120 }] },
-    { id: 'pipe-e', path: [[SQ, -PIPE], [SQ, PIPE]], gaps: [{ at: 0.5, width: 120 }] },
+    { id: 'pipe-n', path: [[-PIPE, -SQ], [PIPE, -SQ]], cover: 'low', gaps: [{ at: 0.5, width: 120 }] },
+    { id: 'pipe-s', path: [[-PIPE, SQ], [PIPE, SQ]], cover: 'low', gaps: [{ at: 0.5, width: 120 }] },
+    { id: 'pipe-w', path: [[-SQ, -PIPE], [-SQ, PIPE]], cover: 'low', gaps: [{ at: 0.5, width: 120 }] },
+    { id: 'pipe-e', path: [[SQ, -PIPE], [SQ, PIPE]], cover: 'low', gaps: [{ at: 0.5, width: 120 }] },
   ],
   decals: [
     { id: 'arm-n', kind: 'road', path: [[0, -SQ], [0, -0.82]], width: 120 },

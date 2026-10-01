@@ -214,6 +214,11 @@ export interface RunConfig {
    */
   areaId?: AtlasAreaId;
   seed: number;
+  /**
+   * Seed of the layout's flow zones (conveyor directions and reversal schedule, src/data/layouts/flow.ts). The server draws it per map
+   * instance independently of `seed` and ships it in ZoneInfo.flowSeed (the client never learns `seed`); absent = derived from `seed`.
+   */
+  flowSeed?: number;
   theme: Theme;
   mapName: string;
   tier: number;
@@ -421,6 +426,12 @@ export type PropKind =
   | 'vat' | 'bellows' | 'altar' | 'sarcophagus' | 'choirStall' | 'ribArch' | 'iceColumn'
   | 'crate' | 'chainPost' | 'hoist' | 'gate' | 'weaponRack' | 'obelisk' | 'statue';
 
+/**
+ * How a solid prop treats straight-flying shots (src/data/propCover.ts): tall = stops them, low = they fly over it,
+ * none = nothing. Lobs and nova rings always fly over. Walking is blocked by any prop with radius > 0.
+ */
+export type PropCover = 'tall' | 'low' | 'none';
+
 export interface PropView {
   id: number;
   kind: PropKind;
@@ -430,6 +441,8 @@ export interface PropView {
   state: number;
   variant: number;            // visual variant index
   interactive: boolean;       // clickable in the hideout (mapDevice, stash, merchant)
+  /** Only when it differs from the kind's default (src/data/propCover.ts): a layout's per-landmark / wall override. */
+  cover?: PropCover;
 }
 
 export type RunPhase = 'hideout' | 'tell' | 'fight' | 'boss' | 'cleared' | 'failed';
@@ -461,6 +474,8 @@ export interface WorldView {
   theme: Theme;
   /** The Atlas area of a map (the presenter draws that area's layout decals and lights from it); absent in hideouts. */
   areaId?: AtlasAreaId;
+  /** Flow-zone seed of the area's layout (the sim's own view, or ZoneInfo.flowSeed on a client): presenter and prediction derive belts from it. */
+  flowSeed?: number;
   /** Every player in the instance (dead players stay until removed). Order is stable by join. */
   players: PlayerView[];
   monsters: MonsterStoreView;
@@ -493,8 +508,8 @@ export type SimEvent =
   | { t: 'debuff'; playerId: number; debuff: PlayerDebuff; stacks: number; x: number; y: number }
   /** Debuffs removed by a flask / death. */
   | { t: 'cleanse'; playerId: number; debuffs: PlayerDebuff[]; x: number; y: number }
-  /** A shieldbearer blocked a player projectile from the front. */
-  | { t: 'blocked'; x: number; y: number }
+  /** A shieldbearer blocked a player projectile from the front, or (`cover`) a tall prop stopped a straight shot. */
+  | { t: 'blocked'; x: number; y: number; cover?: boolean }
   /** A chain hook pulled a player toward (toX, toY). */
   | { t: 'pull'; playerId: number; fromX: number; fromY: number; toX: number; toY: number }
   | { t: 'monsterSpawn'; kind: MonsterKind; rarity: number; x: number; y: number }

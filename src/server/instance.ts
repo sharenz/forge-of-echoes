@@ -16,6 +16,7 @@
 // drops (DropSpec.owner 0) that players put on the floor. Their tokens share the instance's token space
 // with instanced loot; hooks.tryPickup hands a public token to whoever clicked it (host.pickupPublic).
 // They expire (the Game's maintenance calls expireGroundItems) and are lost with the instance (logged).
+import { randomInt } from 'node:crypto';
 import type { Theme } from '../contracts/content';
 import type { RunSetup } from '../contracts/game';
 import type { Item, MapItem } from '../contracts/items';
@@ -27,6 +28,7 @@ import type {
   DropSpec, DropTone, KillLootContext, PlayerView, PropView, RunHooks, SimOutcome, SimRun,
 } from '../contracts/sim';
 import type { Rng } from '../contracts/rng';
+import { coverOf } from '../data/propCover';
 import { hideoutSeed, redactSetupForClient, rules } from '../game';
 import { createSnapshotEncoder, encodeMessage } from '../net';
 import type { NetSnapshotEncoder } from '../net';
@@ -87,7 +89,10 @@ export interface GroundItem {
 }
 
 function plainProp(p: PropView): PropView {
-  return { id: p.id, kind: p.kind, x: p.x, y: p.y, radius: p.radius, state: p.state, variant: p.variant, interactive: p.interactive };
+  const out: PropView = { id: p.id, kind: p.kind, x: p.x, y: p.y, radius: p.radius, state: p.state, variant: p.variant, interactive: p.interactive };
+  // Cover travels only when a layout overrode the kind's default (src/data/propCover.ts).
+  if (p.cover !== undefined && p.cover !== coverOf(p.kind, p.radius)) out.cover = p.cover;
+  return out;
 }
 
 export abstract class Instance {
@@ -131,6 +136,9 @@ export abstract class Instance {
     const config = rules.buildRunConfig(setup, hooks);
     // Every hideout gets its owner's own decor layout (stable across restarts).
     if (!setup) config.seed = hideoutSeed(ownerId);
+    // Flow zones (conveyor belts): their directions come from a per-instance draw that is not the run seed (the client never learns
+    // that one), sent to clients in ZoneInfo.flowSeed. A restored map simply gets new belts.
+    else config.flowSeed = randomInt(0x100000000);
     this.run = createRun(config);
     this.emptySince = now;
   }
@@ -444,6 +452,7 @@ export abstract class Instance {
       props: this.run.view.props.map(plainProp),
       setup: this.setup ? redactSetupForClient(this.setup) : null,
       portal: this.host.zonePortal(this),
+      ...(cfg.flowSeed !== undefined ? { flowSeed: cfg.flowSeed } : {}),
     };
   }
 

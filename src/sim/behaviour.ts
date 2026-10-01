@@ -3,6 +3,7 @@ import type { PlayerDebuff } from '../contracts/bestiary';
 import { MONSTER_KINDS } from '../contracts/content';
 import { MONSTER_ANIM, type MonsterAnimCode, type RootSource } from '../contracts/sim';
 import { hitPlayer } from './combat';
+import { coverBlocked, insideCover } from './cover';
 import { ATTACKER_IMMUNITY, DT, EMPOWER_BONUS, PLAYER_RADIUS, PROJECTILE_SCALING } from './constants';
 import { TAU } from './math';
 import { projSpec, spawnProjectile } from './projectiles';
@@ -159,8 +160,10 @@ export function fireHostileFrom(
   const s = projSpec;
   s.kind = kind;
   s.hostile = true;
-  s.x = x;
-  s.y = y;
+  // A muzzle inside a tall prop's footprint (a shooter pressed against a wall) falls back to the body's centre, which is always clear.
+  const inside = insideCover(w.propGrid, x, y);
+  s.x = inside ? m.x[i] : x;
+  s.y = inside ? m.y[i] : y;
   s.angle = angle;
   s.speed = speed;
   s.range = range;
@@ -175,6 +178,16 @@ export function fireHostileFrom(
   const slot = spawnProjectile(w, s, flight);
   if (slot >= 0) w.projectiles.src[slot] = m.id[i];
   return slot;
+}
+
+/**
+ * Whether monster `i` has a clear straight shot at (tx, ty) for a projectile of radius `radius`: no tall prop between its body and
+ * the target. Ranged brains hold their volley while this is false and close in (the nav flow field takes them round the wall)
+ * instead of spending shots on scenery. Lobs and boss patterns never ask.
+ */
+export function shotClear(w: World, i: number, tx: number, ty: number, radius: number): boolean {
+  const m = w.monsters;
+  return !coverBlocked(w, m.x[i], m.y[i], tx, ty, radius);
 }
 
 /** Where a monster's projectiles leave its body (distance from its centre). */

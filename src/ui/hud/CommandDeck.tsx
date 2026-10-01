@@ -2,7 +2,13 @@
 // Everything here reads hud slices so the ~15 Hz updates only touch what changed.
 import type { JSX } from 'preact';
 import { BELT_SLOTS, LOADOUT_SLOTS } from '../../contracts/items';
-import type { HudFlask, HudSlot } from '../../contracts/ui';
+import type { HudFlask, HudSlot, HudState, UiState } from '../../contracts/ui';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { mapTreeFreePoints } from '../../game/progression/map-tree';
+import { gainedKinds, pointEntries, totalPoints, type PointEntry, type PointKind, type PointsInput } from '../lib/points';
+import { useMotion } from '../atlas/motion';
+import { EMPTY_FOCUS, LOW_LIFE } from '../lib/globe-fx';
+import { GlobeCanvas } from '../lib/globe-render';
 import { PixelIcon, cx } from '../components/common';
 import { useLocal } from '../local';
 import { counterplay } from '../lib/debuffs';
@@ -13,6 +19,7 @@ import { shallowEqual, useStore, useUi } from '../store';
 
 function Globe({ kind }: { kind: 'life' | 'focus' }) {
   const local = useLocal();
+  const { calm } = useMotion();
   const v = useUi(
     (s) =>
       s.hud
@@ -22,17 +29,55 @@ function Globe({ kind }: { kind: 'life' | 'focus' }) {
         : { cur: 0, max: 0, ward: 0 },
     shallowEqual,
   );
+  const debuffs = useUi((s) => s.hud?.debuffs, debuffsEq);
   const fill = fraction(v.cur, v.max);
-  const low = kind === 'life' && fill < 0.3 && v.max > 0;
+  const low = kind === 'life' && fill < LOW_LIFE && v.max > 0 && v.cur > 0;
+  const empty = kind === 'focus' && v.max > 0 && fill <= EMPTY_FOCUS;
+  const root = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const engine = useRef<GlobeCanvas | null>(null);
+
+  // One painter per globe: sized from the CSS box (the height tiers change --globe), paused while the tab is hidden.
+  useEffect(() => {
+    const el = canvas.current;
+    const host = root.current;
+    if (!el || !host) return;
+    const g = new GlobeCanvas(el, kind, (glow) => host.style.setProperty('--glow', glow.toFixed(2)));
+    engine.current = g;
+    g.resize(host.clientWidth || 108);
+    g.setInput(fillRef.current, debuffsRef.current, calmRef.current);
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { g.resize(host.clientWidth || 108); g.wake(); }) : null;
+    ro?.observe(host);
+    const vis = (): void => (document.hidden ? g.stop() : g.wake());
+    document.addEventListener('visibilitychange', vis);
+    return () => {
+      document.removeEventListener('visibilitychange', vis);
+      ro?.disconnect();
+      g.stop();
+      engine.current = null;
+    };
+  }, [kind]);
+  const fillRef = useRef(fill);
+  const debuffsRef = useRef(debuffs);
+  const calmRef = useRef(calm);
+  fillRef.current = fill;
+  debuffsRef.current = debuffs;
+  calmRef.current = calm;
+  useEffect(() => engine.current?.setInput(fill, debuffs, calm), [fill, debuffs, calm]);
+
+  const label = kind === 'life' ? 'Life' : 'Focus';
   return (
     <div
-      class={cx('fe-globe', `fe-globe--${kind}`, low && 'fe-globe--low', v.ward > 0 && 'fe-globe--warded')}
+      ref={root}
+      class={cx('fe-globe', `fe-globe--${kind}`, low && 'fe-globe--low', empty && 'fe-globe--empty', v.ward > 0 && 'fe-globe--warded', calm && 'fe-globe--calm')}
       style={{ '--fill': `${(fill * 100).toFixed(1)}%`, '--ward': v.ward.toFixed(3) } as unknown as JSX.CSSProperties}
+      role="img"
+      aria-label={`${label} ${formatInt(v.cur)} of ${formatInt(v.max)}${low ? ', low' : empty ? ', empty' : ''}`}
       onPointerEnter={(e) =>
         local.showTooltip(
           {
             kind: 'text',
-            title: kind === 'life' ? 'Life' : 'Focus',
+            title: label,
             lines: [
               `${formatInt(v.cur)} / ${formatInt(v.max)}`,
               ...(v.ward > 0 ? [`Cinder Ward: ${Math.round(v.ward * 100)}% remaining`] : []),
@@ -46,10 +91,7 @@ function Globe({ kind }: { kind: 'life' | 'focus' }) {
     >
       <div class="fe-globe__rim" />
       <div class="fe-globe__glass">
-        <div class="fe-globe__liquid" />
-        <div class="fe-globe__void" />
-        <div class="fe-globe__void fe-globe__void--b" />
-        <div class="fe-globe__shine" />
+        <canvas ref={canvas} class="fe-globe__canvas" width={36} height={36} aria-hidden="true" />
       </div>
       {kind === 'life' && <div class="fe-globe__ward" />}
       <div class="fe-globe__text">
@@ -58,6 +100,12 @@ function Globe({ kind }: { kind: 'life' | 'focus' }) {
       </div>
     </div>
   );
+}
+
+function debuffsEq(a: HudState['debuffs'] | undefined, b: HudState['debuffs'] | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((d, i) => d.id === b[i].id);
 }
 
 function SkillSlot({ index }: { index: number }) {
@@ -174,9 +222,81 @@ function FlaskSlot({ index }: { index: number }) {
   );
 }
 
+/** What the HUD needs to know about unspent points; recomputed from the character (so it is right after a level-up, a spend, a reconnect and a character load). */
+function pointsOf(s: UiState): PointsInput {
+  const ch = s.character;
+  if (!ch) return { attribute: 0, skill: 0, atlas: 0, inHideout: false };
+  return {
+    attribute: ch.unspentAttributePoints ?? 0,
+    skill: ch.unspentSkillPoints ?? 0,
+    atlas: mapTreeFreePoints(ch.atlas),
+    inHideout: s.zone !== 'map',
+  };
+}
+
+const POINT_TITLE: Record<PointKind, string> = { attribute: 'Attribute points', skill: 'Skill points', atlas: 'Atlas tree points' };
+
+/** Badges on the plate for everything you can spend: they pulse, open the right panel and vanish at zero. */
+function PointBadges() {
+  const store = useStore();
+  const local = useLocal();
+  const { calm } = useMotion();
+  const id = useUi((s) => s.character?.id ?? null);
+  const pts = useUi(pointsOf, shallowEqual);
+  const open = useUi((s) => s.openPanels, shallowEqual);
+  const prev = useRef<{ id: string | null; pts: PointsInput } | null>(null);
+  const [gain, setGain] = useState<{ kinds: PointKind[]; n: number } | null>(null);
+
+  // A rise in a count after the first look (a level-up, an Atlas point earned) plays the flourish once.
+  useEffect(() => {
+    const before = prev.current && prev.current.id === id ? prev.current.pts : null;
+    prev.current = { id, pts };
+    const kinds = gainedKinds(before, pts);
+    if (!kinds.length) return;
+    setGain((g) => ({ kinds, n: (g?.n ?? 0) + 1 }));
+    const t = setTimeout(() => setGain(null), 1900);
+    return () => clearTimeout(t);
+  }, [id, pts.attribute, pts.skill, pts.atlas]);
+
+  const entries = pointEntries(pts);
+  if (!entries.length) return null;
+  const chip = (e: PointEntry) => (
+    <button
+      key={e.kind}
+      type="button"
+      class={cx('fe-pbadge__chip', `fe-pbadge__chip--${e.kind}`, gain?.kinds.includes(e.kind) && 'fe-pbadge__chip--gain', calm && 'fe-pbadge__chip--calm')}
+      data-gain={gain?.kinds.includes(e.kind) ? gain.n : undefined}
+      aria-label={`${e.label}. Opens the ${e.panel === 'character' ? 'Character' : e.panel === 'skills' ? 'Skills' : 'Cartography Table'} panel`}
+      onPointerEnter={(ev) => local.showTooltip({ kind: 'text', title: POINT_TITLE[e.kind], lines: [e.label], tone: 'good' }, ev.currentTarget, 'above')}
+      onPointerLeave={() => local.hideTooltip()}
+      onClick={() => {
+        local.hideTooltip();
+        store.actions.uiSound(open.includes(e.panel) ? 'close' : 'open');
+        store.actions.togglePanel(e.panel);
+      }}
+    >
+      <span class="fe-pbadge__icon" aria-hidden="true" />
+      <span class="fe-pbadge__count ui-type-caption">{e.count}</span>
+      {e.key && <span class="fe-pbadge__key ui-type-caption" aria-hidden="true">{e.key}</span>}
+      <span class="fe-pbadge__spark fe-pbadge__spark--a" aria-hidden="true" />
+      <span class="fe-pbadge__spark fe-pbadge__spark--b" aria-hidden="true" />
+      <span class="fe-pbadge__spark fe-pbadge__spark--c" aria-hidden="true" />
+    </button>
+  );
+  return (
+    <div class="fe-pbadge" role="group" aria-label="Points to spend">
+      <div class="fe-pbadge__side fe-pbadge__side--l">{entries.filter((e) => e.kind === 'attribute').map(chip)}</div>
+      <div class="fe-pbadge__gap" />
+      <div class="fe-pbadge__side fe-pbadge__side--r">{entries.filter((e) => e.kind !== 'attribute').map(chip)}</div>
+    </div>
+  );
+}
+
 function XpBar() {
   const local = useLocal();
   const x = useUi((s) => (s.hud ? { level: s.hud.level, xp: s.hud.xp, next: s.hud.xpToNext } : null), shallowEqual);
+  const spend = useUi((s) => totalPoints(pointsOf(s)) > 0);
+  const { calm } = useMotion();
   if (!x) return null;
   const f = fraction(x.xp, x.next);
   return (
@@ -199,7 +319,10 @@ function XpBar() {
         <div class="fe-xp__fill" style={{ width: `${(f * 100).toFixed(2)}%` }} />
         <div class="fe-xp__ticks" />
       </div>
-      <div class="fe-xp__level">{x.level}</div>
+      <div class="fe-xp__level">
+        {x.level}
+        {spend && <span class={cx('fe-xp__plus', calm && 'fe-xp__plus--calm')} aria-hidden="true">+</span>}
+      </div>
     </div>
   );
 }
@@ -211,6 +334,7 @@ export function CommandDeck() {
     <div class="fe-deck fe-solid">
       <Globe kind="life" />
       <div class="fe-deck__plate">
+        <PointBadges />
         <XpBar />
         <div class="fe-deck__row">
           <div class="fe-deck__flasks">

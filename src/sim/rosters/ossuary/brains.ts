@@ -5,6 +5,7 @@ import {
   DAMAGE_INDEX, DT, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, aimAtPlayer, attackEvent, byLevel, extraProjectiles, faceTarget, fireHostile, hitPlayer,
   levelExtraShots, monsterDamage, moveAlong, registerAreaEffect, setAnim, spawnArea, steer, stop, toChase, wander, type Area,
   type PlayerState, type World,
+  shotClear,
 } from '../api';
 import { markerDropper } from '../pressure';
 import { SHADE, WEAVER, WEAVER_MARK, WISP } from './tuning';
@@ -120,13 +121,17 @@ export function brainWeaver(w: World, i: number, t: PlayerState | null, dx: numb
     wander(w, i);
     return;
   }
-  if (d < WEAVER.near) moveAlong(w, i, -dx, -dy, 1);
+  // Tall cover between it and its prey: no web into a wall; it closes in (the nav field routes it round) until the line opens.
+  const ready = m.attackCd[i] <= 0 && d < WEAVER.fireRange;
+  const clear = !ready || shotClear(w, i, t.x, t.y, WEAVER.radius);
+  if (!clear) steer(w, i, dx, dy, d, 1);
+  else if (d < WEAVER.near) moveAlong(w, i, -dx, -dy, 1);
   else if (d > WEAVER.far) steer(w, i, dx, dy, d, 1);
   else {
     const side = m.offsetAngle[i] > Math.PI ? 1 : -1;
     moveAlong(w, i, -dy * side, dx * side, 0.4);
   }
-  if (m.attackCd[i] <= 0 && d < WEAVER.fireRange) {
+  if (clear && ready) {
     m.state[i] = MSTATE.cast;
     m.stateTime[i] = WEAVER.windup;
     setAnim(w, i, ANIM.windup);

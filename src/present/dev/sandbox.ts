@@ -449,6 +449,7 @@ function createNetPipe(): NetPipe {
     instanceId: 'sandbox', kind: hideout ? 'hideout' : 'map', ownerCharacterId: 'c1', ownerName: NAMES[0], theme: run.view.theme,
     arenaRadius: run.view.arenaRadius, mapName: config.mapName, tier: config.tier, localPlayerId: localId,
     props: run.view.props.map((p) => ({ ...p })), setup, portal: null,
+    ...(run.view.flowSeed !== undefined ? { flowSeed: run.view.flowSeed } : {}),
   };
   world.setZone(zone);
   timeline.setLocalPlayer(localId);

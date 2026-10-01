@@ -98,6 +98,8 @@ export interface SolidCircle {
   x: number;
   y: number;
   radius: number;
+  /** Tall cover: stops straight-flying projectiles (src/sim/cover.ts). */
+  tall?: boolean;
 }
 
 export class PropGrid {
@@ -107,6 +109,8 @@ export class PropGrid {
   private readonly cols: number;
   private cells: SolidCircle[][];
   private readonly pad: number;
+  /** How many tall-cover props were inserted (0 = shots never need a cover scan). */
+  tallCount = 0;
 
   /** `pad` = largest radius of anything that collides with props. */
   constructor(halfExtent: number, cellSize: number, pad: number) {
@@ -120,6 +124,7 @@ export class PropGrid {
   }
 
   clear(): void {
+    this.tallCount = 0;
     this.cells = [];
     for (let i = 0; i < this.cols * this.cols; i++) this.cells.push([]);
   }
@@ -130,6 +135,7 @@ export class PropGrid {
 
   insert(p: SolidCircle): void {
     if (p.radius <= 0) return;
+    if (p.tall) this.tallCount++;
     const reach = p.radius + this.pad;
     const c0 = this.col(p.x - reach);
     const c1 = this.col(p.x + reach);

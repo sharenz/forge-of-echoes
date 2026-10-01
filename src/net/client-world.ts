@@ -46,6 +46,7 @@ import type { ClientWorld } from '../contracts/net';
 import { ByteReader, StringInterner } from './bytes';
 import { SnapshotClock } from './clock';
 import { cloneMapEvents } from './map-event-codec';
+import { flowFieldFor } from '../data/layouts';
 import { CHILL_CAST_FACTOR, LocalPredictor, createPredictionEnv } from './prediction';
 import type { PredictionEnv, PredictionHints } from './prediction';
 import { DYNAMIC_PROP_KINDS } from './protocol';
@@ -285,6 +286,8 @@ function copyPropFields(src: PropView, dst: PropView): void {
   dst.state = src.state;
   dst.variant = src.variant;
   dst.interactive = src.interactive;
+  if (src.cover !== undefined) dst.cover = src.cover;
+  else delete dst.cover;
 }
 
 export function createClientWorld(): NetClientWorld {
@@ -1252,6 +1255,9 @@ export function createClientWorld(): NetClientWorld {
     view.arenaRadius = zone.arenaRadius;
     // The Atlas area travels inside the run setup, so the client can draw that area's layout decals without a wire change.
     view.areaId = zone.setup?.atlasAreaId;
+    // Conveyor belts: directions and reversals derive from the server's per-instance flow seed (ZoneInfo.flowSeed; the run seed is never sent).
+    view.flowSeed = zone.flowSeed;
+    env.flows = zone.kind === 'map' ? flowFieldFor(view.areaId, zone.arenaRadius, zone.flowSeed ?? 0) : null;
     env.arenaRadius = zone.arenaRadius;
     zoneProps = zone.props.map((p) => ({ ...p }));
     propObjs.clear();

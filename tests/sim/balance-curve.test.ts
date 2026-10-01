@@ -46,7 +46,9 @@ function clears(gear: 'fair' | 'strong', monsterLevel: number, characterLevel: n
 describe('monster level curve and level gap (sim bot)', () => {
   it('on-level maps are clearable: fair gear at map level 16, well-built gear rushes map level 22', () => {
     expect(clears('fair', 16, 16), 'fair gear, ML16 (Tier 3) at level 16').toBeGreaterThanOrEqual(3);
-    expect(clears('strong', 22, 24), 'strong gear, ML22 (Tier 4) at level 24').toBe(SEEDS.length);
+    // Cover (tall props stop the bot's bolts too, and it does not plan for them) costs it a few percent of clear time on this
+    // scattered-pillar map: one seed of four can now fall at the boss. Three of four is still "rushes".
+    expect(clears('strong', 22, 24), 'strong gear, ML22 (Tier 4) at level 24').toBeGreaterThanOrEqual(SEEDS.length - 1);
   }, 120_000);
 
   it('a level-22 character with fair gear cannot handle map level 28 (Tier 5), nor level 34', () => {

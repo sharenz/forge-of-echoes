@@ -5,7 +5,8 @@
 // PropView.interactive marks what a click uses: the hideout's map device, stash, merchant and anvil
 // (the Crafting Bench), plus the hideout map portal while it is open and the map's return portal.
 import type { Theme } from '../contracts/content';
-import type { PropKind } from '../contracts/sim';
+import type { PropCover, PropKind } from '../contracts/sim';
+import { coverOf } from '../data/propCover';
 import { livingIds } from './combat';
 import {
   CHEST_TOUCH_PAD, DT, PLAYER_RADIUS, PORTAL_DWELL, PORTAL_ENTER_RADIUS, PORTAL_LATCH_RADIUS, RETURN_PORTAL_CLEARANCE,
@@ -18,8 +19,10 @@ import { GOLDEN_ANGLE, TAU } from './math';
 import type { PlayerState, Prop, World } from './world';
 
 export function addProp(
-  w: World, kind: PropKind, x: number, y: number, radius: number, opts: { variant?: number; interactive?: boolean; state?: number } = {},
+  w: World, kind: PropKind, x: number, y: number, radius: number,
+  opts: { variant?: number; interactive?: boolean; state?: number; cover?: PropCover } = {},
 ): Prop {
+  const cover = coverOf(kind, radius, opts.cover);
   const prop: Prop = {
     id: w.nextPropId++,
     kind,
@@ -30,6 +33,8 @@ export function addProp(
     variant: opts.variant ?? 0,
     interactive: opts.interactive ?? false,
     solid: radius > 0,
+    cover,
+    tall: cover === 'tall',
   };
   w.props.push(prop);
   if (prop.solid) w.propGrid.insert(prop);

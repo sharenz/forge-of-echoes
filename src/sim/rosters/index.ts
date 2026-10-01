@@ -107,6 +107,11 @@
 //   - A teleport / leap must never move a monster off a lane it is telegraphing or dashing (Varkus's
 //     Execution Mark skips the leap then, and no charge starts while a mark is pending).
 //   - Shots with an aim line leave from the line's start (fireHostileFrom), not the shoved body.
+//   - Cover: tall props (src/data/propCover.ts) stop every straight projectile (lobs fly over). A ranged brain asks
+//     `shotClear(w, i, tx, ty, radius)` before it starts a volley and, when it is false, closes in with `steer` (the nav
+//     field routes it round the wall) instead of firing; an aim line is drawn only if the locked heading reaches the target
+//     (`coverClip(w, x, y, angle, length, radius)` = how far it flies clear) and is clipped to that length. Boss patterns
+//     skip the gate (their shots are still stopped by walls).
 //
 // Frontal shields (MonsterDef.block)
 //   While MFLAG.guard is set (at spawn; `setGuard(w, i, on)`), player projectiles travelling into its

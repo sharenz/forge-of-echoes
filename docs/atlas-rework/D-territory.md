@@ -677,6 +677,27 @@ colliders are circles only; no new collision primitive).
   Walls and corners never trapped a player; the "stuck" bot runs were steering (see `tests/sim/nav.ts`: walk round walls, hysteresis; the sweep's
   event policies walk through it too).
 
+- **Flow zones (conveyor belts; added with the Iron March / Last Kiln mechanic).** `AreaLayout.flows?: LayoutFlow[]` (schema.ts, geometry and schedule in
+  `src/data/layouts/flow.ts`) is a real movement mechanic, not decoration. One format for belts, currents and rivers:
+  `{ id, shape: 'band' | 'annulus', path/width (band: a polyline, flat ends, flows first -> last point) or at/r0/r1 (annulus: clockwise at sense 1),
+  speed (u/s), sense: 1 | -1 | 'random', group?, strength?: { player, monster, heavy, boss, air } (defaults 1, 1, 0.5, 0.5, 0), feather? (8 u),
+  reverse?: { mode: 'pingpong' | 'random', every: [min, max] s, telegraph? (2 s), ramp? (1 s) } }`.
+  Static = `sense: 1`; random direction = `sense: 'random'` (zones sharing a `group` always include both directions); reversing = `reverse`. The sim adds
+  `speed x strength x scale(t)` to every player (`movePlayerDrifted`, same expression as the sim's player update) and monster (`ai.ts integrate`), where
+  `scale(t)` runs -1..1 and passes through 0 in every reversal (telegraph: eased deceleration, ramp: eased acceleration), so velocity is continuous.
+  The schedule is a pure function of the flow seed and the sim clock: `RunConfig.flowSeed` (server draw per map instance, independent of the run seed which
+  clients never see; absent = derived from the seed) -> `ZoneInfo.flowSeed` (PROTOCOL_VERSION 23, optional field, no snapshot change) -> `WorldView.flowSeed`.
+  The client builds the same field from `WorldView.areaId` + arena radius + flow seed, so prediction replays belts and reversals exactly; the presenter draws
+  the chevrons from it (scrolled by the live velocity, flicker in the telegraph, dust on riders, prefers-reduced-motion = no scroll) and the sound director
+  voices a reversal from it. A reversal is not gated on boss roars or event telegraphs (the schedule must be state-independent for prediction).
+  Monster navigation: the stall rule measures movement net of belt drift (`navDrift`), `trackStuck` ignores it, and monsters are carried at most 60% of
+  their own speed so they always make headway.
+  **Validator check 9** (`layout-validate.ts checkFlows`): zones inside 0.92 R and sane (speed <= 66 u/s, reversal gaps >= telegraph + ramp + 4); a random
+  group never runs one way (32 sample seeds); the landing clearing and boss stage stand on no flow; and for both directions of every zone and the
+  reversal scales 1 / 0.5 / 0.2, a body carried passively for 3 s ends within 3 s (Dijkstra at net speed against the drift) of ground off that belt.
+  Candidate areas for later flow zones: Frozen Passage / Winter Throne (frost currents under the ice lakes), Furnace Yard (a slag channel), Shattered
+  Forge (a lava rill), Sunken/crypt areas with a sung stream, Eternal Arena (a rotating sand ring), Gilded Vault (a gold-road tram).
+
 ### 10.6 Per-theme art kit
 | Theme | Floor bed | Signature props (existing + new) | Decals / light |
 |---|---|---|---|
@@ -684,7 +705,7 @@ colliders are circles only; no new collision primitive).
 | Cinder Chapel | charcoal flagstone | pillar, brazier, banner, **altar**, candle | ember glyph circles, stained light shafts |
 | Rimed Ossuary | frost bone tile | crystal, bones, **ribArch**, **iceColumn** | blue pools, frost rims |
 | Choral Crypt | violet stone | standing stone, **sarcophagus**, **choirStall**, bones | sung rings, window light |
-| Chainworks | rusted grates | pillar, brazier, **crate**, **chainPost**, **hoist** | hazard stripes, conveyor bands |
+| Chainworks | rusted grates | pillar, brazier, **crate**, **chainPost**, **hoist** | hazard stripes, conveyor belts (flow zones, a mechanic: 10.5a) |
 | Iron Coliseum | sand over iron plates | pillar, brazier, **gate**, **weaponRack**, **obelisk**/**statue** | sand rings, torch pools |
 
 ### 10.7 The 25 layouts
@@ -781,11 +802,11 @@ what defines the place (every layout also carries the 10.3 minimums). *Reads as*
 
 **CHAINWORKS (R 700 base)**
 
-19. **Iron March (T5, R 700), "Lines".** Five W-E **conveyor lanes** (90 u wide, separated by crate-stack rails with cross-gaps every
+19. **Iron March (T5, R 700), "Lines".** Five W-E **conveyor lanes** (90 u wide, separated by crate-stack rails with cross-gaps every **As built: the lanes are flow zones (10.5a): 48 u/s, directions drawn per run (at least one lane each way), reversing every 28-48 s.**
     0.35 R); landing at the west dock; boss at the east loading gate (`arrive:'gate'`). Hounds run the lanes. Caravan road = the
     centre lane. Pit of Echoes entrance is a hatch decal at the south-west (decor). *Reads as:* the lanes. *Weak spot:* lane
     lock-in; Stalker hides behind crate rails (excellent cover).
-20. **The Last Kiln (T13, R 805), "Kiln".** A huge central **kiln block** (crate ring at r 0.26, hoist landmark, chimney decal) with a
+20. **The Last Kiln (T13, R 805), "Kiln".** A huge central **kiln block** (crate ring at r 0.26, hoist landmark, chimney decal) with a **As built: the annulus is one flow zone: 48 u/s, clockwise or counter-clockwise per run, reversing every 30-50 s.**
     150 u conveyor annulus around it; four radial gantries; the boss stands at the kiln door south (`arrive:'shimmer'`).
     Landing on the annulus at west. *Reads as:* the kiln. *Weak spot:* circular kiting dominates; event anchors only on the
     annulus.
@@ -817,6 +838,30 @@ ring, a wheel), one or two hard decisions (which gate, which bridge, which side 
 from a Stalker and a place to be caught. It is *weak* when it offers no decision (open sand, a single funnel) or no cover (Sands,
 Shrines). Each weak one is placed where the loot table or the event ruleset gives it an identity (Sands is T15, Shrine Field is the
 event playground, Vault is the ingredient detour). Reward budgets do not change per layout; layouts change *how* you earn them.
+
+### 10.8 Cover height (props vs shots)
+Solid props block walking; whether they block **shots** is a second property, the cover height: `tall` (stops straight projectiles of
+players and monsters), `low` (shots fly over it) or `none` (radius 0, never solid). One table, `PROP_COVER` in `src/data/propCover.ts`
+(contract type `PropCover`, `PropView.cover` travels only when a layout overrode the kind's default). Defaults: tall = pillar, standingStone, ruinWall,
+vat, hoist, gate, obelisk, statue, sarcophagus, ribArch, iceColumn, mapDevice; low = brazier, rubble, bones, crystal, banner, crate, chainPost, altar,
+bellows, choirStall, weaponRack, anvil, stash, merchant, chest; none = portal, returnPortal.
+- **Layout schema**: optional `cover?: 'tall' | 'low' | 'none'` on a landmark, a cluster (every prop of it) and a wall (the whole run); compiled into
+  `CompiledProp.cover` and applied by `addProp`. Overrides in the 25 layouts: Iron March crate rails and Last Kiln outer ring + gantry rails are `low`;
+  the Last Kiln kiln block, Gilded Vault cages, counting rooms and cash stacks are `tall` crates; the Furnace Yard pipe walls (and the Slag Yard fixture),
+  the Winter Throne dais wall and the Frozen Passage bridge parapets are `low`. Everything else keeps its kind's cover (the Shattered Forge divide, the
+  Heart of the Forge walls, the Glass Sepulchre nave, the Pit of Echoes tiers, the Echo Bastion rampart and the Hollow Ossuary spiral are tall walls).
+- **Shots**: swept segment against tall circles in the `PropGrid` (`src/sim/cover.ts`), no allocation; a prop containing the shot's start is ignored.
+  Lobs, nova rings and ground areas are never blocked; Arc Chain needs a clear line (target and each jump); see GAME_SPEC section 4 for the full list.
+- **Monsters**: shooters hold fire while a tall prop stands between them and their target and walk the nav flow field until the line is clear; aim lines
+  (kit shooters, Iron Crossbowman, Chainmaster hook) are clipped where the wall stops the bolt and a locked heading that hits a wall first is not fired.
+  Boss patterns are not held back (their projectiles are blocked like any other). Stalker pounces are leaps and go over props.
+- **Presenter**: a blocked shot sparks a small impact (`blocked` event with `cover: true`, the `shieldBlock` sample pitched down); an overridden prop is
+  drawn 1.3 x taller (tall) or 0.72 x (low) than its kind's art, with its shadow.
+- **Measured** (fair bot, 25 areas x 3 seeds, plain runs): clears 70/75 with cover off, 70/75 with it on and a bot that ignores walls (avg 4.55 -> 4.84 min),
+  73/75 with the cover-aware bot of `tests/sim/bot.ts` (4.78 min); every area's boss still falls. Shots wasted into walls before reaching the player's
+  position: about 1% of flat hostile shots (`tests/sim-events/layout-cover.test.ts`, `BALANCE=1` for all 25). Old-generator maps (random pillar fields) gain the
+  most cover: the Tier 1-3 ladder (`balance-ladder`) shows Tier 1 unchanged and the lowest-life margin up by about 0.1-0.18 at Tiers 2-3 (flask use down
+  from about 9 to 5 at Tier 3) with clear times about 3% longer; no number was changed (not "clearly easier"), the ladder's margin-spread bound moved 0.35 -> 0.4.
 
 ## 11. UI screens and components to change
 

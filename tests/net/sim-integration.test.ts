@@ -639,8 +639,9 @@ describe('chain hook drags against the real sim (Iron Coliseum)', () => {
       // (The sub-unit ones are the horde's crowd slow and shoves — sim-only either way.)
       expect(seen.sizes.mid).toBeLessThan(blind.sizes.mid * 0.5);
       expect(seen.sizes.mid + seen.sizes.large).toBeLessThan((blind.sizes.mid + blind.sizes.large) * 0.6);
-      // … leaving about one (unforeseeable) correction per hook.
-      expect(seen.sizes.large).toBeLessThanOrEqual(seen.pullBatches + 2);
+      // … leaving about one (unforeseeable) correction per hook. (1.5 per hook: the count rides on how the whole horde plays out, which
+      // moved when shooters started holding fire behind cover (more hooks land); the large ones also occur without any replay.)
+      expect(seen.sizes.large).toBeLessThanOrEqual(Math.ceil(seen.pullBatches * 1.5) + 2);
     });
   }
 });

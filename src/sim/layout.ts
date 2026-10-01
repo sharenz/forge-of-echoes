@@ -14,6 +14,7 @@ import {
   type CompiledZone, type XY,
 } from '../data/layouts/compile';
 import { layoutFor } from '../data/layouts';
+import { buildFlowField, type FlowField } from '../data/layouts/flow';
 import type { AreaLayout, EventAnchorKind, LaneFavour } from '../data/layouts/schema';
 import { PACK_MIN_DISTANCE } from './constants';
 import { resolveProps } from './grid';
@@ -31,6 +32,15 @@ const PACK_PROP_CLEAR = 24;
 export interface LayoutRuntime {
   readonly layout: AreaLayout;
   readonly compiled: CompiledLayout;
+  /** The run's flow zones (directions and reversal schedule), or null when the layout has none (D 10.5a). */
+  readonly flows: FlowField | null;
+}
+
+const FLOW_SEED_SALT = 0xf10a3e5;
+
+/** The flow seed of a run: the server's own draw (RunConfig.flowSeed) or, without one (tests, sandbox), derived from the run seed. */
+export function flowSeedOf(config: { seed: number; flowSeed?: number }): number {
+  return (config.flowSeed ?? hashU32((config.seed ^ FLOW_SEED_SALT) >>> 0)) >>> 0;
 }
 
 /** The layout an area would use (undefined = old generator): the one lookup run.ts makes. */
@@ -41,10 +51,13 @@ export function layoutForConfig(areaId: AtlasAreaId | undefined, mode: 'hideout'
 /** Build the arena from `layout`: props in a fixed order, cosmetic debris, the rim; stores the runtime on the world. */
 export function applyLayout(w: World, layout: AreaLayout): LayoutRuntime {
   const compiled = compileLayout(layout, w.arenaRadius);
-  for (const p of compiled.props) addProp(w, p.kind, p.x, p.y, p.radius, { variant: p.variant });
+  for (const p of compiled.props) addProp(w, p.kind, p.x, p.y, p.radius, { variant: p.variant, cover: p.cover });
   scatterDebris(w, compiled, createRng(hashU32((w.config.seed ^ SCATTER_SALT) >>> 0)));
   edgeRing(w, 46);
-  const rt: LayoutRuntime = { layout, compiled };
+  const flowSeed = flowSeedOf(w.config);
+  const flows = compiled.flows.length > 0 ? buildFlowField(compiled.flows, layout.areaId, flowSeed) : null;
+  if (flows) w.view.flowSeed = flowSeed;
+  const rt: LayoutRuntime = { layout, compiled, flows };
   w.layout = rt;
   return rt;
 }

@@ -25,6 +25,10 @@
 //    correction that slides her back to where it caught her. Samples taken under any of these (or right after one
 //    ended) never feed the learned base speed or cast times, so a sim detail that differs costs a small blended
 //    correction, never a skewed estimate.
+//  • Conveyor belts (layout flow zones, D 10.5a): the sim adds the zone's drift to her own velocity (movePlayerDrifted), evaluated
+//    at her feet before the step with the field fixed at the step's tick (flowStep(field, tick × SIM_DT)). The client builds the
+//    same field from the area layout and ZoneInfo.flowSeed, so belts, their per-run directions and their reversals are predicted
+//    exactly. The drift is not part of her speed: rec.vx/vy (and so the learned base speed) exclude it.
 //  • A chain hook's drag (the sim's pullPlayer): once her 'pull' event arrives (notePull, right after the snapshot of
 //    its tick), its start tick is matched against the authoritative record and the drag replaces her own movement for
 //    its PULL_STEPS ticks exactly as the sim lerps it (resolvePlayerAt of from→to at 1 − pullTime / pullTotal). The
@@ -37,8 +41,10 @@ import type { AreaView, PlayerAnim, PlayerDebuffView, PropView } from '../contra
 // The movement module alone (not '../sim'): keeps the rest of the simulation out of the client bundle. It is where
 // the sim keeps every rule a predicting client must share (movePlayer, the cast / debuff / ground slows, the chill).
 import {
-  CAST_SLOW, PLAYER_CHILL_SLOW, areaSlowAt, combineSlow, debuffMoveSlow, movePlayer, playerSlow, predictionSlow, resolvePlayerAt,
+  CAST_SLOW, PLAYER_CHILL_SLOW, areaSlowAt, combineSlow, debuffMoveSlow, movePlayerDrifted, playerFlowDrift, playerSlow, predictionSlow,
+  resolvePlayerAt,
 } from '../sim/movement';
+import { flowStep, type FlowField } from '../data/layouts/flow';
 // Plain numbers of the sim (a leaf module the movement rules import too): shared, never copied.
 import { PULL_TIME, WARD_DEBUFF_RATE } from '../sim/constants';
 import { TICK_MS } from './clock';
@@ -94,10 +100,16 @@ export interface PredictionEnv {
    * kind/x/y/radius are read.
    */
   areas: Pick<AreaView, 'kind' | 'x' | 'y' | 'radius'>[];
+  /**
+   * The layout's flow zones (conveyor belts) of this run, built from the area, the arena radius and ZoneInfo.flowSeed (client-world
+   * setZone), or null. Each predicted tick T drifts her by the sim's own playerFlowDrift at her feet with the field fixed at
+   * T x SIM_DT, so a belt (and a reversal) is predicted exactly with no new snapshot field.
+   */
+  flows: FlowField | null;
 }
 
 export function createPredictionEnv(props: readonly PropView[]): PredictionEnv {
-  return { arenaRadius: 0, props, areas: [] };
+  return { arenaRadius: 0, props, areas: [], flows: null };
 }
 
 /** True when (x, y) is inside a tar pool of `areas`, its rim widened by `margin`. */
@@ -635,7 +647,7 @@ export class LocalPredictor {
     return this.count;
   }
 
-  private step(x: number, y: number, moveX: number, moveY: number, slow: number, env: PredictionEnv): { x: number; y: number } {
+  private step(x: number, y: number, moveX: number, moveY: number, slow: number, env: PredictionEnv, tick: number): { x: number; y: number } {
     this.state.x = x;
     this.state.y = y;
     this.move.moveX = moveX;
@@ -645,7 +657,14 @@ export class LocalPredictor {
     p.arenaRadius = env.arenaRadius;
     p.props = env.props;
     p.slow = slow;
-    return movePlayer(this.state, this.move, p, SIM_DT);
+    const flows = env.flows;
+    if (flows) {
+      // The belt under her feet at the start of the step, at the server tick this input lands on (see the module header).
+      flowStep(flows, tick * SIM_DT);
+      const d = playerFlowDrift(flows, x, y);
+      return movePlayerDrifted(this.state, this.move, p, SIM_DT, d.x, d.y);
+    }
+    return movePlayerDrifted(this.state, this.move, p, SIM_DT, 0, 0);
   }
 
   /** Record one input tick and advance the prediction by SIM_DT. */
@@ -690,7 +709,7 @@ export class LocalPredictor {
       this.slow = 1;
       return this.pullPosition(pullStep, env);
     }
-    return this.step(x, y, moveX, moveY, this.slow, env);
+    return this.step(x, y, moveX, moveY, this.slow, env, this.baseTick + this.sinceAuth);
   }
 
   /**

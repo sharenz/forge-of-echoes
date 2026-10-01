@@ -195,6 +195,8 @@ export interface Drop extends DropView {
 
 export interface Prop extends PropView {
   solid: boolean;
+  /** Solid and tall cover: stops straight projectiles (mirrors `cover === 'tall'`; read by the PropGrid scans). */
+  tall: boolean;
 }
 
 export interface Pack {

@@ -21,7 +21,7 @@ const room = (id: string, x0: number, x1: number, door: 'east' | 'west'): AreaLa
   const path = door === 'east'
     ? [u(x1, y0), u(x1, y1), u(x0, y1), u(x0, y0), u(x1, y0)]
     : [u(x0, y0), u(x0, y1), u(x1, y1), u(x1, y0), u(x0, y0)];
-  return { id, path, thickness: 24, prop: 'crate', gaps: [{ at: 130 / 1040, width: 110 }] };
+  return { id, path, thickness: 24, prop: 'crate', cover: 'tall' as const, gaps: [{ at: 130 / 1040, width: 110 }] };
 };
 
 export const GILDED_VAULT: AreaLayout = defineLayout({
@@ -45,15 +45,15 @@ export const GILDED_VAULT: AreaLayout = defineLayout({
     { id: 'trophy-e2', kind: 'obelisk', at: u(470, 100), variant: 1 },
   ],
   clusters: [
-    { id: 'cash-w', pattern: 'line', at: u(-440, -60), params: { length: 120, bearing: 180, count: 3 }, prop: 'crate', variant: 1 },
-    { id: 'cash-e', pattern: 'line', at: u(440, -60), params: { length: 120, bearing: 180, count: 3 }, prop: 'crate', variant: 1 },
+    { id: 'cash-w', pattern: 'line', at: u(-440, -60), params: { length: 120, bearing: 180, count: 3 }, prop: 'crate', cover: 'tall', variant: 1 },
+    { id: 'cash-e', pattern: 'line', at: u(440, -60), params: { length: 120, bearing: 180, count: 3 }, prop: 'crate', cover: 'tall', variant: 1 },
     { id: 'landing-braziers', pattern: 'arc', at: u(0, 540), params: { r: 190, count: 4, a0: 300, a1: 60 }, prop: 'brazier' },
     { id: 'door-braziers', pattern: 'line', at: u(-150, -612), params: { length: 300, bearing: 90, count: 4 }, prop: 'brazier' },
   ],
   walls: [
     // Two rows of cash cages (stacked crates) either side of the aisle, 200 u apart.
-    { id: 'cages-w', path: [u(-112, 360), u(-112, -140)], thickness: 24, prop: 'crate' },
-    { id: 'cages-e', path: [u(112, 360), u(112, -140)], thickness: 24, prop: 'crate' },
+    { id: 'cages-w', path: [u(-112, 360), u(-112, -140)], thickness: 24, prop: 'crate', cover: 'tall' },
+    { id: 'cages-e', path: [u(112, 360), u(112, -140)], thickness: 24, prop: 'crate', cover: 'tall' },
     room('room-w', -490, -290, 'east'),
     room('room-e', 290, 490, 'west'),
   ],

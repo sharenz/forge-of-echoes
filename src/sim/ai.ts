@@ -19,12 +19,15 @@ import { resolveProps } from './grid';
 import { DAMAGE_INDEX, TAU } from './math';
 import { spawnArea } from './areas';
 import { monsterDefs } from './rosters';
-import { navBeginTick, navSteer } from './nav';
+import { navBeginTick, navDrift, navSteer } from './nav';
+import { FLOW_AIR, FLOW_BOSS, FLOW_HEAVY, FLOW_MONSTER, flowOut, flowVelocity } from '../data/layouts/flow';
 import { MFLAG } from './stores';
 import type { PlayerState, World } from './world';
 
 const RETARGET2 = RETARGET_RATIO * RETARGET_RATIO;
 const GHOST = MFLAG.ghost;
+/** A belt never carries a monster faster than this share of its own speed (a slow walker can always gain ground against it). */
+const FLOW_MONSTER_CAP = 0.6;
 
 /** Squared distance to the nearest *present* player from the last pickTarget call (sleep check). */
 let nearestPresentD2 = Infinity;
@@ -384,6 +387,32 @@ function integrate(w: World, i: number, hunting = false): void {
   const y0 = m.y[i];
   let nx = x0 + vx * f * DT + sx;
   let ny = y0 + vy * f * DT + sy;
+  // Conveyor belts (D 10.5a): the ground carries every body but fixtures, ghosts and the dummy (heavy ones and bosses half), on top
+  // of whatever the brain did (a leap or charge keeps its own velocity). Scenery below still stops the sum. Never more than 60% of
+  // the monster's own speed, so a slow walker can always make headway against a belt.
+  let fdx = 0;
+  let fdy = 0;
+  const flows = w.layout?.flows;
+  if (flows && !(m.flags[i] & (MFLAG.unpushable | MFLAG.fixture | MFLAG.frozen))) {
+    const fl = m.flags[i];
+    const cls = fl & GHOST ? FLOW_AIR : fl & MFLAG.boss ? FLOW_BOSS : fl & MFLAG.heavy ? FLOW_HEAVY : FLOW_MONSTER;
+    if (flowVelocity(flows, x0, y0, cls)) {
+      let fvx = flowOut.vx;
+      let fvy = flowOut.vy;
+      const fl2 = fvx * fvx + fvy * fvy;
+      const cap = m.speed[i] * FLOW_MONSTER_CAP;
+      if (fl2 > cap * cap && cap > 0) {
+        const k = cap / Math.sqrt(fl2);
+        fvx *= k;
+        fvy *= k;
+      }
+      fdx = fvx * DT;
+      fdy = fvy * DT;
+      nx += fdx;
+      ny += fdy;
+      navDrift(w, i, fdx, fdy);
+    }
+  }
 
   if (pushable) {
     const kx = m.kbX[i];
@@ -410,7 +439,7 @@ function integrate(w: World, i: number, hunting = false): void {
     const o = resolveProps(w.propGrid, nx, ny, r);
     nx = o.x;
     ny = o.y;
-    if (slider) trackStuck(w, i, o.hit, x0, y0, nx, ny, wishX * f, wishY * f);
+    if (slider) trackStuck(w, i, o.hit, x0 + fdx, y0 + fdy, nx, ny, wishX * f, wishY * f);
   }
   const lim = w.arenaRadius - r;
   const d2 = nx * nx + ny * ny;

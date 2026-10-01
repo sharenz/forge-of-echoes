@@ -8,6 +8,7 @@ import { appendFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { AtlasAreaId } from '../../src/contracts/atlas';
 import { MAP_EVENT_KINDS, type MapEventKind } from '../../src/contracts/map-events';
+import { setCoverEnabled } from '../../src/data/propCover';
 import { overrideLayout, registeredLayouts } from '../../src/data/layouts';
 import { SIM_DT } from '../../src/contracts/sim';
 import { areaRadius, areaTheme } from '../../src/data/layouts/area';
@@ -26,6 +27,10 @@ const kinds = (process.env.LAYOUT_SWEEP_EVENTS?.split(',').filter(Boolean) ?? ['
 const baseline = process.env.LAYOUT_SWEEP_BASELINE === '1';
 /** LAYOUT_SWEEP_NAV=0 plays with monster wall navigation off (before/after comparison of pinned monsters and clear times). */
 if (process.env.LAYOUT_SWEEP_NAV === '0') setNavEnabled(false);
+/** LAYOUT_SWEEP_COVER=0 plays with cover off (every prop flown over: the pre-cover game), for before/after comparisons. */
+if (process.env.LAYOUT_SWEEP_COVER === '0') setCoverEnabled(false);
+/** LAYOUT_SWEEP_FLOW=0 plays with every flow zone (conveyor belt) stripped from the layouts, for before/after comparisons. */
+if (process.env.LAYOUT_SWEEP_FLOW === '0') for (const l of registeredLayouts()) if (l.flows) overrideLayout({ ...l, flows: undefined });
 const areas = (process.env.LAYOUT_SWEEP_AREAS?.split(',').filter(Boolean) ?? registeredLayouts().map((l) => l.areaId)) as AtlasAreaId[];
 
 describe.skipIf(!ON)('layout bot sweep (BALANCE=1)', () => {

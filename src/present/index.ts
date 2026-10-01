@@ -190,7 +190,7 @@ class WorldPresenter implements Presenter {
     this.zoneRadius = world.arenaRadius;
     this.lastTick = world.tick;
     this.ground.build(world.theme, world.arenaRadius);
-    this.layoutArt.build(world.areaId, world.arenaRadius, world.theme);
+    this.layoutArt.build(world.areaId, world.arenaRadius, world.theme, world.flowSeed ?? 0);
     this.fx.clear();
     // Keep running screen flashes: the portal-colour flash of the step through bridges the cut into the new zone.
     this.post.reset();

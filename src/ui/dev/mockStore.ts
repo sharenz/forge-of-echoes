@@ -62,6 +62,11 @@ export interface MockOptions {
   noCharacters?: boolean;
   /** Freeze HUD animation (stable screenshots). */
   still?: boolean;
+  /**
+   * Globe and points showcase (?hud=a,b): lowlife, empty (Focus), full, play (scripted hits, heals and casts), nopoints, points
+   * (6 attribute / 2 skill / Atlas points), atlaspoints. levelUp then also grants the points a real level-up would.
+   */
+  hudFx?: string[];
   /** Put an item on the crafting bench: the rare wand, or ('crafted') the circlet with a bench-crafted affix. */
   bench?: boolean | 'crafted';
   /**
@@ -386,6 +391,8 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
   const rules = withItemLocks(plainRules, offeredNow);
   let ch = buildCharacter(plainRules, opts.specialStash !== false, !!opts.emptyDevice, opts.atlas);
   if (opts.tree) ch = withTree(ch, opts.tree);
+  else if (opts.hudFx?.includes('atlaspoints')) ch = withTree(ch, 'open');
+  if (opts.hudFx?.includes('nopoints')) ch = { ...ch, unspentAttributePoints: 0, unspentSkillPoints: 0 };
   if (opts.workslot) {
     const pick = ch.backpack.entries.find((e) =>
       opts.workslot === 'map'
@@ -622,6 +629,27 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
     return out;
   }
 
+  const fx = new Set(opts.hudFx ?? []);
+  /** Scripted showcase: a hit, a bigger hit, a flask heal, casts and slow regeneration, on a 9 s loop. */
+  function lifeFrac(wave: (p: number, ph: number) => number): number {
+    if (fx.has('lowlife')) return 0.14;
+    if (fx.has('full')) return 1;
+    if (fx.has('play')) {
+      const c = t % 9;
+      return c < 1 ? 0.85 : c < 2.4 ? 0.6 : c < 4 ? 0.34 : c < 4.8 ? 0.2 : c < 7 ? 0.78 : 0.78 + Math.min(0.2, (c - 7) * 0.1);
+    }
+    return 0.55 + 0.35 * wave(2.2, 0);
+  }
+  function focusFrac(wave: (p: number, ph: number) => number): number {
+    if (fx.has('empty')) return 0;
+    if (fx.has('full')) return 1;
+    if (fx.has('play')) {
+      const c = t % 6;
+      return Math.max(0, 0.9 - Math.floor(c / 1.2) * 0.22) + (c % 1.2) * 0.02;
+    }
+    return 0.4 + 0.5 * wave(1.6, 1);
+  }
+
   function hud(): HudState {
     const rt = rules.playerRuntime(ch, runSetup);
     const d = state?.derived ?? rules.deriveStats(ch);
@@ -681,9 +709,9 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       debuffs: opts.dead ? [] : debuffs(),
       zoneOwnerName: zone === 'visit' || zone === 'partymap' ? MIRA.name : ME.name,
       zoneIsOwn: !(zone === 'visit' || zone === 'partymap'),
-      life: opts.dead ? 0 : Math.round(maxLife * (0.55 + 0.35 * wave(2.2, 0))),
+      life: opts.dead ? 0 : Math.round(maxLife * lifeFrac(wave)),
       maxLife,
-      focus: Math.round(maxFocus * (0.4 + 0.5 * wave(1.6, 1))),
+      focus: Math.round(maxFocus * focusFrac(wave)),
       maxFocus,
       wardFraction: Math.max(0, 1 - ((t * 0.12) % 1.8)),
       level: ch.level,
@@ -922,7 +950,13 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       }
     });
   }
-  if (opts.levelUp) later(400, () => set({ levelUpCount: state.levelUpCount + 1 }));
+  if (opts.levelUp) {
+    later(400, () => {
+      const next = { ...ch, level: ch.level + 1, unspentAttributePoints: ch.unspentAttributePoints + 3, unspentSkillPoints: ch.unspentSkillPoints + 1 };
+      ch = next;
+      set({ character: next, derived: derive(), levelUpCount: state.levelUpCount + 1 });
+    });
+  }
 
   // --- Alt tracking (the real client sets altHeld from its input layer) ------------------------------
   const onKey = (e: KeyboardEvent): void => {

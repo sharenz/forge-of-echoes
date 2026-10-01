@@ -18,7 +18,10 @@ import type { PlayerAnim, PlayerDebuffView, PropView, RootSource, SimEvent, Worl
 import type { PlayerDebuff } from '../../src/contracts/bestiary';
 import { createClientWorld, createEventTimeline, createInputQueue, createSnapshotEncoder, heldToMask, moveVector } from '../../src/net';
 import type { EventTimeline, InputQueue, NetClientWorld } from '../../src/net';
-import { CAST_SLOW, PLAYER_CHILL_SLOW, combineSlow, movePlayer, playerSlow, resolvePlayerAt } from '../../src/sim/movement';
+import { CAST_SLOW, PLAYER_CHILL_SLOW, combineSlow, movePlayerDrifted, playerFlowDrift, playerSlow, resolvePlayerAt } from '../../src/sim/movement';
+import type { AtlasAreaId } from '../../src/contracts/atlas';
+import type { RunSetup } from '../../src/contracts/game';
+import { flowFieldFor, flowStep, type FlowField } from '../../src/data/layouts';
 import { PLAYER_RADIUS, PULL_TIME } from '../../src/sim/constants';
 import { makePlayer, makeView, makeZone, setTick } from './fixtures';
 
@@ -54,6 +57,8 @@ export interface HarnessOptions {
   noteEvents?: boolean;
   /** Deliver each events batch before its snapshot instead of right after it (robustness). */
   eventsFirst?: boolean;
+  /** A layout area with flow zones (conveyor belts): the server drifts her with the area's field for `seed`, the client derives it from ZoneInfo. */
+  flow?: { areaId: AtlasAreaId; seed: number };
 }
 
 export interface HarnessInput {
@@ -73,7 +78,7 @@ export class NetHarness {
   readonly view: WorldView;
   readonly client: NetClientWorld;
   readonly player;
-  readonly opts: Required<Omit<HarnessOptions, 'props' | 'stalls' | 'skills'>> & {
+  readonly opts: Required<Omit<HarnessOptions, 'props' | 'stalls' | 'skills' | 'flow'>> & {
     props: PropView[];
     stalls: { at: number; ms: number }[];
     skills: { slot: number; skill: SkillId; castTime: number }[];
@@ -115,6 +120,8 @@ export class NetHarness {
   private nextFrameAt = 0;
   private order = 0;
   private hooks: ServerHooks;
+  /** The server's flow field (belts) when the harness runs a flow area. */
+  private readonly flows: FlowField | null = null;
 
   constructor(opts: HarnessOptions = {}, hooks: ServerHooks = {}) {
     this.opts = {
@@ -152,7 +159,13 @@ export class NetHarness {
     }
     this.view.players.push(this.player);
     this.client = createClientWorld();
-    this.client.setZone(makeZone({ localPlayerId: 1, arenaRadius: this.opts.arenaRadius, props: this.opts.props }));
+    if (opts.flow) {
+      this.flows = flowFieldFor(opts.flow.areaId, this.opts.arenaRadius, opts.flow.seed);
+      this.client.setZone(makeZone({
+        localPlayerId: 1, arenaRadius: this.opts.arenaRadius, props: this.opts.props,
+        setup: { atlasAreaId: opts.flow.areaId } as RunSetup, flowSeed: opts.flow.seed,
+      }));
+    } else this.client.setZone(makeZone({ localPlayerId: 1, arenaRadius: this.opts.arenaRadius, props: this.opts.props }));
     this.timeline.setLocalPlayer(1);
   }
 
@@ -303,9 +316,11 @@ export class NetHarness {
       const castSlow = this.castSlow ? CAST_SLOW : 0;
       // A carried event object (the Ember) slows her too: PlayerView.eventSlow, set by a hook.
       const slow = combineSlow(playerSlow(castSlow, this.debuffSlow(), this.groundSlow()), this.player.eventSlow ?? 0);
-      const next = movePlayer({ x: p.x, y: p.y }, this.currentMove, {
+      if (this.flows) flowStep(this.flows, this.serverTick * SIM_DT);
+      const drift = playerFlowDrift(this.flows, p.x, p.y);
+      const next = movePlayerDrifted({ x: p.x, y: p.y }, this.currentMove, {
         speed: this.opts.moveSpeed, arenaRadius: this.opts.arenaRadius, props: this.opts.props, slow,
-      }, SIM_DT);
+      }, SIM_DT, drift.x, drift.y);
       p.x = next.x;
       p.y = next.y;
       const dir = moveVector(this.currentMove);

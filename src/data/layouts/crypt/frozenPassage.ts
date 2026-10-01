@@ -40,10 +40,10 @@ export const FROZEN_PASSAGE: AreaLayout = defineLayout({
     { id: 'gallery-n', path: [f.p(-WALL_X, -250), f.p(WALL_X, -250)], gaps: [-BRIDGE_X, 0, BRIDGE_X].map(gapAt) },
     { id: 'gallery-s', path: [f.p(-WALL_X, 250), f.p(WALL_X, 250)], gaps: [-BRIDGE_X, 0, BRIDGE_X].map(gapAt) },
     // The outer bridges' side walls: 130 u between their facing edges.
-    { id: 'bridge-w-w', path: [f.p(-BRIDGE_X - 77, -250), f.p(-BRIDGE_X - 77, 250)] },
-    { id: 'bridge-w-e', path: [f.p(-BRIDGE_X + 77, -250), f.p(-BRIDGE_X + 77, 250)] },
-    { id: 'bridge-e-w', path: [f.p(BRIDGE_X - 77, -250), f.p(BRIDGE_X - 77, 250)] },
-    { id: 'bridge-e-e', path: [f.p(BRIDGE_X + 77, -250), f.p(BRIDGE_X + 77, 250)] },
+    { id: 'bridge-w-w', path: [f.p(-BRIDGE_X - 77, -250), f.p(-BRIDGE_X - 77, 250)], cover: 'low' },
+    { id: 'bridge-w-e', path: [f.p(-BRIDGE_X + 77, -250), f.p(-BRIDGE_X + 77, 250)], cover: 'low' },
+    { id: 'bridge-e-w', path: [f.p(BRIDGE_X - 77, -250), f.p(BRIDGE_X - 77, 250)], cover: 'low' },
+    { id: 'bridge-e-e', path: [f.p(BRIDGE_X + 77, -250), f.p(BRIDGE_X + 77, 250)], cover: 'low' },
   ],
   decals: [
     { id: 'bridge-w', kind: 'road', path: [f.p(-BRIDGE_X, -300), f.p(-BRIDGE_X, 300)], width: 120 },

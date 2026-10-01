@@ -296,6 +296,8 @@ describe('server message validation', () => {
     const msgs: ServerMessage[] = [
       { t: 'welcome', protocol: 1, characterId: 'c1', tickRate: 60, serverTime: 1e12 },
       { t: 'zone', zone: makeZone({ props: [{ id: 1, kind: 'portal', x: 0, y: -60, radius: 0, state: 8, variant: 0, interactive: true }] }) },
+      // A layout's cover override rides on the prop (D-territory 10.8); absent = the kind's default.
+      { t: 'zone', zone: makeZone({ props: [{ id: 2, kind: 'crate', x: 10, y: 20, radius: 12, state: 0, variant: 1, interactive: false, cover: 'tall' }] }) },
       { t: 'portal', portal: { ownerCharacterId: 'c1', ownerName: 'Mira', mapName: 'Ashen Forge', tier: 3, remaining: 7, total: 8, cleared: false } },
       { t: 'portal', portal: null },
       { t: 'events', tick: 1200, events: [{ t: 'waveStart', wave: 2 }] },
@@ -343,6 +345,7 @@ describe('server message validation', () => {
       { t: 'welcome', protocol: 1 },
       { t: 'zone', zone: { ...makeZone(), theme: 'moon' } },
       { t: 'zone', zone: { ...makeZone(), props: [{ id: 1, kind: 'ufo', x: 0, y: 0, radius: 0, state: 0, variant: 0, interactive: false }] } },
+      { t: 'zone', zone: { ...makeZone(), props: [{ id: 1, kind: 'crate', x: 0, y: 0, radius: 12, state: 0, variant: 0, interactive: false, cover: 'huge' }] } },
       { t: 'events', tick: 1, events: 'lots' },
       { t: 'events', tick: -1, events: [] },
       { t: 'events', events: [] },

@@ -6,12 +6,15 @@
 // registered, so no real area changes until a pack lands.
 import type { AtlasAreaId } from '../../contracts/atlas';
 import type { AreaLayout } from './schema';
+import { compileLayout } from './compile';
+import { buildFlowField, type FlowField } from './flow';
 import { ASHEN_CHAPEL_LAYOUTS } from './packs/ashenChapel';
 import { OSSUARY_CRYPT_LAYOUTS } from './packs/ossuaryCrypt';
 import { CHAINWORKS_COLISEUM_LAYOUTS } from './packs/chainworksColiseum';
 
 export * from './schema';
 export { compileLayout, type CompiledLayout } from './compile';
+export * from './flow';
 
 /** Shipped layouts. Packs add `areaId: layout` entries here. */
 export const AREA_LAYOUTS: Partial<Record<AtlasAreaId, AreaLayout>> = {
@@ -46,4 +49,14 @@ export function overrideLayout(layout: AreaLayout | null, areaId?: AtlasAreaId):
     if (had) overrides.set(id, prev);
     else overrides.delete(id);
   };
+}
+
+/**
+ * The flow field (conveyor belts, currents) of an area's run for arena radius `radius` and the run's flow seed, or null when the area
+ * has no layout or no flow zones. The client (prediction, presenter) builds it exactly as the sim's `applyLayout` does.
+ */
+export function flowFieldFor(areaId: AtlasAreaId | undefined | null, radius: number, flowSeed: number): FlowField | null {
+  const layout = layoutFor(areaId);
+  if (!layout?.flows || layout.flows.length === 0) return null;
+  return buildFlowField(compileLayout(layout, radius).flows, layout.areaId, flowSeed);
 }

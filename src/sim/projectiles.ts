@@ -12,6 +12,11 @@
 //   (the rest)  just their rider: webShot roots (web), frostShard chills, crossbowBolt bleeds,
 //               cinderSpit / matriarchOrb burn, heraldOrb withers, boneShard nothing.
 //
+// Cover (docs/atlas-rework/D-territory.md 10.8): a straight shot — player or monster, piercing or not — stops at the first TALL solid
+// prop its swept segment touches (cover.ts; low props are flown over; a prop containing the shot's start is ignored, it is leaving
+// it) and sparks a 'blocked' event with `cover: true`. Pierce counts bodies, never walls. Lobs fly over everything (above);
+// nova rings (PASSES_COVER) burst outward over the scenery too: a nova is a point-blank ring, not an aimed shot.
+//
 // Frontal shields: a player projectile meeting a guarding blocker (MonsterDef.block, MFLAG.guard)
 // travelling INTO its front — within ±arc/2 of `m.aim` — is blocked: no damage, 'blocked' event at
 // the contact point, and the projectile is consumed (even a piercing one). From the side or behind it
@@ -23,6 +28,7 @@ import { damageMonster, hitPlayer, isHittable } from './combat';
 import { CHAIN_PULL_DISTANCE, DT, PLAYER_RADIUS, SPIT_SPLASH_RADIUS, TAR_POOL_DURATION, TAR_POOL_RADIUS } from './constants';
 import { ROOT_SOURCES } from './debuffs';
 import { projectileEffect } from './effects';
+import { coverHit } from './cover';
 import { sweepCircle } from './math';
 import { pullPlayer } from './player';
 import { monsterDefs } from './rosters';
@@ -40,6 +46,10 @@ export const PROJECTILE_RIDERS: Readonly<Partial<Record<ProjectileKind, { debuff
   frostShard: { debuff: 'chilled' },
   crossbowBolt: { debuff: 'bleeding' },
 };
+
+/** Kinds that fly over tall cover too (player nova rings); every other straight shot is stopped by it. */
+const PASSES_COVER: Uint8Array = new Uint8Array(PROJECTILE_KINDS.length);
+PASSES_COVER[PROJ.novaFlame] = 1;
 
 const RIDER_CODE: Uint8Array = new Uint8Array(PROJECTILE_KINDS.length);
 const RIDER_SOURCE: Uint8Array = new Uint8Array(PROJECTILE_KINDS.length);
@@ -252,7 +262,14 @@ export function updateProjectiles(w: World): void {
           first = p;
         }
       }
-      if (first) {
+      const wallT = PASSES_COVER[pr.kind[i]] ? -1 : coverHit(w.propGrid, ax, ay, bx, by, rad * 0.5);
+      if (wallT >= 0 && wallT < firstT) {
+        endT = wallT;
+        ended = true;
+        pr.x[i] = ax + (bx - ax) * endT;
+        pr.y[i] = ay + (by - ay) * endT;
+        coverImpact(w, pr.x[i], pr.y[i]);
+      } else if (first) {
         endT = firstT;
         ended = true;
         pr.x[i] = ax + (bx - ax) * endT;
@@ -260,6 +277,8 @@ export function updateProjectiles(w: World): void {
         hostileHit(w, i, first);
       }
     } else {
+      // Tall cover along this tick's segment: bodies beyond it cannot be reached, and it ends the shot.
+      const wallT = PASSES_COVER[pr.kind[i]] ? -1 : coverHit(w.propGrid, ax, ay, bx, by, rad * 0.5);
       const pad = rad + w.grid.maxRadius;
       const n = w.grid.query(
         (ax < bx ? ax : bx) - pad, (ay < by ? ay : by) - pad, (ax > bx ? ax : bx) + pad, (ay > by ? ay : by) + pad, cand,
@@ -282,6 +301,7 @@ export function updateProjectiles(w: World): void {
         hitSlot[h] = j;
       }
       for (let k = 0; k < hits; k++) {
+        if (wallT >= 0 && hitT[k] > wallT) break;
         const j = hitSlot[k];
         if (!m.alive[j]) continue;
         if (m.flags[j] & MFLAG.guard && blocks(w, j, vx, vy)) {
@@ -301,6 +321,11 @@ export function updateProjectiles(w: World): void {
         }
         if (pierce > 0) pr.pierce[i] = pierce - 1;
       }
+      if (!ended && wallT >= 0) {
+        endT = wallT;
+        ended = true;
+        coverImpact(w, ax + (bx - ax) * endT, ay + (by - ay) * endT);
+      }
     }
 
     if (!pr.alive[i]) continue; // an effect removed it
@@ -315,6 +340,11 @@ export function updateProjectiles(w: World): void {
       if (pr.alive[i]) endProjectile(w, i);
     }
   }
+}
+
+/** A straight shot hit tall cover at (x, y): the presenter's dust and sparks. Cosmetic, droppable under load. */
+function coverImpact(w: World, x: number, y: number): void {
+  if (w.events.lowOpen) w.events.low({ t: 'blocked', x, y, cover: true });
 }
 
 /** Remove every hostile projectile (map cleared). */

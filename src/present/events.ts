@@ -523,7 +523,8 @@ export class EventFx {
         return;
       }
       case 'blocked':
-        this.blocked(e.x, e.y, f);
+        if (e.cover) this.coverImpact(e.x, e.y);
+        else this.blocked(e.x, e.y, f);
         return;
       case 'pull':
         this.pull(e, f);
@@ -1291,6 +1292,13 @@ export class EventFx {
     }
     sparks(pen, x, y - 10, 7, C.hot, C.gold, 30, 90, 0.2);
     if (this.pulses++ < 8) fx.pulses.spawn(x, y - 10, 36, 0.15, C.gold, 0.5);
+  }
+
+  /** A straight shot hit tall cover at (x, y): a few stone chips and a small dust puff (budgeted like the other dust). */
+  private coverImpact(x: number, y: number): void {
+    if (this.bursts++ >= 10) return;
+    sparks(this.k.pen, x, y - 8, 4, C.hot, C.gold, 18, 60, 0.15);
+    if (this.dust++ < 6) this.dustPuff(x, y - 6, 3);
   }
 
   /** A chain hook drags a player: the chain snaps taut from its thrower to her. */

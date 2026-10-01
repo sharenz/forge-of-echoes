@@ -15,6 +15,7 @@
 // first two combined. Casting also slows while chilled: a cast progresses `castRateOf(debuffs)` × SIM_DT
 // per tick (0 while frozen).
 import { PICKUP_REACH, type MovePlayer, type PlayerDebuffView, type PlayerView, type PropView } from '../contracts/sim';
+import { FLOW_PLAYER, flowOut, flowVelocity, type FlowField } from '../data/layouts/flow';
 import { areaSlowAt } from './area-geometry';
 import { CAST_MOVE_FACTOR, PLAYER_CHILL_SLOW, PLAYER_RADIUS } from './constants';
 import { clamp, finiteOr } from './math';
@@ -172,12 +173,42 @@ export function resolvePlayerAt(x: number, y: number, arenaRadius: number, props
  * One movement step (contract `MovePlayer`): speed × (1 − slow) along the clamped input, then
  * solid props and the arena edge. Pure — returns a fresh object and never mutates its arguments.
  */
-export const movePlayer: MovePlayer = (state, input, params, dt) => {
+export const movePlayer: MovePlayer = (state, input, params, dt) => movePlayerDrifted(state, input, params, dt, 0, 0);
+
+/** The ground drift (flow zone: a conveyor belt) under a player's feet: scratch written by `playerFlowDrift`. */
+export const flowDrift = { x: 0, y: 0 };
+
+/**
+ * The drift velocity (u/s) the layout's flow zones give a player standing at (x, y), written to `flowDrift` (0, 0 when there is no
+ * field or she stands off every zone). The field must already be fixed at the tick's time (flowStep). The sim's player update and
+ * client prediction both call this at the feet BEFORE the step, exactly like the ground slow.
+ */
+export function playerFlowDrift(field: FlowField | null | undefined, x: number, y: number): typeof flowDrift {
+  if (field && field.any && flowVelocity(field, x, y, FLOW_PLAYER)) {
+    flowDrift.x = flowOut.vx;
+    flowDrift.y = flowOut.vy;
+  } else {
+    flowDrift.x = 0;
+    flowDrift.y = 0;
+  }
+  return flowDrift;
+}
+
+/**
+ * `movePlayer` plus a ground drift (fx, fy in u/s) that is added to her own velocity AFTER the slow: a belt carries a rooted or
+ * frozen body too, and her own speed is untouched by it (the sim's `vx`/`vy`, and so the client's learned base speed, exclude the
+ * drift). Solids and the arena edge still apply to the sum, so a belt pushing her into a rail slides her along it. With (0, 0)
+ * this is bit-for-bit `movePlayer`.
+ */
+export function movePlayerDrifted(
+  state: { x: number; y: number }, input: { moveX: number; moveY: number },
+  params: { speed: number; arenaRadius: number; props: readonly PropView[]; slow: number }, dt: number, fx: number, fy: number,
+): { x: number; y: number } {
   const dir = readMove(input.moveX, input.moveY);
   const speed = slowedSpeed(params.speed, params.slow);
   const step = finiteOr(dt, 0);
   const vx = dir.x * speed;
   const vy = dir.y * speed;
-  const o = resolvePlayerAt(state.x + vx * step, state.y + vy * step, params.arenaRadius, params.props);
+  const o = resolvePlayerAt(state.x + (vx + fx) * step, state.y + (vy + fy) * step, params.arenaRadius, params.props);
   return { x: o.x, y: o.y };
-};
+}

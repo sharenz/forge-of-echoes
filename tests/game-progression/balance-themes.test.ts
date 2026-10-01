@@ -204,6 +204,13 @@ describe.runIf(enabled)('balance across map types (BALANCE=1)', () => {
     const reports: { label: string; r: LockReport }[] = [];
     for (const theme of ['rimedOssuary', 'ironColiseum'] as const) {
       reports.push({ label: `${theme} T1 (new character)`, r: playCareless(rules.createCharacter('Careless', 2), themeMap(theme, 1, `careless-${theme}-1`)) });
+      // Freezes are rare (a wisp burst or an Ice Prison catching her) and walls between shooters and her thin them further (cover), so the
+      // "the roster really freezes her" guard below plays a few more seeds of the Rimed Ossuary's first map to stay meaningful.
+      if (theme === 'rimedOssuary') {
+        for (const seed of [5, 6, 7, 8]) {
+          reports.push({ label: `${theme} T1 (seed ${seed})`, r: playCareless(rules.createCharacter('Careless', seed), themeMap(theme, 1, `careless-${theme}-1-${seed}`)) });
+        }
+      }
       reports.push({ label: `${theme} T3`, r: playCareless(readyForTier3(2), themeMap(theme, 3, `careless-${theme}-3`)) });
     }
     for (const { label, r } of reports) {

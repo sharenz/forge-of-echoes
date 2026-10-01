@@ -38,6 +38,9 @@
       //   ?drag=ok|bad|world|equip|bench|offer   ?summary=cleared|failed|abandoned (or 1)   ?alt=1   ?levelup=1
       //   ?party=0|1 (1 opens the party panel)  &leader=1 (you lead)  ?invite=1  ?chat=1  ?chatopen=1  ?toasts=1  ?still=1
       //   ?elite=magic|rare (monster hover card)
+      //   ?hud=lowlife,empty,full,play,nopoints,points,atlaspoints (globes: Life at 14%, Focus empty, both full, scripted hits / heals / casts;
+      //        unspent points: none, the default 6 attribute + 2 skill, plus Atlas points). Add &levelup=1 to see the level-up flourish;
+      //        &debuffs=burning,bleeding,chilled,frozen,withered,shocked tints the globes; Motion calm (Atlas toggle) or the OS setting flattens them
       //   ?bench=1|crafted (item on the crafting bench; implied by panels=craftingBench)
       //   ?workslot=1|map|crafted|finished (Crafting Stash work slot loaded; crafted = an Essence is applied after mount)
       //   ?trade=1|locked|waiting (a trade with Mira: she accepted / accept countdown / you wait for her)
@@ -54,8 +57,11 @@
       import { generateArt } from '/src/art/index.ts';
       import { mountUi } from '/src/ui/index.ts';
       import { createMockStore } from '/src/ui/dev/mockStore.ts';
+      import { writeMotionPref } from '/src/ui/atlas/motion.ts';
 
       const q = new URLSearchParams(location.search);
+      // ?motion=calm|full|auto sets the shared Motion preference (globes, point badges, Atlas) before the UI mounts.
+      if (q.get('motion')) writeMotionPref(q.get('motion'));
       const flag = (k) => q.get(k) === '1' || q.get(k) === 'true';
       const list = (k) => (q.get(k) ? q.get(k).split(',').filter(Boolean) : []);
       const zone = q.get('zone') ?? 'hideout';
@@ -162,6 +168,7 @@
         portal: q.get('portal') === '0' ? false : true,
         noCharacters: flag('nochars'),
         still: flag('still'),
+        hudFx: list('hud'),
         bench: mode('bench'),
         workslot: mode('workslot'),
         trade: mode('trade'),

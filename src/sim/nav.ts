@@ -85,6 +85,9 @@ class Nav {
   readonly anchorY: Float32Array;
   readonly anchorT: Float32Array;
   readonly nudgedAt: Float32Array;
+  /** Belt drift (u) a monster has been carried since its stall anchor was set: stallCheck measures movement net of it. */
+  readonly driftX: Float32Array;
+  readonly driftY: Float32Array;
   /** Relocation candidates: lane samples (or a ring when the layout has no lanes). */
   readonly spawnPoints: { x: number; y: number }[] = [];
 
@@ -101,6 +104,8 @@ class Nav {
     this.anchorY = new Float32Array(cap);
     this.anchorT = new Float32Array(cap);
     this.nudgedAt = new Float32Array(cap);
+    this.driftX = new Float32Array(cap);
+    this.driftY = new Float32Array(cap);
     this.collectSpawnPoints(w);
     this.sync(w, true);
   }
@@ -313,6 +318,17 @@ export function setNavEnabled(on: boolean): void {
   enabled = on;
 }
 
+/**
+ * ai.ts integrate: monster `i` was carried (dx, dy) u by a flow zone this tick. Recorded so the anti-stuck rules measure only the
+ * monster's own movement: drift along a rail is neither progress nor a reason to forgive a stall.
+ */
+export function navDrift(w: World, i: number, dx: number, dy: number): void {
+  const nav = navs.get(w);
+  if (!nav) return;
+  nav.driftX[i] += dx;
+  nav.driftY[i] += dy;
+}
+
 /** Called once per tick before the monster loop: keeps the blocked grid in step with the solid props. */
 export function navBeginTick(w: World): Nav | null {
   const nav = enabled ? navOf(w) : null;
@@ -367,6 +383,8 @@ export function navSteer(w: World, nav: Nav, i: number, t: PlayerState, dx: numb
     nav.anchorY[i] = y;
     nav.anchorT[i] = w.time;
     nav.nudgedAt[i] = 0;
+    nav.driftX[i] = 0;
+    nav.driftY[i] = 0;
   }
   if (w.tick - nav.lineTick[i] >= LINE_PERIOD && (w.tick + i) % LINE_PERIOD === 0) {
     nav.lineTick[i] = w.tick;
@@ -377,6 +395,8 @@ export function navSteer(w: World, nav: Nav, i: number, t: PlayerState, dx: numb
       nav.anchorX[i] = x;
       nav.anchorY[i] = y;
       nav.anchorT[i] = w.time;
+      nav.driftX[i] = 0;
+      nav.driftY[i] = 0;
     }
   }
   if (!nav.line[i]) return false;
@@ -424,12 +444,15 @@ export function navSteer(w: World, nav: Nav, i: number, t: PlayerState, dx: numb
 
 /** Seconds the monster has stayed within STALL_MOVED of its anchor while held behind scenery. */
 function stallCheck(w: World, nav: Nav, i: number, x: number, y: number): number {
-  const dx = x - nav.anchorX[i];
-  const dy = y - nav.anchorY[i];
+  // Movement net of the belt drift: a monster carried along a rail by a conveyor has not made headway of its own.
+  const dx = x - nav.anchorX[i] - nav.driftX[i];
+  const dy = y - nav.anchorY[i] - nav.driftY[i];
   if (dx * dx + dy * dy >= STALL_MOVED * STALL_MOVED) {
     nav.anchorX[i] = x;
     nav.anchorY[i] = y;
     nav.anchorT[i] = w.time;
+    nav.driftX[i] = 0;
+    nav.driftY[i] = 0;
     return 0;
   }
   return w.time - nav.anchorT[i];
@@ -532,6 +555,8 @@ function relocate(w: World, nav: Nav, i: number, f: Field): boolean {
   nav.anchorX[i] = p.x;
   nav.anchorY[i] = p.y;
   nav.anchorT[i] = w.time;
+  nav.driftX[i] = 0;
+  nav.driftY[i] = 0;
   nav.line[i] = 0;
   nav.stats.relocated++;
   return true;

@@ -138,7 +138,9 @@ describe.runIf(enabled)('Tier 1–3 across map types (BALANCE=1)', () => {
     const margins = MAP_BASE_IDS.map((theme) => mean(pick(theme).map((p) => p.results[0].minLife)));
     const label = MAP_BASE_IDS.map((t, k) => `${t} ${margins[k].toFixed(2)}`).join(', ');
     // Stronger elite combinations increase low-life variance; measured spread was 0.27 before Tier 1 experience was halved and 0.35 after (Iron Coliseum 0.15, Chainworks 0.49): fresh Tier 1 characters now level up less mid-map.
-    expect(Math.max(...margins) - Math.min(...margins), label).toBeLessThanOrEqual(0.35);
+    // With cover (tall props stop shots: D-territory 10.8) every theme's margin rose by about 0.1 (Tier 2 and 3 especially; Tier 1 is unchanged) and the
+    // spread measured 0.37 (Iron Coliseum 0.26, Chainworks 0.62): the bound is 0.4.
+    expect(Math.max(...margins) - Math.min(...margins), label).toBeLessThanOrEqual(0.4);
     for (const m of margins) expect(m, label).toBeLessThan(0.85);
   });
 

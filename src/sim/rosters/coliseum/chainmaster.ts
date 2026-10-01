@@ -21,6 +21,7 @@ import { commanderBrain } from '../kit';
 import {
   DAMAGE_INDEX, DT, MSTATE, PROJ, PULL_MAX_DISTANCE, TAU, attackEvent, clamp, clampToArena, farthestLiving, fieldFull, fireHostileFrom,
   monsterDamage, moveAlong, muzzleOffset, quantizeAreaAngle, setProjectilePull, spawnArea, spawnMonster, stop, summon, type Brain, type World,
+  coverClip,
 } from '../api';
 import { held } from './common';
 import { CHAINMASTER as C } from './tuning';
@@ -50,7 +51,7 @@ function hookAim(w: World, i: number): void {
   m.tx[i] = m.x[i] + Math.cos(a) * off;
   m.ty[i] = m.y[i] + Math.sin(a) * off;
   m.timerC[i] = 1; // an aim is locked
-  spawnArea(w, 'chargeLine', m.tx[i], m.ty[i], m.sy[i], C.hookCast, { angle: a, variant: 0, owner: m.id[i], hurts: 'none', debuff: null });
+  spawnArea(w, 'chargeLine', m.tx[i], m.ty[i], coverClip(w, m.tx[i], m.ty[i], a, m.sy[i], C.hookRadius * 0.5), C.hookCast, { angle: a, variant: 0, owner: m.id[i], hurts: 'none', debuff: null });
 }
 
 /** Hook release: the chain flies exactly along the aim line; its pull brings the victim to him. */

@@ -19,7 +19,7 @@ import type { AreaKind, ProjectileKind, RootSource } from '../../contracts/sim';
 import {
   DAMAGE_INDEX, DT, aimAtPlayer, byLevel, levelExtraShots, MFLAG, MONSTER_ANIM as ANIM, MSTATE, PLAYER_RADIUS, PROJ, attackEvent, extraProjectiles, faceTarget, fireHostile,
   fireHostileFrom, knockPlayer, lobAt, meleeHit, memoryOf, monsterDamage, moveAlong, muzzleOffset, phaseOf, quantizeAreaAngle, setAnim,
-  setGuard, setProjectileDebuff,
+  setGuard, setProjectileDebuff, shotClear, coverClip,
   setProjectileEffect, setProjectilePull, setProjectileSplash, spawnArea, steer, stop, toChase, wander, type MonsterAttack,
   type PlayerState, type World,
 } from './api';
@@ -289,13 +289,32 @@ export function shooterBrain(cfg: ShooterConfig): Brain {
       }
       return;
     }
-    if (d < cfg.near) moveAlong(w, i, -dx, -dy, 1);
+    // Tall cover between it and its target: nothing to shoot at, so it holds the volley and closes in (the nav flow field takes
+    // it round the wall) until the line opens. Lobs fly over cover and never wait.
+    const ready = m.attackCd[i] <= 0 && d < cfg.fireRange;
+    const clear = flight > 0 || !ready || shotClear(w, i, t.x, t.y, cfg.radius);
+    if (!clear) steer(w, i, dx, dy, d, 1);
+    else if (d < cfg.near) moveAlong(w, i, -dx, -dy, 1);
     else if (d > cfg.far) steer(w, i, dx, dy, d, 1);
     else {
       const side = m.offsetAngle[i] > Math.PI ? 1 : -1;
       moveAlong(w, i, -dy * side, dx * side, 0.4);
     }
-    if (m.attackCd[i] <= 0 && d < cfg.fireRange) {
+    if (clear && ready) {
+      // Honest aim line: lock the (id-quantised) heading and the muzzle point first; a heading that runs into a wall before it
+      // reaches the target is no aim at all (no line, no shot): close in instead.
+      let a = 0;
+      const off = muzzleOffset(w, i);
+      if (cfg.aimLine) {
+        const raw = cfg.aim !== undefined && flight <= 0
+          ? aimAtPlayer(w, i, t, pick(cfg.speed, w), cfg.range, pick(cfg.aim, w), cfg.lead ?? 0.25)
+          : Math.atan2(t.y + t.vy * lead - m.y[i], t.x + t.vx * lead - m.x[i]);
+        a = quantizeAreaAngle(raw);
+        if (flight <= 0 && coverClip(w, m.x[i] + Math.cos(a) * off, m.y[i] + Math.sin(a) * off, a, d, cfg.radius * 0.5) < d - 2) {
+          steer(w, i, dx, dy, d, 1);
+          return;
+        }
+      }
       m.state[i] = MSTATE.cast;
       m.stateTime[i] = cfg.windup;
       setAnim(w, i, ANIM.windup);
@@ -303,16 +322,10 @@ export function shooterBrain(cfg: ShooterConfig): Brain {
       faceTarget(w, i, t);
       if (cfg.aimAttack) attackEvent(w, i, cfg.aimAttack);
       if (cfg.aimLine) {
-        // Lock the (id-quantised) heading and the muzzle point: the shot follows exactly the line shown.
-        const off = muzzleOffset(w, i);
-        const raw = cfg.aim !== undefined && flight <= 0
-          ? aimAtPlayer(w, i, t, pick(cfg.speed, w), cfg.range, pick(cfg.aim, w), cfg.lead ?? 0.25)
-          : Math.atan2(t.y + t.vy * lead - m.y[i], t.x + t.vx * lead - m.x[i]);
-        const a = quantizeAreaAngle(raw);
         m.sx[i] = a;
         m.tx[i] = m.x[i] + Math.cos(a) * off;
         m.ty[i] = m.y[i] + Math.sin(a) * off;
-        spawnArea(w, 'chargeLine', m.tx[i], m.ty[i], cfg.range, cfg.windup, {
+        spawnArea(w, 'chargeLine', m.tx[i], m.ty[i], coverClip(w, m.tx[i], m.ty[i], a, cfg.range, cfg.radius * 0.5), cfg.windup, {
           angle: a, variant: 0, owner: m.id[i], hurts: 'none', debuff: null,
         });
       }

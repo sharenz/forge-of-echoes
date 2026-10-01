@@ -18,7 +18,7 @@ import {
   type DebuffCarry,
 } from './debuffs';
 import { clamp, dirFromVector, finiteOr } from './math';
-import { CAST_SLOW, combineSlow, playerSlow, readMove, resolvePlayerAt, slowedSpeed } from './movement';
+import { CAST_SLOW, combineSlow, playerFlowDrift, playerSlow, readMove, resolvePlayerAt, slowedSpeed } from './movement';
 import { releaseSkill, tickFireTrail, tickPendingNovas, tickWard } from './skills';
 import { MFLAG, MSTATE } from './stores';
 import type { FlaskState, PlayerState, SkillChargeState, World } from './world';
@@ -355,7 +355,10 @@ export function updatePlayer(w: World, p: PlayerState): void {
     const speed = slowedSpeed(s.moveSpeed, slow);
     p.vx = mx * speed;
     p.vy = my * speed;
-    moveTo(w, p, p.x + p.vx * DT, p.y + p.vy * DT);
+    // A conveyor belt underfoot adds its drift to her own velocity (movement.ts movePlayerDrifted: same expression, so client
+    // prediction lands on the same spot); p.vx/vy stay her own effective speed.
+    const drift = playerFlowDrift(w.layout?.flows, p.x, p.y);
+    moveTo(w, p, p.x + (p.vx + drift.x) * DT, p.y + (p.vy + drift.y) * DT);
     moving = ml > 0.05 && speed > 0;
   }
   tickFireTrail(w, p, moving);

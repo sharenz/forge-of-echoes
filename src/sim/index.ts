@@ -34,7 +34,8 @@
 // Burning and bleeding damage arrive as 'hit' events (target 'player') every 0.5 s. 'pull' = a chain
 // hook dragging a player (from → to over PULL_TIME = 0.25 s, at most PULL_MAX_DISTANCE = 140 units);
 // 'blocked' = a Shieldbearer's shield stopped a player projectile at (x, y) (the event names no
-// monster: the bearer is the nearest shieldbearer; its `facing` shows the shield side).
+// monster: the bearer is the nearest shieldbearer; its `facing` shows the shield side). With `cover: true` it is
+// instead a straight shot (either side's) stopped by a TALL prop (src/data/propCover.ts, cover.ts): no shielder.
 // Server: a player re-joining an instance can resume their debuffs like their life and focus —
 // SimPlayerJoin.debuffs = a copy of their last PlayerView.debuffs taken when they left
 // (`view.debuffs.map((d) => ({ ...d }))`; the entries carry an extra `dps`, see SimDebuffView).

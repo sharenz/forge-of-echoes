@@ -10,12 +10,12 @@ import type { AtlasAreaId } from '../contracts/atlas';
 import type { Theme } from '../contracts/content';
 import type { RGB } from '../contracts/render';
 import { compileLayout, type CompiledDecal, type CompiledLandmark, type CompiledLayout, type XY } from '../data/layouts/compile';
-import { layoutFor } from '../data/layouts';
+import { flowFieldFor, flowPhaseAt, flowScaleAt, flowStep, flowVelocity, flowOut, FLOW_PLAYER, FLOW_MONSTER, layoutFor, type FlowField, type FlowZone } from '../data/layouts';
 import { C, hexRgb } from './colors';
 import type { FrameCtx } from './context';
 import { hash01, TAU } from './math';
 import type { Pen } from './pen';
-import { themeGlyph, themeRoad } from './layout-art-chainworks-coliseum';
+import { drawBelt, themeGlyph, themeRoad, type BeltLook } from './layout-art-chainworks-coliseum';
 
 interface DecalLook {
   /** Road bed and its edge lines. */
@@ -52,8 +52,33 @@ function S(pen: Pen, color: RGB, alpha: number, x: ShapeExtras): ReturnType<Pen[
   return o;
 }
 
+/** Cosmetic only: does the viewer ask the OS for reduced motion? (belts then stop scrolling and flickering). */
+function prefersCalm(): boolean {
+  try { return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+}
+
+/** The polygon (closed, one vertex per 10 degrees) along the middle of an annulus flow zone, clockwise from the north. */
+function ringPath(z: FlowZone): XY[] {
+  const r = (z.r0 + z.r1) / 2;
+  const out: XY[] = [];
+  for (let k = 0; k <= 36; k++) {
+    const a = (k * 10 * Math.PI) / 180;
+    out.push({ x: z.cx + Math.sin(a) * r, y: z.cy - Math.cos(a) * r });
+  }
+  return out;
+}
+
 export class LayoutArt {
   private key = '';
+  /** The area's flow zones (belts) for this run, built from the same data and flow seed the sim and prediction use. */
+  private field: FlowField | null = null;
+  private flowPaths: XY[][] = [];
+  private flowWidths: number[] = [];
+  /** Cosmetic scroll (u, signed) of each belt's pattern and the sim time it was last advanced to. */
+  private scroll: number[] = [];
+  private scrollT = Number.NaN;
+  private calm = false;
+  private dustAcc = 0;
   private compiled: CompiledLayout | null = null;
   private theme: Theme = 'hideout';
   private look: DecalLook = LOOKS.hideout;
@@ -61,10 +86,16 @@ export class LayoutArt {
   private cracks = new Map<string, XY[]>();
 
   /** (Re)build for a zone; no layout (or no area) clears everything. */
-  build(areaId: AtlasAreaId | undefined, radius: number, theme: Theme): void {
-    this.key = `${areaId ?? ''}:${radius}:${theme}`;
+  build(areaId: AtlasAreaId | undefined, radius: number, theme: Theme, flowSeed = 0): void {
+    this.key = `${areaId ?? ''}:${radius}:${theme}:${flowSeed}`;
     const layout = layoutFor(areaId);
     this.compiled = layout ? compileLayout(layout, radius) : null;
+    this.field = layout ? flowFieldFor(areaId, radius, flowSeed) : null;
+    this.flowPaths = this.field ? this.field.zones.map((z) => (z.shape === 'annulus' ? ringPath(z) : z.path)) : [];
+    this.flowWidths = this.field ? this.field.zones.map((z) => (z.shape === 'annulus' ? z.r1 - z.r0 : z.width)) : [];
+    this.scroll = this.field ? this.field.zones.map(() => 0) : [];
+    this.scrollT = Number.NaN;
+    this.calm = prefersCalm();
     this.theme = theme;
     this.look = LOOKS[theme];
     this.cracks.clear();
@@ -74,8 +105,8 @@ export class LayoutArt {
 
   private ensure(f: FrameCtx): CompiledLayout | null {
     const w = f.world;
-    const key = `${w.areaId ?? ''}:${w.arenaRadius}:${f.theme}`;
-    if (key !== this.key) this.build(w.areaId, w.arenaRadius, f.theme);
+    const key = `${w.areaId ?? ''}:${w.arenaRadius}:${f.theme}:${w.flowSeed ?? 0}`;
+    if (key !== this.key) this.build(w.areaId, w.arenaRadius, f.theme, w.flowSeed ?? 0);
     return this.compiled;
   }
 
@@ -85,6 +116,7 @@ export class LayoutArt {
     const v = f.view;
     const vis = (x: number, y: number, r: number): boolean => !(x + r < v.x0 || x - r > v.x1 || y + r < v.y0 || y - r > v.y1);
     for (const l of c.landmarks) if (!l.prop && vis(l.x, l.y, l.r + 20)) this.landmark(pen, f, l);
+    if (this.field) this.flows(pen, f, vis);
     for (const d of c.decals) {
       if (d.kind === 'road') { if (!themeRoad(this.theme, pen, f, d, vis)) this.road(pen, d, vis); }
       else if (d.kind === 'crack') this.crack(pen, f, d, vis);
@@ -117,6 +149,71 @@ export class LayoutArt {
       else if (l.kind === 'crucible') pen.light(l.x, l.y, l.r * 1.5, C.flame, 0.55 * pulse, 0.5);
       else if (l.kind === 'plinth') pen.light(l.x, l.y, l.r * 2.4, acc, 0.4 * pulse, 0.1);
       else if (l.kind === 'pit') pen.light(l.x, l.y, l.r * 1.2, this.look.accent, 0.25 * pulse, 0.3);
+    }
+  }
+
+  // --- flow zones (conveyor belts) -------------------------------------------------------------------------------
+
+  /**
+   * Draw every flow zone from the live field: the chevrons' pattern is advanced by the belt's real velocity (scale x speed, in sim
+   * time, so it follows the reversal telegraph to a stop and out the other way) and drawn in the zone's own direction. Bodies riding
+   * a belt shed a little dust against its motion. Purely cosmetic; the sim and prediction read the same field in src/data/layouts/flow.ts.
+   */
+  private flows(pen: Pen, f: FrameCtx, vis: (x: number, y: number, r: number) => boolean): void {
+    const field = this.field!;
+    const t = f.world.time;
+    flowStep(field, t);
+    const dtSim = Number.isFinite(this.scrollT) && t > this.scrollT && t - this.scrollT < 0.5 ? t - this.scrollT : 0;
+    this.scrollT = t;
+    let riding = false;
+    for (let k = 0; k < field.zones.length; k++) {
+      const z = field.zones[k];
+      const scale = field.scale[k];
+      if (!this.calm) this.scroll[k] += scale * z.speed * dtSim;
+      const ph = z.reverse ? flowPhaseAt(z, t) : { phase: 0 as const, since: 0, sign: z.sign0 };
+      const look: BeltLook = {
+        sign: ph.sign, scroll: this.scroll[k], speed: Math.abs(scale), warn: ph.phase === 1, time: f.time, calm: this.calm,
+        ...(this.theme === 'chainworks' ? {} : { tint: this.look.accent }),
+      };
+      drawBelt(pen, f, this.flowPaths[k], this.flowWidths[k], look, vis);
+      if (Math.abs(scale) > 0.15) riding = true;
+    }
+    if (riding && !this.calm) this.dust(pen, f);
+  }
+
+  /** A few faint motes thrown back from players and monsters standing on a moving belt (cheap: sampled, never per body per frame). */
+  private dust(pen: Pen, f: FrameCtx): void {
+    const field = this.field!;
+    const v = f.view;
+    const emit = (x: number, y: number, vx: number, vy: number): void => {
+      const sp = Math.sqrt(vx * vx + vy * vy);
+      if (sp < 4) return;
+      const b = pen.burst(x - (vx / sp) * 5, y - (vy / sp) * 5 + 3, 1, [0.55, 0.45, 0.3], [0.3, 0.26, 0.2]);
+      pen.speed(sp * 0.1, sp * 0.3);
+      pen.life(0.3, 0.55);
+      pen.size(0.5, 0.9);
+      b.angle = Math.atan2(-vy, -vx);
+      b.spread = 0.5;
+      pen.emit();
+    };
+    const players = f.world.players;
+    for (let k = 0; k < players.length; k++) {
+      const p = players[k];
+      if (Math.random() > f.fxDt * 9) continue;
+      if (flowVelocity(field, p.x, p.y, FLOW_PLAYER)) emit(p.x, p.y, flowOut.vx, flowOut.vy);
+    }
+    const m = f.world.monsters;
+    let budget = 3;
+    for (let i = 0; i < m.capacity && budget > 0; i++) {
+      if (!m.alive[i]) continue;
+      const x = m.x[i];
+      const y = m.y[i];
+      if (x < v.x0 || x > v.x1 || y < v.y0 || y > v.y1) continue;
+      if (Math.random() > f.fxDt * 1.2) continue;
+      if (flowVelocity(field, x, y, FLOW_MONSTER)) {
+        emit(x, y, flowOut.vx, flowOut.vy);
+        budget--;
+      }
     }
   }
 
