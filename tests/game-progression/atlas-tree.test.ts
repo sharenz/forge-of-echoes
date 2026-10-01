@@ -15,7 +15,7 @@ const REAL_MAP_STATS = new Set([
   'mapDropChance', 'essenceDropChance', 'emberEssenceChance', 'rimeEssenceChance', 'armourStability', 'magicPackChance', 'rarePackChance', 'eventChance',
   'chestUpgradeChance', 'chestQuality', 'droppedMapQuality', 'scarabDropChance', 'rareQuantity', 'normalQuantity', 'equipmentStability',
   'equipmentDropChance', 'bossIngredientChance', 'bossLife', 'bossUnique', 'bossLoot', 'chestLoot', 'chestRareChance', 'chestCurrency', 'waveDuration',
-  'territoryFee', 'revealChance', 'dangerModStrength', 'corruptedModStrength',
+  'territoryFee', 'revealChance', 'dangerModStrength', 'corruptedModStrength', 'surgeCharges', 'surgeKeep', 'sandChance',
 ]);
 
 describe('atlas tree shape', () => {

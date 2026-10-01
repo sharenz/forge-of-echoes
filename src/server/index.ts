@@ -109,7 +109,7 @@
 //     (benchCraft / benchClear) need any hideout; the merchant works in any hideout; the map device (load,
 //     unload, activate) needs the player's own hideout.
 //   • SPECIAL STASH TABS (GAME_SPEC §12) are stash tabs: the Crafting Stash ({ kind: 'currencyStash' }, slot uids
-//     "cstash:<currencyId>") and the Map Stash ({ kind: 'mapStash' }) work in any hideout and nowhere else — as a
+//     "cstash:<currencyId>") the Crafting Stash work slot ({ kind: 'craftSlot' }, one gear or map item in account storage) and the Map Stash ({ kind: 'mapStash' }) work in any hideout and nowhere else — as a
 //     destination (moveItem `to`, quickMove stashTab 'currency' | 'mapCurrency' | 'maps', depositAllCurrency) AND
 //     as a source (withdrawing into the backpack too). Refusal: "The stash can only be used in a hideout.".
 //     moveItem / quickMove pass `count` through (splits, Shift+Ctrl single withdrawals). Every item move is also

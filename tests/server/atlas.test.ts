@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, expect, it, vi } from 'vitest';
 import { ATLAS_AREA_IDS } from '../../src/contracts/atlas';
-import { ATLAS_KEYS } from '../../src/data/progression/atlas';
+import { ATLAS_KEYS, atlasTierCeiling, findAtlasArea } from '../../src/data/progression/atlas';
+import type { MapItem } from '../../src/contracts/items';
 import { GameDatabase } from '../../src/server';
 import { MapInstance } from '../../src/server/instance';
 import { currencyOnHand } from '../../src/game/progression/merchant';
-import { createClock, createLocalCharacter, enterMapOf, LocalPlayer, openMap, partyUp, startTestServer, walkIntoProp } from './helpers';
+import { bindDeviceMap, createClock, createLocalCharacter, enterMapOf, LocalPlayer, openMap, partyUp, startTestServer, walkIntoProp } from './helpers';
 
 const dir = mkdtempSync(join(tmpdir(), 'forge-atlas-'));
 type Server = Awaited<ReturnType<typeof startTestServer>>;
@@ -121,8 +122,13 @@ it('enforces fog and tier ceilings on commands before consuming the map', async 
   const a = new LocalPlayer(server, createLocalCharacter(server, 'Atlas Gate'));
   const item = a.session.record.ch.backpack.entries.find((e) => e.item.kind === 'map')!.item;
   expect(a.command({ c: 'moveItem', uid: item.uid, to: { kind: 'mapDevice' } }).ok).toBe(true);
-  expect(a.command({ c: 'activateMapDevice', areaId: 'winterThrone' }).ok).toBe(false);
-  server.game.setCharacter(a.session, { ...a.session.record.ch, mapDevice: { ...a.session.record.ch.mapDevice!, tier: 2 } });
+  // a map bound to an area the account has not charted cannot be opened (the fog is never skipped)
+  server.game.setCharacter(a.session, { ...a.session.record.ch, mapDevice: { ...a.session.record.ch.mapDevice!, areaId: 'winterThrone', baseId: 'rimedOssuary', tier: 5 } });
+  expect(a.command({ c: 'activateMapDevice' }).ok).toBe(false);
+  // a stale client's area is only accepted when it is the map's own
+  expect(a.command({ c: 'activateMapDevice', areaId: 'cinderCrossing' }).ok).toBe(false);
+  // a tier above the area's ceiling cannot be opened either
+  server.game.setCharacter(a.session, { ...a.session.record.ch, mapDevice: { ...a.session.record.ch.mapDevice!, areaId: 'cinderCrossing', baseId: 'ashenForge', tier: 2 } });
   expect(a.command({ c: 'activateMapDevice' }).ok).toBe(false);
   expect(a.session.record.ch.mapDevice?.tier).toBe(2);
   expect(server.db.loadOpenMaps()).toHaveLength(0);
@@ -135,9 +141,9 @@ it('refunds the original Bounty map, key and paid territory fee together if the 
   server.game.setCharacter(a.session, { ...a.session.record.ch, atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 }, currencyStash: { reliquaryKey: 1, scrap: 20 } });
   const map = a.session.record.ch.backpack.entries.find((e) => e.item.kind === 'map')!.item;
   expect(a.command({ c: 'moveItem', uid: map.uid, to: { kind: 'mapDevice' } }).ok).toBe(true);
-  server.game.setCharacter(a.session, { ...a.session.record.ch, mapDevice: { ...a.session.record.ch.mapDevice!, tier: 7, bounty: true } });
+  server.game.setCharacter(a.session, { ...a.session.record.ch, mapDevice: { ...a.session.record.ch.mapDevice!, areaId: 'shatteredForge', baseId: 'ashenForge', tier: 7, bounty: true } });
   const scrapBefore = currencyOnHand(a.session.record.ch, 'scrap');
-  expect(a.command({ c: 'activateMapDevice', areaId: 'sealedReliquary' }).ok).toBe(true);
+  expect(a.command({ c: 'activateMapDevice', passageKey: 'reliquaryKey' }).ok).toBe(true);
   expect(currencyOnHand(a.session.record.ch, 'scrap')).toBe(scrapBefore - 2);
   expect(JSON.parse(server.db.loadOpenMaps()[0].setup).entranceScrap).toBe(2);
   expect(currencyOnHand(a.session.record.ch, 'reliquaryKey')).toBe(0);
@@ -148,7 +154,7 @@ it('refunds the original Bounty map, key and paid territory fee together if the 
   db.close();
   await boot(path);
   const back = new LocalPlayer(server, aId);
-  expect(back.session.record.ch.mapDevice).toEqual({ ...map, tier: 7, bounty: true, isNew: undefined });
+  expect(back.session.record.ch.mapDevice).toEqual({ ...map, areaId: 'shatteredForge', baseId: 'ashenForge', tier: 7, bounty: true, isNew: undefined });
   expect(currencyOnHand(back.session.record.ch, 'reliquaryKey')).toBe(1);
   expect(currencyOnHand(back.session.record.ch, 'scrap')).toBe(scrapBefore);
   expect(server.db.loadOpenMaps()).toHaveLength(0);
@@ -165,7 +171,8 @@ it('restores a paid Bounty expedition without charging its owner again', async (
     atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 },
     mapDevice: { ...p.session.record.ch.mapDevice!, tier: 7, bounty: true } });
   const before = currencyOnHand(p.session.record.ch, 'scrap');
-  expect(p.command({ c: 'activateMapDevice', areaId: 'shatteredForge' }).ok).toBe(true);
+  bindDeviceMap(p, 'shatteredForge');
+  expect(p.command({ c: 'activateMapDevice' }).ok).toBe(true);
   expect(currencyOnHand(p.session.record.ch, 'scrap')).toBe(before - 2);
   const originalEvent = server.game.instances.activeMapOf(id)!.setup.event;
   expect(originalEvent?.kind).toBe('hunted');
@@ -187,9 +194,9 @@ it.each(ATLAS_KEYS)('refunds the exact $currencyId, source map and fee atomicall
   expect(p.command({ c: 'moveItem', uid: source.uid, to: { kind: 'mapDevice' } }).ok).toBe(true);
   server.game.setCharacter(p.session, { ...p.session.record.ch,
     atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 },
-    currencyStash: { scrap: 50, [key.currencyId]: 2 }, mapDevice: { ...p.session.record.ch.mapDevice!, tier: 4 } });
+    currencyStash: { scrap: 50, [key.currencyId]: 2 }, mapDevice: { ...p.session.record.ch.mapDevice!, areaId: 'furnaceYard', baseId: 'ashenForge', tier: 4 } });
   const before = p.session.record.ch, feeBefore = currencyOnHand(before, 'scrap');
-  expect(p.command({ c: 'activateMapDevice', areaId: key.areaId, lootClass: 'ring' }).ok).toBe(true);
+  expect(p.command({ c: 'activateMapDevice', passageKey: key.currencyId, lootClass: 'ring' }).ok).toBe(true);
   expect(currencyOnHand(p.session.record.ch, key.currencyId)).toBe(1);
   expect(currencyOnHand(p.session.record.ch, 'scrap')).toBe(feeBefore - 1);
   const setup = JSON.parse(server.db.loadOpenMaps()[0].setup);
@@ -213,7 +220,8 @@ it('credits a bossless Shrine Field clear once for every present party account, 
   server.game.setCharacter(a.session, { ...a.session.record.ch, atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 } });
   const source = a.session.record.ch.backpack.entries.find(e => e.item.kind === 'map')!.item;
   expect(a.command({ c: 'moveItem', uid: source.uid, to: { kind: 'mapDevice' } }).ok).toBe(true);
-  expect(a.command({ c: 'activateMapDevice', areaId: 'shrineField' }).ok).toBe(true);
+  bindDeviceMap(a, 'shrineField');
+  expect(a.command({ c: 'activateMapDevice' }).ok).toBe(true);
   walkIntoProp(a, 'portal', clock, [b]); enterMapOf(b, a, clock, [a]);
   const map = a.session.instance as MapInstance;
   server.game.handleOutcomes(map, [{ t: 'cleared' }, { t: 'cleared' }]);
@@ -232,7 +240,8 @@ it('keeps failed Atlas awards after a completed map is closed, then grants them 
   server.game.setCharacter(p.session, { ...p.session.record.ch, atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 } });
   const source = p.session.record.ch.backpack.entries.find(e => e.item.kind === 'map')!.item;
   expect(p.command({ c: 'moveItem', uid: source.uid, to: { kind: 'mapDevice' } }).ok).toBe(true);
-  expect(p.command({ c: 'activateMapDevice', areaId: 'shrineField' }).ok).toBe(true);
+  bindDeviceMap(p, 'shrineField');
+  expect(p.command({ c: 'activateMapDevice' }).ok).toBe(true);
   walkIntoProp(p, 'portal', clock);
   const map = p.session.instance as MapInstance;
   const save = server.db.saveAccountStorage.bind(server.db);
@@ -262,7 +271,7 @@ it('waits for the sealed encounter chain before recording Atlas completion', asy
     atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 }, currencyStash: { riftKey: 1 } });
   const source = p.session.record.ch.backpack.entries.find(e => e.item.kind === 'map')!.item;
   expect(p.command({ c: 'moveItem', uid: source.uid, to: { kind: 'mapDevice' } }).ok).toBe(true);
-  expect(p.command({ c: 'activateMapDevice', areaId: 'riftNexus' }).ok).toBe(true);
+  expect(p.command({ c: 'activateMapDevice', passageKey: 'riftKey' }).ok).toBe(true);
   walkIntoProp(p, 'portal', clock);
   const map = p.session.instance as MapInstance;
   server.game.handleOutcomes(map, [{ t: 'bossDefeated' }]);
@@ -270,6 +279,46 @@ it('waits for the sealed encounter chain before recording Atlas completion', asy
   server.game.handleOutcomes(map, [{ t: 'cleared' }, { t: 'cleared' }]);
   expect(p.session.record.ch.atlas!.clears).toBe(1);
   expect(p.session.record.ch.atlas!.completed).toContain('riftNexus');
+});
+
+it('binds maps saved before area binding once at load, keeps them in every container, and charts a last-resort area in the account storage', async () => {
+  const { path } = await boot();
+  const id = createLocalCharacter(server, 'Legacy Lena');
+  const accountId = new LocalPlayer(server, id).session.record.accountId;
+  await server.close();
+  const db = await GameDatabase.open(path);
+  const legacy = (uid: string, baseId: string, tier: number) => ({ kind: 'map', uid, baseId, tier, rarity: 'normal', mods: [], quality: 0, corrupted: false });
+  const row = db.characterById(id)!;
+  const saved = JSON.parse(row.data);
+  saved.mapDevice = legacy(`${saved.uidNamespace}old-device`, 'rimedOssuary', 1);
+  saved.backpack.entries = [{ item: legacy(`${saved.uidNamespace}old-pack`, 'ironColiseum', 9), x: 0, y: 0 }]; // above anything charted
+  db.saveCharacter(id, row.level, JSON.stringify(saved), 1, 1); // save format 1: no area on any map
+  const storage = db.accountStorage(accountId)!;
+  const shared = JSON.parse(storage.data);
+  shared.mapStash = [legacy(`${saved.uidNamespace}old-stash`, 'chainworks', 1)];
+  db.saveAccountStorage({ accountId, data: JSON.stringify(shared), saveVersion: 1, updated: 1 });
+  db.close();
+
+  await boot(path);
+  const ch = new LocalPlayer(server, id).session.record.ch;
+  const maps = [ch.mapDevice!, ch.backpack.entries[0].item as MapItem, ch.mapStash[0]];
+  for (const m of maps) {
+    expect(m.unbound).toBeUndefined();
+    expect(m.baseId).toBe(findAtlasArea(m.areaId)!.baseId);
+    expect(m.tier).toBeLessThanOrEqual(atlasTierCeiling(findAtlasArea(m.areaId)!));
+  }
+  expect(maps[0]).toMatchObject({ areaId: 'cinderCrossing', baseId: 'ashenForge', migrated: 'theme' }); // only Cinder Crossing is charted
+  expect(maps[2]).toMatchObject({ areaId: 'cinderCrossing', migrated: 'theme' });
+  expect(maps[1].migrated).toBe('fog'); // a Tier 9 map: it is the chart fragment of the shallowest area that takes it
+  expect(ch.atlas!.discovered).toContain(maps[1].areaId);
+  // the binding was persisted: the stored rows no longer need it, and the charted area is in the account storage
+  await server.close();
+  const after = await GameDatabase.open(path);
+  const storedStorage = JSON.parse(after.accountStorage(accountId)!.data);
+  expect(storedStorage.mapStash[0]).toMatchObject({ areaId: 'cinderCrossing' });
+  expect(storedStorage.atlas.discovered).toContain(maps[1].areaId);
+  expect(JSON.parse(after.characterById(id)!.data).mapDevice).toMatchObject({ areaId: 'cinderCrossing' });
+  after.close();
 });
 
 it('backfills legacy completed-map awards once and ignores recipients whose accounts no longer exist', async () => {

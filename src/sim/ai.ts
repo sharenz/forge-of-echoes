@@ -19,6 +19,7 @@ import { resolveProps } from './grid';
 import { DAMAGE_INDEX, TAU } from './math';
 import { spawnArea } from './areas';
 import { monsterDefs } from './rosters';
+import { navBeginTick, navSteer } from './nav';
 import { MFLAG } from './stores';
 import type { PlayerState, World } from './world';
 
@@ -70,6 +71,7 @@ export function updateMonsters(w: World): void {
   computeSeparation(w);
   const m = w.monsters;
   const defs = monsterDefs();
+  const nav = navBeginTick(w); // null outside hand-crafted layouts: no navigation work at all
   // m.hwm is re-read every iteration: summons spawned mid-loop still act this tick.
   for (let i = 0; i < m.hwm; i++) {
     if (!m.alive[i]) continue;
@@ -140,9 +142,12 @@ export function updateMonsters(w: World): void {
     }
     if (m.mods[i] & ELITE.warded && (w.tick + i) % 10 === 0) updateWarded(w, i);
     if (m.mods[i] & STRIKE_MASK && hunting && t && !t.dead) eliteStrikes(w, i, t, d);
-    if (driveEventMonster(w, i, t)) { /* An event script owns this monster; normal integration still follows below. */ }
+    let owned = false;
+    if (driveEventMonster(w, i, t)) owned = true; // An event script owns this monster; normal integration still follows below.
     else if (def.boss) driveBoss(w, i, def, t, dx, dy, d, hunting);
     else def.brain(w, i, t, dx, dy, d, hunting);
+    // Layout arenas: when a wall stands between a walking monster and its target, follow the flow field round it (src/sim/nav.ts).
+    if (nav && t && m.alive[i]) navSteer(w, nav, i, t, dx, dy, d, hunting, owned);
     // A guarding shield turns toward its target at its own pace (flanking is the counterplay); the
     // presenter shows it through `facing`, and a block through the 'blocked' event.
     if (def.block && m.flags[i] & MFLAG.guard && t && m.alive[i]) turnToward(w, i, dx, dy, def.block.turnRate);

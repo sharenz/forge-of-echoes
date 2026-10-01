@@ -1,5 +1,6 @@
 // The inspector rail (brief A, 6.6): hero band with the boss sprite standing on the theme's floor, facts, the
-// monster family, what the area pays, what can happen there, entry requirements and the Set course button.
+// monster family, what the area pays, what can happen there and entry requirements. A map is bound to its area, so there
+// is no course to set: the foot says where the slotted map lives (or that the chart is browse-only).
 import { useMotion } from './motion';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { MapItem } from '../../contracts/items';
@@ -20,6 +21,10 @@ import { MONSTER_NAMES } from '../lib/content';
 import { useAtlasSprites } from './sprites';
 import type { NodeModel } from './model';
 import { typeLabel } from './model';
+import type { RoutingReadout } from '../../game/progression/map-routing';
+import { SourcesPanel } from './SourcesPanel';
+import { SurgeRail } from './SurgePips';
+import type { AtlasAreaId } from '../../contracts/atlas';
 
 /** Cycles a sprite's frames at its own fps as data URLs; static when reduced motion is preferred. */
 function useSpriteFrames(sprites: SpriteDef[] | null, id: string, scale: number, motion: boolean): string {
@@ -46,19 +51,39 @@ function Portrait({ sprites, id, box, motion, label }: { sprites: SpriteDef[] | 
   return <img class="fe-px fe-rail__mob" src={url} alt="" title={label} aria-label={label} draggable={false} style={{ width: info.width * scale, height: info.height * scale }} />;
 }
 
-export function AtlasRail({ area, model, tier, map, odds, courseId, blocked, onSetCourse, onOpenStash, motion: motionProp, compact, onClose }: {
+/** What the rail shows about pins: the state, the slots and the toggle (brief D 5.1). */
+export interface RailPin {
+  pinned: boolean;
+  /** Pins in use and slots available. */
+  used: number;
+  slots: number;
+  /** Why the toggle is disabled (a full tray, a passage area), or null. */
+  blocked: string | null;
+  multiplier: number;
+  onToggle: () => void;
+}
+
+export function AtlasRail({ area, model, tier, map, odds, homeName, blocked, onGoHome, motion: motionProp, compact, onClose, pin, held, sources, onFocus }: {
   area: AtlasAreaDef;
   model: NodeModel;
   tier: number | null;
+  /** The slotted map when it is run in THIS area (fee, encounter odds); null when another area is inspected or the slot is empty. */
   map: MapItem | null;
   odds: Record<string, number> | null;
-  courseId: string;
+  /** The area the slotted map opens, when there is one. */
+  homeName: string | null;
   blocked: string | null;
-  onSetCourse: () => void;
-  onOpenStash: () => void;
+  /** Bring the chart back to the slotted map's area. */
+  onGoHome: () => void;
   motion: boolean;
   compact: boolean;
   onClose: () => void;
+  pin?: RailPin;
+  /** Maps of this area you hold (backpack, stash, Map Stash). */
+  held?: number;
+  /** The slotted map's drop table, shown when this is the area it opens (brief D 3 "Sources"). */
+  sources?: RoutingReadout | null;
+  onFocus?: (id: AtlasAreaId) => void;
 }) {
   const sprites = useAtlasSprites();
   const { calm } = useMotion();
@@ -76,7 +101,6 @@ export function AtlasRail({ area, model, tier, map, odds, courseId, blocked, onS
   ];
   const fee = map ? territoryEntryFee(map.tier, area.id) : null;
   const active = odds ? MAP_EVENT_KINDS.filter((k) => (odds[k] ?? 0) > 0) : [];
-  const isCourse = courseId === area.id;
   const key = area.entranceKey ? CURRENCIES[area.entranceKey] : null;
   return (
     <aside class={cx('fe-rail', compact && 'fe-rail--compact')} aria-label={`${area.name} details`} data-rail>
@@ -91,7 +115,14 @@ export function AtlasRail({ area, model, tier, map, odds, courseId, blocked, onS
         <div class="fe-rail__title">
           <span class="fe-rail__kicker ui-type-caption">{model.status}</span>
           <h3 class="fe-rail__name">{area.name}</h3>
+          <SurgeRail areaId={area.id} />
         </div>
+        {pin && (
+          <button type="button" class={cx('fe-rail__pin fe-btn fe-btn--icon fe-btn--ghost', pin.pinned && 'fe-rail__pin--on')} aria-pressed={pin.pinned} data-pin-toggle={area.id}
+            disabled={!pin.pinned && !!pin.blocked} aria-label={pin.pinned ? `Unpin ${area.name}` : `Pin ${area.name}`} title={pin.pinned ? `Unpin ${area.name}` : pin.blocked ?? `Pin ${area.name}: its maps drop x${pin.multiplier} as often`} onClick={pin.onToggle}>
+            <i class="fe-pinglyph" aria-hidden="true" />
+          </button>
+        )}
         {compact && <button class="fe-rail__close fe-btn fe-btn--icon fe-btn--ghost" aria-label="Close inspector" onClick={onClose}><span class="fe-x" /></button>}
       </div>
       <div class="fe-rail__scroll">
@@ -118,11 +149,24 @@ export function AtlasRail({ area, model, tier, map, odds, courseId, blocked, onS
           </div>
           <p class="ui-type-caption fe-rail__mute">{mapBaseImplicitText(area.baseId)}{keystone ? ' Keystone uniques have a separate 12% base chance per boss, multiplied by your item rarity.' : ''}</p>
         </section>
+        {(pin || held !== undefined) && (
+          <section class="fe-rail__sec" aria-label="Your maps">
+            <h4 class="fe-rail__h ui-type-caption">Your maps</h4>
+            <p class="ui-type-secondary fe-rail__mute" data-rail-held>{held ? `You hold ${held} map${held === 1 ? '' : 's'} of this area.` : 'You hold no maps of this area.'}</p>
+            {pin && (
+              <div class="fe-rail__pinrow">
+                <Button size="small" class={cx(pin.pinned && 'fe-btn--on')} disabled={!pin.pinned && !!pin.blocked} onClick={pin.onToggle}>{pin.pinned ? 'Unpin' : `Pin ${area.name}`}</Button>
+                <span class="ui-type-caption fe-rail__mute">{pin.blocked && !pin.pinned ? pin.blocked : `${pin.used}/${pin.slots} pins · its maps drop x${pin.multiplier} as often`}</span>
+              </div>
+            )}
+          </section>
+        )}
+        {sources && <SourcesPanel readout={sources} onFocus={onFocus} />}
         <section class="fe-rail__sec" aria-label="What can happen here">
           <h4 class="fe-rail__h ui-type-caption">What can happen here</h4>
           {area.encounters ? <div class="fe-rail__chips">{area.encounters.map((e, i) => <span key={i} class="fe-chip fe-chip--event"><span class="ui-type-secondary">{MAP_EVENT_NAMES[e.kind]} · wave {e.wave}</span></span>)}</div>
             : map && odds ? <div class="fe-rail__chips">{active.length ? active.map((k) => <span key={k} class="fe-chip fe-chip--event"><span class="ui-type-secondary">{MAP_EVENT_NAMES[k]} {Math.round(odds[k]! * 1000) / 10}%</span></span>) : <span class="ui-type-secondary fe-rail__mute">Nothing at this tier.</span>}</div>
-            : <p class="ui-type-secondary fe-rail__mute">Slot a map to see encounter odds.{area.eventMultiplier ? ` Chances here are ×${area.eventMultiplier}.` : ''}</p>}
+            : <p class="ui-type-secondary fe-rail__mute">Encounter odds show for the area your slotted map opens.{area.eventMultiplier ? ` Chances here are ×${area.eventMultiplier}.` : ''}</p>}
         </section>
         {(key || area.requiresBounty || fee !== null) && <section class="fe-rail__sec" aria-label="Entry">
           <h4 class="fe-rail__h ui-type-caption">Entry</h4>
@@ -136,10 +180,11 @@ export function AtlasRail({ area, model, tier, map, odds, courseId, blocked, onS
       </div>
       <div class="fe-rail__foot">
         {blocked && <p class="fe-atlas__error ui-type-secondary" role="status">{blocked}</p>}
-        <Button variant="ember" size="large" class="fe-rail__course" disabled={!!blocked || isCourse} onClick={onSetCourse}>
-          {isCourse ? 'Course set' : 'Set course'}
-        </Button>
-        {!map && <button class="fe-rail__link ui-type-secondary" onClick={onOpenStash}>Slot a map…</button>}
+        {model.home
+          ? <p class="fe-rail__mute fe-rail__hint ui-type-secondary">Your slotted map opens here.</p>
+          : homeName
+            ? <Button class="fe-rail__course" data-show-home onClick={onGoHome} title="Bring the chart back to the area your map opens (G)">Show {homeName}</Button>
+            : <p class="fe-rail__mute fe-rail__hint ui-type-caption">Browsing. Drag a map from your inventory into the dock: it opens the area it is bound to.</p>}
       </div>
     </aside>
   );

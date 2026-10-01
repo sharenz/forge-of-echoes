@@ -11,6 +11,7 @@ import { removeHostileAreas, spawnArea } from './areas';
 import { startBoss } from './bosses';
 import { DT_FIRE, killMonster } from './combat';
 import { cleanseAll } from './debuffs';
+import { bossStagePoint, layoutPackPoints, packProfile } from './layout';
 import {
   DT, HAZARD_MAX_INTERVAL, HAZARD_MIN_INTERVAL, INTRO_DELAY, MAX_LIVE_MONSTERS, PACK_MIN_DISTANCE,
   PACK_SHARE, PARTY_BUDGET_PER_PLAYER, PARTY_ELITE_PER_PLAYER, PRESSURE_BASE, PRESSURE_CHECK_TICKS, PRESSURE_PER_WAVE,
@@ -327,6 +328,20 @@ function placePacks(w: World, plan: WavePlan): void {
     }
     return;
   }
+  // A hand-crafted layout with zones or lanes decides where packs may stand; seeds still decide which pack goes where.
+  if (w.layout) {
+    const profiles = plan.packs.map((pk) => packProfile(pk.members.map((kind) => monsterDef(kind).role), pk.rarity === 'rare'));
+    const pts = layoutPackPoints(w, plan.wave, profiles);
+    if (pts) {
+      for (let k = 0; k < n; k++) {
+        const planned = plan.packs[k];
+        const { x, y } = pts[k] ?? pointAway(w, Math.min(PACK_MIN_DISTANCE, R * 0.6));
+        const pack = allocPack(w, x, y, plan.wave, false, planned.rarity, false);
+        spawnGroup(w, planned.members, x, y, pack, planned.rarity, planned.mods, plan.wave);
+      }
+      return;
+    }
+  }
   const total = n * 3 + 6;
   const rot = rng.range(0, TAU);
   const pts: { x: number; y: number }[] = [];
@@ -507,7 +522,8 @@ function spawnBoss(w: World, wave: number): void {
   const m = w.monsters;
   const kind = w.roster.boss;
   const def = monsterDef(kind);
-  const pos = pointAway(w, 210);
+  // A layout's boss stage replaces the random spot (campers on the stage are not landed on: see bossStagePoint).
+  const pos = bossStagePoint(w) ?? pointAway(w, 210);
   const pk = allocPack(w, pos.x, pos.y, wave, false, 'normal', true);
   const i = spawnMonster(w, kind, pos.x, pos.y, { pack: pk, wave, boss: true });
   if (i < 0) return;

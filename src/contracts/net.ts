@@ -27,7 +27,11 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 16: scarab items, map device sockets and frozen wave modifiers.
 // 17: CLI-activated testing merchant prop and purchase commands.
 // 18: vendor sales with a confirmed Scrap payout.
-export const PROTOCOL_VERSION = 18;
+// 19: the Crafting Stash work slot (ItemLocation 'craftSlot', CharacterSave.craftSlot in account storage).
+// 20: area-bound maps (MapItem.areaId); activateMapDevice no longer picks an area (passageKey / pit / useSurge).
+// 21: account pins (pinArea), Rook's generated map offers (map:<area>:<tier>:<grade>), Re-chart services and benchRecycle.
+// 22: refillSurge (Hourglass Sand on one area / Grand Hourglass on all) and the daily surge ledger on the account Atlas (atlas.surge).
+export const PROTOCOL_VERSION = 22;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -115,11 +119,16 @@ export type Command =
   | { c: 'setLoadoutSlot'; slot: number; skillId: SkillId | null }
   // hideout
   | { c: 'setMapTreeNode'; nodeId: import('./atlas').MapTreeNodeId; allocate: boolean }
-  | { c: 'activateMapDevice'; areaId?: import('./atlas').AtlasAreaId; lootClass?: import('./content').ItemClass }
+  /** Pin or unpin an Atlas area (brief D 5.1): free, instant, account-wide. */
+  | { c: 'pinArea'; areaId: import('./atlas').AtlasAreaId; pinned: boolean }
+  /** Hideout: use Hourglass Sand on `areaId`, or a Grand Hourglass on every area (`all`). Exactly one of the two. */
+  | { c: 'refillSurge'; areaId?: import('./atlas').AtlasAreaId; all?: true }
+  | { c: 'activateMapDevice'; lootClass?: import('./content').ItemClass; passageKey?: import('./content').CurrencyId; pit?: true; useSurge?: boolean;
+      /** Stale clients only: accepted when it equals the map's bound area, otherwise an error. */ areaId?: import('./atlas').AtlasAreaId }
   | { c: 'merchantOffers' }
-  | { c: 'buyOffer'; offerId: string }
+  | { c: 'buyOffer'; offerId: string; at?: { x: number; y: number } }
   | { c: 'sellItems'; uids: string[]; expectedScrap: number }
-  | { c: 'buyDebugOffer'; offerId: string; options: import('./game').DebugMerchantOptions }
+  | { c: 'buyDebugOffer'; offerId: string; options: import('./game').DebugMerchantOptions; at?: { x: number; y: number } }
   // party & social
   | { c: 'partyInvite'; name: string }
   | { c: 'partyRespond'; inviteId: string; accept: boolean }
@@ -141,6 +150,8 @@ export type Command =
   | { c: 'benchCraft'; targetUid: string; recipeId: string; expectedScrap?: number }
   /** Crafting bench: remove the item's bench-crafted affix (free). */
   | { c: 'benchClear'; targetUid: string }
+  /** Crafting bench: three maps of one tier become one Normal map bound to `areaId` (brief D 5.3). `expectedScrap` is the quoted price. */
+  | { c: 'benchRecycle'; uids: string[]; areaId: import('./atlas').AtlasAreaId; expectedScrap?: number }
   /** Leave the current map (re-entering costs a portal). Goes to the map owner's hideout while you may visit it, else your own. */
   | { c: 'leaveMap' }
   /** Dead in a map → back to the map owner's hideout (or your own). */

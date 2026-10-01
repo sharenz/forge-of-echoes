@@ -45,4 +45,14 @@ describe('testing merchant purchases', () => {
       expect(rules.buyDebugOffer(ch, 'currency:scrap', { ...options, ...invalid }).ok).toBe(false);
     expect(rules.buyDebugOffer(ch, 'not-an-offer', options).ok).toBe(false);
   });
+
+  it('delivers the first stack on the drop cell and fills the rest first-fit', () => {
+    const ch = bareCharacter();
+    const out = expectOk(rules.buyDebugOffer(ch, 'currency:hasteScarab4', { ...options, quantity: 40 }, { x: 6, y: 4 })).character;
+    const stacks = out.backpack.entries.filter(e => e.item.kind === 'currency' && e.item.currencyId === 'hasteScarab4');
+    expect(stacks).toHaveLength(2);
+    expect(stacks.some(e => e.x === 6 && e.y === 4)).toBe(true);
+    const plain = expectOk(rules.buyDebugOffer(ch, 'currency:hasteScarab4', { ...options, quantity: 40 })).character;
+    expect(plain.backpack.entries.map(e => e.item.kind)).toEqual(out.backpack.entries.map(e => e.item.kind));
+  });
 });

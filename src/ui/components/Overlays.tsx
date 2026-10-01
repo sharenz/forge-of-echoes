@@ -188,19 +188,28 @@ export function DragGhost() {
       const dx = x - (drag.grab.x + 0.5) * drag.cellPx;
       const dy = y - (drag.grab.y + 0.5) * drag.cellPx;
       el.style.transform = `translate(${dx}px, ${dy}px)`;
+      // Keep the status tags (centred under the ghost) inside the window: a drag near an edge shifts them inward.
+      const centre = dx + el.offsetWidth / 2;
+      for (const tag of el.querySelectorAll<HTMLElement>('.fe-drag-ghost__tag')) {
+        const half = tag.offsetWidth / 2;
+        const shift = Math.max(0, centre + half - (window.innerWidth - 8)) * -1 + Math.max(0, 8 - (centre - half));
+        tag.style.marginLeft = `${shift}px`;
+      }
     };
     place(local.pointer.x, local.pointer.y);
     const move = (e: PointerEvent): void => place(e.clientX, e.clientY);
     window.addEventListener('pointermove', move);
     return () => window.removeEventListener('pointermove', move);
-  }, [drag?.uid]);
+  }, [drag?.uid, drag?.target?.key, drag?.target?.valid]);
 
   if (!drag) return null;
   const t = drag.target;
   const state = !t ? 'none' : t.world && t.valid ? 'world' : t.valid || t.noop ? 'ok' : 'bad';
   const filing = state === 'ok' && !t?.noop ? t?.loc?.kind : null;
   const tag =
-    t?.bench && state === 'ok'
+    t?.tag && state === 'ok' && !t.noop
+      ? t.tag
+      : t?.bench && state === 'ok'
       ? 'Place on the bench'
       : t?.offer && state === 'ok' && !t.noop
         ? 'Add to your offer'
@@ -210,7 +219,9 @@ export function DragGhost() {
             ? 'File in the Map Stash'
             : filing === 'mapDevice'
               ? 'Load into the device'
-              : null;
+              : filing === 'scarabSlot'
+                ? 'Socket the scarab'
+                : null;
   return (
     <div
       ref={ref}

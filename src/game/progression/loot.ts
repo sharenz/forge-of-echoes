@@ -17,8 +17,10 @@
 // Summoned minions (and the training dummy) never drop anything.
 import type { MapTreeNodeId } from '../../contracts/atlas';
 import { atlasCurrencyWeight, atlasStat, resolveAtlasRules, treeContextOf, type AtlasRules, type TreeContext } from './atlas-rules';
-import type { RunSetup } from '../../contracts/game';
-import { SCARABS, SCARAB_DROP_CHANCE } from '../../data/scarabs';
+import type { MapRouting, RunSetup } from '../../contracts/game';
+import type { AtlasAreaId } from '../../contracts/atlas';
+import { AREA_SCARAB_SHARE, SCARABS, SCARAB_DROP_CHANCE } from '../../data/scarabs';
+import { GRAND_HOURGLASS, HOURGLASS_SAND } from '../../data/progression/territory';
 import { hashString } from '../../core/rng';
 import type { CharacterSave, CurrencyStack, EquipmentItem, FlaskStack, Item, MapItem, Rarity } from '../../contracts/items';
 import type { CurrencyId, ItemClass, MapBaseId } from '../../contracts/content';
@@ -29,7 +31,7 @@ import type { Rng } from '../../contracts/rng';
 import {
   BOSS_LOOT, CATEGORY_CHANCE, CATEGORY_ORDER, CHEST_LOOT, CHEST_MAP_QUALITY, CURRENCY_DROPS, DROPPED_MAP_QUALITY,
   ECHO_WAVE_QUANTITY_MORE, ELITE_LOOT_MULTIPLIER, EQUIPMENT_RARITY_WEIGHTS, FLASK_DROPS, LIEUTENANT_LOOT, MAP_BASES,
-  MAP_DROP_TIER_OFFSETS, MAP_RARITY_WEIGHTS, MAX_MAP_QUALITY, MAX_MAP_TIER, MIN_MAP_TIER, MONSTER_LOOT_MULTIPLIERS,
+  MAP_RARITY_WEIGHTS, MAX_MAP_QUALITY, MAX_MAP_TIER, MIN_MAP_TIER, MONSTER_LOOT_MULTIPLIERS,
 } from '../../data/progression';
 import type { CurrencyDropDef, LootCategory, RarityWeightDef } from '../../data/progression';
 import { ARMOUR_CLASSES, findCurrency, findFlask, getBase } from '../../data/items';
@@ -37,10 +39,13 @@ import {
   currencyStack, flaskStack, generateEquipment, generateUnique, itemDisplayName, pickRandomBase, pickRandomUnique, randomUid,
 } from '../items';
 import type { Luck } from './luck';
-import { lootLuck } from './luck';
+import { lootLuck, lootLuckWithoutSurge, surgeMultiplier } from './luck';
 import {
   clampTier, echoWaveIndex, mapBaseName, mapDropMultipliers, mapTitle, monsterName, monsterSentenceName, rollMapWithRarity,
 } from './maps';
+import { areaForTheme } from './map-binding';
+import { advanceFor, routeMapDrop } from './map-routing';
+import { ROUTING_NO_ADVANCE_QUALITY, ROUTING_TIER_OFFSETS } from '../../data/progression/routing';
 import { asciiLabel, rollCountTable } from './util';
 import { flattenMapEvents } from './map-events';
 import { RING_VOW_REWARD } from '../../data/progression/events/ring';
@@ -115,14 +120,51 @@ interface LootContext {
   bossUniqueMore: number;
   normalQuantity: number;
   rareQuantity: number;
+  /** The surge's item-quantity multiplier (1 without surge): taken back out of the map category (I1). */
+  surgeQuantity: number;
+  /** Tree: multiplier on every Hourglass Sand chance (Trailmark). */
+  sandMore: number;
   echoWave: number;
   place: string;
   area?: AtlasAreaDef;
   lootClass?: ItemClass;
   crownEncounter: boolean;
+  /** The looter's charted areas (a per-looter view of the context): a dropped map is bound to an area they can open. */
+  discovered?: ReadonlySet<string>;
+  /** The expedition's frozen drop routing (brief D 4); absent on runs frozen before routing: maps then roll a theme as before. */
+  routing?: MapRouting;
 }
 
 const CONTEXTS = new WeakMap<RunSetup, LootContext>();
+const LOOTER_CONTEXTS = new WeakMap<LootContext, WeakMap<object, LootContext>>();
+
+/** The run's loot context seen by one looter (their Atlas decides which area a dropped map is bound to). */
+function lootContextFor(setup: RunSetup, looter: CharacterSave | null): LootContext {
+  const base = lootContext(setup);
+  const atlas = looter?.atlas;
+  if (!atlas) return base;
+  let views = LOOTER_CONTEXTS.get(base);
+  if (!views) LOOTER_CONTEXTS.set(base, views = new WeakMap());
+  let view = views.get(atlas);
+  if (!view) views.set(atlas, view = { ...base, discovered: new Set<string>(atlas.discovered) });
+  return view;
+}
+
+/**
+ * Which scarab a scarab roll yields: the five area-bias families together take AREA_SCARAB_SHARE of the rolls (equal split, the tier
+ * weights of every family are the same), the wave families the rest; a group with nothing eligible at this level yields to the other.
+ */
+export function pickScarab(rng: Rng, monsterLevel: number) {
+  const eligible = SCARABS.filter(s => s.minMonsterLevel <= monsterLevel);
+  const area = eligible.filter(s => s.kind === 'area'), wave = eligible.filter(s => s.kind === 'wave');
+  const pool = area.length && wave.length ? (rng.chance(AREA_SCARAB_SHARE) ? area : wave) : eligible;
+  return rng.weighted(pool, s => s.weight);
+}
+
+/** One Hourglass roll on an independent stream (it never moves the ordinary loot stream): `salt` names the source. */
+function hourglassRoll(rng: Rng, salt: number, chance: number): boolean {
+  return chance > 0 && rng.fork(salt).chance(Math.min(1, chance));
+}
 
 const ESSENCES: ReadonlySet<CurrencyId> = new Set<CurrencyId>(['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift']);
 
@@ -172,11 +214,14 @@ function lootContext(setup: RunSetup): LootContext {
     bossUniqueMore: Math.max(0, atlasStat(atlas, 'bossUnique', 1)),
     normalQuantity: Math.max(0, atlasStat(atlas, 'normalQuantity', 1)),
     rareQuantity: Math.max(0, atlasStat(atlas, 'rareQuantity', 1)),
+    surgeQuantity: surgeMultiplier(setup.surge?.quantityMore),
+    sandMore: Math.max(0, atlasStat(atlas, 'sandChance', 1)),
     echoWave: echoWaveIndex(map),
     place: `${area?.name ?? mapBaseName(map.baseId)} (Tier ${tier})`,
     area,
     lootClass: setup.lootClass,
     crownEncounter,
+    ...(setup.routing ? { routing: setup.routing } : {}),
   };
   CONTEXTS.set(setup, ctx);
   return ctx;
@@ -216,29 +261,55 @@ function pickMapBase(rng: Rng): MapBaseId {
   return rng.weighted(MAP_BASE_IDS, (id) => MAP_BASES[id].dropWeight) ?? MAP_BASE_IDS[0];
 }
 
-function makeMap(rng: Rng, tier: number, m: number, quality: number): MapItem {
-  const baseId = pickMapBase(rng);
+/** How one map drop is addressed: the tier offset (-1, 0, +1) and, for the chest upgrade, a forced destination. */
+interface MapDropRoll {
+  offset?: number;
+  /** The chest upgrade's advance target: the area is not drawn (one draw is still consumed, so the stream stays aligned). */
+  area?: AtlasAreaId;
+  /** Boss-kill and chest drops may name the pending (about to be revealed) areas (D 4.3). */
+  pending?: boolean;
+}
+
+/**
+ * THE map drop entry point (brief D 4). Exactly one rng draw picks the addressee. With a frozen routing table that is a weighted
+ * pick over the run's own area, its charted neighbours, the wander tail, pins and (boss/chest only) the pending reveals; the tier
+ * is the run's plus the offset, clamped to the pick's ceiling (an upward roll only names areas that accept it). Without routing
+ * (a run frozen before it, or a table that holds nothing the looter has charted) the theme is rolled as in T0 and the area follows
+ * from it. Quality, rarity and mods are rolled as before.
+ */
+function makeMap(ctx: LootContext, rng: Rng, m: number, quality: number, roll: MapDropRoll = {}): MapItem {
+  const offset = roll.offset ?? 0;
+  let areaId: AtlasAreaId | undefined;
+  let t = clampTier(ctx.tier + offset);
+  if (roll.area) {
+    rng.next();
+    areaId = roll.area;
+  } else if (ctx.routing) {
+    const drop = routeMapDrop(ctx.routing, { tier: ctx.tier, offset, pending: roll.pending === true, ...(ctx.discovered ? { discovered: ctx.discovered } : {}) }, rng);
+    if (drop) { areaId = drop.areaId; t = drop.tier; }
+  }
+  const baseId = areaId ? undefined : pickMapBase(rng);
   const rarity = rollMapRarity(rng, m);
-  return rollMapWithRarity(rng, baseId, clampTier(tier), rarity, randomUid(rng), quality, true);
+  const uid = randomUid(rng);
+  return rollMapWithRarity(rng, areaId ?? areaForTheme(baseId!, t, uid, ctx.discovered, ctx.area?.id), t, rarity, uid, quality, true);
 }
 
 function droppedMapQuality(rng: Rng, bonus = 0): number {
   return Math.min(MAX_MAP_QUALITY, (rng.chance(DROPPED_MAP_QUALITY.chance) ? rng.int(DROPPED_MAP_QUALITY.min, DROPPED_MAP_QUALITY.max) : 0) + bonus);
 }
 
-/** A random map drop: same tier 60% · one lower 25% · one higher 15% (within 1–15). */
-function makeRandomMap(ctx: LootContext, rng: Rng, m: number): MapItem {
-  const offset = rng.weighted(MAP_DROP_TIER_OFFSETS, (o) => o.weight)?.offset ?? 0;
-  const tier = Math.max(MIN_MAP_TIER, Math.min(MAX_MAP_TIER, ctx.tier + offset));
-  return makeMap(rng, tier, m, droppedMapQuality(rng, ctx.droppedMapQuality));
+/** A random map drop: same tier 60% · one lower 25% · one higher 15% (within 1–15); `pending` = boss-kill drop. */
+function makeRandomMap(ctx: LootContext, rng: Rng, m: number, pending = false): MapItem {
+  const offset = rng.weighted(ctx.routing?.tierOffsets ?? ROUTING_TIER_OFFSETS, (o) => o.weight)?.offset ?? 0;
+  return makeMap(ctx, rng, m, droppedMapQuality(rng, ctx.droppedMapQuality), { offset, pending });
 }
 
-function rollCategory(cat: LootCategory, ctx: LootContext, rng: Rng, m: number, origin: string): Item {
+function rollCategory(cat: LootCategory, ctx: LootContext, rng: Rng, m: number, origin: string, pending = false): Item {
   switch (cat) {
     case 'currency': return makeCurrency(ctx, rng);
     case 'equipment': return makeEquipment(ctx, rng, rollEquipmentRarity(rng, m), origin);
     case 'flask': return makeFlask(rng);
-    case 'map': return makeRandomMap(ctx, rng, m);
+    case 'map': return makeRandomMap(ctx, rng, m, pending);
   }
 }
 
@@ -265,7 +336,8 @@ export interface KillLuck {
   personal: Luck;
 }
 
-function killLuckFrom(ctx: LootContext, personal: Luck, kill: KillLootContext): KillLuck {
+/** `personal` includes the surge (ordinary rolls); `base` is the same luck without it (guarantees, rewards: the KillLuck's `personal`). */
+function killLuckFrom(ctx: LootContext, personal: Luck, kill: KillLootContext, base: Luck = personal): KillLuck {
   const elite = kill.isBoss || kill.isLieutenant;
   const mult = elite ? ELITE_LOOT_MULTIPLIER : (MONSTER_LOOT_MULTIPLIERS[kill.rarity] ?? MONSTER_LOOT_MULTIPLIERS.normal);
   const echo = ctx.echoWave > 0 && kill.wave >= ctx.echoWave;
@@ -275,12 +347,13 @@ function killLuckFrom(ctx: LootContext, personal: Luck, kill: KillLootContext): 
   const eventQuantity = 1 + Math.max(0, kill.quantityMore ?? 0) / 100;
   const eventRarity = 1 + Math.max(0, kill.rarityMore ?? 0) / 100;
   const quantity = personal.itemQuantity * mult.quantity * treeMore * (echo ? 1 + ECHO_WAVE_QUANTITY_MORE / 100 : 1) * eventQuantity;
-  return { quantity, rarity: personal.itemRarity * mult.rarity * eventRarity, echo, personal };
+  return { quantity, rarity: personal.itemRarity * mult.rarity * eventRarity, echo, personal: base };
 }
 
 function chancesFrom(ctx: LootContext, luck: KillLuck): Record<LootCategory, number> {
   const out = {} as Record<LootCategory, number>;
-  for (const cat of CATEGORY_ORDER) out[cat] = CATEGORY_CHANCE[cat] * (luck.quantity / 100)
+  // Surge quantity applies to every category except maps, so the daily clock never changes map volume (brief D I1).
+  for (const cat of CATEGORY_ORDER) out[cat] = CATEGORY_CHANCE[cat] * (luck.quantity / (cat === 'map' ? ctx.surgeQuantity : 1) / 100)
     * (cat === 'map' ? ctx.mapChance : cat === 'currency' ? ctx.area?.currencyMultiplier ?? 1 : cat === 'equipment' ? ctx.equipmentDrop : 1);
   return out;
 }
@@ -290,13 +363,13 @@ function chancesFrom(ctx: LootContext, luck: KillLuck): Record<LootCategory, num
  * `looter` null = map-side luck only (no gear).
  */
 export function killLuck(setup: RunSetup, kill: KillLootContext, looter: CharacterSave | null = null): KillLuck {
-  return killLuckFrom(lootContext(setup), lootLuck(setup, looter), kill);
+  return killLuckFrom(lootContext(setup), lootLuck(setup, looter), kill, lootLuckWithoutSurge(setup, looter));
 }
 
 /** Chance per kill of each category for `looter` (may exceed 1: then several drop). */
 export function categoryChances(setup: RunSetup, kill: KillLootContext, looter: CharacterSave | null = null): Record<LootCategory, number> {
   const ctx = lootContext(setup);
-  return chancesFrom(ctx, killLuckFrom(ctx, lootLuck(setup, looter), kill));
+  return chancesFrom(ctx, killLuckFrom(ctx, lootLuck(setup, looter), kill, lootLuckWithoutSurge(setup, looter)));
 }
 
 /** A kill that never drops anything: summoned minions (defensive — the sim never asks) and the training dummy. */
@@ -310,21 +383,21 @@ function dropsNothing(kill: KillLootContext): boolean {
  */
 export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, looter: CharacterSave | null): Item[] {
   if (dropsNothing(kill)) return [];
-  const ctx = lootContext(setup);
-  const luck = killLuckFrom(ctx, lootLuck(setup, looter), kill);
+  const ctx = lootContextFor(setup, looter);
+  const luck = killLuckFrom(ctx, lootLuck(setup, looter), kill, lootLuckWithoutSurge(setup, looter));
   const chances = chancesFrom(ctx, luck);
   const origin = killOrigin(ctx, kill, luck.echo);
   const m = luck.rarity / 100;
   const out: Item[] = [];
   for (const cat of CATEGORY_ORDER) {
     const n = rollTimes(rng, chances[cat]);
-    for (let i = 0; i < n; i++) out.push(rollCategory(cat, ctx, rng, m, origin));
+    for (let i = 0; i < n; i++) out.push(rollCategory(cat, ctx, rng, m, origin, kill.isBoss === true));
   }
   // An independent per-kill stream keeps ordinary currency/equipment rolls unchanged.
   // The main stream has advanced through the category rolls, even on a kill with no ordinary drops.
   const scarabRng = rng.fork(0x53434152);
   if (scarabRng.chance(Math.min(1, SCARAB_DROP_CHANCE * luck.quantity / 100 * ctx.scarabDrop))) {
-    const scarab = scarabRng.weighted(SCARABS.filter(s => s.minMonsterLevel <= setup.monsterLevel), s => s.weight);
+    const scarab = pickScarab(scarabRng, setup.monsterLevel);
     if (scarab) out.push(currencyStack(scarab.id, 1, randomUid(scarabRng), true));
   }
 
@@ -354,6 +427,16 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
       if (id) out.push(generateUnique(id, rng, { itemLevel: ctx.monsterLevel, origin: `Rival reward from ${monsterName(kill.kind)} in ${ctx.place}`, isNew: true }));
     }
     if (ctx.area?.id === 'sealedReliquary' && (!ctx.crownEncounter || kill.eventReward === 'secondCrown')) out.push(makeEquipment(ctx, rng, 'unique', origin));
+    // Surge refills (brief D 7.4): independent streams, personal rarity (without the surge) scales the chance, the tree scales Sand.
+    if (kill.rival === undefined) {
+      const sealed = ctx.area?.sealed ? HOURGLASS_SAND.sealedBossMultiplier : 1;
+      if (ctx.tier >= HOURGLASS_SAND.bossMinTier && hourglassRoll(rng, 0x53414e44, HOURGLASS_SAND.bossChance * sealed * mapM * ctx.sandMore)) {
+        out.push(currencyStack('hourglassSand', 1, randomUid(rng), true));
+      }
+      if (ctx.tier >= GRAND_HOURGLASS.bossMinTier && hourglassRoll(rng, 0x4752414e, GRAND_HOURGLASS.bossChance * mapM)) {
+        out.push(currencyStack('grandHourglass', 1, randomUid(rng), true));
+      }
+    }
     for (const drop of ctx.area?.ingredientDrops ?? []) {
       if (ctx.tier >= drop.minTier && rng.chance(Math.min(1, drop.chance * ctx.ingredientMore))) out.push(currencyStack(drop.currencyId, 1, randomUid(rng), true));
     }
@@ -379,8 +462,8 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
  * Grade 0 is a small consolation (never a punishment). Called once per living player, in a fixed order.
  */
 export function rollEventReward(setup: RunSetup, ctx: EventRewardContext, rng: Rng, looter: CharacterSave | null): Item[] {
-  const lc = lootContext(setup);
-  const m = lootLuck(setup, looter).itemRarity / 100;
+  const lc = lootContextFor(setup, looter);
+  const m = lootLuckWithoutSurge(setup, looter).itemRarity / 100;
   const out: Item[] = [];
   const grade = ctx.grade;
   const place = lc.place;
@@ -428,7 +511,7 @@ export function rollEventReward(setup: RunSetup, ctx: EventRewardContext, rng: R
       } else if (ctx.choice === 1) {
         out.push(makeEquipment(lc, rng, rollEquipmentRarity(rng, m, 'magic'), `Reliquary chest of the Laden Caravan in ${place}`));
       } else if (ctx.choice === 2) {
-        out.push(makeMap(rng, Math.min(MAX_MAP_TIER, lc.tier + 1), m, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max)));
+        out.push(makeMap(lc, rng, m, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max), { offset: 1 }));
       } else {
         if (rng.chance(0.5 + ctx.ingredientBonus)) cur('twinInk');
         cur('compass');
@@ -558,6 +641,8 @@ export function rollEventReward(setup: RunSetup, ctx: EventRewardContext, rng: R
     }
   }
   if (grade >= 1 && ctx.kind !== 'vaultbreakers' && rng.chance(bonus)) out.push(makeCurrency(lc, rng));
+  // Gold-grade completions can pay Hourglass Sand (brief D 7.4, independent stream; Twin Omens may still trim it with the rest).
+  if (grade >= 3 && hourglassRoll(rng, 0x474f4c44, HOURGLASS_SAND.goldEventChance * lc.sandMore)) cur('hourglassSand');
   // Twin Omens: every event pays less (each extra item has a chance to be lost; the first is always kept).
   if (ctx.multiplier < 1) return out.filter((_, k) => k === 0 || rng.chance(Math.max(0, ctx.multiplier)));
   return out;
@@ -598,8 +683,8 @@ function chestEquipment(ctx: LootContext, rng: Rng, rarity: Rarity, origin: stri
  * a map at the current tier (25% chance of +1), rolled with the looter's personal rarity.
  */
 export function rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave | null, boons?: ChestBoons): Item[] {
-  const ctx = lootContext(setup);
-  const m = lootLuck(setup, looter).itemRarity / 100;
+  const ctx = lootContextFor(setup, looter);
+  const m = lootLuckWithoutSurge(setup, looter).itemRarity / 100;
   const origin = `Found in the reward chest of ${ctx.place}`;
   const out: Item[] = [];
   for (let i = 0; i < Math.round(CHEST_LOOT.equipment * ctx.chestLoot); i++) {
@@ -611,9 +696,18 @@ export function rollChestLoot(setup: RunSetup, rng: Rng, looter: CharacterSave |
   const currency = Math.round((rng.int(CHEST_LOOT.currency.min, CHEST_LOOT.currency.max) * (ctx.area?.currencyMultiplier ?? 1) + ctx.chestCurrency) * ctx.chestLoot);
   for (let i = 0; i < currency; i++) out.push(makeCurrency(ctx, rng));
   for (let i = 0; i < CHEST_LOOT.flasks; i++) out.push(makeFlask(rng));
-  const tier = Math.min(MAX_MAP_TIER, ctx.tier + ((setup.map.charted || rng.chance(CHEST_LOOT.mapTierUpgradeChance + ctx.chestUpgrade)) ? 1 : 0));
-  out.push(makeMap(rng, tier, m, Math.min(MAX_MAP_QUALITY, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max) + Math.round(ctx.chestQuality))));
-  if (rng.chance(CHEST_LOOT.extraMapChance)) out.push(makeRandomMap(ctx, rng, m));
+  // The guaranteed map: upgrade roll as before (Compass forces it, Deepward adds points). An upgrade is a map of the chest's advance
+  // target (the nearest charted area that accepts the next tier); with none it is not upgraded and the map is 3 quality better.
+  const upgrade = setup.map.charted || rng.chance(CHEST_LOOT.mapTierUpgradeChance + ctx.chestUpgrade + (ctx.routing?.chestUpgradeBonus ?? 0) / 100);
+  let quality = Math.min(MAX_MAP_QUALITY, rng.int(CHEST_MAP_QUALITY.min, CHEST_MAP_QUALITY.max) + Math.round(ctx.chestQuality));
+  if (!ctx.routing) out.push(makeMap(ctx, rng, m, quality, { offset: upgrade ? 1 : 0 }));
+  else {
+    const advance = upgrade && ctx.tier < MAX_MAP_TIER ? advanceFor(ctx.routing, ctx.tier, ctx.discovered) : undefined;
+    if (upgrade && ctx.tier < MAX_MAP_TIER && !advance) quality = Math.min(MAX_MAP_QUALITY, quality + ROUTING_NO_ADVANCE_QUALITY);
+    out.push(makeMap(ctx, rng, m, quality, advance ? { offset: 1, area: advance, pending: true } : { pending: true }));
+  }
+  if (rng.chance(CHEST_LOOT.extraMapChance)) out.push(makeRandomMap(ctx, rng, m, true));
+  if (hourglassRoll(rng, 0x43485354, HOURGLASS_SAND.chestChance * ctx.sandMore)) out.push(currencyStack('hourglassSand', 1, randomUid(rng), true));
   return out;
 }
 

@@ -36,9 +36,8 @@ describe('createCharacter', () => {
       if (e.item.kind === 'map') maps.push(e.item);
     }
     expect(currency).toEqual({ scrap: 10, kindling: 4, essenceEmber: 2, reforge: 1, solvent: 1, seal: 1, mapDust: 3, threatGlyph: 2 });
-    expect(maps.map((m) => [m.baseId, m.tier, m.rarity]).sort()).toEqual([
-      ['ashenForge', 1, 'normal'], ['ashenForge', 1, 'normal'], ['rimedOssuary', 1, 'normal'],
-    ]);
+    // nobody has a second area at creation: the kit is three Tier 1 Cinder Crossing maps
+    expect(maps.map((m) => [m.areaId, m.baseId, m.tier, m.rarity])).toEqual(Array(3).fill(['cinderCrossing', 'ashenForge', 1, 'normal']));
   });
 
   it('loads two Life Flask slots and one Focus Flask slot with 3 charges each', () => {

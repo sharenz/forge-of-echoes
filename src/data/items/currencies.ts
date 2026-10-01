@@ -5,6 +5,7 @@ import { CURRENCY_STACK, RARE_CURRENCY_STACK } from './rules';
 import type { CurrencyDef } from './types';
 import { SCARABS } from '../scarabs';
 import type { ScarabId } from '../../contracts/content';
+import { GRAND_HOURGLASS, HOURGLASS_SAND, SURGE_CHARGES } from '../progression/territory';
 
 type Spec = Omit<CurrencyDef, 'id' | 'maxStack'> & { maxStack?: number };
 
@@ -30,6 +31,16 @@ export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
     name: s.name, description: `${s.description} Place in a Map Device scarab socket; consumed when the map opens. Drops from monster level ${s.minMonsterLevel}+. Higher-level monsters can also drop lower tiers.`,
     family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: 20, dropTier: 'rare',
   })])) as Record<ScarabId, CurrencyDef>,
+  hourglassSand: currency('hourglassSand', {
+    name: 'Hourglass Sand',
+    description: `Refills the daily surge of one Atlas area to its full charges. Select the area on the Atlas chart in your hideout and use it there; refused when the area is already full. Found from final bosses on Tier ${HOURGLASS_SAND.bossMinTier}+ maps (${HOURGLASS_SAND.bossChance * 100}%, doubled in sealed areas), completion chests (${HOURGLASS_SAND.chestChance * 100}%) and Gold-grade encounters (${HOURGLASS_SAND.goldEventChance * 100}%). Tradeable.`,
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: HOURGLASS_SAND.stack, dropTier: 'rare',
+  }),
+  grandHourglass: currency('grandHourglass', {
+    name: 'Grand Hourglass',
+    description: `Refills the daily surge of every Atlas area at once (${SURGE_CHARGES} charges or more each). Use it from the Atlas table in your hideout. Found from final bosses on Tier ${GRAND_HOURGLASS.bossMinTier}+ maps (${GRAND_HOURGLASS.bossChance * 100}%). Tradeable.`,
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: GRAND_HOURGLASS.stack, dropTier: 'rare',
+  }),
   kindling: currency('kindling', {
     name: 'Kindling Shard',
     description: 'Awakens a Normal item into a Magic item with 1–2 random affixes.',

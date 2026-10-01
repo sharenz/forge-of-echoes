@@ -185,7 +185,7 @@ export function createCharacter(name: string, seed: number): CharacterSave {
   });
   let x = 0;
   for (const m of STARTING_KIT.maps) {
-    for (let k = 0; k < m.count; k++) backpack = place(backpack, createMapItem(m.baseId, 1, mint(state)), x++, 1);
+    for (let k = 0; k < m.count; k++) backpack = place(backpack, createMapItem(m.areaId, 1, mint(state)), x++, 1);
   }
 
   return {

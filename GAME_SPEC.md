@@ -36,7 +36,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | `I` / `C` / `K` | Inventory / character / skills |
 | `Esc` | Close the top panel, or open the menu (pauses in maps) |
 | `Alt` (hold) | Affix tiers, roll ranges and comparison with equipped items |
-| `Ctrl`/`⌘`+click | Quick-move (a Crafting Stash slot gives a stack) |
+| `Ctrl`/`⌘`+click | Quick-move (a Crafting Stash slot gives a stack; with a Crafting Stash tab open, gear or a map from the backpack or your body loads the work slot, and the work slot's item returns to the backpack) |
 | `Shift`+`Ctrl`/`⌘`+click | Take exactly 1 from a Crafting Stash slot; gear or a map in the stash goes onto the Crafting Bench |
 | `RMB` on currency | Arm the currency, then `LMB` an item to apply it (`Esc`/`RMB` cancels) |
 | `T` | Toggle auto-attack |
@@ -46,9 +46,9 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 
 1. **Title:** create or select a Sorceress. You start in the hideout with the starting kit.
 2. **Hideout:** a small, lit, walkable ritual courtyard with these objects:
-   - **Map Device (the Atlas table):** a full-screen Ember Chart (canvas ground, roads and plates, one button per area), an inspector rail with "Set course", a Codex tab, a Stash drawer (maps in the pack, the Map Stash, scarabs from stash and pack) and an always-visible dock with the course, the map slot, four scarab sockets, the readout and an "Activate" button that opens the portal.
+   - **Map Device (the Atlas table):** an Ember Chart (canvas ground, roads and plates, one button per area) that sits beside the inventory, which opens together with the table (at 1280x720 and 1024x600 the chart takes the left part of the screen, and the inspector rail is a drawer over its right edge), a Codex tab, and an always-visible dock with the map slot and its home chip ("Opens Furnace Yard"), four scarab sockets, a **passage slot** (drag a key from the inventory into it; a Bounty map bound to Iron March offers "Open the Pit of Echoes" in it, click to take), a Re-chart button on the home chip, the readout with a "Next drops" line (where the map's own drops go) and an "Activate" button that opens the portal. A map is bound to one area, so there is no course to set: slotting a map eases the chart to its home and an empty slot leaves the chart browse-only. The chart has two **lenses** (Stock: a count badge per area of the maps you hold, tinted by tier band; Sources: the slotted map's drop table as arrows with shares; a Territory lens is reserved for beacons) and a **pin tray** (see §7 Pins).
    - **Stash:** tabs; opens alongside the inventory.
-   - **Rook the merchant:** maps, flasks and gambling.
+   - **Rook the merchant:** maps of cleared areas, flasks and gambling.
    - **Crafting Bench:** an anvil workbench with a coal forge (§12).
    - **Training dummy:** shows your damage numbers.
    - Braziers and banners for atmosphere.
@@ -339,6 +339,28 @@ Hard currencies (Reforging Ember, Tempering Catalyst and Fracture Core) retain t
 
 ## 7. Maps
 
+**Map items are bound to one Atlas area (brief D, slice T0).** `MapItem.areaId` names the area the map opens (a "Furnace Yard map");
+`baseId` is always that area's theme (`findAtlasArea(areaId).baseId`), so the theme and implicit below come from the area. Tier, quality, mods,
+corruption, Bounty and Compass charting stay on the item. Activating a map runs exactly that area; there is no area argument
+(`openMap(ch, { lootClass?, passage? })`). The tooltip leads with `Area: Furnace Yard (Forge)  Accepts up to Tier 5` and says "Unexplored
+territory" for an area the viewer has not charted; a map of an undiscovered area cannot be opened (the fog is never skipped) and a map above its area's ceiling
+cannot be opened. Maps are named by place (`Furnace Yard map`; magic: first mod + place; rare: the generated name, the place as subtitle).
+A Void Needle tier-up at the area's ceiling moves the map to a deeper area of its theme, so a raised tier never strands it.
+
+**Passages (sealed areas and the Pit).** Sealed areas and the Pit of Echoes are never a map's own address. The dock's **passage slot** is a real drop target (the key stays in the inventory until activation; the slot only records the choice, and refuses with the rules' own reason: not a key, no map slotted, area not charted, tier above its ceiling). A key held in the inventory offers its sealed area
+when the map's tier fits that area's ceiling: any map works, the key is spent with it, the map's own area is bypassed and the run records
+`RunSetup.passage = { kind: 'key' }` (the bound map stays in `sourceMap` for refunds). A Bounty map bound to Iron March (the Pit's only neighbour) offers
+"Open the Pit of Echoes" (`passage: { kind: 'bounty' }`). The wire command is `activateMapDevice { lootClass?, passageKey?, pit?, useSurge? }`; a stale
+client's `areaId` is accepted only when it equals the map's bound area.
+
+**Legacy maps (save version 2).** A map saved without an area is bound once at load (`bindLegacyMaps`, in the character loader and in `openMap` as a guard), in
+every place a map can live (backpack, stash tabs, Map Stash, Crafting Stash work slot, the map device; open runs rebuild their `sourceMap` the same way). Choice inside a candidate set is
+`hash(uid) % n` over the set sorted by depth then id: deterministic, idempotent, no rng. Order: (1) a discovered same-theme area accepting the tier; (2) else any discovered area
+accepting it (smallest ceiling first; the map moves theme and says so in its tooltip); (3) else the shallowest area that accepts the tier, which is charted
+(the map is the chart fragment). Nobody loses a map. The starting kit is three Tier 1 Cinder Crossing maps; Rook sells T1/T2 maps of the areas you have cleared (see **Rook's maps** under §9).
+Drops are routed by the chart (see **Map drops** below). A run frozen before routing existed (no `routing` in its persisted setup) keeps the old behaviour: the theme is rolled (same rng) and the area follows
+from it (a discovered area of that theme accepting its tier, else any discovered area that accepts it, else the shallowest fit beside the chart).
+
 **Map bases** (each has its own theme and palette):
 
 | Base | Theme / palette | Arena radius | Implicit (implemented) |
@@ -395,7 +417,7 @@ Reward-only mods (Reward Ink):
 - **Cartographer's:** maps 3× as likely
 - **Essence-laden:** essences 3× as likely
 
-**Expanded map roster.** All six bases drop and Rook supplies their free T1 maps. Atlas destinations supply the playable theme: Ember Vault uses Cinder Chapel, Glass Sepulchre uses Choral Crypt, and Iron March uses Chainworks. Other routes retain their original themes and bosses. The Atlas shows the theme and boss before activation.
+**Expanded map roster.** All six bases drop and Rook supplies T1/T2 maps of every cleared area of the theme. A map is bound to an area and takes its theme from it: Ember Vault uses Cinder Chapel, Glass Sepulchre uses Choral Crypt, and Iron March uses Chainworks. Other routes retain their original themes and bosses. The Atlas shows the theme and boss before activation.
 
 | New map | Wave family | Final boss | Implicit / arena |
 |---|---|---|---|
@@ -405,19 +427,56 @@ Reward-only mods (Reward Ink):
 
 The new maps have separate floor tiles, decals, lighting, landmark layouts and map emblems. They reuse existing monster art and attack telegraphs. Area-specific arena scales and targeted drop weights still apply.
 
-**Map drops:**
-- The completion chest guarantees one map: normally 75% at the current tier, 25% one tier higher, capped at Tier 15. Far Horizon raises the upgrade chance to 40%; Compass guarantees it below the cap.
-- Random map drops are same tier 60%, one lower 25%, one higher 15% (within 1–15). Their rarity mirrors equipment (normal 70 · magic 22·m · rare 1.6·m^1.3); all six bases are equally likely.
-- The merchant always sells T1 (free) and T2 (4 Scrap).
+**Pins (brief D 5.1, slice P1).** An account keeps up to **3 pins** (more through a `pinSlots` tree node, at most 5): `AtlasProgress.pins`, validated on load (known, charted, not sealed, not the Pit, unique, clamped to the slot count; a respec that removes a slot node drops the last pins). Pinning is free, instant and allowed any time (`pinArea { areaId, pinned }`, predicted by the client, refused by the server for a fogged area, a passage area or a full tray). A pinned area's maps drop `x3` more often (`max(base, 0.5) x 3`, x4 with Chart Keeper) at any distance, frozen into each expedition at activation like the rest of the table. UI: a pin tray in the chart's corner (chip = emblem, name, tier ceiling; click focuses the area, x unpins; open slots dashed), a pin toggle on the selected node and in the rail, a brass pin and halo on pinned nodes in every lens, and a pin mark in the Sources table and the dock's "Next drops".
+
+**Re-chart (brief D 5.2, bench Scrap service).** Moves a map to a chart neighbour of its area that is charted, not sealed, not the Pit and accepts the map's tier. Everything else travels (tier, quality, mods, rarity, Bounty, Charted, Twin Ink); the theme follows the new area; `rechart` counts the hops (tooltip "Re-charted x2"). Price `ceil(1 + tier / 2)` Forge Scrap (T1 2, T5 4, T9 6, T15 9), 1.5x after one hop, 2x after two (Ledgerline takes 1 off, minimum 1). Corrupted maps are refused. A map in an undiscovered area may be re-charted to a charted neighbour (the rescue path for traded-in maps). It is the bench service `bench:rechart:<areaId>` of `benchCraft` (one per legal neighbour; quoted `expectedScrap`, atomic with the move, refused for a map in an open trade offer) and opens from a popover (name, theme, ceiling, what you hold there, price) on the dock's home chip and at the bench.
+
+**Recycle (brief D 5.3, bench).** Three maps of one tier (not corrupted, no Bounty, not Charted; from the backpack, stash, Map Stash or work slot, never the device) become ONE Normal map of an area you choose: the area of one of the three or a chart neighbour of one, charted and accepting the tier. Quality `min(20, floor(mean) + 2)`, no mods, no re-chart count; price the tier in Forge Scrap (Ledgerline -1, minimum 1). The three maps are dragged into the bench's three recycle slots (they stay in the inventory until Recycle is pressed); `benchRecycle { uids, areaId, expectedScrap? }` is atomic (Scrap, the three maps and the new one in one step; no room in the backpack refuses the whole thing). It never raises the tier.
+
+**Map drops (chart-driven, brief D section 4):** every dropped map is bound to an Atlas area chosen from a table frozen into the expedition at activation (`RunSetup.routing`, persisted and restored with the run;
+all numbers in `src/data/progression/routing.ts`, rules in `src/game/progression/map-routing.ts`). The total number of maps per run does not change, only which area they address.
+- **The table** is centred on the map's own area (a passage run keeps the map's area, not the sealed destination). Weights: the run's own area 1.0; each charted neighbour 1.5 (a dead-end neighbour 1.0); a charted
+  area exactly two hops away 0.15 ("wander"); the **pending** reveals of this run's boss 1.5; a pinned area (slice P1) `max(base, 0.5) x 3` at any distance (x4 with Chart Keeper); the five area-bias scarab families (below) multiply
+  after pins. Sealed areas and the Pit of Echoes never appear (passages only). Undiscovered areas never appear, except as pending.
+- **Tier:** the offset is rolled as before (same tier 60%, one lower 25%, one higher 15%, within 1–15), then the area is picked by weight and the tier is clamped to that area's ceiling (a T7 run at Shattered Forge can
+  drop a Furnace Yard map, which arrives as Tier 5). An **upward** roll only considers areas whose ceiling accepts the higher tier (none: it becomes a level roll), so deep areas absorb high tiers.
+- **Fog:** a boss kill reveals up to two neighbours (`discoverAfterBoss`); those same areas, in the same order, are *pending* and can be named only by boss-kill and completion-chest drops, never by ordinary kills or
+  the lieutenant. The Surveyor's fractional extra reveal and the rare door are decided after the run and are not pending. If the boss does not die nothing pending drops.
+- **Per looter:** loot is instanced, so each player's drops are filtered by their own chart (a map must be openable by whoever receives it); pins and scarabs are the opener's, frozen for the party.
+- The completion chest guarantees one map: normally 75% a normal pick at the current tier, 25% an **upgrade** (Far Horizon raises it to 40%; Compass guarantees it below the cap; Tier 15 cannot upgrade). An upgrade is one tier higher
+  in the **advance target**: the nearest area (walking the charted areas and the pending ones, the run's own area at distance 0; ties: a pinned area, then the lower id) whose ceiling accepts the next tier. With no such area the map is not
+  upgraded and gains +3 quality instead. The optional second chest map (50%) and the boss's map drops are ordinary routing rolls. A Caravan "cartographer's tube" reward is an upward roll (no pending areas).
+- A map drop uses exactly one rng draw to pick its addressee (replacing the old theme draw), so the loot stream stays aligned with the pre-routing build. Rarity mirrors equipment (normal 70 · magic 22·m · rare 1.6·m^1.3).
+- **Readout:** `routingReadout(setup.routing, tier, discovered?)` returns the exact shares (own, neighbours, wander, pins; ordinary, boss/chest and upward columns) and the advance target, from the same functions the sim uses.
+- **Measured (harness, first pass kept):** about 7.5 maps per run (the same with and without routing), 12–22% of them for the run's own area once the chart fills in (35–45% early, when little is charted), 55–80% for neighbours,
+  5–15% further along; a bot that always runs its best available map reaches the first Tier 15 run in a mean of 22.0 runs against 20.5 before routing (+7%), and every simulated player did.
+- Rook always sells Tier 1 maps of the starting area (free), so nobody can be map-locked; deeper maps are earned at their boss.
 - **Atlas territory fee:** paid once by the map owner on activation, from inventory/stash Scrap. T1–T3 free;
   T4–T6 cost 1; T7–T9 cost 2; T10–T12 cost 3; T13–T15 cost 4. The device shows the fee before activation.
   Portal entry and restored runs do not charge it again. If a server failure makes the run unrestorable,
   its recorded fee, source map (including Bounty) and any entrance key are returned in one transaction.
   Legacy runs have no fee to refund. Ordinary deaths, abandonment and voluntary map replacement do not refund fees.
 
+**Daily surge (slice G1; `src/game/progression/surge.ts`, constants in `src/data/progression/territory.ts`).** Every Atlas area holds **3 surge charges per account per forge day**. The forge day turns over at **04:00 UTC**
+(`forgeDay(now) = floor((now - 4 h) / 24 h)`: server clock only, no time zones, no DST; the client shows a countdown, "Surges refresh in 3 h 12 m", from `welcome.serverTime` and `pong`). The ledger is `atlas.surge = { day, spent: { area: n } }` on the account's Atlas,
+so every character of an account shares it and alt-hopping gains nothing; it resets lazily (a stored day before today counts as empty, a clock that steps back never grants charges), so a restart across the reset changes nothing.
+- **Spending:** Activate sends `useSurge` (the dock's Hold toggle, on by default; off keeps the charge). The opener spends one charge of the area actually run (a key passage spends the sealed area, the Bounty passage the Pit) in the same save as the map; the expedition freezes
+  `RunSetup.surge = { areaId, quantityMore: 30, rarityMore: 15, day }`, persisted and restored with the run (a restart, even across the reset, keeps the bonus it was opened with). **Guests of a party get the bonus and never spend a charge of their own.**
+  With no charge left the run is simply the normal run (bit for bit; the dock says "No surge left (refreshes in ...)"): there is no hard cap anywhere.
+- **Bonus:** **+30% item quantity and +15% item rarity**, "more" multipliers on the map-side luck (the luck breakdown lists "30% more Surge"; the HUD number is the number the loot rules use). **Quantity applies to every category except maps**, so the clock never changes map volume (the harness
+  asserts it). Boss and chest guarantees, encounter rewards and the Hunting Ground class roll do not see the surge.
+- **Refunds:** only an unrestorable server-side run returns the charge, in the same transaction as the map, key, Scrap and scarabs (and only on the same forge day). Deaths, abandons, disconnects and restarts with a restorable run refund nothing.
+- **Hourglass Sand** (stack 20, tradeable) refills one area to full: select the area in the rail on the Atlas table and choose "Refill surge" (the Sand is taken from the inventory or stash); refused, spending nothing, when the area is full. Sources: a final boss on a Tier 3+ map 5% x personal rarity (doubled in sealed areas),
+  the completion chest 3%, a Gold-grade encounter 10% (about 9% a run in total), all on their own rng stream so no other drop moves. **Grand Hourglass** (stack 5) refills every area ("Refill all" in the dock chip): Tier 9+ final bosses 0.5% x personal rarity.
+  The command is `refillSurge` (protocol 22); the server holds the clock and the ledger.
+- **Tree (as data):** Lantern-Bearer is now **Second Wind** (+1 charge on every area), Lamp Oil +1 charge on dead-end and sealed areas, Cartographer's Pen **Afterglow** (10% a spent charge is not consumed, rolled from the map seed; the bonus still applies), Trailmark +50% Hourglass Sand chance.
+- **Indicators:** three brass pips under every chart node, in the rail, the Re-chart popover and the dock chip (`SurgePips.tsx`), hollow and dim when spent.
+- **Measured** (`tests/game-progression/surge-economy.test.ts`, `BALANCE=1`): a boosted run is worth +8 to +14% (mean +10%) more than a normal one in the bot's Scrap valuation, because only ordinary kill drops are boosted; a player who rotates the chart boosts nearly all of about 20 daily runs (about +10% income), a focus farmer
+  three of them (about +1.5%). Sand-adjusted value is about 3 to 4% of a run for a player who spends every Sand. The levers if income needs trimming are `SURGE_BONUS` (+25% / +12%) and `SURGE_CHARGES` (2).
+
 **Scarabs (four optional Map Device sockets beside the map).** Each socket takes one scarab, split from its
-backpack or shared Crafting Stash stack (maximum stack 20). Use the Stash drawer of the Atlas table (it lists both);
-remove before activation to recover it. Successful activation consumes the map and all loaded scarabs once.
+backpack or shared Crafting Stash stack (maximum stack 20). Move the scarab from the Crafting Stash into the inventory first, then drag it from the inventory into a socket of the
+Atlas table (which opens beside the inventory; Ctrl/Cmd-click fills the first free socket); remove before activation to recover it. Successful activation consumes the map and all loaded scarabs once.
 Failed activation consumes nothing. The expedition records its scarabs for party play and restarts; guests'
 scarabs do not stack. An unrestorable server-side expedition refunds its scarabs with its map, key and fee.
 
@@ -428,8 +487,8 @@ scarabs do not stack. An unrestorable server-side expedition refunds its scarabs
 | 3 | Gilded | 46 | 8 | 35% less wave duration | Start at wave 4 |
 | 4 | Exalted | 70 | 2 | 50% less wave duration | Start at wave 5 |
 
-Only one scarab of each type is allowed per map, regardless of tier: one Haste and one Invasion in this first batch.
-The four sockets support future distinct types. An Exalted Haste Scarab makes 60-second waves last 30 seconds. The normal 3-second tell,
+Only one scarab of each type is allowed per map, regardless of tier: seven types today (Haste, Invasion and the five area-bias families below).
+The four sockets take one of each type. An Exalted Haste Scarab makes 60-second waves last 30 seconds. The normal 3-second tell,
 attack timing and monster budgets are retained. An Invasion Scarab starts on the
 specified wave with **all** monsters from waves 1 through that wave already spawned, including their streaming
 budgets, with each original wave's stats, rarity and rewards. It skips no monsters or loot. Normal waves continue
@@ -437,9 +496,21 @@ afterward; the final boss and any Echo wave remain. Encounters due in earlier wa
 
 Scarabs have an independent 0.05% base roll per eligible monster kill, scaled by personal item quantity and
 magic/rare quantity multipliers, capped at 100%. No guaranteed boss/chest scarab; summoned monsters and the dummy
-cannot drop them. Both families share the listed tier weights. Eligibility uses monster level; every unlocked
+cannot drop them. Every family shares the listed tier weights; the five area-bias families together take **40%** of scarab rolls (an equal split among them), Haste and Invasion the other 60%. Eligibility uses monster level; every unlocked
 lower tier remains in the pool at high levels. Item rarity does not improve scarab tier. Ordinary maps retain
 their 60-second baseline and start on wave 1. Exact combined timing and starting wave appear before activation.
+
+**Area-bias scarabs (slice S1; five families of four tiers, same names, levels and weights as above; `src/data/scarabs.ts`, rules in `src/game/progression/scarab-routing.ts`).** They bend only the frozen drop-routing table of the expedition (which Atlas area its dropped maps are bound to), never how many maps drop, and never the waves. A scarab multiplies the candidates it names; pins multiply independently and the scarab comes after them (Homing IV with the own area pinned is x18).
+
+| Family | Effect on the table | Tier I / II / III / IV |
+|---|---|---|
+| Homing | the run's own area x | 2 / 3 / 4 / 6 |
+| Wayfarer | every charted neighbour that is not a dead end x | 1.5 / 2 / 2.5 / 3 |
+| Deepward | the share of dropped maps that are one tier higher (15% normally) becomes, and the completion chest upgrade gains | 20 / 28 / 36 / 45% and +5 / +8 / +11 / +15 points |
+| Quarry | every dead-end area in the table (a neighbour or two hops away) x | 2 / 3 / 4 / 6 |
+| Hearthbound | every charted area of the map's theme at any distance (a base of at least 0.5) x | 1.5 / 2 / 3 / 4 |
+
+Homing never turns a map into an own-area-only machine: the own area's share of the table is capped at 70% unless the player pinned it (a dead end with one neighbour would reach 77% with Homing IV by the multiplier alone; charts with real neighbours stay at 53 to 67%). The Device readout lists each loaded scarab ("Scarab: Etched Homing Scarab: own area x3").
 
 **Atlas tree, "the Codex" (account-wide).** Open it from the Map Device. It is a wheel of 145 nodes around one origin (the Cinder Crossing brazier): six branches (Cartography, Foundry, Bounty, Fortune, Echoes, Peril), eighteen bridge nodes, five tier-bonus nodes in the inner ring and six theme seals on the outer belt. Every node changes map rules only: no node touches character stats, map tier or monster level, and none grants a temporary power-up. The full node list with every number is in `docs/atlas-rework/tree-nodes.md` (generated from `src/data/progression/map-tree.ts`; `tests/game-progression/spec-sync.test.ts` keeps it in step).
 
@@ -482,8 +553,8 @@ The opener's selected nodes are copied into the expedition at activation and res
 
 Other numbers are pinned by data: Far Horizon (+10 percentage points chest upgrade, 25% to 35%), Crowned Challenge (final bosses 25% more Life, world/exclusive unique chances 50% more, capped at 100% after personal rarity: it multiplies the boss's own 8% and exclusive 12% rolls, not ordinary equipment, guaranteed Reliquary uniques or chest/gamble rewards), Sound Foundations (+1 maximum Stability on armour), Deep Seams (40% more Essence weight, monsters 5% more Life), Kingmaker's Cache (each completion chest equipment is Rare 30% of the time), Deep Pockets (one more chest currency roll), Master Surveyor (35% chance of one more revealed neighbour), Ledgerline (territory fee 1 Scrap lower, never below 0). Essence and currency bonuses reweight ordinary currency tables, never add drops or change special ingredient and key sources. Encounter bonuses add to the total after the area's normal odds and cap (at most +12 percentage points from the tree), preserving relative event weights; Bounty and fixed chains are unchanged. Tier bonus nodes multiply their per-tier value by the opened map's tier.
 
-**Atlas (account-wide).** The Map Device opens maps at a chosen revealed destination. The item supplies
-tier, quality, mods and corruption; the destination supplies the theme, arena and implicit, plus weights for
+**Atlas (account-wide).** The Map Device opens a map at the area it is bound to (or a passage destination). The item supplies
+tier, quality, mods and corruption; the area supplies the theme, arena and implicit, plus weights for
 specific currencies and equipment classes. The original item is preserved for a server-fault refund.
 The Atlas shows area names/types/rewards only after discovery. It starts at Cinder Crossing; each final boss
 reveals two unexplored neighbours in a fixed order. Repeating an area can reveal any remaining neighbours.
@@ -508,8 +579,8 @@ earned discovery. Applying progress and deleting its pending receipt are one tra
 
 The 25-area graph has reciprocal ordinary routes; each Tier 10+ main destination remains reachable after
 any one other non-start area is removed. The map scrolls in both directions and centres the inspected area.
-Any map item up to the area's tier ceiling is accepted, including low-tier maps in deep areas; the Pit of
-Echoes additionally requires a Bounty commission. Forged areas
+A map bound to an area accepts any tier up to that area's ceiling (low-tier maps of deep areas included); the Pit of
+Echoes is reached only through a Bounty passage. Forged areas
 favour caster bases; crypts favour jewellery; arenas favour armour and Fracture Cores. These change weights
 within the loot tables. Hollow Ossuary separately grants 30% more item quantity, including personal gear;
 Gilded Vault triples ordinary currency chances and boss/chest/carrier currency guarantees. Other categories
@@ -791,7 +862,7 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 
 **Personal luck:** a player's item quantity / rarity in a map = the map-side luck (tier, quality, implicit, mods: §7) + that player's gear (`rules.lootLuck`). Example: a map at +26% quantity and a player with a +10% quantity amulet → 136% for that player's drops; a party member without luck gear rolls at 126%.
 
-**Per kill and player**, Q% and R% = personal luck × the monster's rarity multiplier (§8), with quantity doubled in the Echo wave. Each category is rolled independently: `chance = base × Q/100` (maps also × map drop chance: quality, Cartographer's). A chance above 100% drops `floor(chance)` items plus one more with the remainder.
+**Per kill and player**, Q% and R% = personal luck × the monster's rarity multiplier (§8), with quantity doubled in the Echo wave. Each category is rolled independently: `chance = base × Q/100` (maps also × map drop chance: quality, Cartographer's). A chance above 100% drops `floor(chance)` items plus one more with the remainder. An expedition's **daily surge** (§7) multiplies Q by 1.3 and R by 1.15 for these ordinary rolls (Q is divided back out of the Map category, so map volume never changes); guarantees below use the personal luck without it.
 
 | Category | Base chance | Contents |
 |---|---|---|
@@ -809,6 +880,7 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 **Guaranteed drops** (for every player present, on top of the ordinary roll; m = that player's personal rarity / 100):
 - **Boss:** 2 equipment (1 guaranteed rare, 1 ≥ magic), 3 currency, and an 8%×m chance of a unique.
 - **Completion chest:** 2 equipment (both ≥ magic; the last ≥ rare 30% of the time), 4–5 currency, 1 flask, and **1 progression map** (75% current tier, 25% tier+1; quality 4–12, capped at Tier 15). A 50% roll adds a second map using normal map-drop tier/quality rules. These additions transfer the removed wave-3 lieutenant’s guarantees to successful completion.
+- **Hourglasses** (§7 Daily surge): a separate 3% chest roll for Hourglass Sand, a 5% x personal rarity final-boss roll (Tier 3+, doubled in sealed areas) and a 0.5% x personal rarity Grand Hourglass roll (Tier 9+); none of them uses the surge.
 
 **Making luck *felt* (presentation):**
 - Drop beams by tone:
@@ -829,18 +901,42 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 
 **Gambling at Rook:** 6 Scrap buys a random item of a chosen class at the player's level, with magic 25%, rare 6% and unique 0.5% (×m from gear rarity; unique only for classes with a unique whose level requirement ≤ the player's level — a wand from level 10, a ring from 24; offered only for classes with a base at the player's level).
 
+**The vendor layout (Rook and Mira):** a merchant opens beside the inventory, like a Path of Exile vendor, and every
+item moves by drag and drop; clicking is an extra. Rook's Stall has four tabs: Buy (supplies), Maps (see **Rook's maps**), Gamble (one row per
+item class) and Sell. Buy and Gamble list the stock with prices, a search box and a "Can afford" filter.
+Dragging a stock row onto the backpack buys it: the cell under the pointer is the slot (the ghost and the grid preview go green
+when the footprint is free there or the purchase tops up a stack of the same kind, red otherwise) and a gamble reserves room for
+the largest base of its class. The preview states why a drop is refused ("No room there. Drop it on free cells.", "Your
+backpack has no room for this.", "Can't afford: needs 6 Forge Scrap (you have 2).") and a refused drop buys nothing. The
+Buy/Gamble button and Ctrl/⌘-click on a row buy with first-fit placement. The drop cell travels in `buyOffer` /
+`buyDebugOffer` as an optional `at: {x, y}`; the server honours it only when the whole footprint is free there and otherwise
+places first-fit, so a stale or hostile cell never fails or changes a purchase. Everything else about buying (price, affordability,
+atomic payment and placement, the hideout and activation checks) is unchanged and decided by the server.
+
+**Rook's maps (brief D 5.4, the Maps tab).** Normal Tier 1 and 2 maps of every area the account has **cleared** (`atlas.completed`; the starting area is always sold, so nobody is map-locked), never a dead end, a sealed area or the Pit, and a Tier 2 row only where the area's ceiling takes it. Each is offered in three quality grades by id `map:<areaId>:<tier>:<grade>`:
+
+| Grade | Quality | Tier 1 | Tier 2 |
+|---|---|---|---|
+| Plain | 0 | free | 4 Scrap |
+| Fine | +6% | 2 Scrap | 7 Scrap |
+| Pristine | +12% | 6 Scrap | 12 Scrap |
+
+The tab has area chips (with how many maps of the area you hold), a tier toggle and a quality toggle; ONE stock row appears for the chosen combination and is bought like every Rook row (drag onto a backpack cell, or Buy). The server re-derives the offer from the id when you buy; a malformed id, an uncleared area or a tier above the ceiling is refused ("Rook does not sell that."). Stock is unlimited and Scrap is the gate; Rook never sells a map of an area you have not cleared.
+
 **Merchant stock:**
-- T1 map (free) and T2 map (4 Scrap)
+- Maps: see Rook's maps (generated per cleared area)
 - Life and Focus flasks (1 Scrap)
 - Kindling (3 Scrap)
 - Map Dust (3 Scrap)
 - Gamble per class
 
-**Selling equipment to Rook:** Buy and Sell tabs share Rook's Stall. Sell accepts unequipped equipment in
-the seller's backpack. Select a row, Ctrl/⌘-click a backpack item (also opens Sell from Buy), or drag equipment
-into the Sell list. Selection highlights the inventory item but does not move it. Each item shows its appraised
-Scrap payout, with a hover/focus breakdown. The footer shows the batch total; confirmation states that the
-items will be permanently removed. Clear, Cancel, closing Rook or changing zones do not sell anything.
+**Selling equipment to Rook:** the Sell tab is an offer window beside the inventory. Drag unequipped equipment out of
+the backpack into the window (Ctrl/⌘-click on a backpack item also offers it, and opens Sell from the other tabs); worn
+gear is refused with "Unequip the item and put it in your backpack first." and never moves. Each offered item shows its appraised
+Scrap payout and, opened, Rook's appraisal breakdown (base, item level, each affix tier); the newest item opens by itself.
+Drag an item back out of the window (onto the inventory or anywhere else) or press its × to keep it. The footer shows the
+running total; confirmation states that the items will be permanently removed. Offering only selects: items stay in the
+backpack (marked "sell") until you confirm. Clear, Cancel, closing Rook or changing zones do not sell anything.
 
 **Appraisal:** calculate in hundredths of Scrap and round the final item total up to whole Scrap:
 
@@ -852,7 +948,7 @@ items will be permanently removed. Clear, Cancel, closing Rook or changing zones
 - Payout: `max(1, ceil(total / 100))`. No separate flat rarity bonus. For example, an ilvl88 Dusksteel Ring
   with six T1 affixes is worth 8 Scrap; the same base/level with six bottom-tier affixes is worth 4.
 
-Rook buys equipment only: maps (including his free T1 maps), flasks and currencies cannot be sold. Gear in
+Rook buys equipment only: maps (including his own), flasks and currencies cannot be sold. Gear in
 equipment slots, stash, another character's inventory or an open trade offer is refused. Sales work in any
 hideout and pay only the seller. The server recalculates every appraisal and rejects stale totals, missing
 items, duplicate UIDs, batches over 60 and any sale outside a hideout. No partial sale is allowed. Item removal
@@ -866,6 +962,10 @@ enable her per character with `debug_merch <account> <character> enable`; `disab
 arguments. The CLI verifies ownership and persists activation separately from character saves. Changes appear
 in live hideouts within one second without a restart. Every visitor to an enabled hideout can buy free stock
 for their own character; enabling a host does not enable visitors or the host's other characters.
+
+Mira's panel uses the same vendor layout: category, quantity, item level / map tier and rarity selectors, a search box and a stock
+list beside the inventory. Dragging a row onto the backpack takes `quantity` of it with the first stack on the dropped cell and the
+rest first-fit; the preview refuses the drop when the whole purchase cannot fit. The Buy button is the click extra.
 
 Stock includes every scarab tier, currency/key/ingredient, map base, equipment base, unique and flask. Quantity
 is 1–100; maps support T1–T15 and normal/magic/rare, bases support item levels 1–99 and normal/magic/rare,
@@ -1055,7 +1155,7 @@ The client also runs the shared rules locally, for **display only**: tooltips, c
 - **Closing:** either side can cancel. A trade also cancels on disconnect.
 - Items in an open trade stay in your backpack, but they are locked (not movable) until the trade closes.
 
-**Special stash tabs** (every account has all three, in addition to the normal tabs; they don't count towards `MAX_STASH_TABS`). They are part of the stash: usable in any hideout (your own account's stash), nowhere else. They appear as three icon tabs after the normal tabs. With any stash tab open, Ctrl/Cmd-clicking a backpack map or currency files it into the appropriate special tab. Equipment and flasks use the selected normal tab; Ctrl/Cmd-click from a normal tab still withdraws to the backpack.
+**Special stash tabs** (every account has all three, in addition to the normal tabs; they don't count towards `MAX_STASH_TABS`). They are part of the stash: usable in any hideout (your own account's stash), nowhere else. They appear as three icon tabs after the normal tabs. With any stash tab open, Ctrl/Cmd-clicking a backpack map or currency files it into the appropriate special tab (with a Crafting Stash tab open a map or gear loads the work slot instead). Equipment and flasks use the selected normal tab; Ctrl/Cmd-click from a normal tab still withdraws to the backpack.
 
 **Legacy account migration.** The first character's normal tabs are retained, along with every other character's
 nonempty tabs. Special-stash counts/maps merge; anything over their normal limits becomes physical stacks/maps
@@ -1064,7 +1164,7 @@ still have at most eight normal tabs. Items receive distinct character namespace
 crafting history, protections and stability. The database stores shared holdings only once, in `account_storage`.
 
 **Map Stash.** Holds up to 400 maps.
-- Maps are shown grouped by tier (T1–T15). Each tier shows its count and expands into a list sectioned by map base.
+- Maps are shown grouped by tier (T1–T15). Each tier shows its count and expands into a list sectioned by **Atlas area** (chart region order, then depth), each section headed by the area's emblem, name and map count (a slot is reserved for its surge pips).
 - Each map is shown with its icon, rarity colour, mod count and a corrupted marker, plus a full tooltip.
 - **Depositing:** drag or Ctrl-click a map from the backpack or a stash tab. It files itself automatically. With the Map Stash tab open, Ctrl-clicking the map in the map device files it too.
 - **Withdrawing:** drag to the backpack, a stash tab or the map device, or Ctrl-click (to the backpack; into the map device while its panel is open). The map device panel also lists the Map Stash as a picker, so a map can be loaded without opening the stash. A map already in the device goes back into the Map Stash.
@@ -1080,18 +1180,26 @@ crafting history, protections and stability. The database stores shared holdings
   | Drag / Ctrl-click | A full stack (up to the backpack stack size of 40, 20 for Fracture Core), or as much as the backpack can still hold |
   | Shift+Ctrl-click | Exactly 1 |
 
-- **Crafting straight from the stash:** right-click a slot to arm that currency, then left-click an item in the backpack, the stash or equipment. Each use draws from the slot. This works wherever the stash works (any hideout).
+- **Crafting straight from the stash:** right-click a slot to arm that currency, then left-click an item in the backpack, the stash or equipment. Each use draws from the slot. This works wherever the stash works (any hideout). With an item in the **work slot** (below), a plain click on a slot crafts on it.
 - **Paying:** the Crafting Bench takes its price from the backpack first, then from the Crafting Stash; Rook from the backpack, then the normal stash tabs, then the Crafting Stash. Items the server hands back (a public drop returned after a server update, a refunded map) go to the backpack, then the Crafting Stash (currency) or the Map Stash (maps), then the normal tabs.
 - A slot can't be dropped on the floor or discarded as a whole ("Take currency out of the Crafting Stash first.").
 
-**Crafting Stash — Maps.** The same, for map currencies: Map Dust, Threat Glyph, Reward Ink and Void Needle (a list with each currency's effect).
+**Crafting Stash — Maps.** The same, for map currencies: Map Dust, Threat Glyph, Reward Ink and Void Needle, plus the Compass, Twin Ink, Void Splinter, the scarabs and the Atlas keys.
+
+**Crafting Stash work slot.** Both Crafting Stash tabs show, beside their currency slots (compact 3-wide tiles), one **work slot**: the place a piece of gear or a map sits while you craft on it, like the work slot on a PoE currency tab. The stash opens with the inventory, so the item is **dragged from the inventory** into the slot (gear you wear, stash items and the Map Stash also work, by dragging onto the slot or anywhere on a Crafting Stash tab or its tab button; Ctrl/⌘-click from the backpack or your body while a Crafting Stash tab is open is an extra). Only one item fits; an item dropped on an occupied slot swaps with it and the occupant goes back where the new one came from (into the body slot it was worn in, a free backpack spot, the Map Stash) or the move is refused with the reason and nothing changes.
+- **Reading it:** the item is shown in place: name, base, item level, live Stability (pips and number, "Finished" at 0), every implicit, affix (tier and value), scar and sealed / fractured / crafted marker, and the item's own crafting history (the newest line under the name and the earlier ones below the modifiers). The full tooltip is on hover. Hovering a currency tile shows the rules' craft preview for the slot item (odds, what is preserved) or why it cannot be used.
+- **Crafting:** **one click** on a currency slot applies one of that currency to the work slot's item, drawn from that slot; no arming, no dragging, the item never leaves. Seal, Catalyst and Fracture Core open their affix choice beside the item. Fracture Core, Anneal, Transmute and Void Needle (irreversible) ask for a confirmation first; everything else applies at once, and a craft that would do nothing is refused without spending anything. Right-click still arms a currency for any other item (Shift keeps it armed), exactly as before. Crafting works in any hideout, like the stash.
+- **Feedback:** the modifiers the craft added or changed stay lit (a "new" mark and a glow; a breaking seal is not a change) until the next craft or another item takes the slot, the item flashes, the craft's sound and toast play as for any craft, and a "Last" line names what it did (and how many modifiers it removed). The lit marks also show what changed while the tab was closed.
+- **Buttons:** **Equip** wears the item (the piece it replaces takes its place in the work slot; refused with the reason when the level or slot does not fit), **Return** sends it to the backpack (refused when the backpack is full), **Bench** opens the Crafting Bench on it for recipes and Stability repair.
+- **Keyboard:** Tab reaches the slot's controls (a mouse press never leaves keyboard focus behind, so game keys stay game keys). On a currency tile: arrows / Home / End move, Enter or Space crafts, Shift+Enter arms the currency; on the socket, Delete or Backspace returns the item; on Equip / Return / Bench, Enter or Space. Only the keys a control uses are taken from the game.
+- **Persistence:** the item lives in the account's shared storage (`account_storage`, with the stash and the Atlas), in exactly one place: the same slot for every character of the account, kept across tab switches, sessions, disconnects and server restarts. Every move into, out of or crafted in the slot is written at once, in the same transaction as the character row it came from or goes to, so an interrupted save can only leave the item where it was. A move that touches the slot needs the hideout like every stash move ("The stash can only be used in a hideout."); items in an open trade offer cannot be loaded (they stay locked), and the slot's item cannot be offered in a trade or sold to Rook (return it to the backpack first).
 
 **Model.**
 - `CharacterSave.stash`, `currencyStash` (counts) and `mapStash` (maps) project the account's shared holdings into the rules and client state. SQLite stores the authoritative copy in `account_storage`, with empty shared fields on character rows. Legacy characters use the existing item repair rules before their stashes merge. Loading an account stash rejects lost items or changed currency counts instead of silently clamping or dropping them.
 - A currency slot is addressed by the synthetic uid `cstash:<currencyId>`, like `belt:<i>`.
-- New item locations: `currencyStash`, `mapStash`.
+- New item locations: `currencyStash`, `mapStash`, `craftSlot` (the work slot: `CharacterSave.craftSlot`, account storage, one gear or map item that keeps its own uid, so every rule reaches it through `findItem`). An account storage row without the field reads as an empty slot (no save or storage version bump); protocol 19 adds the location to `moveItem`.
 - `moveItem` gains an optional `count`, for splits and single withdrawals (it also splits normal stacks and limits flask charges loaded into the belt).
-- `quickMove`'s stash context accepts `'currency' | 'mapCurrency' | 'maps'`.
+- `quickMove`'s stash context accepts `'currency' | 'mapCurrency' | 'maps'`; with a Crafting Stash tab open it loads gear and maps into the work slot (from the backpack or the body), the work slot's item always returns to the backpack.
 - Stash search covers the special tabs too.
 
 ## 13. Player debuffs

@@ -13,8 +13,8 @@ describe('openMap', () => {
   });
 
   it('consumes the map and derives the run from it', () => {
-    const m = { ...map('rimedOssuary', 4, { quality: 8, mods: [{ modId: 'teeming', value: 100 }] }), isNew: true };
-    const ch = expectOk(rules.moveItem(withBackpack(bareCharacter(), [[m, 0, 0]]), m.uid, { kind: 'mapDevice' }));
+    const m = { ...map('winterThrone', 4, { quality: 8, mods: [{ modId: 'teeming', value: 100 }] }), isNew: true };
+    const ch = expectOk(rules.moveItem(withBackpack(bareCharacter({ currencyStash: { scrap: 9 } }), [[m, 0, 0]]), m.uid, { kind: 'mapDevice' }));
     const { character, setup } = expectOk(rules.openMap(ch));
     expect(character.mapDevice).toBeNull();
     expect(character.rngState).not.toBe(ch.rngState);
@@ -32,12 +32,12 @@ describe('openMap', () => {
 
   it('records map-side luck only: the opener\'s gear stays personal', () => {
     const m = map('ashenForge', 2, { quality: 5 });
-    const geared = bareCharacter({ equipment: { amulet: luckyAmulet(25, 12) } });
+    const geared = bareCharacter({ equipment: { amulet: luckyAmulet(25, 12) }, currencyStash: { scrap: 9 } });
     const open = (who: typeof geared) =>
       expectOk(rules.openMap(expectOk(rules.moveItem(withBackpack(who, [[m, 0, 0]]), m.uid, { kind: 'mapDevice' })))).setup;
     const mine = open(geared);
     expect(mine).toMatchObject({ itemQuantity: 105, itemRarity: 105 });
-    expect(open(bareCharacter()).summary).toEqual(mine.summary);
+    expect(open(bareCharacter({ currencyStash: { scrap: 9 } })).summary).toEqual(mine.summary);
     expect(rules.lootLuck(mine, geared)).toEqual({ itemQuantity: 117, itemRarity: 130 });
     const q = mine.summary.find((l) => l.label === 'Map Item Quantity')!;
     expect(q.value).toBe('+5%');
@@ -47,15 +47,17 @@ describe('openMap', () => {
 
 describe('restoreRunSetup (restart safety: open maps survive a deploy)', () => {
   const opened = () => {
-    const m = map('rimedOssuary', 4, { quality: 8, mods: [{ modId: 'teeming', value: 100 }] });
-    const ch = expectOk(rules.moveItem(withBackpack(bareCharacter(), [[m, 0, 0]]), m.uid, { kind: 'mapDevice' }));
+    const m = map('winterThrone', 4, { quality: 8, mods: [{ modId: 'teeming', value: 100 }] });
+    const ch = expectOk(rules.moveItem(withBackpack(bareCharacter({ currencyStash: { scrap: 9 } }), [[m, 0, 0]]), m.uid, { kind: 'mapDevice' }));
     return expectOk(rules.openMap(ch)).setup;
   };
 
   it('rebuilds exactly the setup the map was opened with, from the persisted map and seed', () => {
     const setup = opened();
     const row = JSON.parse(JSON.stringify({ map: setup.map, seed: setup.seed }));
-    const { event: _event, ...legacy } = setup;
+    // A bare persisted map carries no frozen routing table: such a run keeps rolling themes (the whole setup restores it).
+    expect(setup.routing).toBeDefined();
+    const { event: _event, entranceScrap: _fee, routing: _routing, ...legacy } = setup;
     expect(restoreRunSetup(row.map, row.seed)).toEqual(legacy);
     // The whole persisted RunSetup works too; its map is what counts. So does the JSON text of a column.
     expect(restoreRunSetup(JSON.parse(JSON.stringify(setup)), setup.seed)).toEqual(setup);
@@ -87,7 +89,7 @@ describe('restoreRunSetup (restart safety: open maps survive a deploy)', () => {
   it('returns null for anything that is not a restorable map, and never throws', () => {
     const setup = opened();
     for (const raw of [
-      null, undefined, 'map', '{"kind":"map",', '', 42, [], {}, { kind: 'equipment' }, { map: null }, { ...setup.map, baseId: 'moonPalace' },
+      null, undefined, 'map', '{"kind":"map",', '', 42, [], {}, { kind: 'equipment' }, { map: null }, { ...setup.map, areaId: 'nowhere', baseId: 'moonPalace' },
     ]) {
       expect(restoreRunSetup(raw, 1), JSON.stringify(raw)).toBeNull();
     }
@@ -110,10 +112,10 @@ describe('buildRunConfig', () => {
 
   it('builds a map instance from the setup alone', () => {
     const m = map('ironColiseum', 2, { mods: [{ modId: 'volcanic', value: 100 }] });
-    const ch = expectOk(rules.moveItem(withBackpack(bareCharacter(), [[m, 0, 0]]), m.uid, { kind: 'mapDevice' }));
+    const ch = expectOk(rules.moveItem(withBackpack(bareCharacter({ currencyStash: { scrap: 9 } }), [[m, 0, 0]]), m.uid, { kind: 'mapDevice' }));
     const { setup } = expectOk(rules.openMap(ch));
     const cfg = rules.buildRunConfig(setup, hooks);
-    expect(cfg).toMatchObject({ mode: 'map', theme: 'ironColiseum', tier: 2, arenaRadius: 650, seed: setup.seed, mapName: 'Volcanic Iron Coliseum' });
+    expect(cfg).toMatchObject({ mode: 'map', theme: 'ironColiseum', tier: 2, arenaRadius: 585, seed: setup.seed, mapName: "Champion's Approach" });
     expect(cfg.monsters).toMatchObject({ level: 10, hazards: true });
     expect(cfg.monsters.countMultiplier).toBeCloseTo(1.25, 10);
     expect(cfg.waves).toEqual({ count: 6, baseMonsters: 40, monstersPerWave: 18, waveDuration: 60, tellDuration: 3, lieutenantWave: 0, bossWave: 6 });

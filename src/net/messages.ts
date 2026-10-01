@@ -11,6 +11,7 @@
 import { PLAYER_DEBUFFS } from '../contracts/bestiary';
 import { ATLAS_AREA_IDS } from '../contracts/atlas';
 import { MAP_TREE_NODE_IDS } from '../data/progression/map-tree';
+import { ATLAS_KEYS } from '../data/progression/atlas';
 import { ATTRIBUTES, EQUIP_SLOTS, ITEM_CLASSES, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
 import {
   BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_SLOTS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
@@ -107,6 +108,12 @@ function bool(v: unknown, what: string): boolean {
   return v;
 }
 
+/** A backpack cell {x, y} (the footprint is checked by the rules). */
+function cell(v: unknown): { x: number; y: number } {
+  const o = shape(v, 'at', ['x', 'y']);
+  return { x: int(o.x, 'at.x', 0, 63), y: int(o.y, 'at.y', 0, 63) };
+}
+
 function token(v: unknown, what: string): string {
   if (typeof v !== 'string' || !TOKEN_RE.test(v)) fail(`${what}: invalid id`);
   return v;
@@ -120,6 +127,9 @@ function text(v: unknown, what: string, maxLength: number): string {
   if (CONTROL_RE.test(v)) fail(`${what}: invalid characters`);
   return v;
 }
+
+/** The currencies that open a sealed area when loaded as a passage. */
+const PASSAGE_KEY_IDS = ATLAS_KEYS.map((k) => k.currencyId);
 
 function oneOf<T extends string>(v: unknown, what: string, values: readonly T[]): T {
   if (typeof v !== 'string' || !(values as readonly string[]).includes(v)) fail(`${what}: unknown value`);
@@ -183,6 +193,9 @@ function itemLocation(v: unknown): ItemLocation {
     case 'mapStash':
       shape(v, 'location', ['kind']);
       return { kind: 'mapStash' };
+    case 'craftSlot':
+      shape(v, 'location', ['kind']);
+      return { kind: 'craftSlot' };
     default:
       return fail('location: unknown kind');
   }
@@ -244,17 +257,22 @@ function command(v: unknown): Command {
       return { c, nodeId: oneOf(o.nodeId, 'nodeId', MAP_TREE_NODE_IDS), allocate: bool(o.allocate, 'allocate') };
     }
     case 'buyDebugOffer': {
-      const o = shape(v, c, ['c', 'offerId', 'options']);
+      const o = shape(v, c, ['c', 'offerId', 'options'], ['at']);
       const opts = shape(o.options, 'options', ['quantity', 'itemLevel', 'mapTier', 'rarity']);
       return { c, offerId: token(o.offerId, 'offerId'), options: {
         quantity: int(opts.quantity, 'quantity', 1, 100), itemLevel: int(opts.itemLevel, 'itemLevel', 1, 99),
         mapTier: int(opts.mapTier, 'mapTier', 1, 15), rarity: oneOf(opts.rarity, 'rarity', ['normal', 'magic', 'rare'] as const),
-      } };
+      }, ...(o.at === undefined ? {} : { at: cell(o.at) }) };
     }
     case 'activateMapDevice': {
-      const o = shape(v, c, ['c'], ['areaId', 'lootClass']);
+      const o = shape(v, c, ['c'], ['areaId', 'lootClass', 'passageKey', 'pit', 'useSurge']);
+      if (o.passageKey !== undefined && o.pit !== undefined) fail('passageKey and pit cannot be combined');
+      if (o.pit !== undefined && o.pit !== true) fail('pit: must be true');
       return { c, ...(o.areaId === undefined ? {} : { areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS) }),
-        ...(o.lootClass === undefined ? {} : { lootClass: oneOf(o.lootClass, 'lootClass', ITEM_CLASSES) }) };
+        ...(o.lootClass === undefined ? {} : { lootClass: oneOf(o.lootClass, 'lootClass', ITEM_CLASSES) }),
+        ...(o.passageKey === undefined ? {} : { passageKey: oneOf(o.passageKey, 'passageKey', PASSAGE_KEY_IDS) }),
+        ...(o.pit === undefined ? {} : { pit: true as const }),
+        ...(o.useSurge === undefined ? {} : { useSurge: bool(o.useSurge, 'useSurge') }) };
     }
     case 'usePortal': {
       const o = shape(v, c, ['c', 'propId']);
@@ -287,8 +305,8 @@ function command(v: unknown): Command {
       return { c, uids, expectedScrap: int(o.expectedScrap, 'expectedScrap', 1, 6000) };
     }
     case 'buyOffer': {
-      const o = shape(v, c, ['c', 'offerId']);
-      return { c, offerId: token(o.offerId, 'offerId') };
+      const o = shape(v, c, ['c', 'offerId'], ['at']);
+      return { c, offerId: token(o.offerId, 'offerId'), ...(o.at === undefined ? {} : { at: cell(o.at) }) };
     }
     case 'partyInvite': {
       const o = shape(v, c, ['c', 'name']);
@@ -320,6 +338,23 @@ function command(v: unknown): Command {
       const o = shape(v, c, ['c', 'targetUid', 'recipeId'], ['expectedScrap']);
       return { c, targetUid: token(o.targetUid, 'targetUid'), recipeId: token(o.recipeId, 'recipeId'),
         ...(o.expectedScrap !== undefined ? { expectedScrap: int(o.expectedScrap, 'expectedScrap', 0, Number.MAX_SAFE_INTEGER) } : {}) };
+    }
+    case 'benchRecycle': {
+      const o = shape(v, c, ['c', 'uids', 'areaId'], ['expectedScrap']);
+      const uids = arr(o.uids, 'uids', 3).map((uid, i) => token(uid, `uids[${i}]`));
+      if (uids.length !== 3 || new Set(uids).size !== 3) fail('Choose three different maps to recycle.');
+      return { c, uids, areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS),
+        ...(o.expectedScrap !== undefined ? { expectedScrap: int(o.expectedScrap, 'expectedScrap', 0, 1000) } : {}) };
+    }
+    case 'refillSurge': {
+      const o = shape(v, c, ['c'], ['areaId', 'all']);
+      if ((o.areaId === undefined) === (o.all === undefined)) fail('Choose one area or all areas.');
+      if (o.all !== undefined && o.all !== true) fail('all: must be true');
+      return { c, ...(o.areaId === undefined ? {} : { areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS) }), ...(o.all === undefined ? {} : { all: true as const }) };
+    }
+    case 'pinArea': {
+      const o = shape(v, c, ['c', 'areaId', 'pinned']);
+      return { c, areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS), pinned: bool(o.pinned, 'pinned') };
     }
     case 'benchClear': {
       const o = shape(v, c, ['c', 'targetUid']);

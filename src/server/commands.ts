@@ -8,7 +8,7 @@
 //                     floor, picking items up, attributes, skills, loadout, party and trade commands, chat
 //   any hideout       crafting (applyCurrency, also straight from a Crafting Stash slot "cstash:<id>") and the
 //                     crafting bench; the stash — the normal tabs AND the special tabs (Crafting Stash
-//                     { kind: 'currencyStash' }, Map Stash { kind: 'mapStash' }): moves in or out (withdrawing
+//                     { kind: 'currencyStash' }, its work slot { kind: 'craftSlot' }, Map Stash { kind: 'mapStash' }): moves in or out (withdrawing
 //                     into the backpack too), quick-moves to or from any tab, "Deposit all", tabs, dropping
 //                     stashed items; and the merchant (Rook trades with everyone; you pay with your own currency)
 //   own hideout       the map device (loading / unloading / activating)
@@ -58,9 +58,9 @@ function lockedIn(game: Game, s: PlayerSession, ...uids: string[]): boolean {
   return uids.some((uid) => game.trades.isLocked(s.characterId, uid));
 }
 
-/** The stash: its normal tabs and the special tabs (Crafting Stash, Map Stash) — usable in any hideout only. */
+/** The stash: its normal tabs and the special tabs (Crafting Stash, its work slot, Map Stash) — usable in any hideout only. */
 export function isStashLocation(loc: ItemLocation | null | undefined): boolean {
-  return loc?.kind === 'stash' || loc?.kind === 'currencyStash' || loc?.kind === 'mapStash';
+  return loc?.kind === 'stash' || loc?.kind === 'currencyStash' || loc?.kind === 'mapStash' || loc?.kind === 'craftSlot';
 }
 
 /** Location rules for moving an item from `from` to `to` (null = not a move, e.g. discard). */
@@ -99,6 +99,7 @@ function placeError(s: PlayerSession, before: CharacterSave, after: CharacterSav
   if (before === after) return null;
   if (!inHideout(s) && (
     changed(before.stash, after.stash) || changed(before.currencyStash, after.currencyStash) || changed(before.mapStash, after.mapStash)
+    || changed(before.craftSlot ?? null, after.craftSlot ?? null)
   )) return NEED_HIDEOUT_STASH;
   if (!inOwnHideout(s) && (changed(before.mapDevice, after.mapDevice) || changed(before.mapScarabs, after.mapScarabs))) return NEED_OWN_HIDEOUT_DEVICE;
   return null;
@@ -107,7 +108,11 @@ function placeError(s: PlayerSession, before: CharacterSave, after: CharacterSav
 /** Commit a rules result: save, push, and refresh the sim runtime when it can affect combat. */
 function commit(game: Game, s: PlayerSession, next: CharacterSave, runtime: boolean): void {
   if (next === s.record.ch) return;
+  const slotBefore = s.record.ch.craftSlot ?? null;
   game.setCharacter(s, next);
+  // The work slot holds an item that lives in no other container: write a move into, out of or crafted in it at
+  // once (one transaction with the character row), so a restart can never replay half of a hand-over.
+  if ((next.craftSlot ?? null) !== slotBefore) game.flushSave(s);
   if (runtime && s.instance) s.instance.updateRuntime(s);
 }
 
@@ -278,6 +283,28 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       if (where) return fail(where);
       return applyOutcome(game, s, ch, r.clearCraftedAffix(ch, cmd.targetUid));
     }
+    case 'benchRecycle': {
+      if (!inHideout(s)) return fail(NEED_HIDEOUT_BENCH);
+      for (const uid of cmd.uids) if (!rules.findItem(ch, uid)) return fail(missingItem(uid));
+      if (lockedIn(game, s, ...cmd.uids)) return fail(ITEM_IN_TRADE);
+      const where = itemsPlaceError(s, ch, ...cmd.uids);
+      if (where) return fail(where);
+      const quote = r.recycleQuote(ch, cmd.uids, cmd.areaId);
+      if (!quote.error && cmd.expectedScrap !== undefined && cmd.expectedScrap !== quote.scrap) return fail('The Scrap price changed. Review the current price and try again.');
+      return applyOutcome(game, s, ch, r.recycleMaps(ch, cmd.uids, cmd.areaId));
+    }
+    case 'refillSurge': {
+      // Hourglass Sand / Grand Hourglass (brief D 7.4): the item and the account's surge ledger change in one save, by the server clock.
+      if (!inHideout(s)) return fail('Use an Hourglass on the Atlas table in a hideout.');
+      const used = r.refillSurge(ch, cmd.areaId ? { kind: 'area', areaId: cmd.areaId } : { kind: 'all' }, game.now());
+      if (!used.ok) return fail(used.error);
+      if (!game.store.commit(s.record, used.value.character)) return fail('The hourglass could not be used. Nothing was spent; try again.');
+      s.pushCharacter('now');
+      return { ok: true, message: used.value.message };
+    }
+    case 'pinArea':
+      // Pins are an account setting: free, instant and allowed anywhere (the chart is read in the hideout, the result is what counts).
+      return applyResult(game, s, r.setPin(ch, cmd.areaId, cmd.pinned), false);
     case 'addStashTab':
       if (!inHideout(s)) return fail(NEED_HIDEOUT_STASH);
       return applyResult(game, s, r.addStashTab(ch), false);
@@ -306,13 +333,22 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       return OK;
     }
     case 'activateMapDevice':
-      return game.activateMapDevice(s, cmd.areaId, cmd.lootClass);
+      {
+      // A client from before area-bound maps may still send the area it chose: accepted only when it is the map's own.
+      const device = ch.mapDevice;
+      if (cmd.areaId && device && cmd.areaId !== device.areaId) return fail('This map is bound to another area. Reload the game to update.');
+      return game.activateMapDevice(s, {
+        ...(cmd.lootClass ? { lootClass: cmd.lootClass } : {}),
+        ...(cmd.pit ? { passage: { kind: 'bounty' as const } } : cmd.passageKey ? { passage: { kind: 'key' as const, currencyId: cmd.passageKey } } : {}),
+        ...(cmd.useSurge !== undefined ? { useSurge: cmd.useSurge } : {}),
+      });
+    }
     case 'merchantOffers':
       if (!inHideout(s)) return fail('Rook only trades in a hideout.');
       return { ok: true, offers: r.merchantOffers(ch) };
     case 'buyOffer': {
       if (!inHideout(s)) return fail('Rook only trades in a hideout.');
-      const bought = r.buyOffer(ch, cmd.offerId);
+      const bought = r.buyOffer(ch, cmd.offerId, cmd.at);
       if (!bought.ok) return fail(bought.error);
       const where = placeError(s, ch, bought.value.character);
       if (where) return fail(where);
@@ -331,7 +367,7 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       const instance = s.instance;
       if (!instance || instance.kind !== 'hideout' || !game.db.debugMerchantEnabled(instance.ownerId))
         return fail('The testing merchant is not active in this hideout.');
-      const bought = r.buyDebugOffer(ch, cmd.offerId, cmd.options);
+      const bought = r.buyDebugOffer(ch, cmd.offerId, cmd.options, cmd.at);
       if (!bought.ok) return fail(bought.error);
       if (!game.store.commit(s.record, bought.value.character)) return fail('The purchase could not be saved. Nothing was added; try again.');
       s.pushCharacter('now');

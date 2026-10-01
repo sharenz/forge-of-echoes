@@ -8,7 +8,7 @@ import { rules } from '../../src/game';
 import { generateUnique, uniqueIdsFor, uniqueLevelRequirement } from '../../src/game/items';
 import { mapBosses } from '../../src/game/progression/maps';
 import { keystoneRewards } from '../../src/game/progression/keystones';
-import { bareCharacter, expectOk, kill, map, withBackpack, currency } from './fixtures';
+import { bareCharacter, expectOk, kill, map, withBackpack, currency, openAt } from './fixtures';
 
 const atlas = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 };
 const exclusive = UNIQUE_IDS.filter(id => UNIQUES[id].bossSource);
@@ -37,7 +37,7 @@ describe('boss-exclusive uniques', () => {
   it('pays only the selected keystone pool at the displayed personal rarity chance and respects item levels', () => {
     const looter = bareCharacter();
     for (const area of ATLAS_AREAS.filter(a => a.uniquePool && atlasTierCeiling(a) >= 10)) {
-      const setup = expectOk(rules.openMap(bareCharacter({ atlas, mapDevice: map(area.baseId, 10), currencyStash: { scrap: 100 } }), area.id)).setup;
+      const setup = expectOk(openAt(rules, bareCharacter({ atlas, mapDevice: map(area.baseId, 10), currencyStash: { scrap: 100 } }), area.id)).setup;
       const info = keystoneRewards(area.id, 10, rules.lootLuck(setup, looter).itemRarity)!;
       const seen = new Set<string>(); let count = 0;
       for (let seed = 0; seed < 800; seed++) {
@@ -50,11 +50,12 @@ describe('boss-exclusive uniques', () => {
       expect(seen.size).toBe(2);
       expect(count / 800).toBeCloseTo(info.chance, 1);
       expect(info.chance).toBeCloseTo(KEYSTONE_UNIQUE_CHANCE * rules.lootLuck(setup, looter).itemRarity / 100);
-      const early = expectOk(rules.openMap(bareCharacter({ atlas, mapDevice: map(area.baseId, 7), currencyStash: { scrap: 100 } }), area.id)).setup;
+      const early = expectOk(openAt(rules, bareCharacter({ atlas, mapDevice: map(area.baseId, 7), currencyStash: { scrap: 100 } }), area.id)).setup;
       expect(keystoneRewards(area.id, 7)!.chance).toBe(0);
       for (let seed = 0; seed < 40; seed++) {
         const boss = kill({ kind: area.uniquePool!, isBoss: true });
-        const ordinary = expectOk(rules.openMap(bareCharacter({ mapDevice: map(area.baseId, 10) }))).setup;
+        // Shrine Field is the one deep area without an exclusive-unique boss: bosses there pay no keystone pool
+        const ordinary = expectOk(rules.openMap(bareCharacter({ mapDevice: map('shrineField', 10), currencyStash: { scrap: 100 } }))).setup;
         const excluded = [
           ...rules.rollKillLoot(early, boss, createRng(seed), looter),
           ...rules.rollKillLoot(ordinary, boss, createRng(seed), looter),

@@ -7,9 +7,11 @@ import { sweepRun } from './sweep';
 
 /** Events a bot resolves without help (it fights whatever is near): the forced event must actually finish. */
 const SELF_RESOLVING: readonly MapEventKind[] = ['hunted', 'vaultbreakers', 'secondCrown'];
-const SEEDS = [1, 2, 3];
+/** Five seeds, two of them must clear: a death is the fight's luck, so two of three flipped on any change of path or spawn point. */
+const SEEDS = [1, 2, 3, 4, 5];
 /** Two bosses at once is the hardest encounter of the game: a quarter of matched-bot runs die (docs/atlas-rework/C-map-events.md 12). */
-const MIN_OK: Partial<Record<MapEventKind, number>> = { secondCrown: 1 };
+/** Bellwatch on Rimed Ossuary clears 7 of 16 seeds since monsters no longer spawn buried inside props (it was 11 of 16). */
+const MIN_OK: Partial<Record<MapEventKind, number>> = { secondCrown: 1, bellwatch: 1 };
 
 export function botPlay(theme: Theme): void {
   describe(`bot play with events on ${theme}`, () => {

@@ -99,12 +99,18 @@
 //   model:     buildPlayerModel(ch, extra?) → PlayerModel (all modifiers, attributes, flags)
 //   skills:    SKILL_INFO, resolveSkill(model, id, rank), estimateLines, isMultiHit, playerSkills, canRankUpSkill, rankUpSkill,
 //              setLoadoutSlot, normalizeLoadout, skillSheetFor, skillRank
+//   binding:   a map is bound to ONE Atlas area (createMapItem(areaId, tier, uid); baseId is the area's theme): bindLegacyMaps(ch)
+//              (the load-time migration of maps saved without an area), areaForTheme (loot/Rook: area from a rolled theme),
+//              isMapAddress / mapAddresses (sealed areas and the Pit are passages, not addresses)
+//   routing:   chart-driven map drops (brief D 4, map-routing.ts): buildRouting(input) -> the frozen RunSetup.routing, routeMapDrop(routing,
+//              query, rng), advanceTarget / advanceFor (the chest upgrade's destination), routingReadout(routing, tier, discovered?) ("where
+//              your maps come from" as data), pendingReveals(atlas, area), routingBiasFor(atlas, scarabs) (hook for pins P1 and area scarabs S1)
 //   maps:      MAP_BASE_INFO, describeMap, mapTitle, mapModifiers, monsterScaling, experienceMultiplier, waveConfig, mapLuck,
 //              buildMapSummary, createMapItem, rollMapWithRarity, mapCraftError / mapCraftPreview / craftMap,
 //              partyScaling(n), partyScalingLines(n), mapBosses(baseId) (lieutenant + boss: kind, name, sentence
 //              form), monsterName(kind), monsterSentenceName(kind), mapModName(def, baseId) (a mod's name on that
 //              base: the corrupted Wrath is named after the map's boss)
-//   runs:      mapSummary(ch, map), openMap, restoreRunSetup(map, seed), buildRunConfig(setup, hooks),
+//   runs:      mapSummary(ch, map), openMap(ch, { lootClass?, passage? }), restoreRunSetup(map, seed), buildRunConfig(setup, hooks),
 //              playerRuntime(ch, setup), hideoutSeed(ownerId)
 //   luck:      lootLuck(setup, looter), lootLuckLines(setup, looter), gearLuck(ch)
 //   loot:      rollKillLoot(setup, ctx, rng, looter), rollChestLoot(setup, rng, looter),
@@ -149,6 +155,14 @@ export {
 } from './maps';
 export type { GearLuck, MapCraftResult, MapModifier } from './maps';
 export { buildRunConfig, hideoutSeed, mapSummary, openMap, playerRuntime, restoreRunSetup } from './runs';
+//   surge:     forgeDay(now), msUntilReset(now), resetCountdownText(ms), surgeStatus(atlas, areaId, now) / surgeStatusAll, surgeMaxCharges(area, nodes),
+//              refillSurge(ch, target, now) (Hourglass Sand / Grand Hourglass), refundSurge(atlas, runSurge, now) (server-loss refund)
+export {
+  forgeDay, forgeDayStart, msUntilReset, normalizeRunSurge, normalizeSurge, refillSurge, refundSurge, resetCountdownText, spendSurge, surgeBonusFor,
+  surgeLedgerAt, surgeMaxCharges, surgeStatus, surgeStatusAll,
+} from './surge';
+export type { SurgeRefill, SurgeStatus } from './surge';
+export { lootLuckWithoutSurge } from './luck';
 export { gearLuck, lootLuck, lootLuckLines } from './luck';
 export type { Luck } from './luck';
 export {
@@ -157,6 +171,11 @@ export {
 } from './loot';
 export type { KillLuck } from './loot';
 export { buyOffer, currencyOnHand, gambleOdds, merchantOffers, sellItems, sellQuote } from './merchant';
+export {
+  NEUTRAL_ROUTING_BIAS, advanceFor, advanceTarget, attachRouting, buildRouting, normalizeRouting, pendingReveals, routeMapDrop, routingBiasFor, routingReadout,
+} from './map-routing';
+export type { BuildRoutingInput, RoutedDrop, RouteQuery, RoutingBias, RoutingReadout, RoutingReadoutRow } from './map-routing';
+export { areaForTheme, bindLegacyChoice, bindLegacyMaps, discoveredAreaForTheme, hasUnboundMaps, isMapAddress, mapAddresses, provisionalBinding } from './map-binding';
 export { newSave, normalizeCharacter, normalizeCharacterReport, normalizeItem, normalizeSave, parseSave, serializeSave } from './save';
 export type { NormalizeReport } from './save';
 export { applyCurrency, craftPreview, craftingTargetError, describeItem } from './dispatch';

@@ -208,6 +208,10 @@ export interface UiActions {
   setBenchItem(uid: string | null): void;
   benchCraft(recipeId: string): void;
   benchClear(): void;
+  /** Move the map `uid` (backpack, stash, work slot, bench or device) to a neighbouring area: the Re-chart bench service (brief D 5.2). */
+  rechartMap(uid: string, areaId: import('./atlas').AtlasAreaId): void;
+  /** Recycle three maps of one tier into one Normal map of `areaId` (brief D 5.3). Resolves true when the server accepted it. */
+  recycleMaps(uids: string[], areaId: import('./atlas').AtlasAreaId): Promise<boolean>;
 
   // trading
   tradeRequest(name: string): void;
@@ -224,12 +228,18 @@ export interface UiActions {
 
   // hideout
   setMapTreeNode(nodeId: import('./atlas').MapTreeNodeId, allocate: boolean): void;
-  activateMapDevice(areaId?: import('./atlas').AtlasAreaId, lootClass?: import('./content').ItemClass): void;
+  /** Pin or unpin an Atlas area (account-wide, free): its maps drop three times as often. */
+  pinArea(areaId: import('./atlas').AtlasAreaId, pinned: boolean): void;
+  /** Use Hourglass Sand on an area, or a Grand Hourglass on every area (`'all'`): refills the daily surge (server clock, hideout only). */
+  refillSurge(target: import('./atlas').AtlasAreaId | 'all'): void;
+  /** The map decides the area. `passageKey` (a loaded key) or `pit` (Bounty map bound to the Pit's entrance) redirect it. */
+  activateMapDevice(opts?: { lootClass?: import('./content').ItemClass; passageKey?: import('./content').CurrencyId; pit?: true; useSurge?: boolean }): void;
   /** Offers computed locally from the shared rules (display); buying goes to the server. */
   merchantOffers(): MerchantOffer[];
-  buyOffer(offerId: string): void;
+  /** `at`: the backpack cell the purchase was dragged onto (first-fit when omitted or occupied). */
+  buyOffer(offerId: string, at?: { x: number; y: number }): void;
   sellItems(uids: string[], expectedScrap: number): Promise<boolean>;
-  buyDebugOffer(offerId: string, options: import('./game').DebugMerchantOptions): void;
+  buyDebugOffer(offerId: string, options: import('./game').DebugMerchantOptions, at?: { x: number; y: number }): void;
 
   // party & social
   partyInvite(name: string): void;

@@ -962,6 +962,8 @@ export class ClientApp {
       setBenchItem: (uid) => this.box.update((s) => (s.benchItemUid === uid ? s : { ...s, benchItemUid: uid })),
       benchCraft: (recipeId) => inGame((g) => g.benchCraft(recipeId), undefined),
       benchClear: () => inGame((g) => g.benchClear(), undefined),
+      rechartMap: (uid, areaId) => inGame((g) => g.rechartMap(uid, areaId), undefined),
+      recycleMaps: (uids, areaId) => inGame((g) => g.recycleMaps(uids, areaId), Promise.resolve(false)),
 
       tradeRequest: (name) => inGame((g) => g.tradeRequest(name), undefined),
       tradeRespond: (id, accept) => inGame((g) => g.tradeRespond(id, accept), undefined),
@@ -974,11 +976,13 @@ export class ClientApp {
       setLoadoutSlot: (slot, id) => inGame((g) => g.setLoadoutSlot(slot, id), undefined),
 
       setMapTreeNode: (nodeId, allocate) => inGame((g) => g.setMapTreeNode(nodeId, allocate), undefined),
-      activateMapDevice: (areaId, lootClass) => inGame((g) => g.activateMapDevice(areaId, lootClass), undefined),
+      pinArea: (areaId, pinned) => inGame((g) => g.pinArea(areaId, pinned), undefined),
+      refillSurge: (target) => inGame((g) => g.refillSurge(target), undefined),
+      activateMapDevice: (opts) => inGame((g) => g.activateMapDevice(opts), undefined),
       merchantOffers: () => inGame((g) => g.merchantOffers(), []),
-      buyOffer: (id) => inGame((g) => g.buyOffer(id), undefined),
+      buyOffer: (id, at) => inGame((g) => g.buyOffer(id, at), undefined),
       sellItems: (uids, scrap) => inGame(g => g.sellItems(uids, scrap), Promise.resolve(false)),
-      buyDebugOffer: (id, options) => inGame(g => g.buyDebugOffer(id, options), undefined),
+      buyDebugOffer: (id, options, at) => inGame(g => g.buyDebugOffer(id, options, at), undefined),
 
       partyInvite: (name) => inGame((g) => g.partyInvite(name), undefined),
       partyRespond: (id, accept) => inGame((g) => g.partyRespond(id, accept), undefined),

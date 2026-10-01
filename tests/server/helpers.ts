@@ -1,7 +1,9 @@
 // Shared helpers for the server tests: a real server on port 0 with an in-memory database, HTTP calls,
 // account/character setup, and an in-process harness (fake connections + manual ticking on a fake clock)
 // for scenarios that need minutes of sim time in seconds of test time.
-import type { CharacterSave, Item } from '../../src/contracts/items';
+import type { CharacterSave, Item, MapItem } from '../../src/contracts/items';
+import type { AtlasAreaId } from '../../src/contracts/atlas';
+import { findAtlasArea } from '../../src/data/progression/atlas';
 import type { Command, InputMessage, ServerMessage, ZoneInfo } from '../../src/contracts/net';
 import type { PlayerIntent, PropKind, WorldView } from '../../src/contracts/sim';
 import { SIM_DT } from '../../src/contracts/sim';
@@ -274,6 +276,22 @@ export function partyUp(leader: LocalPlayer, member: LocalPlayer): void {
   if (!accepted.ok) throw new Error(`accept failed: ${accepted.error}`);
 }
 
+/**
+ * Bind the map in `p`'s device (and nothing else) to `areaId`, charting the area: what choosing an area at the device meant
+ * before maps were bound. Sealed areas and the Pit are reached through a passage instead, not by binding.
+ */
+export function bindDeviceMap(p: LocalPlayer, areaId: AtlasAreaId, patch: Partial<MapItem> = {}): void {
+  const ch = p.session.record.ch;
+  const area = findAtlasArea(areaId)!;
+  if (!ch.mapDevice) throw new Error('bindDeviceMap: the device is empty');
+  const atlas = ch.atlas ?? { discovered: [], completed: [], clears: 0 };
+  p.server.game.setCharacter(p.session, {
+    ...ch,
+    mapDevice: { ...ch.mapDevice, areaId, baseId: area.baseId, ...patch },
+    atlas: { ...atlas, discovered: [...new Set([...atlas.discovered, areaId])] as AtlasAreaId[] },
+  });
+}
+
 /** Load the first map of `owner`'s backpack into the device and activate it (owner must be at home). */
 export function openMap(owner: LocalPlayer): void {
   const entry = owner.session.record.ch.backpack.entries.find((e) => e.item.kind === 'map');
@@ -361,6 +379,7 @@ export function holdings(...chs: CharacterSave[]): { items: string[]; stacks: Re
     for (const b of ch.belt) if (b) addStack(`f:${b.flaskId}`, b.count);
     for (const [id, n] of Object.entries(ch.currencyStash ?? {})) if (n) addStack(`c:${id}`, n);
     for (const m of ch.mapStash ?? []) add(m);
+    if (ch.craftSlot) add(ch.craftSlot);
   }
   items.sort();
   return { items, stacks };
@@ -374,6 +393,7 @@ export function uidsOf(ch: CharacterSave): string[] {
   for (const it of Object.values(ch.equipment)) if (it) out.push(it.uid);
   if (ch.mapDevice) out.push(ch.mapDevice.uid);
   for (const m of ch.mapStash ?? []) out.push(m.uid);
+  if (ch.craftSlot) out.push(ch.craftSlot.uid);
   return out;
 }
 

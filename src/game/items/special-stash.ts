@@ -8,6 +8,9 @@
 //                   "cstash:<currencyId>" (currencyStashUid); findItem returns a CurrencyStack view of it
 //                   at location { kind: 'currencyStash' }, so describeItem, crafting (applyCurrency with the
 //                   slot uid as the currency) and the moves all work on it.
+//   Work slot       CharacterSave.craftSlot: the one piece of gear or map being crafted on (location
+//                   { kind: 'craftSlot' }); the item keeps its own uid, so every crafting rule reaches it through
+//                   findItem / replaceItemAt like any other container.
 //   Map Stash       CharacterSave.mapStash: up to MAP_STASH_CAPACITY maps in deposit order, each keeping
 //                   its own uid; location { kind: 'mapStash' }. The UI groups them by tier and base.
 //
@@ -15,7 +18,7 @@
 // are in ./inventory. Pure; tolerant of characters built without the fields (treated as empty).
 import type { CurrencyId } from '../../contracts/content';
 import { EQUIPMENT_CURRENCY_IDS, MAP_CURRENCY_IDS } from '../../contracts/content';
-import type { CharacterSave, CurrencyStack, MapItem, SpecialStashTab } from '../../contracts/items';
+import type { CharacterSave, CraftSlotItem, CurrencyStack, MapItem, SpecialStashTab } from '../../contracts/items';
 import { CURRENCY_STASH_MAX, currencyStashUid } from '../../contracts/items';
 import { isMapCurrency } from '../../data/items';
 
@@ -83,4 +86,14 @@ export function mapStashIndex(ch: CharacterSave, uid: string): number {
 
 export function withMapStash(ch: CharacterSave, maps: MapItem[]): CharacterSave {
   return { ...ch, mapStash: maps };
+}
+
+/** The item in the Crafting Stash work slot (null when empty or for a character built without the field). */
+export function craftSlotOf(ch: CharacterSave): CraftSlotItem | null {
+  const item = ch.craftSlot;
+  return item && typeof item === 'object' && (item.kind === 'equipment' || item.kind === 'map') ? item : null;
+}
+
+export function withCraftSlot(ch: CharacterSave, item: CraftSlotItem | null): CharacterSave {
+  return { ...ch, craftSlot: item };
 }

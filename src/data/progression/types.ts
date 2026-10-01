@@ -136,7 +136,9 @@ export type MapStat =
   | 'magicPackChance' | 'rarePackChance' | 'eventChance' | 'chestUpgradeChance' | 'chestQuality' | 'droppedMapQuality'
   | 'scarabDropChance' | 'rareQuantity' | 'normalQuantity' | 'equipmentStability' | 'equipmentDropChance' | 'bossIngredientChance'
   | 'bossLife' | 'bossUnique' | 'bossLoot' | 'chestLoot' | 'chestRareChance' | 'chestCurrency'
-  | 'waveDuration' | 'territoryFee' | 'revealChance' | 'dangerModStrength' | 'corruptedModStrength';
+  | 'waveDuration' | 'territoryFee' | 'revealChance' | 'dangerModStrength' | 'corruptedModStrength'
+  // Daily surge (brief D 7.5; read by game/progression/surge.ts and loot.ts, never resolved on a map)
+  | 'surgeCharges' | 'surgeKeep' | 'sandChance';
 
 export interface MapEffectDef {
   stat: MapStat;
@@ -219,7 +221,6 @@ export interface PriceDef {
 }
 
 export type MerchantStockDef =
-  | { id: string; kind: 'map'; baseId: MapBaseId; tier: number; price: readonly PriceDef[] }
   | { id: string; kind: 'flask'; flaskId: FlaskId; count: number; price: readonly PriceDef[] }
   | { id: string; kind: 'currency'; currencyId: CurrencyId; count: number; price: readonly PriceDef[] };
 

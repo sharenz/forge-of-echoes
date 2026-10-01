@@ -9,6 +9,7 @@ import {
   atlasRespecCost, findAtlasNode, isAtlasNodeId, isLegacyNodeId, legacyNodeId, LEGACY_PREFIX, type AtlasNode,
 } from '../../data/progression/map-tree';
 import { spendCurrency } from './merchant';
+import { pinSlotCount } from '../../data/progression/routing';
 import { fail, ok } from './util';
 
 /** The six final bosses: killing each for the first time grants a point. */
@@ -110,10 +111,14 @@ export function setMapTreeNode(ch: CharacterSave, id: MapTreeNodeId, allocate: b
   const next = cost > 0 ? spendCurrency(ch, 'scrap', cost)! : ch;
   const atlas = next.atlas!;
   const nodes = allocate ? [...(atlas.nodes ?? []), id] : atlas.nodes!.filter(n => n !== id);
+  const kept = normalizeMapTree(nodes, mapTreePoints(atlas));
+  // A respec that takes a pin-slot node away drops the pins beyond the new slot count (the last pinned goes first).
+  const pins = atlas.pins?.slice(0, pinSlotCount(kept));
+  const { pins: _pins, ...rest } = atlas;
   return ok({
     ...next,
     atlas: {
-      ...atlas, nodes: normalizeMapTree(nodes, mapTreePoints(atlas)),
+      ...rest, nodes: kept, ...(pins?.length ? { pins } : {}),
       ...(allocate ? {} : { refunds: (atlas.refunds ?? 0) + 1, respecSpent: (atlas.respecSpent ?? 0) + cost }),
     },
   });

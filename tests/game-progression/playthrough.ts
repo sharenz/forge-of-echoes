@@ -21,16 +21,18 @@
 //     (run.requestPickup).
 // Skill / attribute points are spent by a simple, sensible policy. Used by the balance suite
 // (tests/game-progression/balance.test.ts).
+import { themeMap } from './fixtures';
 import { MONSTER_KINDS, type Attribute, type MonsterKind, type SkillId } from '../../src/contracts/content';
 import type { RunSetup } from '../../src/contracts/game';
 import type { CharacterSave, Item, MapItem } from '../../src/contracts/items';
+import { ATLAS_AREA_IDS } from '../../src/contracts/atlas';
 import { PORTALS_PER_MAP } from '../../src/contracts/net';
 import {
   PICKUP_REACH, SIM_DT, type DropSpec, type RunConfig, type RunHooks, type SimEvent,
   type WorldView,
 } from '../../src/contracts/sim';
 import { rules } from '../../src/game';
-import { createMapItem, monsterLevelForTier } from '../../src/game/progression';
+import { monsterLevelForTier } from '../../src/game/progression';
 import type { SimPlayerUpdate } from '../../src/sim';
 // run.ts first: it loads the sim's core modules (they import each other in a cycle) in the right order.
 import { createRunInternal } from '../../src/sim/run';
@@ -190,6 +192,8 @@ export function playParty(starts: readonly CharacterSave[], map: MapItem, opts: 
   } else {
     owner = { ...owner, mapDevice: map };
   }
+  // Balance runs play any theme at any tier: every area counts as charted.
+  owner = { ...owner, atlas: { ...(owner.atlas ?? { completed: [], clears: 0 }), discovered: [...ATLAS_AREA_IDS] } as CharacterSave['atlas'] };
   const opened = rules.openMap(owner);
   if (!opened.ok) throw new Error(`playParty: ${opened.error}`);
   const setup = opened.value.setup;
@@ -531,10 +535,12 @@ export function nextMap(ch: CharacterSave, tier: number): { character: Character
   const own = mapInBag(ch, (m) => m.tier === tier && m.rarity === 'normal') ?? mapInBag(ch, (m) => m.tier === tier);
   if (own) return { character: ch, map: own };
   if (tier <= 2) {
-    const bought = rules.buyOffer(ch, `map-t${tier}-ashenForge`);
-    if (bought.ok && bought.value.item.kind === 'map') return { character: bought.value.character, map: bought.value.item };
+    // Rook sells maps of cleared areas: the harness shops as if Cinder Crossing and Ember Road were cleared (the atlas itself is untouched)
+    const cleared = { ...ch, atlas: { ...(ch.atlas ?? { discovered: ['cinderCrossing'], clears: 0 }), completed: ['cinderCrossing', 'emberRoad'], discovered: [...new Set([...(ch.atlas?.discovered ?? []), 'cinderCrossing', 'emberRoad'])] } } as CharacterSave;
+    const bought = rules.buyOffer(cleared, tier === 1 ? 'map:cinderCrossing:1:plain' : 'map:emberRoad:2:plain');
+    if (bought.ok && bought.value.item.kind === 'map') return { character: { ...bought.value.character, ...(ch.atlas ? { atlas: ch.atlas } : { atlas: undefined }) } as CharacterSave, map: bought.value.item };
   }
-  return { character: ch, map: createMapItem('ashenForge', tier, `balance-t${tier}-${ch.nextUid}`) };
+  return { character: ch, map: themeMap('ashenForge', tier, `balance-t${tier}-${ch.nextUid}`) };
 }
 
 /** The highest tier whose monsters are at most `ahead` levels above `level` (GAME_SPEC §7: level + 3 is "fine"). */

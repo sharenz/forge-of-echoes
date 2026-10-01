@@ -2,7 +2,7 @@
 // siblings: the five essences share one crystal-in-a-cage shape and differ only by colour, everything else has its
 // own silhouette.
 import type { PixelImage } from '../../contracts/art';
-import { SCARABS } from '../../data/scarabs';
+import { SCARABS, type ScarabFamily } from '../../data/scarabs';
 import type { Frame } from '../frame';
 import { C, RAMPS, type Color, type Ramp } from '../palette';
 import { Sculpt, hash2, type PrimStyle } from '../shade';
@@ -575,9 +575,32 @@ function voidSplinter(): Frame {
   sparkle(f, 7, 15, C.voidGlow, 2); sparkle(f, 25, 20, C.voidLight, 1); return f;
 }
 
-function scarab(haste: boolean, tier: number): Frame {
+const SCARAB_LOOK: Record<ScarabFamily, { shell: Ramp; rim: Color }> = {
+  haste: { shell: RAMPS.frost, rim: C.ice },
+  invasion: { shell: RAMPS.void, rim: C.voidGlow },
+  homing: { shell: EMBER, rim: C.hot },
+  wayfarer: { shell: RAMPS.moss, rim: C.vitalLight },
+  deepward: { shell: RAMPS.oss, rim: C.goldHi },
+  quarry: { shell: RAMPS.rust, rim: C.ember },
+  hearthbound: { shell: RAMPS.wine, rim: C.hot },
+};
+
+/** The mark on a scarab's shell: what the family does, readable at 32 px. */
+function scarabMark(f: Frame, family: ScarabFamily): void {
+  switch (family) {
+    case 'haste': line(f, 12, 15, 14, 12, C.ice); line(f, 14, 12, 14, 21, C.ice); break;
+    case 'invasion': gem(f, 12, 17, 2, 3, RAMPS.gold); gem(f, 20, 17, 2, 3, RAMPS.gold); break;
+    case 'homing': gem(f, 16, 18, 3, 3, RAMPS.gold); px(f, 16, 18, C.white); break;
+    case 'wayfarer': line(f, 11, 17, 21, 17, C.goldHi); line(f, 19, 15, 21, 17, C.goldHi); line(f, 19, 19, 21, 17, C.goldHi); break;
+    case 'deepward': line(f, 16, 13, 16, 22, C.goldHi); line(f, 13, 19, 16, 22, C.goldHi); line(f, 19, 19, 16, 22, C.goldHi); break;
+    case 'quarry': line(f, 16, 13, 20, 18, C.goldHi); line(f, 20, 18, 16, 23, C.goldHi); line(f, 16, 23, 12, 18, C.goldHi); line(f, 12, 18, 16, 13, C.goldHi); break;
+    case 'hearthbound': gem(f, 16, 19, 2, 3, RAMPS.gold); px(f, 16, 14, C.hot); px(f, 16, 15, C.flame); px(f, 15, 16, C.flame); px(f, 17, 16, C.flame); break;
+  }
+}
+
+function scarab(family: ScarabFamily, tier: number): Frame {
   const f = newIcon(), s = new Sculpt();
-  const shell = haste ? RAMPS.frost : RAMPS.void;
+  const shell = SCARAB_LOOK[family].shell;
   for (const side of [-1, 1]) for (let leg = 0; leg < 3; leg++) {
     line(f, 16 + side * 6, 12 + leg * 5, 16 + side * 12, 9 + leg * 7, C.gold);
     line(f, 16 + side * 12, 9 + leg * 7, 16 + side * 13, 12 + leg * 7, C.goldHi);
@@ -587,14 +610,33 @@ function scarab(haste: boolean, tier: number): Frame {
   s.render(f.c, f.e);
   line(f, 16, 10, 16, 26, C.ink);
   for (let n = 0; n < tier; n++) gem(f, 16 + (n - (tier - 1) / 2) * 5, 29, 1, 1, RAMPS.gold);
-  if (haste) { line(f, 12, 15, 14, 12, C.ice); line(f, 14, 12, 14, 21, C.ice); }
-  else { gem(f, 12, 17, 2, 3, RAMPS.gold); gem(f, 20, 17, 2, 3, RAMPS.gold); }
+  scarabMark(f, family);
   if (tier === 4) sparkle(f, 21, 10, C.goldHi, 1);
   return f;
 }
 
+/** An hourglass: Sand has a little in the lower bulb, the Grand Hourglass is gold-framed and full. */
+function hourglass(grand: boolean): Frame {
+  const f = newIcon(), s = new Sculpt();
+  const frame = style(grand ? RAMPS.gold : RAMPS.wood, 0.3);
+  const sand = style(RAMPS.sand, 0.3);
+  s.poly([[10, 6], [22, 6], [22, 9], [17.5, 16], [22, 23], [22, 26], [10, 26], [10, 23], [14.5, 16], [10, 9]], style(RAMPS.stone, 0.2, { round: 0.4 }), 1);
+  s.render(f.c, f.e);
+  s.poly([[12, 24], [20, 24], [17, 19], [15, 19]], sand, 1, -0.1, -0.1);
+  s.poly([[12.5, 9], [19.5, 9], [16.6, 14], [15.4, 14]], sand, 1, -0.1, -0.1);
+  s.render(f.c, f.e);
+  line(f, 16, 14, 16, 19, C.sandLight ?? C.straw);
+  s.poly([[8, 4], [24, 4], [24, 6.5], [8, 6.5]], frame, 1);
+  s.poly([[8, 25.5], [24, 25.5], [24, 28], [8, 28]], frame, 1);
+  s.render(f.c, f.e);
+  if (grand) { gem(f, 16, 16, 1.5, 1.5, RAMPS.gold); sparkle(f, 26, 7, C.goldHi, 1); sparkle(f, 6, 24, C.goldHi, 1); }
+  return f;
+}
+
 export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
-  ...Object.fromEntries(SCARABS.map(s => [`icon/currency/${s.id}`, () => finishIcon(scarab(s.durationLess > 0, s.tier), s.durationLess > 0 ? C.ice : C.voidGlow)])),
+  ...Object.fromEntries(SCARABS.map(s => [`icon/currency/${s.id}`, () => finishIcon(scarab(s.family, s.tier), SCARAB_LOOK[s.family].rim)])),
+  'icon/currency/hourglassSand': () => finishIcon(hourglass(false), C.goldHi),
+  'icon/currency/grandHourglass': () => finishIcon(hourglass(true), C.goldHi),
   'icon/currency/scarBalm': () => finishIcon(scarBalm()),
   'icon/currency/anneal': () => finishIcon(anneal(), C.hot),
   'icon/currency/graft': () => finishIcon(graft(), C.vitalLight),

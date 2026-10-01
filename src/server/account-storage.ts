@@ -9,19 +9,21 @@ import { normalizeCharacterReport } from '../game/progression';
 import { findCurrency } from '../data/items';
 import { newAtlas } from '../game/progression/atlas';
 
-export type AccountStorage = Pick<CharacterSave, 'stash' | 'stashCapacity' | 'currencyStash' | 'mapStash' | 'atlas'>;
+export type AccountStorage = Pick<CharacterSave, 'stash' | 'stashCapacity' | 'currencyStash' | 'mapStash' | 'atlas' | 'craftSlot'>;
 
 export function storageOf(ch: CharacterSave): AccountStorage {
-  return { stash: ch.stash, stashCapacity: ch.stashCapacity, currencyStash: ch.currencyStash, mapStash: ch.mapStash, atlas: ch.atlas };
+  // The work slot is null when empty (never undefined), so a character row and the storage row agree on "empty".
+  return { stash: ch.stash, stashCapacity: ch.stashCapacity, currencyStash: ch.currencyStash, mapStash: ch.mapStash, atlas: ch.atlas, craftSlot: ch.craftSlot ?? null };
 }
 
 export function sameStorage(a: AccountStorage, b: AccountStorage): boolean {
-  return a.stash === b.stash && a.currencyStash === b.currencyStash && a.mapStash === b.mapStash && a.stashCapacity === b.stashCapacity && a.atlas === b.atlas;
+  return a.stash === b.stash && a.currencyStash === b.currencyStash && a.mapStash === b.mapStash && a.stashCapacity === b.stashCapacity && a.atlas === b.atlas
+    && (a.craftSlot ?? null) === (b.craftSlot ?? null);
 }
 
 /** Shared fields are a wire/rules projection, never a second persisted copy on a character. */
 export function withoutStorage(ch: CharacterSave): CharacterSave {
-  const { stashCapacity: _capacity, atlas: _atlas, ...rest } = ch;
+  const { stashCapacity: _capacity, atlas: _atlas, craftSlot: _craftSlot, ...rest } = ch;
   return { ...rest, stash: [], currencyStash: {}, mapStash: [] };
 }
 
@@ -84,7 +86,7 @@ export function mergeLegacyStorage(characters: readonly CharacterSave[]): Accoun
   }
   const stashCapacity = Math.max(MAX_STASH_TABS, stash.length, ...characters.map((c) => c.stashCapacity ?? MAX_STASH_TABS));
   if (stashCapacity > MAX_PRESERVED_STASH_TABS) throw new Error('Legacy stash exceeds the supported recovery capacity');
-  return { stash, stashCapacity, currencyStash, mapStash, atlas: newAtlas() };
+  return { stash, stashCapacity, currencyStash, mapStash, atlas: newAtlas(), craftSlot: null };
 }
 
 /** Reuse item migrations and validation, but reject data loss rather than silently dropping overflow. */
@@ -96,8 +98,10 @@ export function parseAccountStorage(data: string): AccountStorage {
   const seed = rules.createCharacter('Shared Stash', 1);
   const result = normalizeCharacterReport({ ...seed, equipment: {}, backpack: createGrid(12, 5), mapDevice: null, ...raw, atlas: raw.atlas ?? newAtlas() });
   if (!result || result.lost.length || result.character.backpack.entries.length) throw new Error('Account storage needs recovery');
-  const before = [...raw.stash.flatMap((t) => t.grid.entries.map((e) => e.item)), ...raw.mapStash];
-  const after = [...result.character.stash.flatMap((t) => t.grid.entries.map((e) => e.item)), ...result.character.mapStash];
+  // The work slot keeps its item where it is: an unreadable one would be re-homed and trip this check.
+  const before = [...raw.stash.flatMap((t) => t.grid.entries.map((e) => e.item)), ...raw.mapStash, ...(raw.craftSlot ? [raw.craftSlot] : [])];
+  const after = [...result.character.stash.flatMap((t) => t.grid.entries.map((e) => e.item)), ...result.character.mapStash,
+    ...(result.character.craftSlot ? [result.character.craftSlot] : [])];
   const byId = new Map(after.map((i) => [i.uid, i]));
   if (raw.stash.length !== result.character.stash.length || before.length !== after.length || new Set(before.map((i) => i.uid)).size !== before.length || before.some((i) => {
     const kept = byId.get(i.uid);

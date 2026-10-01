@@ -12,7 +12,10 @@ import type { MapEventKind } from '../../src/contracts/map-events';
 import { SIM_DT } from '../../src/contracts/sim';
 import { createRunInternal } from '../../src/sim/run';
 import type { World } from '../../src/sim/world';
+import type { AtlasAreaId } from '../../src/contracts/atlas';
+import { areaRadius, areaTheme } from '../../src/data/layouts/area';
 import { createBot } from '../sim/bot';
+import { Nav } from '../sim/nav';
 import { STRONG_LOADOUT, TIER5, fairSkills, fairStats, makeConfig, makeHooks, makeJoin } from '../sim/fixtures';
 
 export type EventPolicy = (w: World, playerId: number, base: PlayerIntent) => PlayerIntent;
@@ -20,13 +23,24 @@ export type EventPolicy = (w: World, playerId: number, base: PlayerIntent) => Pl
 export const SWEEP_THEMES: readonly Theme[] = ['ashenForge', 'rimedOssuary', 'ironColiseum'];
 const ARENA: Partial<Record<Theme, number>> = { ashenForge: 900, rimedOssuary: 900, ironColiseum: 650 };
 
-/** Walk toward (x, y) unless already within `stop`; the bot's aim and casting stay as they were. */
+const navs = new WeakMap<World, Nav>();
+
+/**
+ * Walk toward (x, y) unless already within `stop`; the bot's aim and casting stay as they were. Straight while the line is clear,
+ * round walls and prop clusters otherwise (tests/sim/nav.ts), as a player would.
+ */
 export function walkTo(w: World, playerId: number, x: number, y: number, base: PlayerIntent, stop = 24): PlayerIntent {
   const p = w.playerById[playerId];
   if (!p) return base;
   const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy);
   if (d <= stop) return { ...base, moveX: 0, moveY: 0 };
-  return { ...base, moveX: dx / d, moveY: dy / d };
+  let nav = navs.get(w);
+  if (!nav) navs.set(w, nav = new Nav());
+  if (!w.config.areaId) return { ...base, moveX: dx / d, moveY: dy / d };
+  const wp = nav.steer(w.props, w.arenaRadius, p.x, p.y, x, y);
+  const wx = wp.x - p.x, wy = wp.y - p.y, wd = Math.hypot(wx, wy);
+  if (wd < 1e-3) return { ...base, moveX: dx / d, moveY: dy / d };
+  return { ...base, moveX: wx / wd, moveY: wy / wd };
 }
 
 const liveOf = (w: World, kind: MapEventKind) => w.mapEvent?.live.find(e => e.kind === kind && e.phase !== 'complete' && e.phase !== 'failed');
@@ -80,6 +94,7 @@ export const blackoutPolicy: EventPolicy = (w, id, base) => {
 };
 
 const CORE: Partial<Record<MapEventKind, EventPolicy>> = { echoRift: echoPolicy, wound: woundPolicy, blackout: blackoutPolicy };
+const WALKS = new Set<EventPolicy>(Object.values(CORE));
 
 /** Every policy-*.ts next to this file exports `<name>Policy`; the names map onto event kinds. */
 const NAMED: Record<string, MapEventKind> = {
@@ -103,6 +118,8 @@ export interface SweepOptions {
   /** Run without the event policy (what a bot that ignores the event does). */
   noPolicy?: boolean;
   scaling?: Partial<typeof TIER5>;
+  /** Play an Atlas area with its hand-crafted layout live (its theme and arena radius, as buildRunConfig sets them); `theme` is then ignored. */
+  areaId?: AtlasAreaId;
 }
 
 export interface SweepResult {
@@ -122,6 +139,8 @@ export interface SweepResult {
   /** Longest stretch (s) a wave tell was held by an event. */
   maxHold: number;
   errors: number;
+  /** For a 'stuck' run: where and when (diagnostics for the layout sweep). */
+  stuckAt?: string;
   deaths: number;
   /** Deaths while the forced event was running (its own death-rate delta; later boss deaths are flask and level attrition). */
   eventDeaths: number;
@@ -134,7 +153,10 @@ export function sweepRun(kind: MapEventKind | 'none', theme: Theme, seed: number
   const wave = o.wave ?? lo + (seed % (hi - lo + 1));
   const party = Math.max(1, o.party ?? 1);
   const { run, world } = createRunInternal({
-    ...makeConfig({ theme, seed, hooks, arenaRadius: ARENA[theme] ?? 900, scaling: { ...TIER5, ...(o.scaling ?? {}) } }),
+    ...makeConfig({
+      theme: o.areaId ? areaTheme(o.areaId) : theme, seed, hooks, arenaRadius: o.areaId ? areaRadius(o.areaId) : ARENA[theme] ?? 900,
+      scaling: { ...TIER5, ...(o.scaling ?? {}) }, ...(o.areaId ? { areaId: o.areaId } : {}),
+    }),
     ...(kind === 'none' ? {} : { event: { kind, wave, angle: seed * 1.37, variant: (seed * 37) & 255 } }),
   });
   for (let k = 1; k <= party; k++) run.addPlayer(makeJoin(k, { stats: fairStats(), skills: fairSkills(), loadout: STRONG_LOADOUT }));
@@ -142,12 +164,25 @@ export function sweepRun(kind: MapEventKind | 'none', theme: Theme, seed: number
   const policy = o.noPolicy || kind === 'none' ? undefined : POLICIES[kind];
   let result: SweepResult['result'] = 'timeout';
   let deaths = 0, eventDeaths = 0, hold = 0, maxHold = 0, activeAt = -1, finishedAt = -1;
-  let anchorX = 0, anchorY = 0, anchorT = 0;
+  let anchorX = 0, anchorY = 0, anchorT = 0, stuckAt = '';
   const ticks = Math.round((Math.max(1, o.minutes ?? 20) * 60) / SIM_DT);
   for (let t = 0; t < ticks; t++) {
     for (let k = 0; k < party; k++) {
       let intent = bots[k].intent(run.view, k + 1);
-      if (policy) intent = policy(world, k + 1, intent);
+      if (policy) {
+        const own = intent;
+        intent = policy(world, k + 1, intent);
+        // A policy that walks straight at its goal gets walked around walls (the core four already use `walkTo`).
+        if (world.config.areaId && !WALKS.has(policy) && (intent.moveX !== own.moveX || intent.moveY !== own.moveY) && (intent.moveX !== 0 || intent.moveY !== 0)) {
+          const p = world.playerById[k + 1];
+          if (p && !p.dead) {
+            let nav = navs.get(world);
+            if (!nav) navs.set(world, nav = new Nav());
+            const h = nav.around(world.props, world.arenaRadius, p.x, p.y, intent.moveX, intent.moveY);
+            intent = { ...intent, moveX: h.x, moveY: h.y };
+          }
+        }
+      }
       run.setIntent(k + 1, intent);
     }
     run.step();
@@ -161,7 +196,15 @@ export function sweepRun(kind: MapEventKind | 'none', theme: Theme, seed: number
     if (t % 60 === 0) {
       const p0 = world.players[0];
       if (p0 && Math.hypot(p0.x - anchorX, p0.y - anchorY) > 25) { anchorX = p0.x; anchorY = p0.y; anchorT = world.time; }
-      else if (p0 && !p0.dead && world.time - anchorT > 90 && world.director.phase !== 'cleared' && world.director.phase !== 'hideout') { result = 'stuck'; break; }
+      else if (p0 && !p0.dead && world.time - anchorT > 90 && world.director.phase !== 'cleared' && world.director.phase !== 'hideout') {
+        result = 'stuck';
+        const m = world.monsters;
+        let near = '';
+        for (let i = 0; i < m.hwm; i++) if (m.alive[i] && Math.hypot(m.x[i] - p0.x, m.y[i] - p0.y) < 400) near += `${near ? ' ' : ''}${Math.round(m.x[i])},${Math.round(m.y[i])}`;
+        const ev = world.mapEvent?.live.find(x => x.kind === kind);
+        stuckAt = `t=${Math.round(world.time)}s wave ${world.director.wave} at ${Math.round(p0.x)},${Math.round(p0.y)} event ${ev ? ev.phase : '-'} monsters<400u [${near}]`;
+        break;
+      }
     }
     const out = run.drainOutcomes();
     const died = out.filter(x => x.t === 'playerDied').length;
@@ -175,7 +218,7 @@ export function sweepRun(kind: MapEventKind | 'none', theme: Theme, seed: number
   return {
     kind, theme, seed, result, minutes: world.tick * SIM_DT / 60, ...(r ? { event: { grade: r.grade, tally: r.tally } } : {}),
     eventSeconds: activeAt >= 0 ? Math.max(0, (finishedAt >= 0 ? finishedAt : world.time) - activeAt) : 0, maxHold,
-    errors: world.hookErrors.total, deaths, eventDeaths,
+    errors: world.hookErrors.total, deaths, eventDeaths, ...(stuckAt ? { stuckAt } : {}),
   };
 }
 

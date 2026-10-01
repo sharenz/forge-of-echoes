@@ -33,7 +33,7 @@ export { currencyStashUid };
 const MINTED_UID = /^i([0-9a-z]{1,10})$/;
 
 /**
- * Every uid the character holds: backpack, stash tabs, equipment, the map device and the Map Stash
+ * Every uid the character holds: backpack, stash tabs, equipment, the map device, the Map Stash and the Crafting Stash work slot
  * (belt and Crafting Stash uids are synthetic).
  */
 export function heldUids(ch: CharacterSave): Set<string> {
@@ -44,6 +44,7 @@ export function heldUids(ch: CharacterSave): Set<string> {
   if (ch.mapDevice) out.add(ch.mapDevice.uid);
   for (const s of ch.mapScarabs ?? []) if (s) out.add(s.uid);
   if (Array.isArray(ch.mapStash)) for (const m of ch.mapStash) out.add(m.uid);
+  if (ch.craftSlot) out.add(ch.craftSlot.uid);
   return out;
 }
 

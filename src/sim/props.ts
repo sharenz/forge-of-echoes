@@ -37,7 +37,7 @@ export function addProp(
 }
 
 /** Ruined wall segments and broken pillars ringing the playable circle (decorative, outside it). */
-function edgeRing(w: World, spacing: number): void {
+export function edgeRing(w: World, spacing: number): void {
   const R = w.arenaRadius;
   const ringR = R + 12;
   const count = Math.max(12, Math.round((TAU * ringR) / spacing));
@@ -189,7 +189,7 @@ const DECOR: Record<Theme, readonly DecorEntry[]> = {
 /** Keep the start area open so the first seconds of a run are never blocked. */
 const MAP_START_CLEAR = 140;
 
-function clearOf(w: World, x: number, y: number, gap: number): boolean {
+export function clearOf(w: World, x: number, y: number, gap: number): boolean {
   for (const p of w.props) {
     const dx = p.x - x;
     const dy = p.y - y;

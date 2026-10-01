@@ -250,7 +250,7 @@ Map Device panel; the legacy `PanelShell panel="mapDevice"` keeps its id so hotk
 - **Right rail** (320 px): inspector for the selected area (or the tree node while in tree mode).
 - **Bottom dock** (96 px): the device: map slot, four scarab sockets, expedition readout, Activate. It is always visible so
   the player never loses the map they are choosing a destination for.
-- **Mode tabs** top-left: `Chart` | `Codex` (the tree, section 8) | `Stash` (opens the map stash drawer over the left edge).
+- **Mode tabs** top-left: `Chart` | `Codex` (the tree, section 8) | (no Stash tab: maps and scarabs are dragged from the inventory, which opens beside the table; see the addendum at the end of section 6.7).
 
 ### 6.2 Wireframe, 1280x720 (panel about 1100x696)
 
@@ -306,7 +306,7 @@ The rail becomes a **drawer**: closed by default, opens on selecting a node (sli
 - **Keyboard**: `Tab` cycles discovered nodes in graph order (DOM buttons), `Enter` selects, `Space` sets course, `E`
   activates when the dock is ready. All existing button `aria-label`s remain.
 - **Click model**: click = select and open inspector; double-click or `Enter` on a selected node = "Set course" (no
-  Back/Use two-step). If a map is not slotted, the button reads "Slot a map" and opens the Stash drawer.
+  Back/Use two-step). If a map is not slotted, the rail says to drag one from the inventory into the dock.
 
 ### 6.5 Tooltips (hover, DOM, caption/secondary type only)
 Hover over a plate (150 ms delay) shows a 240 px compact card: name, `Forge . T1-T5`, boss name, two drop chips with icons,
@@ -332,7 +332,7 @@ One left-to-right sentence: **Chart a course, load the map, socket scarabs, read
  1 COURSE            2 MAP              3 SCARABS            4 PRICE / READOUT             5 GO
  Furnace Yard  <-    [ T4 Rare map ]    [s1][s2][s3][s4]     Danger: Teeming, Fortified    [ ACTIVATE ]
  (set on chart)      drag / click       drag / Ctrl-click    Qty +58%  Rarity +41%         fee 1 Scrap
-                     stash drawer       tooltip = effect     Event odds (?)  Tree: 12 nodes
+                     from inventory     tooltip = effect     Event odds (?)  Tree: 12 nodes
 ```
 - Steps are *soft*: any order works. The dock draws a thin ember thread through whichever step still blocks Activate.
 - Scarab sockets are 44 px tiles; empty sockets show a ghost of the family they accept once families beyond Haste and
@@ -340,8 +340,13 @@ One left-to-right sentence: **Chart a course, load the map, socket scarabs, read
   the same iron/bronze/gilt/ember frame ladder as nodes).
 - The readout is the existing summary/luck breakdown (`store.rules.openMap`, `lootLuck`) in a popover from the "(?)":
   full stat breakdown lines, personal luck, event odds, party scaling, fees. No new rules.
-- **Map Stash drawer** slides from the left edge over the chart (320 px), reusing `MapStashView`; dragging a map from it to
-  the dock slot or double-click works; the chart dims 30% but stays interactive.
+- **No stash drawer** (owner feedback after wave 1/2, now the game-wide rule in AGENTS.md): the table opens together with the
+  inventory, which sits at the right (the table is `100vw - panel width - 36 px` wide, so the chart, dock and inventory fit
+  side by side at 1280x720 and 1024x600). The dock's map slot and scarab sockets take items dragged from the inventory (slots
+  glow green while a valid item is dragged, turn red with the reason when it is refused; Ctrl/Cmd-click in the inventory
+  quick-loads); dragging out returns them to the inventory. Maps in the Map Stash and scarabs in the Crafting Stash are moved
+  into the inventory with the Stash panel first. The inspector rail is always a drawer below 1500 px of window width, and the
+  dock wraps into two rows below 900 px of table width (container query).
 - Activation feedback: the chosen node flares, the dock's socketed scarabs consume with a spark each, a 0.6 s sigil
   ring closes over the map slot, then the existing portal opening runs. `portalOpen` sound already exists.
 - While a portal is open, the dock's map slot shows the portal status note that `PortalNote` renders today (kept), and the

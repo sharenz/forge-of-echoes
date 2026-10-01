@@ -735,3 +735,20 @@
 .fe-bench-service details { margin-top: 4px; }
 .fe-bench-service summary { cursor: pointer; color: var(--bronze-light); }
 .fe-bench-service details p { margin: 6px 0; }
+
+/* ---- Re-chart row and Recycle (brief D 5.2, 5.3) ----------------------------------------------------------- */
+.fe-bench-service--rechart { position: relative; }
+.fe-bench-service--rechart .fe-rechart { position: static; width: auto; max-width: none; max-height: none; margin-top: 6px; box-shadow: none; overflow: visible; }
+.fe-recycle__intro { margin: 0 0 8px; color: var(--ash); }
+.fe-recycle__slots { display: flex; gap: 12px; justify-content: flex-start; }
+.fe-recycle__cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 96px; }
+.fe-recycle__slot.fe-device-slot { width: 46px; height: 46px; }
+.fe-recycle__cell .fe-scarab-remove { position: absolute; top: -5px; right: 14px; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center; border-radius: 50%; background: #2a1b12; border: 1px solid var(--bronze); color: var(--parchment); cursor: pointer; z-index: 2; }
+.fe-recycle__cap { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ash); min-height: 1.3em; }
+.fe-recycle__targets { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 8px; }
+.fe-recycle__label { color: var(--bronze-light); }
+.fe-recycle__go { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.fe-recycle__result { flex: 1; color: var(--parchment); }
+.fe-recycle .fe-slot--accepts { border-color: rgba(170, 235, 150, 0.85); }
+.fe-recycle .fe-slot--ok { border-color: rgba(170, 235, 150, 1); box-shadow: 0 0 14px rgba(120, 220, 110, 0.55); }
+.fe-recycle .fe-slot--bad { border-color: rgba(240, 100, 90, 1); box-shadow: 0 0 14px rgba(224, 70, 60, 0.5); }

@@ -11,6 +11,7 @@ export { SORCERESS, LEVEL_CAP, XP_BASE, XP_EXPONENT } from './classes';
 export { DAMAGE_ROLL, EXTRA_PROJECTILE_FAN, MAX_SKILL_RANK, SKILLS } from './skills';
 export * from './maps';
 export * from './loot';
+export * from './routing';
 export * from './bestiary';
 export * from './merchant';
 export * from './save';

@@ -296,7 +296,7 @@ describe('item facts', () => {
     history: ['Dropped'],
   };
   const scrap: CurrencyStack = { kind: 'currency', uid: 'c1', currencyId: 'scrap', count: 7 };
-  const map: MapItem = { kind: 'map', uid: 'm1', baseId: 'ashenForge', tier: 1, rarity: 'normal', mods: [], quality: 0, corrupted: false };
+  const map: MapItem = { kind: 'map', uid: 'm1', areaId: 'cinderCrossing', baseId: 'ashenForge', tier: 1, rarity: 'normal', mods: [], quality: 0, corrupted: false };
 
   it('derives tone, icon and stack count', () => {
     expect(itemTone(wand)).toBe('magic');

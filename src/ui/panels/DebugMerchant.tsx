@@ -1,16 +1,14 @@
 import { useMemo, useState } from 'preact/hooks';
 import type { DebugMerchantOptions } from '../../contracts/game';
 import { DEBUG_MERCHANT_DEFAULTS, DEBUG_MERCHANT_NAME, debugMerchantOffers, type DebugMerchantCategory } from '../../game/progression/debug-merchant';
-import { Button, PixelIcon } from '../components/common';
-import { useLocal } from '../local';
-import { itemIconId } from '../lib/items';
+import { StockRow } from './MerchantStock';
 import { useStore, useUi } from '../store';
 import { PanelShell } from './PanelShell';
 
 const CATEGORIES: readonly DebugMerchantCategory[] = ['Scarabs', 'Supplies', 'Maps', 'Bases', 'Uniques', 'Flasks'];
 
 export function DebugMerchantPanel() {
-  const store = useStore(), local = useLocal();
+  const store = useStore();
   const inHideout = useUi(s => s.zone === 'hideout');
   const [category, setCategory] = useState<DebugMerchantCategory>('Scarabs');
   const [search, setSearch] = useState('');
@@ -22,7 +20,7 @@ export function DebugMerchantPanel() {
       onInput={e => setOptions({ ...options, [field]: Number(e.currentTarget.value) })} />
   </label>;
   return <PanelShell panel="debugMerchant" title="Testing Merchant" class="fe-merchant fe-debug-merchant">
-    <p class="fe-panel__note ui-type-secondary">{DEBUG_MERCHANT_NAME} · Everything is free for you and visitors.</p>
+    <p class="fe-panel__note ui-type-caption">{DEBUG_MERCHANT_NAME} · Everything is free for you and visitors.</p>
     {!inHideout ? <p class="fe-panel__note">Visit an enabled hideout to buy test supplies.</p> : <>
       <div class="fe-debug-merchant__controls">
         <label class="ui-type-caption">Category<select class="ui-type-body" aria-label="Testing category" value={category}
@@ -41,18 +39,16 @@ export function DebugMerchantPanel() {
         onInput={e => setSearch(e.currentTarget.value)} />
       <div class="fe-merchant__scroll">
         <div class="fe-offers">
-          {offers.map(o => <div class="fe-offer" key={o.id} data-debug-offer={o.id}
-            onPointerEnter={e => local.showTooltip({ kind: 'preview', item: o.item,
-              note: 'Free. Items go to your backpack; flasks refill your belt first. Equipment and map rolls are examples; purchases roll fresh values.' }, e.currentTarget)}
-            onPointerLeave={() => local.hideTooltip()}>
-            <span class="fe-offer__icon"><PixelIcon id={itemIconId(o.item)} width={32} height={32} /></span>
-            <span class="fe-offer__label">{o.label}</span><span class="fe-price fe-price--free">Free</span>
-            <Button size="small" onClick={() => store.actions.buyDebugOffer(o.id, options)}>Buy</Button>
-          </div>)}
+          {offers.map(o => <StockRow key={o.id} id={o.id} debug label={o.label}
+            sub={options.quantity > 1 ? `× ${options.quantity}${category === 'Bases' || category === 'Uniques' ? ` · item level ${options.itemLevel}` : ''}` : category === 'Bases' || category === 'Uniques' ? `Item level ${options.itemLevel}` : undefined}
+            item={o.item} price={<span class="fe-price fe-price--free">Free</span>} blocked={null} total={options.quantity}
+            tag={options.quantity > 1 ? `Take ${options.quantity} free` : 'Take it (free)'} buyLabel="Buy"
+            tooltip={{ kind: 'preview', item: o.item, note: 'Free. Drag it onto your backpack, or use Buy. Flasks refill your belt first. Equipment and map rolls are examples; purchases roll fresh values.' }}
+            onBuy={at => store.actions.buyDebugOffer(o.id, options, at)} />)}
         </div>
         {!offers.length && <p class="fe-panel__note">No matches. Check your search and selected values.</p>}
       </div>
-      <p class="fe-panel__note ui-type-caption">Buy 1–100 at a time. Purchases must fit in your backpack. Item requirements still apply.</p>
+      <p class="fe-panel__note ui-type-caption">Drag a row onto your backpack (the cell picks the slot) or use Buy. 1–100 at a time; all of it must fit.</p>
     </>}
   </PanelShell>;
 }

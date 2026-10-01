@@ -4,6 +4,7 @@
 // in Scrap by Rook's appraisal (sellQuote) and a fixed currency table. Clear time comes from a wave-queue model
 // (waves arrive on clear or on the timer, the boss wave holds) calibrated so the empty tree clears in a fixed time.
 // It is a model of the economy, not the sim: the heavy sim playthroughs (playthrough.ts) confirm survival separately.
+import type { AtlasAreaId } from '../../src/contracts/atlas';
 import type { CharacterSave, Item, MapItem } from '../../src/contracts/items';
 import type { CurrencyId } from '../../src/contracts/content';
 import type { RunSetup } from '../../src/contracts/game';
@@ -16,8 +17,9 @@ import { rules } from '../../src/game';
 import { sellQuote } from '../../src/game/progression/merchant';
 import { THEME_ROSTER } from '../../src/contracts/bestiary';
 import { normalizeMapTree } from '../../src/game/progression/map-tree';
+import { attachSurge, surgeBonusFor } from '../../src/game/progression/surge';
 import { fullProgress, pathTo } from './atlas-tree-helpers';
-import { bareCharacter, expectOk, map } from './fixtures';
+import { bareCharacter, expectOk, map, openAt } from './fixtures';
 
 /** Scrap value of one currency (a fixed, roughly market-shaped table; the same for every archetype). */
 export const CURRENCY_VALUE: Partial<Record<CurrencyId, number>> = {
@@ -26,6 +28,9 @@ export const CURRENCY_VALUE: Partial<Record<CurrencyId, number>> = {
   suffixRune: 25, scarBalm: 20, anneal: 30, graft: 40, transmute: 15, echoShard: 35, crownFragment: 150, twinInk: 60, voidSplinter: 40,
   compass: 25, reliquaryKey: 40, gildedKey: 40, blackKey: 40, huntingKey: 40, riftKey: 40,
   hasteScarab1: 30, hasteScarab2: 60, hasteScarab3: 120, hasteScarab4: 240, invasionScarab1: 30, invasionScarab2: 60, invasionScarab3: 120, invasionScarab4: 240,
+  // Area-bias scarabs are priced like the wave scarabs by tier. Sand is worth what three boosted runs add (set by the surge harness); the Grand Hourglass a whole day's charges.
+  ...Object.fromEntries(['homing', 'wayfarer', 'deepward', 'quarry', 'hearthbound'].flatMap(f => [30, 60, 120, 240].map((v, i) => [`${f}Scarab${i + 1}`, v]))),
+  hourglassSand: 60, grandHourglass: 1500,
 };
 
 /** Scrap a crafter pays per spare maximum Stability point on a drop (Anneal costs 30 and gives one point back). */
@@ -46,7 +51,7 @@ export function valueOf(item: Item): number {
 
 export interface Cell { valuePerMap: number; seconds: number; valuePerHour: number; pressure: number; kills: number; setup: RunSetup }
 
-const REFERENCE_KILL_SECONDS = 40;
+export const REFERENCE_KILL_SECONDS = 40;
 
 /** The bot's model of the map's danger to the player: what gets stronger and denser, weighted. */
 function pressureOf(setup: RunSetup): number {
@@ -56,7 +61,7 @@ function pressureOf(setup: RunSetup): number {
 }
 
 /** Clear time by the wave-queue model. `speed` is life units the reference player kills per second. */
-function clearSeconds(waves: { count: number; waveDuration: number; bossWave: number; tellDuration: number }, life: number[], boss: number, speed: number): number {
+export function clearSeconds(waves: { count: number; waveDuration: number; bossWave: number; tellDuration: number }, life: number[], boss: number, speed: number): number {
   let t = 0;
   let backlog = 0;
   for (let w = 1; w <= waves.count; w++) {
@@ -77,9 +82,11 @@ export function standardMap(tier: number, corrupted = false): MapItem {
   return { ...m, rarity: 'rare', mods, corrupted, quality: 10 };
 }
 
-export function playMap(nodes: readonly string[], tier: number, area: Parameters<typeof rules.openMap>[1], seed: number, corrupted = false, speedOverride?: number): Cell & { units: number } {
+export function playMap(nodes: readonly string[], tier: number, area: AtlasAreaId, seed: number, corrupted = false, speedOverride?: number, surge = false): Cell & { units: number } {
   const ch: CharacterSave = bareCharacter({ atlas: fullProgress([...nodes]), currencyStash: { scrap: 1000, gildedKey: 5, blackKey: 5, huntingKey: 5, riftKey: 5, reliquaryKey: 5 }, mapDevice: standardMap(tier, corrupted), rngState: seed * 7919 + tier });
-  const setup = expectOk(rules.openMap(ch, area, 'wand')).setup;
+  const setup = expectOk(openAt(rules, ch, area, 'wand')).setup;
+  // The daily surge (brief D 7): the same freezing openMap does with `useSurge`, so a boosted cell uses the real loot rules.
+  if (surge) attachSurge(setup, { areaId: area, ...surgeBonusFor(), day: 0 });
   const cfg = rules.buildRunConfig(setup, {} as never);
   const s = cfg.monsters;
   const rng = createRng(seed * 104729 + tier * 31);
@@ -119,12 +126,12 @@ export function playMap(nodes: readonly string[], tier: number, area: Parameters
 export interface Measured { valuePerHour: number; seconds: number; pressure: number; valuePerMap: number }
 
 /** Mean over seeds. Time is measured at a speed calibrated on the empty tree of the same area and tier. */
-export function measure(nodes: readonly string[], tier: number, area: Parameters<typeof rules.openMap>[1], seeds: readonly number[], corrupted = false): Measured {
+export function measure(nodes: readonly string[], tier: number, area: AtlasAreaId, seeds: readonly number[], corrupted = false, surge = false): Measured {
   const baseline = playMap([], tier, area, seeds[0], corrupted);
   const speed = baseline.units / (6 * REFERENCE_KILL_SECONDS);
   let value = 0, seconds = 0, pressure = 0;
   for (const seed of seeds) {
-    const cell = playMap(nodes, tier, area, seed, corrupted, speed);
+    const cell = playMap(nodes, tier, area, seed, corrupted, speed, surge);
     value += cell.valuePerMap; seconds += cell.seconds; pressure += cell.pressure;
   }
   const n = seeds.length;
@@ -155,7 +162,7 @@ export const ARCHETYPES: readonly Archetype[] = [
   { id: 'speedRunner', name: 'Speed Runner', targets: ['overrunDoctrine', 'riptide', 'waypoint'], fill: ['peril', 'cartography'], area: 'through' },
   { id: 'essenceSniper', name: 'Essence Sniper', targets: ['deepSeams', 'emberwrightsDue', 'ingredientHunter'], fill: ['foundry', 'belt'], area: 'through' },
   { id: 'blankSlateCrafter', name: 'Blank-Slate Crafter', targets: ['blankSlate', 'steadyAnvil', 'soundFoundations', 'cataloguersShelf'], fill: ['foundry', 'bridge'], area: 'through' },
-  { id: 'bossButcher', name: 'Boss Butcher', targets: ['kingslayersTithe', 'crownedChallenge', 'earlyCrown'], fill: ['fortune', 'cartography'], area: 'through' },
+  { id: 'bossButcher', name: 'Boss Butcher', targets: ['kingslayersTithe', 'crownedChallenge', 'earlyCrown'], fill: ['fortune', 'cartography', 'bridge'], area: 'through' },
   { id: 'echoChaser', name: 'Echo Chaser (live subset)', targets: ['whisper', 'veilwalker', 'faintSignal'], fill: ['echoes', 'bridge'], area: 'through', partial: true },
   { id: 'juicedModder', name: 'Juiced Modder', targets: ['thrillOfTheHex', 'hexSculptor', 'stingingDust'], fill: ['peril', 'fortune'], area: 'through', partial: true },
   { id: 'ladderClimber', name: 'Ladder Climber', targets: ['farHorizon', 'laddersReward', 'chartKeeper', 'deepPockets'], fill: ['cartography', 'hub'], area: 'through' },
@@ -166,7 +173,7 @@ export const ARCHETYPES: readonly Archetype[] = [
 ];
 
 /** Areas by kind for a tier: through-route (Heart of the Forge, tier 15) and the best dead end that accepts the tier. */
-export function areaFor(kind: Archetype['area'], tier: number): Parameters<typeof rules.openMap>[1] {
+export function areaFor(kind: Archetype['area'], tier: number): AtlasAreaId {
   if (kind === 'through') return 'heartOfForge';
   return tier <= 3 ? 'emberVault' : tier <= 5 ? 'hollowOssuary' : 'shrineField';
 }

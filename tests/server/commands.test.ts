@@ -41,8 +41,7 @@ describe('command authority', () => {
     // Ann buys a free Tier 1 map: it gets a uid Tom's character has never minted.
     const offers = ann.command({ c: 'merchantOffers' });
     expect(offers.ok).toBe(true);
-    const t1 = offers.offers!.find((o) => o.id.startsWith('map-t1-'))!;
-    const bought = ann.command({ c: 'buyOffer', offerId: t1.id });
+    const bought = ann.command({ c: 'buyOffer', offerId: 'map:cinderCrossing:1:plain' });
     expect(bought).toMatchObject({ ok: true });
     const annCh = ann.session.record.ch;
     const newUid = annCh.backpack.entries.map((e) => e.item.uid).find((uid) => !tom.session.record.ch.backpack.entries.some((e) => e.item.uid === uid))!;
@@ -77,7 +76,7 @@ describe('command authority', () => {
     expect(offers.offers!.length).toBeGreaterThan(0);
     const hostBefore = host.session.record.ch;
     const mapsBefore = guest.session.record.ch.backpack.entries.filter((e) => e.item.kind === 'map').length;
-    const bought = guest.command({ c: 'buyOffer', offerId: 'map-t1-ashenForge' });
+    const bought = guest.command({ c: 'buyOffer', offerId: 'map:cinderCrossing:1:plain' });
     expect(bought.ok).toBe(true);
     expect(guest.session.record.ch.backpack.entries.filter((e) => e.item.kind === 'map').length).toBe(mapsBefore + 1);
     expect(host.session.record.ch).toBe(hostBefore);

@@ -8,6 +8,7 @@ import { AILMENT_BIT, RARITY_CODE, type AreaView, type PlayerIntent, type WorldV
 import {
   CHARGE_LINE_HALF_WIDTH, CHOIR_RING_HALF_WIDTH, FAULT_WEDGE_HALF_ANGLE, areaAngle, areaContains, areaVariant, choirGapAngles, inChoirGap, voidTideInner,
 } from '../../src/sim/area-geometry';
+import { Nav } from './nav';
 
 export interface BotOptions {
   /** Walk to (non-blocked) drops when safe and after the clear. Default true. */
@@ -103,6 +104,14 @@ export function createBot(opts: BotOptions = {}): Bot {
   let pinned = 0;
   let lastCmd = false;
   let escapeTurn = 0;
+  const nav = new Nav();
+  // Progress watchdog: asked to walk for 8 s yet never 30 u from where the window began (a flip-flop between two decisions that cancel
+  // out each tick, which `pinned` cannot see because every tick does move).
+  let tickN = 0;
+  let wdX = Number.NaN;
+  let wdY = 0;
+  let wdTick = 0;
+  let wdCmd = 0;
 
   const decide = (view: WorldView, playerId: number): PlayerIntent => {
       const p = view.players.find((q) => q.id === playerId);
@@ -153,11 +162,17 @@ export function createBot(opts: BotOptions = {}): Bot {
         oy += uy * k;
       }
 
-      const moveToward = (tx: number, ty: number, arrive = 2) => {
+      const moveToward = (goalX2: number, goalY2: number, arrive = 2) => {
+        if (Math.hypot(goalX2 - p.x, goalY2 - p.y) < arrive) return;
+        // Walls and prop clusters between here and the goal: walk the way round (the goal itself while the line is clear).
+        // Only the hand-crafted areas have walls: the old generator's pillar fields keep the bot's own side-stepping.
+        const wp = view.areaId ? nav.steer(view.props, R, p.x, p.y, goalX2, goalY2) : { x: goalX2, y: goalY2 };
+        const tx = wp.x;
+        const ty = wp.y;
         const dx = tx - p.x;
         const dy = ty - p.y;
         const d = Math.hypot(dx, dy);
-        if (d < arrive) return;
+        if (d < 1e-3) return;
         let mx = dx / d + ox * 0.6;
         let my = dy / d + oy * 0.6;
         // Side-step when a prop blocks the straight line.
@@ -181,6 +196,13 @@ export function createBot(opts: BotOptions = {}): Bot {
 
       lastX = p.x;
       lastY = p.y;
+      tickN++;
+      if (Number.isNaN(wdX) || Math.hypot(p.x - wdX, p.y - wdY) > 30) {
+        wdX = p.x;
+        wdY = p.y;
+        wdTick = tickN;
+        wdCmd = 0;
+      } else if (lastCmd) wdCmd++;
 
       const nearestDrop = (maxDist: number) => {
         let best = null as (typeof view.drops)[number] | null;
@@ -329,6 +351,9 @@ export function createBot(opts: BotOptions = {}): Bot {
         fx += ux * wgt;
         fy += uy * wgt;
       }
+      // Threat without the arena-edge push: a drop lying near the rim must not flip the decision every tick (walking out to it
+      // raises the rim push, which would cancel the walk, which lowers the push again...).
+      const threatNoRim = Math.hypot(fx + ox, fy + oy);
       const pr = Math.hypot(p.x, p.y);
       if (pr > R - 110) {
         const k = ((pr - (R - 110)) / 60) * 2;
@@ -352,10 +377,14 @@ export function createBot(opts: BotOptions = {}): Bot {
 
       // Pinned against scenery for a long time with nothing close to fight (a pillar pair the side-step cannot clear): back off
       // along a rotating heading for a moment instead of pushing at the same spot forever.
-      if (pinned > 240 && nearest >= 0 && nd > 200) {
+      const stalled = tickN - wdTick > 480 && wdCmd > 360 && (nearest < 0 || nd > 250);
+      if ((pinned > 240 && (nearest < 0 || nd > 200)) || stalled) {
         pinned = 0;
+        wdTick = tickN;
+        wdCmd = 0;
         escape = 50;
-        const a = escapeTurn++ * 2.4 + 0.7;
+        // Near the rim: back toward the middle (alternating sides); elsewhere a rotating heading.
+        const a = Math.hypot(p.x, p.y) > R * 0.55 ? Math.atan2(-p.y, -p.x) + (escapeTurn++ % 2 ? 0.7 : -0.7) : escapeTurn++ * 2.4 + 0.7;
         escX = Math.cos(a);
         escY = Math.sin(a);
         out.moveX = escX;
@@ -371,7 +400,7 @@ export function createBot(opts: BotOptions = {}): Bot {
       } else {
         const dx = m.x[nearest] - p.x;
         const dy = m.y[nearest] - p.y;
-        const drop = collectDrops && threat < 0.25 && nd > 200 ? nearestDrop(260) : null;
+        const drop = collectDrops && threatNoRim < 0.25 && nd > 200 ? nearestDrop(260) : null;
         if (drop) moveToward(drop.x, drop.y);
         else if (nd > 170 && combatThreat < 0.3) moveToward(m.x[nearest], m.y[nearest], 140);
         else {

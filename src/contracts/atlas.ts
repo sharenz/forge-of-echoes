@@ -43,4 +43,17 @@ export interface AtlasProgress {
   respecSpent?: number;
   /** True once the old tree was refunded free by the Codex redraw (UI shows the notice). */
   redrawn?: boolean;
+  /** Daily surge ledger (brief D 7.1): the forge-day index (04:00 UTC to 04:00 UTC) and the charges spent per area that day. Reset lazily by the server clock. */
+  surge?: AtlasSurge;
+  /**
+   * Pinned areas (brief D 5.1): their maps drop x3 more often (frozen into every expedition at activation). Discovered,
+   * non-sealed, non-Pit areas only; at most `pinSlotCount(nodes)` (3, more through the tree). Account-wide, free to change.
+   */
+  pins?: AtlasAreaId[];
+}
+
+/** Charges spent per area on one forge day. `day` is `forgeDay(server now)`; a stored day before today means nothing is spent. */
+export interface AtlasSurge {
+  day: number;
+  spent: Partial<Record<AtlasAreaId, number>>;
 }

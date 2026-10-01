@@ -21,6 +21,7 @@ import { THEME_ROSTER } from '../contracts/bestiary';
 import { MONSTER_KINDS, type DamageType, type MonsterKind } from '../contracts/content';
 import type { RGB } from '../contracts/render';
 import { RARITY_CODE, type DropTone, type ProjectileKind, type SimEvent } from '../contracts/sim';
+import { layoutFor } from '../data/layouts';
 import { spikeFlip } from './bestiary-areas';
 import { accentOf, MONSTER_LOOKS } from './bestiary';
 import type { CameraRig } from './camera';
@@ -557,6 +558,11 @@ export class EventFx {
           if (cold) this.frostBurst(e.x, e.y - 20, 40, 60, 160);
           else this.fountain(e.x, e.y, 60, C.hot, C.lavaDark, 120, 220);
         }
+        // A hand-crafted boss stage names how its boss arrives (D 10.5 `arrive`): through the gate, over the rim, out of a shimmer.
+        const arrive = layoutFor(f.world.areaId)?.bossStage.arrive;
+        if (arrive === 'gate') this.dustPuff(e.x, e.y, 36);
+        else if (arrive === 'shimmer') this.frostBurst(e.x, e.y - 20, 28, 50, 130);
+        else if (arrive === 'rim') this.fountain(e.x, e.y, 40, C.hot, C.ember, 100, 190);
         return;
       }
       case 'bossPhase': {

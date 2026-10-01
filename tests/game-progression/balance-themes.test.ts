@@ -13,12 +13,14 @@
 // The Tier 1–6 ladder across themes (clear times, margins, boss fights) is tests/game-progression/balance-ladder.test.ts.
 //
 //   BALANCE=1 npx vitest run tests/game-progression/balance-themes.test.ts
+import { exploredAtlas, themeMap } from './fixtures';
+import { ATLAS_AREA_IDS } from '../../src/contracts/atlas';
+import { ATLAS_AREAS } from '../../src/data/progression/atlas';
 import { describe, expect, it } from 'vitest';
 import { MAP_BASE_IDS, type MapBaseId } from '../../src/contracts/content';
 import type { CharacterSave, MapItem } from '../../src/contracts/items';
 import { SIM_DT } from '../../src/contracts/sim';
 import { rules } from '../../src/game';
-import { createMapItem } from '../../src/game/progression';
 import { createRun } from '../../src/sim';
 import { FREEZE_DURATION, FREEZE_IMMUNITY, ROOT_DURATION } from '../../src/sim/constants';
 import { createBot } from '../sim/bot';
@@ -34,7 +36,11 @@ const enabled = !!process.env.BALANCE;
 function tier1(ch: CharacterSave, theme: MapBaseId): { character: CharacterSave; map: MapItem } {
   const own = mapInBag(ch, (m) => m.baseId === theme && m.tier === 1);
   if (own) return { character: ch, map: own };
-  const bought = rules.buyOffer(ch, `map-t1-${theme}`);
+  // Rook sells a theme once the account has charted an area of it: the balance runs play every theme.
+  const charted = { ...ch, atlas: { ...(ch.atlas ?? { clears: 0 }), discovered: [...ATLAS_AREA_IDS], completed: [...ATLAS_AREA_IDS] } } as CharacterSave;
+  const areaId = rules.rookMapAreas(charted).find((id) => ATLAS_AREAS.find((a) => a.id === id)!.baseId === theme);
+  if (!areaId) throw new Error(`Rook sells no ${theme} map`);
+  const bought = rules.buyOffer(charted, `map:${areaId}:1:plain`);
   if (!bought.ok || bought.value.item.kind !== 'map') throw new Error(`Rook sells no Tier 1 ${theme}`);
   return { character: bought.value.character, map: bought.value.item };
 }
@@ -93,7 +99,8 @@ interface LockReport {
  * XP levels her up as usual. Measures how long she is held in place.
  */
 function playCareless(start: CharacterSave, map: MapItem): LockReport {
-  let ch = spendPoints({ ...start, mapDevice: map });
+  // Every area counts as charted: this test is about debuffs, not about the Atlas (a new character has only Cinder Crossing).
+  let ch = spendPoints({ ...start, atlas: { ...start.atlas, ...exploredAtlas() }, mapDevice: map });
   const opened = rules.openMap(ch);
   if (!opened.ok) throw new Error(opened.error);
   const setup = opened.value.setup;
@@ -168,7 +175,7 @@ function readyForTier3(seed: number): CharacterSave {
   const tiers = [1, 1, 2];
   tiers.forEach((tier, k) => {
     const theme = MAP_BASE_IDS[(seed + k) % MAP_BASE_IDS.length];
-    const r = playParty([ch], createMapItem(theme, tier, `careless-${seed}-${k}`), { maxMinutes: 20 })[0];
+    const r = playParty([ch], themeMap(theme, tier, `careless-${seed}-${k}`), { maxMinutes: 20 })[0];
     ch = upgradeGear(r.character);
   });
   return ch;
@@ -196,8 +203,8 @@ describe.runIf(enabled)('balance across map types (BALANCE=1)', () => {
   it('debuffs never chain-lock a careless player: held ≤ 40% of any 10 s, freeze immunity holds, Rift Step breaks roots', () => {
     const reports: { label: string; r: LockReport }[] = [];
     for (const theme of ['rimedOssuary', 'ironColiseum'] as const) {
-      reports.push({ label: `${theme} T1 (new character)`, r: playCareless(rules.createCharacter('Careless', 2), createMapItem(theme, 1, `careless-${theme}-1`)) });
-      reports.push({ label: `${theme} T3`, r: playCareless(readyForTier3(2), createMapItem(theme, 3, `careless-${theme}-3`)) });
+      reports.push({ label: `${theme} T1 (new character)`, r: playCareless(rules.createCharacter('Careless', 2), themeMap(theme, 1, `careless-${theme}-1`)) });
+      reports.push({ label: `${theme} T3`, r: playCareless(readyForTier3(2), themeMap(theme, 3, `careless-${theme}-3`)) });
     }
     for (const { label, r } of reports) {
       console.log(`[balance] careless ${label}: ${r.result}, held ${r.heldIn10s.toFixed(2)} s of 10 s at most, longest ${r.longestHeld.toFixed(2)} s, `

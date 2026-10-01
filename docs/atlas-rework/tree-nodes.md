@@ -18,13 +18,13 @@ Tier 15, everything else at Tier 9). Status "Awaits ..." means the node is fully
 | **Ledgerline** | S | 1 | Territory fee -1 Scrap (minimum 0). | 1.0u | Active |
 | **Master Surveyor** | N | 1 | A boss kill has a 35% chance to reveal one more neighbour. | 3.9u | Active |
 | **Signpost** | S | 1 | The completion chest map has +2.5 quality. | 1.0u | Active |
-| **Trailmark** | S | 1 | 8% increased chance to find maps. | 1.0u | Active |
-| **Lantern-Bearer** | N | 1 | Each loaded scarab has a 20% chance not to be consumed when you open the map (rolled from the map seed). | 3.5u | Awaits the Map Device update |
+| **Trailmark** | S | 1 | 50% increased chance to find Hourglass Sand. | 1.0u | Active |
+| **Lantern-Bearer** | N | 1 | +1 daily surge charge. Second Wind: every Atlas area holds 4 surge charges a day instead of 3 (the day turns over at 04:00 UTC). | 4.0u | Active |
 | **Survey Stake** | S | 1 | 12% increased chance to find scarabs. | 1.0u | Active |
 | **Charter Ink** | S | 1 | The completion chest map has +2.5 quality. | 1.0u | Active |
-| **Lamp Oil** | S | 1 | 12% increased chance to find scarabs. | 1.0u | Active |
+| **Lamp Oil** | S | 1 | +1 daily surge charge in dead-end and sealed areas. | 1.0u | Active |
 | **Fifth Socket** | N | 1 | The Map Device has a fifth scarab socket. Scarab families still allow one scarab each. | 4.0u | Awaits the Map Device update |
-| **Cartographer's Pen** | S | 1 | 8% increased chance to find maps. | 1.0u | Active |
+| **Cartographer's Pen** | S | 1 | A spent surge charge has a 10% chance not to be consumed. Afterglow: rolled from the map seed when you open the map; the surge bonus still applies. | 1.0u | Active |
 | **Wagered Charts** | K | 2 | From Tier 4, completion chests always upgrade your map by one tier (Tier 15 stays capped). The chest map arrives as a Rare with 3 danger mods and 0 quality, and is account-bound. Maps dropped by monsters can no longer roll higher than your tier. | 6.5u | Awaits the map crafting update |
 | **Twinned Sockets** | K | 2 | You may load two scarabs of the same family; the second works at 50% strength. Monsters have 6% more Life per loaded scarab. Wave duration never drops below 25 seconds. | 5.0u | Awaits the Map Device update |
 | **Dead-End Devotee** | K | 2 | 24% more item quantity in dead-end and sealed areas. 30% more boss ingredient chances in dead-end and sealed areas. 25% less item quantity in through-route areas. A boss kill has a 100% chance to reveal one more neighbour. Bosses reveal one neighbour instead of two (a slower Atlas). | 5.5u | Active |

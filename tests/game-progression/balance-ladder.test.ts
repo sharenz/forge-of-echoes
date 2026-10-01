@@ -14,12 +14,13 @@
 //   • nothing holds a player in place longer than a root and a freeze back to back (GAME_SPEC §13);
 //   • a pair of reference characters clears Tiers 2 and 3 of every map type.
 // The results table prints with the test (run with --silent=false).
+import { themeMap } from './fixtures';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { MAP_BASE_IDS, SCARAB_IDS, type MapBaseId } from '../../src/contracts/content';
 import type { CharacterSave } from '../../src/contracts/items';
 import { SIM_DT, type SimEvent, type WorldView } from '../../src/contracts/sim';
 import { rules } from '../../src/game';
-import { createMapItem, monsterLevelForTier } from '../../src/game/progression';
+import { monsterLevelForTier } from '../../src/game/progression';
 import { FREEZE_DURATION, ROOT_DURATION } from '../../src/sim/constants';
 import { describePlay, playParty, playProgression, type PlayResult } from './playthrough';
 
@@ -64,7 +65,7 @@ function play(chars: CharacterSave[], theme: MapBaseId, tier: number, seed: numb
       longestHeld = Math.max(longestHeld, run * SIM_DT);
     }
   };
-  const map = createMapItem(theme, tier, `balance-${theme}-${tier}-${seed}-${chars.length}`);
+  const map = themeMap(theme, tier, `balance-${theme}-${tier}-${seed}-${chars.length}`);
   const results = playParty(chars, map, { maxMinutes: 25, reenterAfter: 12, onStep });
   return { theme, tier, seed, results, bossSeconds: bossAt >= 0 && fellAt >= 0 ? (fellAt - bossAt) * SIM_DT : -1, longestHeld };
 }

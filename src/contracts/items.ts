@@ -2,7 +2,7 @@
 import type {
   Attribute, BaseId, ClassId, CurrencyId, EquipSlot, FlaskId, ItemClass, MapBaseId, SkillId, UniqueId,
 } from './content';
-import type { AtlasProgress } from './atlas';
+import type { AtlasAreaId, AtlasProgress } from './atlas';
 
 // ---------------------------------------------------------------------------
 // Modifiers & stats
@@ -124,6 +124,8 @@ export interface RolledMapMod {
 export interface MapItem {
   kind: 'map';
   uid: string;
+  /** The Atlas area this map opens (brief D). Every map is bound to ONE area; `baseId` always equals that area's theme. */
+  areaId: AtlasAreaId;
   baseId: MapBaseId;
   /** 1–15. */
   tier: number;
@@ -138,6 +140,15 @@ export interface MapItem {
   charted?: boolean;
   /** Twin Ink allows a second reward-only modifier (ordinary Reward Ink still adds at most one). */
   twinInked?: boolean;
+  /** How many times Re-chart has moved it (raises the next Re-chart price). Filled by a later slice. */
+  rechart?: number;
+  /**
+   * Load-time only: a legacy map (saved before maps were bound) whose `areaId` is provisional until
+   * bindLegacyMaps has seen the account's Atlas. Never present on a map the rules or the server hand out.
+   */
+  unbound?: true;
+  /** One-time tooltip note: the legacy map moved to another theme ('theme') or revealed its area ('fog') when it was bound. */
+  migrated?: 'theme' | 'fog';
   isNew?: boolean;
 }
 
@@ -150,6 +161,9 @@ export interface FlaskStack {
 }
 
 export type Item = EquipmentItem | CurrencyStack | MapItem | FlaskStack;
+
+/** What the Crafting Stash work slot can hold. */
+export type CraftSlotItem = EquipmentItem | MapItem;
 
 export interface GridEntry {
   item: Item;
@@ -179,7 +193,9 @@ export type ItemLocation =
   /** The Crafting Stash: a currency always files into its own slot (position-free). */
   | { kind: 'currencyStash' }
   /** The Map Stash: maps file by tier/base (position-free). */
-  | { kind: 'mapStash' };
+  | { kind: 'mapStash' }
+  /** The Crafting Stash work slot: one piece of gear or one map, crafted on in place (account-wide). */
+  | { kind: 'craftSlot' };
 
 // ---------------------------------------------------------------------------
 // Character & save
@@ -246,6 +262,11 @@ export interface CharacterSave {
   mapStash: MapItem[];
   /** Account-wide Atlas discovery, projected alongside shared storage by the server. */
   atlas?: AtlasProgress;
+  /**
+   * The Crafting Stash work slot (account-wide, part of shared storage): the one item (gear or a map) being crafted
+   * on. It physically holds the item (it is in no other container); missing on older saves means empty.
+   */
+  craftSlot?: CraftSlotItem | null;
   /** BELT_SLOTS entries. */
   belt: (BeltSlot | null)[];
   mapDevice: MapItem | null;

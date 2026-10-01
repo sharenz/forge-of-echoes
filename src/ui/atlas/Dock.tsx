@@ -1,5 +1,6 @@
-// The always-visible device dock (brief A, 6.7): course, map, scarabs, price/readout and Activate on one line, so
-// choosing a destination never hides the map you are choosing it for. The full readout opens in a popover.
+// The always-visible device dock (brief A, 6.7; brief D 3): the map slot with its home chip, scarabs, price/readout and
+// Activate on one line. A map is bound to an area, so there is nothing to choose: the slotted map IS the course, and the
+// chip says where it lives. The full readout opens in a popover.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { MAP_EVENT_KINDS } from '../../contracts/map-events';
 import type { MapItem } from '../../contracts/items';
@@ -16,6 +17,10 @@ import { formatLuck } from '../lib/format';
 import { useStore, useUi } from '../store';
 import { useMotion } from './motion';
 import { useActivation } from './activation';
+import type { AtlasAreaId } from '../../contracts/atlas';
+import type { RoutingReadout } from '../../game/progression/map-routing';
+import { SourcesLine, SourcesPanel } from './SourcesPanel';
+import { SurgeChip } from './SurgePips';
 
 export interface DeviceReadout {
   desc: { title: string; tone: string; headerLines: string[]; affixes: { text: string; negative?: boolean; kind?: string }[] } | null;
@@ -24,10 +29,12 @@ export interface DeviceReadout {
   mapLuck: { q: number; r: number } | null;
   events: Record<string, number>;
   error: string | null;
+  /** The frozen drop table of the map as it would be opened now (brief D 4): where its maps go, with shares. Null without a map. */
+  routing: RoutingReadout | null;
 }
 
-export function ReadoutDetail({ area, map, readout, gear }: {
-  area: AtlasAreaDef; map: MapItem; readout: DeviceReadout; gear: { q: number; r: number } | null;
+export function ReadoutDetail({ area, map, readout, gear, onFocus }: {
+  area: AtlasAreaDef; map: MapItem; readout: DeviceReadout; gear: { q: number; r: number } | null; onFocus?: (id: AtlasAreaId) => void;
 }) {
   const [openLine, setOpenLine] = useState<string | null>(null);
   const keystone = keystoneRewards(area.id, map.tier);
@@ -57,6 +64,7 @@ export function ReadoutDetail({ area, map, readout, gear }: {
       )}
       <p class="ui-type-caption">{area.encounters ? `Guaranteed encounters: ${area.encounters.map(e => MAP_EVENT_NAMES[e.kind]).join(' · ')}${map.bounty && !area.encounters.some(e => e.kind === 'hunted') ? ' · additional Bounty hunter' : ''}. Resolve them to complete the area.`
         : `Chance of a first encounter: ${MAP_EVENT_KINDS.filter(k => (readout.events[k] ?? 0) > 0).map(k => `${MAP_EVENT_NAMES[k]} ${Math.round(readout.events[k] * 1000) / 10}%`).join(' · ')}. Once one is drawn, a second follows ${Math.round(MAP_EVENT_SECOND_CHANCE * 100)}% of the time (Twin Omens allows a third). Which one, and when, is only discovered during the map.`}</p>
+      <SourcesPanel readout={readout.routing} onFocus={onFocus} class="fe-device__sources" />
       <div class="fe-device__summary">
         {keystone && <p class="ui-type-caption">Exclusive unique chance: {Math.round((keystoneRewards(area.id, map.tier, readout.luck?.itemRarity ?? 100)?.chance ?? 0) * 1000) / 10}% {readout.luck ? 'per boss for you' : 'base per boss, multiplied by your item rarity when entry is available'}. Equal weight among eligible uniques; ordinary drops and boss guarantees also apply.</p>}
         {readout.summary.map((l) => {
@@ -78,18 +86,28 @@ export function ReadoutDetail({ area, map, readout, gear }: {
   );
 }
 
-export function Dock({ area, map, readout, gear, activate, compact, onOpenStash, stashOpen, onCourse, children }: {
-  area: AtlasAreaDef;
+export function Dock({ area, home, map, readout, gear, activate, compact, stashedMaps, onCourse, onFocus, passage, onRechart, rechartPop, children }: {
+  /** The area that will be run: the map's home, or its passage destination. Null with an empty slot. */
+  area: AtlasAreaDef | null;
+  /** The map's own bound area (differs from `area` when a passage bypasses it). */
+  home: AtlasAreaDef | null;
   map: MapItem | null;
   readout: DeviceReadout | null;
   gear: { q: number; r: number } | null;
   activate: () => void;
   compact: boolean;
-  onOpenStash: () => void;
-  stashOpen: boolean;
-  /** Clicking the course chip brings the chart back to the destination. */
+  /** Maps waiting in the account's Map Stash (they go to the inventory first, then into the slot). */
+  stashedMaps: number;
+  /** Clicking the home chip brings the chart back to the area. */
   onCourse: () => void;
-  /** The Hunter reward class picker, when the area needs it. */
+  /** Light up an area on the chart (the "Next drops" chips). */
+  onFocus?: (id: AtlasAreaId) => void;
+  /** The passage slot (PassageSlot). */
+  passage?: preact.ComponentChildren;
+  /** Opens the Re-chart popover for the slotted map (the popover itself is `rechartPop`, anchored over the dock). */
+  onRechart?: () => void;
+  rechartPop?: preact.ComponentChildren;
+  /** The Hunter reward class picker and the passage options, when they apply. */
   children?: preact.ComponentChildren;
 }) {
   const store = useStore();
@@ -126,20 +144,28 @@ export function Dock({ area, map, readout, gear, activate, compact, onOpenStash,
   const ready = !!map && !readout?.error;
   return (
     <div class={cx('fe-dock', compact && 'fe-dock--compact', calm && 'fe-dock--calm')} role="group" aria-label="Map device">
-      <button class="fe-device__destination fe-dock__course" onClick={() => { store.actions.uiSound('click'); onCourse(); }} aria-label={`Course: ${area.name}`}>
-        <span class="ui-type-caption fe-dock__kicker">1 · Course</span>
-        <strong class="ui-type-body">{area.name}</strong>
-        <span class="ui-type-caption">Up to Tier {atlasTierCeiling(area)}</span>
-      </button>
       <div class="fe-dock__step fe-dock__step--map">
-        <span class="ui-type-caption fe-dock__kicker">2 · Map</span>
+        <span class="ui-type-caption fe-dock__kicker">1 · Map</span>
         <div class={cx('fe-device__circle fe-dock__circle', map && 'fe-device__circle--charged', fx && 'fe-dock__circle--sigil')}>
           <MapDeviceSlotView disabled={false} />
           {fx && <span key={fx.id} class="fe-dock__sigil" aria-hidden="true" />}
         </div>
       </div>
+      <div class="fe-dock__where">
+      <button class="fe-device__destination fe-dock__course" disabled={!area} onClick={() => { store.actions.uiSound('click'); onCourse(); }} aria-label={area ? `Opens ${area.name}` : 'No map slotted'} title={area && home && home.id !== area.id ? `Opens ${area.name}; the passage bypasses ${home.name}` : undefined}>
+        <span class="ui-type-caption fe-dock__kicker">Opens</span>
+        {area
+          ? <><strong class="ui-type-body">{area.name}</strong>
+            <span class={cx('ui-type-caption', home && home.id !== area.id && 'fe-dock__bypass')}>{home && home.id !== area.id ? `Bypasses ${home.name}` : `Up to Tier ${atlasTierCeiling(area)}`}</span></>
+          : <><strong class="ui-type-body">No map</strong><span class="ui-type-caption">Browsing the chart</span></>}
+      </button>
+      <div class="fe-dock__acts">
+        {map && onRechart && <button type="button" class="fe-dock__act ui-type-caption" data-dock-rechart disabled={!!map.corrupted} title={map.corrupted ? 'Corrupted maps cannot be changed.' : 'Move this map to a neighbouring area for Forge Scrap'} onClick={() => { store.actions.uiSound('click'); onRechart(); }}>Re-chart</button>}
+        <SurgeChip areaId={area?.id ?? null} />
+      </div>
+      </div>
       <div class="fe-dock__step fe-dock__step--scarabs">
-        <span class="ui-type-caption fe-dock__kicker">3 · Scarabs</span>
+        <span class="ui-type-caption fe-dock__kicker">2 · Scarabs</span>
         <div class="fe-dock__sockets">{[0, 1, 2, 3].map((i) => (
           <div class="fe-dock__sockwrap" key={i}>
             <ScarabSlotView index={i} />
@@ -147,8 +173,12 @@ export function Dock({ area, map, readout, gear, activate, compact, onOpenStash,
           </div>
         ))}</div>
       </div>
+      <div class="fe-dock__step fe-dock__step--passage">
+        <span class="ui-type-caption fe-dock__kicker">Passage</span>
+        {passage}
+      </div>
       <div class="fe-dock__step fe-dock__step--readout">
-        <span class="ui-type-caption fe-dock__kicker">4 · Price</span>
+        <span class="ui-type-caption fe-dock__kicker">3 · Price</span>
         {map && readout?.desc ? (
           <div class="fe-dock__read">
             <b class={cx('fe-dock__mapname ui-type-secondary', `fe-tone-${readout.desc.tone}`)}>{readout.desc.title}</b>
@@ -156,13 +186,14 @@ export function Dock({ area, map, readout, gear, activate, compact, onOpenStash,
               {readout.luck && <span class="fe-dock__chip ui-type-caption" title="Your personal item quantity for this expedition">Qty {formatLuck(readout.luck.itemQuantity)}</span>}
               {readout.luck && <span class="fe-dock__chip ui-type-caption" title="Your personal item rarity for this expedition">Rarity {formatLuck(readout.luck.itemRarity)}</span>}
               <span class={cx('fe-dock__chip ui-type-caption', dangers > 0 && 'fe-dock__chip--danger')}>Danger {dangers}</span>
+              <SourcesLine readout={readout.routing} onFocus={onFocus} />
               <button class="fe-dock__more ui-type-caption" aria-expanded={details} aria-label="Full map readout" onClick={() => { store.actions.uiSound('click'); setDetails(!details); }}>(?)</button>
             </span>
           </div>
         ) : (
           <div class="fe-dock__read">
-            <span class="ui-type-secondary fe-dock__hint">Load a map to light the way.</span>
-            <button class="fe-dock__more fe-dock__more--text ui-type-secondary" onClick={onOpenStash}>{stashOpen ? 'Stash open' : 'Open Stash…'}</button>
+            <span class="ui-type-secondary fe-dock__hint">Drag a map from your inventory into the slot: it opens the area it is bound to.</span>
+            {stashedMaps > 0 && <span class="ui-type-caption fe-dock__hint fe-dock__hint--sub">{stashedMaps} in your Map Stash: move {stashedMaps === 1 ? 'it' : 'one'} to your inventory first.</span>}
           </div>
         )}
         {children}
@@ -171,15 +202,16 @@ export function Dock({ area, map, readout, gear, activate, compact, onOpenStash,
         {readout?.error && <span class="fe-atlas__error fe-dock__error ui-type-caption" role="status">{readout.error}</span>}
         <Button variant="ember" size="large" class="fe-device__activate fe-dock__activate" disabled={!ready} onClick={activate}>Activate</Button>
         <span class="fe-device__cost ui-type-caption fe-dock__cost">
-          {map ? `Fee ${territoryEntryFee(map.tier, area.id)} Scrap${area.entranceKey ? ` · ${CURRENCIES[area.entranceKey].name}` : ''} · ${PORTALS_PER_MAP} portals` : 'Place a map to activate'}
+          {map && area ? `Fee ${territoryEntryFee(map.tier, area.id)} Scrap${area.entranceKey ? ` · ${CURRENCIES[area.entranceKey].name}` : ''} · ${PORTALS_PER_MAP} portals` : 'Place a map to activate'}
         </span>
       </div>
-      {details && map && readout && (
+      {details && map && area && readout && (
         <div class="fe-dock__pop fe-solid" role="dialog" aria-label="Map readout">
           <button class="fe-dock__pop-close fe-btn fe-btn--icon fe-btn--ghost" aria-label="Close readout" onClick={() => setDetails(false)}><span class="fe-x" /></button>
-          <ReadoutDetail area={area} map={map} readout={readout} gear={gear} />
+          <ReadoutDetail area={area} map={map} readout={readout} gear={gear} onFocus={onFocus} />
         </div>
       )}
+      {rechartPop}
     </div>
   );
 }

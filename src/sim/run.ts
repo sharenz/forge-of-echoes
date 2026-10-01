@@ -15,6 +15,7 @@ import { digestWorld } from './digest';
 import { EventBuffer } from './events';
 import { createEventDirector, updateMapEvent } from './map-events';
 import { PropGrid, SpatialGrid } from './grid';
+import { applyLayout, layoutForConfig, layoutStart } from './layout';
 import { createHookErrorLog } from './hooks';
 import { removeDrop, removePlayerDrops, requestPickup, spawnFloorDrop, updateDrops } from './loot';
 import { resolvePlayerAt } from './movement';
@@ -97,6 +98,7 @@ export function createWorld(config: RunConfig, capacities: StoreCapacities = def
     time: 0,
     arenaRadius: R,
     theme: config.theme,
+    ...(config.mode === 'map' && config.areaId ? { areaId: config.areaId } : {}),
     players: [],
     monsters,
     projectiles,
@@ -133,6 +135,7 @@ export function createWorld(config: RunConfig, capacities: StoreCapacities = def
     pactNext: null,
     pactResist: 0,
     roster: rosterFor(config.theme),
+    layout: null,
     boss: { phase: 1, roar: 0, state: null },
     bossStates: new Map(),
     events: new EventBuffer(),
@@ -160,7 +163,10 @@ export function createWorld(config: RunConfig, capacities: StoreCapacities = def
     const d = hideoutDummyPosition(R);
     spawnMonster(w, 'trainingDummy', d.x, d.y, { animate: false });
   } else {
-    layoutMap(w);
+    // An area with a hand-crafted layout is built from it; every other map keeps the procedural generator.
+    const layout = layoutForConfig(config.areaId, config.mode);
+    if (layout) applyLayout(w, layout);
+    else layoutMap(w);
   }
   syncView(w);
   return w;
@@ -168,7 +174,7 @@ export function createWorld(config: RunConfig, capacities: StoreCapacities = def
 
 /** The instance entry point: the hideout courtyard spot, or the map start. */
 function entryPoint(w: World): { x: number; y: number } {
-  return w.config.mode === 'hideout' ? hideoutSpawn(w.arenaRadius) : { x: 0, y: 0 };
+  return w.config.mode === 'hideout' ? hideoutSpawn(w.arenaRadius) : layoutStart(w) ?? { x: 0, y: 0 };
 }
 
 /**

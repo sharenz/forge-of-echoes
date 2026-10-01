@@ -9,6 +9,7 @@
 // Braziers, crystals, the device and the chest carry their own lights.
 import type { PropKind, PropView } from '../contracts/sim';
 import type { RGB } from '../contracts/render';
+import { LAYOUT_PROP_RADIUS } from '../data/layouts/schema';
 import { C } from './colors';
 import { lightInView, type FrameCtx } from './context';
 import { hash1, TAU } from './math';
@@ -51,6 +52,20 @@ const SHADOW: Record<PropKind, readonly [number, number]> = {
   banner: [0.9, 0.8],
   anvil: [1.6, 1.2],
   ruinWall: [2.5, 1.5],
+  vat: [3.4, 1.9],
+  bellows: [2, 1.2],
+  altar: [2.3, 1.4],
+  sarcophagus: [2.6, 1.4],
+  choirStall: [1.7, 1.2],
+  ribArch: [1.2, 1],
+  iceColumn: [1.3, 1.1],
+  crate: [1.6, 1.2],
+  chainPost: [0.9, 0.8],
+  hoist: [2.4, 1.4],
+  gate: [2.2, 1.3],
+  weaponRack: [1.8, 1.1],
+  obelisk: [1.1, 1],
+  statue: [1.8, 1.3],
 };
 
 /** The light each prop kind carries: [y offset of its centre, reach] (reach 0 = none). Used to cull lights by what
@@ -72,7 +87,37 @@ const LIGHT_REACH: Record<PropKind, readonly [number, number]> = {
   banner: [0, 0],
   anvil: [-18, 50],
   ruinWall: [0, 0],
+  vat: [-18, 96],
+  bellows: [-6, 44],
+  altar: [-26, 70],
+  sarcophagus: [0, 0],
+  choirStall: [0, 0],
+  ribArch: [0, 0],
+  iceColumn: [-24, 56],
+  crate: [0, 0],
+  chainPost: [0, 0],
+  hoist: [0, 0],
+  gate: [0, 0],
+  weaponRack: [0, 0],
+  obelisk: [-30, 54],
+  statue: [0, 0],
 };
+
+/** The layout art kit (D 10.5): solid-circle props a layout can resize with `r` (the sprite scales with the radius). */
+const KIT_KINDS: ReadonlySet<PropKind> = new Set<PropKind>([
+  'vat', 'bellows', 'altar', 'sarcophagus', 'choirStall', 'ribArch', 'iceColumn', 'crate', 'chainPost', 'hoist', 'gate', 'weaponRack',
+  'obelisk', 'statue',
+]);
+/**
+ * Per-theme kit hook (D 10.6): the kit is authored once and each theme nudges it towards its floor (multiplies the sprite tint,
+ * so it only ever dims or warms a little; frame 1 of every kit sprite is the layout-selectable recolour). Absent = untouched.
+ */
+const KIT_THEME_TINT: Partial<Record<string, RGB>> = {
+  ashenForge: [1.04, 0.97, 0.94], cinderChapel: [1.03, 0.97, 0.97], rimedOssuary: [0.93, 0.99, 1.06], choralCrypt: [0.97, 0.94, 1.06],
+  chainworks: [1.02, 0.98, 0.92], ironColiseum: [1.04, 1, 0.9],
+};
+const SLAG: RGB = [1, 0.5, 0.16];
+const GOLD_GLOW: RGB = [1, 0.8, 0.38];
 
 const NAMES: Partial<Record<PropKind, string>> = {
   mapDevice: 'Map Device', stash: 'Stash', merchant: 'Rook the Merchant', anvil: 'Crafting Bench', portal: 'Enter Map',
@@ -95,6 +140,9 @@ const PROP_IDS: Record<PropKind, string> = {
   standingStone: 'prop/standingStone', rubble: 'prop/rubble', bones: 'prop/bones', crystal: 'prop/crystal',
   banner: 'prop/banner', anvil: 'prop/anvil', ruinWall: 'prop/ruinWall',
   debugMerchant: 'prop/debugMerchant',
+  vat: 'prop/vat', bellows: 'prop/bellows', altar: 'prop/altar', sarcophagus: 'prop/sarcophagus', choirStall: 'prop/choirStall',
+  ribArch: 'prop/ribArch', iceColumn: 'prop/iceColumn', crate: 'prop/crate', chainPost: 'prop/chainPost', hoist: 'prop/hoist',
+  gate: 'prop/gate', weaponRack: 'prop/weaponRack', obelisk: 'prop/obelisk', statue: 'prop/statue',
 };
 
 /** Clickable extents (half width, height above the base) of the interactive props' art. */
@@ -224,6 +272,13 @@ export class PropPainter {
         // Pale bone would bleach under the player's light; keep it a step darker than the stonework.
         if (kind === 'bones') o.tint = BONE_TINT;
         if (scaleY !== 1) o.scaleY = scaleY;
+        if (KIT_KINDS.has(kind)) {
+          // A layout may resize a kit prop (`r`): the art follows its solid radius (walk-through decor keeps its size).
+          const base = LAYOUT_PROP_RADIUS[kind];
+          if (p.radius > 0 && base > 0 && p.radius !== base) o.scale = Math.max(0.5, Math.min(2.2, p.radius / base));
+          const tint = KIT_THEME_TINT[f.theme];
+          if (tint) o.tint = tint;
+        }
         if (hovered) {
           const hc = kind === 'portal' ? PORTAL_HOVER : kind === 'returnPortal' ? RETURN_HOVER : HOVER;
           o.outline = hc;
@@ -258,6 +313,52 @@ export class PropPainter {
           }
           break;
         }
+        case 'vat': {
+          // Frame 0 holds molten slag; the cooled crust (frame 1) only smoulders.
+          const molten = p.variant % 2 === 0;
+          const pulse = 0.85 + 0.15 * Math.sin(time * 1.3 + phase);
+          pen.light(x, y - 16, molten ? 104 : 54, SLAG, (molten ? 0.62 : 0.2) * pulse, 0.45);
+          if (!vis || !molten) break;
+          const g = pen.sprite('fx');
+          g.additive = true;
+          g.tint = SLAG;
+          g.alpha = 0.1 * pulse;
+          g.scaleX = 1.3;
+          g.scaleY = 0.7;
+          r.sprite('fx/glow', 0, x, y - 22, g);
+          if (Math.random() < f.fxDt * 3) {
+            const b = pen.burst(x + (Math.random() - 0.5) * 30, y - 24, 1, C.hot, C.ember);
+            b.sprite = 'fx/ember';
+            pen.speed(4, 14);
+            pen.life(0.7, 1.3);
+            pen.size(0.5, 0.9);
+            b.angle = -Math.PI / 2;
+            b.spread = 1.2;
+            b.gravity = -24;
+            pen.emit();
+          }
+          break;
+        }
+        case 'bellows':
+          pen.light(x - 16, y - 8, 46, SLAG, p.variant % 2 === 0 ? 0.5 * (0.8 + 0.2 * Math.sin(time * 2.4 + phase)) : 0.08, 0.5);
+          break;
+        case 'altar':
+          pen.light(x, y - 26, 72, CANDLE, p.variant % 2 === 0 ? 0.7 : 0.4, 0.55);
+          if (vis && p.variant % 2 === 0) {
+            const g = pen.sprite('fx');
+            g.additive = true;
+            g.tint = CANDLE;
+            g.alpha = 0.1;
+            g.scale = 0.5;
+            r.sprite('fx/glow', 0, x, y - 27, g);
+          }
+          break;
+        case 'iceColumn':
+          pen.light(x, y - 22, 56, CRYSTAL, 0.32 * (0.85 + 0.15 * Math.sin(time * 1.5 + phase)), 0.05);
+          break;
+        case 'obelisk':
+          pen.light(x, y - 28, 54, p.variant % 2 === 0 ? PORTAL_EMBER : GOLD_GLOW, 0.34 * (0.85 + 0.15 * Math.sin(time * 1.9 + phase)), 0.2);
+          break;
         case 'crystal': {
           const pulse = 0.85 + 0.15 * Math.sin(time * 1.7 + phase);
           pen.light(x, y - 12, 70, CRYSTAL, 0.6 * pulse, 0.05);

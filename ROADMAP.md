@@ -4,29 +4,36 @@ Maintained at the owner's request. Ask "what's next" and it is read from here; i
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
 Last reprioritised: 2026-09-30.
 
-## Top of the list: Atlas, Codex and map events rework (owner verdict 2026-09-30; wave 1 built, uncommitted)
+## Top of the list: Atlas, Codex and map events rework (owner verdict 2026-09-30; waves 1 and 2 shipped)
 
 Design briefs: `docs/atlas-rework/` (overview, A visuals, B tree, C events, `tree-events-interface.md`, generated `tree-nodes.md`).
 
-**Wave 1: built (working tree, not yet committed or deployed).**
-- **Ember Chart Atlas** (`src/ui/atlas`, `src/art/atlas`, `Atlas.tsx`, `MapDevice.tsx`): a full-screen chart on a canvas (baked ground,
-  roads, fog, 25 plates), an inspector rail with real boss and family sprites, a map dock (map, scarabs, readout, "Set course"),
-  a Stash drawer instead of the backpack Ctrl-click, and a Codex tab.
-- **Codex tree data and economy** (`src/data/progression/atlas-tree`, `atlas-rules.ts`): 145 nodes, 14 keystones, 60 points
-  from areas, tiers, first encounter completions, first boss kills and Atlas milestones; respec costs; one-time free respec and
-  refund of the old 15-node allocation on migration. The encounter engine is now live (lenses of the six existing encounters, the
-  three encounter smalls, Twin Omens and Sworn to the Veil are allocatable and reach the Event Director through the frozen
-  expedition). First event completions credit an Atlas point per account through the server.
-- **Event Director v2** (`src/sim/events`, `src/sim/map-events.ts`): multi-slot runtime, grades (Bronze/Silver/Gold), and the six
-  existing events rebuilt as distinct mechanics (Stalker, Echoing, Laden Caravan, The Fault, Ember Relay, Rival Crowns).
+**Waves 1 and 2: Done, deployed 2026-09-30 (commit `86f4228`).** Ember Chart Atlas, Codex tree wheel UI, 145-node tree with the 60-point
+economy and migration, Event Director v2 with all 13 events (Stalker, Echoing, Caravan, Fault, Relay, Rival Crowns, Pact Altar,
+Orchard, Ring, Host, Anvil, Bellwatch, Void Breach), the `foe` admin CLI, and the balance pass 2 (melee cap removed, steeper monster
+curve plus level gap, armour bases, faster predicted projectiles, leaps and markers, proof rares, tier 1 XP halved).
 
-**Wave 2: in progress (three parallel streams).** T: the new Codex tree UI (`src/ui/codex`, `MapTree.tsx`) and Atlas polish;
-E: six more encounters (Pact Altar, Orchard, Ring, Host, Anvil, Bellwatch); I: integration, e2e and real-client verification.
-When E lands, add its ids to `ATLAS_BUILT_EVENTS` (`src/data/progression/map-tree.ts`) and `ATLAS_EVENT_TO_KIND`
-(`map-event-rules.ts`); a test keeps the two in step, and their six lens nodes become allocatable.
+**Wave 3: Done in part, deployed 2026-10-01 (spec `docs/atlas-rework/D-territory.md`).** Shipped: maps bound to one Atlas area with a
+deterministic legacy-map migration (T0), chart-driven drop routing (R1), the Stock and Sources lenses, a drag-in passage slot, pins,
+Re-chart, Recycle and Rook's Maps tab (U1, P1), five area-bias scarab families and the daily surge with Hourglass Sand (S1, G1), the
+layout engine plus hand-crafted layouts for all 25 areas (L0 to L3), and monster wall navigation. Check 8 of the layout validator
+guarantees no player trap. Protocol 22.
+**Wave 3 still to build:** B1 beacons and sigils (the Territory lens is a hidden stub; Lamp Oil's sigil half, Tide sigils and the tree
+re-roles go with it), E1 anchor-aware events (the Event Director asks the layout for anchors via `layoutAnchors`), F1 polish (discovery,
+pin and surge sounds and banners, reduced motion, telemetry), map tooltip "Surge n/3 today", an Re-chart entry on the item tooltip.
+**Watch in playtest:** deaths with layouts live (a balance probe needed its damage lowered from 1.8x to 1.5x), maps per run (about 7.5),
+surge income (about +10% for a rotating player; Hourglass Sand slightly above 3%, lever `HOURGLASS_SAND.bossChance` 5% to 4%).
 
-**Still gated (fully specified, "Awaits ..." in the Codex):** the six lenses of unbuilt encounters and Voidtouched Atlas (needs the
-Void Breach event); `sim` nodes Warded Hunts and Stragglers' Cull; `device` nodes Lantern-Bearer, Fifth Socket, Twinned Sockets and
+**Done, deployed 2026-09-30: inventory-first UI rule and its first applications.** Game-wide
+rule in `AGENTS.md`: item-using panels open with the inventory and items go into slots by drag and drop. Applied to the Atlas (map
+and scarab slots, Stash drawer removed), the Crafting Stash work slot (server-side, atomic, PoE-style in-place crafting) and the
+merchants (Rook buy/sell/gamble and Mira: offer window, drag stock onto the backpack to buy at a chosen cell). Protocol 19.
+Follow-ups from the audit: Ctrl+Shift-click from a stash tab onto the bench still bypasses the inventory; the Crafting Stash right-click
+craft shortcut is a deliberate exception; delete dead drawer code (`MapStashView mode="device"`, `mapPicker` drop handling, `.fe-device__stash*`
+CSS); at 1024x600 the stash footer ("Deposit all") needs a scroll.
+
+**Still gated (fully specified, "Awaits ..." in the Codex):** Voidtouched Atlas (the Void Breach event exists; the server still has to pass
+the map into the event rules); `sim` nodes Warded Hunts and Stragglers' Cull; `device` nodes Lantern-Bearer, Fifth Socket, Twinned Sockets and
 Single-Minded Furnace (scarab sockets and essence attunement at the Map Device); `items` node Wagered Charts (account-bound chest map).
 Twin Omens' Backlash pack on a failed encounter and Sworn to the Veil's "withhold the chest upgrade" price are not built (their text
 now says only what exists).

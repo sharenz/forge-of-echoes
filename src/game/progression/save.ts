@@ -4,13 +4,15 @@
 // overlap or fall outside a container re-placed (backpack, then stash), and duplicate uids re-minted.
 // The special stash tabs (GAME_SPEC §12) normalise too: a save from before them gets an empty Crafting
 // Stash ({}) and Map Stash ([]); slot counts are clamped to CURRENCY_STASH_MAX, and maps beyond
-// MAP_STASH_CAPACITY (or anything in the Map Stash that is not a map) are re-homed like any overflow.
+// MAP_STASH_CAPACITY (or anything in the Map Stash that is not a map) are re-homed like any overflow. The
+// work slot (CharacterSave.craftSlot, account storage) holds gear or a map; it is missing on older saves,
+// which read as empty, so SAVE_VERSION did not move.
 // Re-homing tries the backpack, the item's special tab (a currency's Crafting Stash slot, the Map Stash),
 // every stash tab and new "Recovered" tabs up to MAX_STASH_TABS. Only an item that fits none of those is
 // lost — which takes a corrupted save holding far more than a character can — and
 // normalizeCharacterReport returns such items so the caller can log them.
 import type {
-  BeltSlot, CharacterSave, CharacterStatsLog, CurrencyStack, EquipmentItem, FlaskStack, GridContainer, Item, MapItem,
+  BeltSlot, CharacterSave, CharacterStatsLog, CraftSlotItem, CurrencyStack, EquipmentItem, FlaskStack, GridContainer, Item, MapItem,
   Rarity, RolledAffix, RolledMapMod, RolledScar, SaveGame, Settings, StashTab,
 } from '../../contracts/items';
 import {
@@ -37,6 +39,7 @@ import { sanitizeName, xpToNext } from './character';
 import { clampTier, rarityForDangerCount, sortMapMods } from './maps';
 import { normalizeLoadout } from './skills';
 import { normalizeAtlas } from './atlas';
+import { bindLegacyMaps, savedBinding } from './map-binding';
 import { findScarab } from '../../data/scarabs';
 import { SCARAB_SLOTS } from '../../contracts/items';
 import { clamp, finite, intIn } from './util';
@@ -64,6 +67,9 @@ export function serializeSave(save: SaveGame): string {
 /** Schema migrations keyed by the version they upgrade from. v0 = unversioned pre-release saves. */
 const MIGRATIONS: Record<number, (raw: Json) => Json> = {
   0: (raw) => raw,
+  // 1 -> 2: maps become area-bound (brief D). The rewrite itself is the item normaliser plus bindLegacyMaps, which need
+  // the account's Atlas; a map without a valid `areaId` is simply recognised as legacy wherever it is read.
+  1: (raw) => raw,
 };
 
 function migrate(raw: Json): Json {
@@ -258,9 +264,17 @@ function normalizeFlask(raw: Json, uid: string): FlaskStack | null {
   return { kind: 'flask', uid, flaskId: id, count, ...(raw.isNew === true ? { isNew: true } : {}) };
 }
 
+/**
+ * A saved map. Brief D: a map is bound to one area and its theme is that area's. A map without a valid area (saved before
+ * binding) comes back with a provisional binding and `unbound: true`; bindLegacyMaps replaces it once the account's Atlas
+ * is known (normalizeCharacterReport does that whenever the Atlas is part of the data it normalises).
+ */
 export function normalizeMap(raw: Json, uid: string): MapItem | null {
-  const baseId = oneOf<MapBaseId>(raw.baseId, MAP_BASE_IDS, 'ashenForge');
-  if (raw.baseId !== baseId) return null;
+  const rawBase = oneOf<MapBaseId | ''>(raw.baseId, MAP_BASE_IDS, '');
+  const tier = clampTier(finite(raw.tier, 1));
+  const binding = savedBinding(raw.areaId, rawBase || null, tier, uid, raw.unbound === true);
+  if (!binding) return null;
+  const baseId = binding.baseId;
   const mods: RolledMapMod[] = [];
   let danger = 0;
   let reward = 0;
@@ -285,12 +299,16 @@ export function normalizeMap(raw: Json, uid: string): MapItem | null {
     ...(raw.charted === true ? { charted: true } : {}),
     ...(raw.twinInked === true ? { twinInked: true } : {}),
     uid,
+    areaId: binding.areaId,
     baseId,
-    tier: clampTier(finite(raw.tier, 1)),
+    tier,
     rarity: rarityForDangerCount(danger),
     mods: sortMapMods(mods),
     quality: intIn(raw.quality, 0, MAX_MAP_QUALITY, 0),
     corrupted: raw.corrupted === true || corruptedMods,
+    ...(binding.unbound ? { unbound: true as const } : {}),
+    ...(raw.migrated === 'theme' || raw.migrated === 'fog' ? { migrated: raw.migrated } : {}),
+    ...(typeof raw.rechart === 'number' && raw.rechart > 0 ? { rechart: intIn(raw.rechart, 0, 99, 0) } : {}),
     ...(raw.isNew === true ? { isNew: true } : {}),
   };
 }
@@ -346,6 +364,7 @@ function highestMinted(raw: Json, prefix: string): number {
   if (isObj(raw.backpack)) arr(raw.backpack.entries).forEach((e) => isObj(e) && visit(e.item));
   for (const tab of arr(raw.stash)) if (isObj(tab) && isObj(tab.grid)) arr(tab.grid.entries).forEach((e) => isObj(e) && visit(e.item));
   visit(raw.mapDevice);
+  visit(raw.craftSlot);
   arr(raw.mapScarabs).forEach(visit);
   arr(raw.mapStash).forEach(visit);
   return max;
@@ -482,6 +501,13 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     scarabFamilies.add(def.family);
     if (item.count > 1) overflow.push({ ...item, uid: claimUid(minter, undefined), count: item.count - 1 });
   }
+  // The Crafting Stash work slot (account storage): gear or a map; anything else is re-homed like overflow.
+  let craftSlot: CraftSlotItem | null = null;
+  if (isObj(raw.craftSlot)) {
+    const item = normalizeItem(raw.craftSlot, claimUid(minter, raw.craftSlot.uid));
+    if (item && (item.kind === 'equipment' || item.kind === 'map')) craftSlot = item;
+    else if (item) overflow.push(item);
+  }
   const mapStash: MapItem[] = [];
   for (const r of arr(raw.mapStash)) {
     if (!isObj(r)) continue;
@@ -556,6 +582,7 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     ...(stashCapacity > MAX_STASH_TABS ? { stashCapacity } : {}),
     currencyStash,
     mapStash,
+    ...(craftSlot ? { craftSlot } : {}),
     ...(raw.atlas !== undefined ? { atlas: normalizeAtlas(raw.atlas) } : {}),
     belt: normalizeBelt(raw.belt),
     mapDevice,
@@ -567,5 +594,7 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     createdAt: Math.max(0, finite(raw.createdAt, 0)),
     updatedAt: Math.max(0, finite(raw.updatedAt, 0)),
   };
-  return { character, lost };
+  // Maps saved before binding meet the account's Atlas here when it is part of the data (account storage always carries
+  // it); a character row without it keeps its provisional bindings until the server merges the shared storage in.
+  return { character: raw.atlas !== undefined ? bindLegacyMaps(character) : character, lost };
 }

@@ -16,7 +16,6 @@ describe('six maps with one final encounter each', () => {
     expect(new Set(MAP_BASE_IDS.map(id => MAP_BASES[id].boss)).size).toBe(6);
     for (const id of MAP_BASE_IDS) {
       expect(ATLAS_AREAS.some(a => a.baseId === id), `${id} has an Atlas destination`).toBe(true);
-      expect(rules.buyOffer(bareCharacter(), `map-t1-${id}`).ok).toBe(true);
       const item = map(id, 3);
       expect(normalizeItem(item, item.uid)).toEqual(item);
       const setup = setupFor(item);

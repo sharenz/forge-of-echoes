@@ -10,7 +10,7 @@ loot to craft again.
 - Monsters inflict **debuffs** you can read and answer: Chilled, Frozen, Rooted, Burning, Bleeding, Shocked and
   Withered, each with its own look on your character, an icon and timer on the HUD, and a counter (see below).
 - **Special stash tabs**: a Map Stash for 400 maps, and a Crafting Stash with a slot for every currency (5,000 each)
-  that you can craft from directly.
+  and a **work slot**: drag an item into it and craft on it in place with one click per currency.
 - Pixel-art world with dynamic lights, rendered by our own WebGL2 renderer; procedural art and audio (no image or
   sound files).
 - One authoritative Node server runs the rules and a deterministic 60 Hz simulation for every hideout and map. The
@@ -46,11 +46,14 @@ Other useful scripts:
 
 ## Selling equipment
 
-Click **Rook → Sell** in any hideout. Select equipment from the list, Ctrl/⌘-click it in your backpack,
-or drag it into the Sell panel. Review the total, press **Sell**, then confirm. You can clear the selection
-or cancel without losing anything. Equipped gear must be unequipped first; gear offered in a trade is locked.
+Click Rook in any hideout: his stall opens beside your inventory, like a Path of Exile vendor. On the **Sell** tab
+drag equipment from your backpack into the offer window (Ctrl/⌘-click works too), review each item's appraisal and the
+total, press **Sell**, then confirm. Drag an item back out or press × to keep it; clear or cancel without losing anything.
+Equipped gear must be unequipped first; gear offered in a trade is locked. **Buy** and **Gamble** work the same way in
+reverse: search or filter the stock, then drag a row onto the backpack cell where you want the item (green means it fits
+and you can pay, red says why not), or use the row's button.
 
-Rook appraises the actual **item level, base, number of affixes and affix tiers**. Hover or focus a price
+Rook appraises the actual **item level, base, number of affixes and affix tiers**. Click an offered item's price
 for its breakdown. Better bases, higher item levels, more affixes and stronger tiers raise the appraisal;
 rarity colour alone does not set a fixed price. Payment goes into your account's Crafting Stash, with overflow
 in your backpack. Visitors sell their own gear and receive their own payment. Sales are permanent and survive
@@ -144,8 +147,14 @@ their belt first. A purchase that cannot fit is rejected in full. Item and Atlas
 Disabling removes Mira and immediately blocks purchases, including from already-open panels. Other
 characters on the account are unaffected. No hideout has her enabled by default.
 
-`npm run e2e -- --prod --only debugmerchant --size 1024x600` tests live activation, stock, guest purchases,
-disable and restart with two real browser clients and a disposable database.
+Mira's panel opens beside the inventory too: drag a stock row onto the backpack (the dropped cell picks the slot of the
+first stack) or use its Buy button.
+
+`npm run e2e -- --prod --only debugmerchant --size 1024x600` tests live activation, stock, dragging and buying,
+guest purchases, disable and restart with two real browser clients and a disposable database.
+`npm run e2e -- --only territory --size 1280x720` (and `1024x600`) plays pins, the Stock and Sources lenses, Re-chart, Recycle by dragging three maps into the bench, Rook's Maps tab and the Map Stash grouped by area.
+`npm run e2e -- --only selling --size 1280x720` (and `1024x600`) runs the debug merchant flow plus Rook: offering gear by
+drag, protected gear, appraisal, atomic payout, buying and gambling by drag onto a chosen cell, the can't-afford state and a restart.
 
 ## Playing with friends
 
@@ -154,9 +163,17 @@ disable and restart with two real browser clients and a disposable database.
 3. Party members can **visit each other's hideouts** from the party panel ("Visit hideout", and "Go home").
    Rook the merchant trades with everyone in any hideout, crafting works in any hideout, and the stash always opens
    your own stash.
-4. The hideout owner opens the **Atlas** (click the Map Device in your hideout), sets a course on the chart, loads a map (the
-   **Stash** tab holds the maps in your pack and your Map Stash, and the scarabs) and presses Activate: **8 portals** open. Each entry, by
-   anyone, uses one portal (re-entering after death too). Click the portal to go in.
+4. The hideout owner opens the **Atlas** (click the Map Device in your hideout) and loads a map (the inventory opens beside the
+   table: drag a map and up to four scarabs from it into the dock's slots; items in your stash go into the inventory first). **A map
+   is bound to one area** ("Furnace Yard map"): the chart points at where it lives, there is no course to set, and an empty slot
+   leaves the chart browse-only. Drag a key from the inventory into the dock's **passage slot** (or, for a Bounty map bound to Iron March, click the slot) to open a sealed
+   area or the Pit of Echoes with the map. **Pin** up to three areas (the tray in the chart's corner, or the pin button on the selected area): their maps drop three times as
+   often. **Re-chart** (dock chip or bench) moves a map to a neighbouring area for Scrap; **Recycle** at the bench turns three maps of a tier into one of an area you choose; Rook's **Maps** tab sells low-tier maps of the areas you have cleared. Press Activate: **8 portals** open. Each entry, by
+   anyone, uses one portal (re-entering after death too). Click the portal to go in. Every area has **3 surge charges a day**
+   (the day turns over at 04:00 UTC; the dock shows the countdown and brass pips mark each area on the chart): Activate with
+   the dock's Surge toggle on spends one for +30% item quantity (not maps) and +15% rarity in that expedition, for the whole
+   party. With none left the area simply runs at the normal rate. Hourglass Sand (one area) and the Grand Hourglass (all areas)
+   refill charges from the rail and the dock.
 5. In the map, **loot is instanced**: everyone sees and picks up only their own drops. **XP is shared** by everyone
    alive in the map. Monsters get tougher and more numerous per extra player.
 6. When you die, "Return to hideout" takes you to the map owner's hideout, right next to the portals, so you can
@@ -210,12 +227,17 @@ one to apply it to the bench item, with the odds preview.
 **Special stash tabs.** Next to your normal stash tabs are three icon tabs; they don't count towards the tab limit.
 - **Map Stash** (up to 400 maps): Ctrl-click or drag a map in and it files itself by tier and map type. Maps are
   listed by tier (click a tier) and grouped by map type, with their mods and a full tooltip. Drag one out, Ctrl-click
-  it to your backpack, or pick it straight from the Atlas table's **Stash** drawer, which lists your Map Stash.
+  it to your backpack and then drag it into the Atlas table's map slot (the table takes maps from the inventory only).
 - **Crafting Stash** (two tabs: equipment currency and map currency): one labelled slot per currency, up to 5,000
   each. Drop or Ctrl-click any currency stack onto either tab and it files into its slot; **Deposit all** empties your
   backpack's currency into it. Ctrl-click a slot to take a stack, Shift+Ctrl-click to take exactly one. Right-click a
   slot to arm that currency and left-click an item to craft with it straight from the stash. Rook and the Crafting
   Bench take what your backpack can't pay from the Crafting Stash, so "Deposit all" never leaves you short.
+  **Work slot**: next to the currency tiles sits one slot for the gear or map you are crafting. Drag an item out of the
+  inventory into it (or Ctrl-click it while a Crafting Stash tab is open), then **click a currency tile** to craft on it
+  without moving anything: the new or changed modifiers light up, Stability and the last crafts are shown, and
+  Equip / Return / Bench sit below. Fracture Core, Anneal, Transmute and Void Needle ask first. The item is saved
+  with your account storage, so it is still there after a restart or on another character.
 
 **Stash search.** The search box on the stash panel (`Ctrl`/`⌘`+`F` while the stash is open, `Esc` clears it)
 highlights matching items in every tab and in your backpack and dims the rest; each tab shows its match count. It

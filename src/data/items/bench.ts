@@ -105,3 +105,22 @@ export const BENCH_RECIPES: readonly BenchRecipeDef[] = [
   recipe('chillChance'),
   recipe('shockChance'),
 ];
+
+// ---------------------------------------------------------------------------------------------
+// Map services (brief D 5.2 and 5.3): Re-chart and Recycle. Both are Forge Scrap sinks at the bench.
+// ---------------------------------------------------------------------------------------------
+
+/** Prefix of a Re-chart service id: `bench:rechart:<areaId>` (one service per legal target area). */
+export const RECHART_SERVICE_PREFIX = 'bench:rechart:';
+
+/**
+ * Re-chart price: `ceil(base + perTier * tier) * (1 + escalation * hops so far)` Scrap. T1 2, T5 4, T9 6, T15 9; a map already
+ * moved once pays 1.5x, twice 2x. Ledgerline (tree) takes 1 off, never below 1.
+ */
+export const RECHART = { base: 1, perTier: 0.5, escalation: 0.5 } as const;
+
+/**
+ * Recycle: `inputs` maps of one tier become one Normal map of a chosen area; the output's quality is
+ * `min(maxQuality, floor(mean input quality) + qualityBonus)`. The price is the tier in Scrap (Ledgerline -1, minimum 1).
+ */
+export const RECYCLE = { inputs: 3, qualityBonus: 2, maxQuality: 20 } as const;

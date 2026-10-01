@@ -8,7 +8,7 @@ import { rules } from '../../src/game';
 import { baseWeights, generateEquipment } from '../../src/game/items';
 import { monsterLevelForTier } from '../../src/game/progression';
 import { normalizeItem } from '../../src/game/progression/save';
-import { bareCharacter, expectOk, kill, map } from './fixtures';
+import { bareCharacter, expectOk, kill, map, openAt } from './fixtures';
 
 const explored = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 };
 
@@ -16,7 +16,7 @@ describe('area ingredients', () => {
   it('drops each rune only at its assigned boss, at 25%, on Tier 3+', () => {
     for (const [area, rune] of [['glassSepulchre', 'prefixRune'], ['emberVault', 'suffixRune']] as const) {
       const ch = bareCharacter({ atlas: explored, mapDevice: map('ashenForge', 3) });
-      const setup = expectOk(rules.openMap(ch, area)).setup;
+      const setup = expectOk(openAt(rules, ch, area)).setup;
       const rng = createRng(152);
       let count = 0;
       for (let i = 0; i < 2000; i++) {
@@ -26,7 +26,7 @@ describe('area ingredients', () => {
       }
       expect(count / 2000).toBeGreaterThan(0.21);
       expect(count / 2000).toBeLessThan(0.29);
-      const low = expectOk(rules.openMap({ ...ch, mapDevice: map('ashenForge', 2) }, area)).setup;
+      const low = expectOk(openAt(rules, { ...ch, mapDevice: map('ashenForge', 2) }, area)).setup;
       for (let i = 0; i < 100; i++) {
         for (const drops of [
           rules.rollKillLoot(low, kill({ isBoss: true }), rng, ch),
@@ -60,7 +60,7 @@ describe('advanced bases', () => {
     const found = new Set<string>();
     for (const tier of [7, 8]) {
       const ch = bareCharacter({ atlas: explored, mapDevice: map('ashenForge', tier), currencyStash: { scrap: 2 } });
-      const setup = expectOk(rules.openMap(ch, 'crownFoundry')).setup;
+      const setup = expectOk(openAt(rules, ch, 'crownFoundry')).setup;
       const rng = createRng(987);
       for (let i = 0; i < 1500; i++) for (const item of rules.rollChestLoot(setup, rng, ch)) {
         if (item.kind !== 'equipment' || !advanced.some(b => b.id === item.baseId)) continue;

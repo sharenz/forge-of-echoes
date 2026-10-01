@@ -51,6 +51,8 @@ export function sameLocation(a: ItemLocation, b: ItemLocation): boolean {
       return b.kind === 'currencyStash';
     case 'mapStash':
       return b.kind === 'mapStash';
+    case 'craftSlot':
+      return b.kind === 'craftSlot';
   }
 }
 
@@ -72,5 +74,7 @@ export function locationKey(loc: ItemLocation): string {
       return 'currencyStash';
     case 'mapStash':
       return 'mapStash';
+    case 'craftSlot':
+      return 'craftSlot';
   }
 }

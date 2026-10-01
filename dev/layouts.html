@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Layout viewer · Forge of Echoes</title>
+    <style>
+      :root { --ink: #0d0b0e; --coal: #1a1619; --char: #2a2326; --bone: #cbbfa8; --ember: #e8662a; --dim: #8d8375; }
+      html, body { margin: 0; height: 100%; background: var(--ink); color: var(--bone); overflow: hidden; font: 12px/1.45 ui-monospace, 'SF Mono', Menlo, monospace; }
+      #app { display: grid; grid-template-columns: 300px 1fr; height: 100%; }
+      #side { background: var(--coal); border-right: 1px solid var(--char); padding: 10px 12px; overflow-y: auto; }
+      h1 { font-size: 13px; margin: 0 0 8px; color: var(--ember); letter-spacing: 0.04em; }
+      h2 { font-size: 11px; margin: 14px 0 4px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
+      label { display: flex; align-items: center; gap: 6px; margin: 2px 0; cursor: pointer; }
+      select, input[type=range], button { font: inherit; color: var(--bone); background: var(--char); border: 1px solid #3b3438; border-radius: 3px; padding: 2px 4px; }
+      select, input[type=range] { width: 100%; box-sizing: border-box; margin: 2px 0 6px; }
+      button { cursor: pointer; margin-right: 4px; }
+      .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
+      #report { white-space: pre-wrap; word-break: break-word; }
+      .ok { color: #7fc68a; }
+      .bad { color: #ff7a6a; }
+      #stage { position: relative; min-width: 0; }
+      canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+      #hud { position: absolute; left: 10px; top: 8px; background: rgba(13, 11, 14, 0.78); border: 1px solid var(--char); border-radius: 3px; padding: 4px 8px; pointer-events: none; white-space: pre; }
+      #fixture { color: #f2d15c; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="side">
+        <h1>LAYOUT VIEWER</h1>
+        <div>Area layout</div>
+        <select id="layout"></select>
+        <div id="fixture"></div>
+        <div>Theme (floor and prop palette)</div>
+        <select id="theme"></select>
+        <div>Seed <span id="seedv"></span> (packs, debris)</div>
+        <input id="seed" type="range" min="1" max="99999" value="1337" />
+        <div>Scale</div>
+        <select id="zoom"><option value="fit">fit to window</option><option value="1">1x</option><option value="2">2x</option></select>
+        <h2>Layers</h2>
+        <div id="layers"></div>
+        <h2>Validator (D 10.3)</h2>
+        <div id="report"></div>
+        <button id="det">run check 7</button>
+        <h2>Click</h2>
+        <div id="click">click the map: Polar copied to the clipboard</div>
+      </div>
+      <div id="stage"><canvas id="c"></canvas><div id="hud"></div></div>
+    </div>
+    <script type="module">
+      // Canvas2D viewer for hand-crafted layouts (docs/atlas-rework/D-territory.md 10.4): radius, props, walls, zones,
+      // lanes, boss stage, anchors, spawn points (a real sim run at the chosen seed), reachability, the 680x400 view box
+      // at the start and at the boss stage, and the validator report. Read-only. Query params: ?layout=<areaId|fixture id>
+      // ?theme=<theme> ?seed=N ?zoom=fit|1|2 ?off=layer,layer (hide layers) ?solo=layer (only that layer).
+      import { THEMES } from '/src/contracts/content.ts';
+      import { createRunInternal, stepWorld } from '/src/sim/run.ts';
+      import { registeredLayouts, overrideLayout } from '/src/data/layouts/index.ts';
+      import { FIXTURE_LAYOUTS } from '/src/data/layouts/fixtures/index.ts';
+      import { compileLayout, inZone } from '/src/data/layouts/compile.ts';
+      import { areaRadius, areaTheme } from '/src/data/layouts/area.ts';
+      import { LAYOUT_RULES, reachability, validateLayout, checkDeterminism, SolidIndex } from '/src/sim/layout-validate.ts';
+      import { makeConfig, makeJoin } from '/tests/sim/fixtures.ts';
+      import { VIEW_HALF_W, VIEW_HALF_H } from '/src/sim/constants.ts';
+
+      const qs = new URLSearchParams(location.search);
+      const $ = (id) => document.getElementById(id);
+      const canvas = $('c');
+      const ctx = canvas.getContext('2d');
+
+      // --- layouts -----------------------------------------------------------------------------------------------
+      const FIXTURE_ID = new Map([[FIXTURE_LAYOUTS[0], 'slag-yard'], [FIXTURE_LAYOUTS[1], 'sand-ring']]);
+      const layouts = [...registeredLayouts().map((l) => ({ id: l.areaId, layout: l })), ...FIXTURE_LAYOUTS.map((l) => ({ id: FIXTURE_ID.get(l), layout: l }))];
+      const sel = $('layout');
+      for (const { id, layout } of layouts) sel.add(new Option(`${id}${layout.fixture ? '  (test fixture)' : ''}`, id));
+      sel.value = layouts.some((l) => l.id === qs.get('layout')) ? qs.get('layout') : layouts[0].id;
+
+      const THEME_LOOK = {
+        hideout: { floor: '#2a2326', rim: '#1a1619', accent: '#e8662a', prop: '#5a5057' },
+        ashenForge: { floor: '#241d21', rim: '#0f0c0f', accent: '#e8662a', prop: '#5a5057' },
+        cinderChapel: { floor: '#2c2528', rim: '#14100f', accent: '#ff9a3c', prop: '#6a5a58' },
+        rimedOssuary: { floor: '#262b38', rim: '#101420', accent: '#7fc6e8', prop: '#8b97ab' },
+        choralCrypt: { floor: '#2a2438', rim: '#120e1c', accent: '#c07bff', prop: '#6d6585' },
+        chainworks: { floor: '#2e2a26', rim: '#161310', accent: '#e0b04a', prop: '#6c6472' },
+        ironColiseum: { floor: '#4a3a2c', rim: '#241a12', accent: '#e0b04a', prop: '#927652' },
+      };
+      for (const t of THEMES) $('theme').add(new Option(t, t));
+
+      const PROP_COL = {
+        pillar: '#7d7278', brazier: '#e8662a', standingStone: '#9a8f95', rubble: '#4a3f3a', bones: '#cbbfa8', crystal: '#7fc6e8', banner: '#9c3a38',
+        anvil: '#3b3438', ruinWall: '#6a5f66', vat: '#b8862f', bellows: '#7e5530', altar: '#cbbfa8', sarcophagus: '#8b97ab', choirStall: '#a3763f',
+        ribArch: '#e8dcc0', iceColumn: '#d4f1ff', crate: '#a3763f', chainPost: '#9a919c', hoist: '#9a919c', gate: '#c9b58a', weaponRack: '#c07f46',
+        obelisk: '#efe9ff', statue: '#a0948d',
+      };
+      const ANCHOR = {
+        perch: ['P', '#ff5a5a'], echo: ['E', '#c07bff'], road: ['R', '#e0b04a'], fault: ['F', '#ff9a3c'], relay: ['L', '#ffe7a8'], altar: ['A', '#e8dcc0'],
+        orchard: ['O', '#8fcf6a'], ring: ['G', '#ff7ac0'], host: ['H', '#7fc6e8'], anvil: ['V', '#b9a6ff'], bell: ['B', '#f2d15c'],
+      };
+      const LAYER_DEFS = [
+        ['floor', 'arena and floor', '#4a3f3a'], ['decals', 'decals and landmarks', '#e8662a'], ['props', 'props (solid / decor)', '#7d7278'],
+        ['zones', 'zones', '#7aa2ff'], ['lanes', 'lanes', '#6fa35a'], ['stage', 'boss stage', '#ff5a2a'], ['anchors', 'event anchors', '#f2d15c'],
+        ['spawns', 'pack spawn points (seed)', '#ffffff'], ['reach', 'reachability heat', '#4a8a3e'], ['views', 'view boxes 680x400', '#cbbfa8'],
+        ['clear', 'start clearing and free discs', '#e0b04a'], ['lights', 'light pools', '#ffb060'],
+      ];
+      const on = new Set(LAYER_DEFS.map((d) => d[0]).filter((k) => !['reach', 'lights'].includes(k)));
+      if (qs.get('off')) for (const k of qs.get('off').split(',')) on.delete(k);
+      if (qs.get('on')) for (const k of qs.get('on').split(',')) on.add(k);
+      if (qs.get('solo')) { on.clear(); for (const k of ['floor', ...qs.get('solo').split(',')]) on.add(k); }
+      for (const [key, label, col] of LAYER_DEFS) {
+        const row = document.createElement('label');
+        row.innerHTML = `<input type="checkbox" ${on.has(key) ? 'checked' : ''}><span class="sw" style="background:${col}"></span>${label}`;
+        row.firstChild.onchange = (e) => { e.target.checked ? on.add(key) : on.delete(key); draw(); };
+        $('layers').append(row);
+      }
+
+      // --- state ---------------------------------------------------------------------------------------------------
+      let cur = null; // { id, layout, R, c, idx, reach, report, packs, theme }
+      function load() {
+        const entry = layouts.find((l) => l.id === sel.value);
+        const layout = entry.layout;
+        const R = areaRadius(layout.areaId);
+        const c = compileLayout(layout, R);
+        const idx = new SolidIndex(c.props);
+        cur = { id: entry.id, layout, R, c, idx, reach: null, report: validateLayout(layout), seedProps: [], packs: [], boss: null };
+        $('fixture').textContent = layout.fixture ? 'TEST FIXTURE: not registered for any area' : '';
+        $('theme').value = THEMES.includes(qs.get('theme')) && !cur.themeSet ? qs.get('theme') : areaTheme(layout.areaId);
+        cur.themeSet = true;
+        showReport();
+        simulate();
+      }
+      $('layout').onchange = () => { delete qs._; load(); draw(); };
+
+      function showReport() {
+        const r = cur.report;
+        const byCheck = new Map();
+        for (const i of r.issues) byCheck.set(i.check, [...(byCheck.get(i.check) ?? []), i]);
+        const names = ['', 'bounds, start clear, solids', 'reachability, chokes', 'overlap, density, free discs', 'Event Charter spacing', 'Stalker cover', 'anchor inventory'];
+        let html = `R ${Math.round(r.R)}  props ${r.stats.props}  solids ${(r.stats.solidDensity * 100).toFixed(1)}%\n`;
+        for (let k = 1; k <= 6; k++) {
+          const list = byCheck.get(k) ?? [];
+          html += `<span class="${list.length ? 'bad' : 'ok'}">${list.length ? 'x' : 'v'} ${k} ${names[k]}</span>\n`;
+          for (const i of list.slice(0, 4)) html += `    ${i.id}: ${i.message}\n`;
+        }
+        html += `<span id="d7">  7 determinism: (run check 7)</span>`;
+        $('report').innerHTML = html;
+      }
+      $('det').onclick = () => {
+        const issues = checkDeterminism(cur.layout, {
+          makeConfig: (areaId, seed, R) => makeConfig({ seed, arenaRadius: R, areaId, theme: areaTheme(areaId) }),
+          addPlayer: (run) => run.addPlayer(makeJoin(1)),
+        });
+        const el = $('d7');
+        el.className = issues.length ? 'bad' : 'ok';
+        el.textContent = issues.length ? `x 7 determinism: ${issues[0].message}` : 'v 7 determinism';
+      };
+
+      // Pack placement by the real sim at the chosen seed (wave 1, then the boss spawn point).
+      function simulate() {
+        const seed = Number($('seed').value);
+        $('seedv').textContent = seed;
+        const restore = overrideLayout(cur.layout);
+        try {
+          const wave = qs.get('wave') ? Number(qs.get('wave')) : 1;
+          const r = createRunInternal(makeConfig({
+            seed, arenaRadius: cur.R, areaId: cur.layout.areaId, theme: areaTheme(cur.layout.areaId),
+            waves: { count: Math.max(wave, 2), startWave: wave, bossWave: Math.max(wave, 2), baseMonsters: 60, monstersPerWave: 0, waveDuration: 60, tellDuration: 2 },
+          }));
+          r.run.addPlayer(makeJoin(1));
+          for (let t = 0; t < 60 * 7; t++) stepWorld(r.world);
+          cur.packs = r.world.packs.filter((p) => p.active && !p.stream).map((p) => ({ x: p.homeX, y: p.homeY, rarity: p.rarity }));
+          cur.debris = r.world.props.filter((p) => p.radius === 0).length;
+        } finally { restore(); }
+      }
+      $('seed').value = qs.get('seed') ?? '1337';
+      $('seed').oninput = () => { simulate(); draw(); };
+      $('zoom').value = qs.get('zoom') ?? 'fit';
+      $('zoom').onchange = draw;
+      $('theme').onchange = draw;
+
+      // --- drawing -------------------------------------------------------------------------------------------------
+      let tf = { s: 1, ox: 0, oy: 0 };
+      const W = (x) => tf.ox + x * tf.s;
+      const H = (y) => tf.oy + y * tf.s;
+      function resize() {
+        const r = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.round(r.width * dpr);
+        canvas.height = Math.round(r.height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return r;
+      }
+      function disc(x, y, r, fill, stroke, lw = 1) {
+        ctx.beginPath(); ctx.arc(W(x), H(y), Math.max(0.6, r * tf.s), 0, Math.PI * 2);
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+      }
+      function poly(path, stroke, lw, dash = null) {
+        if (path.length < 2) return;
+        ctx.beginPath(); ctx.moveTo(W(path[0].x), H(path[0].y));
+        for (const p of path.slice(1)) ctx.lineTo(W(p.x), H(p.y));
+        ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.setLineDash(dash ?? []); ctx.stroke(); ctx.setLineDash([]);
+      }
+      function band(path, width, fill) {
+        for (let i = 1; i < path.length; i++) {
+          const a = path[i - 1], b = path[i];
+          const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+          const nx = -(b.y - a.y) / len * width / 2, ny = (b.x - a.x) / len * width / 2;
+          ctx.beginPath();
+          ctx.moveTo(W(a.x + nx), H(a.y + ny)); ctx.lineTo(W(b.x + nx), H(b.y + ny)); ctx.lineTo(W(b.x - nx), H(b.y - ny)); ctx.lineTo(W(a.x - nx), H(a.y - ny)); ctx.closePath();
+          ctx.fillStyle = fill; ctx.fill();
+        }
+      }
+
+      function draw() {
+        if (!cur) return;
+        const rect = resize();
+        const { c, R } = cur;
+        const theme = $('theme').value;
+        const look = THEME_LOOK[theme];
+        const zoomSel = $('zoom').value;
+        const fit = Math.min(rect.width, rect.height) / (R * 2 + 140);
+        tf.s = zoomSel === 'fit' ? fit : Number(zoomSel);
+        tf.ox = rect.width / 2; tf.oy = rect.height / 2;
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        ctx.fillStyle = look.rim; ctx.fillRect(0, 0, rect.width, rect.height);
+        if (on.has('floor')) {
+          disc(0, 0, R + 18, '#161215', null);
+          disc(0, 0, R, look.floor, '#5a5057', 2);
+          disc(0, 0, R * 0.92, null, 'rgba(203,191,168,0.18)', 1);
+          // 0.25 R and 0.5 R guides, N-S and E-W axes
+          for (const f of [0.25, 0.5, 0.75]) disc(0, 0, R * f, null, 'rgba(203,191,168,0.07)');
+          poly([{ x: -R, y: 0 }, { x: R, y: 0 }], 'rgba(203,191,168,0.07)', 1); poly([{ x: 0, y: -R }, { x: 0, y: R }], 'rgba(203,191,168,0.07)', 1);
+          ctx.fillStyle = 'rgba(203,191,168,0.4)'; ctx.font = '11px ui-monospace, monospace';
+          ctx.fillText('N', W(-4), H(-R) - 8);
+        }
+        if (on.has('reach') && !cur.reach) cur.reach = reachability(c, cur.idx);
+        if (on.has('reach') && cur.reach) {
+          const rc = cur.reach, n = rc.n, size = n * 2, st = rc.step;
+          for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
+            const v = rc.cells[j * size + i];
+            if (!v) continue;
+            ctx.fillStyle = v === 2 ? 'rgba(74,138,62,0.22)' : 'rgba(208,48,58,0.5)';
+            ctx.fillRect(W((i - n) * st), H((j - n) * st), st * tf.s + 0.5, st * tf.s + 0.5);
+          }
+        }
+        if (on.has('lights') && c.light) for (const p of c.light.pools) disc(p.x, p.y, p.r, `${p.colour}33`, p.colour, 1);
+        if (on.has('zones')) {
+          for (const z of c.zones) {
+            ctx.save(); ctx.beginPath();
+            ctx.arc(W(0), H(0), R * tf.s, 0, Math.PI * 2); ctx.clip();
+            ctx.beginPath();
+            if (z.shape === 'disc') ctx.arc(W(z.x), H(z.y), z.r * tf.s, 0, Math.PI * 2);
+            else { const a0 = (z.a0 - 90) * Math.PI / 180, span = (((z.a1 - z.a0) % 360 + 360) % 360 || 360) * Math.PI / 180; ctx.moveTo(W(z.x), H(z.y)); ctx.arc(W(z.x), H(z.y), z.r * tf.s, a0, a0 + span); ctx.closePath(); }
+            ctx.fillStyle = `rgba(122,162,255,${0.05 + 0.03 * Math.min(3, z.weight)})`; ctx.fill();
+            ctx.strokeStyle = 'rgba(122,162,255,0.45)'; ctx.setLineDash([6, 4]); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+            ctx.restore();
+            ctx.fillStyle = '#9fb6ff'; ctx.font = '10px ui-monospace, monospace';
+            const lx = z.shape === 'disc' ? z.x : z.x + Math.sin(((z.a0 + (((z.a1 - z.a0) % 360 + 360) % 360 || 360) / 2) * Math.PI) / 180) * Math.min(z.r, R) * 0.55;
+            const ly = z.shape === 'disc' ? z.y : z.y - Math.cos(((z.a0 + (((z.a1 - z.a0) % 360 + 360) % 360 || 360) / 2) * Math.PI) / 180) * Math.min(z.r, R) * 0.55;
+            ctx.fillText(`${z.id} w${z.weight}${z.wave ? ` [${z.wave}]` : ''}`, W(lx) - 20, H(ly));
+          }
+        }
+        if (on.has('decals')) {
+          for (const d of c.decals) {
+            if (d.kind === 'road') band(d.path, d.width || 70, 'rgba(160,148,141,0.16)');
+            else if (d.kind === 'crack') poly(d.path, look.accent, 2);
+            else if (d.kind === 'pool') disc(d.x, d.y, d.r || 60, 'rgba(5,5,8,0.5)', look.accent, 1);
+            else if (d.kind === 'glyph') { disc(d.x, d.y, d.r || 50, null, look.accent, 1.5); disc(d.x, d.y, (d.r || 50) * 0.62, null, look.accent + '88', 1); }
+            else if (d.kind === 'light') disc(d.x, d.y, d.r || 80, look.accent + '22', null);
+          }
+          for (const l of c.landmarks) if (!l.prop) {
+            disc(l.x, l.y, l.r, 'rgba(232,102,42,0.10)', '#e8662a', 1.5);
+            ctx.fillStyle = '#e8c8a0'; ctx.font = '10px ui-monospace, monospace'; ctx.fillText(l.kind, W(l.x) - 14, H(l.y) + 3);
+          }
+        }
+        if (on.has('lanes')) {
+          for (const l of c.lanes) {
+            band(l.path, l.width, `rgba(111,163,90,${0.08 + 0.04 * Math.min(3, l.weight)})`);
+            poly(l.path, 'rgba(143,207,106,0.7)', 1.5, [5, 3]);
+            if (l.path[0]) { ctx.fillStyle = '#8fcf6a'; ctx.font = '10px ui-monospace, monospace'; ctx.fillText(`${l.id} w${l.weight}${l.favours.length ? ' ' + l.favours.join('/') : ''}`, W(l.path[0].x) + 4, H(l.path[0].y) - 4); }
+          }
+        }
+        if (on.has('props')) {
+          for (const p of c.props) {
+            const col = PROP_COL[p.kind] ?? look.prop;
+            if (p.radius > 0) disc(p.x, p.y, p.radius, col, 'rgba(13,11,14,0.9)', 1);
+            else disc(p.x, p.y, 3, col + '99', null);
+          }
+        }
+        if (on.has('clear')) {
+          disc(c.start.x, c.start.y, c.start.clear, null, '#e0b04a', 1.2);
+          disc(c.start.x, c.start.y, LAYOUT_RULES.landingFreeRadius, null, 'rgba(224,176,74,0.45)', 1);
+          disc(c.bossStage.x, c.bossStage.y, LAYOUT_RULES.bossFreeRadius, null, 'rgba(255,90,42,0.45)', 1);
+          if (c.bossStage.second) disc(c.bossStage.second.x, c.bossStage.second.y, LAYOUT_RULES.bossFreeRadius, null, 'rgba(255,90,42,0.3)', 1);
+        }
+        if (on.has('stage')) {
+          const s = c.bossStage;
+          disc(s.x, s.y, s.r, 'rgba(255,90,42,0.14)', '#ff5a2a', 2);
+          const f = s.facing * Math.PI / 180;
+          poly([{ x: s.x, y: s.y }, { x: s.x + Math.sin(f) * s.r, y: s.y - Math.cos(f) * s.r }], '#ff5a2a', 2);
+          ctx.fillStyle = '#ffb08a'; ctx.font = '11px ui-monospace, monospace'; ctx.fillText(`BOSS (${s.arrive})`, W(s.x) - 30, H(s.y) + 4);
+          if (s.second) { disc(s.second.x, s.second.y, s.r, 'rgba(255,90,42,0.1)', '#ff5a2a', 1.5); ctx.fillText('BOSS 2', W(s.second.x) - 18, H(s.second.y) + 4); }
+        }
+        if (on.has('anchors')) {
+          for (const a of c.anchors) {
+            const [ch, col] = ANCHOR[a.fits];
+            if (a.path.length > 1) poly(a.path, col, 2, [8, 4]);
+            disc(a.x, a.y, 9, col + '55', col, 1.5);
+            ctx.fillStyle = col; ctx.font = 'bold 10px ui-monospace, monospace'; ctx.fillText(ch, W(a.x) - 3, H(a.y) + 3.5);
+          }
+        }
+        if (on.has('spawns')) {
+          const RC = { normal: '#ffffff', magic: '#7aa2ff', rare: '#f2d15c' };
+          for (const p of cur.packs) { disc(p.x, p.y, 7, (RC[p.rarity] ?? '#fff') + '55', RC[p.rarity] ?? '#fff', 1.5); disc(p.x, p.y, 1.5, RC[p.rarity] ?? '#fff', null); }
+        }
+        // start marker
+        disc(c.start.x, c.start.y, 6, '#e0b04a', '#0d0b0e', 1.5);
+        ctx.fillStyle = '#0d0b0e'; ctx.font = 'bold 9px ui-monospace, monospace'; ctx.fillText('S', W(c.start.x) - 3, H(c.start.y) + 3);
+        if (on.has('views')) {
+          for (const p of [c.start, c.bossStage]) {
+            ctx.strokeStyle = 'rgba(203,191,168,0.6)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+            ctx.strokeRect(W(p.x - VIEW_HALF_W), H(p.y - VIEW_HALF_H), VIEW_HALF_W * 2 * tf.s, VIEW_HALF_H * 2 * tf.s); ctx.setLineDash([]);
+          }
+        }
+        $('hud').textContent = `${cur.id}  R ${Math.round(R)}  theme ${theme}  scale ${tf.s.toFixed(2)}x  packs ${cur.packs.length} (seed ${$('seed').value})  props ${c.props.length}+${cur.debris ?? 0} debris`;
+      }
+
+      canvas.addEventListener('click', (e) => {
+        if (!cur) return;
+        const r = canvas.getBoundingClientRect();
+        const x = (e.clientX - r.left - tf.ox) / tf.s, y = (e.clientY - r.top - tf.oy) / tf.s;
+        const rr = Math.hypot(x, y) / cur.R;
+        let a = Math.atan2(x, -y) * 180 / Math.PI; if (a < 0) a += 360;
+        const txt = `{ r: ${rr.toFixed(3)}, a: ${a.toFixed(1)} }   [${(x / cur.R).toFixed(3)}, ${(y / cur.R).toFixed(3)}]   (${Math.round(x)}, ${Math.round(y)} u)`;
+        $('click').textContent = txt;
+        try { navigator.clipboard?.writeText(`{ r: ${rr.toFixed(3)}, a: ${a.toFixed(1)} }`); } catch { /* clipboard may be blocked */ }
+      });
+      window.addEventListener('resize', draw);
+      load();
+      draw();
+      window.__layouts = { ready: true };
+    </script>
+  </body>
+</html>

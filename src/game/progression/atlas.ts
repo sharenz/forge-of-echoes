@@ -4,13 +4,26 @@ import { ATLAS_EVENT_KIND_IDS, ATLAS_TREE_VERSION, type AtlasAreaId, type AtlasE
 import { ATLAS_AREAS, ATLAS_REVEALS_PER_BOSS, ATLAS_START, atlasTierCeiling, findAtlasArea } from '../../data/progression/atlas';
 import { ATLAS_POINT_TIERS, mapTreeNodes } from '../../data/progression/map-tree';
 import { ATLAS_BOSS_KINDS, mapTreePoints, normalizeMapTree } from './map-tree';
+import { normalizeSurge } from './surge';
+import { isMapAddress } from './map-binding';
+import { pinSlotCount } from '../../data/progression/routing';
+import type { CharacterSave } from '../../contracts/items';
+import type { Result } from '../../contracts/game';
+
+export { pinSlotCount };
 
 export function newAtlas(): AtlasProgress {
   return { discovered: [ATLAS_START], completed: [], clears: 0, treeVersion: ATLAS_TREE_VERSION };
 }
 
-/** Known, unique IDs; the starting area is always usable and completed areas remain visible. */
+/** Known, unique IDs; the starting area is always usable and completed areas remain visible. Pins are clamped to what the tree allows. */
 export function normalizeAtlas(raw: unknown): AtlasProgress {
+  const atlas = normalizeAtlasCore(raw);
+  const pins = normalizePins((raw as { pins?: unknown } | null)?.pins, atlas);
+  return pins.length ? { ...atlas, pins } : atlas;
+}
+
+function normalizeAtlasCore(raw: unknown): AtlasProgress {
   if (!raw || typeof raw !== 'object') return newAtlas();
   const value = raw as Record<string, unknown>;
   const ids = (list: unknown): AtlasAreaId[] => Array.isArray(list)
@@ -38,10 +51,16 @@ export function normalizeAtlas(raw: unknown): AtlasProgress {
   const legacy = value.treeVersion !== ATLAS_TREE_VERSION;
   if (legacy) {
     if (Array.isArray(value.nodes) && value.nodes.length) base.redrawn = true;
-    return Array.isArray(value.nodes) ? { ...base, nodes: [] } : base;
+    return withSurge(Array.isArray(value.nodes) ? { ...base, nodes: [] } : base, value.surge);
   }
   if (value.redrawn === true) base.redrawn = true;
-  return Array.isArray(value.nodes) ? { ...base, nodes: normalizeMapTree(value.nodes, mapTreePoints(base)) } : base;
+  return withSurge(Array.isArray(value.nodes) ? { ...base, nodes: normalizeMapTree(value.nodes, mapTreePoints(base)) } : base, value.surge);
+}
+
+/** The daily surge ledger (brief D 7.1) rides along, clamped to the charges the allocated tree grants. */
+function withSurge(atlas: AtlasProgress, raw: unknown): AtlasProgress {
+  const surge = normalizeSurge(raw, atlas.nodes);
+  return surge ? { ...atlas, surge } : atlas;
 }
 
 /**
@@ -122,4 +141,54 @@ export function paidTerritoryFee(raw: unknown): number {
 export function atlasCreditFor(areaId: AtlasAreaId, tier: number, revealRoll: number): AtlasCredit {
   const area = findAtlasArea(areaId);
   return { revealRoll, ...(tier > 0 ? { tier } : {}), ...(area && !area.noBoss ? { boss: THEME_ROSTER[area.baseId].boss } : {}) };
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Pins (brief D 5.1)
+// ---------------------------------------------------------------------------------------------
+
+/** An area that can wear a pin: discovered, not sealed, not the Pit (those are passages, never drop addresses). */
+export function pinnable(atlas: Pick<AtlasProgress, 'discovered'>, areaId: unknown): AtlasAreaId | null {
+  const area = findAtlasArea(areaId);
+  return area && isMapAddress(area) && atlas.discovered.includes(area.id) ? area.id : null;
+}
+
+/** A persisted pin list back to a valid one: known, discovered, unique, non-passage, at most the slot count (the tail is dropped). */
+export function normalizePins(raw: unknown, atlas: Pick<AtlasProgress, 'discovered' | 'nodes'>): AtlasAreaId[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AtlasAreaId[] = [];
+  for (const id of raw) {
+    const ok = pinnable(atlas, id);
+    if (ok && !out.includes(ok)) out.push(ok);
+  }
+  return out.slice(0, pinSlotCount(atlas.nodes));
+}
+
+/** Why `areaId` cannot be pinned (null = it can). */
+export function pinError(atlas: AtlasProgress, areaId: unknown): string | null {
+  const area = findAtlasArea(areaId);
+  if (!area) return 'Choose an area on the Atlas.';
+  if (!atlas.discovered.includes(area.id)) return 'Defeat bosses to reveal this part of the Atlas before pinning it.';
+  if (!isMapAddress(area)) return `${area.name} is opened with a key or a Bounty: maps are never dropped for it, so it cannot be pinned.`;
+  if ((atlas.pins ?? []).includes(area.id)) return null;
+  const slots = pinSlotCount(atlas.nodes);
+  if ((atlas.pins ?? []).length >= slots) return `All ${slots} pins are in use. Unpin an area first.`;
+  return null;
+}
+
+/** Pin or unpin an area (free and instant; an unpin of an area that is not pinned is a no-op). Pure. */
+export function setPin(ch: CharacterSave, areaId: AtlasAreaId, pinned: boolean): Result<CharacterSave> {
+  const atlas = ch.atlas ?? newAtlas();
+  const pins = atlas.pins ?? [];
+  if (!pinned) {
+    if (!pins.includes(areaId)) return { ok: true, value: ch };
+    const left = pins.filter((p) => p !== areaId);
+    const { pins: _drop, ...rest } = atlas;
+    return { ok: true, value: { ...ch, atlas: left.length ? { ...rest, pins: left } : rest } };
+  }
+  if (pins.includes(areaId)) return { ok: true, value: ch };
+  const error = pinError(atlas, areaId);
+  if (error) return { ok: false, error };
+  return { ok: true, value: { ...ch, atlas: { ...atlas, pins: [...pins, areaId] } } };
 }

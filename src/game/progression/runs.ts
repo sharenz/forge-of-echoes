@@ -6,7 +6,7 @@ import { ATLAS_TREE_VERSION } from '../../contracts/atlas';
 import { mapTreePoints, normalizeMapTree, restoreExpeditionTree } from './map-tree';
 import { atlasStat, flooredWaveDuration, resolveAtlasRules, treeContextOf } from './atlas-rules';
 import { CHEST_LOOT } from '../../data/progression/loot';
-import type { MapSummaryLine, Result, RunSetup } from '../../contracts/game';
+import type { MapSummaryLine, OpenMapOptions, Result, RunPassage, RunSetup } from '../../contracts/game';
 import type { AtlasAreaId, MapTreeNodeId } from '../../contracts/atlas';
 import type { CharacterSave, MapItem } from '../../contracts/items';
 import { ITEM_CLASSES, type ItemClass } from '../../contracts/content';
@@ -21,12 +21,16 @@ import { normalizeMap } from './save';
 import { normalizeLoadout, playerSkills } from './skills';
 import { computeCombat } from './stats';
 import { clean, fail, ok } from './util';
-import { atlasKeyDestination, findAtlasArea } from '../../data/progression/atlas';
+import { ATLAS_AREAS, atlasKeyDestination, findAtlasArea } from '../../data/progression/atlas';
+import { bindLegacyMaps, isMapAddress } from './map-binding';
+import { attachRouting, buildRouting, normalizeRouting, routingBiasFor } from './map-routing';
 import { atlasAccessError, newAtlas, paidTerritoryFee, territoryEntryFee } from './atlas';
 import { spendCurrency } from './merchant';
 import { mapEventRules } from './map-event-rules';
 import { normalizeMapEvent, rollMapEvent } from './map-events';
-import { findScarab, scarabEffects, validScarabs } from '../../data/scarabs';
+import { findScarab, isWaveScarab, scarabEffects, validScarabs } from '../../data/scarabs';
+import { attachSurge, normalizeRunSurge, spendSurge } from './surge';
+import { scarabRoutingLines } from './scarab-routing';
 import type { ScarabId } from '../../contracts/content';
 
 /**
@@ -48,9 +52,11 @@ function requireAll(plan: NonNullable<RunSetup['event']>): NonNullable<RunSetup[
 }
 
 /** The run parameters of `map` (an already snapshotted map) with `seed`: map-side luck only. */
-function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass?: ItemClass, nodes: MapTreeNodeId[] = [], scarabs: ScarabId[] = []): RunSetup {
+function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass?: ItemClass, nodes: MapTreeNodeId[] = [], scarabs: ScarabId[] = [], passage?: RunPassage): RunSetup {
   const area = findAtlasArea(areaId);
-  let map = area ? { ...source, baseId: area.baseId } : source;
+  // The effective map is the one run: the area's theme and id (a passage runs another area than the item's own).
+  const { unbound: _unbound, ...bound } = source; // a run's effective map is never "provisional"; sourceMap keeps the item as it was
+  let map = area ? { ...bound, baseId: area.baseId, areaId: area.id } : source;
   if (area?.echoWave && !map.mods.some(m => m.modId === 'echo')) map = { ...map, mods: [...map.mods, { modId: 'echo', value: 100 }] };
   // The encounter roll comes first: tree effects may depend on whether the expedition has one.
   // The tree's encounter rules (Twin Omens, Sworn to the Veil ...) shape the slate before it is rolled.
@@ -61,7 +67,9 @@ function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass
   const atlas = resolveAtlasRules(nodes, { tier: clampTier(map.tier), baseId: map.baseId, corrupted: map.corrupted, ...tree });
   const luck = mapLuck(map, null, nodes, tree);
   const summary = buildMapSummary(map, nodes, tree);
-  if (scarabs.length) {
+  const routingLines = scarabRoutingLines(scarabs);
+  if (routingLines.length) summary.push({ label: 'Scarab: map drops', value: scarabs.filter(id => !isWaveScarab(id)).map(id => findScarab(id)!.name.replace(/ Scarab$/, '')).join(', '), breakdown: [...routingLines, 'Only which areas your dropped maps are bound to changes; the number of maps does not.'] });
+  if (scarabs.some(isWaveScarab)) {
     const effects = scarabEffects(scarabs);
     const duration = Math.round(flooredWaveDuration(waveConfig(map, nodes, tree).waveDuration * effects.durationMultiplier) * 100) / 100;
     const waves = summary.find(line => line.label === 'Waves');
@@ -85,6 +93,7 @@ function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass
     map,
     event,
     ...(area ? { atlasAreaId: area.id, sourceMap: source } : {}),
+    ...(passage ? { passage } : {}),
     ...(area?.chosenClass && lootClass ? { lootClass } : {}),
     seed: seed >>> 0,
     monsterLevel: monsterLevelForTier(map.tier),
@@ -95,33 +104,58 @@ function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass
 }
 
 /**
+ * The area a map is run in and how it gets there (brief D 2.5). A map runs its own bound area; a loaded key redirects it to
+ * the key's sealed area (any map works, the key is consumed with it); a Bounty map bound to the Pit's entrance may open the
+ * Pit of Echoes. Sealed areas and the Pit are never a map's own address.
+ */
+function resolvePassage(map: MapItem, passage: RunPassage | undefined): { area: ReturnType<typeof findAtlasArea>; error?: string } {
+  const home = findAtlasArea(map.areaId);
+  if (!home) return { area: undefined, error: 'This map no longer belongs to an area.' };
+  if (!passage) {
+    if (!isMapAddress(home)) return { area: home, error: `${home.name} can only be entered through its passage.` };
+    return { area: home };
+  }
+  if (passage.kind === 'key') {
+    const dest = findAtlasArea(atlasKeyDestination(passage.currencyId));
+    if (!dest) return { area: home, error: 'That is not a passage key.' };
+    return { area: dest };
+  }
+  const pit = ATLAS_AREAS.find(a => a.requiresBounty);
+  if (!pit || !pit.neighbours.includes(home.id)) return { area: home, error: `The Pit of Echoes opens only from a Bounty map bound to ${findAtlasArea(pit?.neighbours[0])?.name ?? 'its entrance'}.` };
+  if (!map.bounty) return { area: pit, error: `${pit.name} requires a Bounty map. Commission one at the crafting bench.` };
+  return { area: pit };
+}
+
+/**
  * Consume the map in the device and produce the run parameters: seed from the character rng, and the
  * map-side luck (no gear — every player adds their own through lootLuck). Pure, so the UI may call it
- * as a preview.
+ * as a preview. The map decides the area (`map.areaId`); there is no area argument. A legacy map that is somehow
+ * still unbound is bound here with the same rules the loader uses (and may reveal its area).
  */
-export function openMap(ch: CharacterSave, areaId?: AtlasAreaId, lootClass?: ItemClass): Result<{ character: CharacterSave; setup: RunSetup }> {
+export function openMap(character: CharacterSave, opts: OpenMapOptions = {}): Result<{ character: CharacterSave; setup: RunSetup }> {
+  const ch = bindLegacyMaps(character);
   const map = ch.mapDevice;
   if (!map) return fail('Place a map in the Map Device first.');
   if (!findMapBase(map.baseId)) return fail('This map can no longer be opened.');
   const scarabs = (ch.mapScarabs ?? []).filter(s => s !== null).map(s => s.currencyId);
   if (!validScarabs(scarabs) || ch.mapScarabs?.some(s => s && (s.kind !== 'currency' || s.count !== 1))) return fail('The scarab sockets contain an invalid loadout.');
+  const lootClass = opts.lootClass;
   let next = ch;
-  const area = findAtlasArea(areaId);
-  if (areaId !== undefined) {
-    const error = atlasAccessError(ch.atlas ?? newAtlas(), areaId, map.tier);
-    if (error) return fail(error);
-    if (area?.requiresBounty && !map.bounty) return fail(`${area.name} requires a Bounty map. Commission one at the crafting bench.`);
-    if (area?.chosenClass && (!lootClass || !ITEM_CLASSES.includes(lootClass)
-      || !Object.values(BASES).some(b => b.itemClass === lootClass && b.levelRequirement <= monsterLevelForTier(map.tier)))) {
-      return fail('Choose an equipment class available at this map’s item level.');
-    }
-    if (area?.entranceKey) {
-      const paid = spendCurrency(next, area.entranceKey, 1);
-      if (!paid) return fail(`${area.name} requires one ${CURRENCIES[area.entranceKey].name}. Find its source on the key tooltip or trade for one.`);
-      next = paid;
-    }
+  const { area, error: passageError } = resolvePassage(map, opts.passage);
+  if (passageError) return fail(passageError);
+  if (!area) return fail('This map can no longer be opened.');
+  const error = atlasAccessError(ch.atlas ?? newAtlas(), area.id, map.tier);
+  if (error) return fail(error);
+  if (area.chosenClass && (!lootClass || !ITEM_CLASSES.includes(lootClass)
+    || !Object.values(BASES).some(b => b.itemClass === lootClass && b.levelRequirement <= monsterLevelForTier(map.tier)))) {
+    return fail('Choose an equipment class available at this map’s item level.');
   }
-  const fee = territoryEntryFee(map.tier, areaId, ch.atlas?.nodes);
+  if (area.entranceKey) {
+    const paid = spendCurrency(next, area.entranceKey, 1);
+    if (!paid) return fail(`${area.name} requires one ${CURRENCIES[area.entranceKey].name}. Find its source on the key tooltip or trade for one.`);
+    next = paid;
+  }
+  const fee = territoryEntryFee(map.tier, area.id, ch.atlas?.nodes);
   if (fee > 0) {
     const paid = spendCurrency(next, 'scrap', fee);
     if (!paid) return fail(`This territory expedition costs ${fee} Forge Scrap from your inventory or stash.`);
@@ -129,10 +163,19 @@ export function openMap(ch: CharacterSave, areaId?: AtlasAreaId, lootClass?: Ite
   }
   const rng = createRng(ch.rngState >>> 0);
   const seed = Math.floor(rng.next() * 0x100000000) >>> 0;
-  const setup = setupFor(snapshotMap(map), seed, areaId, lootClass, normalizeMapTree(ch.atlas?.nodes, mapTreePoints(ch.atlas)), scarabs);
+  const passage: RunPassage | undefined = opts.passage?.kind === 'key' ? { kind: 'key', currencyId: area.entranceKey! } : opts.passage;
+  const setup = setupFor(snapshotMap(map), seed, area.id, lootClass, normalizeMapTree(ch.atlas?.nodes, mapTreePoints(ch.atlas)), scarabs, passage);
   if (fee > 0) setup.entranceScrap = fee;
-  if (area?.entranceKey) setup.entranceKey = area.entranceKey;
-  return ok({ character: { ...next, ...(next.atlas?.respecSpent ? { atlas: { ...next.atlas, respecSpent: 0 } } : {}), mapDevice: null, ...(ch.mapScarabs ? { mapScarabs: [null, null, null, null] } : {}), rngState: rng.state() }, setup });
+  if (area.entranceKey) setup.entranceKey = area.entranceKey;
+  // Drop routing is frozen at activation (brief D 4, I5): centred on the map's own area, even when a passage runs another.
+  attachRouting(setup, buildRouting({ from: map.areaId, runArea: area.id, tier: map.tier, bias: routingBiasFor(ch.atlas, scarabs, { from: map.areaId }), ...(ch.atlas ? { atlas: ch.atlas } : {}) }));
+  // Daily surge (brief D 7.2): one charge of the area actually run, spent by the opener only (guests share the frozen bonus).
+  let atlas = next.atlas?.respecSpent ? { ...next.atlas, respecSpent: 0 } : next.atlas;
+  if (opts.useSurge === true && typeof opts.now === 'number' && Number.isFinite(opts.now)) {
+    const spent = spendSurge(atlas ?? newAtlas(), area.id, opts.now, seed);
+    if (spent) { attachSurge(setup, spent.surge); atlas = spent.atlas; }
+  }
+  return ok({ character: { ...next, ...(atlas ? { atlas } : {}), mapDevice: null, ...(ch.mapScarabs ? { mapScarabs: [null, null, null, null] } : {}), rngState: rng.state() }, setup });
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -161,13 +204,15 @@ export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
   if (typeof seed !== 'number' || !Number.isFinite(seed)) return null;
   const value = parsedJson(raw);
   const wrapper = isRecord(value) && value.kind !== 'map' && isRecord(value.map) ? value : null;
-  const area = wrapper?.atlasAreaId === undefined ? undefined : findAtlasArea(wrapper.atlasAreaId);
-  if (wrapper?.atlasAreaId !== undefined && !area) return null;
+  const recorded = wrapper?.atlasAreaId === undefined ? undefined : findAtlasArea(wrapper.atlasAreaId);
+  if (wrapper?.atlasAreaId !== undefined && !recorded) return null;
   const source = wrapper ? (isRecord(wrapper.sourceMap) ? wrapper.sourceMap : wrapper.map) : value;
   if (!isRecord(source) || source.kind !== 'map') return null;
   const uid = typeof source.uid === 'string' && source.uid.length > 0 && source.uid.length <= 64 ? source.uid : 'restored-map';
   const map = normalizeMap(source, uid);
   if (!map || !findMapBase(map.baseId)) return null;
+  // A run records the area it was opened in (it differs from the map's own when a passage redirected it); a bare map runs its own.
+  const area = recorded ?? findAtlasArea(map.areaId);
   const lootClass = area?.chosenClass && typeof wrapper?.lootClass === 'string' && (ITEM_CLASSES as readonly string[]).includes(wrapper.lootClass)
     ? wrapper.lootClass as ItemClass : undefined;
   if (area?.chosenClass && (!lootClass || !Object.values(BASES).some(b => b.itemClass === lootClass && b.levelRequirement <= monsterLevelForTier(map.tier)))) return null;
@@ -181,7 +226,21 @@ export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
   if (fee > 0) setup.entranceScrap = fee;
   const key = paidEntranceKey(wrapper);
   if (key) setup.entranceKey = key;
+  // The routing table is frozen with the expedition: a run saved before routing existed keeps rolling themes.
+  attachRouting(setup, normalizeRouting(wrapper?.routing));
+  // The surge is frozen with the expedition too (a restart across the daily reset keeps the bonus the run was opened with).
+  const surge = normalizeRunSurge(wrapper?.surge);
+  if (surge) attachSurge(setup, surge);
+  // The passage is part of the frozen expedition: keep it, or recover it for runs saved before it was recorded.
+  const passage = restoredPassage(wrapper?.passage, setup.entranceKey, area);
+  if (passage) setup.passage = passage;
   return setup;
+}
+
+function restoredPassage(raw: unknown, key: RunSetup['entranceKey'], area: ReturnType<typeof findAtlasArea>): RunPassage | undefined {
+  if (key && atlasKeyDestination(key) === area?.id) return { kind: 'key', currencyId: key };
+  if (isRecord(raw) && raw.kind === 'bounty' && area?.requiresBounty) return { kind: 'bounty' };
+  return area?.requiresBounty ? { kind: 'bounty' } : undefined;
 }
 
 /** Legacy Reliquary runs predate explicit receipts. No other area infers a payment. */
@@ -280,12 +339,13 @@ export function buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConf
     ...((area?.bossLifeMultiplier ?? 1) * treeBossLife !== 1 ? { bossLifeMultiplier: (area?.bossLifeMultiplier ?? 1) * treeBossLife } : {}),
     ...(area?.bossDamageMultiplier ? { bossDamageMultiplier: area.bossDamageMultiplier } : {}),
     seed: setup.seed >>> 0,
+    ...(area ? { areaId: area.id } : {}),
     theme: base?.theme ?? 'ashenForge',
     mapName: area?.name ?? mapTitle(map),
     tier: clampTier(map.tier),
     arenaRadius: (base?.arenaRadius ?? 900) * (area?.arenaScale ?? 1),
     monsters: monsterScaling(map, setup.mapTree, tree),
-    waves: { ...waves, ...(area?.noBoss ? { bossWave: 0 } : {}), ...(setup.scarabs?.length ? { waveDuration: flooredWaveDuration(waves.waveDuration * effects.durationMultiplier), startWave: effects.startWave } : {}) },
+    waves: { ...waves, ...(area?.noBoss ? { bossWave: 0 } : {}), ...(setup.scarabs?.some(isWaveScarab) ? { waveDuration: flooredWaveDuration(waves.waveDuration * effects.durationMultiplier), startWave: effects.startWave } : {}) },
     hooks,
   };
 }

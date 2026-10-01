@@ -13,6 +13,7 @@
 // are computed by the rules and handed in pre-resolved (SkillRuntimeDef / PlayerCombatStats), so UI and combat
 // can never drift. The sim owns *behaviour*: movement, AI, collisions, projectiles, waves, packs, bosses, drops.
 import type { DamageType, FlaskId, MonsterKind, PlayerFlag, SkillId, Theme } from './content';
+import type { AtlasAreaId } from './atlas';
 import type { Rng } from './rng';
 import type { PlayerDebuff } from './bestiary';
 import { NEW_AREA_KINDS, NEW_PROJECTILE_KINDS } from './bestiary';
@@ -206,6 +207,12 @@ export interface RunConfig {
   bossLifeMultiplier?: number;
   bossDamageMultiplier?: number;
   mode: 'hideout' | 'map';
+  /**
+   * The Atlas area this map is bound to (RunSetup.atlasAreaId). When the area has a registered hand-crafted layout
+   * (src/data/layouts), the arena is built from it (props, spawn zones and lanes, boss stage, start, event anchors);
+   * absent, or an area without a layout, keeps the procedural generator.
+   */
+  areaId?: AtlasAreaId;
   seed: number;
   theme: Theme;
   mapName: string;
@@ -409,7 +416,10 @@ export interface DropView {
 
 export type PropKind =
   | 'mapDevice' | 'stash' | 'merchant' | 'debugMerchant' | 'portal' | 'returnPortal' | 'chest'
-  | 'pillar' | 'brazier' | 'standingStone' | 'rubble' | 'bones' | 'crystal' | 'banner' | 'anvil' | 'ruinWall';
+  | 'pillar' | 'brazier' | 'standingStone' | 'rubble' | 'bones' | 'crystal' | 'banner' | 'anvil' | 'ruinWall'
+  // Hand-crafted layout art kit (docs/atlas-rework/D-territory.md 10.5), appended in this order: stable wire codes.
+  | 'vat' | 'bellows' | 'altar' | 'sarcophagus' | 'choirStall' | 'ribArch' | 'iceColumn'
+  | 'crate' | 'chainPost' | 'hoist' | 'gate' | 'weaponRack' | 'obelisk' | 'statue';
 
 export interface PropView {
   id: number;
@@ -449,6 +459,8 @@ export interface WorldView {
   time: number;               // tick * SIM_DT
   arenaRadius: number;
   theme: Theme;
+  /** The Atlas area of a map (the presenter draws that area's layout decals and lights from it); absent in hideouts. */
+  areaId?: AtlasAreaId;
   /** Every player in the instance (dead players stay until removed). Order is stable by join. */
   players: PlayerView[];
   monsters: MonsterStoreView;

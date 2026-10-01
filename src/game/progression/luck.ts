@@ -79,6 +79,21 @@ function mapMore(setup: RunSetup): { quantity: number; rarity: number } {
  * player's item quantity / rarity, and every loot roll for that player uses it.
  */
 export function lootLuck(setup: RunSetup, looter: CharacterSave | null): Luck {
+  const base = lootLuckWithoutSurge(setup, looter);
+  const surge = setup.surge;
+  if (!surge) return base;
+  // The surge (brief D 7.2) is a "more" multiplier on the whole map-side luck. The loot rules take the quantity part out of the
+  // map category again (surge never changes map volume, I1) and use `lootLuckWithoutSurge` for guarantees and rewards.
+  return { itemQuantity: clean(base.itemQuantity * surgeMultiplier(surge.quantityMore)), itemRarity: clean(base.itemRarity * surgeMultiplier(surge.rarityMore)) };
+}
+
+/** The surge's "more" multiplier for a bonus in percent (1 when absent or invalid). */
+export function surgeMultiplier(more: number | undefined): number {
+  return typeof more === 'number' && Number.isFinite(more) && more > 0 ? 1 + more / 100 : 1;
+}
+
+/** Personal luck without the daily surge: what guarantees (boss, chest, events) and the Hunting Ground use. */
+export function lootLuckWithoutSurge(setup: RunSetup, looter: CharacterSave | null): Luck {
   const gear = gearDetail(looter).luck;
   const more = mapMore(setup);
   return {
@@ -97,6 +112,9 @@ function personalLine(
   ];
   const area = findAtlasArea(setup.atlasAreaId);
   if (stat === 'itemQuantity' && area?.quantityMore) lines.push(`${area.quantityMore}% more ${area.name}`);
+  const surge = setup.surge;
+  const surgeMore = stat === 'itemQuantity' ? surge?.quantityMore : surge?.rarityMore;
+  if (surgeMore) lines.push(`${surgeMore}% more Surge${stat === 'itemQuantity' ? ' (not on maps)' : ''}`);
   if (!lines.length) lines.push('No bonuses: 100% is the base rate');
   lines.push(luckTotalLine(value), 'Your drops only: each party member rolls their own loot with their own gear');
   return { label, value: signedPercent(value - 100), breakdown: lines };

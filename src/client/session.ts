@@ -1047,6 +1047,33 @@ export class GameSession {
     });
   }
 
+  /** Re-chart: a deterministic bench service, shown at once and confirmed by the server. */
+  rechartMap(uid: string, areaId: import('../contracts/atlas').AtlasAreaId): void {
+    const ch = this.character.display;
+    if (!ch) return;
+    const recipeId = `bench:rechart:${areaId}`;
+    const service = safe(() => this.rules.benchServices(ch, uid).find((s) => s.id === recipeId) ?? null, null);
+    if (!service) { this.commandFailed('That map cannot be re-charted there.'); return; }
+    if (!service.available) { this.commandFailed(service.reason ?? 'That map cannot be re-charted there.'); return; }
+    void this.command({ c: 'benchCraft', targetUid: uid, recipeId, expectedScrap: service.cost[0].count }, {
+      predict: (base) => {
+        const r = this.rules.applyBenchRecipe(base, uid, recipeId);
+        return r.ok ? { ok: true, value: r.value.character } : r;
+      },
+      onOk: (r) => { this.deps.sound('craftApply'); this.toast(r.message ?? 'The map was re-charted.', 'good'); },
+    });
+  }
+
+  async recycleMaps(uids: string[], areaId: import('../contracts/atlas').AtlasAreaId): Promise<boolean> {
+    const ch = this.character.display;
+    const quote = ch ? safe(() => this.rules.recycleQuote(ch, uids, areaId), null) : null;
+    if (quote?.error) { this.commandFailed(quote.error); return false; }
+    const result = await this.command({ c: 'benchRecycle', uids, areaId, ...(quote ? { expectedScrap: quote.scrap } : {}) }, {
+      onOk: (r) => { this.deps.sound('craftApply'); this.toast(r.message ?? 'Recycled.', 'good'); },
+    });
+    return result.ok;
+  }
+
   // --- trading -----------------------------------------------------------------------------------
 
   tradeRequest(name: string): void {
@@ -1149,8 +1176,29 @@ export class GameSession {
     void this.command({ c: 'setMapTreeNode', nodeId, allocate });
   }
 
-  activateMapDevice(areaId?: import('../contracts/atlas').AtlasAreaId, lootClass?: import('../contracts/content').ItemClass): void {
-    void this.command({ c: 'activateMapDevice', ...(areaId ? { areaId } : {}), ...(lootClass ? { lootClass } : {}) }, {
+  /** Hourglass Sand on one area, or a Grand Hourglass on all: the server decides (it holds the clock and the ledger). */
+  refillSurge(target: import('../contracts/atlas').AtlasAreaId | 'all'): void {
+    void this.command(target === 'all' ? { c: 'refillSurge', all: true } : { c: 'refillSurge', areaId: target });
+  }
+
+  /** Pins are free and instant: predicted, with a sound; the server's refusal (a stale chart) rolls it back. */
+  pinArea(areaId: import('../contracts/atlas').AtlasAreaId, pinned: boolean): void {
+    void this.command({ c: 'pinArea', areaId, pinned }, {
+      predict: (base) => this.rules.setPin(base, areaId, pinned),
+      onPredicted: () => this.deps.sound(pinned ? 'equip' : 'uiClose'),
+      quiet: false,
+      onOk: () => undefined,
+    });
+  }
+
+  activateMapDevice(opts: { lootClass?: import('../contracts/content').ItemClass; passageKey?: import('../contracts/content').CurrencyId; pit?: true; useSurge?: boolean } = {}): void {
+    void this.command({
+      c: 'activateMapDevice',
+      ...(opts.lootClass ? { lootClass: opts.lootClass } : {}),
+      ...(opts.passageKey ? { passageKey: opts.passageKey } : {}),
+      ...(opts.pit ? { pit: true as const } : {}),
+      ...(opts.useSurge !== undefined ? { useSurge: opts.useSurge } : {}),
+    }, {
       onOk: (r) => {
         if (r.message) this.toast(r.message, 'good');
         this.box.update((s) => closePanel(s, 'mapDevice'));
@@ -1163,8 +1211,8 @@ export class GameSession {
     return ch ? safe(() => this.rules.merchantOffers(ch), []) : [];
   }
 
-  buyOffer(offerId: string): void {
-    void this.command({ c: 'buyOffer', offerId }, {
+  buyOffer(offerId: string, at?: { x: number; y: number }): void {
+    void this.command({ c: 'buyOffer', offerId, ...(at ? { at } : {}) }, {
       onOk: (r) => {
         this.deps.sound('buy');
         this.toast(r.message ?? 'Bought.', 'good');
@@ -1178,8 +1226,8 @@ export class GameSession {
     return result.ok;
   }
 
-  buyDebugOffer(offerId: string, options: import('../contracts/game').DebugMerchantOptions): void {
-    void this.command({ c: 'buyDebugOffer', offerId, options }, {
+  buyDebugOffer(offerId: string, options: import('../contracts/game').DebugMerchantOptions, at?: { x: number; y: number }): void {
+    void this.command({ c: 'buyDebugOffer', offerId, options, ...(at ? { at } : {}) }, {
       onOk: r => { this.deps.sound('buy'); this.toast(r.message ?? 'Received test supplies.', 'good'); },
     });
   }

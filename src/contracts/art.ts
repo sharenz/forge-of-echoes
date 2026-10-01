@@ -73,6 +73,9 @@ export const REQUIRED_SPRITES: readonly string[] = [
   'prop/debugMerchant',
   'prop/pillar', 'prop/brazier', 'prop/standingStone', 'prop/rubble', 'prop/bones', 'prop/crystal',
   'prop/banner', 'prop/anvil', 'prop/ruinWall',
+  // layout art kit (D 10.5)
+  'prop/vat', 'prop/bellows', 'prop/altar', 'prop/sarcophagus', 'prop/choirStall', 'prop/ribArch', 'prop/iceColumn',
+  'prop/crate', 'prop/chainPost', 'prop/hoist', 'prop/gate', 'prop/weaponRack', 'prop/obelisk', 'prop/statue',
   // ground drops (bottom-centre anchored, untinted; rarity is a runtime treatment)
   'drop/equipment', 'drop/currency', 'drop/map', 'drop/flask',
   // Ossuary / Coliseum rosters, new projectiles, debuff overlays and area visuals (contracts/bestiary.ts)

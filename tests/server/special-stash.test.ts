@@ -529,8 +529,15 @@ describe('special stash tabs: characters saved before them', () => {
     expect(loaded.mapDevice?.uid.startsWith(loaded.uidNamespace!)).toBe(true);
     const expected = structuredClone({ ...fixture, currencyStash: {}, mapStash: [] });
     // Equipment also migrates to the new affix revision; this starter roll keeps its value.
-    for (const item of [...Object.values(expected.equipment), ...expected.backpack.entries.map((e) => e.item),
+    for (const item of [...Object.values(expected.equipment), ...(expected.mapDevice ? [expected.mapDevice] : []), ...expected.backpack.entries.map((e) => e.item),
       ...expected.stash.flatMap((s) => s.grid.entries.map((e) => e.item))]) {
+      // Maps saved before area binding are bound at load: with only Cinder Crossing charted, every Tier 1 map lands there
+      // (a map of another theme is moved to it and says so).
+      if (item?.kind === 'map') {
+        if (item.baseId !== 'ashenForge') item.migrated = 'theme';
+        item.areaId = 'cinderCrossing';
+        item.baseId = 'ashenForge';
+      }
       if (!item || item.kind !== 'equipment') continue;
       item.affixVersion = 2;
       for (const affix of item.affixes) if (affix.affixId === 'fireDamage' && affix.tier === 8) affix.tier = 10;
@@ -589,7 +596,7 @@ describe('special stash tabs: conservation', () => {
       const ground = [...hideout.groundItems.values()].map((g) => g.item);
       const floor: CharacterSave = {
         ...ida.session.record.ch,
-        backpack: { w: 0, h: 0, entries: [] }, equipment: {}, mapDevice: null, belt: [], currencyStash: {}, mapStash: [],
+        backpack: { w: 0, h: 0, entries: [] }, equipment: {}, mapDevice: null, belt: [], currencyStash: {}, mapStash: [], craftSlot: null,
         stash: [{ name: 'ground', grid: { w: 99, h: 99, entries: ground.map((item, k) => ({ item, x: k, y: 0 })) } }],
       };
       return holdings(chOf(ida), chOf(jon), floor);
@@ -673,6 +680,23 @@ describe('special stash tabs: conservation', () => {
         else if (r < 0.7) tally('device out', t.me.command({ c: 'moveItem', uid: m.uid, to: rand() < 0.5 ? tabCell() : cell() }));
         else tally('device out', t.me.command({ c: 'quickMove', uid: m.uid, stashTab: pick(['maps', null, 0] as const)! }));
       }],
+      // The work slot: loaded from the backpack, a normal tab, the Map Stash or the body (swapping the occupant back
+      // there), emptied to a cell, by Ctrl-click or onto the floor.
+      [7, (t) => {
+        const from = pick([...t.bag, ...t.tab, ...t.ch.mapStash, ...Object.values(t.ch.equipment)].filter((i) => i.kind === 'equipment' || i.kind === 'map'));
+        if (from) tally('load work slot', t.me.command({ c: 'moveItem', uid: from.uid, to: { kind: 'craftSlot' } }));
+      }],
+      [4, (t) => { const i = pick([...t.bag, ...t.tab].filter((x) => x.kind === 'equipment' || x.kind === 'map')); if (i) tally('ctrl-click load', t.me.command({ c: 'quickMove', uid: i.uid, stashTab: pick(['currency', 'mapCurrency'] as const)! })); }],
+      [5, (t) => {
+        const w = t.ch.craftSlot;
+        if (!w) return;
+        const r = rand();
+        if (r < 0.3) tally('work slot out', t.me.command({ c: 'moveItem', uid: w.uid, to: cell() }));
+        else if (r < 0.5) tally('work slot out', t.me.command({ c: 'moveItem', uid: w.uid, to: tabCell() }));
+        else if (r < 0.65) tally('work slot out', t.me.command({ c: 'moveItem', uid: w.uid, to: { kind: 'mapStash' } }));
+        else if (r < 0.8) tally('work slot out', t.me.command({ c: 'quickMove', uid: w.uid, stashTab: anyTab() }));
+        else tally('work slot equip', t.me.command({ c: 'moveItem', uid: w.uid, to: { kind: 'equipment', slot: pick(['mainHand', 'ring1', 'ring2', 'helmet'] as const)! } }));
+      }],
       [3, (t) => tally('deposit all', t.me.command({ c: 'depositAllCurrency' }))],
       // Trades (offered items are locked against every command above).
       [6, (t) => {
@@ -694,7 +718,7 @@ describe('special stash tabs: conservation', () => {
       // Onto the floor (backpack, Map Stash, a normal tab or a Crafting Stash slot — which is refused) and back.
       [7, (t) => {
         const r = rand();
-        const uid = r < 0.5 ? pick(t.bag)?.uid : r < 0.7 ? pick(t.ch.mapStash)?.uid : r < 0.9 ? pick(t.tab)?.uid : pick(t.held.map(currencyStashUid));
+        const uid = r < 0.45 ? pick(t.bag)?.uid : r < 0.6 ? pick(t.ch.mapStash)?.uid : r < 0.75 ? pick(t.tab)?.uid : r < 0.85 ? t.ch.craftSlot?.uid : pick(t.held.map(currencyStashUid));
         if (uid) tally('drop', t.me.command({ c: 'dropItem', uid }));
       }],
       [7, (t) => {
@@ -729,6 +753,7 @@ describe('special stash tabs: conservation', () => {
     const paths = [
       'deposit', 'tab → cstash', 'withdraw', 'cstash → tab', 'quickMove', 'split to tab', 'tab → backpack', 'to tab', 'file map',
       'file tab map', 'take map', 'load device', 'device → map stash', 'device out', 'deposit all', 'drop', 'backpack move',
+      'load work slot', 'work slot out',
     ];
     for (const what of paths) expect(ok.get(what) ?? 0, what).toBeGreaterThan(5);
     expect(logger.lines.filter((l) => l.msg === 'trade completed').length).toBeGreaterThan(0);

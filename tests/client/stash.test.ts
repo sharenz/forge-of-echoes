@@ -134,13 +134,30 @@ describe('Ctrl-click contexts', () => {
     expect(shown().mapDevice?.uid).toBe(map.uid);
   });
 
-  it('files maps into the Map Stash even when a Crafting Stash tab is selected', () => {
+  it('loads a map into the work slot (not the Map Stash) when a Crafting Stash tab is selected, and back out with another Ctrl-click', () => {
     openStash('currency');
     const map = mapsIn(shown())[0];
     r.session.quickMove(map.uid);
     expect(lastCmd(r).cmd).toEqual({ c: 'quickMove', uid: map.uid, stashTab: 'currency' });
-    expect(shown().mapStash.some((m) => m.uid === map.uid)).toBe(true);
+    expect(shown().craftSlot?.uid).toBe(map.uid);
+    expect(shown().mapStash.some((m) => m.uid === map.uid)).toBe(false);
     expect(mapsIn(shown()).some((m) => m.uid === map.uid)).toBe(false);
+    // The work slot's item goes back to the backpack, whichever tab is open.
+    r.session.quickMove(map.uid);
+    expect(shown().craftSlot ?? null).toBeNull();
+    expect(mapsIn(shown()).some((m) => m.uid === map.uid)).toBe(true);
+  });
+
+  it('dragging into the work slot is predicted at once and sent as a moveItem to { kind: craftSlot }', () => {
+    openStash('currency');
+    const map = mapsIn(shown())[0];
+    expect(r.session.moveItem(map.uid, { kind: 'craftSlot' })).toBe(true);
+    expect(lastCmd(r).cmd).toEqual({ c: 'moveItem', uid: map.uid, to: { kind: 'craftSlot' } });
+    expect(shown().craftSlot?.uid).toBe(map.uid);
+    // Currency cannot go there: refused locally, nothing sent.
+    const n = r.sent.length;
+    expect(r.session.moveItem(stackOf(shown(), 'scrap').uid, { kind: 'craftSlot' })).toBe(false);
+    expect(r.sent.length).toBe(n);
   });
 
   it('a stash hidden behind another left panel is not the destination (the UI shows only the newest left panel)', () => {

@@ -1,6 +1,73 @@
 # D. Territory: area-bound maps, chart-driven drops, surge, beacons and hand-crafted areas
 
-Design only. Nothing here is built. Sits beside `A-atlas-visuals.md` (the chart), `B-atlas-tree.md` (the Codex) and
+**Status: slices T0 (bound maps + migration), R1 (chart-driven drop routing), U1 (chart and dock UI), P1 (pins, Re-chart, Recycle, Rook maps), S1 (area-bias scarabs) and G1 (daily surge) are built; everything else here is still design.** As built, where T0 differs from or
+fills in the text below:
+- `MapItem` also carries load-only `unbound?: true` (a legacy map wearing a provisional binding until the account's Atlas is known) and
+  `migrated?: 'theme' | 'fog'` (the one-time tooltip note); `rechart?` is typed for P1. `bindLegacyMaps`, `bindLegacyChoice`,
+  `areaForTheme` live in `src/game/progression/map-binding.ts`. `SAVE_VERSION` is 2; `PROTOCOL_VERSION` is 20.
+- `openMap(ch, { lootClass?, passage?, useSurge?, now? })`; `RunSetup.passage` is set, `routing`/`surge`/`territory`/`layoutV` are typed and unused.
+  `restoreRunSetup` does not carry the unused fields through: R1/G1/B1 must copy theirs there.
+- Passage UI: chips in the dock (a key held in the *inventory*, or "Open the Pit of Echoes"), not yet the drag-in passage slot of section 3. U1 may replace them.
+- Drops still roll the theme exactly as before (same rng draws); the area is derived from it without rng: discovered same-theme area accepting the tier,
+  else any discovered area accepting it, else the shallowest fit next to the chart. R1 replaced this with the routing table (kept only for runs frozen without one).
+- Rook sells a theme's T1/T2 rows only when a discovered same-theme area accepts the tier (bound by a hash of the offer id); P1 reworks the stock.
+- Void Needle's tier-up keeps its odds; at the area's ceiling the map moves to a deeper area of its theme.
+- Tree nodes assuming "any map anywhere" that need a re-role (not rebalanced in T0): Milestone, Trailmark, Cartographer's Pen, Signpost, Charter Ink,
+  Survey Stake, Lamp Oil, Chart Keeper, Far Horizon, Master Surveyor, Lantern-Bearer, Wagered Charts and the six theme seals (all as listed in section 9).
+
+**R1 as built (drop routing).** Where R1 differs from or fills in section 4:
+- Files: `src/data/progression/routing.ts` (every constant), `src/game/progression/map-routing.ts` (pure rules), `makeMap` in `loot.ts`
+  (the only drop entry point; signature is now `makeMap(ctx, rng, m, quality, { offset?, area?, pending? })`), `openMap` and `restoreRunSetup`
+  in `runs.ts`, tests `tests/game-progression/routing.test.ts`, harness `routing-harness.ts` and `routing-balance.test.ts` (BALANCE=1).
+- `RunSetup.routing` is filled by `openMap` (`buildRouting`) and restored by `restoreRunSetup` (`normalizeRouting`: junk dropped; absent = a run frozen
+  before routing keeps the old theme roll). `MapRouting.candidates[]` gained optional `kind` (`own | neighbour | deadEnd | wander | pending | pinned`)
+  and `pinned`; `from` is the map's bound area (a passage run keeps it). `routing.advance` is computed for the map's own tier.
+- Exactly ONE rng draw picks the addressee (the draw that used to pick the theme), also for a chest upgrade (the target is forced, the draw is burned), so the
+  stream after a chest or a boss is identical with and without routing (tested). A table with nothing eligible for the looter falls back to the T0 theme roll.
+- Loot is per looter: the frozen table is filtered by the looter's own chart (a pending area is allowed on boss/chest drops, as is the run's own area).
+  The chest advance target is walked over the looter's chart plus the pending areas.
+- Event rewards: the Caravan "cartographer's tube" map is an upward roll without pending areas. The lieutenant's map is an ordinary roll (no pending).
+- Pending areas are `discoverAfterBoss(atlas, area, false, { revealRoll: 1 }).revealed` minus the run area and non-addresses (the Pit takes a reveal slot but is
+  never a candidate); candidates list normal areas in `ATLAS_AREAS` order, then pending ones in reveal order.
+- **Hook points.** `RoutingBias` (typed, default neutral) is the one place P1 and S1 plug in: `routingBiasFor(atlas, scarabs)` returns it (P1 reads
+  `atlas.pins` there and sets `pins`/`pinMultiplier`; S1 sets `weightMultiplier(area, kind)`, `tierOffsets` and `chestUpgradeBonus`). `buildRouting` applies
+  pins first (`max(base, 0.5) x multiplier`, any distance, discovered only), then `weightMultiplier`.
+- **Readout.** `routingReadout(routing, tier, discovered?)` returns rows (`areaId`, `name`, `kind`, `pinned`, `weight`, `ceiling`, `share`, `bossShare`,
+  `upwardShare`, `pending`), `groups` (own / neighbours / wander / pinned), `advance(+Name)` and ready-made `lines`; U1 renders it, nothing is pushed into `setup.summary`.
+- **Measured** (60 seeds per cell, real loot rules; full table with `BALANCE=1 npx vitest run tests/game-progression/routing-balance.test.ts`): about 7.5 maps per run
+  (about 37 an hour at the spec's 5 runs/hour; identical with and without routing, I1; the harness model is a little richer than the spec's 6 per run), own area 12 to 22% late and 35 to 45% while the chart is thin, neighbours 55 to 80%,
+  wander 5 to 15%; "ladder bot" (always run the best map held) first Tier 15 run: mean 22.0 runs vs 20.5 pre-routing (+7%), 300 of 300 seeds arrive, longest stretch without
+  a better map in hand 10 runs. The first-pass constants stay: the sweep (pending 1.5 to 3, wander 0.15 to 0.3, own 0.5 to 1.0, neighbour 1.5 to 2.0) moves the ladder by under 1%.
+  Dead ends at their ceiling (Hollow Ossuary T5, Ember Vault T3) drop almost no deeper map themselves (0.2 per run); the path out is their neighbour (4.9 maps per run), tested as
+  "from every area a deeper area is at most 3 drops away".
+
+**S1 + G1 as built (area-bias scarabs and the daily surge).** Where they differ from or fill in sections 5.6 and 7:
+- Files: `src/data/scarabs.ts` (7 families x 4 tiers, `AREA_SCARAB_SHARE`, `AREA_SCARAB_OWN_CAP`), `src/game/progression/scarab-routing.ts` (the `RoutingBias` the loaded scarabs make, `composeRoutingBias`, readout lines), `src/game/progression/surge.ts` (clock, ledger,
+  spend, refund, refill), `src/data/progression/territory.ts` (every surge number; beacons append their own), `src/ui/atlas/{SurgePips.tsx,surge-view.ts}` and `src/ui/styles/surge.css`, tests `tests/game-progression/{area-scarabs,surge,surge-economy}.test.ts`,
+  `tests/server/surge.test.ts`, `tests/net/surge-messages.test.ts`, e2e `npm run e2e -- --only surge`. `PROTOCOL_VERSION` is 22 (`refillSurge`).
+- **Hook additions** (`RoutingBias`, still data-driven): `reach(area)` lets a scarab bring a charted area into the table at any distance with a base weight (Hearthbound, floor 0.5) and `finalize(candidates)` is the last word on the finished weights (Homing's own-area cap).
+  `routingBiasFor(atlas, scarabs, { from })` takes the map's bound area for the theme. Quarry multiplies every dead-end candidate (a neighbour or two hops away); Wayfarer every `neighbour` (never a dead end); Deepward renormalises the tier ladder so its upward share is exactly 20/28/36/45%.
+- **Homing cap:** the own area's share is limited to 70% unless pinned: with only the multiplier a dead end with one neighbour reaches 77% (Homing IV); charts with real neighbours stay at 53 to 67%. Tested on every area at the late and the frontier chart.
+- Scarab sources: drops only (40% of scarab rolls, equal split among the five families). Rook does not sell scarabs and nothing crafts them.
+- `OpenMapOptions.useSurge` is spent by `spendSurge` inside `openMap` (the character returned carries the updated Atlas); no `now` means no surge. `RunSetup.surge` gained `kept?: true` (Afterglow: bonus applies, nothing was spent, nothing is refunded) and is carried by `restoreRunSetup`.
+  `GameServer.now` is the clock (already injected); the server refunds through `refundMapItem` (same transaction as the map, key, Scrap and scarabs) and only on the same forge day.
+- **Loot:** `lootLuck` includes the surge (HUD = sim); `lootLuckWithoutSurge` feeds guarantees, the chest and event rewards; `chancesFrom` divides the surge quantity out of the Map category. Hourglass rolls use forked rng streams (salts in `loot.ts`), so no other drop moves.
+- **Sand use** is the rail's "Refill surge" button (the chart node is the target pick) and the dock's "Refill all" for the Grand Hourglass: both send `refillSurge` (hideout only). No drag onto the canvas: the inventory-first rule is kept, the item stays in the inventory until used.
+- **Tree:** Lantern-Bearer (Second Wind, 4.0u, now `live`), Lamp Oil (+1 charge on dead-end and sealed areas, 1.0u; its sigil-uses half waits for B1), Cartographer's Pen (Afterglow, 1.0u), Trailmark (+50% Sand chance, 1.0u); new stats `surgeCharges`, `surgeKeep`, `sandChance` (priced in `UNIT_RATES`).
+  Not touched: Milestone/Signpost (pins), Survey Stake, Charter Ink, Chart Keeper, Far Horizon, Master Surveyor, Wagered Charts, the seals. The Boss Butcher bot's filler gained `bridge` so the acceptance band stays met with three cartography smalls re-roled.
+- **Measured** (BALANCE=1 `surge-economy`): a boosted run is +8 to +14% (mean +10%) because only ordinary kills are boosted (the spec's +18 to +24% expected more); Sand about 9.5% of runs and 3 to 4% of a run in value for a player who spends it. See GAME_SPEC §7 "Daily surge".
+
+**U1 and P1 as built.** Where they differ from or fill in sections 3, 5 and 11:
+- Files: `src/ui/atlas/{lens,lens-draw,passage,PassageSlot,PinTray,RechartPopover,SourcesPanel}.ts(x)` (new), `Dock.tsx`, `Rail.tsx`, `model.ts`, `render.ts` (one call into `drawLensLayer`), `src/ui/panels/{Atlas,MapDevice,CraftingBench,Merchant,MerchantMaps,MapRecycle,StashSpecial}.tsx`, rules in `game/progression/{map-services,merchant,atlas}.ts` and `game/items/bench.ts`, data in `data/items/bench.ts` (RECHART, RECYCLE) and `data/progression/{merchant,routing}.ts` (ROOK_MAP_*, pin slots).
+- **Protocol 21:** `pinArea { areaId, pinned }`, `benchRecycle { uids[3], areaId, expectedScrap? }`; Re-chart is the existing `benchCraft` with recipe `bench:rechart:<areaId>` (one bench service per legal neighbour, quoted `expectedScrap`); Rook's maps are `buyOffer` with `map:<areaId>:<tier>:<grade>` (generated, not in `merchantOffers`; the UI reads `rules.rookMapAreas` / `rules.rookMapOffers`).
+- **Passage slot:** a real drop target but not an item location: `Local.slots` + `data-drop="slot" data-slot="passage"`. The key stays in the inventory; the slot records the choice (the key is spent with the map at activation). The same registry serves the bench's recycle slots (`recycle:0..2`). No new `ItemLocation`, no server state.
+- **Pins:** `pinSlotCount(nodes)` is 3 plus the sum of `pinSlots` tree effects (the stat itself ships with the tree re-roles; until then it is 3), at most 5; Chart Keeper's x4 is `pinMultiplierFor`. `routingBiasFor` composes `pinBias(atlas)` with S1's scarab bias. A respec that removes a slot node trims `pins` in `setMapTreeNode`.
+- **Rook maps:** the starting area is always on sale (T1 Plain free) so nobody is map-locked; every other area needs `atlas.completed`; dead ends, sealed areas and the Pit are never sold.
+- **Re-chart** may be run on a map in the work slot, on the bench or in the device (the dock button), from one popover; **Recycle** takes inputs from the backpack, stash tabs, Map Stash or work slot (never the device) and files the result in the backpack (no room: nothing happens).
+- **Lenses:** `Stock` (badge per node, tinted by the Map Stash's tier bands) and `Sources` (arrows plus share labels and a table, all from `routingReadout`); `Territory` exists in `LENSES` with `available: false` (a hidden stub for B1). The Map Stash groups by area (chart region order, then depth).
+- Not built: the item tooltip's own Re-chart entry (the dock chip and the bench cover it), an `area:` search operator (the stash search already matches the area name in the tooltip text).
+
+Design only below this line. Sits beside `A-atlas-visuals.md` (the chart), `B-atlas-tree.md` (the Codex) and
 `C-map-events.md` (Event Director v2). Owner decisions 1 to 6 are final and are implemented as written; this brief makes them
 buildable. Section 13 is the slice order with file ownership.
 
@@ -204,7 +271,7 @@ Before (A 6.7): the chart picks a "course", the dock takes a map. After: the **m
 - **"Where your maps come from"** in the readout (new block under Luck): top 4 areas of the frozen routing with percentages
   ("Next drops: Shattered Forge 23%, Glass Sepulchre 23%, Ember Road 23%, this area 16%"), each clickable to light the node.
   The numbers are the exact weights of 4.2, tier-filtered, so a player can read what pins and scarabs do before activating.
-- **Stash drawer** groups maps by area (region order), header chip per area with pips and a count; filter chips by region; a
+- **(Superseded: the Atlas has no stash drawer any more; AGENTS.md "inventory first" rule. Grouping and filtering belong in the Stash panel's Map Stash tab; the table takes maps dragged from the inventory.)** Stash drawer groups maps by area (region order), header chip per area with pips and a count; filter chips by region; a
   search box (`search.ts` already exists for the stash) understands `area:`, `tier:`, `q>10`. Drag from the drawer still slots.
 - **Chart lenses** (A's toolbar; three new toggles): `Stock` (count badge per node of maps you hold, tinted by tier mix),
   `Sources` (inspected node shows outgoing drop arrows with percentages, incoming arrows for what drops it), `Territory` (beacon
@@ -586,6 +653,30 @@ colliders are circles only; no new collision primitive).
   `statue`. Fourteen props, about 2 to 3 per theme, drawn in the existing pixel style with one recolour each; no new game
   mechanics (all solid circles or walk-through decor).
 
+### 10.5a L0 as built (slice L0, shipped)
+- Files: `src/data/layouts/{schema,compile,area,index}.ts` (format, compiler, registry `AREA_LAYOUTS`, empty until a pack lands),
+  `src/sim/layout.ts` (`applyLayout`, pack zones/lanes/rare spots, `bossStagePoint`, `layoutAnchors`),
+  `src/sim/layout-validate.ts` (the seven checks), `scripts/layout-lint.mjs` (`npm run layout:lint [-- --fixtures]`),
+  `dev/layouts.html` (viewer), `src/art/props-kit.ts` and `src/present/layout-art.ts` (kit sprites, decals/landmarks/lights),
+  fixtures in `src/data/layouts/fixtures/` (not registered).
+- Units: positions are R fractions (`[x, y]` or `{ r, a }`); every other length (`r`, `width`, `thickness`, `clear`, gap widths, cluster
+  params, zone `r`) is world units (u). Wall gap `at` = 0..1 along the wall path. Compass bearings everywhere.
+- Runtime: `RunConfig.areaId` (T0 passes `setup.atlasAreaId` in `buildRunConfig`); `WorldView.areaId` (client: from `zone.setup.atlasAreaId`,
+  so no wire change and `SNAPSHOT_VERSION` stays 10); no layout registered for the area (or hideout) = the old generator, untouched
+  (goldens unchanged). The fixed props use no RNG; cosmetic debris uses a stream forked from the seed, so packs/events keep their streams.
+- Check 3 reads "a 400 u / 300 u disc" as diameters (free radius 200 at the boss stage, 150 at the landing); check 2 runs on a 7 u grid
+  with a half-cell tolerance (a 24 u corridor passes); every wall gap must be >= 96 u. All in `LAYOUT_RULES`.
+- E1 (Event Director): `layoutAnchors(w, kind, { tier?, fallback? })` returns the layout's declared anchors (world units, tier-filtered);
+  `[]` = no layout or none declared = keep the radial rules; `fallback: true` synthesises deterministic Charter-respecting sites for
+  point-like kinds. `pickLayoutAnchor(w, kind, rng, filter?)` picks with the caller's seeded rng.
+
+- **Spawn placement and pockets (layouts live in real runs).** `spawnMonster` (`src/sim/spawn.ts`) resolves every spawn (packs, stream groups,
+  lieutenant, boss, summons, event spawns) to the nearest point clear of every solid prop (`freeSpawnPoint`: a fixed outward ring search on the
+  `propGrid`, no RNG, so streams stay stable; the old generator shares it). Check 8 of `layout-validate.ts` (`findPockets`, `findCornerTraps`):
+  no standing ground (exact `PLAYER_RADIUS`) cut off from the landing, and every concave corner can be left with the real `resolvePlayerAt`.
+  Walls and corners never trapped a player; the "stuck" bot runs were steering (see `tests/sim/nav.ts`: walk round walls, hysteresis; the sweep's
+  event policies walk through it too).
+
 ### 10.6 Per-theme art kit
 | Theme | Floor bed | Signature props (existing + new) | Decals / light |
 |---|---|---|---|
@@ -790,7 +881,7 @@ parallel and are referenced where they touch.
 |---|---|---|---|---|---|
 | **T0** | **Bound maps + migration** | M | `MapItem.areaId`, `createMapItem(areaId)`, tooltips, `normalizeMap/bindLegacyMaps`, SAVE_VERSION, new `openMap` signature, passage resolution, protocol bump, starter kit, server `activateMapDevice`, minimal UI (Device shows the home area, no picker), drops still random-by-theme (area derived from theme: same behaviour) | `src/contracts/{items,game,atlas}.ts`, `src/game/progression/{maps,runs,save,atlas}.ts`, `src/server/{game,db}.ts`, `src/net/{messages,protocol}.ts`, `src/ui/panels/MapDevice.tsx` (logic only) | none (A slice 1 preferred merged first) |
 | **R1** | **Routing** | M | `routing.ts` data + `map-routing.ts`, `RunSetup.routing`, loot changes (`makeMap`, chest, boss), pending reveals, advance target, readout block (data), Rook unchanged, harness | `src/data/progression/routing.ts`, `src/game/progression/{map-routing,loot}.ts`, `src/sim/hooks.ts` (context only), tests | T0 |
-| **U1** | **Device + chart UI for bound maps** | M | dock flow (3), rail, lenses `Stock`/`Sources`, stash drawer by area, chip/pips placeholder | `src/ui/atlas/*`, `src/ui/panels/{Atlas,MapDevice}.tsx` (visuals), `src/ui/styles/atlas.css` | T0, R1; A slice 1 |
+| **U1** | **Device + chart UI for bound maps** | M | dock flow (3), rail, lenses `Stock`/`Sources`, Map Stash tab grouped by area (no drawer in the Atlas), chip/pips placeholder | `src/ui/atlas/*`, `src/ui/panels/{Atlas,MapDevice}.tsx` (visuals), `src/ui/styles/atlas.css` | T0, R1; A slice 1 |
 | **P1** | **Pins, Rook maps, Re-chart, Recycle** | M | account pins, tray UI, bench services, Rook Maps tab, scarab-free | `src/game/progression/{merchant,stats?}.ts` (merchant only), `src/data/items/bench.ts`, `src/ui/panels/{CraftingBench,Merchant}.tsx`, `src/ui/atlas/PinTray.tsx`, `RechartPopover.tsx` | T0, R1 |
 | **S1** | **Area scarabs** | S-M | 5 families x 4 tiers, currencies, routing effects | `src/data/scarabs.ts`, `src/data/items/currencies.ts`, `src/contracts/content.ts` (scarab/currency ids only), `src/game/progression/map-routing.ts` (effects hook) | R1; coordinate with B slice 6 (shared registry) |
 | **G1** | **Surge** | M | clock util, `atlas.surge`, activation spend/refund, Sand/Grand, loot hook (non-map quantity), pips everywhere, countdown, tree nodes (charges, Afterglow, Sand) | `src/game/progression/{surge,atlas}.ts` (surge parts), `src/data/progression/territory.ts` (surge), `src/server/game.ts` (clock), `src/ui/atlas/SurgePips.tsx` | T0, R1 |

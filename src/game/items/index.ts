@@ -57,6 +57,12 @@
 //     depositAllCurrency(ch)                every backpack currency stack into its slot
 //     applyCurrency / craftPreview / craftingTargetError(ch, 'cstash:scrap', targetUid)  craft straight from a
 //       slot (one is taken from the slot); targets may sit in the Map Stash too
+//   WORK SLOT (Crafting Stash): ch.craftSlot holds ONE gear or map item (craftSlotOf / withCraftSlot); it keeps its
+//   own uid at location { kind: 'craftSlot' }, so findItem, applyCurrency (currency from the backpack or a
+//   'cstash:<id>' slot), the bench and every move reach it. moveItem(ch, uid, { kind: 'craftSlot' }) loads it from
+//   anywhere (an occupant goes back where the new item came from); out via any move or quickMove (→ backpack). With a
+//   Crafting Stash tab open quickMove(ch, uid, { stashTab: 'currency' | 'mapCurrency' }) loads gear / maps from the
+//   backpack or the body.
 //   Maps: moveItem(ch, mapUid, { kind: 'mapStash' }) / quickMove(…, { stashTab: 'maps' }) deposit; a Map Stash
 //   map moves to a grid cell or { kind: 'mapDevice' } (the device's old map is filed into the Map Stash),
 //   and quickMove sends it to the backpack; with the Map Stash open, quickMove files the Map Device's map
@@ -192,8 +198,8 @@ export {
   parseCurrencyStashUid, randomUid, withCharacterRng,
 } from './ids';
 export {
-  CRAFTING_STASH_EQUIPMENT_SLOTS, CRAFTING_STASH_MAP_SLOTS, currencyStashCount, currencyStashItem, currencyStashRoom,
-  currencyStashTab, mapStashIndex, mapStashOf, specialStashTab, withCurrencyStashCount, withMapStash,
+  CRAFTING_STASH_EQUIPMENT_SLOTS, CRAFTING_STASH_MAP_SLOTS, craftSlotOf, currencyStashCount, currencyStashItem, currencyStashRoom,
+  currencyStashTab, mapStashIndex, mapStashOf, specialStashTab, withCraftSlot, withCurrencyStashCount, withMapStash,
 } from './special-stash';
 export {
   baseWeights, buildEquipment, clampItemLevel, currencyStack, flaskStack, generateEquipment, generateUnique,

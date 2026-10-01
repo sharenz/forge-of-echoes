@@ -186,11 +186,13 @@ export function noteCraftSent(store: UiStore, target: string): void {
 }
 
 /**
- * Apply one currency stack to a target in one click (the crafting bench palette): the same arm → apply → disarm
+ * Apply one currency stack to a target in one click (the crafting bench palette and the Crafting Stash work slot): the same arm → apply → disarm
  * sequence as right-click then left-click. Seal / Catalyst / Fracture Core open the affix choice and stay armed
  * until it is answered.
  */
-export function applyCurrencyOnce(store: UiStore, local: Local, e: MouseEvent, currencyUid: string, targetUid: string): void {
+export function applyCurrencyOnce(
+  store: UiStore, local: Local, e: Pick<MouseEvent, 'clientX' | 'clientY'>, currencyUid: string, targetUid: string,
+): void {
   const s = store.get();
   const ch = s.character;
   if (!ch) return;

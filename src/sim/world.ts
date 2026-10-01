@@ -311,6 +311,8 @@ export interface World {
   pactResist: number;
   /** This map's monsters (THEME_ROSTER by RunConfig.theme; the hideout gets the Ashen Forge's). */
   readonly roster: Roster;
+  /** The hand-crafted layout this arena was built from (src/sim/layout.ts), or null (the procedural generator built it). */
+  layout: import('./layout').LayoutRuntime | null;
   /** Primary boss alias, retained for the HUD and single-boss fixtures. */
   boss: BossRuntime;
   /** Independent script state keyed by generation-safe monster ID. */

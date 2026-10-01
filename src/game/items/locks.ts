@@ -25,7 +25,7 @@ export interface LockMask {
 
 /** A 1×1 item nothing can stack onto, pay with or count as currency. Never leaves the rules. */
 function standIn(item: Item): MapItem {
-  return { kind: 'map', uid: item.uid, baseId: 'ashenForge', tier: 1, rarity: 'normal', mods: [], quality: 0, corrupted: false };
+  return { kind: 'map', uid: item.uid, areaId: 'cinderCrossing', baseId: 'ashenForge', tier: 1, rarity: 'normal', mods: [], quality: 0, corrupted: false };
 }
 
 /** Swap the character's locked stacks for stand-ins; returns the masked character and what to restore. */
@@ -56,6 +56,7 @@ function sameLocation(a: ItemLocation, b: ItemLocation): boolean {
     case 'scarabSlot': return b.kind === 'scarabSlot' && a.index === b.index;
     case 'currencyStash': return b.kind === 'currencyStash';
     case 'mapStash': return b.kind === 'mapStash';
+    case 'craftSlot': return b.kind === 'craftSlot';
   }
 }
 

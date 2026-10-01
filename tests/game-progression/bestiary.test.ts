@@ -209,10 +209,10 @@ describe('item histories name the new bosses and lieutenants', () => {
       const eq = items.find((i) => i.kind === 'equipment');
       return eq && eq.kind === 'equipment' ? eq.history[0] : null;
     };
-    expect(origin('rimedOssuary', { kind: 'hollowWarden', isBoss: true, rarity: 'rare', wave: 6 })).toBe('Dropped by The Hollow Warden in Rimed Ossuary (Tier 2)');
-    expect(origin('rimedOssuary', { kind: 'boneChorister', isLieutenant: true, rarity: 'rare', wave: 3 })).toBe('Dropped by the Bone Chorister in Rimed Ossuary (Tier 2)');
-    expect(origin('ironColiseum', { kind: 'varkus', isBoss: true, rarity: 'rare', wave: 6 })).toBe('Dropped by Varkus, the Iron Champion in Iron Coliseum (Tier 2)');
-    expect(origin('ironColiseum', { kind: 'chainmaster', isLieutenant: true, rarity: 'rare', wave: 3 })).toBe('Dropped by The Chainmaster in Iron Coliseum (Tier 2)');
+    expect(origin('rimedOssuary', { kind: 'hollowWarden', isBoss: true, rarity: 'rare', wave: 6 })).toBe('Dropped by The Hollow Warden in Bone Approach (Tier 2)');
+    expect(origin('rimedOssuary', { kind: 'boneChorister', isLieutenant: true, rarity: 'rare', wave: 3 })).toBe('Dropped by the Bone Chorister in Bone Approach (Tier 2)');
+    expect(origin('ironColiseum', { kind: 'varkus', isBoss: true, rarity: 'rare', wave: 6 })).toBe("Dropped by Varkus, the Iron Champion in Champion's Approach (Tier 2)");
+    expect(origin('ironColiseum', { kind: 'chainmaster', isLieutenant: true, rarity: 'rare', wave: 3 })).toBe("Dropped by The Chainmaster in Champion's Approach (Tier 2)");
   });
 
   it('gives the new bosses the same guaranteed drops as the Matriarch', () => {

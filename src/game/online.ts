@@ -69,9 +69,9 @@ export function withServerEntropy(base: GameRulesApi, entropy: () => number): Ga
     applyCurrency: (ch, currencyUid, targetUid, affixIndex) =>
       base.applyCurrency(reseedCharacter(ch, entropy()), currencyUid, targetUid, affixIndex),
     applyBenchRecipe: (ch, targetUid, recipeId) => base.applyBenchRecipe(reseedCharacter(ch, entropy()), targetUid, recipeId),
-    buyOffer: (ch, offerId) => base.buyOffer(reseedCharacter(ch, entropy()), offerId),
-    buyDebugOffer: (ch, offerId, options) => base.buyDebugOffer(reseedCharacter(ch, entropy()), offerId, options),
-    openMap: (ch, areaId, lootClass) => base.openMap(reseedCharacter(ch, entropy()), areaId, lootClass),
+    buyOffer: (ch, offerId, at) => base.buyOffer(reseedCharacter(ch, entropy()), offerId, at),
+    buyDebugOffer: (ch, offerId, options, at) => base.buyDebugOffer(reseedCharacter(ch, entropy()), offerId, options, at),
+    openMap: (ch, opts) => base.openMap(reseedCharacter(ch, entropy()), opts),
   };
 }
 
@@ -163,10 +163,21 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
       ch, [targetUid], (c) => base.clearCraftedAffix(c, targetUid), outcomeCharacter, withOutcomeCharacter,
     ),
     setMapTreeNode: (ch, id, allocate) => guard(ch, [], c => base.setMapTreeNode(c, id, allocate), plain, replace),
+    recycleMaps: (ch, uids, areaId) => guard(ch, uids, (c) => base.recycleMaps(c, uids, areaId), outcomeCharacter, withOutcomeCharacter),
+    recycleQuote: (ch, uids, areaId) => {
+      const locked = locksOf(ch);
+      if (locked && uids.some((uid) => isLocked(locked, uid))) return { ...base.recycleQuote(ch, uids, areaId), error: LOCKED_ITEM_ERROR };
+      return base.recycleQuote(locked ? maskLocked(ch, locked).character : ch, uids, areaId);
+    },
+    rookMapOffers: (ch, areaId) => {
+      const locked = locksOf(ch);
+      return base.rookMapOffers(locked ? maskLocked(ch, locked).character : ch, areaId);
+    },
     sellItems: (ch, uids, expectedScrap) => guard(ch, uids, c => base.sellItems(c, uids, expectedScrap), outcomeCharacter, withOutcomeCharacter),
-    buyOffer: (ch, offerId) => guard(ch, [], (c) => base.buyOffer(c, offerId), outcomeCharacter, withOutcomeCharacter),
-    buyDebugOffer: (ch, offerId, options) => guard(ch, [], c => base.buyDebugOffer(c, offerId, options), outcomeCharacter, withOutcomeCharacter),
-    openMap: (ch, areaId, lootClass) => guard(ch, [ch.mapDevice?.uid], (c) => base.openMap(c, areaId, lootClass), outcomeCharacter, withOutcomeCharacter),
+    buyOffer: (ch, offerId, at) => guard(ch, [], (c) => base.buyOffer(c, offerId, at), outcomeCharacter, withOutcomeCharacter),
+    buyDebugOffer: (ch, offerId, options, at) => guard(ch, [], c => base.buyDebugOffer(c, offerId, options, at), outcomeCharacter, withOutcomeCharacter),
+    openMap: (ch, opts) => guard(ch, [ch.mapDevice?.uid], (c) => base.openMap(c, opts), outcomeCharacter, withOutcomeCharacter),
+    refillSurge: (ch, target, now) => guard(ch, [], (c) => base.refillSurge(c, target, now), outcomeCharacter, withOutcomeCharacter),
     craftingTargetError: (ch, currencyUid, targetUid) => {
       const locked = locksOf(ch);
       if (locked && (isLocked(locked, currencyUid) || isLocked(locked, targetUid))) return LOCKED_ITEM_ERROR;

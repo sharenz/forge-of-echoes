@@ -111,6 +111,8 @@ export function digestWorld(w: World): number {
   }
   h.int(w.props.length);
   for (const pp of w.props) h.int(pp.state);
+  // Hand-crafted layouts only (the old generator's digests are unchanged): the fixed geometry's signature.
+  if (w.layout) h.int(w.layout.compiled.signature);
   const d = w.director;
   h.int(PHASES.indexOf(d.phase));
   h.int(d.wave);

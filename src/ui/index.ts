@@ -115,7 +115,9 @@ import './styles/panels.css';
 import './styles/bench.css';
 import './styles/trade.css';
 import './styles/stash.css';
+import './styles/workslot.css';
 import './styles/debuffs.css';
+import './styles/merchant.css';
 
 import { h, render } from 'preact';
 import type { MountUi, UiStore } from '../contracts/ui';

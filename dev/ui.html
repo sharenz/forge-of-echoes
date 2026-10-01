@@ -39,6 +39,7 @@
       //   ?party=0|1 (1 opens the party panel)  &leader=1 (you lead)  ?invite=1  ?chat=1  ?chatopen=1  ?toasts=1  ?still=1
       //   ?elite=magic|rare (monster hover card)
       //   ?bench=1|crafted (item on the crafting bench; implied by panels=craftingBench)
+      //   ?workslot=1|map|crafted|finished (Crafting Stash work slot loaded; crafted = an Essence is applied after mount)
       //   ?trade=1|locked|waiting (a trade with Mira: she accepted / accept countdown / you wait for her)
       //   ?tradeRequest=1 (Corvin asks to trade)   ?search=life (opens the stash with that query)   ?chattext=/trade%20Mira
       //   ?stash=maps|currency|mapCurrency|<tab index> (opens the stash on that tab)  &specialstash=0 (empty special tabs)
@@ -46,10 +47,10 @@
       //   ?theme=ashenForge|rimedOssuary|ironColiseum (map roster: world, Tell banner, lieutenant and boss names)
       //   ?tooltip=map-row|cslot|cslot-empty|tier|debuff|debuff-rooted|stab-maps|stab-currency (special tab / HUD hovers)
       //   ?drag=deposit|withdraw|mapdeposit (drag a currency onto the Crafting Stash, a slot to the backpack, a map in)
-      //   ?device=empty (the map device starts empty: its panel opens on the Map Stash picker)
+      //   ?device=empty (the map device starts empty: drag a map from the inventory into the dock)
       //   ?atlas=fresh|mid|late|full (Atlas progress for the Cartography Table; panels=mapDevice)
       //   ?tree=open|mid|full (Codex preset: all 60 points earned, none / 14 / all spent; with panels=mapDevice, then the Codex tab)
-      //   ?drag=mapload (with panels=mapDevice: drag a backpack map onto the picker, which loads it into the device)
+      //   ?drag=mapload (with panels=mapDevice: drag a backpack map onto the dock's map slot, which loads it into the device)
       import { generateArt } from '/src/art/index.ts';
       import { mountUi } from '/src/ui/index.ts';
       import { createMockStore } from '/src/ui/dev/mockStore.ts';
@@ -125,8 +126,8 @@
       // ---- UI -----------------------------------------------------------------------------------
       const panels = list('panels');
       if (q.get('party') === '1' && !panels.includes('party')) panels.push('party');
-      if ((q.get('search') !== null || q.get('stash') !== null) && !panels.includes('stash')) panels.push('inventory', 'stash');
-      const stashParam = q.get('stash');
+      if ((q.get('search') !== null || q.get('stash') !== null || q.get('workslot')) && !panels.includes('stash')) panels.push('inventory', 'stash');
+      const stashParam = q.get('stash') ?? (q.get('workslot') ? 'currency' : null);
       const stashTab = stashParam === null ? null : /^\d+$/.test(stashParam) ? Number(stashParam) : stashParam;
       const debuffParam = q.get('debuffs');
       const debuffs = !debuffParam || debuffParam === '0' ? false : debuffParam === '1' ? true : debuffParam.split(',').filter(Boolean);
@@ -162,6 +163,7 @@
         noCharacters: flag('nochars'),
         still: flag('still'),
         bench: mode('bench'),
+        workslot: mode('workslot'),
         trade: mode('trade'),
         tradeRequest: flag('tradeRequest'),
         stash: stashTab,
@@ -268,7 +270,7 @@
           if (drag === 'bench') [tx, ty] = onto('.fe-bench__socket');
           if (drag === 'deposit') [tx, ty] = onto('.fe-cstash');
           if (drag === 'mapdeposit') [tx, ty] = onto('.fe-stab--maps');
-          if (drag === 'mapload') [tx, ty] = onto('.fe-mstash--device .fe-mstash__list');
+          if (drag === 'mapload') [tx, ty] = onto('.fe-dock [data-drop="mapDevice"]');
           if (drag === 'withdraw') [tx, ty] = [grid.left + cell * 11.5, grid.top + cell * 4.5];
           if (drag === 'offer') [tx, ty] = onto('[data-drop="offer"]');
           if (drag === 'equip') {

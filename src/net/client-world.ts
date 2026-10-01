@@ -1250,6 +1250,8 @@ export function createClientWorld(): NetClientWorld {
     localPlayerId = zone.localPlayerId;
     view.theme = zone.theme;
     view.arenaRadius = zone.arenaRadius;
+    // The Atlas area travels inside the run setup, so the client can draw that area's layout decals without a wire change.
+    view.areaId = zone.setup?.atlasAreaId;
     env.arenaRadius = zone.arenaRadius;
     zoneProps = zone.props.map((p) => ({ ...p }));
     propObjs.clear();

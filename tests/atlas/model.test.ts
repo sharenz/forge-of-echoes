@@ -26,17 +26,24 @@ describe('Atlas node states (brief 5.2)', () => {
     expect(model('gildedVault', ctx({ keys: new Set(['reliquaryKey']) })).kind).toBe('sealedLocked');
   });
 
-  it('reports the slotted map against each ceiling: fits, at the ceiling, or too shallow with a reason', () => {
-    const fits = model('emberRoad', ctx({ tier: 2 }));
+  it('reports the slotted map against its own area only: home, fits, at the ceiling, or too shallow with a reason', () => {
+    const fits = model('emberRoad', ctx({ tier: 2, home: 'emberRoad' }));
+    expect(fits.home).toBe(true);
     expect(fits.fits).toBe(true);
     expect(fits.tooShallow).toBe(false);
     expect(fits.blocker).toBeNull();
-    expect(model('emberRoad', ctx({ tier: 3 })).atCeiling).toBe(true);
-    const shallow = model('cinderCrossing', ctx({ tier: 4 }));
+    expect(fits.status).toBe('Your map opens here');
+    expect(model('emberRoad', ctx({ tier: 3, home: 'emberRoad' })).atCeiling).toBe(true);
+    // every other area is just browsed: a bound map is not a selection, so its tier says nothing about them
+    const other = model('boneApproach', ctx({ tier: 3, home: 'emberRoad' }));
+    expect([other.home, other.fits, other.tooShallow, other.atCeiling]).toEqual([false, false, false, false]);
+    // an empty device: the chart is browse-only
+    expect(model('emberRoad').home).toBe(false);
+    // only an invalid binding can put a map above its own ceiling
+    const shallow = model('cinderCrossing', ctx({ tier: 4, home: 'cinderCrossing' }));
     expect(shallow.tooShallow).toBe(true);
-    expect(shallow.blocker).toMatch(/needs an area accepting T4/);
+    expect(shallow.blocker).toMatch(/above this area's ceiling of Tier 1/);
     expect(shallow.status).toBe('Too shallow for T4');
-    expect(model('emberRoad').fits).toBe(false);
   });
 
   it('flags a newly revealed node until it is inspected, and never leaks anything for unknown ones', () => {

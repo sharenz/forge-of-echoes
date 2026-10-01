@@ -32,13 +32,20 @@ import type { AffixDef, AffixLimits, AffixTierDef, BaseDef, BenchRecipeDef } fro
 import { affixAllowedOnBase, affixState, rollValue, sortAffixes } from './affix-pool';
 import { appendHistory } from './crafting';
 import { capitalize, formatChance, formatLine, formatRangeLine, joinWords } from './format';
-import { findItem, replaceItemAt, setStackCount } from './inventory';
+import { addToBackpack, findItem, removeItemAt, replaceItemAt, setStackCount } from './inventory';
 import type { FoundItem } from './inventory';
 import { currencyStashItem } from './special-stash';
 import { historyCount, itemCraftCount, nextCraftCount } from './crafting-history';
 import { BOUNTY_COMMISSION, MAP_MOD_REROLL, STABILITY_REPAIR } from '../../data/items/economy';
+import { RECHART_SERVICE_PREFIX, RECYCLE } from '../../data/items/bench';
+import type { AtlasAreaId } from '../../contracts/atlas';
+import { atlasTierCeiling, findAtlasArea } from '../../data/progression/atlas';
 import { DANGER_MODS, getMapMod } from '../../data/progression';
-import { inclusionChances, mapModName, modValueRange, rollModValue, sortMapMods } from '../progression/maps';
+import { createMapItem, inclusionChances, mapModName, modValueRange, rollModValue, sortMapMods } from '../progression/maps';
+import {
+  rechartCost, rechartMapError, rechartTargets, rechartedMap, recycleCost, recycleInputsError, recycleQuality, recycleTargets,
+} from '../progression/map-services';
+import { mintUid } from './ids';
 
 const ok = <T>(value: T): Result<T> => ({ ok: true, value });
 const fail = <T>(error: string): Result<T> => ({ ok: false, error });
@@ -302,7 +309,7 @@ export function benchRecipes(ch: CharacterSave, targetUid: string): BenchRecipe[
  * Normal → Magic, and appends "Bench: added <affix> (T<n>)" to the item's history. Nothing changes on failure.
  */
 export function applyBenchRecipe(ch: CharacterSave, targetUid: string, recipeId: string): Result<CraftOutcome> {
-  if (typeof recipeId === 'string' && (recipeId === 'bench:repair' || recipeId === 'bench:bounty' || recipeId.startsWith('bench:map:'))) {
+  if (typeof recipeId === 'string' && (recipeId === 'bench:repair' || recipeId === 'bench:bounty' || recipeId.startsWith('bench:map:') || recipeId.startsWith(RECHART_SERVICE_PREFIX))) {
     return applyBenchService(ch, targetUid, recipeId);
   }
   const recipe = findBenchRecipe(recipeId);
@@ -415,7 +422,27 @@ export function benchServices(ch: CharacterSave, targetUid: string): BenchServic
         `Magnitude: ${range.min}-${range.max}% of the new mod's base values; every integer is equally likely.`,
       ], locked ?? (pool.length ? null : 'No other danger mod can be rolled.')));
   }
+  services.push(...rechartServices(ch, item, service));
   return services;
+}
+
+type ServiceFactory = (id: string, label: string, scrap: number, lines: string[], error: string | null) => BenchService;
+
+/** One Re-chart service per legal neighbouring area (brief D 5.2); a single disabled row explains when there is none. */
+function rechartServices(ch: CharacterSave, item: MapItem, service: ServiceFactory): BenchService[] {
+  const cost = rechartCost(item, ch.atlas?.nodes);
+  const own = findAtlasArea(item.areaId);
+  const blocked = rechartMapError(item);
+  const targets = rechartTargets(ch.atlas, item);
+  if (!targets.length) {
+    return [service(`${RECHART_SERVICE_PREFIX}none`, 'Re-chart', cost, [
+      'Moves this map to a neighbouring area of the same tier, keeping its quality and mods.',
+    ], blocked ?? `No charted neighbour of ${own?.name ?? 'this area'} accepts a Tier ${item.tier} map yet.`)];
+  }
+  return targets.map((t) => service(`${RECHART_SERVICE_PREFIX}${t.id}`, `Re-chart to ${t.name}`, cost, [
+    `Moves this map from ${own?.name ?? 'its area'} to ${t.name}: same tier, quality, mods, Bounty and corruption state; the theme follows the area.`,
+    `${t.name} accepts maps up to Tier ${atlasTierCeiling(t)}.${item.rechart ? ` Re-charted ${item.rechart} time${item.rechart === 1 ? '' : 's'} already: each hop costs 50% more.` : ''}`,
+  ], blocked));
 }
 
 function applyBenchService(ch: CharacterSave, targetUid: string, serviceId: string): Result<CraftOutcome> {
@@ -434,6 +461,12 @@ function applyBenchService(ch: CharacterSave, targetUid: string, serviceId: stri
   } else if (item.kind === 'map' && serviceId === 'bench:bounty') {
     item = { ...item, bounty: true };
     message = 'Bounty commissioned: The Stalker is guaranteed in this map';
+  } else if (item.kind === 'map' && serviceId.startsWith(RECHART_SERVICE_PREFIX)) {
+    const target = findAtlasArea(serviceId.slice(RECHART_SERVICE_PREFIX.length));
+    if (!target) return fail('That bench service does not fit this item.');
+    const from = findAtlasArea(item.areaId);
+    item = rechartedMap(item, target);
+    message = `Re-charted to ${target.name}${from ? ` from ${from.name}` : ''}`;
   } else if (item.kind === 'map') {
     const id = serviceId.slice('bench:map:'.length);
     const rng = createRng(ch.rngState >>> 0);
@@ -447,4 +480,60 @@ function applyBenchService(ch: CharacterSave, targetUid: string, serviceId: stri
   const paid = payPrice(replaceItemAt(ch, found.location, item), service.cost);
   const character = { ...paid, rngState, stats: { ...paid.stats, itemsCrafted: paid.stats.itemsCrafted + 1 } };
   return ok({ character, message, kind: 'success', targetUid });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Recycle (brief D 5.3): three maps of one tier become one Normal map of a chosen area
+// ---------------------------------------------------------------------------------------------
+
+/** Where recycled maps may come from: backpack, stash tabs, Map Stash and the work slot (never the map in the device). */
+const recyclable = (loc: ItemLocation): boolean => loc.kind === 'backpack' || loc.kind === 'stash' || loc.kind === 'mapStash' || loc.kind === 'craftSlot';
+
+export interface RecycleQuote {
+  /** Why it cannot be done right now (null = ready). */
+  error: string | null;
+  scrap: number;
+  quality: number;
+  tier: number | null;
+  /** Areas the output may be bound to. */
+  targets: AtlasAreaId[];
+}
+
+/** Preview of a Recycle of `uids`: the price, the output quality and the legal target areas (the server charges exactly this). */
+export function recycleQuote(ch: CharacterSave, uids: readonly string[], areaId?: AtlasAreaId): RecycleQuote {
+  const found = (Array.isArray(uids) ? uids : []).map((uid) => findItem(ch, uid));
+  const maps = found.flatMap((f) => (f && f.item.kind === 'map' ? [f.item] : []));
+  const base = { scrap: 0, quality: 0, tier: null, targets: [] as AtlasAreaId[] };
+  if (found.length !== RECYCLE.inputs || maps.length !== found.length) return { ...base, error: found.some((f) => !f) ? 'A map is no longer there.' : 'Recycling takes three maps.' };
+  if (found.some((f) => !recyclable(f!.location))) return { ...base, error: 'Take the map out of the Map Device first.' };
+  const inputsError = recycleInputsError(maps);
+  const tier = maps[0].tier;
+  const scrap = recycleCost(tier, ch.atlas?.nodes);
+  const quality = recycleQuality(maps);
+  const targets = recycleTargets(ch.atlas, maps).map((a) => a.id);
+  if (inputsError) return { error: inputsError, scrap, quality, tier, targets: [] };
+  if (!targets.length) return { error: 'No charted area next to these maps accepts them.', scrap, quality, tier, targets };
+  if (areaId !== undefined && !targets.includes(areaId)) return { error: 'The new map can only be bound to one of these maps\' areas or their neighbours.', scrap, quality, tier, targets };
+  const cost: BenchPrice = [{ currencyId: 'scrap', count: scrap }];
+  return { error: affordError(ch, cost), scrap, quality, tier, targets };
+}
+
+/** Atomic: pays, removes the three inputs and files one Normal map bound to `areaId` in the backpack. Nothing changes on failure. */
+export function recycleMaps(ch: CharacterSave, uids: readonly string[], areaId: AtlasAreaId): Result<CraftOutcome & { item: MapItem; scrap: number }> {
+  if (!findAtlasArea(areaId)) return fail('Choose an area for the new map.');
+  const quote = recycleQuote(ch, uids, areaId);
+  if (quote.error) return fail(quote.error);
+  let next = ch;
+  for (const uid of uids) {
+    const f = findItem(next, uid)!;
+    next = removeItemAt(next, f.location, uid);
+  }
+  next = payPrice(next, [{ currencyId: 'scrap', count: quote.scrap }]);
+  const minted = mintUid(next);
+  const item = createMapItem(areaId, quote.tier!, minted.uid, { quality: quote.quality, isNew: true });
+  const placed = addToBackpack(minted.character, item);
+  if (!placed.ok) return fail('Your backpack has no room for the new map. Nothing was recycled.');
+  const area = findAtlasArea(areaId)!;
+  const character = { ...placed.value, stats: { ...placed.value.stats, itemsCrafted: (placed.value.stats?.itemsCrafted ?? 0) + 1 } };
+  return ok({ character, message: `Recycled three Tier ${quote.tier} maps into a ${area.name} map (+${quote.quality}% quality)`, kind: 'success', targetUid: item.uid, item, scrap: quote.scrap });
 }

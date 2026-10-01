@@ -303,6 +303,8 @@ export interface ConfigOptions {
   /** Hidden event plan(s) of the map (Event Director v2). */
   event?: RunConfig['event'];
   eventModifiers?: RunConfig['eventModifiers'];
+  /** The Atlas area (hand-crafted layout lookup); absent = the procedural generator. */
+  areaId?: RunConfig['areaId'];
 }
 
 const MAP_NAMES: Record<Theme, string> = {
@@ -324,6 +326,7 @@ export function makeConfig(o: ConfigOptions = {}): RunConfig {
     hooks: o.hooks ?? makeHooks().hooks,
     ...(o.event !== undefined ? { event: o.event } : {}),
     ...(o.eventModifiers ? { eventModifiers: o.eventModifiers } : {}),
+    ...(o.areaId ? { areaId: o.areaId } : {}),
   };
 }
 

@@ -16,6 +16,9 @@ import {
 } from '../../src/game/progression';
 import { bareCharacter, equip, kill, luckyAmulet, map, setupFor, unique } from './fixtures';
 
+/** A run frozen before drop routing existed (brief D R1): its maps roll a theme as before, so tier offsets are exact. */
+const withoutRouting = (setup: RunSetup): RunSetup => { const { routing: _routing, ...rest } = setup; return rest; };
+
 const mod = (modId: string, value = 100): RolledMapMod => ({ modId, value });
 
 const BASE_CURRENCY = CATEGORY_CHANCE.currency;
@@ -66,11 +69,12 @@ describe('per-kill drop rates (100k kills at 100% quantity and rarity)', () => {
   it('rolls item level = monster level and marks drops as new', () => {
     const eq = t.items.filter((i): i is EquipmentItem => i.kind === 'equipment');
     expect(eq.every((e) => e.itemLevel === monsterLevelForTier(3) && e.isNew === true)).toBe(true);
-    expect(eq.every((e) => e.history[0] === 'Dropped in Ashen Forge (Tier 3)')).toBe(true);
+    expect(eq.every((e) => e.history[0] === 'Dropped in Ember Road (Tier 3)')).toBe(true);
   });
 
-  it('drops maps at the same tier 60%, one lower 25%, one higher 15%', () => {
-    const maps = t.items.filter((i): i is MapItem => i.kind === 'map');
+  it('drops maps at the same tier 60%, one lower 25%, one higher 15% (a run without routing: no ceilings clamp them)', () => {
+    const legacy = tallyKills(withoutRouting(setup), N, kill(), 2);
+    const maps = legacy.items.filter((i): i is MapItem => i.kind === 'map');
     const same = maps.filter((m) => m.tier === 3).length;
     const lower = maps.filter((m) => m.tier === 2).length;
     const higher = maps.filter((m) => m.tier === 4).length;
@@ -139,7 +143,7 @@ describe('monster rarity and luck multipliers', () => {
     expectRate(t.currency, n, BASE_CURRENCY * 4);
     expectRate(t.equipment, n, BASE_EQUIPMENT * 4);
     const eq = t.items.find((i): i is EquipmentItem => i.kind === 'equipment')!;
-    expect(eq.history[0]).toBe('Dropped by a rare Ironhide Brute in Ashen Forge (Tier 1)');
+    expect(eq.history[0]).toBe('Dropped by a rare Ironhide Brute in Cinder Crossing (Tier 1)');
   });
 
   it('item quantity scales every category; quality and Cartographer\'s also raise map drops', () => {
@@ -220,11 +224,12 @@ describe('guaranteed drops', () => {
     const currencyCounts = new Set<number>();
     let upgrades = 0, bonusMaps = 0;
     for (let i = 0; i < 500; i++) {
-      const items = rules.rollChestLoot(setup, rng, NAKED);
+      const items = rules.rollChestLoot(withoutRouting(setup), rng, NAKED);
       const eq = items.filter((x): x is EquipmentItem => x.kind === 'equipment');
       expect(eq).toHaveLength(CHEST_LOOT.equipment);
       expect(eq.every((e) => e.rarity !== 'normal')).toBe(true);
-      const cur = items.filter((x) => x.kind === 'currency').length;
+      // Hourglass Sand (3% of chests, brief D 7.4) is a separate roll, not one of the chest's currency rolls.
+      const cur = items.filter((x) => x.kind === 'currency' && x.currencyId !== 'hourglassSand').length;
       expect(cur).toBeGreaterThanOrEqual(CHEST_LOOT.currency.min);
       expect(cur).toBeLessThanOrEqual(CHEST_LOOT.currency.max);
       currencyCounts.add(cur);
@@ -242,7 +247,7 @@ describe('guaranteed drops', () => {
     );
     expectRate(upgrades, 500, 0.25);
     expectRate(bonusMaps, 500, CHEST_LOOT.extraMapChance);
-    const top = setupFor(map('ashenForge', 15));
+    const top = withoutRouting(setupFor(map('ashenForge', 15)));
     expect(rules.rollChestLoot(top, createRng(1), NAKED).find((x) => x.kind === 'map')!.tier).toBe(15);
   });
 
@@ -293,7 +298,7 @@ describe('determinism and drop specs', () => {
     expect(rules.dropSpec({ kind: 'currency', uid: 'x', currencyId: 'voidNeedle', count: 1 }, 1, 4)).toEqual({
       token: 1, owner: 4, autoPickup: true, label: 'Void Needle', tone: 'currency', sprite: 'currency', iconId: 'icon/currency/voidNeedle',
     });
-    expect(rules.dropSpec(map('ironColiseum', 4), 2, 1).label).toBe('Iron Coliseum (T4)');
+    expect(rules.dropSpec(map('ironColiseum', 4), 2, 1).label).toBe("Champion's Approach map (T4)");
     expect(rules.dropSpec({ kind: 'flask', uid: 'f', flaskId: 'lifeFlask', count: 1 }, 3, 2).tone).toBe('flask');
   });
 

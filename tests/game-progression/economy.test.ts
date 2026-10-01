@@ -12,6 +12,7 @@ import { MAP_EVENT_KINDS } from '../../src/contracts/map-events';
 import { normalizeCharacter, normalizeItem } from '../../src/game/progression/save';
 import { restoreRunSetup } from '../../src/game/progression/runs';
 import { currency, equip, expectOk, makeCharacter, map, withBackpack } from '../game-items/fixtures';
+import { openAt } from './fixtures';
 
 const project = () => equip({ uid: 'project', baseId: 'ashwoodWand', itemLevel: 30, rarity: 'magic', stability: 2,
   affixes: [{ affixId: 'fireDamage', tier: 7, sealed: true }, { affixId: 'castSpeed', tier: 7, fractured: true }],
@@ -73,7 +74,7 @@ it('rejects full Stability, uniques, insufficient funds and trade locks without 
   expect(benchCurrency(tight, 'scrap')).toBe(cost);
 });
 
-const craftedMap = (): MapItem => ({ ...map('project'), tier: 5, rarity: 'magic', quality: 13,
+const craftedMap = (): MapItem => ({ ...map('project'), areaId: 'furnaceYard', tier: 5, rarity: 'magic', quality: 13,
   mods: [{ modId: 'teeming', value: 95 }, { modId: 'restless', value: 110 }, { modId: REWARD_MODS[0].id, value: 123 }] });
 
 describe('map Scrap services', () => {
@@ -106,7 +107,7 @@ describe('map Scrap services', () => {
     for (let seed = 0; seed < 100; seed++) {
       expect(rollMapEvent(bounty, seed, 'glassSepulchre')?.kind).toBe('hunted');
     }
-    const entered = expectOk(rules.openMap({ ...result, mapDevice: bounty,
+    const entered = expectOk(openAt(rules, { ...result, mapDevice: bounty,
       atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 } }, 'glassSepulchre'));
     expect(entered.setup.event?.kind).toBe('hunted');
     const restored = restoreRunSetup(JSON.stringify(entered.setup), entered.setup.seed)!;
@@ -131,7 +132,7 @@ it('charges only the map owner for Atlas territory, keeps T1–3 free, and prese
   const atlas = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 };
   for (const [tier, fee] of [[1, 0], [3, 0], [4, 1], [6, 1], [7, 2], [9, 2]]) {
     const ch = makeCharacter({ atlas, mapDevice: { ...map(), tier }, currencyStash: { scrap: 5 } });
-    const opened = expectOk(rules.openMap(ch, 'crownFoundry'));
+    const opened = expectOk(openAt(rules, ch, 'crownFoundry'));
     expect(opened.character.currencyStash.scrap).toBe(5 - fee);
     expect(opened.setup.entranceScrap ?? 0).toBe(fee);
     expect(restoreRunSetup(opened.setup, opened.setup.seed)?.entranceScrap ?? 0).toBe(fee);
@@ -141,6 +142,6 @@ it('charges only the map owner for Atlas territory, keeps T1–3 free, and prese
   }
   const poor = makeCharacter({ atlas, mapDevice: { ...map(), tier: 7 } });
   const before = structuredClone(poor);
-  expect(rules.openMap(poor, 'crownFoundry').ok).toBe(false);
+  expect(openAt(rules, poor, 'crownFoundry').ok).toBe(false);
   expect(poor).toEqual(before);
 });

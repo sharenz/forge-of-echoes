@@ -4,8 +4,10 @@ import type { DebugMerchantOptions, Result } from '../../contracts/game';
 import type { Rng } from '../../contracts/rng';
 import { createRng, hashString } from '../../core/rng';
 import { getBase, getCurrency, getFlask, getUnique } from '../../data/items';
-import { addToBackpack, currencyStack, flaskStack, generateEquipment, generateUnique, mintUid } from '../items';
+import { currencyStack, flaskStack, generateEquipment, generateUnique, mintUid } from '../items';
+import { addBoughtItem, type BackpackCell } from './merchant';
 import { mapBaseName, rollMapWithRarity } from './maps';
+import { areaForTheme } from './map-binding';
 import { fail, ok } from './util';
 
 export const DEBUG_MERCHANT_NAME = 'Mira the Provisioner';
@@ -22,7 +24,7 @@ const STOCK: readonly Stock[] = [
   ...CURRENCY_IDS.map(id => ({ id: `currency:${id}`, label: getCurrency(id).name, category: (SCARAB_IDS as readonly string[]).includes(id) ? 'Scarabs' as const : 'Supplies' as const, maxStack: getCurrency(id).maxStack,
     make: (_o: DebugMerchantOptions, _r: Rng, uid: string, count: number) => currencyStack(id, count, uid, true) })),
   ...MAP_BASE_IDS.map(id => ({ id: `map:${id}`, label: mapBaseName(id), category: 'Maps' as const, maxStack: 1,
-    make: (o: DebugMerchantOptions, r: Rng, uid: string) => rollMapWithRarity(r, id, o.mapTier, o.rarity, uid, 0, true) })),
+    make: (o: DebugMerchantOptions, r: Rng, uid: string) => rollMapWithRarity(r, areaForTheme(id, o.mapTier, `debug:${id}`), o.mapTier, o.rarity, uid, 0, true) })),
   ...BASE_IDS.map(id => ({ id: `base:${id}`, label: getBase(id).name, category: 'Bases' as const, maxStack: 1,
     make: (o: DebugMerchantOptions, r: Rng, uid: string) => generateEquipment(id, o.itemLevel, o.rarity, r, { uid, isNew: true, origin: DEBUG_MERCHANT_NAME }) })),
   ...UNIQUE_IDS.map(id => ({ id: `unique:${id}`, label: getUnique(id).name, category: 'Uniques' as const, maxStack: 1,
@@ -46,7 +48,7 @@ export function debugMerchantOffers(options: DebugMerchantOptions) {
 }
 
 /** All-or-nothing delivery to the buyer. Authorization belongs to the host hideout on the server. */
-export function buyDebugOffer(ch: CharacterSave, id: string, options: DebugMerchantOptions): Result<{ character: CharacterSave; message: string }> {
+export function buyDebugOffer(ch: CharacterSave, id: string, options: DebugMerchantOptions, at?: BackpackCell): Result<{ character: CharacterSave; message: string }> {
   if (!validDebugMerchantOptions(options)) return fail('Choose a quantity from 1–100, item level 1–99 and map tier 1–15.');
   const stock = STOCK.find(s => s.id === id);
   if (!stock) return fail('This testing merchant offer does not exist.');
@@ -55,7 +57,8 @@ export function buyDebugOffer(ch: CharacterSave, id: string, options: DebugMerch
   for (let left = options.quantity; left > 0;) {
     const count = Math.min(left, stock.maxStack);
     const minted = mintUid(next);
-    const added = addToBackpack(minted.character, stock.make(options, rng, minted.uid, count));
+    // The first delivery honours the drop cell; the rest of a bulk purchase fills the backpack first-fit.
+    const added = addBoughtItem(minted.character, stock.make(options, rng, minted.uid, count), next === ch ? at : undefined);
     if (!added.ok) return fail('Your backpack cannot hold the whole purchase. Nothing was added.');
     next = added.value;
     left -= count;

@@ -33,6 +33,7 @@ export function describeItem(item: Item, ch?: CharacterSave): ItemDescription {
       return describeMap(item, {
         inDevice: !!ch && ch.mapDevice?.uid === item.uid,
         inMapStash: !!ch && mapStashIndex(ch, item.uid) >= 0,
+        ...(ch?.atlas ? { atlas: ch.atlas } : {}),
       });
   }
 }

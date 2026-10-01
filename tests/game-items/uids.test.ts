@@ -69,7 +69,7 @@ describe('items received from another character', () => {
     const giver = fresh('Giver', 1);
     const taker = fresh('Taker', 2);
     // Both fresh characters minted the same kit uids; the giver's first purchase is the taker's next mint.
-    const bought = expectOk(rules.buyOffer(giver, 'map-t1-ashenForge'));
+    const bought = expectOk(rules.buyOffer(giver, 'map:cinderCrossing:1:plain'));
     expect(bought.item.uid).toBe(nextMinted(taker));
     const got = expectOk(addToBackpack(taker, bought.item));
     expect(findItem(got, bought.item.uid)?.item).toMatchObject({ kind: 'map' });
@@ -120,11 +120,11 @@ describe('items received from another character', () => {
   it('(c) buying after adopting two consecutive uids mints a third, fresh one', () => {
     const giver = fresh('Giver', 1);
     const taker = fresh('Taker', 2);
-    const a = expectOk(rules.buyOffer(giver, 'map-t1-ashenForge'));
-    const b = expectOk(rules.buyOffer(a.character, 'map-t1-ashenForge'));
+    const a = expectOk(rules.buyOffer(giver, 'map:cinderCrossing:1:plain'));
+    const b = expectOk(rules.buyOffer(a.character, 'map:cinderCrossing:1:plain'));
     let ch = expectOk(addToBackpack(taker, a.item));
     ch = expectOk(addToBackpack(ch, b.item));
-    const bought = expectOk(rules.buyOffer(ch, 'map-t1-ashenForge'));
+    const bought = expectOk(rules.buyOffer(ch, 'map:cinderCrossing:1:plain'));
     expect([a.item.uid, b.item.uid]).not.toContain(bought.item.uid);
     expectUnique(bought.character);
   });
@@ -182,7 +182,7 @@ describe('items received from another character', () => {
           break;
         }
         case 3: { // buy from Rook
-          const offers = ['map-t1-ashenForge', 'gamble-ring', 'gamble-wand', 'flask-life'];
+          const offers = ['map:cinderCrossing:1:plain', 'gamble-ring', 'gamble-wand', 'flask-life'];
           const r = rules.buyOffer(me, offers[rand(offers.length)]);
           if (r.ok) me = r.value.character;
           break;

@@ -5,6 +5,8 @@
 // every monster kind, riders included). Reports avg / p99.
 import { describe, expect, it } from 'vitest';
 import { PROJECTILE_KINDS, type PlayerIntent } from '../../src/contracts/sim';
+import { areaRadius, areaTheme } from '../../src/data/layouts/area';
+import { navStats, setNavEnabled } from '../../src/sim/nav';
 import { createRunInternal } from '../../src/sim/run';
 import { projSpec, spawnProjectile } from '../../src/sim/projectiles';
 import { spawnMonster } from '../../src/sim/spawn';
@@ -60,10 +62,17 @@ function topUp(w: World, k: number): void {
   }
 }
 
+/** PERF_NAV=0 measures the layout cases without monster navigation (before/after comparison). */
+setNavEnabled(process.env.PERF_NAV !== '0');
+
 describe('performance', () => {
-  it(`${MONSTERS} monsters (every roster) + ${PROJECTILES} projectiles with ${PLAYERS} players in a map: avg < 3 ms per tick`, () => {
+  for (const layoutArea of [undefined, 'glassSepulchre', 'lastKiln'] as const) {
+  it(`${MONSTERS} monsters (every roster) + ${PROJECTILES} projectiles with ${PLAYERS} players in a map${layoutArea ? ` with the ${layoutArea} layout (monster navigation live)` : ''}: avg < 3 ms per tick`, () => {
     const { run, world } = createRunInternal(
-      makeConfig({ mode: 'map', theme: 'ashenForge', arenaRadius: 900, scaling: { hazards: true, extraProjectiles: 1 } }),
+      makeConfig({
+        mode: 'map', theme: layoutArea ? areaTheme(layoutArea) : 'ashenForge', arenaRadius: layoutArea ? areaRadius(layoutArea) : 900,
+        scaling: { hazards: true, extraProjectiles: 1 }, ...(layoutArea ? { areaId: layoutArea } : {}),
+      }),
     );
     for (let id = 1; id <= PLAYERS; id++) {
       run.addPlayer(makeJoin(id, {
@@ -115,5 +124,11 @@ describe('performance', () => {
     expect(world.monsters.count).toBeGreaterThanOrEqual(MONSTERS);
     expect(world.projectiles.count).toBeGreaterThanOrEqual(PROJECTILES * 0.9);
     expect(avg).toBeLessThan(3);
+    const nav = navStats(world);
+    if (layoutArea && process.env.PERF_NAV !== '0') {
+      expect(nav).not.toBeNull();
+      console.log(`[sim perf] nav: ${JSON.stringify(nav)}`);
+    }
   }, 60_000);
+  }
 });

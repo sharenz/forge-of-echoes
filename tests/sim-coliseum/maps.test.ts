@@ -1,12 +1,12 @@
 // Whole Iron Coliseum maps (GAME_SPEC §7, §14): a new character clears Tier 1 with the starting kit through the
 // real rules (the map's +25% monster count and the early-tier easing included), a geared one clears Tier 5,
 // and every run is deterministic.
+import { themeMap } from '../game-progression/fixtures';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRunInternal } from '../../src/sim/run';
 import { THEME_ROSTER } from '../../src/contracts/bestiary';
 import { SIM_DT, type PlayerIntent } from '../../src/contracts/sim';
 import { rules } from '../../src/game';
-import { createMapItem } from '../../src/game/progression';
 import { createRun } from '../../src/sim';
 import { monsterDef } from '../../src/sim/rosters';
 import { describePlay, playMap } from '../game-progression/playthrough';
@@ -19,7 +19,7 @@ describe('Tier 1: a new character with the starting kit', () => {
   it('clears an Iron Coliseum through the portals (real rules, seeds 1–6: at least 5), under real pressure, and levels up', () => {
     const results = [1, 2, 3, 4, 5, 6].map((seed) => {
       const ch = rules.createCharacter('Gladiator', seed);
-      return playMap(ch, createMapItem('ironColiseum', 1, `coliseum-t1-${seed}`), { maxMinutes: 25, reenterAfter: 12 });
+      return playMap(ch, themeMap('ironColiseum', 1, `coliseum-t1-${seed}`), { maxMinutes: 25, reenterAfter: 12 });
     });
     const lines = results.map(describePlay);
     console.info(lines.join('\n'));

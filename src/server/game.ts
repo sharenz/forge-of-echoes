@@ -21,7 +21,7 @@ import { isScarabId } from '../data/scarabs';
 // An open map's row is only ever written together with its owner's consumed map item, and a refund only
 // together with the deletion of that row, so no crash can leave a map both restorable and refunded.
 import { randomInt, randomUUID } from 'node:crypto';
-import type { GameRulesApi, RunEndInput, RunSetup } from '../contracts/game';
+import type { GameRulesApi, OpenMapOptions, RunEndInput, RunSetup } from '../contracts/game';
 import type { CharacterSave, Item, MapItem } from '../contracts/items';
 import type { Rng } from '../contracts/rng';
 import { createRng, hashString } from '../core/rng';
@@ -29,6 +29,7 @@ import type { AtlasAreaId } from '../contracts/atlas';
 import { ATLAS_RARE_DOOR_CHANCE, ATLAS_START, findAtlasArea } from '../data/progression/atlas';
 import { atlasCreditFor, creditEventCompletion, discoverAfterBoss, newAtlas, paidTerritoryFee } from '../game/progression/atlas';
 import { paidEntranceKey } from '../game/progression/runs';
+import { normalizeRunSurge, refundSurge } from '../game/progression/surge';
 import { atlasEventIdOf } from '../game/progression/map-event-rules';
 import { PORTALS_PER_MAP, PROTOCOL_VERSION } from '../contracts/net';
 import type { Command, PartyInfo, PartyMemberInfo, PortalInfo, RunSummaryInfo, ServerMessage } from '../contracts/net';
@@ -819,7 +820,7 @@ export class Game implements InstanceHost {
   }
 
   /** Open a new map from the device in the session's own hideout. */
-  activateMapDevice(s: PlayerSession, areaId: AtlasAreaId = ATLAS_START, lootClass?: import('../contracts/content').ItemClass): { ok: true; message: string } | { ok: false; error: string } {
+  activateMapDevice(s: PlayerSession, opts: OpenMapOptions = {}): { ok: true; message: string } | { ok: false; error: string } {
     const inst = s.instance;
     if (!inst || inst.kind !== 'hideout' || inst.ownerId !== s.characterId) {
       return { ok: false, error: 'Maps can only be opened at the map device in your own hideout.' };
@@ -833,7 +834,7 @@ export class Game implements InstanceHost {
     if (inUse > 0) {
       return { ok: false, error: `Your previous map is still in use (${inUse} player${inUse === 1 ? '' : 's'} inside).` };
     }
-    const opened = this.serverRules.openMap(s.record.ch, areaId, lootClass);
+    const opened = this.serverRules.openMap(s.record.ch, { ...opts, now: this.now() });
     if (!opened.ok) return { ok: false, error: opened.error };
     if (old) this.closeMap(old, 'replaced');
     const map = this.instances.createMap(s.characterId, s.name, opened.value.setup, this.now(), randomUUID());
@@ -903,7 +904,7 @@ export class Game implements InstanceHost {
   private refundMap(map: MapInstance): void {
     const item = map.sourceItem;
     if (!item) return;
-    if (this.refundMapItem(map.ownerId, item, map.mapKey, () => this.db.deleteOpenMap(map.mapKey), paidEntranceKey(map.setup), map.setup.entranceScrap, map.setup.scarabs)) map.sourceItem = null;
+    if (this.refundMapItem(map.ownerId, item, map.mapKey, () => this.db.deleteOpenMap(map.mapKey), paidEntranceKey(map.setup), map.setup.entranceScrap, map.setup.scarabs, map.setup.surge)) map.sourceItem = null;
   }
 
   /**
@@ -911,12 +912,17 @@ export class Game implements InstanceHost {
    * with `alsoWrite` (the deletion of the map's row). All or nothing: when the write fails (logged) the
    * character is unchanged and false is returned.
    */
-  private refundMapItem(ownerId: string, item: MapItem, mapKey: string, alsoWrite: () => void, refundKey?: import('../contracts/content').CurrencyId, entranceScrap = 0, scarabs: readonly import('../contracts/content').ScarabId[] = []): boolean {
+  private refundMapItem(ownerId: string, item: MapItem, mapKey: string, alsoWrite: () => void, refundKey?: import('../contracts/content').CurrencyId, entranceScrap = 0, scarabs: readonly import('../contracts/content').ScarabId[] = [], surge?: RunSetup['surge']): boolean {
     const extra: Item[] = refundKey ? [{ kind: 'currency', currencyId: refundKey, count: 1, uid: `refund-key:${mapKey}` }] : [];
     scarabs.forEach((currencyId, index) => extra.push({ kind: 'currency', currencyId, count: 1, uid: `refund-scarab:${mapKey}:${index}` }));
     const fee = paidTerritoryFee(entranceScrap);
     if (fee) extra.push({ kind: 'currency', currencyId: 'scrap', count: fee, uid: `refund-scrap:${mapKey}` });
-    return this.returnToOwner(ownerId, item, { what: 'map refund', done: 'map refunded' }, { map: mapKey }, alsoWrite, extra);
+    // An unrestorable run also gives its surge charge back (D 7.2): same transaction, exact (nothing once the forge day has turned over).
+    const restoreSurge = surge ? (ch: CharacterSave): CharacterSave => {
+      const atlas = refundSurge(ch.atlas, surge, this.now());
+      return atlas === ch.atlas || !atlas ? ch : { ...ch, atlas };
+    } : undefined;
+    return this.returnToOwner(ownerId, item, { what: 'map refund', done: 'map refunded' }, { map: mapKey }, alsoWrite, extra, restoreSurge);
   }
 
   /**
@@ -926,7 +932,7 @@ export class Game implements InstanceHost {
    */
   private returnToOwner(
     ownerId: string, item: Item, log: { what: string; done: string }, ctx: Record<string, unknown>, alsoWrite?: () => void,
-    extraItems: readonly Item[] = [],
+    extraItems: readonly Item[] = [], transform?: (ch: CharacterSave) => CharacterSave,
   ): boolean {
     const what = log.what;
     const s = this.sessions.get(ownerId);
@@ -947,6 +953,7 @@ export class Game implements InstanceHost {
         if (!placed.ok) { this.log.error(`${what} extra item did not fit`, { ...ctx, owner: ownerId }); return false; }
         next = placed.value.character;
       }
+      if (transform) next = transform(next);
       if (!this.store.commit(rec, next, alsoWrite)) {
         this.log.error(`${what} could not be saved`, { ...ctx, owner: ownerId });
         return false;
@@ -1613,7 +1620,7 @@ export class Game implements InstanceHost {
     if (!setup || !owner || this.instances.activeMapOf(row.ownerId)) {
       // The run cannot come back: the map item goes back to its owner, if it is still a valid map.
       const item = restoreRunSetup(isRecord(parsed) ? (parsed.sourceMap ?? parsed.map) : null, 0)?.map ?? null;
-      if (owner && item) this.refundMapItem(row.ownerId, item, row.mapId, () => this.db.deleteOpenMap(row.mapId), paidEntranceKey(parsed), isRecord(parsed) ? paidTerritoryFee(parsed.entranceScrap) : 0, isRecord(parsed) && Array.isArray(parsed.scarabs) ? parsed.scarabs.slice(0, 4).filter(isScarabId) : []);
+      if (owner && item) this.refundMapItem(row.ownerId, item, row.mapId, () => this.db.deleteOpenMap(row.mapId), paidEntranceKey(parsed), isRecord(parsed) ? paidTerritoryFee(parsed.entranceScrap) : 0, isRecord(parsed) && Array.isArray(parsed.scarabs) ? parsed.scarabs.slice(0, 4).filter(isScarabId) : [], isRecord(parsed) ? normalizeRunSurge(parsed.surge) : undefined);
       else {
         this.db.deleteOpenMap(row.mapId);
         this.log.error('open map could not be restored', { map: row.mapId, owner: row.ownerName });

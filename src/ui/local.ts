@@ -54,6 +54,36 @@ export interface DropTarget {
   /** Pointer is over your side of the trade window (dropping adds the item to your offer). */
   offer?: boolean;
   sale?: boolean;
+  /** A sale-window item dragged back out: dropping anywhere but the window takes it out of the sale. */
+  unsale?: boolean;
+  /** Short label on the drag ghost when the drop is valid ("Buy for 6 Forge Scrap"). */
+  tag?: string;
+  /** Pointer is over a panel-owned slot (data-drop="slot" data-slot="<id>", see Local.slots): the item stays where it is, the slot's handler decides. */
+  slot?: string;
+}
+
+/**
+ * A drop target a panel owns that is not an item location: the Atlas dock's passage slot and the bench's recycle slots. The item is
+ * only SELECTED into the slot (it stays in the inventory until the server action, e.g. the key is spent with the map); `accepts`
+ * answers with the refusal text (null = it fits) using the SAME rules the server enforces, `onDrop` records the choice.
+ */
+export interface SlotHandler {
+  accepts(drag: { uid: string; item: Item; from: ItemLocation }): string | null;
+  onDrop(drag: { uid: string; item: Item; from: ItemLocation }): void;
+  /** Ghost label on a valid drop ("Use as passage"). */
+  tag?: string;
+}
+
+/** A merchant stock row being dragged onto the backpack (nothing is removed from anywhere; dropping buys). */
+export interface StockDrag {
+  /** Why it cannot be bought right now ("Can't afford: ..."), or null. */
+  blocked: string | null;
+  /** Units the purchase delivers (bulk quantity at the testing merchant). */
+  total: number;
+  /** Ghost label for a valid drop. */
+  tag: string;
+  /** Buys it; `at` is the backpack cell it was dropped on. */
+  buy(at: { x: number; y: number }): void;
 }
 
 export interface DragState {
@@ -65,6 +95,10 @@ export interface DragState {
   /** Pixel size of one cell where the drag started (ghost size). */
   cellPx: number;
   target: DropTarget | null;
+  /** Set for a merchant stock row: `uid`/`item` are a preview, the drop buys. */
+  stock?: StockDrag;
+  /** Set for an item dragged out of the sale window. */
+  fromSale?: boolean;
 }
 
 export interface DialogSpec {
@@ -101,6 +135,8 @@ export interface Local {
   search: Signal<string>;
   /** The Map Stash tier the player expanded (shared by the stash tab and the map device's picker); null = auto. */
   mapTier: Signal<number | null>;
+  /** Panel-owned drop slots by id (data-slot): registered while their panel is mounted. */
+  slots: Map<string, SlotHandler>;
   /** performance.now() when the UI last opened the chat (keys typed before the field has focus go to it). */
   chatOpenedAt: number;
   showTooltip(spec: TooltipSpec, el: Element, placement?: 'side' | 'above'): void;
@@ -123,6 +159,7 @@ export function createLocal(): Local {
     hint,
     search: signal(''),
     mapTier: signal<number | null>(null),
+    slots: new Map<string, SlotHandler>(),
     chatOpenedAt: -Infinity,
     showTooltip(spec, el, placement = 'side') {
       const r = el.getBoundingClientRect();

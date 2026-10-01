@@ -38,6 +38,7 @@ function map(tier: number, baseId: MapItem['baseId'], rarity: MapItem['rarity'] 
   return {
     kind: 'map',
     uid: `map-${n.toString().padStart(3, '0')}`,
+    areaId: baseId === 'rimedOssuary' ? 'boneApproach' : baseId === 'ironColiseum' ? 'championsApproach' : 'emberRoad',
     baseId,
     tier,
     rarity,

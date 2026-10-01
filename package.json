@@ -12,6 +12,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "NODE_ENV=production tsx src/server/main.ts",
     "typecheck": "tsc --noEmit",
+    "layout:lint": "node scripts/layout-lint.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "node scripts/e2e.mjs",

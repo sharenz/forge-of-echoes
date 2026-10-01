@@ -107,7 +107,7 @@ describe('trading', () => {
     expect(info(ben)).toMatchObject({ theyAccepted: true, youAccepted: false });
 
     // Ben's offer changes: Ann's accept is cleared and the lock restarts.
-    const benMap = uidOf(ben.session.record.ch, (k, id) => k === 'map' && id === 'rimedOssuary');
+    const benMap = uidOf(ben.session.record.ch, (k, id) => k === 'map' && id === 'ashenForge');
     expect(ben.command({ c: 'tradeOffer', tradeId, uids: [benMap] }).ok).toBe(true);
     expect(info(ann)).toMatchObject({ youAccepted: false, theyAccepted: false });
     expect(ben.command({ c: 'tradeAccept', tradeId, accept: true }).error).toMatch(/offer just changed/);
@@ -125,7 +125,8 @@ describe('trading', () => {
     const benCh = ben.session.record.ch;
     expect(annCh.backpack.entries.filter((e) => e.item.kind === 'currency' && e.item.currencyId === 'scrap')).toHaveLength(0);
     expect(benCh.backpack.entries.filter((e) => e.item.kind === 'currency' && e.item.currencyId === 'scrap').reduce((n, e) => n + (e.item.kind === 'currency' ? e.item.count : 0), 0)).toBe(20);
-    expect(annCh.backpack.entries.filter((e) => e.item.kind === 'map' && e.item.baseId === 'rimedOssuary')).toHaveLength(2);
+    // one Cinder Crossing map out, one in: still three of the starting kit
+    expect(annCh.backpack.entries.filter((e) => e.item.kind === 'map' && e.item.areaId === 'cinderCrossing')).toHaveLength(3);
     // Received items are new; the uids stay unique on each side (both characters minted the same ones).
     expect(annCh.backpack.entries.some((e) => e.item.isNew)).toBe(true);
     for (const ch of [annCh, benCh]) expect(new Set(uidsOf(ch)).size).toBe(uidsOf(ch).length);

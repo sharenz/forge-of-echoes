@@ -130,7 +130,7 @@ function StashFooter({ special }: { special: SpecialStashTab | null }) {
     const title = [move, names.length ? fullSlotsNote(names) : ''].filter(Boolean).join(' ');
     return (
       <div class="fe-stash__foot">
-        <span class="fe-panel__note ui-type-caption">Ctrl-click: a stack · Shift+Ctrl-click: one · Right-click: craft</span>
+        <span class="fe-panel__note ui-type-caption">Click: craft on the work slot · Ctrl-click: take a stack · Right-click: arm</span>
         <Button
           size="small"
           class="fe-stash__deposit"
@@ -166,6 +166,7 @@ export function StashPanel() {
   const [draft, setDraft] = useState('');
   if (!ch) return null;
   const special = isSpecialTab(active) ? active : null;
+  const crafting = special === 'currency' || special === 'mapCurrency';
   const tabIndex = normalTabIndex(active, ch.stash.length);
   const tab = tabIndex === null ? null : ch.stash[tabIndex];
   const capacity = ch.stashCapacity ?? MAX_STASH_TABS;
@@ -178,8 +179,8 @@ export function StashPanel() {
   };
 
   return (
-    <PanelShell panel="stash" title="Stash" class="fe-stash">
-      <p class="ui-type-caption fe-muted">Shared by all characters on your account.</p>
+    <PanelShell panel="stash" title="Stash" class={cx('fe-stash', crafting && 'fe-stash--crafting')}>
+      <p class="ui-type-caption fe-muted fe-stash__shared">Shared by all characters on your account.</p>
       <StashSearch />
       <div class="fe-tabs" role="tablist">
         <div class="fe-tabs__normal">

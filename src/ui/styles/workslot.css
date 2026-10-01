@@ -1,0 +1,467 @@
+/* Crafting Stash work slot (panels/WorkSlot.tsx, panels/StashSpecial.tsx): the page of both Crafting Stash tabs is a
+ * two-column bench. Left: the work slot (socket, name plate and Stability, modifiers, what the last craft did, Equip /
+ * Return / Bench). Right: the currency slots as compact 4-wide tiles (the tab's slot table, one click crafts). The page
+ * keeps the 12 x 8 grid's width; on these tabs the "Shared by all characters" line makes way for extra height, so the
+ * panel itself never changes size when switching tabs. Type sizes are the four --font-ui-* tokens only. */
+
+.fe-stash--crafting .fe-stash__shared {
+  display: none;
+}
+
+.fe-cstash--work {
+  --wtile: calc(var(--cell) + 4px);
+  --wgap: 4px;
+  /* The hidden "Shared by all characters" line: its text (caption, 1.3 line height), its 14 px margins and the 12 px gap
+   * around it. Short screens (the panel is clipped by the command deck there) keep the page inside the panel instead. */
+  --wslot-extra: calc(var(--font-ui-caption) * 1.3 + 40px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) calc(var(--wtile) * 3 + var(--wgap) * 2 + 8px);
+  gap: 8px;
+  padding: 8px 6px 8px 8px;
+  overflow: hidden;
+  height: calc(var(--cell) * 8 + 2px + var(--wslot-extra));
+}
+
+/* ---- the currency tiles (right) ---- */
+.fe-cstash__tiles {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, var(--wtile));
+  grid-auto-rows: var(--wtile);
+  gap: var(--wgap);
+  align-content: start;
+  justify-content: start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 2px 0 0;
+  margin: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bronze-dark) rgba(0, 0, 0, 0.35);
+}
+.fe-cslot--tile {
+  width: var(--wtile);
+  height: var(--wtile);
+  box-sizing: border-box;
+  padding: 0;
+  justify-content: center;
+  --cslot-icon: var(--icon-cell);
+}
+.fe-cslot--tile .fe-cslot__well {
+  width: var(--icon-cell);
+  height: var(--icon-cell);
+}
+.fe-cslot--tile .fe-cslot__count {
+  right: 0;
+  bottom: 0;
+  padding: 0 2px;
+  line-height: 15px;
+}
+.fe-cslot--tile:focus-visible,
+.fe-wslot__socket:focus-visible,
+.fe-wbtn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+.fe-cslot--tile:not(.fe-cslot--empty):hover .fe-cslot__icon {
+  transform: translateY(-1px);
+}
+.fe-cslot--tile:not(.fe-cslot--empty):active {
+  background: radial-gradient(circle at 50% 40%, rgba(232, 102, 42, 0.3), transparent 70%), linear-gradient(180deg, #1c1410, #0a0809);
+}
+
+/* ---- the work slot (left) ---- */
+.fe-wslot {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 7px 6px;
+  background:
+    radial-gradient(90% 60% at 0% 0%, rgba(232, 102, 42, 0.09), transparent 70%),
+    rgba(0, 0, 0, 0.3);
+  border: 1px solid #2c2219;
+  box-shadow: inset 0 1px 0 rgba(201, 160, 100, 0.06);
+}
+.fe-wslot__top {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+/* socket */
+.fe-wslot__socket {
+  --tone: var(--bronze);
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: calc(var(--icon-cell) * 2 + 10px);
+  height: calc(var(--icon-cell) * 3 + 10px);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  touch-action: none;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 240, 220, 0.06), transparent 70%),
+    linear-gradient(180deg, #120e10, #0a0809);
+  border: 1px solid var(--tone);
+  border-radius: 3px;
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 0 3px rgba(13, 11, 14, 0.85),
+    0 0 0 4px rgba(138, 106, 62, 0.4),
+    inset 0 0 16px rgba(0, 0, 0, 0.9);
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+.fe-wslot__socket--magic {
+  --tone: var(--tone-magic);
+}
+.fe-wslot__socket--rare {
+  --tone: var(--tone-rare);
+}
+.fe-wslot__socket--unique {
+  --tone: var(--tone-unique);
+}
+.fe-wslot__socket--map {
+  --tone: var(--gold);
+}
+.fe-wslot__socket--empty {
+  cursor: default;
+  border-style: dashed;
+  border-color: var(--bronze-dark);
+}
+.fe-wslot__socket--lifted .fe-wslot__icon {
+  opacity: 0.3;
+}
+.fe-wslot__ring {
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(255, 240, 220, 0.05);
+  border-radius: 2px;
+  pointer-events: none;
+}
+.fe-wslot__icon {
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.8));
+  pointer-events: none;
+}
+.fe-wslot__hole {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.fe-wslot__flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 2px;
+  background: radial-gradient(circle at 50% 45%, rgba(255, 214, 140, 0.75), rgba(232, 102, 42, 0.35) 45%, transparent 75%);
+  animation: fe-wflash 0.9s ease-out forwards;
+}
+@keyframes fe-wflash {
+  0% {
+    opacity: 1;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
+/* name plate */
+.fe-wslot__plate {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.fe-wslot__name {
+  font-family: var(--font-title);
+  font-size: var(--font-ui-secondary);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 1px #000;
+}
+.fe-wslot__name--empty {
+  color: var(--parchment);
+}
+.fe-wslot__base {
+  font-size: var(--font-ui-caption);
+  line-height: 1.2;
+}
+.fe-wslot__stab {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 5px;
+  margin-top: 3px;
+  font-size: var(--font-ui-caption);
+  font-weight: 700;
+  color: var(--parchment);
+}
+.fe-wslot__stab img {
+  image-rendering: pixelated;
+}
+.fe-wslot__stab-pips {
+  display: inline-flex;
+  gap: 1px;
+}
+.fe-wslot__stab-pips .fe-bench__pip {
+  width: 6px;
+  height: 11px;
+}
+.fe-wslot__stab--finished .fe-wslot__stab-n {
+  color: var(--gold);
+}
+.fe-wslot__intro {
+  margin: 2px 0 0;
+  font-size: var(--font-ui-caption);
+  line-height: 1.3;
+  color: var(--bone);
+}
+.fe-wslot__intro b {
+  color: var(--parchment);
+}
+.fe-wslot__empty-note {
+  margin-top: auto;
+  padding: 6px 2px 0;
+  font-size: var(--font-ui-caption);
+  line-height: 1.3;
+  color: var(--ash);
+  border-top: 1px dashed rgba(201, 160, 100, 0.2);
+}
+
+/* modifiers */
+.fe-wslot__mods {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0 2px 0 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bronze-dark) rgba(0, 0, 0, 0.35);
+}
+.fe-wmod {
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 3px;
+  font-size: var(--font-ui-caption);
+  line-height: 1.25;
+  color: var(--affix);
+  background: rgba(0, 0, 0, 0.26);
+  border-left: 2px solid transparent;
+}
+.fe-wmod.fe-mod--implicit {
+  color: var(--implicit);
+}
+.fe-wmod.fe-mod--neg,
+.fe-wmod.fe-mod--scar {
+  color: #e8847a;
+}
+.fe-wmod.fe-mod--sealed {
+  color: #f1dc9c;
+  border-left-color: rgba(224, 176, 74, 0.6);
+}
+.fe-wmod.fe-mod--fractured {
+  color: var(--fractured);
+  border-left-color: rgba(216, 183, 122, 0.5);
+}
+.fe-wmod.fe-mod--crafted {
+  color: var(--crafted);
+  border-left-color: var(--crafted);
+}
+.fe-wmod__tier {
+  display: block;
+  padding: 0 1px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--bronze-light);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #4a3621;
+  border-radius: 2px;
+}
+.fe-wmod__tier:empty {
+  border-color: transparent;
+  background: transparent;
+}
+.fe-wmod__text {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 4px;
+  min-width: 0;
+}
+.fe-wmod__new {
+  width: 9px;
+  height: 9px;
+  margin-right: 2px;
+  background: linear-gradient(135deg, #ffe1a6, #e8862e);
+  border: 1px solid #fff0cc;
+  transform: rotate(45deg);
+  box-shadow: 0 0 6px rgba(255, 170, 70, 0.9);
+}
+.fe-wslot__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+/* The modifier the last craft added or changed: lit until the next craft. */
+.fe-wmod--fresh {
+  color: #fff3d6;
+  background: linear-gradient(90deg, rgba(255, 170, 70, 0.34), rgba(232, 102, 42, 0.12) 70%, rgba(0, 0, 0, 0.26));
+  border-left-color: #ffb45e;
+  box-shadow: inset 0 0 0 1px rgba(255, 180, 94, 0.28);
+  animation: fe-wfresh 1.4s ease-out;
+}
+.fe-wmod--fresh.fe-mod--neg,
+.fe-wmod--fresh.fe-mod--scar {
+  color: #ffd2cb;
+}
+.fe-wmod--fresh .fe-wmod__tier {
+  color: #fff3d6;
+  background: rgba(0, 0, 0, 0.35);
+  border-color: rgba(255, 190, 110, 0.7);
+}
+@keyframes fe-wfresh {
+  0% {
+    background-color: rgba(255, 220, 150, 0.85);
+    box-shadow: 0 0 14px rgba(255, 170, 70, 0.9);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.fe-wslot__none {
+  padding: 4px 2px;
+  font-size: var(--font-ui-caption);
+  color: var(--ash);
+}
+.fe-wslot__log {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 3px;
+  padding: 3px 2px 0 6px;
+  font-size: var(--font-ui-caption);
+  line-height: 1.25;
+  color: var(--stone-light);
+  border-top: 1px dashed rgba(201, 160, 100, 0.18);
+}
+.fe-wslot__log span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* last craft (under the plate's Stability) */
+.fe-wslot__last {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 3px;
+  padding: 2px 5px;
+  font-size: var(--font-ui-caption);
+  line-height: 1.25;
+  color: var(--bone);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #2c2219;
+}
+.fe-wslot__last--fresh {
+  border-color: rgba(255, 180, 94, 0.55);
+  box-shadow: inset 0 0 10px rgba(232, 102, 42, 0.18);
+}
+.fe-wslot__last-k {
+  flex: none;
+  font-weight: 700;
+  color: var(--bronze-light);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.fe-wslot__last-t {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.fe-wslot__last-none {
+  color: var(--ash);
+}
+.fe-wslot__gone {
+  flex: none;
+  color: #e8847a;
+  font-weight: 700;
+  cursor: help;
+}
+.fe-wslot__warn {
+  flex: none;
+  margin: 0;
+  padding: 3px 6px;
+  font-size: var(--font-ui-caption);
+  color: #f3c9c2;
+  background: rgba(90, 34, 38, 0.3);
+  border: 1px solid #5a2226;
+}
+
+/* actions: role="button" elements so the keyboard can use them in game (see WorkSlot.tsx) */
+.fe-wslot__actions {
+  flex: none;
+  display: flex;
+  gap: 4px;
+}
+.fe-wbtn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-left: 4px;
+  padding-right: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.fe-wbtn .fe-anvil {
+  width: 14px;
+  height: 11px;
+}
+.fe-wbtn--off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-height: 699px) {
+  .fe-cstash--work {
+    --wslot-extra: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fe-wmod--fresh,
+  .fe-wslot__flash {
+    animation: none;
+  }
+  .fe-wslot__flash {
+    opacity: 0;
+  }
+}

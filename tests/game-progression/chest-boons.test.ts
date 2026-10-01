@@ -64,7 +64,7 @@ describe('chest boons (Wayside Anvil)', () => {
   it('Recast: rolling twice and keeping the better raises the chest equipment on average', () => {
     const score = (it: EquipmentItem) => ({ normal: 0, magic: 1, rare: 2, unique: 3 }[it.rarity] ?? 0) * 10 + it.affixes.length;
     let plain = 0, recast = 0, n = 0;
-    for (let seed = 1; seed <= 60; seed++) {
+    for (let seed = 1; seed <= 300; seed++) {
       for (const it of gear(roll(seed))) { plain += score(it); n++; }
       for (const it of gear(roll(seed, { ...NONE, recast: true }))) recast += score(it);
     }

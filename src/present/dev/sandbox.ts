@@ -4,6 +4,8 @@
 //
 // Query params:
 //   ?theme=<map base>|hideout   zone look (all six map bases; hideout = your courtyard with its portal)
+//   ?layout=slag-yard|sand-ring  build the arena from a hand-crafted layout fixture (src/data/layouts/fixtures; the area, radius and
+//                        theme follow the fixture unless ?theme is given), to look at layout props, decals and light pools
 //   ?players=1..4        party size (bots)
 //   ?wave=N              fast-forward (with short waves) until wave N has started
 //   ?boss=1              fast-forward to the boss wave
@@ -46,6 +48,7 @@
 //                          party:A|B|…  these sets on the party members in join order (each set a,b:n,… as above)
 //                        Combine with ?idle=1 (and ?freeze=1 for stills). Frozen / rooted players can't move.
 //   ?stage=KIND          set a scene around the local player after the fast-forward (for stills, add ?freeze=1):
+//                          kit          the 14 layout art-kit props, frame 0 / frame 1 rows (frame: ?zoom=1; ?theme= tints them)
 //                          lineup       the theme's family in a row, a magic and a rare leader (frame: ?zoom=2)
 //                          commanders   the theme's lieutenant and boss side by side
 //                          boss         the theme's boss alone, close beside the local player (· lieutenant: the same)
@@ -82,6 +85,11 @@ import type { RootSource } from '../../contracts/sim';
 import { createBot, type Bot } from '../../../tests/sim/bot';
 import { createRng } from '../../core/rng';
 import { createPresenter, isDropVisible, pickInteractiveProp } from '../index';
+import { overrideLayout, registeredLayouts } from '../../data/layouts';
+import { FIXTURE_LAYOUTS } from '../../data/layouts/fixtures';
+import { areaRadius, areaTheme } from '../../data/layouts/area';
+import { LAYOUT_PROP_RADIUS } from '../../data/layouts/schema';
+import { addProp } from '../../sim/props';
 
 declare global {
   interface Window {
@@ -105,7 +113,8 @@ declare global {
 }
 
 const qs = new URLSearchParams(location.search);
-const theme = (THEMES.includes(qs.get('theme') as Theme) ? qs.get('theme') : 'ashenForge') as Theme;
+const layoutFixture = FIXTURE_LAYOUTS.find((l) => (l.areaId === 'furnaceYard' ? 'slag-yard' : 'sand-ring') === qs.get('layout')) ?? registeredLayouts().find((l) => l.areaId === qs.get('layout'));
+const theme = (THEMES.includes(qs.get('theme') as Theme) ? qs.get('theme') : layoutFixture ? areaTheme(layoutFixture.areaId) : 'ashenForge') as Theme;
 const hideout = theme === 'hideout';
 const partySize = Math.max(1, Math.min(4, Number(qs.get('players') ?? 1) || 1));
 const targetWave = qs.get('boss') === '1' ? -1 : Number(qs.get('wave') ?? 0);
@@ -174,10 +183,11 @@ if (!hideout) {
   const owner = chars.get(1)!;
   const entry = owner.backpack.entries.find((e) => e.item.kind === 'map');
   if (!entry) throw new Error('sandbox: the starting kit has no map');
-  const map: MapItem = { ...(entry.item as MapItem), baseId: theme as MapItem['baseId'], tier };
+  const map: MapItem = entry.item as MapItem; // the starter map (Cinder Crossing, tier 1): the theme and tier are overridden on the setup below
   const opened = rules.openMap({ ...owner, mapDevice: map });
   if (!opened.ok) throw new Error(`sandbox: ${opened.error}`);
-  setup = { ...opened.value.setup, seed, itemQuantity: opened.value.setup.itemQuantity * luck, itemRarity: opened.value.setup.itemRarity * luck };
+  // A layout area is not discovered in the sandbox's account: open the starter map, then run the layout's own area at ?tier.
+  setup = { ...opened.value.setup, ...(layoutFixture ? { atlasAreaId: layoutFixture.areaId } : {}), map: { ...opened.value.setup.map, baseId: theme as MapItem['baseId'], tier }, seed, itemQuantity: opened.value.setup.itemQuantity * luck, itemRarity: opened.value.setup.itemRarity * luck };
 }
 
 const loot = new Map<number, Item>();
@@ -236,6 +246,13 @@ const hooks: RunHooks = {
 };
 
 const config: RunConfig = rules.buildRunConfig(setup, hooks);
+if (layoutFixture) {
+  overrideLayout(layoutFixture);
+  config.areaId = layoutFixture.areaId;
+  config.theme = areaTheme(layoutFixture.areaId);
+  if (THEMES.includes(qs.get('theme') as Theme)) config.theme = qs.get('theme') as Theme;
+  config.arenaRadius = areaRadius(layoutFixture.areaId);
+}
 // Dev switch: force one or two concurrent event plans (a hidden plan never exists here otherwise).
 const forced = (qs.get('event') ?? '').split(',').filter((k): k is MapEventKind => (MAP_EVENT_KINDS as readonly string[]).includes(k));
 if (forced.length > 0) {
@@ -800,6 +817,16 @@ function stage(kind: string): void {
     fam.forEach((k, n) => spawnMonster(w, k, cx - 128 + n * 62, cy - 22, { animate: false }));
     spawnMonster(w, fam[0], cx - 110, cy + 60, { animate: false, rarity: 'magic', mods: ELITE_BIT.swift });
     spawnMonster(w, fam[1], cx + 110, cy + 60, { animate: false, rarity: 'rare', mods: ELITE_BIT.juggernaut | ELITE_BIT.frenzied });
+  } else if (kind === 'kit') {
+    // The layout art kit (D 10.5): the fourteen props in two rows, frame 0 on top and the recolour (variant 1) below.
+    // Frame with ?zoom=1 (a 640x360 view); add ?theme= to see the per-theme kit tint.
+    const m = w.monsters;
+    for (let i = 0; i < m.capacity; i++) if (m.alive[i]) m.release(i);
+    const kit = ['vat', 'bellows', 'altar', 'sarcophagus', 'choirStall', 'ribArch', 'iceColumn', 'crate', 'chainPost', 'hoist', 'gate', 'weaponRack', 'obelisk', 'statue'] as const;
+    kit.forEach((k, n) => {
+      const row = Math.floor(n / 7);
+      for (const variant of [0, 1]) addProp(w, k, cx - 270 + (n % 7) * 90, cy - 70 + (row * 2 + variant) * 62, LAYOUT_PROP_RADIUS[k], { variant });
+    });
   } else if (kind === 'party') {
     const m = w.monsters;
     for (let i = 0; i < m.capacity; i++) if (m.alive[i]) m.release(i);

@@ -7,7 +7,7 @@ import { CORRUPTED_MODS, CURRENCY_DROPS, ECHO_MOD, REWARD_MODS } from '../../src
 import { rules } from '../../src/game';
 import { craftMap, mapCraftError, mapCraftPreview } from '../../src/game/progression/maps';
 import { normalizeItem } from '../../src/game/progression/save';
-import { eventCtx, bareCharacter, expectOk, kill, map, setupFor } from './fixtures';
+import { eventCtx, bareCharacter, expectOk, kill, map, setupFor, openAt } from './fixtures';
 
 const saved = (m: MapItem) => normalizeItem(JSON.parse(JSON.stringify(m)), m.uid);
 const rewards = (m: MapItem) => m.mods.filter(r => REWARD_MODS.some(d => d.id === r.modId));
@@ -31,7 +31,7 @@ describe('advanced map ingredients', () => {
     expect(mapCraftError(charted, 'compass')).toMatch(/already charted/);
     expect(mapCraftError(map('ashenForge', 15), 'compass')).toMatch(/highest/);
     // A later Void Needle tier upgrade cannot take the charted chest beyond the tier cap.
-    const cap = setupFor({ ...charted, tier: 15 });
+    const cap = setupFor({ ...charted, areaId: 'heartOfForge', tier: 15 });
     expect(rules.rollChestLoot(cap, rng, bareCharacter()).filter(i => i.kind === 'map').every(i => i.tier <= 15)).toBe(true);
   });
 
@@ -96,8 +96,8 @@ describe('advanced ingredient sources', () => {
     for (const [area, ingredient, tier, chance] of sources) {
       const ch = bareCharacter({ atlas: { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 },
         currencyStash: { scrap: 10 }, mapDevice: map('ashenForge', tier) });
-      const setup = expectOk(rules.openMap(ch, area)).setup;
-      const low = expectOk(rules.openMap({ ...ch, mapDevice: map('ashenForge', tier - 1) }, area)).setup;
+      const setup = expectOk(openAt(rules, ch, area)).setup;
+      const low = expectOk(openAt(rules, { ...ch, mapDevice: map('ashenForge', tier - 1) }, area)).setup;
       const rng = createRng(573), n = 1000;
       let count = 0;
       for (let i = 0; i < n; i++) {

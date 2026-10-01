@@ -1,9 +1,81 @@
-import { useEffect } from 'preact/hooks';
+// Rook's Sell tab: the offer window. Drag equipment out of the inventory (shown beside this panel) into the window to
+// put it up for sale; every item shows Rook's appraisal breakdown and the footer the running total. Drag an item back
+// out (or click its ×) to keep it. Nothing leaves the backpack until you confirm: then one atomic server command
+// removes exactly the offered items and pays the displayed total, or changes nothing. Equipped gear is protected (it
+// cannot be offered until you unequip it), and Ctrl/⌘-clicking backpack gear toggles it in the window as an extra.
+import { useEffect, useRef, useState } from 'preact/hooks';
+import type { EquipmentItem } from '../../contracts/items';
 import { Button, PixelIcon, cx } from '../components/common';
-import { isTradeLocked, saleItemError, selectForSale } from '../items/hooks';
+import { beginPointerDrag } from '../items/dnd';
+import { isTradeLocked, safe, saleItemError } from '../items/hooks';
+import { readCellPx } from '../items/ItemView';
 import { itemIconId, itemTone } from '../lib/items';
 import { useLocal } from '../local';
 import { useSignal, useStore, useUi } from '../store';
+
+/** "Base · Ashwood Wand: 1.25 Scrap" → the label and the amount, for a two-column breakdown. */
+export function splitAppraisalLine(line: string): { label: string; amount: string } {
+  const i = line.lastIndexOf(': ');
+  return i < 0 ? { label: line, amount: '' } : { label: line.slice(0, i), amount: line.slice(i + 2) };
+}
+
+function OfferRow({ item, expanded, onToggle, busy }: { item: EquipmentItem; expanded: boolean; onToggle(): void; busy: boolean }) {
+  const store = useStore(), local = useLocal();
+  const ch = useUi((s) => s.character);
+  const iconRef = useRef<HTMLSpanElement>(null);
+  const quote = store.rules.sellQuote(item);
+  if (!ch || !quote) return null;
+  const name = store.rules.describeItem(item, ch).title;
+  const locked = isTradeLocked(store.get(), item.uid);
+  const entry = ch.backpack.entries.find((e) => e.item.uid === item.uid);
+
+  const onPointerDown = (e: PointerEvent): void => {
+    if (busy || !entry || (e.target as HTMLElement).closest('button')) return;
+    const el = iconRef.current;
+    if (!el) return;
+    const size = safe(() => store.rules.itemSize(item), { w: 1, h: 1 });
+    beginPointerDrag(e, store, local, {
+      uid: item.uid, item, from: { kind: 'backpack', x: entry.x, y: entry.y }, size, el, cellPx: readCellPx(el), offsetX: 0, offsetY: 0,
+      grab: { x: Math.floor((size.w - 1) / 2), y: Math.floor((size.h - 1) / 2) }, fromSale: true,
+    });
+  };
+  const remove = (): void => {
+    if (busy) return;
+    const sale = local.merchantSale.get();
+    if (sale) local.merchantSale.set({ ...sale, uids: sale.uids.filter((id) => id !== item.uid) });
+    local.hideTooltip();
+    store.actions.uiSound('click');
+  };
+
+  return (
+    <div class={cx('fe-sell__item', 'fe-sell__item--selected', expanded && 'fe-sell__item--open')} data-sell-uid={item.uid}
+      onPointerDown={onPointerDown as never}
+      onPointerEnter={(e) => { if (!local.drag.get()) local.showTooltip({ kind: 'item', uid: item.uid }, e.currentTarget); }}
+      onPointerLeave={() => local.hideTooltip()}>
+      <div class="fe-sell__head">
+        <span class={cx('fe-offer__icon', `fe-item--${itemTone(item)}`)} ref={iconRef}><PixelIcon id={itemIconId(item)} width={32} height={32} /></span>
+        <span class="fe-sell__who">
+          <span class="fe-sell__name" style={{ color: `var(--tone-${itemTone(item)})` }}>{name}</span>
+          <span class="fe-sell__meta ui-type-caption">{locked ? 'Offered in trade' : `Item level ${item.itemLevel} · ${item.affixes.length} modifier${item.affixes.length === 1 ? '' : 's'}`}</span>
+        </span>
+        <button class="fe-sell__price ui-type-body" type="button" aria-expanded={expanded} aria-label={`Appraisal for ${name}: ${quote.scrap} Scrap`}
+          title="Show Rook’s appraisal" onClick={onToggle}>
+          <PixelIcon id="icon/currency/scrap" width={20} height={20} />{quote.scrap}
+        </button>
+        <button class="fe-sell__remove ui-type-body" type="button" aria-label={`Take ${name} out of the sale`} disabled={busy} title="Keep it" onClick={remove}>×</button>
+      </div>
+      {expanded && (
+        <ul class="fe-sell__lines ui-type-caption" aria-label="Rook’s appraisal">
+          {quote.lines.map((line, i) => {
+            const { label, amount } = splitAppraisalLine(line);
+            const total = i === quote.lines.length - 1;
+            return <li key={i} class={cx(total && 'fe-sell__line--total')}><span>{label}</span>{amount && <b>{amount}</b>}</li>;
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function MerchantSell() {
   const store = useStore(), local = useLocal();
@@ -12,9 +84,12 @@ export function MerchantSell() {
   const online = useUi(s => s.connection === 'online');
   const sale = useSignal(local.merchantSale);
   const drag = useSignal(local.drag);
-  const items = ch?.backpack.entries.map(e => e.item).filter(i => i.kind === 'equipment') ?? [];
-  const selected = items.filter(i => sale?.uids.includes(i.uid) && !isTradeLocked(store.get(), i.uid));
-  const total = selected.reduce((sum, i) => sum + (store.rules.sellQuote(i)?.scrap ?? 0), 0);
+  const [open, setOpen] = useState<string | null>(null);
+  const items = (sale?.uids ?? []).flatMap(uid => {
+    const item = ch?.backpack.entries.find(e => e.item.uid === uid)?.item;
+    return item?.kind === 'equipment' && !isTradeLocked(store.get(), uid) ? [item] : [];
+  });
+  const total = items.reduce((sum, i) => sum + (store.rules.sellQuote(i)?.scrap ?? 0), 0);
 
   // Moving, equipping or offering a selected item retires it from the pending sale.
   useEffect(() => {
@@ -23,13 +98,19 @@ export function MerchantSell() {
     const uids = current.uids.filter(uid => !saleItemError(store, uid));
     if (uids.length !== current.uids.length) local.merchantSale.set({ ...current, uids });
   }, [ch, trade, local, store]);
+  // The item you just offered opens its appraisal.
+  const last = items[items.length - 1]?.uid ?? null;
+  const count = items.length;
+  useEffect(() => { setOpen(count ? last : null); }, [last, count]);
   if (!ch || !sale) return null;
 
+  const dropState = drag?.target?.sale ? (drag.target.valid ? 'valid' : 'invalid') : drag && !drag.stock && !drag.fromSale && drag.item.kind === 'equipment' ? 'ready' : null;
+
   const confirm = (): void => {
-    if (sale.busy || !selected.length) return;
-    const uids = selected.map(i => i.uid);
-    const names = selected.slice(0, 3).map(i => store.rules.describeItem(i, ch).title).join(', ') + (selected.length > 3 ? ` and ${selected.length - 3} more` : '');
-    const uniques = selected.filter(i => i.rarity === 'unique').length;
+    if (sale.busy || !items.length) return;
+    const uids = items.map(i => i.uid);
+    const names = items.slice(0, 3).map(i => store.rules.describeItem(i, ch).title).join(', ') + (items.length > 3 ? ` and ${items.length - 3} more` : '');
+    const uniques = items.filter(i => i.rarity === 'unique').length;
     local.hideTooltip();
     local.dialog.set({
       title: 'Sell equipment', confirmLabel: `Sell for ${total} Scrap`, danger: true,
@@ -45,38 +126,23 @@ export function MerchantSell() {
   };
 
   return <>
-    <p class="fe-sell__intro ui-type-secondary">Select backpack equipment below, Ctrl-click it, or drag it here. Items stay yours until you confirm.</p>
-    <div class={cx('fe-sell__stock', drag?.target?.sale && (drag.target.valid ? 'fe-sell__stock--valid' : 'fe-sell__stock--invalid'))} data-drop="sale">
-      {items.length === 0 && <p class="fe-panel__note">No equipment to sell. Put unequipped gear in your backpack.</p>}
-      {items.map(item => {
-        const quote = store.rules.sellQuote(item)!;
-        const locked = isTradeLocked(store.get(), item.uid);
-        const picked = selected.some(i => i.uid === item.uid);
-        const name = store.rules.describeItem(item, ch).title;
-        return <div class={cx('fe-sell__item', picked && 'fe-sell__item--selected')} key={item.uid} data-sell-uid={item.uid}>
-          <button class="fe-sell__choose" type="button" aria-pressed={picked} aria-label={`${picked ? 'Remove' : 'Select'} ${name}`} disabled={sale.busy || locked}
-            onClick={() => selectForSale(store, local, item.uid)}
-            onPointerEnter={e => local.showTooltip({ kind: 'item', uid: item.uid }, e.currentTarget)} onPointerLeave={() => local.hideTooltip()}>
-            <PixelIcon id={itemIconId(item)} width={32} height={32} />
-            <span><span class="fe-sell__name" style={{ color: `var(--tone-${itemTone(item)})` }}>{name}</span>
-              <span class="fe-sell__meta ui-type-caption">{locked ? 'Offered in trade' : `Item level ${item.itemLevel} · ${item.affixes.length} modifiers`}</span></span>
-            <span aria-hidden="true">{picked ? '✓' : '+'}</span>
-          </button>
-          <button class="fe-sell__price ui-type-body" type="button" aria-label={`Appraisal for ${name}: ${quote.scrap} Scrap`}
-            onPointerEnter={e => local.showTooltip({ kind: 'text', title: 'Rook’s appraisal', lines: quote.lines }, e.currentTarget)}
-            onPointerLeave={() => local.hideTooltip()}
-            onFocus={e => local.showTooltip({ kind: 'text', title: 'Rook’s appraisal', lines: quote.lines }, e.currentTarget)} onBlur={() => local.hideTooltip()}>
-            <PixelIcon id="icon/currency/scrap" width={20} height={20} />{quote.scrap}
-          </button>
-        </div>;
-      })}
+    <p class="fe-sell__intro ui-type-caption">Drag gear from your backpack into the window. Nothing is sold until you confirm.</p>
+    <div class={cx('fe-sell__window', dropState && `fe-sell__window--${dropState}`)} data-drop="sale" aria-label="Items offered for sale">
+      {items.length === 0 ? (
+        <div class="fe-sell__empty ui-type-secondary">
+          <span class="fe-sell__empty-mark" aria-hidden="true" />
+          <span>Drop equipment here</span>
+          <span class="fe-sell__empty-sub ui-type-caption">Worn gear stays protected. Ctrl-click also works.</span>
+        </div>
+      ) : items.map(item => (
+        <OfferRow key={item.uid} item={item} busy={sale.busy} expanded={open === item.uid} onToggle={() => setOpen(open === item.uid ? null : item.uid)} />
+      ))}
     </div>
     <div class="fe-sell__footer">
-      <div class="fe-sell__total ui-type-body"><span>{selected.length} selected</span><strong>{total} Forge Scrap</strong></div>
-      <p class="fe-panel__note">Hover a price for its appraisal. Scrap goes to your Crafting Stash; overflow goes to your backpack.</p>
+      <div class="fe-sell__total ui-type-body"><span>{items.length} offered</span><strong>{total} Forge Scrap</strong></div>
       <div class="fe-sell__actions">
         <Button disabled={sale.busy || !sale.uids.length} onClick={() => local.merchantSale.set({ uids: [], busy: false })}>Clear</Button>
-        <Button variant="ember" disabled={sale.busy || !selected.length || !online} onClick={confirm}>{sale.busy ? 'Selling…' : `Sell ${selected.length || ''} item${selected.length === 1 ? '' : 's'}`}</Button>
+        <Button variant="ember" disabled={sale.busy || !items.length || !online} onClick={confirm}>{sale.busy ? 'Selling…' : `Sell ${items.length || ''} item${items.length === 1 ? '' : 's'}`}</Button>
       </div>
     </div>
   </>;

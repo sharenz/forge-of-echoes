@@ -16,7 +16,10 @@ import type { ChatLine, HudAlly, HudRun, HudSlot, HudState, Panel, Screen, Toast
 import { createRng } from '../../core/rng';
 import { deriveRunStats, rules as gameRules, withItemLocks } from '../../game';
 import { currencyStack, flaskStack, generateEquipment, generateUnique, placeItem } from '../../game/items';
-import { rollMapWithRarity } from '../../game/progression';
+import { areaForTheme, rollMapWithRarity } from '../../game/progression';
+
+/** A mock map's home: an area of the theme that accepts the tier (every area counts as charted). */
+const areaOf = (base: MapBaseId, tier: number, key: string = base) => areaForTheme(base, tier, key);
 import { MONSTER_NAMES } from '../lib/content';
 import { ATLAS_AREA_IDS } from '../../contracts/atlas';
 import { withTree } from './mockTree';
@@ -68,6 +71,11 @@ export interface MockOptions {
   trade?: boolean | 'locked' | 'waiting';
   /** An incoming trade request from Corvin. */
   tradeRequest?: boolean;
+  /**
+   * Crafting Stash work slot: true = the rare wand sits in it; 'map' = a map; 'crafted' = the wand, then (after the UI
+   * mounted) one Essence is applied from the Crafting Stash so the new affix shows highlighted; 'finished' = Finished gear.
+   */
+  workslot?: boolean | 'map' | 'crafted' | 'finished';
   /** Open the stash on this tab (a normal tab index or a special tab). */
   stash?: number | SpecialStashTab | null;
   /** false = the Map Stash and the Crafting Stash start empty. */
@@ -163,7 +171,7 @@ function stashedMaps(rng: ReturnType<typeof createRng>, uid: () => string): MapI
     for (let k = 0; k < count; k++) {
       n += 1;
       const rarity = n % 4 === 0 ? 'rare' : n % 3 === 0 ? 'magic' : n % 5 === 1 ? 'rare' : 'normal';
-      const m = rollMapWithRarity(rng, bases[(n * 7 + k) % 3], i + 1, rarity, uid(), (n * 5) % 21, n === 21 || n === 22);
+      const m = rollMapWithRarity(rng, areaOf(bases[(n * 7 + k) % 3], i + 1, `m${n}`), i + 1, rarity, uid(), (n * 5) % 21, n === 21 || n === 22);
       out.push(n % 9 === 0 && rarity !== 'normal' ? { ...m, corrupted: true } : m);
     }
   });
@@ -254,7 +262,7 @@ function buildCharacter(r: GameRulesApi, specialStash: boolean, emptyDevice = fa
     ['ashenForge', 5, 'rare', false],
   ];
   maps.forEach(([b, t, rar, isNew], i) => {
-    const m = rollMapWithRarity(rng, b, t, rar, uid(), i * 6, isNew);
+    const m = rollMapWithRarity(rng, areaOf(b, t, `p${i}`), t, rar, uid(), i * 6, isNew);
     bp = place(bp, i === 3 ? { ...m, corrupted: true } : m, 8 + i, 2);
   });
   bp = place(bp, flaskStack('lifeFlask', 4, uid()), 8, 3);
@@ -280,7 +288,7 @@ function buildCharacter(r: GameRulesApi, specialStash: boolean, emptyDevice = fa
     const tier = 1 + (i % 6);
     const rar = i % 5 === 0 ? 'rare' : i % 3 === 0 ? 'magic' : 'normal';
     const bases: MapBaseId[] = ['ashenForge', 'rimedOssuary', 'ironColiseum'];
-    mapsTab = place(mapsTab, rollMapWithRarity(rng, bases[i % 3], tier, rar, uid(), (i * 3) % 20, false), i % 12, Math.floor(i / 12));
+    mapsTab = place(mapsTab, rollMapWithRarity(rng, areaOf(bases[i % 3], tier, `t${i}`), tier, rar, uid(), (i * 3) % 20, false), i % 12, Math.floor(i / 12));
   }
 
   const skillRanks = {
@@ -305,7 +313,8 @@ function buildCharacter(r: GameRulesApi, specialStash: boolean, emptyDevice = fa
     ring2,
   };
   const level = 24;
-  const deviceMap = rollMapWithRarity(rng, 'ashenForge', 4, 'rare', uid(), 8, false);
+  // with a charted Atlas the device map lives in a charted area (the chart opens on it)
+  const deviceMap = rollMapWithRarity(rng, atlas && atlas !== 'fresh' ? 'furnaceYard' : areaOf('ashenForge', 4, 'device'), 4, 'rare', uid(), 8, false);
   return {
     ...base,
     id: ME.id,
@@ -340,8 +349,8 @@ function buildCharacter(r: GameRulesApi, specialStash: boolean, emptyDevice = fa
 function mockAtlas(kind: NonNullable<MockOptions['atlas']>): NonNullable<CharacterSave['atlas']> {
   const mid = ['cinderCrossing', 'emberRoad', 'boneApproach', 'furnaceYard', 'glassSepulchre', 'ironMarch', 'emberVault'] as const;
   const late = [...mid, 'shatteredForge', 'championsApproach', 'crownFoundry', 'winterThrone', 'emberCitadel', 'frozenPassage', 'hollowOssuary', 'pitOfEchoes', 'gildedVault', 'sealedReliquary'] as const;
-  if (kind === 'mid') return { discovered: [...mid, 'hollowOssuary'], completed: ['cinderCrossing', 'emberRoad', 'boneApproach', 'furnaceYard'], clears: 4 };
-  if (kind === 'late' || kind === 'keys') return { discovered: [...late], completed: ['cinderCrossing', 'emberRoad', 'boneApproach', 'furnaceYard', 'glassSepulchre', 'shatteredForge', 'crownFoundry'], clears: 7 };
+  if (kind === 'mid') return { discovered: [...mid, 'hollowOssuary'], completed: ['cinderCrossing', 'emberRoad', 'boneApproach', 'furnaceYard'], clears: 4, pins: ['glassSepulchre'] };
+  if (kind === 'late' || kind === 'keys') return { discovered: [...late], completed: ['cinderCrossing', 'emberRoad', 'boneApproach', 'furnaceYard', 'glassSepulchre', 'shatteredForge', 'crownFoundry'], clears: 7, pins: ['shatteredForge', 'crownFoundry'] };
   return { discovered: [...ATLAS_AREA_IDS], completed: ATLAS_AREA_IDS.filter((id) => id !== 'sealedReliquary' && id !== 'heartOfForge' && id !== 'eternalArena' && id !== 'shrineField' && id !== 'riftNexus' && id !== 'huntingGround'), clears: 14 };
 }
 
@@ -352,7 +361,7 @@ function partnerItems(seq: number): Item[] {
   const amulet = generateEquipment('boneTalisman', 38, 'rare', rng, { uid: uid() });
   const boots = generateEquipment('ashenSandals', 30, 'magic', rng, { uid: uid() });
   const ring = generateEquipment('stormLoop', 35, 'rare', rng, { uid: uid() });
-  return [amulet, boots, ring, currencyStack('catalyst', 3, uid()), rollMapWithRarity(rng, 'rimedOssuary', 5, 'rare', uid(), 7, false)];
+  return [amulet, boots, ring, currencyStack('catalyst', 3, uid()), rollMapWithRarity(rng, areaOf('rimedOssuary', 5), 5, 'rare', uid(), 7, false)];
 }
 
 function toneOfOutcome(kind: string): Toast['tone'] {
@@ -377,6 +386,17 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
   const rules = withItemLocks(plainRules, offeredNow);
   let ch = buildCharacter(plainRules, opts.specialStash !== false, !!opts.emptyDevice, opts.atlas);
   if (opts.tree) ch = withTree(ch, opts.tree);
+  if (opts.workslot) {
+    const pick = ch.backpack.entries.find((e) =>
+      opts.workslot === 'map'
+        ? e.item.kind === 'map' && e.item.rarity === 'rare'
+        : opts.workslot === 'finished'
+          ? e.item.kind === 'equipment' && e.item.baseId === 'silkWraps'
+          : e.item.kind === 'equipment' && e.item.baseId === 'ashwoodWand' && e.item.rarity === 'rare',
+    );
+    const moved = pick ? plainRules.moveItem(ch, pick.item.uid, { kind: 'craftSlot' }) : null;
+    if (moved?.ok) ch = moved.value;
+  }
   const listeners = new Set<() => void>();
   let toastId = 0;
   let chatId = 0;
@@ -393,7 +413,7 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
   const roster = THEME_ROSTER[theme];
   if (inMap) {
     const rng = createRng(99);
-    const map = rollMapWithRarity(rng, theme, 4, 'rare', 'run-map', 10, false);
+    const map = rollMapWithRarity(rng, areaOf(theme, 4, 'run'), 4, 'rare', 'run-map', 10, false);
     const opened = rules.openMap({ ...ch, mapDevice: map });
     if (opened.ok) runSetup = opened.value.setup;
   }
@@ -888,6 +908,20 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
     set({ hud: hud() });
   }, 1000 / 15);
 
+  if (opts.workslot === 'crafted') {
+    // One Essence from the Crafting Stash straight onto the work slot, as a click on its tile does.
+    later(250, () => {
+      const target = ch.craftSlot;
+      if (!target) return;
+      for (const id of ['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift'] as const) {
+        const uid = `cstash:${id}`;
+        if (rules.craftingTargetError(ch, uid, target.uid) === null) {
+          applyCraft(uid, target.uid);
+          return;
+        }
+      }
+    });
+  }
   if (opts.levelUp) later(400, () => set({ levelUpCount: state.levelUpCount + 1 }));
 
   // --- Alt tracking (the real client sets altHeld from its input layer) ------------------------------
@@ -1070,6 +1104,19 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       setCharacter(r.value.character);
       toast(r.value.message, toneOfOutcome(r.value.kind));
     },
+    rechartMap(uid, areaId) {
+      const r = rules.applyBenchRecipe(ch, uid, `bench:rechart:${areaId}`);
+      if (!r.ok) return fail(r.error);
+      setCharacter(r.value.character);
+      toast(r.value.message, 'good');
+    },
+    recycleMaps(uids, areaId) {
+      const r = rules.recycleMaps(ch, uids, areaId);
+      if (!r.ok) { fail(r.error); return Promise.resolve(false); }
+      setCharacter(r.value.character);
+      toast(r.value.message, 'good');
+      return Promise.resolve(true);
+    },
     benchClear() {
       const uid = state.benchItemUid;
       if (!uid) return;
@@ -1146,12 +1193,23 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       }
     },
 
+    refillSurge(target) {
+      const r = rules.refillSurge(ch, target === 'all' ? { kind: 'all' } : { kind: 'area', areaId: target }, Date.now());
+      if (!r.ok) fail(r.error); else setCharacter(r.value.character);
+    },
+    pinArea(areaId, pinned) {
+      const r = rules.setPin(ch, areaId, pinned);
+      if (!r.ok) fail(r.error); else setCharacter(r.value);
+    },
     setMapTreeNode(nodeId, allocate) {
       const r = rules.setMapTreeNode(ch, nodeId, allocate);
       if (!r.ok) fail(r.error); else setCharacter(r.value);
     },
-    activateMapDevice(areaId, lootClass) {
-      const r = rules.openMap(ch, areaId, lootClass);
+    activateMapDevice(opts) {
+      const r = rules.openMap(ch, {
+        ...(opts?.lootClass ? { lootClass: opts.lootClass } : {}),
+        ...(opts?.pit ? { passage: { kind: 'bounty' as const } } : opts?.passageKey ? { passage: { kind: 'key' as const, currencyId: opts.passageKey } } : {}),
+      });
       if (!r.ok) {
         fail(r.error);
         return;
@@ -1174,14 +1232,14 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       toast(`Sold ${uids.length} items for ${result.value.scrap} Forge Scrap.`, 'good');
       return true;
     },
-    buyDebugOffer(id, options) {
-      const result = rules.buyDebugOffer(ch, id, options);
+    buyDebugOffer(id, options, at) {
+      const result = rules.buyDebugOffer(ch, id, options, at);
       if (!result.ok) { fail(result.error); return; }
       setCharacter(result.value.character);
       toast(result.value.message, 'good');
     },
-    buyOffer(id) {
-      const r = rules.buyOffer(ch, id);
+    buyOffer(id, at) {
+      const r = rules.buyOffer(ch, id, at);
       if (!r.ok) {
         fail(r.error);
         return;

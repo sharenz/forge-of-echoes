@@ -114,6 +114,9 @@ export const PROP_KIND_CODES = [
   'mapDevice', 'stash', 'merchant', 'portal', 'returnPortal', 'chest',
   'pillar', 'brazier', 'standingStone', 'rubble', 'bones', 'crystal', 'banner', 'anvil', 'ruinWall',
   'debugMerchant',
+  // Layout art kit (append-only; static props travel in ZoneInfo, so no snapshot-layout change).
+  'vat', 'bellows', 'altar', 'sarcophagus', 'choirStall', 'ribArch', 'iceColumn',
+  'crate', 'chainPost', 'hoist', 'gate', 'weaponRack', 'obelisk', 'statue',
 ] as const satisfies readonly PropKind[];
 
 // Compile-time exhaustiveness: every union member must have a code (a missing one fails to typecheck here).

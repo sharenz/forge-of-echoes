@@ -1,9 +1,10 @@
 // Save format constants, default settings and the starting kit (GAME_SPEC §3).
-import type { CurrencyId, FlaskId, MapBaseId, SkillId } from '../../contracts/content';
+import type { CurrencyId, FlaskId, SkillId } from '../../contracts/content';
+import type { AtlasAreaId } from '../../contracts/atlas';
 import type { Settings } from '../../contracts/items';
 
 /** Current save schema version. parseSave migrates anything older and normalises everything. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export const DEFAULT_SETTINGS: Settings = {
   masterVolume: 0.8,
@@ -25,8 +26,8 @@ export interface StartingKit {
   wand: { affixId: string; tier: number };
   /** Currency stacks, placed along the top row of the backpack in this order. */
   currency: readonly { currencyId: CurrencyId; count: number }[];
-  /** Tier 1 maps, placed on the second row. */
-  maps: readonly { baseId: MapBaseId; count: number }[];
+  /** Tier 1 maps bound to the first Atlas area (nobody has a second at creation), placed on the second row. */
+  maps: readonly { areaId: AtlasAreaId; count: number }[];
   /** Belt slots (flask + charges). */
   belt: readonly ({ flaskId: FlaskId; count: number } | null)[];
   skills: { basic: SkillId; rank: number; unspentPoints: number };
@@ -47,8 +48,7 @@ export const STARTING_KIT: StartingKit = {
     { currencyId: 'threatGlyph', count: 2 },
   ],
   maps: [
-    { baseId: 'ashenForge', count: 2 },
-    { baseId: 'rimedOssuary', count: 1 },
+    { areaId: 'cinderCrossing', count: 3 },
   ],
   belt: [
     { flaskId: 'lifeFlask', count: 3 },

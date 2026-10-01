@@ -143,9 +143,11 @@ export function describeCurrency(stack: CurrencyStack): ItemDescription {
   const keyArea = findAtlasArea(atlasKeyDestination(stack.currencyId));
   if (keyArea) hint = `Select ${keyArea.name} in the Map Device. Activation consumes one key from your inventory or stash.`;
   if (scarab) {
-    properties.push({ label: 'Scarab tier', value: String(scarab.tier) }, { label: 'Drop monster level', value: `${scarab.minMonsterLevel}+` });
-    hint = 'Drag or Ctrl-click into one of the four scarab sockets in your Map Device. Consumed only when the map opens.';
+    properties.push({ label: 'Scarab type', value: scarab.familyName }, { label: 'Scarab tier', value: String(scarab.tier) }, { label: 'Drop monster level', value: `${scarab.minMonsterLevel}+` });
+    hint = `Drag or Ctrl-click into one of the four scarab sockets in your Map Device. Consumed only when the map opens. One ${scarab.familyName} Scarab per map, whatever its tier.${scarab.kind === 'area' ? ' Changes only which areas your dropped maps are bound to, never how many drop.' : ''}`;
   }
+  if (stack.currencyId === 'hourglassSand') hint = 'Select an Atlas area in your hideout and choose "Refill surge" to use one. Refused when the area is already full.';
+  if (stack.currencyId === 'grandHourglass') hint = 'Choose "Refill all surges" on the Atlas table in your hideout to use one. Refused when every area is already full.';
   // A Crafting Stash slot (uid "cstash:<id>", see src/game/items/special-stash.ts).
   const inStash = parseCurrencyStashUid(stack.uid) !== null;
   if (inStash) {

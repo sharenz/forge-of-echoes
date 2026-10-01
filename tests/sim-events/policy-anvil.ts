@@ -17,6 +17,12 @@ export function anvilPolicy(w: World, playerId: number, base: PlayerIntent): Pla
     if (!st) return base;
     return Math.hypot(st.x - p.x, st.y - p.y) > 10 ? toward(base, p.x, p.y, st.x, st.y) : { ...base, moveX: 0, moveY: 0 };
   }
-  // Charging: stay within the anvil's hearing (leave the bot's own kiting alone while inside).
+  // Charging: stay within the anvil's hearing (leave the bot's own kiting alone while inside). With nothing left to fight within reach
+  // of the anvil (the horde is held behind a wall, say) the pull-back would only fight the bot's own hunt at the edge of the range
+  // for ever: let it go and find them.
+  let nearest = Infinity;
+  const m = w.monsters;
+  for (let i = 0; i < m.hwm; i++) if (m.alive[i]) nearest = Math.min(nearest, Math.hypot(m.x[i] - s.site.x, m.y[i] - s.site.y));
+  if (nearest > 330) return base;
   return Math.hypot(s.site.x - p.x, s.site.y - p.y) > 200 ? toward(base, p.x, p.y, s.site.x, s.site.y) : base;
 }

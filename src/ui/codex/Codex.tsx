@@ -138,7 +138,7 @@ export function CodexView({ onBack, areaId }: CodexProps) {
   const hintFor = useCallback((id: string): Hint | null => {
     const node = findAtlasNode(id);
     if (!node || id === ATLAS_ORIGIN_ID) return null;
-    const map: MapItem | null = ch.mapDevice ? ({ ...ch.mapDevice, baseId: area.baseId } as MapItem) : null;
+    const map: MapItem | null = ch.mapDevice ? ({ ...ch.mapDevice, areaId: area.id, baseId: area.baseId } as MapItem) : null;
     if (!atlasNodeAllocatable(node)) return { lines: [], note: 'Not active yet: no effect on maps until its update lands.' };
     const on = allocated.has(id);
     if (!on && exclusionOf(node, allocated)) return null; // it cannot be taken while its rival is held

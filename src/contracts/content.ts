@@ -67,8 +67,21 @@ export const EQUIPMENT_CURRENCY_IDS = [
   'echoShard',      // Roll each unprotected affix value twice and keep the higher roll
   'crownFragment',  // Reroll a unique's numeric modifiers, preserving its special behaviour
 ] as const;
-export const SCARAB_IDS = ['hasteScarab1', 'hasteScarab2', 'hasteScarab3', 'hasteScarab4', 'invasionScarab1', 'invasionScarab2', 'invasionScarab3', 'invasionScarab4'] as const;
+/** Wave scarabs (slice of the first batch): four tiers each. */
+export const WAVE_SCARAB_IDS = ['hasteScarab1', 'hasteScarab2', 'hasteScarab3', 'hasteScarab4', 'invasionScarab1', 'invasionScarab2', 'invasionScarab3', 'invasionScarab4'] as const;
+/** Area-bias scarabs (brief D 5.6, slice S1): five families x four tiers. They act on the frozen drop-routing table only. */
+export const AREA_SCARAB_IDS = [
+  'homingScarab1', 'homingScarab2', 'homingScarab3', 'homingScarab4',
+  'wayfarerScarab1', 'wayfarerScarab2', 'wayfarerScarab3', 'wayfarerScarab4',
+  'deepwardScarab1', 'deepwardScarab2', 'deepwardScarab3', 'deepwardScarab4',
+  'quarryScarab1', 'quarryScarab2', 'quarryScarab3', 'quarryScarab4',
+  'hearthboundScarab1', 'hearthboundScarab2', 'hearthboundScarab3', 'hearthboundScarab4',
+] as const;
+export const SCARAB_IDS = [...WAVE_SCARAB_IDS, ...AREA_SCARAB_IDS] as const;
 export type ScarabId = (typeof SCARAB_IDS)[number];
+/** Hourglass Sand refills one area's surge charges; the Grand Hourglass refills every area's (brief D 7.4). */
+export const HOURGLASS_IDS = ['hourglassSand', 'grandHourglass'] as const;
+export type HourglassId = (typeof HOURGLASS_IDS)[number];
 export const MAP_CURRENCY_IDS = [
   'mapDust',        // normal → magic, or reroll a magic/rare map's mods
   'threatGlyph',    // add one danger mod (danger paired with reward)
@@ -80,6 +93,7 @@ export const MAP_CURRENCY_IDS = [
   'voidSplinter',   // Remove corruption and its marked mods, sacrificing all quality
   'gildedKey', 'blackKey', 'huntingKey', 'riftKey', // sealed Atlas destinations
   ...SCARAB_IDS,
+  ...HOURGLASS_IDS, // daily surge refills (brief D 7.4, slice G1)
 ] as const;
 export const CURRENCY_IDS = [...EQUIPMENT_CURRENCY_IDS, ...MAP_CURRENCY_IDS] as const;
 export type CurrencyId = (typeof CURRENCY_IDS)[number];

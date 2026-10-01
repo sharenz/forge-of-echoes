@@ -166,6 +166,8 @@ export function MapDeviceSlotView({ disabled }: { disabled: boolean }) {
         map && 'fe-device-slot--filled',
       )}
       data-drop={disabled ? undefined : 'mapDevice'}
+      aria-label="Map slot"
+      title={map ? undefined : 'Map slot: drag a map here from your inventory (or Ctrl/Cmd-click it)'}
     >
       {map ? (
         <ItemView
@@ -176,7 +178,7 @@ export function MapDeviceSlotView({ disabled }: { disabled: boolean }) {
           class={drag?.uid === map.uid ? 'fe-item--lifted' : undefined}
         />
       ) : (
-        <span class="fe-device-slot__hint">Place a map</span>
+        <span class="fe-device-slot__hint">Drop<br />map</span>
       )}
     </div>
   );
@@ -191,7 +193,8 @@ export function ScarabSlotView({ index }: { index: number }) {
   const accepts = drag?.item.kind === 'currency' && !!findScarab(drag.item.currencyId);
   return <div class="fe-scarab-socket">
     <div class={cx('fe-device-slot fe-solid', accepts && 'fe-slot--accepts', hovered && (drag!.target!.valid || drag!.target!.noop ? 'fe-slot--ok' : 'fe-slot--bad'), item && 'fe-device-slot--filled')}
-      data-drop="scarabSlot" data-index={index} aria-label={`Scarab socket ${index + 1}`}>
+      data-drop="scarabSlot" data-index={index} aria-label={`Scarab socket ${index + 1}`}
+      title={item ? undefined : `Scarab socket ${index + 1}: drag a scarab here from your inventory. One scarab per type; up to four.`}>
       {item ? <ItemView item={item} uid={item.uid} from={{ kind: 'scarabSlot', index }} mode="slot" class={drag?.uid === item.uid ? 'fe-item--lifted' : undefined} />
         : <span class="fe-device-slot__hint">Scarab<br />{index + 1}</span>}
     </div>

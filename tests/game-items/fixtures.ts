@@ -54,7 +54,7 @@ export function flask(flaskId: FlaskId, count = 1, id = uid('f')): FlaskStack {
 }
 
 export function map(id = uid('m')): MapItem {
-  return { kind: 'map', uid: id, baseId: 'ashenForge', tier: 1, rarity: 'normal', mods: [], quality: 0, corrupted: false };
+  return { kind: 'map', uid: id, areaId: 'cinderCrossing', baseId: 'ashenForge', tier: 1, rarity: 'normal', mods: [], quality: 0, corrupted: false };
 }
 
 export function equip(spec: Omit<EquipmentSpec, 'uid'> & { uid?: string }, seed = 7): EquipmentItem {

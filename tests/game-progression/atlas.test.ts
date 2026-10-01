@@ -5,7 +5,7 @@ import { atlasAccessError, discoverAfterBoss, newAtlas, normalizeAtlas } from '.
 import { restoreRunSetup, rules, withItemLocks } from '../../src/game';
 import { createRng } from '../../src/core/rng';
 import { getBase } from '../../src/data/items';
-import { bareCharacter, expectErr, expectOk, kill, map, withBackpack } from './fixtures';
+import { bareCharacter, expectErr, expectOk, kill, map, withBackpack, openAt } from './fixtures';
 
 describe('Atlas routes and discovery', () => {
   it('has connected destinations, optional dead ends and sealed doors outside the tier routes', () => {
@@ -76,11 +76,13 @@ describe('Atlas map expeditions', () => {
   const explored = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 };
   const character = (tier = 3) => bareCharacter({ atlas: explored, mapDevice: map('ashenForge', tier, { quality: 9, mods: [{ modId: 'teeming', value: 100 }] }) });
 
-  it('takes tier, quality and mods from any item and theme, implicit and arena from the chosen area', () => {
-    const ch = character();
-    const result = expectOk(rules.openMap(ch, 'boneApproach'));
-    expect(result.setup.map).toEqual({ ...ch.mapDevice, baseId: 'rimedOssuary' });
+  it('runs exactly the area the map is bound to: tier, quality and mods from the item, theme, implicit and arena from the area', () => {
+    const ch = { ...character(), mapDevice: map('boneApproach', 3, { quality: 9, mods: [{ modId: 'teeming', value: 100 }] }) };
+    const result = expectOk(rules.openMap(ch));
+    expect(result.setup.map).toEqual(ch.mapDevice);
+    expect(result.setup.map).toMatchObject({ areaId: 'boneApproach', baseId: 'rimedOssuary' });
     expect(result.setup.sourceMap).toEqual(ch.mapDevice);
+    expect(result.setup.passage).toBeUndefined();
     expect(result.setup.atlasAreaId).toBe('boneApproach');
     expect(result.character.mapDevice).toBeNull();
     expect(ch.mapDevice).not.toBeNull();
@@ -94,28 +96,28 @@ describe('Atlas map expeditions', () => {
 
   it('refuses fog or an excessive tier without spending the map or an entrance key', () => {
     const ch = { ...character(), atlas: newAtlas(), currencyStash: { reliquaryKey: 1 } };
-    expect(expectErr(rules.openMap(ch, 'boneApproach'))).toContain('reveal');
-    expect(expectErr(rules.openMap(ch, 'cinderCrossing'))).toContain('Tier 1');
+    expect(expectErr(openAt(rules, ch, 'boneApproach'))).toContain('reveal');
+    expect(expectErr(openAt(rules, ch, 'cinderCrossing'))).toContain('Tier 1');
     expect(ch.mapDevice).not.toBeNull();
     expect(ch.currencyStash.reliquaryKey).toBe(1);
   });
 
   it('consumes one key per sealed expedition, including shared-stash keys, but never a key in a trade offer', () => {
     const ch = character();
-    expect(expectErr(rules.openMap(ch, 'sealedReliquary'))).toContain('Reliquary Key');
+    expect(expectErr(openAt(rules, ch, 'sealedReliquary'))).toContain('Reliquary Key');
     const funded = { ...ch, currencyStash: { reliquaryKey: 2 } };
-    const result = expectOk(rules.openMap(funded, 'sealedReliquary'));
+    const result = expectOk(openAt(rules, funded, 'sealedReliquary'));
     expect(result.character.currencyStash.reliquaryKey).toBe(1);
     expect(funded.currencyStash.reliquaryKey).toBe(2);
     const offered = withBackpack(ch, [[{ kind: 'currency', currencyId: 'reliquaryKey', uid: 'key', count: 1 }, 0, 0]]);
-    expect(withItemLocks(rules, () => new Set(['key'])).openMap(offered, 'sealedReliquary').ok).toBe(false);
-    expect(rules.openMap(offered, 'sealedReliquary').ok).toBe(true);
+    expect(openAt(withItemLocks(rules, () => new Set(['key'])), offered, 'sealedReliquary').ok).toBe(false);
+    expect(openAt(rules, offered, 'sealedReliquary').ok).toBe(true);
   });
 
   it('makes the vault a targeted key source and raises the crypt jewellery share without inflating total equipment', () => {
     const looter = bareCharacter();
-    const vault = expectOk(rules.openMap(character(1), 'emberVault')).setup;
-    const crypt = expectOk(rules.openMap(character(3), 'glassSepulchre')).setup;
+    const vault = expectOk(openAt(rules, character(1), 'emberVault')).setup;
+    const crypt = expectOk(openAt(rules, character(3), 'glassSepulchre')).setup;
     const ordinary = expectOk(rules.openMap({ ...character(3), mapDevice: { ...character(3).mapDevice!, baseId: 'rimedOssuary' } })).setup;
     let keys = 0, jewellery = 0, baseline = 0, pieces = 0, basePieces = 0;
     for (let seed = 1; seed <= 1200; seed++) {
@@ -138,7 +140,7 @@ describe('Atlas map expeditions', () => {
   it('gives a sealed-area boss its extra Unique when eligible and an extra Rare below that level', () => {
     for (const tier of [1, 2]) {
       const ch = { ...character(tier), currencyStash: { reliquaryKey: 1 } };
-      const setup = expectOk(rules.openMap(ch, 'sealedReliquary')).setup;
+      const setup = expectOk(openAt(rules, ch, 'sealedReliquary')).setup;
       for (let seed = 1; seed <= 20; seed++) {
         const drops = rules.rollKillLoot(setup, kill({ isBoss: true, eventReward: 'secondCrown' }), createRng(seed), bareCharacter());
         expect(drops.at(-1)).toMatchObject({ kind: 'equipment', rarity: tier === 1 ? 'rare' : 'unique' });

@@ -9,12 +9,12 @@ import { mapEventOdds } from '../../src/game/progression/map-events';
 import { categoryChances, killLuck } from '../../src/game/progression/loot';
 import { currencyOnHand } from '../../src/game/progression/merchant';
 import { createRng } from '../../src/core/rng';
-import { bareCharacter, equip, expectOk, kill, map, withBackpack, eventCtx } from './fixtures';
+import { bareCharacter, equip, expectOk, kill, map, withBackpack, eventCtx, openAt } from './fixtures';
 
 const explored = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 };
 const character = (tier = 3) => bareCharacter({ atlas: explored, mapDevice: map('ashenForge', tier),
   currencyStash: { scrap: 100, reliquaryKey: 2, gildedKey: 2, blackKey: 2, huntingKey: 2, riftKey: 2 } });
-const expedition = (id: AtlasAreaId, tier = 3) => expectOk(rules.openMap(character(tier), id, 'ring')).setup;
+const expedition = (id: AtlasAreaId, tier = 3) => expectOk(openAt(rules, character(tier), id, 'ring')).setup;
 function sequence(plan: MapEventPlan | null | undefined): MapEventPlan[] {
   return plan ? [plan, ...sequence(plan.next)] : [];
 }
@@ -39,23 +39,28 @@ describe('extended Atlas routes and entry', () => {
   it('pays only the correct key, retains its receipt and refuses offered keys without mutation', () => {
     for (const key of ATLAS_KEYS) {
       const ch = character(), before = structuredClone(ch);
-      const r = expectOk(rules.openMap(ch, key.areaId, 'ring'));
+      const r = expectOk(openAt(rules, ch, key.areaId, 'ring'));
       expect(r.setup.entranceKey).toBe(key.currencyId);
       expect(currencyOnHand(r.character, key.currencyId)).toBe(currencyOnHand(ch, key.currencyId) - 1);
       expect(restoreRunSetup(JSON.stringify(r.setup), r.setup.seed)).toEqual(r.setup);
       const empty = { ...ch, currencyStash: {} };
-      expect(rules.openMap(empty, key.areaId, 'ring').ok).toBe(false);
+      expect(openAt(rules, empty, key.areaId, 'ring').ok).toBe(false);
       const offered = withBackpack(empty, [[{ kind: 'currency', uid: 'key', currencyId: key.currencyId, count: 1 }, 0, 0]]);
-      expect(withItemLocks(rules, () => new Set(['key'])).openMap(offered, key.areaId, 'ring').ok).toBe(false);
+      expect(openAt(withItemLocks(rules, () => new Set(['key'])), offered, key.areaId, 'ring').ok).toBe(false);
       expect(ch).toEqual(before);
     }
   });
 
   it('requires a Bounty map for the Pit and preserves the original item separately from its guaranteed Echo', () => {
-    const ch = character(5);
-    expect(rules.openMap(ch, 'pitOfEchoes').ok).toBe(false);
+    // the Pit opens only through a Bounty passage from a map bound to its entrance, Iron March
+    const ch = { ...character(5), mapDevice: map('ironMarch', 5) };
+    expect(openAt(rules, ch, 'pitOfEchoes').ok).toBe(false);
+    expect(rules.openMap(ch, { passage: { kind: 'bounty' } }).ok).toBe(false);
+    expect(rules.openMap({ ...ch, mapDevice: { ...map('furnaceYard', 5), bounty: true } }, { passage: { kind: 'bounty' } }).ok).toBe(false);
+    expect(rules.openMap({ ...ch, mapDevice: { ...ch.mapDevice!, bounty: true } }, { passage: { kind: 'key', currencyId: 'scrap' } }).ok).toBe(false);
     const source = { ...ch.mapDevice!, bounty: true };
-    const setup = expectOk(rules.openMap({ ...ch, mapDevice: source }, 'pitOfEchoes')).setup;
+    const setup = expectOk(openAt(rules, { ...ch, mapDevice: source }, 'pitOfEchoes')).setup;
+    expect(setup.passage).toEqual({ kind: 'bounty' });
     expect(setup.sourceMap).toEqual(source);
     expect(setup.map.mods.filter(m => m.modId === 'echo')).toHaveLength(1);
     expect(setup.event?.kind).toBe('hunted');
@@ -76,12 +81,12 @@ describe('extended Atlas routes and entry', () => {
       expect(restoreRunSetup(setup, setup.seed)).toEqual(setup);
       expect(redactSetupForClient(setup)).not.toHaveProperty('event');
       const ch = character(1);
-      const bounty = expectOk(rules.openMap({ ...ch, mapDevice: { ...ch.mapDevice!, bounty: true } }, id as AtlasAreaId, 'ring')).setup;
+      const bounty = expectOk(openAt(rules, { ...ch, mapDevice: { ...ch.mapDevice!, bounty: true } }, id as AtlasAreaId, 'ring')).setup;
       expect(sequence(bounty.event).some(e => e.kind === 'hunted')).toBe(true);
       expect(sequence(bounty.event).length).toBeLessThanOrEqual(4);
       expect(restoreRunSetup(bounty, bounty.seed)).toEqual(bounty);
     }
-    expect(rules.openMap(character(), 'huntingGround').ok).toBe(false);
+    expect(openAt(rules, character(), 'huntingGround').ok).toBe(false);
   });
 });
 
@@ -120,15 +125,16 @@ describe('special-area rewards', () => {
     expect(a.currency).toBeCloseTo(b.currency * 3); expect(a.equipment).toBe(b.equipment); expect(a.map).toBe(b.map);
     for (let seed = 0; seed < 50; seed++) {
       const chest = rules.rollChestLoot(vault, createRng(seed), bareCharacter());
-      expect(chest.filter(i => i.kind === 'currency').length).toBeGreaterThanOrEqual(12);
-      expect(chest.filter(i => i.kind === 'currency').length).toBeLessThanOrEqual(15);
+      const rolls = chest.filter(i => i.kind === 'currency' && i.currencyId !== 'hourglassSand').length; // Sand is its own 3% roll
+      expect(rolls).toBeGreaterThanOrEqual(12);
+      expect(rolls).toBeLessThanOrEqual(15);
       expect(chest.filter(i => i.kind === 'equipment')).toHaveLength(2);
     }
   });
 
   it('gives all ten chosen classes their correct hunter reward and keeps keyed rewards eligible at low tiers', () => {
     for (const id of ITEM_CLASSES) {
-      const setup = expectOk(rules.openMap(character(4), 'huntingGround', id)).setup;
+      const setup = expectOk(openAt(rules, character(4), 'huntingGround', id)).setup;
       const result = rules.rollEventReward(setup, eventCtx('hunted'), createRng(99), bareCharacter()).at(-1)!;
       expect(result.kind).toBe('equipment');
       if (result.kind === 'equipment') { expect(getBase(result.baseId).itemClass).toBe(id); expect(result.rarity).toBe('rare'); }
@@ -152,7 +158,7 @@ describe('special-area rewards', () => {
     expect(Object.values(odds).reduce((a, b) => a + b, 0)).toBeCloseTo(1); // triple the 45% base is certain
     expect(cfg.waves.count).toBe(6);
     const ch = character(5);
-    const echo = expectOk(rules.openMap({ ...ch, mapDevice: { ...ch.mapDevice!, mods: [{ modId: 'echo', value: 100 }] } }, 'shrineField')).setup;
+    const echo = expectOk(openAt(rules, { ...ch, mapDevice: { ...ch.mapDevice!, mods: [{ modId: 'echo', value: 100 }] } }, 'shrineField')).setup;
     expect(rules.buildRunConfig(echo, {} as never).waves.count).toBe(7);
     expect(echo.summary.find(line => line.label === 'Area objective')?.value).toBe('Clear 7 waves');
   });

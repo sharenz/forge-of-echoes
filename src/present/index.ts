@@ -55,7 +55,7 @@
 // area-geometry doesn't export yet (the tar pool's radius, Varkus's charge tail and mark lock, his leap) are mirrored
 // in bestiary.ts and pinned to their sources by tests/present/telegraphs.test.ts.
 //
-// Module map: ground.ts (tiles, veins, rim, light pools) · props.ts · players.ts (+ debuffs.ts: player debuff
+// Module map: ground.ts (tiles, veins, rim, light pools) · layout-art.ts (hand-crafted layout decals, landmarks, lights) · props.ts · players.ts (+ debuffs.ts: player debuff
 // overlays, tints, pops and cleanses) · monsters.ts (+ bestiary.ts: per-kind looks, presences, action sets and the
 // area geometry helpers) · projectiles.ts (+ chain.ts: chain links and pull tethers) · areas.ts (+ bestiary-areas.ts:
 // the Ossuary / Coliseum ground areas) · drops.ts (+ labels.ts stacking) · fx.ts (pooled transient effects) ·
@@ -84,6 +84,7 @@ import { DropPainter } from './drops';
 import { EventFx } from './events';
 import { Effects } from './fx';
 import { Ground } from './ground';
+import { LayoutArt } from './layout-art';
 import { Indicators } from './indicators';
 import { MapEventPainter } from './map-events';
 import { clamp, clamp01 } from './math';
@@ -121,6 +122,8 @@ class WorldPresenter implements Presenter {
   private readonly table: SpriteTable;
   private readonly rig = new CameraRig();
   private readonly ground = new Ground();
+  /** Decals, landmarks and light pools of the area's hand-crafted layout (nothing for the procedural arenas). */
+  private readonly layoutArt = new LayoutArt();
   private readonly fx: Effects;
   private readonly post = new PostState();
   private readonly props: PropPainter;
@@ -187,6 +190,7 @@ class WorldPresenter implements Presenter {
     this.zoneRadius = world.arenaRadius;
     this.lastTick = world.tick;
     this.ground.build(world.theme, world.arenaRadius);
+    this.layoutArt.build(world.areaId, world.arenaRadius, world.theme);
     this.fx.clear();
     // Keep running screen flashes: the portal-colour flash of the step through bridges the cut into the new zone.
     this.post.reset();
@@ -298,7 +302,9 @@ class WorldPresenter implements Presenter {
     setup.clearColor = f.look.clear;
     r.beginFrame(setup);
     this.ground.draw(pen, f);
+    this.layoutArt.draw(pen, f);
     this.ground.lightsAndHaze(pen, f);
+    this.layoutArt.lights(pen, f);
     this.fx.update(fxDt, pen);
     this.fx.decals.draw(pen, f);
     this.fx.corpses.draw(pen, f);

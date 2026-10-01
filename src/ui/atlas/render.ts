@@ -21,6 +21,8 @@ import { valueNoise } from '../../art/shade';
 import { NODE_REVEAL_R, ROAD_REVEAL_R, SEALED_REVEAL_R, computeReveal, type Disc } from './reveal';
 import { ParticleField, type Emitter } from './particles';
 import { nodeModel, type ChartContext, type NodeModel } from './model';
+import { drawLensLayer, type LensInput } from './lens-draw';
+import { drawSurgePips } from './surge-view';
 
 // ---- assets ----------------------------------------------------------------------------------------------
 export class ChartAssets {
@@ -131,6 +133,8 @@ export interface ChartInput {
   portal?: AtlasAreaId | null;
   /** Screen-space spots (CSS px inside the chart) where the owned keys sit: a dashed thread runs from each to its door. */
   keyAnchors?: readonly { keyId: string; x: number; y: number }[];
+  /** Chart lenses (src/ui/atlas/lens.ts): pins on every lens, the Sources arrows on its own. */
+  lens?: LensInput;
 }
 
 export interface CineItem { id: AtlasAreaId; from: AtlasAreaId | null; start: number }
@@ -508,6 +512,7 @@ export class ChartRenderer {
     ctx.globalCompositeOperation = 'source-over';
     this.drawPlumes(ctx, t, motion);
     this.drawNodes(ctx, t, motion);
+    drawLensLayer(ctx, this.input.lens, this.models, t, motion, { halo: (hex) => this.assets.halo(hex) });
     this.drawOverlays(ctx, dt, t, motion);
     this.drawCineRun(ctx);
     this.drawParticles(ctx, dt, ox, oy, motion);
@@ -688,6 +693,7 @@ export class ChartRenderer {
         const pf = this.assets.small(`pip|${lit ? 1 : 0}|${material}`, () => pipFrame(lit, material));
         drawFrameSurface(ctx, pf, cx - 22 + i * 9, cy + 22, 1, m.tooShallow ? 0.55 : 1);
       }
+      drawSurgePips(ctx, m.id, cx, cy, 31, m.tooShallow ? 0.55 : 1);
       // boss crowns
       const crown = this.assets.small('crown', crownFrame);
       const cn = m.crowns;
@@ -900,6 +906,7 @@ export class ChartRenderer {
       const pf = this.assets.small(`pip|${lit ? 1 : 0}|${m.material}`, () => pipFrame(lit, m.material));
       drawFrameSurface(ctx, pf, cx - 22 + i * 9, cy + 25, 1, 0.85);
     }
+    drawSurgePips(ctx, m.id, cx, cy, 34, 0.85);
   }
 
   private pixels(ctx: CanvasRenderingContext2D, px: readonly [number, number][], cx: number, cy: number, fill: string, alpha: number): void {

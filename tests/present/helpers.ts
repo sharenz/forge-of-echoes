@@ -46,6 +46,7 @@ export interface SpriteCall {
   alpha: number;
   tint: readonly number[] | undefined;
   flipX: boolean;
+  scale: number;
 }
 
 /** Records every draw call; the per-frame lists are cleared by beginFrame. Font: 6 px advance per glyph. */
@@ -100,7 +101,7 @@ export class RecordingRenderer implements Renderer {
     if (def && (frame < 0 || frame >= def.frames.length) && !def.loop) throw new Error(`frame ${frame} out of range for ${id}`);
     this.frameSprites.push({
       id, frame, x, y, layer: o?.layer ?? 'world', outline: o?.outline ? [...o.outline] : undefined, alpha: o?.alpha ?? 1,
-      tint: o?.tint ? [...o.tint] : undefined, flipX: !!o?.flipX,
+      tint: o?.tint ? [...o.tint] : undefined, flipX: !!o?.flipX, scale: o?.scale ?? 1,
     });
   }
   private shape(kind: ShapeCall['kind'], x: number, y: number, x2: number, y2: number, radius: number, o: ShapeOptions): void {

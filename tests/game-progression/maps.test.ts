@@ -324,8 +324,9 @@ describe('luck', () => {
 describe('map tooltip', () => {
   it('describes a Normal map', () => {
     const d = rules.describeItem(map('ironColiseum', 2));
-    expect(d).toMatchObject({ title: 'Iron Coliseum', subtitle: null, tone: 'map', classLabel: 'Map', iconId: 'icon/map/ironColiseum' });
-    expect(d.headerLines).toEqual(['Tier 2 Map']);
+    expect(d).toMatchObject({ title: "Champion's Approach map", subtitle: null, tone: 'map', classLabel: 'Map', iconId: 'icon/map/ironColiseum' });
+    // a map is bound to one area: the tooltip leads with where it lives and how deep that area accepts
+    expect(d.headerLines).toEqual(['Tier 2 Map', "Area: Champion's Approach (Arena)  Accepts up to Tier 7"]);
     expect(d.implicits.map((l) => l.text)).toEqual(['25% increased number of Monsters', 'Armour bases drop with +2 Stability', 'Small arena', 'Characters 4+ levels below monster level 10 take 5% more damage per level of difference, up to 100%']);
     expect(d.properties).toContainEqual({ label: 'Monster Level', value: '10' });
   });
@@ -339,12 +340,12 @@ describe('map tooltip', () => {
 
   it('names Magic maps after their first mod and Rare maps stably', () => {
     const magic = rules.describeItem(map('ashenForge', 3, { mods: [mod('teeming')] }));
-    expect(magic.title).toBe('Teeming Ashen Forge');
+    expect(magic.title).toBe('Teeming Ember Road map');
     expect(magic.tone).toBe('magic');
     const rare = map('ashenForge', 3, { uid: 'fixed-uid', mods: [mod('teeming'), mod('hexed'), mod('restless')] });
     const d = rules.describeItem(rare);
     expect(d.tone).toBe('rare');
-    expect(d.subtitle).toBe('Ashen Forge');
+    expect(d.subtitle).toBe('Ember Road map');
     expect(d.title).toBe(rules.describeItem({ ...rare }).title);
     expect(d.title.split(' ')).toHaveLength(2);
   });

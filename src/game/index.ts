@@ -63,6 +63,10 @@
 //   gearLuck(ch)              % item quantity / rarity from gear alone
 //   deriveRunStats(ch, setup) deprecated alias of rules.deriveStats(ch, setup)
 import { setMapTreeNode } from './progression/map-tree';
+import { setPin } from './progression/atlas';
+import { refillSurge } from './progression/surge';
+import { recycleMaps, recycleQuote } from './items/bench';
+import { rookMapAreas, rookMapOffers } from './progression/merchant';
 import { buyDebugOffer } from './progression/debug-merchant';
 import type { ContentInfo, GameRulesApi } from '../contracts/game';
 import {
@@ -143,8 +147,12 @@ export const rules: GameRulesApi = {
 
   // --- maps & runs ---
   setMapTreeNode,
+  setPin,
+  recycleQuote,
+  recycleMaps,
   mapSummary,
   openMap,
+  refillSurge,
   buildRunConfig,
   playerRuntime,
   lootLuck,
@@ -157,6 +165,8 @@ export const rules: GameRulesApi = {
 
   // --- merchant ---
   merchantOffers,
+  rookMapAreas,
+  rookMapOffers,
   sellItems,
   sellQuote,
   buyOffer,

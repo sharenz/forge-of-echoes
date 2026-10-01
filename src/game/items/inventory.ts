@@ -5,7 +5,7 @@
 // Every function is pure: it returns a new CharacterSave (untouched containers keep their identity,
 // which lets the UI memoise) or a Result error with a player-facing reason.
 import type {
-  BeltSlot, CharacterSave, CurrencyStack, FlaskStack, GridContainer, GridEntry, Item, ItemLocation, MapItem, SpecialStashTab,
+  BeltSlot, CharacterSave, CraftSlotItem, CurrencyStack, FlaskStack, GridContainer, GridEntry, Item, ItemLocation, MapItem, SpecialStashTab,
   StashTab,
 } from '../../contracts/items';
 import { BELT_SLOTS, CURRENCY_STASH_MAX, MAP_STASH_CAPACITY, MAX_STASH_TABS, STASH_TAB_SIZE } from '../../contracts/items';
@@ -20,8 +20,8 @@ import { formatCount, joinWords } from './format';
 import { adoptUid, beltUid, heldUids, isReservedUid, mintUid, parseBeltUid, parseCurrencyStashUid } from './ids';
 import { equipmentLevelRequirement, itemDisplayName } from './modifiers';
 import {
-  currencyStashCount, currencyStashItem, currencyStashRoom, mapStashIndex, mapStashOf, specialStashTab, withCurrencyStashCount,
-  withMapStash,
+  craftSlotOf, currencyStashCount, currencyStashItem, currencyStashRoom, mapStashIndex, mapStashOf, specialStashTab,
+  withCraftSlot, withCurrencyStashCount, withMapStash,
 } from './special-stash';
 
 export type GridRef = { kind: 'backpack' } | { kind: 'stash'; tab: number };
@@ -295,6 +295,8 @@ export function findItem(ch: CharacterSave, uid: string): FoundItem | null {
     if (item?.uid === uid) return { item, location: { kind: 'scarabSlot', index } };
   }
   for (const m of mapStashOf(ch)) if (m.uid === uid) return { item: m, location: { kind: 'mapStash' } };
+  const work = craftSlotOf(ch);
+  if (work && work.uid === uid) return { item: work, location: { kind: 'craftSlot' } };
   return null;
 }
 
@@ -314,6 +316,8 @@ export function allItems(ch: CharacterSave): FoundItem[] {
   if (ch.mapDevice) out.push({ item: ch.mapDevice, location: { kind: 'mapDevice' } });
   ch.mapScarabs?.forEach((item, index) => { if (item) out.push({ item, location: { kind: 'scarabSlot', index } }); });
   for (const m of mapStashOf(ch)) out.push({ item: m, location: { kind: 'mapStash' } });
+  const work = craftSlotOf(ch);
+  if (work) out.push({ item: work, location: { kind: 'craftSlot' } });
   return out;
 }
 
@@ -351,6 +355,9 @@ export function replaceItemAt(ch: CharacterSave, location: ItemLocation, item: I
     maps[i] = item;
     return withMapStash(ch, maps);
   }
+  if (location.kind === 'craftSlot' && (item.kind === 'equipment' || item.kind === 'map') && craftSlotOf(ch)?.uid === item.uid) {
+    return withCraftSlot(ch, item);
+  }
   return ch;
 }
 
@@ -380,6 +387,7 @@ export function removeItemAt(ch: CharacterSave, location: ItemLocation, uid: str
     return i < 0 ? ch : withMapStash(ch, mapStashOf(ch).filter((_, j) => j !== i));
   }
   if (location.kind === 'mapDevice') return ch.mapDevice ? { ...ch, mapDevice: null } : ch;
+  if (location.kind === 'craftSlot') return craftSlotOf(ch)?.uid === uid ? withCraftSlot(ch, null) : ch;
   if (location.kind === 'scarabSlot') {
     const mapScarabs = Array.from({ length: SCARAB_SLOTS }, (_, i) => i === location.index ? null : ch.mapScarabs?.[i] ?? null);
     return { ...ch, mapScarabs };
@@ -486,6 +494,7 @@ function reattach(ch: CharacterSave, loc: ItemLocation, item: Item): CharacterSa
     return { ...ch, belt };
   }
   if (loc.kind === 'mapDevice') return item.kind === 'map' ? { ...ch, mapDevice: item } : null;
+  if (loc.kind === 'craftSlot') return (item.kind === 'equipment' || item.kind === 'map') && !craftSlotOf(ch) ? withCraftSlot(ch, item) : null;
   if (loc.kind === 'scarabSlot') {
     const def = item.kind === 'currency' ? findScarab(item.currencyId) : undefined;
     if (!def || item.kind !== 'currency' || item.count !== 1) return null;
@@ -702,7 +711,7 @@ function moveToGrid(
   // Swap with the single blocking item: it goes back to where the moved item came from.
   const placed = placeItem(removeFromGrid(grid, blocker.item.uid, blocker), moving, x, y)!;
   const swapped = reattach(withGrid(c1, ref, placed), src, blocker.item);
-  if (!swapped) return fail(src.kind === 'equipment' || src.kind === 'belt' || src.kind === 'mapDevice'
+  if (!swapped) return fail(src.kind === 'equipment' || src.kind === 'belt' || src.kind === 'mapDevice' || src.kind === 'craftSlot'
     ? 'Those items cannot trade places.'
     : 'There is no room to swap those items.');
   return ok(swapped);
@@ -782,7 +791,7 @@ function moveToScarabSlot(ch: CharacterSave, found: FoundItem, index: number): R
   if (found.location.kind === 'scarabSlot' && found.location.index === index) return ok(ch);
   if (ch.mapScarabs?.[index]) return fail('Remove the scarab in this socket first.');
   if (ch.mapScarabs?.some(s => s && s.uid !== item.uid && findScarab(s.currencyId)!.family === def.family))
-    return fail(`Only one ${def.family === 'haste' ? 'Haste' : 'Invasion'} Scarab can be used per map, regardless of tier.`);
+    return fail(`Only one ${def.familyName} Scarab can be used per map, regardless of tier.`);
   let next = setStackCount(ch, found, item.count - 1);
   let uid = item.uid;
   if (item.count > 1 || found.location.kind === 'currencyStash') {
@@ -803,6 +812,26 @@ function moveToMapDevice(ch: CharacterSave, found: FoundItem): Result<CharacterS
   // The map it replaces goes back where the new one came from (a map from the Map Stash swaps into it).
   const c3 = reattach(c2, found.location, occupant);
   return c3 ? ok(c3) : fail('There is no room for the map in the device.');
+}
+
+/**
+ * Load the Crafting Stash work slot: gear or a map, from anywhere it can be taken from. An item already in the slot
+ * goes back to where the new one came from (a free spot of that grid, the equipment slot it is worn in, the Map
+ * Stash), or the move is refused with the reason and nothing changes.
+ */
+function moveToCraftSlot(ch: CharacterSave, found: FoundItem): Result<CharacterSave> {
+  const item = found.item;
+  if (item.kind !== 'equipment' && item.kind !== 'map') return fail('The work slot holds one piece of gear or one map.');
+  if (found.location.kind === 'craftSlot') return ok(ch);
+  if (found.location.kind === 'belt' || found.location.kind === 'scarabSlot' || found.location.kind === 'currencyStash') {
+    return fail('The work slot holds one piece of gear or one map.');
+  }
+  const occupant = craftSlotOf(ch);
+  const c1 = detach(ch, found);
+  const c2 = withCraftSlot(c1, item as CraftSlotItem);
+  if (!occupant) return ok(c2);
+  const c3 = reattach(c2, found.location, occupant);
+  return c3 ? ok(c3) : fail(`There is no room to put ${occupant.kind === 'equipment' ? itemDisplayName(occupant) : 'the map'} back. Take it out of the work slot first.`);
 }
 
 /**
@@ -843,13 +872,15 @@ export function moveItem(ch: CharacterSave, uid: string, to: ItemLocation, count
       return moveToCurrencyStash(ch, found, n);
     case 'mapStash':
       return moveToMapStash(ch, found);
+    case 'craftSlot':
+      return moveToCraftSlot(ch, found);
     default:
       return fail('Invalid destination.');
   }
 }
 
 const LOCATION_KINDS: ReadonlySet<string> = new Set<ItemLocation['kind']>([
-  'backpack', 'stash', 'equipment', 'belt', 'mapDevice', 'scarabSlot', 'currencyStash', 'mapStash',
+  'backpack', 'stash', 'equipment', 'belt', 'mapDevice', 'scarabSlot', 'currencyStash', 'mapStash', 'craftSlot',
 ]);
 
 /**
@@ -939,6 +970,8 @@ export interface QuickMoveContext {
  *                          the map device
  *   Stash tab item, equipped item, belt charges → the backpack.
  *   The device's map → the Map Stash while it is open ('maps'), otherwise the backpack.
+ *   With a Crafting Stash tab open ('currency' | 'mapCurrency'): backpack or worn gear and backpack maps load the
+ *     work slot (an occupant goes back to where the new item came from). The work slot's item → the backpack.
  *   Crafting Stash slot ("cstash:<id>") → the backpack: a full stack (up to the stack size) or `count`
  *     (Shift+Ctrl-click sends 1), topping up matching stacks first.
  *   Map Stash map → the backpack (to reach the open Map Device, the UI moves it with moveItem).
@@ -958,9 +991,14 @@ export function quickMove(ch: CharacterSave, uid: string, ctx: QuickMoveContext)
       return found.item.kind === 'currency' ? withdrawCurrency(ch, found.item.currencyId, count, null) : fail(missingItemError(uid));
     case 'mapStash':
       return found.item.kind === 'map' ? withdrawMap(ch, found.item, null) : fail(missingItemError(uid));
+    case 'craftSlot':
+      // Ctrl-click on the work slot's item always gives it back to the backpack.
+      return transferToGrid(ch, found, backpack, 'Your backpack is full.');
     case 'backpack': {
       if (tab !== null) {
         if (!special && !validStashTab(ch, tab)) return fail('That stash tab does not exist.');
+        // With a Crafting Stash tab open, gear and maps load the work slot (the Map Stash tab still files maps).
+        if (isCraftingTab(special) && (found.item.kind === 'equipment' || found.item.kind === 'map')) return moveToCraftSlot(ch, found);
         if (found.item.kind === 'map') return moveToMapStash(ch, found);
         if (found.item.kind === 'currency') return moveToCurrencyStash(ch, found, count);
       }
@@ -986,11 +1024,18 @@ export function quickMove(ch: CharacterSave, uid: string, ctx: QuickMoveContext)
     case 'scarabSlot':
       if (special) return moveToCurrencyStash(ch, found, count);
       return transferToGrid(ch, found, backpack, 'Your backpack is full.', count);
-    case 'stash':
     case 'equipment':
+      // Worn gear with a Crafting Stash tab open goes into the work slot (it is taken off on the way).
+      if (isCraftingTab(special)) return moveToCraftSlot(ch, found);
+      return transferToGrid(ch, found, backpack, 'Your backpack is full.', count);
+    case 'stash':
     case 'belt':
       return transferToGrid(ch, found, backpack, 'Your backpack is full.', count);
   }
+}
+
+function isCraftingTab(tab: SpecialStashTab | null): boolean {
+  return tab === 'currency' || tab === 'mapCurrency';
 }
 
 /**
@@ -1162,6 +1207,7 @@ export function clearNewFlags(ch: CharacterSave): CharacterSave {
     mapDevice: ch.mapDevice ? stripNew(ch.mapDevice) : null,
     ...(ch.mapScarabs ? { mapScarabs: ch.mapScarabs.map(s => s ? stripNew(s) : null) } : {}),
     mapStash: maps.some((m) => m.isNew) ? maps.map(stripNew) : Array.isArray(ch.mapStash) ? ch.mapStash : [],
+    ...(ch.craftSlot ? { craftSlot: stripNew(ch.craftSlot) } : {}),
   };
 }
 

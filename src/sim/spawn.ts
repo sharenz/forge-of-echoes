@@ -7,6 +7,7 @@ import { PARTY_LIFE_PER_PLAYER, SPAWN_ANIM_TIME, WAVE_DAMAGE_GROWTH, WAVE_LIFE_G
 import { DAMAGE_INDEX, GOLDEN_ANGLE, TAU } from './math';
 import { nearestLiving } from './player';
 import { monsterDefs } from './rosters';
+import { resolveProps } from './grid';
 import { MFLAG } from './stores';
 import { pactForWave, type Pack, type World } from './world';
 
@@ -31,8 +32,52 @@ export interface SpawnOptions {
   animate?: boolean;
 }
 
+/** Spare room kept between a spawned body and a solid prop. */
+const SPAWN_PROP_MARGIN = 3;
+const SPAWN_SEARCH_STEP = 8;
+const SPAWN_SEARCH_RINGS = 60;
+const spawnPoint = { x: 0, y: 0 };
+
+/**
+ * The spawn point for a body of `radius` wanted at (x, y): the point itself when it is clear of every solid prop, else the nearest
+ * clear point found by a fixed outward ring search (8 u steps, angles starting from the direction the solid pushes the point out,
+ * so it is deterministic and draws no RNG). Stays inside the arena (`arenaRadius - 20`); with no clear point in reach the wanted
+ * point is kept. Result in a shared scratch object.
+ */
+export function freeSpawnPoint(w: World, x: number, y: number, radius: number): { x: number; y: number } {
+  spawnPoint.x = x;
+  spawnPoint.y = y;
+  const need = radius + SPAWN_PROP_MARGIN;
+  if (!resolveProps(w.propGrid, x, y, need).hit) return spawnPoint;
+  const lim = w.arenaRadius - 20;
+  const pushed = resolveProps(w.propGrid, x, y, need);
+  const pushX = pushed.x;
+  const pushY = pushed.y;
+  const base = Math.atan2(pushY - y, pushX - x);
+  const STEPS = 16;
+  for (let ring = 0; ring <= SPAWN_SEARCH_RINGS; ring++) {
+    const d = ring * SPAWN_SEARCH_STEP;
+    const n = ring === 0 ? 1 : STEPS;
+    for (let k = 0; k < n; k++) {
+      // Alternate sides of the push-out heading: 0, +1, -1, +2, -2 ...
+      const j = (k + 1) >> 1;
+      const a = base + (k & 1 ? j : -j) * (TAU / STEPS);
+      const px = ring === 0 ? pushX : x + Math.cos(a) * d;
+      const py = ring === 0 ? pushY : y + Math.sin(a) * d;
+      if (px * px + py * py > lim * lim) continue;
+      if (resolveProps(w.propGrid, px, py, need).hit) continue;
+      spawnPoint.x = px;
+      spawnPoint.y = py;
+      return spawnPoint;
+    }
+  }
+  spawnPoint.x = x;
+  spawnPoint.y = y;
+  return spawnPoint;
+}
+
 /** Spawn one monster; returns its slot or -1 when the store is full. */
-export function spawnMonster(w: World, kind: MonsterKind, x: number, y: number, opts: SpawnOptions = {}): number {
+export function spawnMonster(w: World, kind: MonsterKind, x0: number, y0: number, opts: SpawnOptions = {}): number {
   const m = w.monsters;
   const i = m.alloc();
   if (i < 0) return -1;
@@ -49,6 +94,11 @@ export function spawnMonster(w: World, kind: MonsterKind, x: number, y: number, 
   const dmgMult = s.damageMultiplier * (1 + WAVE_DAMAGE_GROWTH * (wave - 1)) * eliteDamageMult(mods) * strength.damage * (opts.boss ? w.config.bossDamageMultiplier ?? 1 : 1);
   const rng = w.worldRng;
   const animate = opts.animate ?? true;
+  // Never inside a solid prop (packs, summons, boss arrivals, event spawns all come through here).
+  const spawnR = a.radius * (rarity === 'rare' ? 1.15 : 1);
+  const at = isDummy ? null : freeSpawnPoint(w, x0, y0, spawnR);
+  const x = at ? at.x : x0;
+  const y = at ? at.y : y0;
 
   m.kind[i] = kindIndex;
   m.rarity[i] = opts.boss ? RARITY_CODE.boss : opts.lieutenant ? RARITY_CODE.lieutenant : RARITY_CODE[rarity];

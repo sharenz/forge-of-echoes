@@ -6,10 +6,13 @@
 //     empty slots ghosted). Dropping a currency anywhere on the tab (or on its tab button) files it into its slot.
 //     Drag / Ctrl-click a slot takes a stack, Shift+Ctrl-click one; right-click arms it for crafting (`cstash:<id>`),
 //     exactly like a backpack stack.
+// Both Crafting Stash tabs put the work slot (WorkSlot.tsx: the item being crafted on, in place) beside the currency
+// slots as compact tiles: one click on a tile crafts on the work slot's item. Drop gear or a map anywhere on a
+// Crafting Stash tab (or its tab button) to load the slot.
 // Both pages keep the normal grid's footprint (12 x 8 cells), so switching tabs never resizes the panel. The stash
 // search lights up map rows and filled currency slots like grid items.
 import type { JSX } from 'preact';
-import { useEffect, useMemo, useRef } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { iconIdForCurrency, iconIdForMap, type CurrencyId } from '../../contracts/content';
 import {
   CURRENCY_STASH_MAX,
@@ -23,9 +26,13 @@ import {
 } from '../../contracts/items';
 import type { UiStore } from '../../contracts/ui';
 import { PixelIcon, cx } from '../components/common';
+import { emblemUrl } from '../../art/atlas/sprites';
+import { AreaSurgePips } from '../atlas/SurgePips';
 import { beginPointerDrag, pickerDropKind } from '../items/dnd';
 import { ItemCard } from '../items/ItemTooltip';
 import { clickSuppressed, itemClick, itemContextMenu, safe, useCraftMark } from '../items/hooks';
+import { tileStep } from '../lib/workslot';
+import { WorkSlot, craftInWorkSlot } from './WorkSlot';
 import { readCellPx } from '../items/ItemView';
 import { useSearch, type SearchResult } from '../items/search';
 import { formatInt } from '../lib/format';
@@ -51,19 +58,20 @@ import { useSignal, useStore, useUi } from '../store';
 const MAP_STASH: ItemLocation = { kind: 'mapStash' };
 const CURRENCY_STASH: ItemLocation = { kind: 'currencyStash' };
 
-/** Map names come from the rules' description; maps never change in place, so one description per object. */
-const mapDescs = new WeakMap<MapItem, ItemDescription | null>();
+/** Map names come from the rules' description; maps never change in place, so one description per object (and per Atlas: the tooltip says whether the viewer has charted the map's area). */
+const mapDescs = new WeakMap<MapItem, { atlas: unknown; desc: ItemDescription | null }>();
 function describeMap(store: UiStore, map: MapItem, ch: CharacterSave): ItemDescription | null {
-  if (mapDescs.has(map)) return mapDescs.get(map) ?? null;
-  const d = safe(() => store.rules.describeItem(map, ch), null);
-  mapDescs.set(map, d);
-  return d;
+  const hit = mapDescs.get(map);
+  if (hit && hit.atlas === ch.atlas) return hit.desc;
+  const desc = safe(() => store.rules.describeItem(map, ch), null);
+  mapDescs.set(map, { atlas: ch.atlas, desc });
+  return desc;
 }
 
 /** Drop feedback of a special-stash drop target (`data-drop-id` = id): lit while a fitting item is dragged, green /
  * red while it hovers this very element. */
 function useDropState(
-  dropKind: 'mapStash' | 'currencyStash' | 'mapDevice',
+  dropKind: 'mapStash' | 'currencyStash' | 'mapDevice' | 'craftSlot',
   id: string,
   accepts: (d: DragState) => boolean,
 ): { accepting: boolean; state: 'ok' | 'bad' | null } {
@@ -87,7 +95,14 @@ export function SpecialTabButton({ tab, on, hits }: { tab: SpecialStashTab; on: 
   const ch = useUi((s) => s.character);
   const info = SPECIAL_TAB_INFO[tab];
   const dropKind = tab === 'maps' ? 'mapStash' : 'currencyStash';
-  const { accepting, state } = useDropState(dropKind, `tab-${tab}`, (d) => (tab === 'maps' ? d.item.kind === 'map' : d.item.kind === 'currency'));
+  const dragging = useSignal(local.drag);
+  // A Crafting Stash tab takes currency into its slot, and gear or a map into the work slot.
+  const gearIn = tab !== 'maps' && !!dragging && (dragging.item.kind === 'equipment' || dragging.item.kind === 'map');
+  const { accepting, state } = useDropState(
+    gearIn ? 'craftSlot' : dropKind,
+    `tab-${tab}`,
+    (d) => (tab === 'maps' ? d.item.kind === 'map' : d.item.kind === 'currency' || d.item.kind === 'equipment' || d.item.kind === 'map'),
+  );
 
   const tip = (el: Element): void => {
     if (!ch) return;
@@ -101,6 +116,7 @@ export function SpecialTabButton({ tab, on, hits }: { tab: SpecialStashTab; on: 
       const filled = ids.filter((id) => stashCount(ch, id) > 0).length;
       lines.push(`${formatInt(stashTotal(ch, tab))} currency in ${filled} of ${ids.length} slots`);
       lines.push(`Drop any currency here: it files into its own slot (up to ${formatInt(CURRENCY_STASH_MAX)}).`);
+      lines.push('Drop gear or a map here to craft on it in the work slot.');
     }
     if (hits !== null) lines.unshift(`${hits} ${hits === 1 ? 'match' : 'matches'}`);
     local.showTooltip({ kind: 'text', title: tab === 'maps' ? info.title : `${info.title}: ${info.subtitle}`, lines }, el, 'above');
@@ -172,7 +188,7 @@ function TierTile({
       // An empty tier has nothing to show (its tooltip says so): the open tier stays.
       onClick={() => !empty && onPick()}
       onPointerEnter={(e) => {
-        const bases = group.sections.map((s) => `${s.maps.length} × ${store.rules.content.mapBases[s.baseId]?.name ?? s.baseId}`);
+        const bases = group.sections.map((s) => `${s.maps.length} × ${s.name}`);
         local.showTooltip(
           {
             kind: 'text',
@@ -360,9 +376,11 @@ export function MapStashView({ mode }: { mode: 'stash' | 'device' }) {
           </div>
         ) : (
           group.sections.map((sec) => (
-            <section key={sec.baseId} class="fe-mstash__section">
-              <div class="fe-mstash__base">
-                <span class="fe-mstash__base-name">{names[sec.baseId]?.name ?? sec.baseId}</span>
+            <section key={sec.areaId} class="fe-mstash__section" data-area={sec.areaId}>
+              <div class="fe-mstash__base" title={`${sec.name} · ${names[sec.baseId]?.name ?? sec.baseId}`}>
+                <img class="fe-px fe-mstash__emblem" src={emblemUrl(sec.baseId, 24)} alt="" width={20} height={20} />
+                <span class="fe-mstash__base-name">{sec.name}</span>
+                <span class="fe-mstash__pips" data-surge-pips={sec.areaId}><AreaSurgePips areaId={sec.areaId} /></span>
                 <span class="fe-mstash__base-n">{sec.maps.length}</span>
               </div>
               {sec.maps.map((m) => (
@@ -382,7 +400,10 @@ const EMPTY_MAPS: MapItem[] = [];
 // Crafting Stash
 // ---------------------------------------------------------------------------------------------------------------
 
-/** The slot's tooltip: the currency card with the stash count and what each click does. Reads the store live. */
+/**
+ * The slot's tooltip: the currency card with the stash count, what each click does and — with an item in the work slot —
+ * what this currency would do to it right now (the rules' own preview). Reads the store live.
+ */
 function SlotTooltip({ store, id }: { store: UiStore; id: CurrencyId }) {
   const s = store.get();
   const ch = s.character;
@@ -391,12 +412,16 @@ function SlotTooltip({ store, id }: { store: UiStore; id: CurrencyId }) {
   const desc = safe(() => store.rules.describeItem(slotStack(id, Math.max(1, count)), ch), null);
   if (!desc) return null;
   const stack = store.rules.content.currencies[id]?.maxStack ?? 0;
+  const work = ch.craftSlot ?? null;
+  const uid = currencyStashUid(id);
+  const error = count > 0 && work && s.craftingAllowed ? safe(() => store.rules.craftingTargetError(ch, uid, work.uid), 'This item cannot be crafted.') : null;
+  const preview = count > 0 && work && s.craftingAllowed && !error ? safe(() => store.rules.craftPreview(ch, uid, work.uid), []) : [];
   const hints =
     count > 0
       ? [
-          `Drag or Ctrl-click: take a stack${stack > 0 ? ` (up to ${stack})` : ''}`,
-          'Shift+Ctrl-click: take one',
-          s.craftingAllowed ? 'Right-click: craft with it straight from the stash' : 'Crafting only works in a hideout',
+          !s.craftingAllowed ? 'Crafting only works in a hideout' : work ? 'Click: craft on the work slot item' : 'Click: craft (put an item in the work slot first)',
+          'Right-click: arm it for any item (Shift keeps it armed)',
+          `Drag or Ctrl-click: take a stack${stack > 0 ? ` (up to ${stack})` : ''} · Shift+Ctrl-click: one`,
         ]
       : [`Drop ${desc.title} anywhere on this tab to file it here`];
   const card: ItemDescription = {
@@ -410,18 +435,46 @@ function SlotTooltip({ store, id }: { store: UiStore; id: CurrencyId }) {
         desc={card}
         alt={false}
         footer={
-          <div class="fe-tt__hint fe-cslot-tip">
-            {hints.map((h) => (
-              <div key={h}>{h}</div>
-            ))}
-          </div>
+          <>
+            {work && count > 0 && s.craftingAllowed && (
+              <div class={cx('fe-tt__craft', error && 'fe-tt__craft--bad')}>
+                {error ? (
+                  <div class="fe-tt__craft-line">{error}</div>
+                ) : (
+                  preview.map((l, i) => (
+                    <div class="fe-tt__craft-line" key={i}>
+                      {l}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            <div class="fe-tt__hint fe-cslot-tip">
+              {hints.map((h) => (
+                <div key={h}>{h}</div>
+              ))}
+            </div>
+          </>
         }
       />
     </div>
   );
 }
 
-function CurrencySlot({ id, count, wide, search }: { id: CurrencyId; count: number; wide: boolean; search: SearchResult }) {
+function CurrencySlot({
+  id,
+  count,
+  search,
+  rove,
+  onRove,
+}: {
+  id: CurrencyId;
+  count: number;
+  search: SearchResult;
+  /** This tile is the one the Tab key reaches (roving focus inside the tile grid). */
+  rove: boolean;
+  onRove: () => void;
+}) {
   const store = useStore();
   const local = useLocal();
   const drag = useSignal(local.drag);
@@ -452,17 +505,22 @@ function CurrencySlot({ id, count, wide, search }: { id: CurrencyId; count: numb
     });
   };
 
-  const nothingHere = (e: MouseEvent): void => {
+  const nothingHere = (e: { clientX: number; clientY: number }): void => {
     store.actions.uiSound('error');
     local.flashHint(`No ${info?.name ?? 'currency'} in the stash.`, e.clientX, e.clientY);
+  };
+
+  /** A plain click or Enter: craft on the work slot's item (modifiers and an armed currency keep their old meaning). */
+  const craft = (at: { clientX: number; clientY: number }): void => {
+    if (empty) return nothingHere(at);
+    craftInWorkSlot(store, local, at, id);
   };
 
   return (
     <div
       ref={ref}
       class={cx(
-        'fe-cslot',
-        wide && 'fe-cslot--wide',
+        'fe-cslot fe-cslot--tile',
         empty && 'fe-cslot--empty',
         full && 'fe-cslot--full',
         mark && `fe-cslot--craft-${mark}`,
@@ -473,10 +531,47 @@ function CurrencySlot({ id, count, wide, search }: { id: CurrencyId; count: numb
       )}
       data-uid={uid}
       data-currency={id}
+      role="button"
+      tabIndex={rove ? 0 : -1}
+      aria-label={`${info?.name ?? id}, ${formatInt(count)} in the Crafting Stash. Enter crafts with it.`}
+      // Keyboard focus comes from Tab only (src/ui/panels/WorkSlot.tsx, header): a mouse press never leaves focus here.
+      onMouseDown={(e) => e.preventDefault()}
+      onFocus={onRove}
       onPointerDown={onPointerDown}
+      onKeyDown={(e) => {
+        const tiles = [...(e.currentTarget.closest('.fe-cstash__tiles')?.querySelectorAll<HTMLElement>('[data-currency]') ?? [])];
+        const at = tiles.indexOf(e.currentTarget);
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          const r = e.currentTarget.getBoundingClientRect();
+          // Shift+Enter arms the currency like a right-click, to use it on an item elsewhere.
+          if (e.shiftKey) {
+            if (!empty) {
+              store.actions.uiSound('click');
+              itemContextMenu(store, local, { preventDefault() {}, ctrlKey: false, button: 2, clientX: r.left, clientY: r.top } as unknown as MouseEvent, uid, item, CURRENCY_STASH);
+            }
+            return;
+          }
+          craft({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
+          return;
+        }
+        const top = Math.round(e.currentTarget.getBoundingClientRect().top);
+        // Up / Down step by a row of tiles: as many as share this tile's row.
+        const columns = Math.max(1, tiles.filter((t) => Math.round(t.getBoundingClientRect().top) === top).length);
+        const next = tileStep(e.key, at, tiles.length, columns);
+        if (next === null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        tiles[next]?.focus();
+        if (tiles[next]) local.hideTooltip();
+      }}
       onClick={(e) => {
         const ev = e as unknown as MouseEvent;
+        if (clickSuppressed()) return;
         if (empty && (ev.ctrlKey || ev.metaKey) && !store.get().armed) return nothingHere(ev);
+        // Nothing armed, no modifier: the tile crafts on the work slot (the old click did nothing).
+        if (!ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !store.get().armed) return craft(ev);
         itemClick(store, local, ev, uid, item, CURRENCY_STASH);
       }}
       onContextMenu={(e) => {
@@ -493,19 +588,12 @@ function CurrencySlot({ id, count, wide, search }: { id: CurrencyId; count: numb
         local.showTooltip({ kind: 'custom', render: () => <SlotTooltip store={store} id={id} /> }, e.currentTarget, 'side');
       }}
       onPointerLeave={() => local.hideTooltip()}
+      onBlur={() => local.hideTooltip()}
     >
       <span class="fe-cslot__well">
         <PixelIcon id={iconIdForCurrency(id)} class="fe-cslot__icon" width="var(--cslot-icon)" height="var(--cslot-icon)" />
         {!empty && <span class="fe-cslot__count">{formatInt(count)}</span>}
       </span>
-      {wide ? (
-        <span class="fe-cslot__text">
-          <span class="fe-cslot__name">{info?.name ?? CURRENCY_SHORT[id]}</span>
-          <span class="fe-cslot__desc">{info?.description}</span>
-        </span>
-      ) : (
-        <span class="fe-cslot__label">{CURRENCY_SHORT[id]}</span>
-      )}
     </div>
   );
 }
@@ -513,25 +601,31 @@ function CurrencySlot({ id, count, wide, search }: { id: CurrencyId; count: numb
 export function CurrencyStashView({ tab }: { tab: 'currency' | 'mapCurrency' }) {
   const ch = useUi((s) => s.character);
   const search = useSearch();
-  const { accepting, state } = useDropState('currencyStash', `page-${tab}`, (d) => d.item.kind === 'currency');
+  const local = useLocal();
+  const drag = useSignal(local.drag);
+  const gearIn = !!drag && (drag.item.kind === 'equipment' || drag.item.kind === 'map');
+  const { accepting, state } = useDropState(
+    gearIn ? 'craftSlot' : 'currencyStash',
+    `page-${tab}`,
+    (d) => d.item.kind === 'currency' || d.item.kind === 'equipment' || d.item.kind === 'map',
+  );
+  const [rove, setRove] = useState<CurrencyId | null>(null);
   if (!ch) return null;
-  const wide = tab === 'mapCurrency';
+  const ids = CURRENCY_SHELVES[tab].flatMap((shelf) => shelf.ids);
+  // The one tile Tab reaches: the last one focused, else the first that holds something.
+  const tabStop = rove && ids.includes(rove) ? rove : (ids.find((id) => stashCount(ch, id) > 0) ?? ids[0]);
   return (
     <div
-      class={cx('fe-cstash fe-solid', `fe-cstash--${tab}`, accepting && 'fe-cstash--accepts', state && `fe-cstash--${state}`)}
+      class={cx('fe-cstash fe-cstash--work fe-solid', `fe-cstash--${tab}`, accepting && 'fe-cstash--accepts', state && `fe-cstash--${state}`)}
       data-drop="currencyStash"
       data-drop-id={`page-${tab}`}
     >
-      {CURRENCY_SHELVES[tab].map((shelf) => (
-        <section key={shelf.title} class="fe-cstash__shelf">
-          <div class="fe-cstash__kicker">{shelf.title}</div>
-          <div class="fe-cstash__row">
-            {shelf.ids.map((id) => (
-              <CurrencySlot key={id} id={id} count={stashCount(ch, id)} wide={wide} search={search} />
-            ))}
-          </div>
-        </section>
-      ))}
+      <WorkSlot />
+      <div class="fe-cstash__tiles" role="group" aria-label={tab === 'currency' ? 'Equipment currency' : 'Map currency'}>
+        {ids.map((id) => (
+          <CurrencySlot key={id} id={id} count={stashCount(ch, id)} search={search} rove={id === tabStop} onRove={() => setRove(id)} />
+        ))}
+      </div>
     </div>
   );
 }

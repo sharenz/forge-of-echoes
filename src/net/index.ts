@@ -33,7 +33,7 @@
 //   nearest first (tar / fire pools before the players' own fire trails) — a carpet of pools never hides a telegraph.
 //   The server should still cap live tar pools per instance: every one in the AOI costs each viewer 19 B.
 //   Commands (parseClientMessage): moveItem { count? 1..CURRENCY_STASH_MAX } to any ItemLocation incl. the
-//   position-free { kind: 'currencyStash' } / { kind: 'mapStash' }; quickMove { stashTab: tab index | 'currency' |
+//   position-free { kind: 'currencyStash' } / { kind: 'mapStash' } / { kind: 'craftSlot' } (the work slot); quickMove { stashTab: tab index | 'currency' |
 //   'mapCurrency' | 'maps' | null, count? }; depositAllCurrency. Synthetic uids ('belt:2', 'cstash:<currencyId>') are
 //   ordinary tokens here; the rules resolve them.
 //

@@ -47,7 +47,7 @@ function rareRing(uid = 'ring'): EquipmentItem {
 }
 
 describe('slots and synthetic uids', () => {
-  it.each([0, 'maps', 'currency', 'mapCurrency'] as const)('automatically files map and currency items with stash tab %s open', (stashTab) => {
+  it.each([0, 'maps'] as const)('automatically files map and currency items with stash tab %s open', (stashTab) => {
     let ch = withBackpack(makeCharacter(), [[map('m'), 0, 0], [currency('scrap', 7, 'c'), 1, 0]]);
     ch = expectOk(quickMove(ch, 'm', {stashTab}));
     ch = expectOk(quickMove(ch, 'c', {stashTab}));
@@ -55,6 +55,16 @@ describe('slots and synthetic uids', () => {
     expect(ch.currencyStash.scrap).toBe(7);
     expect(ch.backpack.entries).toHaveLength(0);
     expect(ch.stash[0].grid.entries).toHaveLength(0);
+  });
+
+  it.each(['currency', 'mapCurrency'] as const)('with the Crafting Stash tab %s open a map loads the work slot and currency files', (stashTab) => {
+    let ch = withBackpack(makeCharacter(), [[map('m'), 0, 0], [currency('scrap', 7, 'c'), 1, 0]]);
+    ch = expectOk(quickMove(ch, 'm', {stashTab}));
+    ch = expectOk(quickMove(ch, 'c', {stashTab}));
+    expect(ch.craftSlot?.uid).toBe('m');
+    expect(ch.mapStash).toEqual([]);
+    expect(ch.currencyStash.scrap).toBe(7);
+    expect(ch.backpack.entries).toHaveLength(0);
   });
 
   it('addresses every currency by "cstash:<id>" and rejects anything else', () => {
@@ -147,8 +157,9 @@ describe('depositing currency', () => {
     const ch = withBackpack(makeCharacter(), [[map('m'), 0, 0], [flask('lifeFlask', 3, 'f'), 1, 0], [rareRing('r'), 2, 0]]);
     for (const uid of ['m', 'f', 'r']) {
       expect(expectErr(moveItem(ch, uid, { kind: 'currencyStash' }))).toBe('Only currency can be stored in the Crafting Stash.');
-      if (uid === 'm') {
-        expect(expectOk(quickMove(ch, uid, { stashTab: 'currency' })).mapStash.map((m) => m.uid)).toEqual(['m']);
+      if (uid === 'm' || uid === 'r') {
+        // Gear and maps go into the work slot instead of a currency slot (src/game/items work slot tests).
+        expect(expectOk(quickMove(ch, uid, { stashTab: 'currency' })).craftSlot?.uid).toBe(uid);
         continue;
       }
       expect(expectErr(quickMove(ch, uid, { stashTab: 'currency' }))).toBe('Only currency can be stored in the Crafting Stash.');
@@ -380,7 +391,7 @@ describe('the Map Stash', () => {
 
   it('describes a Map Stash map with its withdraw hint, and clearNewFlags clears its badge', () => {
     const ch = makeCharacter({ mapStash: [{ ...map('a'), isNew: true }] });
-    expect(rules.describeItem(ch.mapStash[0], ch).hint).toBe('Drag it to the Map Device or your backpack; Ctrl+click takes it to your backpack.');
+    expect(rules.describeItem(ch.mapStash[0], ch).hint).toBe('Drag it to your backpack, then into the Map Device; Ctrl+click takes it to your backpack.');
     expect(clearNewFlags(ch).mapStash[0].isNew).toBeUndefined();
     expect(rules.clearNewFlags(ch).mapStash).toEqual([map('a')]);
   });
@@ -388,7 +399,7 @@ describe('the Map Stash', () => {
   it('lists its maps among the held items and never mints their uids again', () => {
     const ch = makeCharacter({ nextUid: 1, mapStash: [map('i1'), map('i2')] });
     expect([...heldUids(ch)].sort()).toEqual(['i1', 'i2']);
-    const bought = expectOk(rules.buyOffer(ch, 'map-t1-ashenForge'));
+    const bought = expectOk(rules.buyOffer(ch, 'map:cinderCrossing:1:plain'));
     expect(bought.item.uid).toBe('i3');
     expectUniqueUids(bought.character);
     // An incoming item with a slot uid never keeps it.
@@ -556,11 +567,11 @@ describe('crafting straight from a slot', () => {
 describe('Rook and refunds use the special tabs', () => {
   it('Rook takes payment from the Crafting Stash after the backpack', () => {
     const ch = withBackpack(makeCharacter({ currencyStash: { scrap: 10 } }), [[currency('scrap', 2, 'a'), 0, 0]]);
-    const offer = rules.merchantOffers(ch).find((o) => o.id === 'map-t2-ashenForge')!;
+    const offer = rules.merchantOffers(ch).find((o) => o.id === 'currency-kindling')!; // 3 Scrap
     expect(offer.affordable).toBe(true);
-    const out = expectOk(rules.buyOffer(ch, 'map-t2-ashenForge'));
+    const out = expectOk(rules.buyOffer(ch, 'currency-kindling'));
     expect(carried(out.character, 'scrap')).toBe(0);
-    expect(out.character.currencyStash).toEqual({ scrap: 8 });
+    expect(out.character.currencyStash).toEqual({ scrap: 9 });
   });
 
   it('stows refunded currency in the Crafting Stash when the backpack is full', () => {
@@ -641,7 +652,7 @@ describe('purity and determinism', () => {
     for (let i = 0; i < 3; i++) ch = expectOk(rules.quickMove(ch, S('scrap'), { stashTab: 'currency', count: 1 }));
     ch = expectOk(rules.moveItem(ch, mapUids[0], { kind: 'mapDevice' }));
     ch = expectOk(rules.moveItem(ch, mapUids[1], { kind: 'mapDevice' }));
-    ch = expectOk(rules.buyOffer(ch, 'map-t1-rimedOssuary')).character;
+    ch = expectOk(rules.buyOffer(ch, 'map:cinderCrossing:1:plain')).character;
     expect(ch.mapStash.map((m) => m.uid)).toEqual([mapUids[2], mapUids[0]]);
     expect(ch.currencyStash.scrap).toBe(10 - 3);
     expectUniqueUids(ch);

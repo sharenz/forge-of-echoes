@@ -103,7 +103,7 @@ describe('withItemLocks', () => {
 
   it('hands back the real items, never the stand-ins', () => {
     const ch = trader();
-    const after = expectOk(locked.buyOffer(ch, 'map-t1-ashenForge')).character;
+    const after = expectOk(locked.buyOffer(ch, 'map:cinderCrossing:1:plain')).character;
     for (const uid of OFFER) expect(rules.findItem(after, uid)).toEqual(rules.findItem(ch, uid));
     expect(after.backpack.entries.filter((e) => e.item.kind === 'map')).toHaveLength(2);
   });

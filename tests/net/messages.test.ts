@@ -45,7 +45,7 @@ function scrap(): CurrencyStack {
 function sampleTrade(): TradeInfo {
   return {
     tradeId: 'trade-1', partnerCharacterId: 'c2', partnerName: 'Brann', yourItems: [wand()],
-    theirItems: [scrap(), { kind: 'map', uid: 'i21', baseId: 'rimedOssuary', tier: 4, rarity: 'magic', mods: [{ modId: 'teeming', value: 36 }], quality: 5, corrupted: false }],
+    theirItems: [scrap(), { kind: 'map', uid: 'i21', areaId: 'boneApproach', baseId: 'rimedOssuary', tier: 4, rarity: 'magic', mods: [{ modId: 'teeming', value: 36 }], quality: 5, corrupted: false }],
     youAccepted: false, theyAccepted: true, acceptLockedUntil: 1.7e12,
   };
 }
@@ -80,6 +80,7 @@ describe('client message validation', () => {
       { c: 'setMapTreeNode', nodeId: 'waypoint', allocate: false },
       { c: 'merchantOffers' },
       { c: 'buyOffer', offerId: 'gamble:wand' },
+      { c: 'buyOffer', offerId: 'map:emberRoad:2:plain', at: { x: 11, y: 4 } },
       { c: 'partyInvite', name: 'Mira' },
       { c: 'partyRespond', inviteId: 'inv-12', accept: false },
       { c: 'partyLeave' },
@@ -110,6 +111,8 @@ describe('client message validation', () => {
       // special stash tabs (GAME_SPEC §12)
       { c: 'moveItem', uid: 'i4', to: { kind: 'currencyStash' } },
       { c: 'moveItem', uid: 'i5', to: { kind: 'mapStash' } },
+      { c: 'moveItem', uid: 'i5', to: { kind: 'craftSlot' } }, // the Crafting Stash work slot
+      { c: 'moveItem', uid: 'i5', to: { kind: 'craftSlot' }, count: 1 },
       { c: 'moveItem', uid: 'cstash:essenceEmber', to: { kind: 'backpack', x: 0, y: 0 }, count: 40 },
       { c: 'moveItem', uid: 'cstash:voidNeedle', to: { kind: 'backpack', x: 3, y: 2 }, count: 1 },
       { c: 'moveItem', uid: 'i6', to: { kind: 'backpack', x: 5, y: 1 }, count: 7 }, // split a backpack stack
@@ -158,6 +161,10 @@ describe('client message validation', () => {
       cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash', x: 0, y: 0 } }),
       cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currencyStash', currencyId: 'scrap' } }),
       cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'mapStash', tier: 5 } }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'craftSlot', x: 0, y: 0 } }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'craftSlot', slot: 'mainHand' } }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'craftslot' } }),
+      cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'workSlot' } }),
       cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'mapstash' } }),
       cmd({ c: 'moveItem', uid: 'i1', to: { kind: 'currency' } }),
       // quickMove: a normal tab index, one of the three special tabs, or null
@@ -607,7 +614,52 @@ it('validates optional quoted Scrap prices without changing legacy bench command
 });
 
 it('validates the Hunting Ground reward class on map activation', () => {
-  const choice = { c: 'activateMapDevice', areaId: 'huntingGround', lootClass: 'ring' };
+  const choice = { c: 'activateMapDevice', lootClass: 'ring' };
   expect(ok(cmd(choice))).toEqual(cmd(choice));
   for (const lootClass of ['sword', '', null, 3, ['ring']]) expect(rejected(cmd({ ...choice, lootClass }))).toBeTruthy();
+});
+
+it('validates map activation without an area: passage key, Pit and surge; a stale area is still well-formed', () => {
+  for (const good of [
+    { c: 'activateMapDevice' },
+    { c: 'activateMapDevice', passageKey: 'reliquaryKey' },
+    { c: 'activateMapDevice', passageKey: 'riftKey', lootClass: 'ring', useSurge: false },
+    { c: 'activateMapDevice', pit: true },
+    { c: 'activateMapDevice', areaId: 'cinderCrossing' }, // a client from before area-bound maps; the server compares it to the map
+  ]) expect(ok(cmd(good))).toEqual(cmd(good));
+  for (const bad of [
+    { passageKey: 'scrap' }, { passageKey: '' }, { passageKey: 7 }, { pit: false }, { pit: 'yes' }, { useSurge: 1 }, { areaId: 'moonPalace' },
+    { passageKey: 'reliquaryKey', pit: true }, { extra: 1 },
+  ]) expect(rejected(cmd({ c: 'activateMapDevice', ...bad })), JSON.stringify(bad)).toBeTruthy();
+});
+
+it('validates the optional backpack drop cell of a merchant purchase', () => {
+  const buy = { c: 'buyOffer', offerId: 'gamble-wand' };
+  const debug = { c: 'buyDebugOffer', offerId: 'currency:scrap', options: { quantity: 2, itemLevel: 50, mapTier: 3, rarity: 'rare' } };
+  for (const base of [buy, debug]) {
+    for (const at of [{ x: 0, y: 0 }, { x: 11, y: 4 }]) expect(ok(cmd({ ...base, at }))).toEqual(cmd({ ...base, at }));
+    for (const at of [null, 5, { x: -1, y: 0 }, { x: 1.5, y: 0 }, { x: 0 }, { x: 0, y: 0, z: 1 }, { x: '2', y: 1 }, { x: 64, y: 0 }]) {
+      expect(rejected(cmd({ ...base, at }))).toBeTruthy();
+    }
+  }
+});
+
+it('validates account pins, Re-chart through benchCraft and the three-map recycle', () => {
+  for (const good of [
+    { c: 'pinArea', areaId: 'emberRoad', pinned: true },
+    { c: 'pinArea', areaId: 'sealedReliquary', pinned: false }, // well-formed: the rules refuse a pin on a passage area
+    { c: 'benchCraft', targetUid: 'i9', recipeId: 'bench:rechart:furnaceYard', expectedScrap: 3 },
+    { c: 'benchRecycle', uids: ['i1', 'i2', 'i3'], areaId: 'emberRoad' },
+    { c: 'benchRecycle', uids: ['i1', 'i2', 'i3'], areaId: 'furnaceYard', expectedScrap: 3 },
+  ]) expect(ok(cmd(good))).toEqual(cmd(good));
+  for (const bad of [
+    { c: 'pinArea', areaId: 'moonPalace', pinned: true }, { c: 'pinArea', areaId: 'emberRoad' }, { c: 'pinArea', areaId: 'emberRoad', pinned: 1 },
+    { c: 'pinArea', areaId: 'emberRoad', pinned: true, extra: 1 }, { c: 'pinArea', pinned: true },
+    { c: 'benchRecycle', uids: ['i1', 'i2'], areaId: 'emberRoad' }, { c: 'benchRecycle', uids: ['i1', 'i2', 'i3', 'i4'], areaId: 'emberRoad' },
+    { c: 'benchRecycle', uids: ['i1', 'i1', 'i3'], areaId: 'emberRoad' }, { c: 'benchRecycle', uids: ['i1', 'i2', 3], areaId: 'emberRoad' },
+    { c: 'benchRecycle', uids: ['i1', 'i2', 'i3'] }, { c: 'benchRecycle', uids: ['i1', 'i2', 'i3'], areaId: 'nowhere' },
+    { c: 'benchRecycle', uids: ['i1', 'i2', 'i3'], areaId: 'emberRoad', expectedScrap: -1 },
+    { c: 'benchRecycle', uids: ['i1', 'i2', 'i3'], areaId: 'emberRoad', expectedScrap: 1.5 },
+    { c: 'benchRecycle', uids: 'i1', areaId: 'emberRoad' },
+  ]) expect(rejected(cmd(bad)), JSON.stringify(bad)).toBeTruthy();
 });

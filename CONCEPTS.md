@@ -144,7 +144,7 @@ value = (base + Σflat) × (1 + Σincreased/100) × Π(1 + more_i/100)
 
 ## 7. Maps as craftable items
 
-A map is an item that is consumed when opened. It has a base (theme + implicit), a tier (1–20), a rarity, affixes, quality and corruption. Map rarity mirrors equipment rarity.
+A map is an item that is consumed when opened. **A map is bound to one Atlas area** (a Furnace Yard map opens the Furnace Yard): the area gives its theme and implicit, and the item carries a tier (1–15), a rarity, affixes, quality and corruption. Map rarity mirrors equipment rarity. The device no longer asks "which area?"; it shows where the map lives. A key or a Bounty may redirect a map to a sealed area or the Pit (a *passage*).
 
 **Map crafting uses its own currencies, so maps don't compete with gear:**
 - **Map Dust:** reroll or change rarity.

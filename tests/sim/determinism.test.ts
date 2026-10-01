@@ -39,11 +39,14 @@ const TICKS = 3000;
 /** record(4242): digests after ticks 1000, 2000 and 3000. */
 // Re-pinned 2026-09-30 for the bot's pillar-navigation fix: static props no longer stop pursuit, and again for
 // level-scaled enemy projectile speed and intercept aim.
-const GOLDEN_4242 = [3614022833, 970621829, 3211910776];
+// Re-pinned 2026-10-01: spawns resolve to a point clear of solid props (spawn.ts freeSpawnPoint; tick 1000 is unchanged), and the
+// bot no longer flip-flops on drops near the rim.
+const GOLDEN_4242 = [3614022833, 3665796018, 2308037584];
 /** The whole tier-5 map at seed 9001 (the bot clears it and takes the return portal): its final digest and length. */
 // Re-pinned 2026-09-30 after removing the wave-3 lieutenant and fixing bot pursuit around pillars.
 // The complete intent recording still replays to identical intermediate and final digests below.
-const GOLDEN_9001 = { digest: 1934722132, ticks: 16456 };
+// Re-pinned 2026-10-01 with GOLDEN_4242 (spawn placement clear of solids, rim/drop decision).
+const GOLDEN_9001 = { digest: 1734587646, ticks: 16189 };
 const strong = { stats: strongStats(), skills: strongSkills(), loadout: STRONG_LOADOUT };
 
 function soloRun(seed: number, extra: Partial<ConfigOptions> = {}): SimRun {

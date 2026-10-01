@@ -15,6 +15,7 @@
 import type { SpriteDef } from '../contracts/art';
 import { createRng } from '../core/rng';
 import { Frame, toSprite } from './frame';
+import { kitPropSprites } from './props-kit';
 import { drawSigil } from './fx';
 import { C, RAMPS, type Color, type Ramp } from './palette';
 import { lineCells } from './raster';
@@ -844,5 +845,6 @@ export function propSprites(): SpriteDef[] {
     one('banner', range(4).map(banner), 5, true),
     one('anvil', range(BENCH_FRAMES).map(craftingBench), 5, true),
     one('ruinWall', range(3).map(ruinWall)),
+    ...kitPropSprites(),
   ];
 }

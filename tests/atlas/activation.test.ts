@@ -68,6 +68,9 @@ describe('Chart fills the viewport (no black void)', () => {
     expect(fillZoom(500, 300)).toBe(1);
     // the 1280x720 and 1024x600 table viewports: the chart at 1x (640x360) would float, so 2x
     expect(fillZoom(934, 514)).toBe(2);
+    // beside the inventory: the chart viewport at 1280x720 and at 1024x600 (the table is 100vw - panel - 36 px wide)
+    expect(fillZoom(768, 480)).toBe(2);
+    expect(fillZoom(560, 440)).toBe(2);
     expect(fillZoom(1000, 424)).toBe(2);
     expect(fillZoom(1280, 720)).toBe(2);
     expect(fillZoom(1281, 720)).toBe(3);

@@ -30,6 +30,9 @@ import {
 } from '../items/hooks';
 import { useSignal, useStore, useUi } from '../store';
 import { PanelShell } from './PanelShell';
+import { MapRecycle } from './MapRecycle';
+import { RechartPopover, rechartServices } from '../atlas/RechartPopover';
+import type { MapItem } from '../../contracts/items';
 
 function whereText(loc: ItemLocation, ch: CharacterSave): string {
   switch (loc.kind) {
@@ -49,10 +52,12 @@ function whereText(loc: ItemLocation, ch: CharacterSave): string {
       return 'In your Crafting Stash';
     case 'mapStash':
       return 'In your Map Stash';
+    case 'craftSlot':
+      return 'In the Crafting Stash work slot';
   }
 }
 
-function StabilityBar({ current, max }: { current: number; max: number }) {
+export function StabilityBar({ current, max }: { current: number; max: number }) {
   const pips = Math.max(0, Math.min(16, max));
   const finished = current <= 0;
   return (
@@ -653,14 +658,31 @@ function Palette({
   );
 }
 
-function Services({ services, carried, disabled, onCraft }: {
+function Services({ services, carried, disabled, onCraft, map }: {
   services: BenchService[]; carried: Map<CurrencyId, Carried>; disabled: boolean;
   onCraft: (r: Pick<BenchRecipe, 'id'>, e?: MouseEvent) => void;
+  /** The map on the bench (Re-chart opens its popover from here). */
+  map?: MapItem | null;
 }) {
+  const [rechartOpen, setRechartOpen] = useState(false);
+  useEffect(() => { setRechartOpen(false); }, [map?.uid, map?.areaId]);
   if (!services.length) return null;
+  // Re-chart has one service per neighbouring area: they fold into one row that opens the popover (RechartPopover)
+  const rechart = rechartServices(services);
+  const ordinary = services.filter((s) => !rechart.includes(s));
+  const firstOk = rechart.find((s) => s.available) ?? rechart[0];
   return <section class="fe-bench__section fe-bench-services">
     <div class="fe-section-title">Scrap services</div>
-    {services.map(service => <div key={service.id} class="fe-bench-service">
+    {map && firstOk && <div class="fe-bench-service fe-bench-service--rechart" data-service="bench:rechart">
+      <div class="fe-bench-service__row">
+        <span class="ui-type-secondary">Re-chart: move to a neighbouring area</span>
+        <CostChips cost={firstOk.cost} carried={carried} />
+        <Button disabled={disabled || !rechart.some((s) => s.available)} onClick={() => setRechartOpen((o) => !o)} class="fe-bench-service__apply" data-rechart-open>Choose area</Button>
+      </div>
+      {!rechart.some((s) => s.available) && firstOk.reason && <p class="fe-bench__note">{firstOk.reason}</p>}
+      {rechartOpen && <RechartPopover map={map} onClose={() => setRechartOpen(false)} />}
+    </div>}
+    {ordinary.map(service => <div key={service.id} class="fe-bench-service">
       <div class="fe-bench-service__row">
         <span class="ui-type-secondary">{service.label}</span>
         <CostChips cost={service.cost} carried={carried} />
@@ -763,7 +785,8 @@ export function CraftingBenchPanel() {
         {allowed && benchLocked && <p class="fe-bench__blocked">{LOCKED_REASON}</p>}
         {item && desc ? (
           <>
-            <Services services={services} carried={carried} disabled={busy || !allowed || benchLocked} onCraft={craft} />
+            <Services services={services} carried={carried} disabled={busy || !allowed || benchLocked} onCraft={craft} map={item.kind === 'map' ? item : null} />
+            {item.kind === 'map' && <MapRecycle allowed={allowed} />}
             <Mods
               key={withRecipes ? 'gear' : 'plain'}
               desc={desc}
@@ -776,6 +799,8 @@ export function CraftingBenchPanel() {
             <Story history={desc.history ?? []} />
           </>
         ) : (
+          <>
+          {allowed && <MapRecycle allowed={allowed} />}
           <section class="fe-bench__section fe-bench__explain">
             <div class="fe-section-title">How the bench works</div>
             <ul class="fe-bench__rules">
@@ -787,8 +812,10 @@ export function CraftingBenchPanel() {
                 One crafted affix per item, marked with <AnvilGlyph /> in tooltips. Clearing it is free.
               </li>
               <li>Your currency below applies to the bench item with one click, odds shown on hover.</li>
+              <li>Maps: Re-chart moves one to a neighbouring area, and Recycle turns three of a tier into one new map.</li>
             </ul>
           </section>
+          </>
         )}
       </div>
       <Palette

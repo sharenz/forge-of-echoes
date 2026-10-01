@@ -11,7 +11,9 @@ import { findScarab } from '../../data/scarabs';
 import type { MapTreeNodeId } from '../../contracts/atlas';
 import { atlasStat, flooredWaveDuration, resolveAtlasRules, type TreeContext } from './atlas-rules';
 import type { MapSummaryLine } from '../../contracts/game';
-import { atlasKeyDestination, findAtlasArea } from '../../data/progression/atlas';
+import { atlasKeyDestination, atlasTierCeiling, findAtlasArea, ATLAS_AREA_TYPE_LABELS } from '../../data/progression/atlas';
+import type { AtlasAreaId, AtlasProgress } from '../../contracts/atlas';
+import { areaForTheme } from './map-binding';
 import type {
   ItemDescription, MapItem, ModifierMode, Rarity, RolledMapMod, StatModifier, TooltipLine,
 } from '../../contracts/items';
@@ -141,16 +143,19 @@ export function hasEchoWave(map: MapItem): boolean {
   return map.mods.some((m) => m.modId === ECHO_MOD.id);
 }
 
-/** A map item (merchant stock, starting kit, drops). */
+/** A map item bound to `areaId` (merchant stock, starting kit, drops); `baseId` is always the area's theme. */
 export function createMapItem(
-  baseId: MapBaseId, tier: number, uid: string,
+  areaId: AtlasAreaId, tier: number, uid: string,
   opts: { rarity?: Exclude<Rarity, 'unique'>; mods?: RolledMapMod[]; quality?: number; isNew?: boolean } = {},
 ): MapItem {
+  const area = findAtlasArea(areaId);
+  if (!area) throw new Error(`createMapItem: unknown area ${String(areaId)}`);
   const mods = sortMapMods(opts.mods ?? []);
   const map: MapItem = {
     kind: 'map',
     uid,
-    baseId,
+    areaId: area.id,
+    baseId: area.baseId,
     tier: clampTier(tier),
     rarity: 'normal',
     mods,
@@ -177,17 +182,17 @@ export function rollDangerMods(rng: Rng, count: number, tier: number, exclude: r
 
 /** A random map of a rarity with the right number of danger mods. */
 export function rollMapWithRarity(
-  rng: Rng, baseId: MapBaseId, tier: number, rarity: Exclude<Rarity, 'unique'>, uid: string, quality: number, isNew: boolean,
+  rng: Rng, areaId: AtlasAreaId, tier: number, rarity: Exclude<Rarity, 'unique'>, uid: string, quality: number, isNew: boolean,
 ): MapItem {
   const t = clampTier(tier);
   let mods: RolledMapMod[] = [];
   if (rarity !== 'normal') mods = rollDangerMods(rng, rollCountTable(rng, MAP_DUST_COUNTS[rarity]), t);
-  return createMapItem(baseId, t, uid, { rarity, mods, quality, isNew });
+  return createMapItem(areaId, t, uid, { rarity, mods, quality, isNew });
 }
 
-/** Rare maps take a stable generated name from their uid ("Howling Crucible"). */
+/** The map's place: "Furnace Yard map". Rare maps take a stable generated name ("Howling Crucible"); magic maps lead with their first mod. */
 export function mapTitle(map: MapItem): string {
-  const baseName = mapBaseName(map.baseId);
+  const place = `${findAtlasArea(map.areaId)?.name ?? mapBaseName(map.baseId)} map`;
   if (map.rarity === 'rare') {
     const h = hashString(map.uid);
     return `${MAP_NAME_FIRST[stableIndex(h, MAP_NAME_FIRST.length)]} ${MAP_NAME_SECOND[stableIndex(h >>> 8, MAP_NAME_SECOND.length)]}`;
@@ -195,9 +200,9 @@ export function mapTitle(map: MapItem): string {
   if (map.rarity === 'magic') {
     const first = modsOfKind(map, 'danger')[0];
     const def = first ? getMapMod(first.modId) : undefined;
-    return def ? `${mapModName(def, map.baseId)} ${baseName}` : baseName;
+    return def ? `${mapModName(def, map.baseId)} ${place}` : place;
   }
-  return baseName;
+  return place;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -249,6 +254,9 @@ const MAP_STAT_TEXT: Record<MapStat, Templates> = {
   revealChance: { flat: 'A boss kill has a {v}% chance to reveal one more neighbour' },
   dangerModStrength: { increased: 'Danger mods on your map are {v}% {inc} strong on both sides' },
   corruptedModStrength: { increased: 'Corrupted mods are {v}% {inc} strong on both sides' },
+  surgeCharges: { flat: '{+v} daily surge charge{s} for each area' },
+  surgeKeep: { flat: '{v}% chance a spent surge charge is not consumed' },
+  sandChance: { increased: 'Hourglass Sand is {v}% {inc} likely to drop' },
 };
 
 /**
@@ -708,6 +716,8 @@ export interface MapDescribeOptions {
   inDevice?: boolean;
   /** Map sits in the Map Stash. */
   inMapStash?: boolean;
+  /** The viewer's Atlas: lets the tooltip say "Unexplored territory" for an area they have not charted. */
+  atlas?: AtlasProgress;
 }
 
 /** Tooltip for a map. Tone follows rarity (Normal maps use the silver map tone). */
@@ -745,7 +755,15 @@ export function describeMap(map: MapItem, opts: MapDescribeOptions = {}): ItemDe
   });
   const affixes = map.mods.flatMap((m) => modLines(m, tier, mapBosses(map.baseId).boss.sentence, map.baseId));
 
+  const home = findAtlasArea(map.areaId);
   const headerLines = [`Tier ${tier} Map`];
+  if (home) {
+    headerLines.push(`Area: ${home.name} (${ATLAS_AREA_TYPE_LABELS[home.type]})  Accepts up to Tier ${atlasTierCeiling(home)}`);
+    if (opts.atlas && !opts.atlas.discovered.includes(home.id)) headerLines.push('Unexplored territory: defeat bosses to chart this area before the map can be opened');
+    if (map.migrated === 'theme') headerLines.push('Moved to this area when maps became area-bound, because none of its old theme fit your Atlas');
+    if (map.migrated === 'fog') headerLines.push('This map was above everything you had charted, so it revealed this area on the Atlas');
+  }
+  if (map.rechart) headerLines.push(`Re-charted ×${map.rechart}`);
   if (map.bounty) headerLines.push('Bounty: The Stalker guaranteed');
   if (map.charted) headerLines.push(`Charted: completion chest guarantees a Tier ${Math.min(MAX_MAP_TIER, map.tier + 1)} map`);
   if (map.twinInked) headerLines.push('Twin Ink: two reward-mod slots');
@@ -753,13 +771,13 @@ export function describeMap(map: MapItem, opts: MapDescribeOptions = {}): ItemDe
   let hint = opts.inDevice
     ? 'Activate the Map Device to open a portal.'
     : opts.inMapStash
-      ? 'Drag it to the Map Device or your backpack; Ctrl+click takes it to your backpack.'
-      : 'Place it in the Map Device in your hideout, then activate the device.';
+      ? 'Drag it to your backpack, then into the Map Device; Ctrl+click takes it to your backpack.'
+      : 'Place it in the Map Device in your hideout: it opens exactly this area.';
   if (map.corrupted) hint += ' Corrupted: map currency no longer works on it.';
 
   const desc: ItemDescription = {
     title,
-    subtitle: map.rarity === 'rare' ? (base?.name ?? null) : null,
+    subtitle: map.rarity === 'rare' ? (home ? `${home.name} map` : base?.name ?? null) : null,
     tone: map.rarity === 'normal' ? 'map' : map.rarity,
     iconId: iconIdForMap(base ? base.id : MAP_BASE_IDS[0]),
     classLabel: 'Map',
@@ -805,7 +823,7 @@ export function voidOutcomes(map: MapItem): { id: VoidOutcomeId; label: string; 
 export function mapCraftError(map: MapItem, currencyId: CurrencyId): string | null {
   if (findScarab(currencyId)) return 'Place scarabs in the Map Device scarab sockets.';
   const keyArea = findAtlasArea(atlasKeyDestination(currencyId));
-  if (keyArea) return `Select ${keyArea.name} in the Map Device to use this key.`;
+  if (keyArea) return `Load it as a passage at the Map Device to open ${keyArea.name}; it is not used on maps.`;
   const name = currencyName(currencyId);
   if (!isMapCurrencyId(currencyId)) return `${name} cannot be applied to maps.`;
   if (currencyId === 'voidSplinter') return map.corrupted ? null : 'This map is not corrupted.';
@@ -924,6 +942,12 @@ export function mapCraftPreview(map: MapItem, currencyId: CurrencyId): string[] 
       const outcomes = voidOutcomes(map);
       lines.push(`Corrupts the map: ${formatDistribution(outcomes.map((o) => ({ label: o.label, chance: o.weight }))).join(' · ')}`);
       lines.push(pickOddsLine('Corrupted mods', CORRUPTED_MODS, map.baseId));
+      {
+        const home = findAtlasArea(map.areaId);
+        if (home && outcomes.some((o) => o.id === 'tierUp') && clampTier(map.tier) + 1 > atlasTierCeiling(home)) {
+          lines.push(`${home.name} accepts up to Tier ${atlasTierCeiling(home)}: a Tier up moves the map to a deeper area of its theme.`);
+        }
+      }
       lines.push('Further crafting requires a Void Splinter, which removes corruption, its modifiers and all quality.');
       break;
     }
@@ -1002,10 +1026,16 @@ export function craftMap(map: MapItem, currencyId: CurrencyId, rng: Rng): MapCra
           message = `Void Needle corrupted the map with ${mapModName(pick, map.baseId)}`;
           break;
         }
-        case 'tierUp':
-          next = { ...map, tier: tier + 1 };
-          message = `Void Needle corrupted the map: Tier ${tier} became Tier ${tier + 1}`;
+        case 'tierUp': {
+          // The map still has to fit its area: at the area's tier ceiling it moves to a deeper area of its theme (when none
+          // exists, to the shallowest area that accepts the new tier), so a raised tier never strands the map.
+          const home = findAtlasArea(map.areaId);
+          const to = home && tier + 1 <= atlasTierCeiling(home) ? home : findAtlasArea(areaForTheme(map.baseId, tier + 1, map.uid));
+          const moved = !!to && to.id !== map.areaId;
+          next = { ...map, tier: tier + 1, ...(moved ? { areaId: to.id, baseId: to.baseId } : {}) };
+          message = `Void Needle corrupted the map: Tier ${tier} became Tier ${tier + 1}${moved ? `, and it now belongs to ${to.name}` : ''}`;
           break;
+        }
         case 'rareFour': {
           const rolled = rollDangerMods(rng, MAX_DANGER_MODS, tier).map((m) => ({ ...m, corrupted: true }));
           next = withMods(map, [...keep, ...rolled]);

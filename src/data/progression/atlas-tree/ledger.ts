@@ -32,6 +32,8 @@ export const UNIT_RATES: Readonly<Record<string, Rate>> = {
   'monsterSpeed:increased': D(4), 'monsterSpeed:more': D(3.5), 'monsterResist:flat': D(5),
   'playerResist:flat': D(-4.4), 'playerFocusRegen:increased': D(-8),
   'currencyWeight:increased': R(8), 'currencyWeight:more': R(8),
+  // Daily surge (brief D 7.5): a charge on every area is about 4u (Second Wind), Afterglow's 10% 1u, +50% Sand chance 1u.
+  'surgeCharges:flat': R(0.25), 'surgeKeep:flat': R(10), 'sandChance:increased': R(50),
 };
 
 const NIL: AtlasUnits = { reward: 0, danger: 0 };
@@ -73,7 +75,7 @@ const NOUN: Readonly<Record<string, string>> = {
   monsterCount: 'number of monsters', monsterLife: 'monster life', monsterDamage: 'monster damage', monsterSpeed: 'monster movement speed',
   packRarity: 'chance of magic and rare packs', itemQuantity: 'item quantity', itemRarity: 'item rarity',
   mapDropChance: 'chance to find maps', essenceDropChance: 'essence weight', emberEssenceChance: 'ember essence weight',
-  rimeEssenceChance: 'rime essence weight', playerFocusRegen: 'focus regeneration for players', scarabDropChance: 'chance to find scarabs',
+  rimeEssenceChance: 'rime essence weight', sandChance: 'chance to find Hourglass Sand', playerFocusRegen: 'focus regeneration for players', scarabDropChance: 'chance to find scarabs',
   rareQuantity: 'quantity from rare monsters', normalQuantity: 'quantity from ordinary monsters', equipmentDropChance: 'equipment drops',
   bossIngredientChance: 'boss ingredient chances', bossLife: 'life for final bosses', bossUnique: 'unique chance from final bosses',
   bossLoot: 'boss loot', chestLoot: 'completion chest loot', waveDuration: 'wave duration', magicPackChance: 'chance of magic packs',
@@ -94,6 +96,8 @@ const FLAT: Readonly<Record<string, (v: number) => string>> = {
   chestRareChance: v => `completion chest equipment is Rare ${num(v)}% of the time`,
   chestCurrency: v => `the completion chest holds ${num(v)} more currency roll${Math.abs(v) === 1 ? '' : 's'}`,
   hazards: () => 'volcanic eruptions burst around you',
+  surgeCharges: v => `${v < 0 ? '-' : '+'}${num(v)} daily surge charge${Math.abs(v) === 1 ? '' : 's'}`,
+  surgeKeep: v => `a spent surge charge has a ${num(v)}% chance not to be consumed`,
 };
 
 function scope(w: AtlasCondition | undefined): string {

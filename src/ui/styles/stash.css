@@ -882,3 +882,5 @@
     animation: none;
   }
 }
+.fe-mstash__emblem { flex: none; }
+.fe-mstash__pips { display: inline-flex; }

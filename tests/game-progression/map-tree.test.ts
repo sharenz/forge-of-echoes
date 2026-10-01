@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { AtlasAreaId } from '../../src/contracts/atlas';
 import { ATLAS_AREA_IDS, ATLAS_TREE_VERSION } from '../../src/contracts/atlas';
 import { MAP_TREE_POINTS } from '../../src/data/progression/map-tree';
 import { rules, restoreRunSetup, withItemLocks } from '../../src/game';
@@ -12,11 +13,11 @@ import { keystoneRewards } from '../../src/game/progression/keystones';
 import { currencyOnHand } from '../../src/game/progression/merchant';
 import { UNIQUES } from '../../src/data/items';
 import type { CharacterSave } from '../../src/contracts/items';
-import { bareCharacter, currency, expectOk, kill, map, withBackpack } from './fixtures';
+import { bareCharacter, currency, expectOk, kill, map, withBackpack, openAt } from './fixtures';
 import { fullProgress, pathTo, treeCharacter } from './atlas-tree-helpers';
 
-const setup = (nodes: string[] = [], tier = 10, base: Parameters<typeof map>[0] = 'ashenForge', area: Parameters<typeof rules.openMap>[1] = 'heartOfForge') =>
-  expectOk(rules.openMap(treeCharacter(nodes, {}, tier, base), area)).setup;
+const setup = (nodes: string[] = [], tier = 10, base: Parameters<typeof map>[0] = 'ashenForge', area: AtlasAreaId = 'heartOfForge') =>
+  expectOk(openAt(rules, treeCharacter(nodes, {}, tier, base), area)).setup;
 const hooks = {} as Parameters<typeof rules.buildRunConfig>[1];
 const allocate = (ch: ReturnType<typeof treeCharacter>, ids: string[]) => ids.reduce((c, id) => expectOk(rules.setMapTreeNode(c, id, true)), ch);
 
@@ -124,7 +125,7 @@ describe('allocation, exclusions and respec', () => {
     ch = expectOk(rules.setMapTreeNode(ch, 'ironHides', false));
     expect(scrap()).toBe(free); // cap reached: free
     // opening a map ends the session
-    const opened = expectOk(rules.openMap({ ...ch, mapDevice: map('ashenForge', 1) }, 'cinderCrossing')).character;
+    const opened = expectOk(rules.openMap({ ...ch, mapDevice: map('cinderCrossing', 1) })).character;
     expect(opened.atlas!.respecSpent).toBe(0);
   });
 
@@ -191,7 +192,7 @@ describe('save migration', () => {
 describe('the tree changes the opening account’s expedition', () => {
   it('freezes choices through respec, restarts and party play; legacy runs gain no nodes', () => {
     let ch = allocate(treeCharacter(), pathTo('crownedChallenge'));
-    const opened = expectOk(rules.openMap(ch, 'heartOfForge')).setup;
+    const opened = expectOk(openAt(rules, ch, 'heartOfForge')).setup;
     ch = expectOk(rules.setMapTreeNode(ch, 'crownedChallenge', false));
     expect(opened.mapTree).toContain('crownedChallenge');
     expect(opened.mapTreeV).toBe(ATLAS_TREE_VERSION);
@@ -300,7 +301,7 @@ describe('the tree changes the opening account’s expedition', () => {
 
   it('applies Thrill of the Hex to both sides of danger mods and caps the tree', () => {
     const dangerous = { ...map('ashenForge', 10), mods: [{ modId: 'teeming', value: 100 }], rarity: 'magic' as const };
-    const withNodes = (nodes: string[]) => expectOk(rules.openMap({ ...treeCharacter(nodes), mapDevice: dangerous }, 'heartOfForge')).setup;
+    const withNodes = (nodes: string[]) => expectOk(rules.openMap({ ...treeCharacter(nodes), mapDevice: { ...dangerous, areaId: 'heartOfForge', baseId: 'ashenForge' } })).setup;
     const plain = withNodes([]), hex = withNodes(pathTo('thrillOfTheHex'));
     const cfg = (s: typeof plain) => rules.buildRunConfig(s, hooks).monsters.countMultiplier;
     expect(cfg(hex) / cfg(plain)).toBeGreaterThan(1.1);
@@ -310,7 +311,7 @@ describe('the tree changes the opening account’s expedition', () => {
   it('applies conditional effects: dead ends versus through routes, and theme seals only on their base', () => {
     const dead = setup(pathTo('deadEndDevotee'), 3, 'ashenForge', 'emberVault');
     const through = setup(pathTo('deadEndDevotee'), 5, 'ashenForge', 'heartOfForge');
-    const noDevotee = (area: Parameters<typeof rules.openMap>[1]) => setup([], area === 'emberVault' ? 3 : 5, 'ashenForge', area);
+    const noDevotee = (area: AtlasAreaId) => setup([], area === 'emberVault' ? 3 : 5, 'ashenForge', area);
     expect(dead.itemQuantity / noDevotee('emberVault').itemQuantity).toBeCloseTo(1.24, 2);
     expect(through.itemQuantity / noDevotee('heartOfForge').itemQuantity).toBeCloseTo(0.75, 2);
     const seal = pathTo('emberwrightsDue');

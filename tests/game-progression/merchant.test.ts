@@ -6,22 +6,21 @@ import { getBase } from '../../src/data/items';
 import { currencyOnHand, gambleOdds } from '../../src/game/progression';
 import { bareCharacter, currency, expectErr, expectOk, luckyAmulet, withBackpack } from './fixtures';
 
+/** Rook sells maps of cleared areas (and the starting area): these two rows are the ones the tests buy. */
+const T1 = 'map:cinderCrossing:1:plain';
+const T2 = 'map:emberRoad:2:plain';
+const CLEARED = { discovered: ['cinderCrossing', 'emberRoad'], completed: ['cinderCrossing', 'emberRoad'], clears: 2 } as CharacterSave['atlas'];
+
 function rich(scrap = 40, extra: Partial<CharacterSave> = {}): CharacterSave {
-  return withBackpack(bareCharacter(extra), [[currency('scrap', scrap, 'scrap'), 0, 0]]);
+  return withBackpack(bareCharacter({ atlas: CLEARED, ...extra }), [[currency('scrap', scrap, 'scrap'), 0, 0]]);
 }
 
 describe('offers', () => {
-  it('lists free Tier 1 maps, Tier 2 maps, flasks, basic currency and gambles', () => {
+  it('lists flasks, basic currency and gambles (maps are generated per cleared area, see Rook\'s maps)', () => {
     const offers = rules.merchantOffers(rich());
     const ids = offers.map((o) => o.id);
-    expect(ids).toEqual(expect.arrayContaining([
-      'map-t1-ashenForge', 'map-t1-rimedOssuary', 'map-t1-ironColiseum', 'map-t2-ashenForge',
-      'flask-life', 'flask-focus', 'currency-kindling', 'currency-mapDust', 'gamble-wand', 'gamble-ring',
-    ]));
-    const t1 = offers.find((o) => o.id === 'map-t1-ashenForge')!;
-    expect(t1).toMatchObject({ kind: 'map', price: [], affordable: true });
-    expect((t1.item as MapItem).tier).toBe(1);
-    expect(offers.find((o) => o.id === 'map-t2-rimedOssuary')!.price).toEqual([{ currencyId: 'scrap', count: 4 }]);
+    expect(ids).toEqual(expect.arrayContaining(['flask-life', 'flask-focus', 'currency-kindling', 'currency-mapDust', 'gamble-wand', 'gamble-ring']));
+    expect(offers.some((o) => o.kind === 'map')).toBe(false);
     expect(offers.find((o) => o.id === 'flask-life')!.price).toEqual([{ currencyId: 'scrap', count: 1 }]);
     expect(offers.find((o) => o.id === 'currency-kindling')!.price).toEqual([{ currencyId: 'scrap', count: 3 }]);
     const gamble = offers.find((o) => o.id === 'gamble-wand')!;
@@ -43,9 +42,9 @@ describe('offers', () => {
 
   it('marks what the player cannot afford', () => {
     const offers = rules.merchantOffers(rich(2));
-    expect(offers.find((o) => o.id === 'map-t1-ashenForge')!.affordable).toBe(true);
+    expect(rules.rookMapOffers(rich(2), 'cinderCrossing').find((o) => o.id === T1)!.affordable).toBe(true);
     expect(offers.find((o) => o.id === 'flask-life')!.affordable).toBe(true);
-    expect(offers.find((o) => o.id === 'map-t2-ashenForge')!.affordable).toBe(false);
+    expect(rules.rookMapOffers(rich(2), 'emberRoad').find((o) => o.id === T2)!.affordable).toBe(false);
   });
 
   it('counts scrap across the backpack and the stash', () => {
@@ -61,14 +60,14 @@ describe('offers', () => {
 describe('buying', () => {
   it('gives a free Tier 1 map', () => {
     const ch = rich(0);
-    const out = expectOk(rules.buyOffer({ ...ch, backpack: { ...ch.backpack, entries: [] } }, 'map-t1-rimedOssuary'));
-    expect(out.item).toMatchObject({ kind: 'map', baseId: 'rimedOssuary', tier: 1, rarity: 'normal', isNew: true });
+    const out = expectOk(rules.buyOffer({ ...ch, backpack: { ...ch.backpack, entries: [] } }, T1));
+    expect(out.item).toMatchObject({ kind: 'map', areaId: 'cinderCrossing', tier: 1, rarity: 'normal', quality: 0, isNew: true });
     expect(out.item.uid).toMatch(/^i/);
     expect(rules.findItem(out.character, out.item.uid)?.location.kind).toBe('backpack');
   });
 
   it('charges the price', () => {
-    const out = expectOk(rules.buyOffer(rich(10), 'map-t2-ashenForge'));
+    const out = expectOk(rules.buyOffer(rich(10), T2));
     expect(currencyOnHand(out.character, 'scrap')).toBe(6);
     expect((out.item as MapItem).tier).toBe(2);
   });
@@ -92,7 +91,7 @@ describe('buying', () => {
       if (x === 0 && y === 0) continue;
       ch = withBackpack(ch, [[currency('solvent', 1, `s${x}-${y}`), x, y]]);
     }
-    expect(expectErr(rules.buyOffer(ch, 'map-t2-ashenForge'))).toBe('Your backpack is full.');
+    expect(expectErr(rules.buyOffer(ch, T2))).toBe('Your backpack is full.');
     expect(expectErr(rules.buyOffer(ch, 'gamble-ring'))).toBe('Your backpack is full.');
   });
 
@@ -177,5 +176,31 @@ describe('gambling', () => {
     expect(magic / n).toBeLessThan(0.3);
     expect(rare / n).toBeGreaterThan(0.035);
     expect(rare / n).toBeLessThan(0.085);
+  });
+});
+
+describe('placing a purchase where it was dropped', () => {
+  const empty = (): CharacterSave => ({ ...rich(40), backpack: { ...rich(40).backpack, entries: [] } });
+
+  it('puts a purchase on the drop cell when its whole footprint is free there', () => {
+    const out = expectOk(rules.buyOffer(empty(), T1, { x: 7, y: 3 }));
+    expect(rules.findItem(out.character, out.item.uid)?.location).toMatchObject({ kind: 'backpack', x: 7, y: 3 });
+  });
+
+  it('falls back to first-fit when the cell is taken, out of range or malformed, and never loses the purchase', () => {
+    const ch = withBackpack(empty(), [[currency('kindling', 1, 'blocker'), 7, 3]]);
+    for (const at of [{ x: 7, y: 3 }, { x: 99, y: 0 }, { x: -1, y: 2 }, { x: 1.5, y: 2 }]) {
+      const out = expectOk(rules.buyOffer(ch, T1, at as { x: number; y: number }));
+      expect(rules.findItem(out.character, out.item.uid)?.location).toMatchObject({ kind: 'backpack', x: 0, y: 0 });
+    }
+  });
+
+  it('pays once and keeps the price rules when dropped: an unaffordable offer still fails', () => {
+    expect(expectErr(rules.buyOffer(empty(), 'gamble-wand', { x: 0, y: 0 })).length).toBeGreaterThan(0);
+    const poor = withBackpack(empty(), [[currency('scrap', 2, 'scrap'), 0, 0]]);
+    expect(expectErr(rules.buyOffer(poor, 'gamble-wand', { x: 5, y: 2 }))).toBe('You need 6 Forge Scrap (you have 2).');
+    const out = expectOk(rules.buyOffer(rich(10), T2, { x: 9, y: 4 }));
+    expect(currencyOnHand(out.character, 'scrap')).toBe(6);
+    expect(rules.findItem(out.character, out.item.uid)?.location).toMatchObject({ x: 9, y: 4 });
   });
 });

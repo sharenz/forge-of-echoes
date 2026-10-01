@@ -14,16 +14,16 @@ export const CARTOGRAPHY: readonly AtlasNodeSpec[] = [
   N('masterSurveyor', 'Master Surveyor', 8, 0, 'ledgerline', { effects: [flat('revealChance', 35)] }),
   // spur A
   S('signpost', 'Signpost', 5, -1.4, 'chartKeeper', { effects: [flat('chestQuality', 2.5)] }),
-  S('trailmark', 'Trailmark', 6, -1.4, 'signpost', { effects: [inc('mapDropChance', 8)] }),
-  N('lanternBearer', 'Lantern-Bearer', 7, -1.4, 'trailmark', { engine: 'device', rules: [{ id: 'scarabKeepChance', chance: 20 }],
-    units: { reward: 4, danger: 0.5 }, notes: ['Each loaded scarab has a 20% chance not to be consumed when you open the map (rolled from the map seed).'] }),
+  S('trailmark', 'Trailmark', 6, -1.4, 'signpost', { effects: [inc('sandChance', 50)] }),
+  N('lanternBearer', 'Lantern-Bearer', 7, -1.4, 'trailmark', { effects: [flat('surgeCharges', 1)],
+    notes: ['Second Wind: every Atlas area holds 4 surge charges a day instead of 3 (the day turns over at 04:00 UTC).'] }),
   S('surveyStake', 'Survey Stake', 8, -1.4, 'lanternBearer', { effects: [inc('scarabDropChance', 12)] }),
   // spur B
   S('charterInk', 'Charter Ink', 5, 1.4, 'chartKeeper', { effects: [flat('chestQuality', 2.5)] }),
-  S('lampOil', 'Lamp Oil', 6, 1.4, 'charterInk', { effects: [inc('scarabDropChance', 12)] }),
+  S('lampOil', 'Lamp Oil', 6, 1.4, 'charterInk', { effects: [flat('surgeCharges', 1, { area: 'deadEnd' })], units: { manual: true, reward: 1, danger: 0 } }),
   N('fifthSocket', 'Fifth Socket', 7, 1.4, 'lampOil', { engine: 'device', rules: [{ id: 'scarabSockets', extra: 1 }],
     units: { reward: 5, danger: 1 }, notes: ['The Map Device has a fifth scarab socket. Scarab families still allow one scarab each.'] }),
-  S('cartographersPen', "Cartographer's Pen", 8, 1.4, 'fifthSocket', { effects: [inc('mapDropChance', 8)] }),
+  S('cartographersPen', "Cartographer's Pen", 8, 1.4, 'fifthSocket', { effects: [flat('surgeKeep', 10)], notes: ['Afterglow: rolled from the map seed when you open the map; the surge bonus still applies.'] }),
   // keystones
   K('wageredCharts', 'Wagered Charts', 9.5, -1.1, ['surveyStake', 'masterSurveyor'], {
     engine: 'items', excludes: ['deadEndDevotee'],

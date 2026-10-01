@@ -141,6 +141,35 @@ export interface MapSummaryLine {
   breakdown: string[];  // "+22% Teeming", "+12% Tier 4" …
 }
 
+/** How a map reaches an area other than its own (brief D 2.5). */
+export type RunPassage = { kind: 'key'; currencyId: import('./content').CurrencyId } | { kind: 'bounty' };
+
+/** How a routing candidate relates to the run's area (brief D 4.2); the readout groups by it. */
+export type RouteKind = 'own' | 'neighbour' | 'deadEnd' | 'wander' | 'pending' | 'pinned';
+
+/** Frozen drop routing of an expedition (brief D 2.2, built by slice R1 in game/progression/map-routing.ts). */
+export interface MapRouting {
+  /** The area the table is centred on: the map's bound area (a passage run keeps the map's own area, not the sealed one). */
+  from: AtlasAreaId;
+  /** Final weights (pins and scarab biases already multiplied in). `kind` is the base class, `pinned` marks a pin. */
+  candidates: { areaId: AtlasAreaId; weight: number; kind?: RouteKind; pinned?: true; pending?: true }[];
+  /** The chest upgrade's destination for the map's own tier (D 4.4); absent when no charted or pending area accepts the next tier. */
+  advance?: AtlasAreaId;
+  tierOffsets: { offset: number; weight: number }[];
+  chestUpgradeBonus: number;
+}
+
+/** What the player chose at the Map Device. The map itself decides the area; there is no area argument. */
+export interface OpenMapOptions {
+  lootClass?: import('./content').ItemClass;
+  /** A loaded key or the Bounty/Pit passage; absent = the map runs its own area. */
+  passage?: RunPassage;
+  /** Spend one surge charge of the run's area for the surge bonus (brief D 7.2). Absent or false: the run is normal and keeps its charge. */
+  useSurge?: boolean;
+  /** Server clock (ms): decides the forge day. Without it no surge can be spent (the run is simply normal). */
+  now?: number;
+}
+
 export interface RunSetup {
   /** Consumed scarabs, fixed for this expedition and shared by its party. */
   scarabs?: import('./content').ScarabId[];
@@ -153,7 +182,22 @@ export interface RunSetup {
   map: MapItem;         // effective map: item tier/quality/mods with the Atlas area's theme/implicit
   /** Original item for restart refunds when the chosen area changed its base. */
   sourceMap?: MapItem;
+  /** The area actually run: `sourceMap.areaId`, or the passage destination (a sealed area through its key, the Pit of Echoes through a Bounty). */
   atlasAreaId?: AtlasAreaId;
+  /** Set when a passage redirected the map; `sourceMap.areaId` is then the bound area that was bypassed. */
+  passage?: RunPassage;
+  /** Frozen drop routing for every map this expedition drops (brief D 2.2, 4). Built by openMap (map-routing.ts), persisted and restored; absent on runs frozen before routing (their maps roll a theme). */
+  routing?: MapRouting;
+  /**
+   * The surge of this expedition (brief D 7): the area whose charge was spent, the "more" bonuses it gives (item quantity everywhere
+   * except the map category, item rarity) and the forge day. `kept` = the tree's Afterglow kept the charge: the bonus applies but
+   * nothing was spent, so nothing is refunded. Frozen, persisted and restored with the run; guests get the bonus but never spend.
+   */
+  surge?: { areaId: AtlasAreaId; quantityMore: number; rarityMore: number; day: number; kept?: true };
+  /** Sigil effects applied (slice B1; unused in T0). */
+  territory?: { sigilId: string; fromAreaId: AtlasAreaId; effects: { stat: string; mode: string; value: number }[] }[];
+  /** Layout edition run (slice L0; unused in T0). */
+  layoutV?: number;
   /** Actual Scrap entry fee paid; absent on legacy/free maps. Returned only for server-side run loss. */
   entranceScrap?: number;
   /** Exact key paid at entry, retained for atomic restart refunds. */
@@ -296,11 +340,22 @@ export interface GameRulesApi {
   clearCraftedAffix(ch: CharacterSave, targetUid: string): Result<CraftOutcome>;
 
   setMapTreeNode(ch: CharacterSave, nodeId: MapTreeNodeId, allocate: boolean): Result<CharacterSave>;
+  /** Pin or unpin an Atlas area (brief D 5.1): free and instant, at most `pinSlotCount` pins; validated like the server. */
+  setPin(ch: CharacterSave, areaId: AtlasAreaId, pinned: boolean): Result<CharacterSave>;
+  /** Preview of Recycle (three maps of one tier into one Normal map, brief D 5.3): price, output quality, legal target areas, why not. */
+  recycleQuote(ch: CharacterSave, uids: readonly string[], areaId?: AtlasAreaId): { error: string | null; scrap: number; quality: number; tier: number | null; targets: AtlasAreaId[] };
+  /** Recycle three maps into one Normal map of `areaId` (atomic: pays Scrap, removes the three, files the new one in the backpack). */
+  recycleMaps(ch: CharacterSave, uids: readonly string[], areaId: AtlasAreaId): Result<CraftOutcome & { item: MapItem; scrap: number }>;
 
   // --- maps & runs ---
   mapSummary(ch: CharacterSave, map: MapItem): MapSummaryLine[];
   /** Consume the map in the device and produce run parameters (map-side luck only). */
-  openMap(ch: CharacterSave, areaId?: AtlasAreaId, lootClass?: import('./content').ItemClass): Result<{ character: CharacterSave; setup: RunSetup }>;
+  openMap(ch: CharacterSave, opts?: OpenMapOptions): Result<{ character: CharacterSave; setup: RunSetup }>;
+  /**
+   * Use one Hourglass Sand on an Atlas area, or one Grand Hourglass on every area (brief D 7.4): the item leaves the inventory or stash and
+   * the daily surge ledger is reset. Refused, spending nothing, when everything it would refill is already full. `now` is the server clock.
+   */
+  refillSurge(ch: CharacterSave, target: { kind: 'area'; areaId: AtlasAreaId } | { kind: 'all' }, now: number): Result<{ character: CharacterSave; message: string }>;
   /** Build the instance sim config (players join separately via SimRun.addPlayer). `setup` null = hideout. */
   buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConfig;
   /** One player's resolved stats/skills/loadout/belt for an instance (after joining, level-ups, gear or flask changes). */
@@ -324,8 +379,11 @@ export interface GameRulesApi {
 
   // --- merchant ---
   merchantOffers(ch: CharacterSave): MerchantOffer[];
+  /** Areas Rook sells maps of (cleared ones plus the starting area), and the T1-T2 quality grades he offers for one (brief D 5.4). */
+  rookMapAreas(ch: CharacterSave): AtlasAreaId[];
+  rookMapOffers(ch: CharacterSave, areaId: AtlasAreaId): MerchantOffer[];
   sellQuote(item: Item): { scrap: number; lines: string[] } | null;
   sellItems(ch: CharacterSave, uids: readonly string[], expectedScrap: number): Result<{ character: CharacterSave; scrap: number }>;
-  buyOffer(ch: CharacterSave, offerId: string): Result<{ character: CharacterSave; item: Item }>;
-  buyDebugOffer(ch: CharacterSave, offerId: string, options: DebugMerchantOptions): Result<{ character: CharacterSave; message: string }>;
+  buyOffer(ch: CharacterSave, offerId: string, at?: { x: number; y: number }): Result<{ character: CharacterSave; item: Item }>;
+  buyDebugOffer(ch: CharacterSave, offerId: string, options: DebugMerchantOptions, at?: { x: number; y: number }): Result<{ character: CharacterSave; message: string }>;
 }

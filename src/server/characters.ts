@@ -6,6 +6,7 @@ import { randomInt } from 'node:crypto';
 import type { CharacterSummary } from '../contracts/net';
 import type { CharacterSave } from '../contracts/items';
 import { rules, validateCharacterName } from '../game';
+import { bindLegacyMaps } from '../game/progression';
 import type { GameDatabase, CharacterRow } from './db';
 import type { Logger } from './log';
 import { mergeLegacyStorage, namespaceItems, parseAccountStorage, sameStorage, storageOf, withoutStorage, type AccountStorage } from './account-storage';
@@ -125,6 +126,10 @@ export class CharacterStore {
     }
     const rec: CharacterRecord = { id, accountId: row.accountId, ch, dirty: false, refs: 1, saveTimer: null, deleted: false };
     this.cache.set(id, rec);
+    // Maps saved before they were area-bound meet the account's Atlas here (the character row has no atlas of its own): bind
+    // them once; set() persists the result (and the shared storage, if a last-resort binding charted an area).
+    const bound = bindLegacyMaps(ch);
+    if (bound !== ch) this.set(rec, bound);
     return rec;
   }
 
