@@ -1,0 +1,330 @@
+/* Trade window (panels/Trade.tsx): partner line, the two offers as tile grids, and the accept control with its
+ * countdown ring. */
+
+.fe-trade .fe-panel__body {
+  align-items: stretch;
+  gap: 12px;
+}
+.fe-trade__none {
+  margin: 8px 0;
+  text-align: center;
+  color: var(--bone);
+}
+.fe-trade__none b {
+  color: var(--parchment);
+}
+.fe-trade__partner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: var(--font-ui-body);
+  color: var(--bone);
+}
+.fe-trade__partner b {
+  font-family: var(--font-title);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--parchment);
+}
+.fe-trade__sigil {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 40%, var(--gold) 85%, var(--hot) 100%);
+  -webkit-mask: radial-gradient(circle, transparent 45%, #000 48%);
+  mask: radial-gradient(circle, transparent 45%, #000 48%);
+  animation: fe-spin 2.4s linear infinite;
+}
+
+/* ---- one side ---- */
+.fe-tside {
+  position: relative;
+  padding: 8px 10px 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid #2c2219;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.fe-tside--accepted {
+  border-color: rgba(143, 191, 106, 0.65);
+  box-shadow:
+    inset 0 0 26px rgba(143, 191, 106, 0.12),
+    0 0 12px rgba(143, 191, 106, 0.15);
+}
+.fe-tside__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.fe-tside__title {
+  font-family: var(--font-title);
+  font-size: var(--font-ui-secondary);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #cfae78;
+}
+.fe-tside__n {
+  font-size: var(--font-ui-caption);
+  color: var(--ash);
+  font-variant-numeric: tabular-nums;
+}
+.fe-tside__state {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 9px 1px 7px;
+  font-size: var(--font-ui-caption);
+  font-weight: 700;
+  color: var(--stone-light);
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #3a2c1d;
+  border-radius: 2px;
+}
+.fe-tside__check {
+  position: relative;
+  width: 11px;
+  height: 11px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.7;
+}
+.fe-tside__state--on {
+  color: #d6ebc4;
+  background: rgba(60, 90, 40, 0.4);
+  border-color: rgba(143, 191, 106, 0.7);
+  box-shadow: 0 0 8px rgba(143, 191, 106, 0.3);
+}
+.fe-tside__state--on .fe-tside__check {
+  border: 0;
+  border-radius: 0;
+  opacity: 1;
+  width: 6px;
+  height: 10px;
+  margin: -3px 2px 0 3px;
+  border-right: 2px solid var(--good);
+  border-bottom: 2px solid var(--good);
+  transform: rotate(45deg);
+}
+.fe-tside__grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, calc(var(--cell) * 1.45)));
+  justify-content: center;
+  gap: 4px;
+  outline: 1px solid transparent;
+  outline-offset: 3px;
+  transition: outline-color 0.12s;
+}
+.fe-tside__grid--accepts {
+  outline-color: rgba(150, 220, 130, 0.45);
+}
+.fe-tside__grid--ok {
+  outline-color: rgba(170, 235, 150, 0.9);
+  box-shadow: 0 0 16px rgba(120, 200, 110, 0.25);
+}
+.fe-tside__grid--bad {
+  outline-color: rgba(240, 100, 90, 0.9);
+}
+.fe-tside__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 24px;
+  font-size: var(--font-ui-secondary);
+  font-style: italic;
+  text-align: center;
+  color: var(--stone-light);
+  pointer-events: none;
+}
+.fe-tside__hint {
+  margin-top: 7px;
+  font-size: var(--font-ui-caption);
+  text-align: center;
+  color: var(--ash);
+}
+
+/* ---- tiles (tone variables come from .fe-item--<tone>) ---- */
+.fe-ttile {
+  position: relative;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background:
+    radial-gradient(circle at 50% 45%, var(--tone-bg, rgba(216, 210, 196, 0.04)), transparent 90%),
+    rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--tone-edge, rgba(216, 210, 196, 0.12));
+  box-shadow: 0 0 0 1px #000;
+  cursor: default;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+.fe-ttile:not(.fe-ttile--empty):hover {
+  border-color: var(--tone, var(--tone-normal));
+  box-shadow:
+    0 0 0 1px #000,
+    inset 0 0 14px var(--tone-edge, rgba(216, 210, 196, 0.12));
+}
+.fe-ttile__icon {
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.75));
+}
+.fe-ttile--empty {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px dashed #2c2219;
+  box-shadow: none;
+}
+.fe-ttile--removable {
+  cursor: pointer;
+}
+.fe-ttile__x {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  background: rgba(40, 8, 10, 0.9);
+  border: 1px solid #7a2a26;
+  border-radius: 2px;
+  transition: opacity 0.12s;
+}
+.fe-ttile__x::before,
+.fe-ttile__x::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 2px;
+  height: 10px;
+  background: #f3c9c2;
+  transform: rotate(45deg);
+}
+.fe-ttile__x::after {
+  transform: rotate(-45deg);
+}
+.fe-ttile--removable:hover .fe-ttile__x {
+  opacity: 1;
+}
+.fe-ttile--removable:hover {
+  border-color: #b8514a !important;
+}
+.fe-ttile--fresh {
+  animation: fe-trade-fresh 0.85s ease-in-out 3;
+}
+@keyframes fe-trade-fresh {
+  50% {
+    border-color: var(--hot);
+    box-shadow:
+      0 0 0 1px #000,
+      0 0 14px rgba(255, 190, 90, 0.85),
+      inset 0 0 16px rgba(255, 190, 90, 0.5);
+  }
+}
+
+/* ---- accept control ---- */
+.fe-trade__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  /* On short screens the offers scroll behind it: the status line and the accept control stay in view. The
+   * negative margins cancel the panel body's padding, so the backing spans the panel and meets its bottom edge. */
+  position: sticky;
+  bottom: -16px;
+  z-index: 2;
+  margin: 0 -20px -16px;
+  padding: 10px 20px 16px;
+  background: linear-gradient(180deg, rgba(18, 16, 19, 0) 0, #151215 14px, #121013 100%);
+}
+.fe-trade__status {
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0 8px;
+  font-size: var(--font-ui-secondary);
+  text-align: center;
+  color: var(--bone);
+}
+.fe-trade__status--warn {
+  color: #efc27f;
+}
+.fe-trade__status--done {
+  color: var(--good);
+}
+.fe-trade__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fe-accept {
+  min-width: 200px;
+  gap: 10px;
+}
+.fe-accept--on {
+  color: #eaffd8;
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(214, 235, 196, 0.35), transparent 55%),
+    linear-gradient(180deg, #5b8a3c 0%, #365a22 55%, #213a14 100%);
+  border-color: #a8d884;
+  text-shadow: 0 1px 1px rgba(10, 30, 0, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(230, 255, 210, 0.45),
+    0 0 0 1px #0c1a06,
+    0 0 20px rgba(143, 191, 106, 0.5),
+    0 4px 10px rgba(0, 0, 0, 0.55);
+}
+.fe-accept__ring {
+  position: relative;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255, 243, 220, 0.6);
+  border-radius: 50%;
+}
+.fe-accept__ring--on {
+  border-color: #eaffd8;
+  background: rgba(234, 255, 216, 0.12);
+}
+.fe-accept__ring--on::after {
+  content: '';
+  width: 5px;
+  height: 10px;
+  margin-top: -3px;
+  border-right: 2px solid #eaffd8;
+  border-bottom: 2px solid #eaffd8;
+  transform: rotate(45deg);
+}
+.fe-accept__ring--lock {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.fe-accept__ring--lock::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: conic-gradient(var(--flame) calc(var(--p, 0) * 360deg), transparent 0);
+  -webkit-mask: radial-gradient(circle, transparent 57%, #000 60%);
+  mask: radial-gradient(circle, transparent 57%, #000 60%);
+}
+.fe-accept__secs {
+  font-family: var(--font-text);
+  font-size: var(--font-ui-caption);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--hot);
+}
+/* Locked after an offer change: muted, but the countdown ring keeps its ember colour. */
+.fe-accept--locked:disabled {
+  filter: none;
+  color: #b9a58a;
+  background: linear-gradient(180deg, #3a2a22, #22170f);
+  border-color: #6b4a2a;
+}

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8" /><title>Codex plates</title>
+<style>html,body{margin:0;background:#120d10}canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+import { cachedPlate } from '/src/art/codex/plates.ts';
+import { GLYPH_IDS } from '/src/art/codex/glyphs.ts';
+import { frameToSurface, drawFrameSurface } from '/src/art/atlas/canvas.ts';
+const q = new URLSearchParams(location.search);
+const Z = Number(q.get('z') ?? 5);
+const tones = ['cartography','foundry','bounty','fortune','echoes','peril','hub'];
+const classes = ['small','notable','lens','tier','keystone'];
+const states = ['locked','ready','on','gated'];
+const c = document.getElementById('c');
+const view = q.get('view') ?? 'plates';
+const ctx = c.getContext('2d');
+if (view === 'big') {
+  c.width = 1500; c.height = 560; ctx.imageSmoothingEnabled = false; ctx.fillStyle = '#1a1416'; ctx.fillRect(0,0,c.width,c.height); ctx.scale(Z,Z);
+  let x = 2;
+  for (const [cls, tone, g] of [['small','cartography','map'],['small','fortune','coin'],['notable','foundry','anvil'],['notable','peril','skull'],['lens','echoes','bell'],['tier','hub','coin'],['keystone','foundry','flame'],['keystone','echoes','eye']]) {
+    let y = 2;
+    for (const state of states) { drawFrameSurface(ctx, frameToSurface(cachedPlate({ cls, tone, glyph: g, state })), x, y, 1); y += 39; }
+    x += 38;
+  }
+} else if (view === 'plates') {
+  c.width = 44 * tones.length * states.length / 1 * 0 + 1500; c.height = 900;
+  ctx.imageSmoothingEnabled = false; ctx.fillStyle = '#1a1416'; ctx.fillRect(0,0,c.width,c.height); ctx.scale(Z/2,Z/2);
+  let y = 4;
+  for (const cls of classes) {
+    let x = 4;
+    for (const tone of tones) for (const state of states) {
+      const g = cls === 'lens' ? 'spiral' : GLYPH_IDS[(x+y) % GLYPH_IDS.length];
+      const s = frameToSurface(cachedPlate({ cls, tone, glyph: g, state }));
+      ctx.globalCompositeOperation='source-over';
+      drawFrameSurface(ctx, s, x, y, 1); x += 40;
+    }
+    y += 44;
+  }
+  let x = 4;
+  for (const t of ['ashenForge','cinderChapel','rimedOssuary','choralCrypt','ironColiseum','chainworks']) for (const state of states) { drawFrameSurface(ctx, frameToSurface(cachedPlate({ cls:'seal', tone:t, glyph:'seal', state })), x, y, 1); x += 40; }
+} else {
+  const n = GLYPH_IDS.length; c.width = 1500; c.height = 700;
+  ctx.imageSmoothingEnabled = false; ctx.fillStyle = '#1a1416'; ctx.fillRect(0,0,c.width,c.height); ctx.scale(Z/2,Z/2);
+  GLYPH_IDS.forEach((g,i) => {
+    const col = i % 14, row = Math.floor(i/14);
+    drawFrameSurface(ctx, frameToSurface(cachedPlate({ cls:'small', tone:'foundry', glyph:g, state:'on' })), 4+col*26, 4+row*26, 1);
+    drawFrameSurface(ctx, frameToSurface(cachedPlate({ cls:'notable', tone:'echoes', glyph:g, state:'on' })), 4+col*26, 4+(row+4)*26, 1);
+  });
+}
+window.__done = true;
+</script></body></html>

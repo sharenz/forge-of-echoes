@@ -1,0 +1,41 @@
+[Unit]
+Description=Forge of Echoes game server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=forge
+Group=forge
+WorkingDirectory=/opt/forge/current
+Environment=NODE_ENV=production
+Environment=PORT=8787
+Environment=DB_PATH=/var/lib/forge/forge.db
+Environment=TRUST_PROXY=1
+Environment=NODE_OPTIONS=--disable-warning=ExperimentalWarning
+# One process, no tsx CLI wrapper: the wrapper relays SIGTERM to its child and SIGKILLs it when the child does not
+# acknowledge within 30 ms (a busy tick), and with the whole cgroup signalled the server could also see SIGTERM
+# twice, which skips the restart drain. `node --import tsx` gets exactly one SIGTERM and drains (GAME_SPEC §11).
+ExecStart=/usr/bin/env node --import tsx src/server/main.ts
+Restart=always
+RestartSec=2
+KillSignal=SIGTERM
+# SIGTERM to the main process only; anything left in the cgroup is killed only when the stop times out.
+KillMode=mixed
+# Must exceed DRAIN_SECONDS (20 in production) + the 8 s shutdown budget in src/server/main.ts.
+TimeoutStopSec=60
+LimitNOFILE=65536
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/forge
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UI Sandbox</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #0d0b0e;
+      }
+      #world {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        image-rendering: pixelated;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="world"></canvas>
+    <div id="ui"></div>
+    <script type="module">
+      // UI sandbox over a fake game world drawn from the real procedural art.
+      //
+      // Query params (combine freely):
+      //   ?screen=loading|auth|characters|disconnected|game   &fatal=1 &error=text &busy=1 &nochars=1
+      //   ?panels=inventory,character,skills,stash,party,mapDevice,merchant,craftingBench,trade,menu,help
+      //   ?zone=hideout|visit|map|partymap  &boss=1 &lieutenant=1 &tell=1 &cleared=1 &dead=1 &portal=0
+      //   ?zone=map&event=pactAltar,orchard,host (map-event HUD cards, up to three; &eventphase=available|warning|active|complete|failed)
+      //   ?tooltip=first-rare|first-unique|first-magic|first-normal|first-map|first-currency|first-flask|equipped|belt|skill|stash-unique
+      //            |crafted|bench-socket|palette|palette-bad|trade-theirs|trade-yours
+      //   ?armed=scrap (hovers the first valid target)   ?affix=seal|catalyst|fractureCore
+      //   ?drag=ok|bad|world|equip|bench|offer   ?summary=cleared|failed|abandoned (or 1)   ?alt=1   ?levelup=1
+      //   ?party=0|1 (1 opens the party panel)  &leader=1 (you lead)  ?invite=1  ?chat=1  ?chatopen=1  ?toasts=1  ?still=1
+      //   ?elite=magic|rare (monster hover card)
+      //   ?hud=lowlife,empty,full,play,nopoints,points,atlaspoints (globes: Life at 14%, Focus empty, both full, scripted hits / heals / casts;
+      //        unspent points: none, the default 6 attribute + 2 skill, plus Atlas points). Add &levelup=1 to see the level-up flourish;
+      //        &debuffs=burning,bleeding,chilled,frozen,withered,shocked tints the globes; Motion calm (Atlas toggle) or the OS setting flattens them
+      //   ?bench=1|crafted (item on the crafting bench; implied by panels=craftingBench)
+      //   ?workslot=1|map|crafted|finished (Crafting Stash work slot loaded; crafted = an Essence is applied after mount)
+      //   ?trade=1|locked|waiting (a trade with Mira: she accepted / accept countdown / you wait for her)
+      //   ?tradeRequest=1 (Corvin asks to trade)   ?search=life (opens the stash with that query)   ?chattext=/trade%20Mira
+      //   ?stash=maps|currency|mapCurrency|<tab index> (opens the stash on that tab)  &specialstash=0 (empty special tabs)
+      //   ?tier=<1-15> (expanded Map Stash tier)   ?debuffs=1 | ?debuffs=chilled,rooted (HUD debuff bar)
+      //   ?theme=ashenForge|rimedOssuary|ironColiseum (map roster: world, Tell banner, lieutenant and boss names)
+      //   ?tooltip=map-row|cslot|cslot-empty|tier|debuff|debuff-rooted|stab-maps|stab-currency (special tab / HUD hovers)
+      //   ?drag=deposit|withdraw|mapdeposit (drag a currency onto the Crafting Stash, a slot to the backpack, a map in)
+      //   ?device=empty (the map device starts empty: drag a map from the inventory into the dock)
+      //   ?atlas=fresh|mid|late|full (Atlas progress for the Cartography Table; panels=mapDevice)
+      //   ?tree=open|mid|full (Codex preset: all 60 points earned, none / 14 / all spent; with panels=mapDevice, then the Codex tab)
+      //   ?drag=mapload (with panels=mapDevice: drag a backpack map onto the dock's map slot, which loads it into the device)
+      import { generateArt } from '/src/art/index.ts';
+      import { mountUi } from '/src/ui/index.ts';
+      import { createMockStore } from '/src/ui/dev/mockStore.ts';
+      import { writeMotionPref } from '/src/ui/atlas/motion.ts';
+
+      const q = new URLSearchParams(location.search);
+      // ?motion=calm|full|auto sets the shared Motion preference (globes, point badges, Atlas) before the UI mounts.
+      if (q.get('motion')) writeMotionPref(q.get('motion'));
+      const flag = (k) => q.get(k) === '1' || q.get(k) === 'true';
+      const list = (k) => (q.get(k) ? q.get(k).split(',').filter(Boolean) : []);
+      const zone = q.get('zone') ?? 'hideout';
+      const mapTheme = q.get('theme') ?? 'ashenForge';
+      const art = generateArt();
+
+      // ---- fake world -------------------------------------------------------------------------------
+      const theme = zone === 'map' || zone === 'partymap' ? mapTheme : 'hideout';
+      const WORLD_MONSTERS = {
+        ashenForge: ['monster/ashling/move', 'monster/emberSkitter/move', 'monster/cinderSpitter/idle'],
+        rimedOssuary: ['monster/boneThrall/move', 'monster/rimeshade/move', 'monster/frostWeaver/idle'],
+        ironColiseum: ['monster/pitHound/move', 'monster/chainThrall/move', 'monster/shieldbearer/idle'],
+      };
+      const canvas = document.getElementById('world');
+      function frameCanvas(img) {
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const ctx = c.getContext('2d');
+        const d = ctx.createImageData(img.width, img.height);
+        d.data.set(img.data);
+        ctx.putImageData(d, 0, 0);
+        return c;
+      }
+      const sprite = (id) => art.sprites.find((s) => s.id === id);
+      function drawWorld() {
+        const S = 3;
+        const w = (canvas.width = Math.ceil(innerWidth / S));
+        const h = (canvas.height = Math.ceil(innerHeight / S));
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        const floor = sprite(`tile/${theme}/floor`);
+        const detail = sprite(`tile/${theme}/detail`);
+        const tiles = floor.frames.map(frameCanvas);
+        const details = detail.frames.map(frameCanvas);
+        let seed = 7;
+        const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+        for (let y = 0; y < h; y += 16) for (let x = 0; x < w; x += 16) ctx.drawImage(tiles[Math.floor(rnd() * tiles.length)], x, y);
+        for (let i = 0; i < 40; i++) ctx.drawImage(details[Math.floor(rnd() * details.length)], Math.floor(rnd() * w / 16) * 16, Math.floor(rnd() * h / 16) * 16);
+        const props = theme === 'hideout'
+          ? [['prop/mapDevice', 0.5, 0.36], ['prop/stash', 0.3, 0.44], ['prop/merchant', 0.7, 0.46], ['prop/brazier', 0.4, 0.3], ['prop/brazier', 0.6, 0.3], ['prop/portal', 0.56, 0.4], ['prop/banner', 0.22, 0.3], ['prop/anvil', 0.76, 0.6]]
+          : [['prop/pillar', 0.2, 0.3], ['prop/pillar', 0.82, 0.34], ['prop/rubble', 0.3, 0.7], ['prop/brazier', 0.64, 0.28], ['prop/bones', 0.72, 0.66], ['prop/standingStone', 0.12, 0.62]];
+        for (const [id, fx, fy] of props) {
+          const s = sprite(id);
+          if (!s) continue;
+          ctx.drawImage(frameCanvas(s.frames[0]), Math.round(w * fx - s.anchorX), Math.round(h * fy - s.anchorY));
+        }
+        const hero = sprite('sorceress/idle/south');
+        ctx.drawImage(frameCanvas(hero.frames[0]), Math.round(w * 0.5 - hero.anchorX), Math.round(h * 0.55 - hero.anchorY));
+        if (theme !== 'hideout') {
+          for (let i = 0; i < 26; i++) {
+            const kinds = WORLD_MONSTERS[theme] ?? WORLD_MONSTERS.ashenForge;
+            const m = sprite(kinds[i % 3]);
+            if (!m) continue;
+            ctx.drawImage(frameCanvas(m.frames[i % m.frames.length]), Math.round(w * (0.25 + rnd() * 0.5) - m.anchorX), Math.round(h * (0.2 + rnd() * 0.3) - m.anchorY));
+          }
+        }
+        // lighting: dark ambient, warm pool around the hero, vignette
+        const g = ctx.createRadialGradient(w * 0.5, h * 0.5, 10, w * 0.5, h * 0.5, Math.max(w, h) * 0.7);
+        g.addColorStop(0, 'rgba(255,150,70,0.10)');
+        g.addColorStop(0.35, 'rgba(10,6,8,0.35)');
+        g.addColorStop(1, 'rgba(5,3,4,0.85)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
+      }
+      drawWorld();
+
+      // ---- UI -----------------------------------------------------------------------------------
+      const panels = list('panels');
+      if (q.get('party') === '1' && !panels.includes('party')) panels.push('party');
+      if ((q.get('search') !== null || q.get('stash') !== null || q.get('workslot')) && !panels.includes('stash')) panels.push('inventory', 'stash');
+      const stashParam = q.get('stash') ?? (q.get('workslot') ? 'currency' : null);
+      const stashTab = stashParam === null ? null : /^\d+$/.test(stashParam) ? Number(stashParam) : stashParam;
+      const debuffParam = q.get('debuffs');
+      const debuffs = !debuffParam || debuffParam === '0' ? false : debuffParam === '1' ? true : debuffParam.split(',').filter(Boolean);
+      const mode = (k) => (q.get(k) === '1' || q.get(k) === 'true' ? true : q.get(k) === '0' ? false : q.get(k) || undefined);
+      const summary = q.get('summary');
+      const store = createMockStore(art, {
+        screen: q.get('screen') ?? 'game',
+        panels,
+        zone,
+        event: q.get('event'),
+        eventPhase: q.get('eventphase') ?? undefined,
+        boss: flag('boss'),
+        lieutenant: flag('lieutenant'),
+        tell: flag('tell'),
+        cleared: flag('cleared'),
+        dead: flag('dead'),
+        summary: summary ? (summary === '1' ? 'cleared' : summary) : null,
+        alt: flag('alt'),
+        armed: q.get('armed'),
+        affix: q.get('affix'),
+        party: q.get('party') === '0' ? false : true,
+        leader: flag('leader'),
+        invite: flag('invite'),
+        chat: flag('chat') || flag('chatopen'),
+        chatOpen: flag('chatopen'),
+        elite: q.get('elite'),
+        toasts: flag('toasts'),
+        levelUp: flag('levelup'),
+        error: q.get('error'),
+        fatal: flag('fatal'),
+        busy: flag('busy'),
+        portal: q.get('portal') === '0' ? false : true,
+        noCharacters: flag('nochars'),
+        still: flag('still'),
+        hudFx: list('hud'),
+        bench: mode('bench'),
+        workslot: mode('workslot'),
+        trade: mode('trade'),
+        tradeRequest: flag('tradeRequest'),
+        stash: stashTab,
+        specialStash: q.get('specialstash') !== '0',
+        emptyDevice: q.get('device') === 'empty',
+        atlas: q.get('atlas') ?? undefined,
+        tree: q.get('tree') ?? undefined,
+        debuffs,
+        theme: mapTheme,
+      });
+      window.__store = store;
+      const unmount = mountUi(document.getElementById('ui'), store);
+      window.__unmount = unmount;
+
+      // ---- scripted hovers / drags for screenshots ---------------------------------------------------
+      const hoverSel = {
+        'first-rare': '.fe-grid [data-kind="equipment"][data-tone="rare"]',
+        'first-unique': '.fe-grid [data-tone="unique"]',
+        'first-magic': '.fe-grid [data-kind="equipment"][data-tone="magic"]',
+        'first-normal': '.fe-grid [data-kind="equipment"][data-tone="normal"]',
+        'first-map': '.fe-grid [data-kind="map"][data-tone="rare"]',
+        'first-currency': '.fe-grid [data-kind="currency"]',
+        'first-flask': '.fe-grid [data-kind="flask"]',
+        'stash-unique': '[data-drop="stash"] [data-tone="unique"]',
+        equipped: '.fe-slot [data-tone="rare"]',
+        belt: '.fe-slot--belt [data-kind="flask"]',
+        skill: '.fe-skill',
+        'bench-socket': '.fe-bench__socket',
+        palette: '.fe-cur:not(.fe-cur--off)',
+        'palette-bad': '.fe-cur--off',
+        'trade-theirs': '.fe-tside--theirs .fe-ttile:not(.fe-ttile--empty)',
+        'trade-yours': '.fe-tside--yours .fe-ttile:not(.fe-ttile--empty)',
+        'map-row': '.fe-maprow--rare',
+        cslot: '.fe-cslot:not(.fe-cslot--empty)',
+        'cslot-empty': '.fe-cslot--empty',
+        tier: '.fe-tier--on',
+        debuff: '.fe-debuff',
+        'debuff-rooted': '.fe-debuff--rooted',
+        'stab-maps': '.fe-stab--maps',
+        'stab-currency': '.fe-stab--currency',
+      };
+      /** The backpack item carrying a bench-crafted affix. */
+      const craftedSel = () => {
+        const e = store.get().character.backpack.entries.find((x) => x.item.kind === 'equipment' && x.item.affixes.some((a) => a.crafted));
+        return e ? `.fe-grid [data-uid="${e.item.uid}"]` : null;
+      };
+      const enter = (el) => el && el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false }));
+      // The Map Stash tier is picked first, so hovers and drags below find its rows.
+      setTimeout(() => {
+        const tier = q.get('tier');
+        if (tier) document.querySelectorAll('.fe-tier')[Number(tier) - 1]?.click();
+      }, 800);
+      setTimeout(() => {
+        const search = q.get('search');
+        if (search !== null) {
+          const field = document.querySelector('.fe-search__input');
+          if (field) {
+            field.value = search;
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
+        const chatText = q.get('chattext');
+        if (chatText !== null) {
+          const field = document.querySelector('.fe-chat__input');
+          if (field) {
+            field.value = chatText;
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.form.requestSubmit();
+          }
+        }
+        const tip = q.get('tooltip');
+        if (tip) enter(document.querySelector(tip === 'crafted' ? craftedSel() : hoverSel[tip] ?? tip));
+        if (q.get('armed')) enter(document.querySelector('.fe-grid .fe-item--craft-valid'));
+        const drag = q.get('drag');
+        /** The backpack stack of a currency (by id), for the deposit drag. */
+        const backpackCurrency = (id) => {
+          const e = store.get().character.backpack.entries.find((x) => x.item.kind === 'currency' && x.item.currencyId === id);
+          return e ? `[data-drop="backpack"] [data-uid="${e.item.uid}"]` : '[data-drop="backpack"] [data-kind="currency"]';
+        };
+        const SOURCES = {
+          equip: '.fe-grid [data-kind="equipment"][data-tone="magic"]',
+          deposit: backpackCurrency('essenceRime'),
+          mapdeposit: '[data-drop="backpack"] [data-kind="map"]',
+          mapload: '[data-drop="backpack"] [data-kind="map"]',
+          withdraw: '.fe-cslot:not(.fe-cslot--empty)',
+        };
+        if (drag) {
+          const src = document.querySelector(SOURCES[drag] ?? '.fe-grid [data-tone="rare"][data-kind="equipment"]');
+          const r = src.getBoundingClientRect();
+          const down = { bubbles: true, clientX: r.left + 8, clientY: r.top + 8, button: 0, pointerId: 1 };
+          src.dispatchEvent(new PointerEvent('pointerdown', down));
+          let tx = 0;
+          let ty = 0;
+          const grid = document.querySelector('[data-drop="backpack"]').getBoundingClientRect();
+          const cell = grid.width / 12;
+          if (drag === 'ok') [tx, ty] = [grid.left + cell * 10.5, grid.top + cell * 3.5];
+          if (drag === 'bad') [tx, ty] = [grid.left + cell * 5.2, grid.top + cell * 0.5];
+          if (drag === 'world') [tx, ty] = [innerWidth * 0.45, innerHeight * 0.5];
+          const onto = (sel) => {
+            const el = document.querySelector(sel);
+            const r = el.getBoundingClientRect();
+            return [r.left + r.width / 2, r.top + Math.min(r.height / 2, 40)];
+          };
+          if (drag === 'bench') [tx, ty] = onto('.fe-bench__socket');
+          if (drag === 'deposit') [tx, ty] = onto('.fe-cstash');
+          if (drag === 'mapdeposit') [tx, ty] = onto('.fe-stab--maps');
+          if (drag === 'mapload') [tx, ty] = onto('.fe-dock [data-drop="mapDevice"]');
+          if (drag === 'withdraw') [tx, ty] = [grid.left + cell * 11.5, grid.top + cell * 4.5];
+          if (drag === 'offer') [tx, ty] = onto('[data-drop="offer"]');
+          if (drag === 'equip') {
+            const slot = document.querySelector('[data-slot="ring2"]') ?? document.querySelector('[data-slot="helmet"]');
+            const sr = slot.getBoundingClientRect();
+            [tx, ty] = [sr.left + sr.width / 2, sr.top + sr.height / 2];
+          }
+          for (let i = 0; i < 3; i++) window.dispatchEvent(new PointerEvent('pointermove', { clientX: tx + i, clientY: ty + i, pointerId: 1 }));
+        }
+      }, 1000);
+    </script>
+  </body>
+</html>

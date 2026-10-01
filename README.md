@@ -1,192 +1,317 @@
-<p align="center">
-  <img src="./public/og-forge-of-echoes.png" alt="Forge of Echoes — dark fantasy pixel-art action RPG" width="100%" />
-</p>
+# Forge of Echoes
 
-<h1 align="center">Forge of Echoes</h1>
+An online browser action RPG: **Path of Exile itemization and crafting × Vampire Survivors waves.** You craft your
+gear and your maps in a hideout, open a map with friends, fight six escalating waves up to a boss, and come home with
+loot to craft again.
 
-<p align="center">
-  <strong>Forge your build. Break the waves. Claim what survives.</strong>
-</p>
+- Three map types, each with its own monster family, lieutenant and boss: the **Ashen Forge** (fire; the Ashbound
+  Herald and the Cinder Matriarch), the **Rimed Ossuary** (cold and bone; the Bone Chorister and The Hollow Warden)
+  and the **Iron Coliseum** (steel and blood; The Chainmaster and Varkus, the Iron Champion).
+- Monsters inflict **debuffs** you can read and answer: Chilled, Frozen, Rooted, Burning, Bleeding, Shocked and
+  Withered, each with its own look on your character, an icon and timer on the HUD, and a counter (see below).
+- **Special stash tabs**: a Map Stash for 400 maps, and a Crafting Stash with a slot for every currency (5,000 each)
+  and a **work slot**: drag an item into it and craft on it in place with one click per currency.
+- Pixel-art world with dynamic lights, rendered by our own WebGL2 renderer; procedural art and audio (no image or
+  sound files).
+- One authoritative Node server runs the rules and a deterministic 60 Hz simulation for every hideout and map. The
+  browser client predicts your own movement and interpolates everything else.
+- Characters, parties and open maps are saved in SQLite. A deploy does not cost you your party or your map (see
+  [Deploying](#deploying)).
 
-<p align="center">
-  A browser-native, multiplayer pixel-art action RPG built around deep itemization,<br />
-  dangerous map items, dense monster waves, and hands-on crafting.
-</p>
+There are no game-engine libraries. Everything is TypeScript: `ws` + `node:http` + `node:sqlite` on the server, and
+Vite + WebGL2 + WebAudio + Preact (DOM UI only) in the browser.
 
-<p align="center">
-  <a href="https://discord.gg/avMe75Xaf"><img src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Join the Forge of Echoes Discord" /></a>
-  <img src="https://img.shields.io/badge/status-active%20development-d97732" alt="Status: active development" />
-  <img src="https://img.shields.io/badge/multiplayer-1–4%20players-6b4ce6" alt="Multiplayer: one to four players" />
-</p>
+## Running it locally
 
-> [!NOTE]
-> Forge of Echoes is in active development. The Sorceress is currently the playable class; more classes, skills, monsters, items, and crafting options will follow as the core game matures.
+Requirements: Node **22.13+** (for `node:sqlite`) and npm.
 
-## Enter the Forge
+```bash
+npm install
+npm run dev          # game server (tsx watch, port 8787) + Vite (http://localhost:5173)
+```
 
-Forge of Echoes combines the build depth of classic loot-driven ARPGs with a focused wave-based endgame. Every character, item, map, monster, drop, and combat result is managed by an authoritative multiplayer server—even when playing solo.
+Open http://localhost:5173, create an account and a Sorceress, and you start in your hideout. The dev database is
+`data/dev.db`. Delete it to start over.
 
-Your hideout is the heart of the game. Prepare your equipment, organize your stash, trade with other players, craft map items, and open six portals into increasingly dangerous expeditions. Inside, explore a large scrolling battlefield, fight distributed monster packs through six escalating waves, collect shared free-for-all loot, and survive the final rage.
+Other useful scripts:
 
-## Current highlights
-
-| | Feature |
+| Command | What it does |
 |---|---|
-| ⚔️ | Fast pixel-art combat with directional animation, projectiles, damage numbers, positional audio, corpses, and dense monster packs |
-| 🔥 | A playable Sorceress with configurable skill slots, skill levels, casting, cooldowns, charges, projectiles, and piercing |
-| 💎 | Normal, magic, and rare equipment with item levels, base stats, affix tiers, roll ranges, implicits, and rarity-colored loot |
-| 🔨 | Inventory crafting inspired by currency-based ARPG systems: activate a material, then apply it directly to an eligible item |
-| 🗺️ | Maps are real items that can be bought, found, crafted, consumed, and opened through a six-portal map device |
-| 👹 | Melee, ranged, jumping, fast, tanky, magic, and rare monsters assembled into randomized packs and escalating waves |
-| 🧙 | Character levels 1–99, experience, attributes, derived combat stats, equipment comparison, and persistent skill progression |
-| 🎒 | Grid-based backpack and multi-tab stash with item footprints, drag-and-drop placement, quick transfers, equipment slots, and flask belt |
-| 🤝 | One-to-four-player parties, shared hideouts, co-op maps, transactional trading, and first-come-first-served loot |
-| 🛡️ | Server-authoritative combat, progression, inventory, map state, drops, and trades—clients send intent, never trusted outcomes |
+| `npm test` | All unit and integration tests (vitest; the servers in tests use `:memory:` databases) |
+| `npm run typecheck` | `tsc --noEmit` for the whole repository |
+| `npm run e2e` | End-to-end run: the real server and client, played by two headless browsers (add `-- --prod` to test the production bundle) |
+| `npm run build` | Typecheck, then build the client into `dist/` |
+| `npm start` | Production mode: the server also serves `dist/` (build first) |
+| `npm run shot -- /dev/present.html?theme=rimedOssuary --out .shots/x.png` | Headless screenshot of any page; `dev/*.html` are per-module sandboxes |
 
-## The current game loop
+## Selling equipment
 
-1. Register or sign in with your account handle and password, then select or create a uniquely named Sorceress.
-2. Prepare your character in the hideout using the inventory, stash, merchant, and skill interfaces.
-3. Buy or find a map, craft it in your backpack, and place it into the map device.
-4. Open six one-use portals and enter alone or with a party of up to four players.
-5. Hunt geographically distributed packs through six increasingly dangerous waves.
-6. Collect equipment, maps, flasks, and crafting materials directly from the ground.
-7. Defeat the final rage, open the reward chest, return to the hideout, and improve your build.
+Click Rook in any hideout: his stall opens beside your inventory, like a Path of Exile vendor. On the **Sell** tab
+drag equipment from your backpack into the offer window (Ctrl/⌘-click works too), review each item's appraisal and the
+total, press **Sell**, then confirm. Drag an item back out or press × to keep it; clear or cancel without losing anything.
+Equipped gear must be unequipped first; gear offered in a trade is locked. **Buy** and **Gamble** work the same way in
+reverse: search or filter the stock, then drag a row onto the backpack cell where you want the item (green means it fits
+and you can pay, red says why not), or use the row's button.
 
-There are no temporary between-wave power-ups. Progress comes from your character level, attributes, skills, equipment, and crafting decisions.
+Rook appraises the actual **item level, base, number of affixes and affix tiers**. Click an offered item's price
+for its breakdown. Better bases, higher item levels, more affixes and stronger tiers raise the appraisal;
+rarity colour alone does not set a fixed price. Payment goes into your account's Crafting Stash, with overflow
+in your backpack. Visitors sell their own gear and receive their own payment. Sales are permanent and survive
+restarts. Maps, flasks and currencies cannot be sold.
+
+## Admin CLI (`foe`)
+
+`foe` (also `foe-cli`) is the admin tool for accounts, characters and the testing merchant. The deploy installs it
+on the server next to the old `debug_merch` command, which still works and is now just `foe merchant`.
+
+```bash
+ssh -t crafty-prod foe            # interactive menu (-t gives it a terminal); alias: alias foe='ssh -t crafty-prod foe'
+ssh crafty-prod foe online        # anything else runs one command and exits
+# Local development against a dev database (DB_PATH, default data/dev.db)
+./scripts/foe accounts            # or: npm run foe -- accounts
+```
+
+**Interactive mode** (no arguments): type to fuzzy-search characters (by account, name, class, level) or
+accounts, arrow keys to move, enter to select, esc to go back. The preview under the list shows level, class, highest
+map tier, last played and online status. No dependencies: it uses raw terminal keys.
+
+| Command | What it does |
+| --- | --- |
+| `foe accounts [--search q]` | all accounts with character counts, created, last seen, online |
+| `foe chars [account]` | characters with class, level, tier, last played, online, testing merchant |
+| `foe online` | players in the running server: account, character, level, hideout/map, party |
+| `foe show <account> [character]` | read-only details (progress, stash tabs, party, open map, location) |
+| `foe merchant <account> <character> enable\|disable\|status` | the testing merchant (below), live, no restart |
+| `foe kick <account> [character]` | disconnect players from the running server |
+| `foe delete-char <account> <character>` | delete one character; the account's stash and Atlas stay |
+| `foe reset <account>` | delete ALL characters and progress of one account; the login stays |
+| `foe reset --all` | the same for every account |
+
+Every read command takes `--json` (`ssh crafty-prod foe chars sharenz --json | jq ...`). Online columns show `?`
+when the server cannot be asked. Options: `--db <path>`, `--dry-run`, `--yes --i-know`, `--confirm <phrase>`,
+`--force`, `--offline`.
+
+**What "progress" is.** A reset deletes, in one transaction: `characters` (saves: levels, equipment, backpack,
+map device, skills, flasks), `account_storage` (the shared stash tabs, currency and map stash, and the Atlas
+including tree points), `atlas_credit_queue` (pending Atlas awards), `open_maps`, `character_maps` (where
+characters stood, including visits to their hideouts), `party_members` / `parties` and `debug_merchants`. Accounts and login
+sessions stay. A party that keeps two members under a deleted leader gets a new leader; smaller ones dissolve.
+`foe delete-char` removes that character's rows but leaves the account stash/Atlas.
+
+**Safety of destructive commands** (`reset`, `delete-char`):
+
+1. A summary with row counts per table is always printed first; `--dry-run` stops there.
+2. The full database is copied to `<data dir>/backups/pre-reset-<time>.db` (SQLite backup API, verified,
+   mode 600) before anything is deleted; no backup, no reset.
+3. Typed confirmation: the account name (`reset <account>`), the character name (`delete-char`), or
+   `RESET-ALL-ACCOUNTS <number of characters>` (`reset --all`). Scripts pass `--confirm "<phrase>"`, or
+   `--yes --i-know` together (either alone is refused).
+4. It needs to know the server state: through the admin channel, or `--offline` when the server is stopped.
+   Affected players online block the command unless `--force`, which kicks them.
+5. While it runs the server refuses their logins; it then drops their sessions, parties and open maps from memory, the
+   CLI backs up, deletes the rows in one transaction (rolled back on any error), and lifts the lock.
+   Nobody needs to restart the server. A crashed CLI cannot leave a lock behind: it expires after 10 minutes.
+6. Every action (also refusals and dry runs) is appended as a JSON line to `<data dir>/admin-audit.log`
+   (`/var/lib/forge/admin-audit.log`: time, actor, account/characters, counts, backup path). If the log cannot be written, nothing is changed.
+
+```bash
+ssh crafty-prod foe reset sharenz --dry-run
+ssh -t crafty-prod foe reset sharenz                     # asks you to type: sharenz
+ssh crafty-prod foe reset --all --force --confirm "RESET-ALL-ACCOUNTS 14"
+ssh crafty-prod 'tail -5 /var/lib/forge/admin-audit.log'
+```
+
+**The admin channel** (`src/server/admin.ts`): the running server listens on a unix socket
+`<data dir>/admin.sock` (mode 600) and requires the secret in `<data dir>/admin.token` (mode 600, new on every start)
+in each request. There is no TCP listener and Caddy only proxies the game port, so it is not reachable from
+outside. The CLI runs as the `forge` service user (the wrapper switches from root), so file ownership stays correct.
+Set `ADMIN_DIR` to move the socket and token.
+
+## Testing merchant
+
+Enable **Mira the Provisioner** in one character's hideout using the server CLI. The account must own the
+character; names are case-insensitive. It updates live without restarting and persists across releases.
+
+```bash
+# Local development (DB_PATH defaults to data/dev.db)
+./scripts/foe merchant sharenz eldurin enable
+# Production (the deploy installs foe and debug_merch on the server)
+ssh crafty-prod foe merchant sharenz eldurin enable
+ssh crafty-prod debug_merch sharenz eldurin disable     # the old name still works
+```
+
+Click Mira, south of Rook. Every visitor to that hideout can buy free scarabs (all tiers), crafting supplies,
+maps, equipment bases, uniques and flasks. Choose quantity (1–100), map tier (1–15), equipment item level
+(1–99), and normal/magic/rare rolls where applicable. Purchases go to the buyer's backpack; flasks refill
+their belt first. A purchase that cannot fit is rejected in full. Item and Atlas requirements still apply.
+Disabling removes Mira and immediately blocks purchases, including from already-open panels. Other
+characters on the account are unaffected. No hideout has her enabled by default.
+
+Mira's panel opens beside the inventory too: drag a stock row onto the backpack (the dropped cell picks the slot of the
+first stack) or use its Buy button.
+
+`npm run e2e -- --prod --only debugmerchant --size 1024x600` tests live activation, stock, dragging and buying,
+guest purchases, disable and restart with two real browser clients and a disposable database.
+`npm run e2e -- --only territory --size 1280x720` (and `1024x600`) plays pins, the Stock and Sources lenses, Re-chart, Recycle by dragging three maps into the bench, Rook's Maps tab and the Map Stash grouped by area.
+`npm run e2e -- --only selling --size 1280x720` (and `1024x600`) runs the debug merchant flow plus Rook: offering gear by
+drag, protected gear, appraisal, atomic payout, buying and gambling by drag onto a chosen cell, the can't-afford state and a restart.
+
+## Playing with friends
+
+1. Everyone registers their own account on the same server and creates a character.
+2. Press **P** (party panel) and invite a friend by character name. They accept from the card that pops up.
+3. Party members can **visit each other's hideouts** from the party panel ("Visit hideout", and "Go home").
+   Rook the merchant trades with everyone in any hideout, crafting works in any hideout, and the stash always opens
+   your own stash.
+4. The hideout owner opens the **Atlas** (click the Map Device in your hideout) and loads a map (the inventory opens beside the
+   table: drag a map and up to four scarabs from it into the dock's slots; items in your stash go into the inventory first). **A map
+   is bound to one area** ("Furnace Yard map"): the chart points at where it lives, there is no course to set, and an empty slot
+   leaves the chart browse-only. Drag a key from the inventory into the dock's **passage slot** (or, for a Bounty map bound to Iron March, click the slot) to open a sealed
+   area or the Pit of Echoes with the map. **Pin** up to three areas (the tray in the chart's corner, or the pin button on the selected area): their maps drop three times as
+   often. **Re-chart** (dock chip or bench) moves a map to a neighbouring area for Scrap; **Recycle** at the bench turns three maps of a tier into one of an area you choose; Rook's **Maps** tab sells low-tier maps of the areas you have cleared. Press Activate: **8 portals** open. Each entry, by
+   anyone, uses one portal (re-entering after death too). Click the portal to go in. Every area has **3 surge charges a day**
+   (the day turns over at 04:00 UTC; the dock shows the countdown and brass pips mark each area on the chart): Activate with
+   the dock's Surge toggle on spends one for +30% item quantity (not maps) and +15% rarity in that expedition, for the whole
+   party. With none left the area simply runs at the normal rate. Hourglass Sand (one area) and the Grand Hourglass (all areas)
+   refill charges from the rail and the dock.
+5. In the map, **loot is instanced**: everyone sees and picks up only their own drops. **XP is shared** by everyone
+   alive in the map. Monsters get tougher and more numerous per extra player.
+6. When you die, "Return to hideout" takes you to the map owner's hideout, right next to the portals, so you can
+   walk back in.
+7. To give someone an item, **trade** with them ("Trade" in the party panel or `/trade <name>` in chat), or drop it
+   on the floor for them to pick up.
+
+A party has up to 4 players; so does every map.
 
 ## Controls
 
 | Input | Action |
 |---|---|
-| `W` `A` `S` `D` | Move |
-| Left click | Aim and use the primary attack |
-| `Space` `Q` `E` `R` `F` | Use configured skills |
-| `1`–`5` | Use flask-belt slots |
-| `I` | Open or close the inventory |
-| `Alt` / `Option` | Show affix ranges and equipped-item comparisons |
-| `Ctrl` / `⌘` + click | Contextual quick transfer, equip, load, or buy |
-| Right click | Activate a crafting material |
+| `WASD` / arrow keys | Move |
+| Mouse | Aim |
+| `LMB` (hold) | Basic attack (Ember Lance) |
+| `Space` `Q` `E` `R` `F` | Skill slots 1–5 |
+| `1`–`4` | Flasks |
+| `T` | Toggle auto-attack (targets the nearest enemy near the cursor) |
+| `I` / `C` / `K` / `P` | Inventory / character / skills / party |
+| `Enter` | Chat (party chat; `/trade <name>` requests a trade) |
+| `Esc` | Close the top panel, or open the menu (the world keeps running: the game is online) |
+| `Alt` (hold) | Affix tiers, roll ranges and a comparison with your equipped item |
+| `Ctrl`/`⌘` + click | Quick-move an item (backpack ↔ stash or a special stash tab, into a trade offer, onto the crafting bench, into the open map device) |
+| `Shift` + `Ctrl`/`⌘` + click | Take exactly 1 currency from a Crafting Stash slot; gear or a map in the stash goes onto the crafting bench |
+| `RMB` on a currency, then `LMB` on an item | Apply the currency (`Esc` or `RMB` cancels) |
+| Click a hideout object | Map Device, stash, Rook the merchant, the anvil (Crafting Bench) |
+| Click a portal | Enter the map (from anywhere in the hideout); in a map, the return portal takes you back |
 
-Skill slots are configurable. The displayed hotkeys always reflect the current loadout.
+**Loot.** Currency, flasks and maps are collected by walking over them. **Equipment is picked up by clicking** its
+label or sprite. If it's out of reach, your character walks there first (any movement key cancels the walk). A click
+on a label always wins over the basic attack, and hovering a drop highlights its label.
 
-## Run it locally
+**Dropping items.** Drag an item out of any panel onto the world to drop it at your feet. Stash items can only be
+dropped in a hideout. A dropped item is **public**: anyone in the area sees it (its label has a neutral "ground"
+marker) and anyone can click it up. Public items are never collected by walking over them, and they vanish after
+10 minutes or when the area closes.
 
-### Requirements
+**Trading.** Request a trade from the party panel or with `/trade <name>`; the other player accepts from the card
+that pops up, anywhere on the server. Drag (or Ctrl-click) up to 12 backpack items into your offer. Any change to
+either offer clears both accepts and locks accepting for 2 seconds. When both accept, the server checks that both
+backpacks have room and swaps everything in one step. Offered items stay in your backpack but are locked until the
+trade closes.
 
-- Node.js 22.13 or newer
-- Docker Desktop with Docker Compose
-- npm
+**Crafting Bench.** Click the anvil in any hideout and drag (or Ctrl-click) an item onto its slot. Each recipe adds
+one chosen affix at a modest, fixed tier (never better than T4) for Forge Scrap, plus a matching essence for tagged
+affixes. It costs 1 Stability with no scar risk. An item holds at most one bench-crafted affix; it is marked
+"crafted" and can be removed for free ("Clear crafted affix"). The bench also lists every currency you carry: click
+one to apply it to the bench item, with the odds preview.
 
-### Start the complete development stack
+**Special stash tabs.** Next to your normal stash tabs are three icon tabs; they don't count towards the tab limit.
+- **Map Stash** (up to 400 maps): Ctrl-click or drag a map in and it files itself by tier and map type. Maps are
+  listed by tier (click a tier) and grouped by map type, with their mods and a full tooltip. Drag one out, Ctrl-click
+  it to your backpack and then drag it into the Atlas table's map slot (the table takes maps from the inventory only).
+- **Crafting Stash** (two tabs: equipment currency and map currency): one labelled slot per currency, up to 5,000
+  each. Drop or Ctrl-click any currency stack onto either tab and it files into its slot; **Deposit all** empties your
+  backpack's currency into it. Ctrl-click a slot to take a stack, Shift+Ctrl-click to take exactly one. Right-click a
+  slot to arm that currency and left-click an item to craft with it straight from the stash. Rook and the Crafting
+  Bench take what your backpack can't pay from the Crafting Stash, so "Deposit all" never leaves you short.
+  **Work slot**: next to the currency tiles sits one slot for the gear or map you are crafting. Drag an item out of the
+  inventory into it (or Ctrl-click it while a Crafting Stash tab is open), then **click a currency tile** to craft on it
+  without moving anything: the new or changed modifiers light up, Stability and the last crafts are shown, and
+  Equip / Return / Bench sit below. Fracture Core, Anneal, Transmute and Void Needle ask first. The item is saved
+  with your account storage, so it is still there after a restart or on another character.
 
-```bash
-git clone https://github.com/sharenz/crafty-combat.git
-cd crafty-combat
-npm install
-npm run dev
-```
+**Stash search.** The search box on the stash panel (`Ctrl`/`⌘`+`F` while the stash is open, `Esc` clears it)
+highlights matching items in every tab and in your backpack and dims the rest; each tab shows its match count. It
+matches names, base types, affix texts and names, tags, currency and map names, and rarity words. Space-separated
+terms must all match, `"quoted phrases"` match as a whole, `a|b` matches either, and `!term` excludes.
 
-Open [http://localhost:3001](http://localhost:3001). The development command starts:
+## Map types, bosses and debuffs
 
-- PostgreSQL in Docker on `127.0.0.1:5434`
-- the authoritative game server on `127.0.0.1:2567`
-- the web client on `127.0.0.1:3001`
+Every map type has its own family of five monsters, a **lieutenant** on wave 3 and a **boss** on wave 6. The map
+device readout names the boss and lists the map's **Afflictions** (which debuffs its monsters inflict, from what, and
+the counter).
 
-Local development is entirely self-contained. Copy `.env.example` to `.env` only when you need to override the safe defaults.
+| Map type | Family | Lieutenant | Boss | Debuffs |
+|---|---|---|---|---|
+| Ashen Forge | Ashling, Ember Skitter, Cinder Spitter, Rift Stalker, Ironhide Brute | Ashbound Herald | Cinder Matriarch | Burning, Withered |
+| Rimed Ossuary | Bone Thrall, Rimeshade, Frost Weaver, Glacial Wisp, Ossuary Golem | Bone Chorister | The Hollow Warden | Chilled, Rooted, Frozen |
+| Iron Coliseum | Pit Hound, Chain Thrall, Iron Crossbowman, Shieldbearer, Tar Slinger | The Chainmaster | Varkus, the Iron Champion | Bleeding, Rooted |
 
-Create an account from the opening screen on your first visit. Existing accounts
-created before password authentication was introduced need an administrator to set
-their initial password through `crafty-cli dev` (or `crafty-cli prod` for production).
+| Debuff | What it does | Counter |
+|---|---|---|
+| Chilled | 30% slower movement and casting | Cold resistance shortens it |
+| Frozen | Can't move or cast for 0.8 s (only from telegraphed attacks: an Ice Prison, a Glacial Wisp at point blank), then 3 s immune | Walk out of the telegraph |
+| Rooted | Can't move, can still cast; no new root for 3 s after one | **Rift Step** breaks it |
+| Burning | Fire damage over 3 s | Life flask; fire resistance shortens it |
+| Bleeding | Physical damage over 4 s, doubled while you move, stacks to 3 | Life flask; stand still |
+| Shocked | 20% more damage taken (no monster inflicts it yet) | Lightning resistance shortens it |
+| Withered | −12% to all elemental and void resistances per stack, stacks to 3 | Focus flask |
 
-```bash
-npm run db:down       # Stop the local PostgreSQL container
-npm run dev:web       # Start only the web client
-npm run dev:server    # Start only the game server
-```
+A debuff never comes from an invisible source: every root and freeze comes from a projectile you can see or a
+telegraph you can read. Cinder Ward makes debuffs run out twice as fast; dying or killing the boss clears them. Hold
+`Alt` (or open a panel) and hover a debuff icon for its details. Iron Coliseum tips: Shieldbearers block your
+projectiles from the front (flank them), and Varkus's charge lane is drawn before he runs it.
 
-## Quality gates
+## Deploying
 
-```bash
-npm run typecheck
-npm run lint
-npm test
-npm run test:multiplayer:db
-```
-
-The test suite covers the game engine, authoritative profile commands, real WebSocket rooms, four-player party and map flows, forged-command rejection, free-for-all loot, item ownership, trading, persistence, simulation performance, production builds, and server-rendered metadata.
-
-## Architecture at a glance
-
-```text
-Browser / React UI / Phaser renderer
-                │
-                │ validated player intent
-                ▼
-      Colyseus authoritative rooms
-                │
-       game services + simulation
-                │
-                ▼
-     PostgreSQL persistence and coordination
-```
-
-- `app/game/` — serializable domain models, stats, items, crafting, maps, loot, and balance configuration
-- `app/game2d/` — Phaser presentation, interpolation, input, animation, VFX, and audio
-- `app/components/` — React shell, HUD, inventory, stash, merchants, map device, and character interfaces
-- `multiplayer/` — runtime-validated protocol contracts and compact wire formats shared by client and server
-- `server/rooms/` — authoritative hideout and map rooms running the 20 Hz simulation
-- `server/coordination/` — PostgreSQL-backed parties, expeditions, portals, leases, and room claims
-- `server/db/migrations/` — ordered transactional schema migrations and relational ownership constraints
-- `tests/` — engine, multiplayer, persistence, performance, rendering, and end-to-end coverage
-
-The browser never creates items or decides damage, drops, cooldowns, ownership, experience, or progression. Solo and co-op use the same server rooms and commands, preventing a separate offline ruleset from drifting away from multiplayer.
-
-Read the deeper technical documents:
-
-- [Architecture](./ARCHITECTURE.md)
-- [AI-assisted asset pipeline](./ASSET_PIPELINE.md)
-- [Game design foundation](./GAME_DESIGN.md)
-- [Server scaling](./SERVER_SCALING.md)
-- [Production deployment](./DEPLOYMENT.md)
-
-## Production and administration
-
-Production runs the web client, authoritative Node/Colyseus server, and PostgreSQL as an isolated Docker Compose stack on one VM. Deployment remains intentionally simple:
+Production is one VM running the game server under systemd behind Caddy (automatic HTTPS). The settings (SSH host
+alias, IP, domain) are in `scripts/deploy/config.sh`; override them in `scripts/deploy/.env.deploy` (git-ignored).
 
 ```bash
-make deploy
+npm run deploy:setup   # once per VM: Node packages, the forge user, systemd unit, Caddy, firewall
+npm run deploy         # typecheck + tests, build, upload a new release, switch, health-check, roll back on failure
 ```
 
-Realm administration is available through the interactive terminal console:
+`npm run deploy` (`SKIP_CHECKS=1` skips the typecheck and tests) uploads an immutable release to
+`/opt/forge/releases/<time>-<commit>`, installs the runtime dependencies, points `/opt/forge/current` at it and
+restarts the `forge` service. The database lives outside the releases, in `/var/lib/forge/forge.db`. The last 5
+releases are kept.
 
-```bash
-npm link
-crafty-cli dev
-crafty-cli prod
-```
+**Deploys keep your session.** On `systemctl restart` the server gets SIGTERM and:
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) before provisioning or deploying a server.
+1. announces "Server update in 20 seconds — your party and open maps are kept." (chat and a toast) and keeps the
+   world running for `DRAIN_SECONDS` (20 in production);
+2. saves every character, party and open map, then closes the sockets with code 4004;
+3. the clients show "Server updating — reconnecting…" and reconnect on their own when the new server is up.
 
-The interactive asset-production wizard guides GPT Image and Veo source creation, writes reusable prompts, tracks expected media, and builds safe review candidates:
+After the restart, parties are back, and every open map that wasn't cleared is recreated with the same portals left.
+Players who were inside go straight back into it without using a portal (the fight restarts from wave 1, and loot
+nobody picked up yet is lost). Players who were visiting a party member's hideout go back to that hideout. Items a player
+dropped on the floor go back to whoever dropped them, and open trades are cancelled.
 
-```bash
-npm run assets
-# or, after npm link
-crafty-assets
-```
+The systemd unit (`scripts/deploy/forge.service`, re-installed by every deploy) runs the server as a single
+`node --import tsx` process with `KillMode=mixed`, so the server receives exactly one SIGTERM and gets 60 s to
+drain and save. Server logs: `ssh crafty-prod journalctl -u forge -f`.
 
-## Community
+## How the code is organised
 
-Forge of Echoes is being built in the open, one system at a time. Join the community to share feedback, report bugs, discuss builds, or follow development:
+| Document | What it covers |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Module map, dependency rules, timing, determinism, the online data flow |
+| [GAME_SPEC.md](GAME_SPEC.md) | The buildable spec: every number, rule, monster and online behaviour |
+| [CONCEPTS.md](CONCEPTS.md) | The design brief: pillars, the numeric core, why things are the way they are |
+| [AGENTS.md](AGENTS.md) | Contributor guidance, including the UI type scale |
 
-### [Join the Forge of Echoes Discord →](https://discord.gg/avMe75Xaf)
-
-When reporting a bug, please include what you were doing, whether you were playing solo or in a party, and any relevant browser or server logs. Focused reproduction steps are extremely valuable for an authoritative multiplayer game.
-
----
-
-<p align="center">
-  <strong>The forge remembers every choice.</strong><br />
-  What will your echoes become?
-</p>
+In short: `src/contracts` holds the shared interfaces; `src/game` + `src/data` the rules; `src/sim` the deterministic
+simulation; `src/server` the authoritative server (auth, SQLite, instances, parties, trades); `src/net` the binary
+snapshot protocol; and `src/client`, `src/render`, `src/present`, `src/art`, `src/audio` and `src/ui` the browser
+side. Each module's `index.ts` starts with a header describing its conventions, and tests live in `tests/<module>/`.

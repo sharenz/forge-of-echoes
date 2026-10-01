@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ossuary Bestiary</title>
+    <style>
+      :root {
+        --ink: #0d0b0e;
+        --coal: #1a1619;
+        --char: #2a2326;
+        --iron: #3b3438;
+        --stone: #7d7278;
+        --bone: #cbbfa8;
+        --ember: #e8662a;
+        --frost: #7fc6e8;
+        --font-ui-caption: 14px;
+        --font-ui-secondary: 16px;
+        --font-ui-body: 19px;
+        --font-ui-title: 28px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 20px 24px 60px;
+        background: radial-gradient(ellipse at 50% 0%, #1a1c24 0%, var(--ink) 70%);
+        background-color: var(--ink);
+        color: var(--bone);
+        font-family: 'Alegreya Sans', system-ui, sans-serif;
+        font-size: var(--font-ui-secondary);
+      }
+      header { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; margin-bottom: 6px; }
+      h1 { font-family: 'Cinzel', Georgia, serif; font-size: var(--font-ui-title); font-weight: 600; margin: 0; color: var(--frost); }
+      h2 {
+        font-family: 'Cinzel', Georgia, serif; font-size: var(--font-ui-body); font-weight: 600; margin: 22px 0 8px;
+        color: var(--bone); border-bottom: 1px solid var(--iron); padding-bottom: 5px;
+      }
+      .meta { font-size: var(--font-ui-caption); color: var(--stone); }
+      .bad { color: var(--ember); font-size: var(--font-ui-body); }
+      .ok { color: var(--frost); font-size: var(--font-ui-secondary); }
+      .grid { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+      .card {
+        background: linear-gradient(180deg, #1a1a20, #121116);
+        border: 1px solid #2a2a33; border-radius: 3px; padding: 6px 6px 4px;
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+      }
+      canvas { image-rendering: pixelated; display: block; }
+      .label { font-size: var(--font-ui-caption); color: var(--bone); white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Rimed Ossuary · Bestiary</h1>
+      <span class="meta" id="stats"></span>
+    </header>
+    <div id="check"></div>
+    <main id="app"></main>
+    <script type="module">
+      // ?view=lineup,strips,scene (default all)  ?kind=boneThrall,...  ?anim=idle,cast  ?scale=5  ?lit=0|1|both  ?t=<seconds for scene>
+      import { generateSprites } from '/src/art/index.ts';
+      import { ossuarySprites } from '/src/art/bestiary/ossuary.ts';
+      import { OSSUARY_MONSTERS, NEW_REQUIRED_SPRITES } from '/src/contracts/bestiary.ts';
+
+      const params = new URLSearchParams(location.search);
+      const view = (params.get('view') ?? 'lineup,strips,scene').split(',');
+      const app = document.getElementById('app');
+      const base = generateSprites();
+      const t0 = performance.now();
+      const mine = ossuarySprites();
+      const ms = performance.now() - t0;
+      const all = [...base, ...mine];
+      const byId = (id) => all.find((s) => s.id === id);
+      const frames = mine.reduce((n, s) => n + s.frames.length, 0);
+      document.getElementById('stats').textContent = `${mine.length} sprites · ${frames} frames · generated in ${ms.toFixed(0)} ms`;
+
+      // --- coverage + consistency check ---
+      const want = [
+        ...NEW_REQUIRED_SPRITES.filter((id) => OSSUARY_MONSTERS.some((m) => id.startsWith(`monster/${m}/`))),
+      ];
+      const missing = want.filter((id) => !mine.some((s) => s.id === id));
+      const problems = [];
+      for (const m of OSSUARY_MONSTERS) {
+        const set = mine.filter((s) => s.id.startsWith(`monster/${m}/`));
+        const sizes = new Set(set.map((s) => `${s.width}x${s.height}@${s.anchorX},${s.anchorY}`));
+        if (sizes.size > 1) problems.push(`${m}: mixed sizes/anchors ${[...sizes].join(' ')}`);
+        for (const s of set) {
+          for (const f of s.frames) if (f.width !== s.width || f.height !== s.height) problems.push(`${s.id}: frame size`);
+          if (s.frames.some((f) => !f.data.some((v, i) => i % 4 === 3 && v > 0))) problems.push(`${s.id}: empty frame`);
+        }
+      }
+      const check = document.getElementById('check');
+      check.innerHTML = missing.length || problems.length
+        ? `<div class="bad">missing: ${missing.join(', ') || '-'}<br>problems: ${problems.join(' · ') || '-'}</div>`
+        : `<div class="ok">coverage ok · ${want.length} required ids present · sizes/anchors consistent</div>`;
+      console.log('[shot] coverage', missing.length ? 'MISSING ' + missing.join(',') : 'ok', problems.join(' | '));
+
+      // --- helpers ---
+      const AMBIENT = 0.3;
+      function frameCanvas(img, emis, lit, bg) {
+        const c = document.createElement('canvas');
+        c.width = img.width; c.height = img.height;
+        const ctx = c.getContext('2d');
+        const out = ctx.createImageData(img.width, img.height);
+        for (let i = 0; i < img.data.length; i += 4) {
+          let r = img.data[i], g = img.data[i + 1], b = img.data[i + 2];
+          const a = img.data[i + 3] / 255;
+          const e = emis ? emis.data[i + 3] / 255 : 0;
+          if (lit) {
+            // game look: the ossuary ambient with the renderer's 2.5x actor lift and exposure
+            const G = params.get('look') === 'game';
+            const [ar, ag, ab] = G ? [0.26 * 2.5 * 1.1, 0.29 * 2.5 * 1.1, 0.36 * 2.5 * 1.1] : [AMBIENT, AMBIENT, AMBIENT];
+            r = r * ar * (1 - e) + (emis ? emis.data[i] * e : 0);
+            g = g * ag * (1 - e) + (emis ? emis.data[i + 1] * e : 0);
+            b = b * ab * (1 - e) + (emis ? emis.data[i + 2] * e : 0);
+          }
+          // like the renderer, emissive glows even where the albedo is transparent (halo / trail pixels)
+          const halo = lit && emis ? e * (1 - a) : 0;
+          out.data[i] = r * a + bg[0] * (1 - a) + (halo ? emis.data[i] * halo : 0);
+          out.data[i + 1] = g * a + bg[1] * (1 - a) + (halo ? emis.data[i + 1] * halo : 0);
+          out.data[i + 2] = b * a + bg[2] * (1 - a) + (halo ? emis.data[i + 2] * halo : 0);
+          out.data[i + 3] = 255;
+        }
+        ctx.putImageData(out, 0, 0);
+        return c;
+      }
+      function section(title) {
+        const h = document.createElement('h2');
+        h.textContent = title;
+        app.append(h);
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+        app.append(grid);
+        return grid;
+      }
+      const hash = (x, y, s) => {
+        let h = (Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(s + 1, 982451653)) >>> 0;
+        h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+        h = Math.imul(h ^ (h >>> 13), 3266489917) >>> 0;
+        return (h ^ (h >>> 16)) >>> 0;
+      };
+
+      // --- compositing on a virtual screen: floor, blob shadows, actors, light + bloom ---
+      function makeScreen(VW, VH) {
+        return { VW, VH, buf: new Float32Array(VW * VH * 4), ebuf: new Float32Array(VW * VH * 4), amask: new Float32Array(VW * VH) };
+      }
+      function blit(S, img, emis, x0, y0, flip, isActor = false) {
+        const { VW, VH, buf, ebuf, amask } = S;
+        const w = img.width, h = img.height;
+        for (let y = 0; y < h; y++) {
+          const ty = y0 + y;
+          if (ty < 0 || ty >= VH) continue;
+          for (let x = 0; x < w; x++) {
+            const tx = x0 + x;
+            if (tx < 0 || tx >= VW) continue;
+            const sx = flip ? w - 1 - x : x;
+            const si = (y * w + sx) * 4;
+            const a = img.data[si + 3] / 255;
+            const di = (ty * VW + tx) * 4;
+            if (a <= 0) {
+              // emissive-only pixel: glows over whatever is below
+              if (emis && emis.data[si + 3] > 0) {
+                const ea = emis.data[si + 3] / 255;
+                for (let k = 0; k < 3; k++) ebuf[di + k] = Math.max(ebuf[di + k], emis.data[si + k] * ea);
+              }
+              continue;
+            }
+            for (let k = 0; k < 3; k++) buf[di + k] = img.data[si + k] * a + buf[di + k] * (1 - a);
+            buf[di + 3] = 255;
+            amask[ty * VW + tx] = isActor ? a + amask[ty * VW + tx] * (1 - a) : amask[ty * VW + tx] * (1 - a);
+            if (emis) {
+              const ea = emis.data[si + 3] / 255;
+              for (let k = 0; k < 3; k++) ebuf[di + k] = Math.max(ebuf[di + k] * (1 - a), emis.data[si + k] * ea);
+            } else for (let k = 0; k < 3; k++) ebuf[di + k] *= 1 - a;
+          }
+        }
+      }
+      function floor(S, theme) {
+        const fl = byId(`tile/${theme}/floor`), de = byId(`tile/${theme}/detail`);
+        for (let r = 0; r < Math.ceil(S.VH / 16); r++) for (let c = 0; c < Math.ceil(S.VW / 16); c++) {
+          const k = hash(c, r, 2) % fl.frames.length;
+          blit(S, fl.frames[k], fl.emissive?.[k], c * 16, r * 16, false);
+          if (hash(c, r, 3) % 100 < 9) { const d = hash(c, r, 4) % de.frames.length; blit(S, de.frames[d], de.emissive?.[d], c * 16, r * 16, false); }
+        }
+      }
+      function shadowBlob(S, x, y, sw) {
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -sw / 2; dx <= sw / 2; dx++) {
+          const tx = Math.round(x + dx), ty = Math.round(y + dy - 1);
+          if (tx < 0 || ty < 0 || tx >= S.VW || ty >= S.VH) continue;
+          if ((dx / (sw / 2)) ** 2 + (dy / 2.4) ** 2 > 1) continue;
+          const di = (ty * S.VW + tx) * 4;
+          for (let k = 0; k < 3; k++) S.buf[di + k] *= 0.55;
+        }
+      }
+      function actor(S, s, f, x, y, flip) {
+        const ax = flip ? s.width - s.anchorX : s.anchorX;
+        blit(S, s.frames[f], s.emissive?.[f], Math.round(x - ax), Math.round(y - s.anchorY), flip, true);
+      }
+      function present(S, canvas, lit, lights) {
+        const { VW, VH, buf, ebuf } = S;
+        const out = canvas.getContext('2d').createImageData(VW, VH);
+        const bloom = new Float32Array(VW * VH * 3);
+        if (lit) {
+          const R = 3;
+          for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
+            let r = 0, g = 0, b = 0, n = 0;
+            for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+              const tx = x + dx, ty = y + dy;
+              if (tx < 0 || ty < 0 || tx >= VW || ty >= VH) continue;
+              const i = (ty * VW + tx) * 4;
+              r += ebuf[i]; g += ebuf[i + 1]; b += ebuf[i + 2]; n++;
+            }
+            const o = (y * VW + x) * 3;
+            bloom[o] = r / n; bloom[o + 1] = g / n; bloom[o + 2] = b / n;
+          }
+        }
+        for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
+          const i = (y * VW + x) * 4;
+          let r = buf[i], g = buf[i + 1], b = buf[i + 2];
+          if (lit) {
+            const GAME = params.get('look') === 'game';
+            const am = GAME ? S.amask[y * VW + x] : 0;
+            let lr = GAME ? 0.26 * (am ? 2.5 : 0.88) : 0.22, lg = GAME ? 0.29 * (am ? 2.5 : 0.88) : 0.21, lb = GAME ? 0.36 * (am ? 2.5 : 0.88) : 0.26;
+            for (const L of lights) {
+              const d = Math.hypot(x - L.x, (y - L.y) * 1.3) / L.r;
+              if (d >= 1) continue;
+              const k = (1 - d) * (1 - d) * 1.4 * L.k;
+              lr += k * L.col[0]; lg += k * L.col[1]; lb += k * L.col[2];
+            }
+            const o = (y * VW + x) * 3;
+            const e = Math.max(ebuf[i], ebuf[i + 1], ebuf[i + 2]) / 255;
+            const cap = GAME ? 3 : 1.3, ex = GAME ? 1.1 : 1;
+            r = (r * Math.min(cap, lr) * (1 - e) + ebuf[i] + bloom[o] * 0.9) * ex;
+            g = (g * Math.min(cap, lg) * (1 - e) + ebuf[i + 1] + bloom[o + 1] * 0.9) * ex;
+            b = (b * Math.min(cap, lb) * (1 - e) + ebuf[i + 2] + bloom[o + 2] * 0.9) * ex;
+          }
+          out.data[i] = r; out.data[i + 1] = g; out.data[i + 2] = b; out.data[i + 3] = 255;
+        }
+        canvas.getContext('2d').putImageData(out, 0, 0);
+      }
+
+      const OSS = ['boneThrall', 'rimeshade', 'frostWeaver', 'glacialWisp', 'ossuaryGolem', 'boneChorister', 'hollowWarden'];
+      const REF = ['sorceress/idle/east', 'monster/ashling/idle', 'monster/emberSkitter/idle', 'monster/riftStalker/idle', 'monster/ironhideBrute/idle', 'monster/ashboundHerald/idle', 'monster/cinderMatriarch/idle'];
+
+      // =============================================================================================================
+      // Lineup: reference roster + ossuary roster on one baseline, on the ossuary floor, plain and lit.
+      // =============================================================================================================
+      if (view.includes('lineup')) {
+        const g = section('Scale lineup · reference (left) vs ossuary (right) · 1× art on the ossuary floor, shown at 3×');
+        const frameIx = Number(params.get('lf') ?? 0);
+        const anim = params.get('lanim') ?? 'idle';
+        const ids = [...REF, ...OSS.map((k) => `monster/${k}/${anim}`)];
+        const sprites = ids.map(byId).filter(Boolean);
+        const gap = 6;
+        const VW = sprites.reduce((n, s) => n + s.width + gap, gap);
+        const VH = 104;
+        for (const lit of [false, true]) {
+          const S = makeScreen(VW, VH);
+          floor(S, 'rimedOssuary');
+          let x = gap;
+          const lights = [];
+          for (const s of sprites) {
+            const f = Math.min(frameIx, s.frames.length - 1);
+            shadowBlob(S, x + s.anchorX, VH - 8, Math.max(8, s.width * 0.55));
+            actor(S, s, f, x + s.anchorX, VH - 8, false);
+            if (s.id.startsWith('sorceress')) lights.push({ x: x + s.anchorX, y: VH - 24, r: 60, k: 1, col: [1, 0.62, 0.32] });
+            x += s.width + gap;
+          }
+          const c = document.createElement('canvas');
+          c.width = VW; c.height = VH;
+          c.style.width = `${VW * 3}px`; c.style.height = `${VH * 3}px`;
+          present(S, c, lit, lights);
+          const card = document.createElement('div');
+          card.className = 'card';
+          const label = document.createElement('div');
+          label.className = 'label';
+          label.textContent = lit ? 'lit (ambient + emissive + bloom)' : 'plain';
+          card.append(c, label);
+          g.append(card);
+        }
+      }
+
+      // =============================================================================================================
+      // Frame strips per monster and animation, with the anchor marked (blue tick at the anchor column, below).
+      // =============================================================================================================
+      if (view.includes('strips')) {
+        const kinds = params.get('kind')?.split(',') ?? OSS;
+        const litMode = params.get('lit') ?? 'both';
+        for (const k of kinds) {
+          const set = mine.filter((s) => s.id.startsWith(`monster/${k}/`));
+          if (!set.length) continue;
+          const g = section(`${k} · ${set[0].width}×${set[0].height} · anchor ${set[0].anchorX},${set[0].anchorY}`);
+          const scale = Number(params.get('scale') ?? (set[0].width > 50 ? 3 : set[0].width > 30 ? 4 : 6));
+          const anims = params.get('anim')?.split(',');
+          for (const s of set) {
+            if (anims && !anims.includes(s.id.split('/')[2])) continue;
+            for (const lit of litMode === 'both' ? [false, true] : [litMode === '1']) {
+              const n = s.frames.length;
+              const c = document.createElement('canvas');
+              const fw = s.width * scale;
+              c.width = n * (fw + 4) - 4;
+              c.height = s.height * scale + 4;
+              const ctx = c.getContext('2d');
+              ctx.imageSmoothingEnabled = false;
+              s.frames.forEach((f, i) => {
+                const fc = frameCanvas(f, s.emissive?.[i], lit, lit ? [14, 14, 20] : [34, 34, 44]);
+                ctx.drawImage(fc, i * (fw + 4), 0, fw, s.height * scale);
+                ctx.fillStyle = 'rgba(122,162,255,0.9)';
+                ctx.fillRect(i * (fw + 4) + s.anchorX * scale, s.height * scale, scale, 4);
+                ctx.fillStyle = 'rgba(122,162,255,0.25)';
+                ctx.fillRect(i * (fw + 4), s.anchorY * scale, fw, 1);
+              });
+              const card = document.createElement('div');
+              card.className = 'card';
+              const label = document.createElement('div');
+              label.className = 'label';
+              label.textContent = `${s.id.split('/')[2]} · ${n}f @${s.fps}${s.loop ? ' loop' : ''}${lit ? ' · lit' : ''}`;
+              card.append(c, label);
+              g.append(card);
+            }
+          }
+        }
+      }
+
+      // =============================================================================================================
+      // Gameplay scene: an ossuary wave around the sorceress, 1× on a 400×225 virtual screen, lit, shown at 3×.
+      // =============================================================================================================
+      if (view.includes('scene')) {
+        const g = section('Gameplay scene · rimedOssuary · 400×225 at 3×, lit');
+        const VW = 400, VH = 225;
+        const S = makeScreen(VW, VH);
+        floor(S, 'rimedOssuary');
+        let seed = 17;
+        const rnd = () => ((seed = hash(seed, 11, 5)) % 10000) / 10000;
+        const T = Number(params.get('t') ?? 0.4);
+        const actors = [];
+        const add = (id, x, y, o = {}) => actors.push({ id, x, y, flip: false, phase: rnd() * 10, light: 0, ...o });
+        const px = VW / 2, py = VH / 2 + 12;
+        add('sorceress/cast/east', px, py, { light: 1 });
+        const ring = (id, n, r0, r1) => {
+          for (let i = 0; i < n; i++) {
+            const a = rnd() * Math.PI * 2, r = r0 + rnd() * (r1 - r0);
+            const x = px + Math.cos(a) * r * 1.6, y = py + Math.sin(a) * r;
+            if (x < 8 || x > VW - 8 || y < 30 || y > VH - 4) continue;
+            add(id, x, y, { flip: x > px });
+          }
+        };
+        ring('monster/boneThrall/move', 30, 40, 110);
+        ring('monster/rimeshade/move', 8, 40, 100);
+        ring('monster/glacialWisp/move', 6, 34, 90);
+        add('monster/frostWeaver/idle', px + 150, py - 60, { flip: true });
+        add('monster/frostWeaver/windup', px - 150, py + 55);
+        add('monster/ossuaryGolem/move', px - 70, py - 55);
+        add('monster/ossuaryGolem/windup', px + 110, py + 30, { flip: true });
+        add('monster/boneChorister/sing', px - 140, py - 25, { light: 0.4 });
+        add('monster/hollowWarden/idle', px + 145, py + 85, { flip: true, light: 0.6 });
+        add('monster/glacialWisp/windup', px + 36, py - 30, { flip: true });
+        add('monster/boneThrall/corpse', px - 30, py + 40);
+        add('monster/boneThrall/corpse', px + 60, py + 60);
+        const sorted = actors.filter((a) => byId(a.id)).sort((a, b) => a.y - b.y);
+        for (const a of sorted) shadowBlob(S, a.x, a.y, Math.max(8, byId(a.id).width * 0.5));
+        const lights = [];
+        for (const a of sorted) {
+          const s = byId(a.id);
+          const i = Math.floor((T + a.phase) * s.fps);
+          const f = s.loop ? i % s.frames.length : Math.min(s.frames.length - 1, i % (s.frames.length + 4));
+          actor(S, s, f, a.x, a.y, a.flip);
+          if (a.light) lights.push({ x: a.x, y: a.y - s.height * 0.6, r: 34 + 70 * a.light, k: a.light, col: a.id.startsWith('sorceress') ? [1, 0.62, 0.32] : [0.55, 0.8, 1] });
+        }
+        const c = document.createElement('canvas');
+        c.width = VW; c.height = VH;
+        c.style.width = `${VW * 3}px`; c.style.height = `${VH * 3}px`;
+        present(S, c, true, lights);
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.append(c);
+        g.append(card);
+      }
+    </script>
+  </body>
+</html>

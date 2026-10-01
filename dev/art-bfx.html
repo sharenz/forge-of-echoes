@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bestiary FX Gallery</title>
+    <style>
+      :root {
+        --ink: #0d0b0e;
+        --iron: #3b3438;
+        --stone: #7d7278;
+        --bone: #cbbfa8;
+        --gold: #e0b04a;
+        --font-ui-caption: 14px;
+        --font-ui-secondary: 16px;
+        --font-ui-body: 19px;
+        --font-ui-title: 28px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 16px 20px 48px;
+        background: radial-gradient(ellipse at 50% 0%, #211a1e 0%, var(--ink) 70%);
+        background-color: var(--ink);
+        color: var(--bone);
+        font-family: 'Alegreya Sans', system-ui, sans-serif;
+        font-size: var(--font-ui-secondary);
+      }
+      h1 { font-family: 'Cinzel', Georgia, serif; font-size: var(--font-ui-title); margin: 0 0 4px; color: var(--gold); }
+      h2 {
+        font-family: 'Cinzel', Georgia, serif; font-size: var(--font-ui-body); font-weight: 600; margin: 18px 0 6px;
+        border-bottom: 1px solid var(--iron); padding-bottom: 3px;
+      }
+      .meta { font-size: var(--font-ui-caption); color: var(--stone); }
+      .grid { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+      .card {
+        background: linear-gradient(180deg, #1c171a, #141013);
+        border: 1px solid #2c2428; border-radius: 3px; padding: 5px 5px 3px;
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+      }
+      canvas, img { image-rendering: pixelated; display: block; }
+      .label { font-size: var(--font-ui-caption); white-space: nowrap; }
+      .hud { display: flex; gap: 4px; align-items: center; padding: 6px 8px; background: linear-gradient(180deg, #1b1618, #0f0c0e); border: 1px solid #3b3438; }
+    </style>
+  </head>
+  <body>
+    <h1>Bestiary FX · debuffs, projectiles, areas, icons</h1>
+    <div class="meta" id="stats"></div>
+    <main id="app"></main>
+    <script type="module">
+      // ?view=all|game|debuffs|variants|proj|areas|prison|icons|scene|zoom (comma list; 'all' = everything but zoom)
+      // ?t=<seconds> freezes the clock
+      // ?only=<debuff,...>  restricts the debuff views   ?f=<frame> pins the frame of the 'game' view
+      //
+      // Composite model = the renderer's (src/render/shaders.ts): albedo × (theme ambient + light) where the emissive
+      // mask is absent, + emissive mask glow, + actor lift (albedo × ambient × 1.5) on characters/monsters, + a soft
+      // pixel bloom of the emissive layer. Hostile projectiles get the presenter's emissive 0.7 and dark-red outline.
+      import { generateSprites } from '/src/art/index.ts';
+      import { generateArt } from '/src/art/index.ts';
+      import { coliseumSprites } from '/src/art/bestiary/coliseum.ts';
+      import { ossuarySprites } from '/src/art/bestiary/ossuary.ts';
+      import { bestiaryFxSprites, DEBUFF_PLAYER_TINT, debuffOverlayFrame, icePrisonShardFrame, ICE_PRISON_SHARDS, ROOTED_VARIANTS, CHAIN_PERIOD } from '/src/art/bestiary/fx.ts';
+      import { debuffIconPixels, bestiaryIconIds } from '/src/art/bestiary/icons.ts';
+      import { NEW_REQUIRED_SPRITES, DEBUFF_ICON_IDS, PLAYER_DEBUFFS } from '/src/contracts/bestiary.ts';
+
+      const params = new URLSearchParams(location.search);
+      const view = (params.get('view') ?? 'all').split(',');
+      const show = (n) => view.includes('all') || view.includes(n);
+      const fixedT = params.has('t') ? Number(params.get('t')) : null;
+      const onlyD = params.get('only')?.split(',') ?? null;
+      const app = document.getElementById('app');
+
+      const t0 = performance.now();
+      const mine = bestiaryFxSprites();
+      const ms = performance.now() - t0;
+      let others = [];
+      try { others = [...coliseumSprites(), ...ossuarySprites()]; } catch (e) { console.warn('bestiary monsters unavailable', e); }
+      const base = generateSprites();
+      const art = generateArt();
+      const byId = new Map([...base, ...others, ...mine].map((s) => [s.id, s]));
+      const has = (id) => byId.has(id);
+      const get = (id) => { const s = byId.get(id); if (!s) throw new Error('missing ' + id); return s; };
+      const mineIds = new Set(mine.map((s) => s.id));
+      const wanted = NEW_REQUIRED_SPRITES.filter((id) => id.startsWith('proj/') || id.startsWith('fx/'));
+      const missing = wanted.filter((id) => !mineIds.has(id));
+      document.getElementById('stats').textContent =
+        `${mine.length} sprites · ${mine.reduce((n, s) => n + s.frames.length, 0)} frames · ${ms.toFixed(0)} ms · coverage of proj/ + fx/ ids: ${wanted.length - missing.length}/${wanted.length}` +
+        (missing.length ? ` · MISSING: ${missing.join(', ')}` : '') + ` · icons ${bestiaryIconIds.length}/${DEBUFF_ICON_IDS.length} · extra: ${mine.map((s) => s.id).filter((id) => !wanted.includes(id)).join(', ')}`;
+      console.log('[shot] bfx generated', ms.toFixed(1), 'ms', missing.length ? 'missing ' + missing.join(',') : 'all present');
+
+      // ------------------------------------------------------------------------------------------------------
+      const THEMES = {
+        rimedOssuary: { amb: [0.26, 0.29, 0.36], pl: [0.95, 0.8, 0.7] },
+        ironColiseum: { amb: [0.32, 0.26, 0.22], pl: [1, 0.72, 0.52] },
+        ashenForge: { amb: [0.45, 0.325, 0.295], pl: [1, 0.72, 0.52] },
+        none: { amb: [1, 1, 1], pl: [0, 0, 0] },
+      };
+      const HOST = { emissive: 0.7, outline: [0.45, 0.04, 0.03] };
+
+      function section(title) {
+        const h = document.createElement('h2'); h.textContent = title; app.append(h);
+        const g = document.createElement('div'); g.className = 'grid'; app.append(g);
+        return g;
+      }
+      function card(g, el, label) {
+        const c = document.createElement('div'); c.className = 'card'; c.append(el);
+        const l = document.createElement('div'); l.className = 'label'; l.textContent = label; c.append(l);
+        g.append(c);
+        return c;
+      }
+      const info = (s) => `${s.width}×${s.height} · ${s.frames.length}f${s.fps ? ` @${s.fps}` : ''}${s.loop ? ' loop' : ''}${s.emissive ? ' · glow' : ''} · a(${s.anchorX},${s.anchorY})`;
+
+      function newBuf(w, h, bg = null) {
+        const B = { w, h, lit: new Float32Array(w * h * 3), glow: new Float32Array(w * h * 3), flat: new Float32Array(w * h * 3), actor: new Uint8Array(w * h) };
+        if (bg) for (let i = 0; i < w * h; i++) { B.lit[i * 3] = bg[0]; B.lit[i * 3 + 1] = bg[1]; B.lit[i * 3 + 2] = bg[2]; }
+        return B;
+      }
+      // opts: flip, actor, emissive (instance 0..1), outline [r,g,b], rot (radians, about the anchor), tint [r,g,b]
+      function place(B, id, frame, x, y, o = {}) {
+        const s = get(id);
+        const n = s.frames.length;
+        const fi = ((frame % n) + n) % n;
+        const img = s.frames[fi], em = s.emissive?.[fi];
+        const flip = !!o.flip, rot = o.rot ?? 0, eI = o.emissive ?? 0, tint = o.tint ?? [1, 1, 1];
+        const ax = flip ? s.width - 1 - s.anchorX : s.anchorX;
+        const cos = Math.cos(-rot), sin = Math.sin(-rot);
+        const R = Math.ceil(Math.hypot(s.width, s.height)) + 1;
+        const sample = (dx, dy) => {
+          let sx = dx, sy = dy;
+          if (rot) { sx = Math.floor(dx * cos - dy * sin + 0.5); sy = Math.floor(dx * sin + dy * cos + 0.5); }
+          sx += ax; sy += s.anchorY;
+          if (sx < 0 || sy < 0 || sx >= s.width || sy >= s.height) return -1;
+          return sy * s.width + (flip ? s.width - 1 - sx : sx);
+        };
+        const alphaAt = (dx, dy) => { const i = sample(dx, dy); return i < 0 ? 0 : img.data[i * 4 + 3]; };
+        const rx0 = rot ? -R : -ax - 1, rx1 = rot ? R : s.width - ax;
+        const ry0 = rot ? -R : -s.anchorY - 1, ry1 = rot ? R : s.height - s.anchorY;
+        for (let dy = ry0; dy <= ry1; dy++) for (let dx = rx0; dx <= rx1; dx++) {
+          const tx = Math.round(x) + dx, ty = Math.round(y) + dy;
+          if (tx < 0 || ty < 0 || tx >= B.w || ty >= B.h) continue;
+          const di = ty * B.w + tx;
+          const si = sample(dx, dy);
+          const a = si < 0 ? 0 : img.data[si * 4 + 3] / 255;
+          if (a < 0.5 && o.outline) {
+            if (alphaAt(dx + 1, dy) > 127 || alphaAt(dx - 1, dy) > 127 || alphaAt(dx, dy + 1) > 127 || alphaAt(dx, dy - 1) > 127) {
+              for (let k = 0; k < 3; k++) { B.lit[di * 3 + k] = 0; B.glow[di * 3 + k] = 0; B.flat[di * 3 + k] = o.outline[k] * 255; }
+              continue;
+            }
+          }
+          if (si < 0) continue;
+          const ma = em ? em.data[si * 4 + 3] / 255 : 0;
+          if (a <= 0 && ma <= 0) continue;
+          for (let k = 0; k < 3; k++) {
+            const c = img.data[si * 4 + k] * tint[k];
+            const lit = c * (1 - eI) * (1 - ma);
+            B.lit[di * 3 + k] = lit * a + B.lit[di * 3 + k] * (1 - a);
+            B.glow[di * 3 + k] = c * eI * a + B.glow[di * 3 + k] * (1 - a) + (em ? em.data[si * 4 + k] * ma * tint[k] : 0);
+            B.flat[di * 3 + k] *= 1 - a;
+          }
+          if (a > 0.5) B.actor[di] = o.actor ? 1 : 0;
+        }
+      }
+      function floor(B, theme, seed = 1) {
+        const id = `tile/${theme}/floor`;
+        const fl = get(id);
+        for (let y = 0; y < B.h; y += 16) for (let x = 0; x < B.w; x += 16) {
+          const k = (((x * 7 + y * 13 + seed) * 2654435761) >>> 0) % fl.frames.length;
+          place(B, id, k, x + fl.anchorX, y + fl.anchorY);
+        }
+      }
+      function present(B, scale, theme = 'none', lights = []) {
+        const T = THEMES[theme];
+        const cv = document.createElement('canvas');
+        cv.width = B.w * scale; cv.height = B.h * scale;
+        const tmp = document.createElement('canvas'); tmp.width = B.w; tmp.height = B.h;
+        const ctx = tmp.getContext('2d'); const out = ctx.createImageData(B.w, B.h);
+        const lit = theme !== 'none';
+        const bloom = new Float32Array(B.w * B.h * 3);
+        if (lit) {
+          const R = 2;
+          for (let y = 0; y < B.h; y++) for (let x = 0; x < B.w; x++) {
+            let r = 0, g = 0, b = 0, n = 0;
+            for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+              const tx = x + dx, ty = y + dy;
+              if (tx < 0 || ty < 0 || tx >= B.w || ty >= B.h) continue;
+              const i = (ty * B.w + tx) * 3;
+              const pk = Math.max(B.glow[i], B.glow[i + 1], B.glow[i + 2]) / 255;
+              const k = Math.min(1, Math.max(0, (pk - 0.2) / 0.6));
+              r += B.glow[i] * k; g += B.glow[i + 1] * k; b += B.glow[i + 2] * k; n++;
+            }
+            const o = (y * B.w + x) * 3; bloom[o] = r / n; bloom[o + 1] = g / n; bloom[o + 2] = b / n;
+          }
+        }
+        for (let y = 0; y < B.h; y++) for (let x = 0; x < B.w; x++) {
+          const i = y * B.w + x;
+          const L = [T.amb[0], T.amb[1], T.amb[2]];
+          const dyn = [0, 0, 0];
+          for (const l of lights) {
+            const d2 = ((x - l.x) ** 2 + (y - l.y) ** 2) / (l.r * l.r);
+            if (d2 >= 1) continue;
+            const f = (1 - d2) ** 2 + 0.15 * Math.exp(-d2 * 18);
+            for (let c = 0; c < 3; c++) dyn[c] += f * l.k * l.col[c];
+          }
+          for (let c = 0; c < 3; c++) {
+            const v = dyn[c];
+            L[c] += v > 1.2 ? 1.2 + (v - 1.2) / (1 + v - 1.2) : v;
+            const a = B.lit[i * 3 + c];
+            let col = lit ? a * L[c] + (B.actor[i] ? a * T.amb[c] * 1.5 : 0) + B.glow[i * 3 + c] + B.flat[i * 3 + c] + bloom[i * 3 + c] * 0.55 + dyn[c] * 6
+                          : a + B.glow[i * 3 + c] + B.flat[i * 3 + c];
+            out.data[i * 4 + c] = Math.min(255, col);
+          }
+          out.data[i * 4 + 3] = 255;
+        }
+        ctx.putImageData(out, 0, 0);
+        const c2 = cv.getContext('2d'); c2.imageSmoothingEnabled = false; c2.drawImage(tmp, 0, 0, cv.width, cv.height);
+        return cv;
+      }
+      const PL = (theme, x, y) => ({ x, y: y - 10, r: 128, k: 0.72, col: THEMES[theme].pl });
+
+      // Views that animate register draw callbacks; with ?t= they render once.
+      const anims = [];
+      function live(build) { const holder = document.createElement('div'); anims.push((t) => { holder.replaceChildren(build(t)); }); return holder; }
+      const fAt = (s, t, phase = 0) => { if (!s.fps) return 0; const i = Math.floor((t + phase) * s.fps); return s.loop ? i : Math.min(s.frames.length - 1, i % (s.frames.length + 6)); };
+
+      const debuffs = PLAYER_DEBUFFS.filter((d) => !onlyD || onlyD.includes(d));
+      const poseTint = (d) => DEBUFF_PLAYER_TINT[d] ?? [1, 1, 1];
+
+      // =================================================================================================
+      if (show('game')) {
+        const g = section('At the scale of play (3×, lit, player light, cold tint while chilled/frozen) — ' + debuffs.join(' · '));
+        for (const theme of ['rimedOssuary', 'ironColiseum', 'ashenForge']) {
+          g.append(live((t) => {
+            const W = 20 + debuffs.length * 40, B = newBuf(W, 64);
+            floor(B, theme, 2);
+            const fr = params.has('f') ? Number(params.get('f')) : null;
+            debuffs.forEach((d, i) => {
+              const x = 22 + i * 40, pose = i % 2 ? 'sorceress/run/east' : 'sorceress/idle/south';
+              const ps = get(pose);
+              place(B, pose, fr ?? fAt(ps, t), x, 52, { actor: true, tint: poseTint(d) });
+              const s = get(`fx/debuff/${d}`);
+              place(B, `fx/debuff/${d}`, fr ?? debuffOverlayFrame(d, t), x, 52, { flip: false });
+            });
+            return present(B, 3, theme, [{ x: W / 2, y: 40, r: 220, k: 0.72, col: THEMES[theme].pl }]);
+          }));
+        }
+      }
+
+      // =================================================================================================
+      // ?view=zoom&id=fx/debuff/bleeding&from=0&n=6&scale=8&poses=idle/south,run/east — frame-synced close-ups:
+      // overlay alone, on each pose unlit, and on each pose lit on the Coliseum sand and Ossuary stone
+      if (view.includes('zoom')) {
+        const id = params.get('id') ?? 'fx/debuff/bleeding';
+        const s = get(id);
+        const from = Number(params.get('from') ?? 0), n = Number(params.get('n') ?? Math.min(6, s.frames.length));
+        const sc = Number(params.get('scale') ?? 8);
+        const poses = (params.get('poses') ?? 'idle/south,run/east').split(',').map((p) => 'sorceress/' + p);
+        const isDebuff = id.startsWith('fx/debuff/');
+        const tint = isDebuff ? DEBUFF_PLAYER_TINT[id.slice(10)] ?? [1, 1, 1] : [1, 1, 1];
+        const g = section(`${id} frames ${from}..${from + n - 1} at ${sc}× — alone · on ${poses.join(' / ')} (unlit) · lit on sand / stone`);
+        const cw = s.width + 2, ch = s.height + 2;
+        const B = newBuf(cw * n, ch, [58, 50, 54]);
+        for (let i = 0; i < n; i++) place(B, id, from + i, i * cw + 1 + s.anchorX, 1 + s.anchorY);
+        card(g, present(B, sc), 'alone');
+        for (const [ti, theme] of [['none', 'none'], ['sand', 'ironColiseum'], ['stone', 'rimedOssuary']]) {
+          const B2 = newBuf(cw * n, ch * poses.length, theme === 'none' ? [58, 50, 54] : null);
+          if (theme !== 'none') floor(B2, theme, 3);
+          poses.forEach((pose, j) => {
+            for (let i = 0; i < n; i++) {
+              const x = i * cw + 1 + s.anchorX, y = j * ch + 1 + s.anchorY;
+              if (isDebuff) place(B2, pose, from + i, x, y, { actor: true, tint });
+              place(B2, id, from + i, x, y);
+            }
+          });
+          const lights = theme === 'none' ? [] : poses.flatMap((_, j) => Array.from({ length: n }, (_, i) => ({ x: i * cw + 17, y: j * ch + 24, r: 40, k: 0.35, col: THEMES[theme].pl })));
+          card(g, present(B2, sc, theme, lights), ti);
+        }
+      }
+
+      // =================================================================================================
+      if (show('debuffs')) {
+        for (const d of debuffs) {
+          const id = `fx/debuff/${d}`;
+          const s = get(id);
+          const g = section(`${id} (${info(s)}) — every frame on idle S / idle E / run E / run W / idle N, 3× unlit; lit on each floor`);
+          const nFrames = s.frames.length;
+          const poses = [['sorceress/idle/south', false], ['sorceress/idle/east', false], ['sorceress/run/east', false], ['sorceress/run/east', true], ['sorceress/idle/north', false]];
+          const n = Math.min(nFrames, 24);
+          const B = newBuf(34 * n + 2, 40 * poses.length + 2, [58, 50, 54]);
+          poses.forEach(([pose, flip], j) => {
+            for (let i = 0; i < n; i++) {
+              place(B, pose, i, 1 + i * 34 + 16, 36 + j * 40, { actor: true, flip, tint: poseTint(d) });
+              place(B, id, i, 1 + i * 34 + 16, 36 + j * 40, { flip });
+            }
+          });
+          card(g, present(B, 3), 'frames 0..' + (n - 1));
+          for (const theme of ['rimedOssuary', 'ironColiseum', 'ashenForge']) {
+            g.append(live((t) => {
+              const B2 = newBuf(150, 48);
+              floor(B2, theme, 5);
+              poses.slice(0, 4).forEach(([pose, flip], j) => {
+                place(B2, pose, fAt(get(pose), t), 20 + j * 36, 42, { actor: true, flip, tint: poseTint(d) });
+                place(B2, id, debuffOverlayFrame(d, t), 20 + j * 36, 42, { flip });
+              });
+              return present(B2, 3, theme, [PL(theme, 75, 42)]);
+            }));
+          }
+        }
+      }
+
+      // =================================================================================================
+      if (show('variants')) {
+        const g = section('Frame-range variants: rooted by source (bone / web / chain / tar) and bleeding by stacks (1..3) — 4× lit');
+        for (const [label, theme, d, opt] of [
+          ['rooted bone', 'rimedOssuary', 'rooted', { source: 'bone' }], ['rooted web', 'rimedOssuary', 'rooted', { source: 'web' }],
+          ['rooted chain', 'ironColiseum', 'rooted', { source: 'chain' }], ['rooted tar', 'ironColiseum', 'rooted', { source: 'tar' }],
+          ['bleeding ×1', 'ironColiseum', 'bleeding', { stacks: 1 }], ['bleeding ×2', 'ironColiseum', 'bleeding', { stacks: 2 }], ['bleeding ×3', 'ironColiseum', 'bleeding', { stacks: 3 }],
+          ['withered ×1', 'ashenForge', 'withered', { stacks: 1 }], ['withered ×3', 'ashenForge', 'withered', { stacks: 3 }],
+        ]) {
+          card(g, live((t) => {
+            const B = newBuf(76, 48);
+            floor(B, theme, 4);
+            if (d === 'rooted' && opt.source === 'tar') place(B, 'fx/tarPool', 0, 20, 42);
+            if (d === 'rooted' && opt.source === 'web') place(B, 'fx/web', 1, 20, 42);
+            place(B, 'sorceress/idle/south', fAt(get('sorceress/idle/south'), t), 20, 42, { actor: true });
+            place(B, `fx/debuff/${d}`, debuffOverlayFrame(d, t, opt), 20, 42);
+            place(B, 'sorceress/run/east', fAt(get('sorceress/run/east'), t), 56, 42, { actor: true });
+            place(B, `fx/debuff/${d}`, debuffOverlayFrame(d, t, opt), 56, 42);
+            return present(B, 4, theme, [PL(theme, 38, 42)]);
+          }), label);
+        }
+      }
+
+      // =================================================================================================
+      if (show('proj')) {
+        const g = section('Projectiles: every frame at 8× (raw) — and rotated in 30° steps (nearest, like the renderer)');
+        for (const id of ['proj/webShot', 'proj/frostShard', 'proj/crossbowBolt', 'proj/chainHook', 'proj/tarGlob', 'proj/boneShard', 'proj/rimeShard', 'proj/cinderSpit']) {
+          const s = get(id);
+          const B = newBuf((s.width + 3) * s.frames.length + 3, s.height + 6, [70, 60, 62]);
+          s.frames.forEach((_, i) => place(B, id, i, 3 + i * (s.width + 3) + s.anchorX, 3 + s.anchorY));
+          card(g, present(B, id === 'proj/boneShard' ? 6 : 8), `${id} · ${info(s)}`);
+        }
+        for (const id of ['proj/chainHook', 'proj/frostShard', 'proj/crossbowBolt']) {
+          const s = get(id);
+          const cell = Math.ceil(Math.hypot(s.width, s.height)) + 2;
+          const B = newBuf(cell * 12, cell, [70, 60, 62]);
+          for (let i = 0; i < 12; i++) place(B, id, 0, cell * i + cell / 2, cell / 2, { rot: (i * Math.PI) / 6 });
+          card(g, present(B, 4), id + ' rotated 0°..330°');
+        }
+        const g2 = section('In play (3×, lit): shooters in their attack pose, hostile look (emissive 0.7 + dark-red outline)');
+        const pairs = [
+          ['rimedOssuary', 'monster/frostWeaver/attack', 'proj/webShot'],
+          ['rimedOssuary', 'monster/hollowWarden/cast', 'proj/frostShard'],
+          ['rimedOssuary', 'monster/boneChorister/sing', 'proj/boneShard'],
+          ['ironColiseum', 'monster/ironCrossbowman/attack', 'proj/crossbowBolt'],
+          ['ironColiseum', 'monster/chainThrall/throw', 'proj/chainHook'],
+          ['ironColiseum', 'monster/tarSlinger/attack', 'proj/tarGlob'],
+        ];
+        for (const [theme, mon, pid] of pairs) {
+          card(g2, live((t) => {
+            const B = newBuf(200, 96);
+            floor(B, theme, 3);
+            if (has(mon)) place(B, mon, get(mon).frames.length - 1, 36, 78, { actor: true });
+            const ps = get(pid);
+            [0, -0.4, 0.3].forEach((a, j) => place(B, pid, fAt(ps, t, j * 0.13), 88 + j * 36, 64 + j * 5, { ...HOST, rot: a }));
+            place(B, 'sorceress/idle/east', 0, 184, 86, { actor: true, flip: true });
+            return present(B, 3, theme, [PL(theme, 184, 86)]);
+          }), `${mon.split('/')[1]} → ${pid}`);
+        }
+        // chain line: hook + fx/chain every CHAIN_PERIOD px, straight and at angles, plain and hostile-outlined
+        card(g2, live((t) => {
+          const B = newBuf(230, 110);
+          floor(B, 'ironColiseum', 9);
+          if (has('monster/chainThrall/throw')) place(B, 'monster/chainThrall/throw', get('monster/chainThrall/throw').frames.length - 1, 24, 70, { actor: true });
+          [0, -0.3, 0.42].forEach((a, j) => {
+            const x0 = 34, y0 = 58, len = 110 + j * 30;
+            for (let d = 4; d < len; d += CHAIN_PERIOD) place(B, 'fx/chain', 0, x0 + Math.cos(a) * d, y0 + Math.sin(a) * d, { rot: a, emissive: 0 });
+            place(B, 'proj/chainHook', fAt(get('proj/chainHook'), t), x0 + Math.cos(a) * (len + 5), y0 + Math.sin(a) * (len + 5), { ...HOST, rot: a });
+          });
+          return present(B, 3, 'ironColiseum', [PL('ironColiseum', 190, 70)]);
+        }), 'chain line (links unoutlined) + hook (hostile look)');
+        {
+          const B = newBuf(100, 20, [70, 60, 62]);
+          for (let d = 0; d < 96; d += CHAIN_PERIOD) place(B, 'fx/chain', 0, 4 + d, 10);
+          card(g2, present(B, 6), 'fx/chain tiled, 6×');
+        }
+      }
+
+      // =================================================================================================
+      if (show('areas')) {
+        const g = section('Area visuals (3×, lit) on their floor with the sorceress for scale; strips of every frame');
+        const rows = [
+          ['fx/iceSpike', 'rimedOssuary'], ['fx/blizzard', 'rimedOssuary'], ['fx/web', 'rimedOssuary'], ['fx/tarPool', 'ironColiseum'],
+          ['fx/arenaSpike', 'ironColiseum'], ['fx/executionMark', 'ironColiseum'], ['fx/shieldArc', 'ironColiseum'], ['fx/icePrison', 'rimedOssuary'],
+        ];
+        for (const [id, theme] of rows) {
+          card(g, live((t) => {
+            const s = get(id);
+            const W = Math.max(110, s.width + 60), H = Math.max(80, s.height + 24);
+            const B = newBuf(W, H);
+            floor(B, theme, 7);
+            const cx = Math.round(W / 2 + 10), cy = Math.round(H / 2 + 4);
+            if (id === 'fx/arenaSpike') for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) place(B, id, fAt(s, t, (i + j) * 0.12), cx - 16 + i * 16, cy - 8 + j * 16);
+            else if (id === 'fx/iceSpike') for (let i = 0; i < 4; i++) place(B, id, fAt(s, t, -i * 0.12), cx - 18 + i * 12, cy + i * 5);
+            else if (id === 'fx/shieldArc') {
+              if (has('monster/shieldbearer/block')) place(B, 'monster/shieldbearer/block', 0, cx - 4, cy + 18, { actor: true });
+              place(B, id, fAt(s, t), cx - 4, cy + 2);
+            } else if (id === 'fx/icePrison') {
+              place(B, id, fAt(s, t), cx, cy);
+            } else place(B, id, s.fps ? fAt(s, t) : Math.floor(t) % s.frames.length, cx, cy);
+            place(B, 'sorceress/idle/east', fAt(get('sorceress/idle/east'), t), 18, H - 6, { actor: true });
+            const extra = id === 'fx/executionMark' ? [{ x: cx, y: cy, r: 50, k: 0.5, col: [1, 0.2, 0.2] }] : [];
+            return present(B, 3, theme, [PL(theme, 18, H - 6), ...extra]);
+          }), id + ' · ' + info(get(id)));
+        }
+        for (const id of ['fx/iceSpike', 'fx/blizzard', 'fx/web', 'fx/tarPool', 'fx/arenaSpike', 'fx/executionMark', 'fx/shieldArc', 'fx/chain']) {
+          const s = get(id);
+          const sc = s.width > 40 ? 2 : 3;
+          const B = newBuf((s.width + 2) * s.frames.length, s.height, [58, 50, 54]);
+          s.frames.forEach((_, i) => place(B, id, i, i * (s.width + 2) + s.anchorX, s.anchorY));
+          card(g, present(B, sc), id + ' frames');
+        }
+        // blizzard next to the portal sigil: they must not read alike
+        const B = newBuf(150, 70, [42, 36, 40]);
+        if (has('fx/sigil')) place(B, 'fx/sigil', 0, 36, 35);
+        place(B, 'fx/blizzard', 0, 110, 35);
+        card(g, present(B, 3), 'fx/sigil (portal) vs fx/blizzard — must not read alike');
+      }
+
+      // =================================================================================================
+      if (show('prison')) {
+        const g = section('Ice prison closing: 14 fx/icePrisonShard sprites placed on the current radius at 1:1 (y-sorted with the player) — R 20 → 5');
+        for (const R of [20, 15, 10, 6]) {
+          card(g, live((t) => {
+            const B = newBuf(84, 76);
+            floor(B, 'rimedOssuary', 6);
+            const cx = 42, cy = 50;
+            const close = 1 - (R - 5) / 15;
+            const items = [];
+            for (let i = 0; i < ICE_PRISON_SHARDS; i++) {
+              const a = ((i + 0.5) / ICE_PRISON_SHARDS) * Math.PI * 2;
+              const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+              items.push({ y, draw: () => place(B, 'fx/icePrisonShard', icePrisonShardFrame(a, close, i, t), x, y) });
+            }
+            items.push({ y: cy, draw: () => { place(B, 'sorceress/idle/south', fAt(get('sorceress/idle/south'), t), cx, cy, { actor: true, tint: close > 0.9 ? DEBUFF_PLAYER_TINT.chilled : [1, 1, 1] }); } });
+            items.sort((p, q) => p.y - q.y).forEach((it) => it.draw());
+            return present(B, 4, 'rimedOssuary', [PL('rimedOssuary', cx, cy)]);
+          }), `radius ${R}`);
+        }
+        const s = get('fx/icePrisonShard');
+        const B = newBuf((s.width + 1) * 14, s.height * 2 + 2, [58, 50, 54]);
+        s.frames.forEach((_, i) => place(B, 'fx/icePrisonShard', i, (i % 14) * (s.width + 1) + s.anchorX, Math.floor(i / 14) * (s.height + 2) + s.anchorY));
+        card(g, present(B, 3), 'fx/icePrisonShard frames · ' + info(s));
+      }
+
+      // =================================================================================================
+      if (show('icons')) {
+        const g = section('Debuff icons · 64 (2×), 32 (1×), 24 (HUD) · with skill icons for comparison');
+        const toUrl = (img, scale) => {
+          const c = document.createElement('canvas');
+          c.width = img.width * scale; c.height = img.height * scale;
+          const ctx = c.getContext('2d');
+          const d = ctx.createImageData(c.width, c.height);
+          for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+            const si = (((y / scale) | 0) * img.width + ((x / scale) | 0)) * 4, di = (y * c.width + x) * 4;
+            for (let k = 0; k < 4; k++) d.data[di + k] = img.data[si + k];
+          }
+          ctx.putImageData(d, 0, 0);
+          return c.toDataURL();
+        };
+        for (const id of bestiaryIconIds) {
+          const img = debuffIconPixels(id);
+          const wrap = document.createElement('div');
+          wrap.style.cssText = 'display:flex;gap:6px;align-items:flex-end';
+          for (const [sz, sc] of [[64, 2], [32, 1], [24, 1]]) {
+            const im = document.createElement('img'); im.src = toUrl(img, sc); im.style.width = im.style.height = `${sz}px`; wrap.append(im);
+          }
+          card(g, wrap, id.slice(5));
+        }
+        const hud = document.createElement('div');
+        hud.className = 'hud';
+        for (const id of ['icon/skill/emberLance', 'icon/skill/rimeShards', 'icon/skill/riftStep']) {
+          const im = document.createElement('img'); im.src = art.icon(id, 32); im.style.width = im.style.height = '32px'; hud.append(im);
+        }
+        const sp = document.createElement('div'); sp.style.width = '16px'; hud.append(sp);
+        for (const id of bestiaryIconIds) { const im = document.createElement('img'); im.src = toUrl(debuffIconPixels(id), 1); im.style.width = im.style.height = '24px'; hud.append(im); }
+        card(g, hud, 'HUD mock: skills at 32 px, debuffs at 24 px');
+      }
+
+      // =================================================================================================
+      if (show('scene')) {
+        const g = section('Gameplay scenes (1× composed, lit, shown at 3×): scale against ashling / ironhideBrute / cinderMatriarch');
+        const scene = (theme, build) => card(g, live((t) => { const B = newBuf(300, 170); floor(B, theme, 11); build(B, t); return present(B, 3, theme, [PL(theme, 150, 102)]); }), theme);
+        scene('rimedOssuary', (B, t) => {
+          place(B, 'fx/blizzard', fAt(get('fx/blizzard'), t), 236, 58);
+          place(B, 'fx/web', 0, 70, 130);
+          for (let i = 0; i < 5; i++) place(B, 'fx/iceSpike', fAt(get('fx/iceSpike'), t, -i * 0.1), 40 + i * 14, 60 + i * 6);
+          place(B, 'monster/ashling/move', fAt(get('monster/ashling/move'), t), 200, 130, { actor: true, flip: true });
+          place(B, 'monster/ironhideBrute/idle', fAt(get('monster/ironhideBrute/idle'), t), 262, 150, { actor: true, flip: true });
+          place(B, 'proj/webShot', fAt(get('proj/webShot'), t), 110, 118, HOST);
+          place(B, 'proj/frostShard', fAt(get('proj/frostShard'), t), 190, 80, HOST);
+          place(B, 'proj/boneShard', fAt(get('proj/boneShard'), t), 100, 80, HOST);
+          place(B, 'sorceress/idle/south', fAt(get('sorceress/idle/south'), t), 150, 102, { actor: true, tint: DEBUFF_PLAYER_TINT.chilled });
+          place(B, 'fx/debuff/chilled', debuffOverlayFrame('chilled', t), 150, 102);
+          place(B, 'sorceress/run/east', fAt(get('sorceress/run/east'), t), 40, 150, { actor: true, tint: DEBUFF_PLAYER_TINT.frozen });
+          place(B, 'fx/debuff/frozen', debuffOverlayFrame('frozen', t), 40, 150);
+          place(B, 'sorceress/idle/south', fAt(get('sorceress/idle/south'), t), 70, 130, { actor: true });
+          place(B, 'fx/debuff/rooted', debuffOverlayFrame('rooted', t, { source: 'web' }), 70, 130);
+        });
+        scene('ironColiseum', (B, t) => {
+          place(B, 'fx/tarPool', 0, 80, 120);
+          place(B, 'fx/executionMark', fAt(get('fx/executionMark'), t), 150, 100);
+          for (let j = 0; j < 2; j++) for (let i = 0; i < 4; i++) place(B, 'fx/arenaSpike', fAt(get('fx/arenaSpike'), t, (i + j) * 0.1), 220 + i * 16, 40 + j * 16);
+          place(B, 'sorceress/idle/south', fAt(get('sorceress/idle/south'), t), 150, 102, { actor: true });
+          place(B, 'fx/debuff/bleeding', debuffOverlayFrame('bleeding', t, { stacks: 2 }), 150, 102);
+          place(B, 'sorceress/idle/east', fAt(get('sorceress/idle/east'), t), 80, 122, { actor: true });
+          place(B, 'fx/debuff/rooted', debuffOverlayFrame('rooted', t, { source: 'tar' }), 80, 122);
+          place(B, 'monster/cinderMatriarch/idle', fAt(get('monster/cinderMatriarch/idle'), t), 250, 160, { actor: true, flip: true });
+          place(B, 'monster/ironhideBrute/idle', 0, 40, 60, { actor: true });
+          place(B, 'proj/crossbowBolt', fAt(get('proj/crossbowBolt'), t), 190, 70, HOST);
+          place(B, 'proj/tarGlob', fAt(get('proj/tarGlob'), t), 120, 60, HOST);
+          place(B, 'sorceress/cast/east', fAt(get('sorceress/cast/east'), t), 200, 140, { actor: true });
+          place(B, 'fx/debuff/burning', debuffOverlayFrame('burning', t), 200, 140);
+          place(B, 'sorceress/idle/south', fAt(get('sorceress/idle/south'), t), 110, 160, { actor: true });
+          place(B, 'fx/debuff/shocked', debuffOverlayFrame('shocked', t), 110, 160);
+          place(B, 'sorceress/idle/south', fAt(get('sorceress/idle/south'), t), 30, 160, { actor: true });
+          place(B, 'fx/debuff/withered', debuffOverlayFrame('withered', t), 30, 160);
+        });
+      }
+
+      const start = performance.now();
+      let last = -1;
+      function tick() {
+        const t = fixedT ?? (performance.now() - start) / 1000;
+        const step = Math.floor(t * 12);
+        if (step !== last) { last = step; for (const a of anims) a(t); }
+        if (fixedT === null) requestAnimationFrame(tick);
+      }
+      tick();
+    </script>
+  </body>
+</html>

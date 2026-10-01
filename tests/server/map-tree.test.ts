@@ -1,0 +1,57 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, afterEach, expect, it, vi } from 'vitest';
+import { fullProgress, pathTo } from '../game-progression/atlas-tree-helpers';
+import { MapInstance } from '../../src/server/instance';
+import { currencyOnHand } from '../../src/game/progression/merchant';
+import { createClock, createLocalCharacter, enterMapOf, LocalPlayer, openMap, partyUp, startTestServer, walkIntoProp } from './helpers';
+
+const dir = mkdtempSync(join(tmpdir(), 'forge-map-tree-'));
+let server: Awaited<ReturnType<typeof startTestServer>>;
+afterEach(async () => { vi.restoreAllMocks(); await server?.close(); });
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+it('shares nodes with alts, atomically refunds currency, preserves party maps and survives restart', async () => {
+  const path = join(dir, 'tree.db'), clock = createClock();
+  const options = { dbPath: path, game: { autoTick: false, now: clock.now } };
+  server = await startTestServer(options);
+  const aId = createLocalCharacter(server, 'Tree Owner'), bId = createLocalCharacter(server, 'Tree Guest');
+  let a = new LocalPlayer(server, aId), b = new LocalPlayer(server, bId);
+  const altMade = server.game.store.create(a.session.record.accountId, 'Tree Alt');
+  if (!altMade.ok) throw new Error(altMade.error);
+  const altId = altMade.character.id;
+  let alt = new LocalPlayer(server, altId);
+  server.game.setCharacter(a.session, { ...a.session.record.ch, atlas: { ...fullProgress(), refunds: 6 }, currencyStash: { scrap: 100 } });
+  const route = pathTo('crownedChallenge');
+  for (const id of route) expect(a.command({ c: 'setMapTreeNode', nodeId: id, allocate: true }).ok).toBe(true);
+  expect(alt.session.record.ch.atlas!.nodes).toEqual(a.session.record.ch.atlas!.nodes);
+  expect(b.session.record.ch.atlas!.nodes).toBeUndefined();
+  expect(alt.command({ c: 'setMapTreeNode', nodeId: route[0], allocate: true }).ok).toBe(false);
+  expect(JSON.parse(server.db.characterById(aId)!.data).atlas).toBeUndefined();
+  expect(JSON.parse(server.db.accountStorage(a.session.record.accountId)!.data).atlas.nodes).toHaveLength(route.length);
+  partyUp(a, b); openMap(a);
+  walkIntoProp(a, 'portal', clock, [b]); enterMapOf(b, a, clock, [a]);
+  const instance = a.session.instance as MapInstance;
+  expect(instance.setup.mapTree).toEqual(route);
+  expect(b.session.instance).toBe(instance);
+  expect(a.command({ c: 'setMapTreeNode', nodeId: 'crownedChallenge', allocate: false }).error).toMatch(/own hideout/);
+  const before = currencyOnHand(alt.session.record.ch, 'scrap');
+  const stored = server.db.accountStorage(a.session.record.accountId)!.data;
+  vi.spyOn(server.db, 'saveAccountStorage').mockImplementationOnce(() => { throw new Error('disk busy'); });
+  expect(alt.command({ c: 'setMapTreeNode', nodeId: 'crownedChallenge', allocate: false }).ok).toBe(false);
+  expect(alt.session.record.ch.atlas!.nodes).toHaveLength(route.length);
+  expect(currencyOnHand(alt.session.record.ch, 'scrap')).toBe(before);
+  expect(server.db.accountStorage(a.session.record.accountId)!.data).toBe(stored);
+  expect(alt.command({ c: 'setMapTreeNode', nodeId: 'crownedChallenge', allocate: false }).ok).toBe(true);
+  expect(currencyOnHand(alt.session.record.ch, 'scrap')).toBe(before - 15); // notable refund after the free ones
+  expect(a.session.record.ch.atlas!.nodes).toHaveLength(route.length - 1);
+  expect(instance.setup.mapTree).toHaveLength(route.length);
+  await server.close(); server = await startTestServer(options);
+  a = new LocalPlayer(server, aId); b = new LocalPlayer(server, bId); alt = new LocalPlayer(server, altId);
+  expect(a.session.record.ch.atlas!.nodes).toEqual(route.slice(0, -1));
+  expect((a.session.instance as MapInstance).setup.mapTree).toHaveLength(route.length);
+  expect(b.session.instance).toBe(a.session.instance);
+  expect(currencyOnHand(alt.session.record.ch, 'scrap')).toBe(before - 15);
+  expect(alt.command({ c: 'visitHideout', characterId: bId }).ok).toBe(false); // not in the owner's party
+}, 30_000);

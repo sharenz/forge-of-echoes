@@ -1,0 +1,249 @@
+{
+  "id": "ch-cbgn6q-2l26",
+  "name": "Old Timer",
+  "classId": "sorceress",
+  "level": 7,
+  "xp": 120,
+  "unspentAttributePoints": 0,
+  "allocated": {
+    "str": 0,
+    "dex": 0,
+    "int": 0
+  },
+  "unspentSkillPoints": 1,
+  "skillRanks": {
+    "emberLance": 1,
+    "emberNova": 0,
+    "flameWave": 0,
+    "rimeShards": 0,
+    "arcChain": 0,
+    "riftStep": 0,
+    "cinderWard": 0
+  },
+  "loadout": [
+    "emberLance",
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "equipment": {
+    "mainHand": {
+      "kind": "equipment",
+      "uid": "i1",
+      "baseId": "ashwoodWand",
+      "itemLevel": 1,
+      "rarity": "magic",
+      "name": null,
+      "implicitValues": [
+        13
+      ],
+      "affixes": [
+        {
+          "affixId": "fireDamage",
+          "tier": 8,
+          "value": 11
+        }
+      ],
+      "scars": [],
+      "stability": 8,
+      "maxStability": 8,
+      "history": [
+        "Carried out of the ashes: your first wand."
+      ]
+    },
+    "chest": {
+      "kind": "equipment",
+      "uid": "i2",
+      "baseId": "ashenRobe",
+      "itemLevel": 1,
+      "rarity": "normal",
+      "name": null,
+      "implicitValues": [
+        45,
+        11
+      ],
+      "affixes": [],
+      "scars": [],
+      "stability": 8,
+      "maxStability": 8,
+      "history": [
+        "Singed at the hem, but it held."
+      ]
+    }
+  },
+  "backpack": {
+    "w": 12,
+    "h": 5,
+    "entries": [
+      {
+        "item": {
+          "kind": "currency",
+          "uid": "i3",
+          "currencyId": "scrap",
+          "count": 10
+        },
+        "x": 0,
+        "y": 0
+      },
+      {
+        "item": {
+          "kind": "currency",
+          "uid": "i4",
+          "currencyId": "kindling",
+          "count": 4
+        },
+        "x": 1,
+        "y": 0
+      },
+      {
+        "item": {
+          "kind": "currency",
+          "uid": "i5",
+          "currencyId": "essenceEmber",
+          "count": 2
+        },
+        "x": 2,
+        "y": 0
+      },
+      {
+        "item": {
+          "kind": "currency",
+          "uid": "i6",
+          "currencyId": "reforge",
+          "count": 1
+        },
+        "x": 3,
+        "y": 0
+      },
+      {
+        "item": {
+          "kind": "currency",
+          "uid": "i7",
+          "currencyId": "solvent",
+          "count": 1
+        },
+        "x": 4,
+        "y": 0
+      },
+      {
+        "item": {
+          "kind": "currency",
+          "uid": "i8",
+          "currencyId": "seal",
+          "count": 1
+        },
+        "x": 5,
+        "y": 0
+      },
+      {
+        "item": {
+          "kind": "currency",
+          "uid": "i9",
+          "currencyId": "mapDust",
+          "count": 3
+        },
+        "x": 6,
+        "y": 0
+      },
+      {
+        "item": {
+          "kind": "map",
+          "uid": "ic",
+          "baseId": "ashenForge",
+          "tier": 1,
+          "rarity": "normal",
+          "mods": [],
+          "quality": 0,
+          "corrupted": false
+        },
+        "x": 1,
+        "y": 1
+      }
+    ]
+  },
+  "stash": [
+    {
+      "name": "Loot",
+      "grid": {
+        "w": 12,
+        "h": 8,
+        "entries": [
+          {
+            "item": {
+              "kind": "currency",
+              "uid": "ia",
+              "currencyId": "threatGlyph",
+              "count": 2
+            },
+            "x": 0,
+            "y": 0
+          },
+          {
+            "item": {
+              "kind": "map",
+              "uid": "ib",
+              "baseId": "ashenForge",
+              "tier": 1,
+              "rarity": "normal",
+              "mods": [],
+              "quality": 0,
+              "corrupted": false
+            },
+            "x": 0,
+            "y": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "Maps",
+      "grid": {
+        "w": 12,
+        "h": 8,
+        "entries": []
+      }
+    }
+  ],
+  "belt": [
+    {
+      "flaskId": "lifeFlask",
+      "count": 3
+    },
+    {
+      "flaskId": "lifeFlask",
+      "count": 3
+    },
+    {
+      "flaskId": "focusFlask",
+      "count": 3
+    },
+    null
+  ],
+  "mapDevice": {
+    "kind": "map",
+    "uid": "id",
+    "baseId": "rimedOssuary",
+    "tier": 1,
+    "rarity": "normal",
+    "mods": [],
+    "quality": 0,
+    "corrupted": false
+  },
+  "rngState": 4281427179,
+  "nextUid": 14,
+  "stats": {
+    "mapsCompleted": 0,
+    "mapsFailed": 0,
+    "highestTierCompleted": 0,
+    "kills": 0,
+    "deaths": 0,
+    "raresFound": 0,
+    "uniquesFound": 0,
+    "itemsCrafted": 0,
+    "playSeconds": 0
+  },
+  "createdAt": 1720000000000,
+  "updatedAt": 1720500000000
+}

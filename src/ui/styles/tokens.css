@@ -1,0 +1,140 @@
+/* Forge of Echoes — UI design tokens.
+ * The ONLY place font sizes are defined. Every other rule uses var(--font-ui-*) or a .ui-type-* class
+ * (tests/ui/typography.test.ts enforces this). Palette mirrors GAME_SPEC §10 / src/art/palette.ts. */
+
+:root {
+  /* --- type scale (AGENTS.md) --- */
+  --font-ui-caption: 14px;
+  --font-ui-secondary: 16px;
+  --font-ui-body: 19px;
+  --font-ui-title: 28px;
+
+  --font-title: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  --font-text: 'Alegreya Sans', 'Gill Sans', 'Segoe UI', sans-serif;
+
+  /* --- neutrals --- */
+  --ink: #0d0b0e;
+  --coal: #1a1619;
+  --char: #2a2326;
+  --iron: #3b3438;
+  --stone: #5a5057;
+  --stone-light: #7d7278;
+  --ash: #a0948d;
+  --bone: #cbbfa8;
+  --parchment: #e8dcc0;
+
+  /* --- earth --- */
+  --moss: #4b5a3a;
+  --olive: #6e7447;
+  --rust: #7a3b24;
+  --blood: #7a1e22;
+  --burgundy: #5a1a2a;
+  --ochre: #b8862f;
+  --gold: #e0b04a;
+
+  /* --- emissive --- */
+  --ember: #e8662a;
+  --flame: #ff9a3c;
+  --hot: #ffe7a8;
+
+  /* --- elements --- */
+  --frost: #7fc6e8;
+  --ice: #d4f1ff;
+  --mana: #4a7bd6;
+  --storm: #b9a6ff;
+  --lightning: #efe9ff;
+  --void: #7b3fa0;
+  --void-glow: #c07bff;
+
+  /* --- rarity / item tones --- */
+  --tone-normal: #d8d2c4;
+  --tone-magic: #7aa2ff;
+  --tone-rare: #f2d15c;
+  --tone-unique: #e8772e;
+  --tone-currency: #c9b58a;
+  --tone-map: #d0d0dc;
+  --tone-flask: #c9c79a;
+
+  /* --- UI materials --- */
+  --bronze: #8a6a3e;
+  --bronze-dark: #4a3621;
+  --bronze-light: #c9a064;
+  --leather: #1d1719;
+  --leather-light: #2b2226;
+  --metal-deep: #100d13;
+  --metal-dark: #1e1a22;
+  --metal: #322d36;
+  --good: #8fbf6a;
+  --bad: #e0605a;
+  --affix: #9db4ff;
+  --implicit: #c9c2e6;
+  --fractured: #d8b77a;
+  /* bench-crafted affixes (anvil glyph, "Crafted" tag) */
+  --crafted: #9ed8cf;
+  --crafted-dim: rgba(158, 216, 207, 0.45);
+
+  /* --- layout geometry ---
+   * Three height tiers keep every docked panel ABOVE the command deck (--deck-clear), so the globes, flasks
+   * and skills are never hidden, and size the inventory cell so the whole inventory fits without scrolling.
+   * Icons are drawn at 32 px per cell (--icon-cell snaps to 32 or 48 so the pixel art scales cleanly). */
+  --cell: 36px;
+  --icon-cell: 32px;
+  --globe: 108px;
+  --slot: 46px;
+  --slot-icon: 32px;
+  --flask-w: 40px;
+  --flask-h: 52px;
+  /* Deck: globe + 8px bottom offset + the level diamond overhang + a gap. */
+  --deck-clear: calc(var(--globe) + 20px);
+  --panel-top: 12px;
+  --panel-w: calc(var(--cell) * 12 + 42px);
+  --panel-max-h: calc(100vh - var(--panel-top) - var(--deck-clear));
+}
+
+/* Short viewports (laptops with browser chrome). */
+@media (max-height: 699px) {
+  :root {
+    --cell: 32px;
+    --globe: 92px;
+    --slot: 42px;
+    --flask-w: 36px;
+    --flask-h: 46px;
+    --panel-top: 8px;
+  }
+}
+
+/* Large screens. */
+@media (min-width: 1600px) and (min-height: 910px) {
+  :root {
+    --cell: 48px;
+    --icon-cell: 48px;
+    --globe: 138px;
+    --slot: 62px;
+    --slot-icon: 48px;
+    --flask-w: 54px;
+    --flask-h: 68px;
+  }
+}
+@media (min-width: 1600px) and (min-height: 1000px) {
+  :root {
+    --cell: 52px;
+  }
+}
+
+/* --- type scale classes --- */
+.ui-type-caption {
+  font-size: var(--font-ui-caption);
+  line-height: 1.3;
+}
+.ui-type-secondary {
+  font-size: var(--font-ui-secondary);
+  line-height: 1.35;
+}
+.ui-type-body {
+  font-size: var(--font-ui-body);
+  line-height: 1.35;
+}
+.ui-type-title {
+  font-size: var(--font-ui-title);
+  line-height: 1.15;
+}

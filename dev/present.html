@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Presenter sandbox · Forge of Echoes</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #0d0b0e;
+      }
+      #view {
+        display: block;
+        position: fixed;
+        inset: 0;
+        image-rendering: pixelated;
+        cursor: crosshair;
+      }
+      #stats {
+        position: fixed;
+        left: 12px;
+        top: 12px;
+        margin: 0;
+        padding: 6px 10px;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: #e8dcc0;
+        background: rgba(13, 11, 14, 0.72);
+        border: 1px solid #3b3438;
+        border-radius: 3px;
+        white-space: pre;
+        pointer-events: none;
+      }
+      #stats.hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <pre id="stats">starting…</pre>
+    <script type="module" src="/src/present/dev/sandbox.ts"></script>
+  </body>
+</html>

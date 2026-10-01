@@ -1,0 +1,16 @@
+/* Daily surge (brief D 7.6): brass pips, the dock chip and the rail line. Type sizes come from the --font-ui-* tokens (.ui-type-* classes). */
+.fe-surge-pips { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
+.fe-surge-pip { display: block; width: 9px; height: 9px; transform: rotate(45deg); border: 1px solid #6b5a3a; background: #2a1f12; box-sizing: border-box; }
+.fe-surge-pip--on { border-color: #fff0b8; background: #d9a441; box-shadow: 0 0 4px rgba(255, 190, 80, 0.55); }
+.fe-surge-pips--spent { opacity: 0.55; }
+
+.fe-surge-chip { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.fe-surge-chip__reset, .fe-surge-chip__idle { color: var(--ash, #8d8272); }
+.fe-surge-hold--on { color: var(--gold); border-color: var(--gold); }
+.fe-surge-btn { padding: 0 8px; height: 22px; color: var(--bone); background: rgba(0, 0, 0, 0.4); border: 1px solid #4d3b28; cursor: pointer; font-family: inherit; }
+.fe-surge-btn:hover:not(:disabled) { color: var(--flame); border-color: var(--flame); }
+.fe-surge-btn:focus-visible { outline: 2px solid var(--flame); outline-offset: 1px; }
+
+.fe-surge-rail { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 2px; }
+.fe-surge-rail__text { color: var(--bone); }
+.fe-rechart__pips { display: inline-flex; }
