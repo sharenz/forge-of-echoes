@@ -247,6 +247,8 @@ export interface Director {
   wave: number;
   waveTime: number;
   intro: number;
+  /** Seconds the first-run warm-up has held the opening (RunConfig.warmup); -1 once it is over (or was never on). */
+  warm: number;
   tellWave: number;
   tellTimer: number;
   plan: WavePlan | null;

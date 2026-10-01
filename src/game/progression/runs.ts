@@ -338,6 +338,7 @@ export function buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConf
     ...(Object.keys(eventRules).length > 0 ? { eventModifiers: eventRules } : {}),
     ...((area?.bossLifeMultiplier ?? 1) * treeBossLife !== 1 ? { bossLifeMultiplier: (area?.bossLifeMultiplier ?? 1) * treeBossLife } : {}),
     ...(area?.bossDamageMultiplier ? { bossDamageMultiplier: area.bossDamageMultiplier } : {}),
+    ...(setup.warmup ? { warmup: true } : {}),
     seed: setup.seed >>> 0,
     ...(area ? { areaId: area.id } : {}),
     theme: base?.theme ?? 'ashenForge',

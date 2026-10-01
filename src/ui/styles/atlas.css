@@ -217,132 +217,18 @@
 .fe-chart__tick--ceiling::after { content: ''; position: absolute; left: 50%; bottom: -2px; width: 5px; height: 3px; margin-left: -2px; background: var(--bronze-light); }
 .fe-chart__tick--map { color: var(--ink); background: var(--flame); font-weight: 700; }
 
-/* ---- rail ---------------------------------------------------------------------------------------------- */
-.fe-railslot { flex: none; width: 320px; min-height: 0; display: flex; }
-.fe-rail { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: linear-gradient(180deg, #1d1719, #141114); }
-.fe-rail__hero {
-  position: relative;
-  flex: none;
-  height: 104px;
-  overflow: hidden;
-  border-bottom: 1px solid #58432d;
-  background-color: #100d10;
-  background-size: 32px 32px;
-  image-rendering: pixelated;
-}
-.fe-rail__pool { position: absolute; inset: 0; background: radial-gradient(ellipse 60% 90% at 78% 92%, color-mix(in srgb, var(--glow, #e8662a) 62%, transparent), transparent 70%), linear-gradient(90deg, rgba(8, 6, 8, 0.9) 8%, rgba(8, 6, 8, 0.35) 55%, rgba(8, 6, 8, 0.55)); }
-.fe-rail__stage { position: absolute; right: 12px; bottom: 6px; display: flex; align-items: flex-end; gap: 6px; }
-.fe-rail__mob { image-rendering: pixelated; filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.8)); }
-.fe-rail__mob--missing { display: inline-block; }
-.fe-rail__title { position: absolute; left: 14px; top: 12px; right: 96px; display: flex; flex-direction: column; gap: 3px; }
-.fe-rail__kicker { color: var(--ash); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fe-rail__name { margin: 0; color: var(--parchment); font-family: var(--font-title); font-weight: 700; font-size: var(--font-ui-body); line-height: 1.15; text-shadow: 0 2px 0 #000, 0 0 10px #000; }
-.fe-rail__close { position: absolute; right: 6px; top: 6px; }
-.fe-rail__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 14px 6px; display: flex; flex-direction: column; gap: 10px; }
-.fe-rail__facts { display: flex; flex-wrap: wrap; gap: 6px; }
-.fe-rail__desc { margin: 0; color: var(--bone); }
-.fe-rail__sec { display: flex; flex-direction: column; gap: 6px; }
-.fe-rail__h { margin: 0; color: var(--bronze-light); text-transform: uppercase; letter-spacing: 0.12em; }
-.fe-rail__family { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px 8px; padding: 6px 8px; min-height: 48px; background: rgba(0, 0, 0, 0.32); border: 1px solid #2f261f; }
-.fe-rail__chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.fe-rail__mute { margin: 0; color: var(--ash); }
+
+/* ---- chips (facts, what it pays, entry) --------------------------------------------------------------------- */
 .fe-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 4px; color: var(--parchment); background: rgba(0, 0, 0, 0.4); border: 1px solid #3f3227; }
 .fe-chip > span:only-child { padding-left: 4px; }
 .fe-chip--rare { border-color: #7a6a2a; }
 .fe-chip--unique { border-color: #8a4a22; color: var(--tone-unique); }
 .fe-chip--event { border-color: #55407a; color: var(--storm); }
-.fe-rail__foot { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 14px 12px; border-top: 1px solid #3a2c1d; background: rgba(0, 0, 0, 0.25); }
-.fe-rail__foot .fe-atlas__error { margin: 0; text-align: left; }
-.fe-rail__course { width: 100%; }
-.fe-rail__link { align-self: center; padding: 0; color: var(--ash); background: none; border: 0; text-decoration: underline; cursor: pointer; }
-
-/* ---- dock ---------------------------------------------------------------------------------------------- */
-.fe-dock {
-  position: relative;
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 96px;
-  padding: 6px 14px 8px;
-  border-top: 1px solid #58432d;
-  background: linear-gradient(180deg, #211a1b, #141113);
-}
-.fe-dock::before { content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 154, 60, 0.5), transparent); pointer-events: none; }
-.fe-dock__kicker { display: block; color: var(--bronze-light); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 3px; }
-.fe-dock__step { display: flex; flex-direction: column; min-width: 0; }
-.fe-dock .fe-device__destination { width: 176px; padding: 6px 10px; }
-.fe-dock .fe-dock__kicker { margin: 0; }
-.fe-dock__course { align-items: flex-start; }
-.fe-dock__circle.fe-device__circle { width: 66px; height: 66px; margin: 0; }
-.fe-dock__circle .fe-device-slot { width: 46px; height: 46px; }
-.fe-dock__sockets { display: flex; gap: 6px; }
-.fe-dock__sockets .fe-scarab-socket { gap: 2px; }
-.fe-dock__sockets .fe-device-slot { width: 46px; height: 46px; }
-.fe-dock__sockets .fe-scarab-remove { font-size: var(--font-ui-caption); }
 .fe-scarab-remove__x { display: none; }
-.fe-dock__step--readout { flex: 1; }
-.fe-dock__read { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.fe-dock__mapname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fe-dock__chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.fe-dock__chip { padding: 1px 7px; color: var(--parchment); background: rgba(0, 0, 0, 0.45); border: 1px solid #3f3227; }
-.fe-dock__chip--danger { color: #f3a090; border-color: #6a2a26; }
-.fe-dock__more { padding: 1px 6px; color: var(--ash); background: none; border: 1px solid transparent; cursor: pointer; }
-.fe-dock__more:hover, .fe-dock__more[aria-expanded='true'] { color: var(--flame); border-color: #6b5033; }
-.fe-dock__more--text { align-self: flex-start; text-decoration: underline; }
-.fe-dock__hint { color: var(--ash); }
-.fe-dock__class { justify-content: flex-start; margin-top: 4px; }
-.fe-dock__class select { padding: 2px 6px; }
-.fe-dock__go { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-left: auto; }
-.fe-dock__activate.fe-device__activate { min-width: 168px; }
-.fe-dock__cost { max-width: 260px; text-align: center; }
-.fe-dock__error { max-width: 260px; text-align: center; }
-.fe-dock__pop {
-  position: absolute;
-  right: 14px;
-  bottom: calc(100% + 6px);
-  z-index: 9;
-  width: min(460px, calc(100vw - 48px));
-  max-height: min(60vh, 460px);
-  overflow-y: auto;
-  padding: 12px 14px 14px;
-  background: linear-gradient(180deg, #26201b, #171316);
-  border: 1px solid var(--bronze);
-  box-shadow: 0 -8px 26px rgba(0, 0, 0, 0.7);
-}
-.fe-dock__pop-close { position: absolute; right: 6px; top: 6px; }
-.fe-device--table .fe-device__portal { margin: 0; border-left: 0; border-right: 0; border-radius: 0; flex: none; }
-
-/* ---- drop targets: the dock's slots light up while an item is dragged from the inventory ---------------------- */
-.fe-dock .fe-device-slot { transition: border-color 0.12s, box-shadow 0.12s; }
-.fe-dock .fe-device-slot.fe-slot--accepts { border-color: rgba(170, 235, 150, 0.85); animation: fe-slot-invite 1.1s ease-in-out infinite; }
-.fe-dock .fe-device-slot.fe-slot--ok { border-color: rgba(170, 235, 150, 1); animation: none; box-shadow: 0 0 0 1px #000, 0 0 0 4px rgba(13, 11, 14, 0.85), 0 0 0 5px rgba(170, 235, 150, 0.7), 0 0 22px rgba(120, 220, 110, 0.6), inset 0 0 18px rgba(120, 200, 110, 0.45); }
-.fe-dock .fe-device-slot.fe-slot--bad { border-color: rgba(240, 100, 90, 1); animation: none; box-shadow: 0 0 0 1px #000, 0 0 0 4px rgba(13, 11, 14, 0.85), 0 0 0 5px rgba(240, 100, 90, 0.7), 0 0 22px rgba(224, 70, 60, 0.55), inset 0 0 18px rgba(224, 70, 60, 0.5); }
 @keyframes fe-slot-invite { 50% { box-shadow: 0 0 0 1px #000, 0 0 0 4px rgba(13, 11, 14, 0.85), 0 0 0 5px rgba(150, 220, 130, 0.5), 0 0 14px rgba(120, 220, 110, 0.5), inset 0 0 14px rgba(0, 0, 0, 0.9); } }
-.fe-dock__hint--sub { display: block; }
-.fe-rail__hint { text-align: center; }
 
-/* ---- a table beside the inventory: the dock wraps into two rows below 900px of table width ----------------------- */
+/* ---- a table beside the inventory: the chart controls move up below 900px of table width -------------------------- */
 @container table (max-width: 899px) {
-  .fe-dock { flex-wrap: wrap; min-height: 0; gap: 4px 10px; padding: 6px 10px 6px; }
-  .fe-dock__kicker { display: none; }
-  .fe-dock .fe-device__destination { width: 156px; padding: 3px 8px; }
-  .fe-dock .fe-device__destination .ui-type-caption:last-child { display: none; }
-  .fe-dock__circle.fe-device__circle { width: 56px; height: 56px; }
-  .fe-dock__circle .fe-device-slot, .fe-dock__sockets .fe-device-slot { width: 40px; height: 40px; }
-  /* the word does not fit under a 40px socket: a small corner cross keeps removal visible (the name stays for screen readers) */
-  .fe-dock__sockets .fe-scarab-socket { position: relative; }
-  .fe-dock__sockets .fe-scarab-remove { position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center; border-radius: 50%; background: #2a1b12; border: 1px solid var(--bronze); z-index: 2; }
-  .fe-dock__sockets .fe-scarab-remove__word { display: none; }
-  .fe-dock__sockets .fe-scarab-remove__x { display: inline; }
-  .fe-dock__sockets { gap: 5px; }
-  .fe-dock__step--readout { order: 5; flex: 1 0 100%; }
-  .fe-dock__read { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-  .fe-dock__mapname { max-width: 48%; }
-  .fe-dock__cost { display: none; }
-  .fe-dock__go { margin-left: auto; }
-  .fe-dock__activate.fe-device__activate { min-width: 140px; }
-  .fe-dock__pop { right: 10px; width: calc(100% - 20px); }
   .fe-chart__ruler .fe-chart__ruler-label { display: none; }
   .fe-chart__controls { bottom: auto; top: 10px; }
   .fe-chart .fe-chart__bar { right: 252px; }
@@ -358,25 +244,16 @@
   .fe-table__meta { justify-self: end; gap: 10px; }
 }
 
+
 /* ---- compact: 1024x600 and other small windows ---------------------------------------------------------- */
 @media (max-width: 1179px), (max-height: 679px) {
   .fe-table__head { height: 40px; gap: 10px; }
   .fe-table__title { font-size: var(--font-ui-body); letter-spacing: 0.14em; }
   .fe-table__tab { padding: 3px 10px; }
-  .fe-dock .fe-device__destination { width: 112px; }
-  .fe-dock__activate.fe-device__activate { min-width: 112px; }
-  .fe-dock .fe-device__activate { padding-left: 14px; padding-right: 14px; }
-}
-/* the inspector rail is a drawer whenever the inventory shares the screen (below wide windows) */
-@media (max-width: 1499px), (max-height: 679px) {
-  .fe-railslot { position: absolute; right: 0; top: 0; bottom: 0; z-index: 6; width: 304px; transform: translateX(105%); transition: transform 0.18s ease-out; visibility: hidden; box-shadow: -10px 0 24px rgba(0, 0, 0, 0.6); border-left: 1px solid var(--bronze); }
-  .fe-railslot--open { transform: none; visibility: visible; }
-  .fe-rail__hero { height: 92px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fe-device.fe-device--table, .fe-chart__tip { animation: none; }
-  .fe-railslot { transition: none; }
+  .fe-device.fe-device--table, .fe-chart__tip, .fe-amodal, .fe-amodal__scrim { animation: none; }
 }
 
 /* ---- keys in hand: chips with a dashed thread to their door (drawn on the canvas) ---------------------------- */
@@ -388,39 +265,6 @@
 }
 .fe-chart__btn--on { border-color: var(--flame); color: var(--flame); }
 
-/* ---- activation: a sigil ring closes over the map slot, each consumed scarab gives a spark ------------------- */
-.fe-dock__circle { position: relative; }
-.fe-dock__sigil {
-  position: absolute; inset: -16px; border-radius: 50%; pointer-events: none; z-index: 3;
-  background: repeating-conic-gradient(from 8deg, var(--flame) 0 10deg, transparent 10deg 30deg);
-  -webkit-mask: radial-gradient(circle, transparent 0 50%, #000 53% 71%, transparent 73%);
-  mask: radial-gradient(circle, transparent 0 50%, #000 53% 71%, transparent 73%);
-  filter: drop-shadow(0 0 6px var(--ember));
-  animation: fe-sigil-close 0.7s cubic-bezier(0.2, 0.85, 0.25, 1) both;
-}
-@keyframes fe-sigil-close {
-  0% { transform: scale(2.3) rotate(-140deg); opacity: 0; }
-  35% { opacity: 1; }
-  78% { transform: scale(1) rotate(0); opacity: 1; filter: drop-shadow(0 0 12px var(--hot)) brightness(1.6); }
-  100% { transform: scale(0.94) rotate(20deg); opacity: 0; }
-}
-.fe-dock__sockwrap { position: relative; display: flex; }
-.fe-dock__spark {
-  position: absolute; left: 50%; top: 40%; width: 6px; height: 6px; margin: -3px 0 0 -3px; pointer-events: none; z-index: 3;
-  background: var(--hot); box-shadow: 0 0 10px 4px var(--flame), 0 0 22px 8px rgba(232, 102, 42, 0.5);
-  animation: fe-spark 0.7s ease-out both;
-}
-@keyframes fe-spark { 0% { transform: scale(0.4); opacity: 1; } 35% { transform: translateY(-10px) scale(1.6); opacity: 1; } 100% { transform: translateY(-34px) scale(0.2); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .fe-dock__sigil, .fe-dock__spark { animation-name: fe-sigil-calm; animation-duration: 0.5s; transform: none; } }
-@keyframes fe-sigil-calm { 0% { opacity: 0; } 40% { opacity: 0.9; } 100% { opacity: 0; } }
-.fe-dock--calm .fe-dock__sigil, .fe-dock--calm .fe-dock__spark { animation-name: fe-sigil-calm; animation-duration: 0.5s; transform: none; }
-
-/* Passage options in the dock (brief D 2.5): a key held in the pack or the Pit's Bounty. Chips reuse the dock's chip type. */
-.fe-dock__passage { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 4px; }
-.fe-dock__chip--btn { cursor: pointer; font-family: inherit; }
-.fe-dock__chip--btn:hover { border-color: #6b5033; color: var(--flame); }
-.fe-dock .fe-device__destination .ui-type-caption.fe-dock__bypass:last-child { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* what a passage spends stays visible in the compact dock */
-.fe-dock__chip--on { color: var(--flame); border-color: var(--bronze); background: rgba(80, 40, 10, 0.55); }
 
 /* ---- chart bar: lenses and the pin tray (brief D 3, 5.1) ---------------------------------------------------- */
 .fe-chart__bar { position: absolute; left: 10px; top: 10px; right: 10px; z-index: 5; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: flex-start; pointer-events: none; }
@@ -475,11 +319,7 @@
 .fe-sources__bar i { display: block; height: 100%; background: linear-gradient(90deg, #8a6a3e, #e0b04a); }
 .fe-sources__row--pending .fe-sources__bar i { background: linear-gradient(90deg, #55407a, #c07bff); }
 .fe-chart__sources { position: absolute; left: 10px; bottom: 52px; z-index: 4; width: min(330px, calc(100% - 20px)); max-height: calc(100% - 170px); overflow-y: auto; padding: 8px 10px 10px; background: rgba(12, 9, 12, 0.93); border: 1px solid #58432d; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6); pointer-events: auto; }
-.fe-dock__sources { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; color: var(--ash); }
-.fe-dock__sources-label { color: var(--bronze-light); text-transform: uppercase; letter-spacing: 0.08em; }
-.fe-dock__source { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; color: var(--parchment); background: rgba(0, 0, 0, 0.4); border: 1px solid #3f3227; cursor: pointer; font-family: inherit; }
-.fe-dock__source:hover { border-color: var(--flame); color: var(--flame); }
-.fe-dock__source--pinned { border-color: #7a5a22; }
+
 
 /* ---- Re-chart popover ------------------------------------------------------------------------------------- */
 .fe-rechart { position: absolute; z-index: 30; width: min(420px, calc(100vw - 32px)); max-height: min(440px, calc(100vh - 140px)); overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 12px; color: var(--parchment); background: linear-gradient(180deg, #26201b, #171316); border: 1px solid var(--bronze); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.75); }
@@ -497,12 +337,7 @@
 .fe-rechart__pips { display: inline-flex; }
 .fe-rechart__none { padding: 6px 4px; color: var(--ash); }
 .fe-price--short { color: var(--bad); }
-.fe-rail__pin { position: absolute; right: 10px; top: 8px; z-index: 2; width: 34px; height: 34px; display: grid; place-items: center; background: rgba(10, 8, 11, 0.75); border: 1px solid #6b5033; }
-.fe-rail__pin:hover:not(:disabled), .fe-rail__pin--on { border-color: var(--gold); box-shadow: 0 0 10px rgba(224, 176, 74, 0.45); }
-.fe-rail__pin:disabled { opacity: 0.45; }
-.fe-rail__pin .fe-pinglyph { width: 12px; height: 16px; }
-.fe-rail__pinrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.fe-rail--compact .fe-rail__pin { right: 46px; top: 6px; }
+
 
 /* ---- passage slot ------------------------------------------------------------------------------------------- */
 .fe-passage { position: relative; display: flex; }
@@ -512,18 +347,213 @@
 .fe-passage__pit--offer { opacity: 0.55; animation: fe-slot-invite 1.4s ease-in-out infinite; }
 .fe-passage__x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 15px; text-align: center; color: var(--ash); background: #2a1b12; border: 1px solid var(--bronze); border-radius: 50%; pointer-events: none; }
 .fe-passage__socket:focus-visible { outline: 2px solid var(--flame); outline-offset: 2px; }
-.fe-dock__step--passage .fe-device-slot { width: 46px; height: 46px; }
 
-/* ---- dock: where the map lives, its quick actions, the passage step --------------------------------------- */
-.fe-dock__where { display: flex; flex-direction: column; gap: 3px; align-items: stretch; }
-.fe-dock__acts { display: flex; flex-wrap: wrap; gap: 4px; min-height: 0; }
-.fe-dock__acts:empty { display: none; }
-.fe-dock__act { padding: 0 8px; height: 22px; color: var(--bone); background: rgba(0, 0, 0, 0.4); border: 1px solid #4d3b28; cursor: pointer; font-family: inherit; }
-.fe-dock__act:hover:not(:disabled) { color: var(--flame); border-color: var(--flame); }
-.fe-dock__act:disabled { opacity: 0.45; cursor: default; }
-.fe-dock__act:focus-visible { outline: 2px solid var(--flame); outline-offset: 1px; }
-.fe-dock .fe-dock__rechart { position: absolute; left: 14px; bottom: calc(100% + 6px); }
+
+/* ---- small action buttons (the modal, the status line, the surge strip) ------------------------------------- */
+.fe-act { padding: 0 8px; height: 24px; color: var(--bone); background: rgba(0, 0, 0, 0.4); border: 1px solid #4d3b28; cursor: pointer; font-family: inherit; }
+.fe-act:hover:not(:disabled) { color: var(--flame); border-color: var(--flame); }
+.fe-act:disabled { opacity: 0.45; cursor: default; }
+.fe-act:focus-visible { outline: 2px solid var(--flame); outline-offset: 1px; }
 .fe-sources__more { align-self: flex-start; padding: 0 8px; color: var(--ash); background: none; border: 1px solid #3f3227; cursor: pointer; font-family: inherit; }
 .fe-sources__more:hover { color: var(--flame); border-color: var(--flame); }
-.fe-dock .fe-dock__rechart { max-height: min(440px, calc(100vh - 300px)); }
-@media (max-height: 679px) { .fe-dock .fe-dock__rechart .fe-rechart__implicit { display: none; } }
+.fe-nextdrops { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; color: var(--ash); }
+.fe-nextdrops__label { color: var(--bronze-light); text-transform: uppercase; letter-spacing: 0.08em; }
+.fe-nextdrops__src { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; color: var(--parchment); background: rgba(0, 0, 0, 0.4); border: 1px solid #3f3227; cursor: pointer; font-family: inherit; }
+.fe-nextdrops__src:hover { border-color: var(--flame); color: var(--flame); }
+.fe-nextdrops__src--pinned { border-color: #7a5a22; }
+
+.fe-passage__pit--idle { opacity: 0.45; animation: none; box-shadow: none; filter: grayscale(0.6); }
+.fe-passage__socket--pit { cursor: default; }
+.fe-passage__clear { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center; border-radius: 50%; background: #2a1b12; border: 1px solid var(--bronze); z-index: 2; }
+
+/* ---- the slim status line under the chart: the open expedition, the way to it, the surge countdown ----------------- */
+.fe-table__status {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-height: 36px;
+  padding: 4px 14px;
+  border-top: 1px solid #58432d;
+  background: linear-gradient(180deg, #211a1b, #141113);
+}
+.fe-table__status::before { content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 154, 60, 0.5), transparent); pointer-events: none; }
+.fe-table__expedition { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: var(--parchment); }
+.fe-table__expedition--idle { color: var(--ash); }
+.fe-table__expedition b { color: var(--hot); }
+.fe-device__portal-dot--idle { filter: grayscale(1); opacity: 0.45; }
+.fe-table__statusfill { flex: 1; }
+.fe-table__enter { color: var(--hot); border-color: var(--flame); }
+.fe-chart__tip-open { color: var(--bronze-light); }
+
+/* ---- the area modal ---------------------------------------------------------------------------------------------- */
+.fe-amodal__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  background: radial-gradient(ellipse at 50% 38%, rgba(12, 8, 10, 0.6), rgba(4, 2, 5, 0.86));
+  animation: fe-amodal-fade 0.14s ease-out;
+}
+@keyframes fe-amodal-fade { from { opacity: 0; } }
+@keyframes fe-amodal-in { from { opacity: 0; transform: translateY(6px) scale(0.99); } }
+.fe-amodal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 780px);
+  max-height: 100%;
+  min-height: 0;
+  background: linear-gradient(180deg, #1f1819, #141114);
+  border: 1px solid var(--bronze);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.8), 0 0 0 1px #000, inset 0 0 0 1px rgba(255, 170, 90, 0.06);
+  outline: none;
+  animation: fe-amodal-in 0.18s ease-out;
+}
+.fe-amodal:focus-visible { box-shadow: 0 18px 48px rgba(0, 0, 0, 0.8), 0 0 0 2px var(--flame); }
+
+.fe-amodal__hero {
+  position: relative;
+  flex: none;
+  min-height: 92px;
+  display: flex;
+  align-items: center;
+  padding: 10px 84px 10px 14px;
+  overflow: hidden;
+  border-bottom: 1px solid #58432d;
+  background-color: #100d10;
+  background-size: 32px 32px;
+  image-rendering: pixelated;
+}
+.fe-amodal__pool { position: absolute; inset: 0; background: radial-gradient(ellipse 50% 90% at 82% 98%, color-mix(in srgb, var(--glow, #e8662a) 62%, transparent), transparent 70%), linear-gradient(90deg, rgba(8, 6, 8, 0.94) 14%, rgba(8, 6, 8, 0.5) 58%, rgba(8, 6, 8, 0.6)); }
+.fe-amodal__stage { position: absolute; right: 78px; bottom: 6px; display: flex; align-items: flex-end; gap: 6px; pointer-events: none; }
+.fe-amodal__mob { image-rendering: pixelated; filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.8)); }
+.fe-amodal__mob--missing { display: inline-block; }
+.fe-amodal__title { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.fe-amodal__plate { flex: none; filter: drop-shadow(0 2px 2px #000); }
+.fe-amodal__titletext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fe-amodal__kicker { color: var(--ash); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fe-amodal__name { margin: 0; color: var(--parchment); font-family: var(--font-title); font-weight: 700; font-size: var(--font-ui-title); line-height: 1.1; letter-spacing: 0.04em; text-shadow: 0 2px 0 #000, 0 0 12px #000; }
+.fe-amodal__sub { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; color: var(--bone); text-shadow: 0 1px 0 #000, 0 0 6px #000; }
+.fe-amodal__heroacts { position: absolute; right: 8px; top: 8px; z-index: 2; display: flex; gap: 6px; }
+.fe-amodal__pin, .fe-amodal__close { width: 34px; height: 34px; display: grid; place-items: center; background: rgba(10, 8, 11, 0.75); border: 1px solid #6b5033; }
+.fe-amodal__pin:hover:not(:disabled), .fe-amodal__pin--on { border-color: var(--gold); box-shadow: 0 0 10px rgba(224, 176, 74, 0.45); }
+.fe-amodal__pin:disabled { opacity: 0.45; }
+.fe-amodal__pin .fe-pinglyph { width: 12px; height: 16px; }
+
+.fe-amodal__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 10px 14px 14px; }
+.fe-amodal__facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.fe-amodal__main { display: grid; grid-template-columns: minmax(268px, 304px) minmax(0, 1fr); gap: 14px 22px; align-items: start; }
+.fe-amodal__device { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.fe-amodal__side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fe-amodal__h { margin: 0; color: var(--bronze-light); text-transform: uppercase; letter-spacing: 0.12em; }
+.fe-amodal__sec { display: flex; flex-direction: column; gap: 6px; }
+.fe-amodal__about { display: flex; flex-direction: column; gap: 12px; }
+.fe-amodal__desc { margin: 0; color: var(--bone); }
+.fe-amodal__mute { margin: 0; color: var(--ash); }
+.fe-amodal__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fe-amodal__bad { color: var(--bad); }
+
+/* the ring: the map slot in the middle of the sigil circle, four scarab sockets around it, the passage socket on the rim (sealed areas, the Pit) */
+.fe-amodal__ring { position: relative; flex: none; width: 272px; height: 204px; }
+.fe-amodal__ring--passage { height: 238px; }
+.fe-amodal__circle.fe-device__circle { position: absolute; left: 50%; top: 0; width: 196px; height: 196px; margin: 0; transform: translateX(-50%); }
+.fe-amodal__mapslot.fe-device-slot { width: 84px; height: 84px; }
+.fe-amodal__sock { position: absolute; z-index: 2; }
+.fe-amodal__sock--0 { left: 6px; top: 6px; }
+.fe-amodal__sock--1 { right: 6px; top: 6px; }
+.fe-amodal__sock--2 { left: 6px; top: 118px; }
+.fe-amodal__sock--3 { right: 6px; top: 118px; }
+.fe-amodal__sock .fe-scarab-socket { position: relative; gap: 0; }
+.fe-amodal__sock .fe-scarab-remove { position: absolute; top: -8px; right: -8px; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center; border-radius: 50%; background: #2a1b12; border: 1px solid var(--bronze); z-index: 3; }
+.fe-amodal__sock .fe-scarab-remove__word { display: none; }
+.fe-amodal__sock .fe-scarab-remove__x { display: inline; }
+.fe-amodal__passage { position: absolute; left: 50%; bottom: 0; z-index: 2; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.fe-amodal__slotlabel { color: var(--bronze-light); text-transform: uppercase; letter-spacing: 0.1em; }
+
+/* drop targets: the slots light up while an item is dragged from the inventory (green fits, red says why not in the cursor tag) */
+.fe-amodal .fe-device-slot { transition: border-color 0.12s, box-shadow 0.12s; }
+.fe-amodal .fe-device-slot.fe-slot--accepts { border-color: rgba(170, 235, 150, 0.85); animation: fe-slot-invite 1.1s ease-in-out infinite; }
+.fe-amodal .fe-device-slot.fe-slot--ok { border-color: rgba(170, 235, 150, 1); animation: none; box-shadow: 0 0 0 1px #000, 0 0 0 4px rgba(13, 11, 14, 0.85), 0 0 0 5px rgba(170, 235, 150, 0.7), 0 0 22px rgba(120, 220, 110, 0.6), inset 0 0 18px rgba(120, 200, 110, 0.45); }
+.fe-amodal .fe-device-slot.fe-slot--bad, .fe-amodal .fe-device-slot--mismatch { border-color: rgba(240, 100, 90, 1); animation: none; box-shadow: 0 0 0 1px #000, 0 0 0 4px rgba(13, 11, 14, 0.85), 0 0 0 5px rgba(240, 100, 90, 0.7), 0 0 22px rgba(224, 70, 60, 0.55), inset 0 0 18px rgba(224, 70, 60, 0.5); }
+
+.fe-amodal__notice { width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; color: #f3a090; background: rgba(110, 30, 26, 0.28); border: 1px solid #7a2f2a; }
+.fe-amodal__noticeacts { display: flex; flex-wrap: wrap; gap: 6px; }
+.fe-amodal__mapcard { width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: rgba(0, 0, 0, 0.32); border: 1px solid #3a2f24; }
+.fe-amodal__mapname { min-width: 0; font-family: var(--font-title); text-shadow: 0 1px 2px #000; }
+.fe-amodal__mapacts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.fe-amodal__maptier { color: var(--ash); }
+.fe-amodal__mods { margin: 2px 0 0; }
+.fe-amodal__empty { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 12px; text-align: center; color: var(--ash); background: rgba(0, 0, 0, 0.24); border: 1px dashed #5a4630; }
+.fe-amodal__empty strong { color: var(--parchment); font-weight: 700; }
+.fe-amodal__stashnote { color: var(--gold); }
+.fe-amodal__repeat { width: 100%; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 8px; padding: 5px 10px; color: var(--parchment); background: rgba(80, 40, 10, 0.35); border: 1px dashed var(--bronze); cursor: pointer; font-family: inherit; }
+.fe-amodal__repeat:hover { border-color: var(--flame); color: var(--hot); }
+.fe-amodal__repeat:focus-visible { outline: 2px solid var(--flame); outline-offset: 1px; }
+.fe-amodal__repeatglyph { color: var(--flame); }
+.fe-amodal__repeatnote { color: var(--ash); }
+.fe-amodal__class { justify-content: flex-start; }
+.fe-amodal__class select { padding: 2px 6px; }
+.fe-surge-hold { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 8px; padding: 4px 0 0; border-top: 1px solid #2f261f; }
+.fe-surge-hold__reset { color: var(--ash); }
+.fe-amodal__rechart { position: absolute; left: 50%; top: 56px; z-index: 12; transform: translateX(-50%); width: min(430px, calc(100% - 20px)); max-height: calc(100% - 80px); }
+
+/* a one-line readout under the map card, for the narrow layout where the full readout sits below the fold */
+.fe-amodal__mini { display: none; width: 100%; flex-wrap: wrap; gap: 4px 6px; }
+.fe-amodal__minichip { padding: 1px 7px; color: var(--parchment); background: rgba(0, 0, 0, 0.45); border: 1px solid #3f3227; }
+.fe-amodal__minichip--bad { color: #f3a090; border-color: #6a2a26; }
+.fe-amodal__narrowhint { display: none; color: var(--bronze-light); }
+
+/* the live readout */
+.fe-amodal__live { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: rgba(0, 0, 0, 0.28); border: 1px solid #33291f; }
+.fe-amodal__stats { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; align-items: baseline; }
+.fe-amodal__stats dt { color: var(--ash); }
+.fe-amodal__stats dd { margin: 0; color: var(--parchment); }
+.fe-amodal__scarab { display: block; }
+.fe-amodal__scarab b { color: var(--parchment); font-weight: 700; }
+.fe-amodal__drops { min-width: 0; }
+.fe-amodal__more { align-self: flex-start; padding: 0 8px; color: var(--ash); background: none; border: 1px solid #3f3227; cursor: pointer; font-family: inherit; }
+.fe-amodal__more:hover, .fe-amodal__more[aria-expanded='true'] { color: var(--flame); border-color: var(--flame); }
+.fe-amodal__where { padding: 10px 12px; background: rgba(0, 0, 0, 0.24); border: 1px solid #33291f; }
+.fe-amodal__wherelist { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--bone); }
+.fe-amodal__link { padding: 0; color: var(--hot); background: none; border: 0; text-decoration: underline; cursor: pointer; font-family: inherit; font-size: inherit; }
+.fe-amodal__link:hover { color: var(--flame); }
+.fe-amodal__link:focus-visible { outline: 2px solid var(--flame); outline-offset: 2px; }
+
+/* the footer: why the button is disabled is always written out */
+.fe-amodal__foot { flex: none; display: flex; align-items: center; gap: 14px; padding: 10px 14px 12px; border-top: 1px solid #58432d; background: rgba(0, 0, 0, 0.3); }
+.fe-amodal__footinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fe-amodal__footinfo p { margin: 0; }
+.fe-amodal__reason--ok { color: var(--good); }
+.fe-amodal__reason--bad { color: #f3a090; }
+.fe-amodal__portalnote { color: var(--gold); }
+.fe-amodal__cost { color: var(--ash); }
+.fe-amodal__open.fe-btn { flex: none; min-width: 168px; }
+
+/* a narrow table (the inventory takes the rest of a 1024 window): one column, a smaller ring, no sprite stage */
+@container table (max-width: 699px) {
+  .fe-amodal__main { grid-template-columns: minmax(0, 1fr); }
+  .fe-amodal__mini { display: flex; }
+  .fe-amodal__narrowhint { display: block; }
+  .fe-amodal__stage { display: none; }
+  .fe-amodal__hero { min-height: 68px; padding-right: 84px; }
+  .fe-amodal__name { font-size: var(--font-ui-body); }
+  .fe-amodal__facts { display: none; }
+  .fe-amodal__ring { width: 248px; height: 172px; }
+  .fe-amodal__ring--passage { height: 204px; }
+  .fe-amodal__circle.fe-device__circle { width: 168px; height: 168px; }
+  .fe-amodal__mapslot.fe-device-slot { width: 72px; height: 72px; }
+  .fe-amodal__sock--2, .fe-amodal__sock--3 { top: 100px; }
+  .fe-amodal__sock .fe-device-slot, .fe-amodal__sock .fe-scarab-socket .fe-device-slot { width: 42px; height: 42px; }
+  .fe-amodal__foot { gap: 10px; padding: 8px 10px 10px; }
+  .fe-amodal__open.fe-btn { min-width: 124px; }
+  .fe-amodal__scroll { padding: 8px 10px 12px; gap: 10px; }
+}
+@media (max-height: 679px) {
+  .fe-amodal__scrim { padding: 6px; }
+  .fe-amodal__hero { min-height: 60px; }
+}

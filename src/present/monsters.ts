@@ -63,6 +63,8 @@ const BAR_LAG: RGB = [1, 0.85, 0.55];
 // Magic monsters: the life bar takes their blue so the pack reads as one.
 const BAR_MAGIC: RGB = [0.36, 0.52, 0.95];
 const NAME_RARE: RGB = [0.98, 0.84, 0.36];
+/** How many rare packs show their full name at once (the nearest ones). */
+const NAMED_RARES = 3;
 const NAME_LT: RGB = [1, 0.58, 0.24];
 const RARE_GLOW: RGB = [1, 0.78, 0.3];
 const MAGIC_GLOW: RGB = [0.35, 0.5, 1];
@@ -127,6 +129,8 @@ export class MonsterPainter {
   private drv = new Uint8Array(0);
   private drvT0 = new Float64Array(0);
   private readonly names = new MonsterNameCache();
+  /** Scratch: the squared distances of the nearest rares (see rareNameCut). */
+  private readonly nameBest = new Float64Array(NAMED_RARES);
   private readonly tint: [number, number, number] = [1, 1, 1];
   private readonly hotOut = { x: 0, y: 0 };
   /** This frame's charge lanes (variant ≥ 1) and whirling blade rings (x, y) for the driven actions. */
@@ -318,6 +322,27 @@ export class MonsterPainter {
     return Driven.None;
   }
 
+  /**
+   * The squared distance (from the local player) up to which a rare keeps its name plate this frame: the NAMED_RARES nearest ones.
+   * Infinity when there are no more rares than that.
+   */
+  private rareNameCut(f: FrameCtx, m: FrameCtx['world']['monsters'], a: number): number {
+    const best = this.nameBest;
+    let n = 0;
+    const px = f.local ? f.local.x : f.view.cx;
+    const py = f.local ? f.local.y : f.view.cy;
+    for (let i = 0; i < m.capacity; i++) {
+      if (!m.alive[i] || m.rarity[i] !== RARITY_CODE.rare) continue;
+      const dx = m.prevX[i] + (m.x[i] - m.prevX[i]) * a - px;
+      const dy = m.prevY[i] + (m.y[i] - m.prevY[i]) * a - py;
+      const d = dx * dx + dy * dy;
+      // keep the NAMED_RARES smallest in `best` (insertion into a tiny sorted array)
+      if (n < NAMED_RARES) { let k = n++; while (k > 0 && best[k - 1] > d) { best[k] = best[k - 1]; k--; } best[k] = d; }
+      else if (d < best[NAMED_RARES - 1]) { let k = NAMED_RARES - 1; while (k > 0 && best[k - 1] > d) { best[k] = best[k - 1]; k--; } best[k] = d; }
+    }
+    return n < NAMED_RARES ? Infinity : best[NAMED_RARES - 1];
+  }
+
   draw(pen: Pen, f: FrameCtx): void {
     const m = f.world.monsters;
     this.ensure(m.capacity);
@@ -334,6 +359,7 @@ export class MonsterPainter {
     this.presenceCount = 0;
     this.scanAreas(f);
     const cap = m.capacity;
+    const nameCut = this.rareNameCut(f, m, a);
     for (let i = 0; i < cap; i++) {
       if (!m.alive[i]) continue;
       const x = m.prevX[i] + (m.x[i] - m.prevX[i]) * a;
@@ -629,6 +655,10 @@ export class MonsterPainter {
         if (lagW > 0) r.rect(bx, by, lagW, 3, pen.shape(BAR_LAG, 0.85, 'top'));
         const lifeW = Math.round(w * frac);
         if (lifeW > 0) r.rect(bx, by, lifeW, 3, pen.shape(BAR_LIFE, 1, 'top'));
+        // Only the few rares nearest to you carry their full name; the rest of a crowd show the bar alone (a name pile covers the screen).
+        const pdx = x - (f.local ? f.local.x : v.cx);
+        const pdy = y - (f.local ? f.local.y : v.cy);
+        if (isRare && pdx * pdx + pdy * pdy > nameCut) continue;
         const name = this.names.name(kind, rarity, m.mods[i]);
         // Keep the whole plate on screen: a leader at the edge still shows its name (the bar stays on the body).
         const half = (r.measureText(name, 1) / 2 + NAME_PAD + 1) / f.zoom;

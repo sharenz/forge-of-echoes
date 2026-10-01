@@ -769,7 +769,7 @@ export function describeMap(map: MapItem, opts: MapDescribeOptions = {}): ItemDe
   if (map.twinInked) headerLines.push('Twin Ink: two reward-mod slots');
   if (map.corrupted) headerLines.push('Corrupted');
   let hint = opts.inDevice
-    ? 'Activate the Map Device to open a portal.'
+    ? 'Open the area in the Atlas to open a portal.'
     : opts.inMapStash
       ? 'Drag it to your backpack, then into the Map Device; Ctrl+click takes it to your backpack.'
       : 'Place it in the Map Device in your hideout: it opens exactly this area.';

@@ -31,7 +31,8 @@ export function kindCaption(line: TooltipLine): string | null {
   else if (line.kind === 'unique') parts.push('Unique');
   else if (line.kind === 'scar') parts.push('Scar');
   if (line.affixName) parts.push(`“${line.affixName}”`);
-  if (line.tier !== undefined) parts.push(`Tier ${line.tier}`);
+  // Affix tiers are ranks: 1 is the best roll band (a map's tier is the opposite: higher is harder), so the caption says so.
+  if (line.tier !== undefined) parts.push(line.kind === 'mapMod' ? `Tier ${line.tier}` : `Tier ${line.tier} (1 is best)`);
   if (line.tags?.length) parts.push(line.tags.join(', '));
   return parts.length > 1 || (line.kind === 'mapMod' && parts.length > 0) || line.tier !== undefined ? parts.join(' · ') : null;
 }
@@ -328,6 +329,8 @@ export function DetachedItemTooltip({
   note,
   label,
   compare,
+  price,
+  appraisal,
 }: {
   store: UiStore;
   ch: CharacterSave;
@@ -336,6 +339,8 @@ export function DetachedItemTooltip({
   note?: string;
   label?: string;
   compare?: boolean;
+  price?: { text: string; poor: boolean };
+  appraisal?: string[];
 }) {
   const desc = safe(() => store.rules.describeItem(item, ch), null);
   if (!desc) return null;
@@ -343,7 +348,13 @@ export function DetachedItemTooltip({
   return (
     <div class="fe-tt-row">
       {compareMode && compareCards(store, ch, item, alt)}
-      <ItemCard desc={desc} alt={alt} label={label} footer={note ? <div class="fe-tt__hint">{note}</div> : undefined} />
+      <ItemCard desc={desc} alt={alt} label={label} footer={note || price || appraisal ? (
+        <>
+          {note && <div class="fe-tt__hint">{note}</div>}
+          {appraisal && <div class="fe-tt__appraisal">{appraisal.map((l, i) => <div key={i}>{l}</div>)}</div>}
+          {price && <div class={cx('fe-tt__price', price.poor && 'fe-tt__price--poor')} data-testid="tooltip-price">{price.text}</div>}
+        </>
+      ) : undefined} />
     </div>
   );
 }

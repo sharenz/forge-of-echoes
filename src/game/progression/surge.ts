@@ -35,6 +35,16 @@ export function forgeDayStart(day: number): number {
   return day * SURGE_DAY_MS + SURGE_RESET_UTC_HOUR * HOUR_MS;
 }
 
+/** Index of the `hours`-long slice of the forge clock containing `now` (slices start at the 04:00 UTC anchor; `hours` divides 24). */
+export function forgeRotation(now: number, hours: number): number {
+  return Math.floor((now - SURGE_RESET_UTC_HOUR * HOUR_MS) / (hours * HOUR_MS));
+}
+
+/** Server time (ms) at which forge rotation `index` (of `hours`-long slices) starts. */
+export function forgeRotationStart(index: number, hours: number): number {
+  return index * hours * HOUR_MS + SURGE_RESET_UTC_HOUR * HOUR_MS;
+}
+
 /** Milliseconds until the next reset (always in (0, 24 h]). */
 export function msUntilReset(now: number): number {
   return forgeDayStart(forgeDay(now) + 1) - now;

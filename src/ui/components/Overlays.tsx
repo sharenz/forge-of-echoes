@@ -88,6 +88,8 @@ export function TooltipHost() {
           note={spec.note}
           label={spec.label}
           compare={spec.compare}
+          price={spec.price}
+          appraisal={spec.appraisal}
         />
       );
   } else if (spec.kind === 'skill') {

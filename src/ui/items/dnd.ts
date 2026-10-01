@@ -130,6 +130,7 @@ function drop(d: DragState, target: DropTarget | null, store: UiStore, local: Lo
     if (!target.valid || !handler) {
       store.actions.uiSound('error');
       if (target.reason) local.flashHint(target.reason, at.x, at.y);
+      handler?.onRefused?.({ uid: d.uid, item: d.item, from: d.from }, target.reason);
       return;
     }
     handler.onDrop({ uid: d.uid, item: d.item, from: d.from });

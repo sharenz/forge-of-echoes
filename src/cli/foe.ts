@@ -8,7 +8,7 @@ import { createAdminClient } from './admin-client';
 import type { AdminClient } from './admin-client';
 import { actor, audit } from './audit';
 import type { AuditEntry } from './audit';
-import { backupDatabase, characterDetails, atlasSummary, executeReset, findAccount, findCharacter, listAccounts, listCharacters, openDb, planReset, RESET_TABLES, timestamp } from './data';
+import { backupDatabase, characterDetails, atlasSummary, guideSummary, type GuideSummary, executeReset, findAccount, findCharacter, listAccounts, listCharacters, openDb, planReset, RESET_TABLES, timestamp } from './data';
 import type { AccountSummary, CharacterSummary, ResetPlan, ResetScope } from './data';
 import { debugMerch } from '../server/debug-merch-cli';
 import type { AdminOnlinePlayer } from '../server/admin';
@@ -184,12 +184,21 @@ async function cmdOnline(rt: Runtime): Promise<void> {
   rt.ctx.out(`${players.length} player(s) online`);
 }
 
-export function accountLines(a: AccountSummary, chars: CharacterSummary[], atlas: ReturnType<typeof atlasSummary>, now: number, online: number | null): string[] {
+/** "active, 4/11 steps (last: fight), 2 hints" with the gaps between steps ("device +0:12, area +0:08"), or the skip. */
+export function tutorialLine(g: GuideSummary): string {
+  const gaps = g.steps.map((s, i) => `${s.id} +${Math.max(0, Math.round((s.at - (g.steps[i - 1]?.at ?? s.at)) / 1000))}s`).slice(1);
+  const last = g.done.length ? g.done[g.done.length - 1] : 'none';
+  const state = g.mode === 'skipped' ? `skipped by ${g.skippedBy ?? 'the player'}` : g.mode;
+  return `${state}, ${g.done.length} steps (last: ${last}), ${g.hints} hints${g.replays ? `, ${g.replays} replays` : ''}${gaps.length ? `   ${gaps.join(', ')}` : ''}`;
+}
+
+export function accountLines(a: AccountSummary, chars: CharacterSummary[], atlas: ReturnType<typeof atlasSummary>, now: number, online: number | null, guide: GuideSummary | null = null): string[] {
   return [
     `account     ${a.username}`,
     `created     ${day(a.created)}   last seen ${ago(a.lastSeen, now)}   online ${online === null ? '?' : online}`,
     `characters  ${chars.length ? chars.map((c) => `${c.name} (L${c.level} ${c.classId})`).join(', ') : 'none'}`,
     `progress    highest map tier ${atlas.tier}, ${atlas.clears} atlas clears, ${atlas.completed} areas completed, ${atlas.stashTabs} stash tabs`,
+    ...(guide ? [`tutorial    ${tutorialLine(guide)}`] : []),
   ];
 }
 
@@ -223,9 +232,10 @@ async function cmdShow(rt: Runtime): Promise<void> {
     }
     const chars = listCharacters(db, acc.id);
     const atlas = atlasSummary(db, acc.id);
+    const guide = guideSummary(db, acc.id);
     const on = online ? online.filter((p) => p.accountId === acc.id).length : null;
-    if (rt.json) rt.ctx.out(JSON.stringify({ account: acc.username, id: acc.id, created: iso(acc.created), lastSeen: iso(acc.lastSeen), online: on, atlas, characters: chars.map((c) => ({ name: c.name, class: c.classId, level: c.level, lastPlayed: iso(c.updated), testingMerchant: c.merchant })) }, null, 2));
-    else rt.ctx.out(accountLines(acc, chars, atlas, now, on).join('\n'));
+    if (rt.json) rt.ctx.out(JSON.stringify({ account: acc.username, id: acc.id, created: iso(acc.created), lastSeen: iso(acc.lastSeen), online: on, atlas, guide, characters: chars.map((c) => ({ name: c.name, class: c.classId, level: c.level, lastPlayed: iso(c.updated), testingMerchant: c.merchant })) }, null, 2));
+    else rt.ctx.out(accountLines(acc, chars, atlas, now, on, guide).join('\n'));
   } finally { db.close(); }
 }
 

@@ -47,11 +47,11 @@ export function currencyOnHand(ch: CharacterSave, id: CurrencyId): number {
   return stacksOf(ch, id).reduce((s, f) => s + f.item.count, 0);
 }
 
-function canAfford(ch: CharacterSave, price: readonly PriceDef[]): boolean {
+export function canAfford(ch: CharacterSave, price: readonly PriceDef[]): boolean {
   return price.every((p) => currencyOnHand(ch, p.currencyId) >= p.count);
 }
 
-function pay(ch: CharacterSave, price: readonly PriceDef[]): CharacterSave {
+export function pay(ch: CharacterSave, price: readonly PriceDef[]): CharacterSave {
   let next = ch;
   for (const p of price) {
     let left = p.count;

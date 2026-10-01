@@ -1,5 +1,5 @@
 // Re-chart (brief D 5.2): move a map to a neighbouring area of the same tier, keeping its quality, mods and commissions, for Forge Scrap.
-// One popover, three doors: the dock's map chip, the Crafting Bench and the work slot. It lists the legal neighbours (name, theme, the
+// One popover, three doors: the area modal's map card, the Crafting Bench and the work slot. It lists the legal neighbours (name, theme, the
 // ceiling it accepts, what you hold of it, the price) from the SAME bench service list the server charges from (rules.benchServices), and
 // confirming sends actions.rechartMap(uid, area): server-authoritative and atomic (the Scrap leaves with the move, never one without the other).
 import { useLayoutEffect, useMemo } from 'preact/hooks';
@@ -23,7 +23,7 @@ export function rechartServices(services: readonly BenchService[]): BenchService
   return services.filter((s) => s.id.startsWith(RECHART_SERVICE_PREFIX));
 }
 
-export function RechartPopover({ map, onClose, class: klass }: { map: MapItem; onClose: () => void; class?: string }) {
+export function RechartPopover({ map, onClose, onDone, class: klass }: { map: MapItem; onClose: () => void; /** Called with the chosen area after the move was sent (the area modal follows the map there). */ onDone?: (areaId: AtlasAreaId) => void; class?: string }) {
   const store = useStore();
   const ch = useUi((s) => s.character);
   const inHideout = useUi((s) => s.zone === 'hideout');
@@ -48,6 +48,7 @@ export function RechartPopover({ map, onClose, class: klass }: { map: MapItem; o
     store.actions.uiSound('click');
     store.actions.rechartMap(map.uid, areaId);
     onClose();
+    onDone?.(areaId);
   };
   return (
     <div class={cx('fe-rechart fe-solid', klass)} role="dialog" aria-label="Re-chart map" data-rechart>

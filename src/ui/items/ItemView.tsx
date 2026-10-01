@@ -10,7 +10,7 @@ import { useLocal } from '../local';
 import { itemIconId, itemTone, stackCount } from '../lib/items';
 import { useSignal, useStore, useUi } from '../store';
 import { beginPointerDrag } from './dnd';
-import { isTradeLocked, itemClick, itemContextMenu, safe, useCraftMark } from './hooks';
+import { isTradeLocked, itemClick, itemContextMenu, quickMoveItem, safe, useCraftMark } from './hooks';
 import { useSearch } from './search';
 
 /** Pixel size of one inventory cell (the --cell custom property) at this element. */
@@ -49,6 +49,9 @@ export function ItemView({ item, uid, from, mode, x = 0, y = 0, class: klass }: 
   const search = useSearch();
   const inGrid = from.kind === 'backpack' || from.kind === 'stash';
   const found = search.active && inGrid ? search.matches.has(uid) : null;
+  // an open panel (the Atlas area modal) can suggest what to drag: a subtle ring on the backpack items that fit it
+  const fitting = useSignal(local.fits);
+  const fits = from.kind === 'backpack' && !!fitting?.has(uid);
 
   const style: JSX.CSSProperties =
     mode === 'grid'
@@ -81,6 +84,7 @@ export function ItemView({ item, uid, from, mode, x = 0, y = 0, class: klass }: 
         empty && 'fe-item--empty',
         found === true && 'fe-item--found',
         found === false && 'fe-item--dim',
+        fits && 'fe-item--fits',
         locked && 'fe-item--locked',
         benched && 'fe-item--benched',
         selling && 'fe-item--selling',
@@ -90,6 +94,18 @@ export function ItemView({ item, uid, from, mode, x = 0, y = 0, class: klass }: 
       data-uid={uid}
       data-tone={tone}
       data-kind={item.kind}
+      // A map the open area modal suggests loads with a double-click, or with Enter / Space once focused (the keyboard path of the drag).
+      tabIndex={fits ? 0 : undefined}
+      role={fits ? 'button' : undefined}
+      aria-label={fits ? 'Load into the Map Device (Enter)' : undefined}
+      onDblClick={fits ? (e) => quickMoveItem(store, local, e as unknown as MouseEvent, uid, item, from) : undefined}
+      onKeyDown={fits ? (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation();
+        const r = e.currentTarget.getBoundingClientRect();
+        quickMoveItem(store, local, { clientX: r.left, clientY: r.top, shiftKey: false } as MouseEvent, uid, item, from);
+      } : undefined}
       onPointerDown={onPointerDown}
       onClick={(e) => itemClick(store, local, e as unknown as MouseEvent, uid, item, from)}
       onContextMenu={(e) => itemContextMenu(store, local, e as unknown as MouseEvent, uid, item, from)}

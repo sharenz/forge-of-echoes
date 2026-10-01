@@ -11,6 +11,9 @@ import { GameScreen } from './screens/Game';
 import { useUi } from './store';
 import { cx } from './components/common';
 
+/** An Esc this soon after one that closed a panel is the same double press: it does not open the menu. */
+const ESC_DOUBLE_MS = 300;
+
 /** Enter → chat field focus happens a frame later (store update + layout effect); keys in between go to the field. */
 const CHAT_FOCUS_WINDOW_MS = 250;
 
@@ -73,6 +76,13 @@ function handleKey(e: KeyboardEvent, store: UiStore, local: Local): void {
     return;
   }
   const blocked = !!visiblePanels(s.openPanels).modal || !!s.runSummary || !!local.dialog.get() || !!s.affixChoice;
+  // H / F1 / ? close the Help window they opened (it is a modal, which otherwise lets only Esc through).
+  if (cmd.kind === 'toggle' && cmd.panel === 'help' && visiblePanels(s.openPanels).modal === 'help') {
+    e.preventDefault();
+    store.actions.uiSound('close');
+    store.actions.closePanel('help');
+    return;
+  }
   if (!keyAllowedWhile(cmd, blocked)) return;
   if (cmd.kind === 'toggle') {
     e.preventDefault();
@@ -103,9 +113,11 @@ function handleKey(e: KeyboardEvent, store: UiStore, local: Local): void {
   });
   switch (step.kind) {
     case 'cancelDrag':
+      local.escClosedAt = performance.now();
       local.drag.set(null);
       break;
     case 'closeDialog':
+      local.escClosedAt = performance.now();
       local.dialog.set(null);
       break;
     case 'cancelAffix':
@@ -121,6 +133,7 @@ function handleKey(e: KeyboardEvent, store: UiStore, local: Local): void {
       store.actions.dismissRunSummary();
       break;
     case 'closePanel':
+      local.escClosedAt = performance.now();
       store.actions.uiSound('close');
       // Esc on a visible trade window (whichever of trade / inventory opened last) closes it on purpose, which
       // cancels the trade; hiding it behind another panel does not.
@@ -129,6 +142,8 @@ function handleKey(e: KeyboardEvent, store: UiStore, local: Local): void {
       if (step.panel === 'menu') store.actions.setPaused(false);
       break;
     case 'openMenu':
+      // A double press of Esc closed a panel and would now pop the menu: ignore the second one.
+      if (performance.now() - local.escClosedAt < ESC_DOUBLE_MS) break;
       store.actions.uiSound('open');
       store.actions.openPanel('menu');
       store.actions.setPaused(true);

@@ -208,6 +208,11 @@ export interface RunConfig {
   bossDamageMultiplier?: number;
   mode: 'hideout' | 'map';
   /**
+   * The gentle opening of an account's very first map (first-run guide): the director holds the first wave until a living
+   * player has moved or cast, or `GUIDE_WARMUP_SECONDS` have passed, whichever comes first. Absent = a normal opening.
+   */
+  warmup?: boolean;
+  /**
    * The Atlas area this map is bound to (RunSetup.atlasAreaId). When the area has a registered hand-crafted layout
    * (src/data/layouts), the arena is built from it (props, spawn zones and lanes, boss stage, start, event anchors);
    * absent, or an area without a layout, keeps the procedural generator.

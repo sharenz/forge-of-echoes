@@ -1,4 +1,6 @@
 // Out-of-game screens: loading, login / register, character select and the disconnected screen.
+import { setSkipFlag } from '../guide/Driver';
+import { gt, suggestName } from '../../data/guide/strings';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { CharacterSummary } from '../../contracts/net';
 import { Button, Embers, Frame, PanelHead, Sigil, cx, usePortrait } from '../components/common';
@@ -54,11 +56,21 @@ export function LoadingScreen() {
   );
 }
 
+const SEEN_KEY = 'foe.seen';
+/** This browser has been through the account screen before (localStorage; a blocked store counts as "not yet"). */
+function hasSeenTitle(): boolean {
+  try { return localStorage.getItem(SEEN_KEY) === '1'; } catch { return false; }
+}
+function rememberTitle(): void {
+  try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* per-browser convenience only */ }
+}
+
 export function AuthScreen() {
   const store = useStore();
   const busy = useUi((s) => s.busy);
   const error = useUi((s) => s.error);
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  // A first-time visitor (no session, and this browser never logged in) lands on "Create account"; a returning one on "Log in".
+  const [mode, setMode] = useState<'login' | 'register'>(() => (hasSeenTitle() ? 'login' : 'register'));
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -76,6 +88,7 @@ export function AuthScreen() {
       if (!valid) store.actions.uiSound('error');
       return;
     }
+    rememberTitle();
     if (mode === 'login') store.actions.login(username.trim(), password);
     else store.actions.register(username.trim(), password);
   };
@@ -85,6 +98,7 @@ export function AuthScreen() {
       <TitleBackdrop />
       <div class="fe-auth">
         <Logo />
+        <p class="fe-auth__pitch ui-type-secondary" data-pitch>{gt('title.pitch')}</p>
         <Frame class="fe-auth__card">
           <div class="fe-auth__tabs" role="tablist">
             {(['login', 'register'] as const).map((m) => (
@@ -176,7 +190,8 @@ export function CharactersScreen() {
   const busy = useUi((s) => s.busy);
   const error = useUi((s) => s.error);
   const [selected, setSelected] = useState<string | null>(chars[0]?.id ?? null);
-  const [name, setName] = useState('');
+  // A name is suggested (and selected, so typing replaces it): nobody has to invent one before seeing the game.
+  const [name, setName] = useState(() => suggestName());
   const [tried, setTried] = useState(false);
   const [creating, setCreating] = useState(chars.length === 0);
   // Which request the store's single `error` belongs to, so it shows next to the thing that failed.
@@ -307,9 +322,18 @@ export function CharactersScreen() {
                     autoComplete="off"
                     spellcheck={false}
                     autoFocus
+                    onFocus={(e) => (e.currentTarget as HTMLInputElement).select()}
                     onInput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
                   />
+                  <button type="button" class="fe-create__dice ui-type-secondary" data-name-dice title={gt('title.diceLabel')} aria-label={gt('title.diceLabel')} disabled={busy}
+                    onClick={() => { store.actions.uiSound('click'); setName(suggestName()); }}>
+                    <span aria-hidden="true">{'\u2684'}</span>
+                  </button>
                   <div class="fe-field__hint">{tried && nameErr ? nameErr : ''}</div>
+                  <label class="fe-create__skip ui-type-caption">
+                    <input type="checkbox" data-skip-tutorial onChange={(e) => setSkipFlag((e.currentTarget as HTMLInputElement).checked)} />
+                    {gt('title.skip')}
+                  </label>
                 </div>
                 {createError && (
                   <div class="fe-auth__error" role="alert">

@@ -59,6 +59,7 @@ export function InventoryPanel() {
           <span class="fe-inv__wallet-n">{formatInt(scrap.backpack + scrap.stash + scrap.crafting)}</span>
           <span class="fe-muted">Forge Scrap</span>
         </span>
+        <button type="button" class="fe-inv__sort ui-type-caption" data-sort-backpack title="Sort the backpack: currency, flasks, maps, then gear by slot" onClick={() => { store.actions.uiSound('click'); store.actions.sortBackpack(); }}>Sort</button>
         <span class="fe-inv__hints ui-type-caption">
           <Keycap>Ctrl</Keycap> click moves
           {craftingAllowed ? (

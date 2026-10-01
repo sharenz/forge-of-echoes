@@ -15,7 +15,7 @@ describe('unspent point badges', () => {
     expect(e.map((x) => [x.kind, x.count, x.panel, x.key])).toEqual([
       ['attribute', 3, 'character', 'C'],
       ['skill', 1, 'skills', 'K'],
-      ['atlas', 2, 'mapDevice', null],
+      ['atlas', 2, 'mapDevice', 'M'],
     ]);
     expect(pointEntries({ ...base, skill: 4 }).map((x) => x.kind)).toEqual(['skill']);
     expect(totalPoints({ attribute: 3, skill: 1, atlas: 2, inHideout: true })).toBe(6);
@@ -24,7 +24,7 @@ describe('unspent point badges', () => {
   it('writes the tooltip from the actual key bindings', () => {
     expect(pointLabel('attribute', 6)).toBe('6 attribute points to spend (C)');
     expect(pointLabel('skill', 1)).toBe('1 skill point to spend (K)');
-    expect(pointLabel('atlas', 3)).toBe('3 Atlas tree points to spend at the Cartography Table');
+    expect(pointLabel('atlas', 3)).toBe('3 Atlas tree points to spend in the Atlas (Map Device)');
     expect(panelHotkey('character')).toBe(Object.keys(PANEL_KEYS).find((k) => PANEL_KEYS[k] === 'character')?.toUpperCase());
     expect(panelHotkey('stash')).toBeNull();
   });

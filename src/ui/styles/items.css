@@ -173,6 +173,12 @@
       inset 0 0 22px rgba(255, 154, 60, 0.8);
   }
 }
+/* a panel's suggestion (the Atlas area modal): a quiet green ring on the backpack items that fit it. A highlight, not a picker. */
+.fe-item--fits::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(160, 228, 140, 0.8),
+    inset 0 0 9px rgba(120, 200, 110, 0.38);
+}
 .fe-item--dim {
   opacity: 0.28;
   transition: opacity 0.15s;
@@ -716,6 +722,9 @@
   font-size: var(--font-ui-caption);
   color: var(--ash);
 }
+.fe-tt__appraisal { margin-top: 8px; display: flex; flex-direction: column; gap: 1px; font-size: var(--font-ui-caption); color: var(--ash); }
+.fe-tt__price { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(201, 160, 100, 0.18); font-size: var(--font-ui-secondary); font-weight: 700; color: var(--gold); }
+.fe-tt__price--poor { color: var(--bad); }
 .fe-tt__alt {
   margin-top: 6px;
   font-size: var(--font-ui-caption);

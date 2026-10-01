@@ -5,9 +5,11 @@ import { createContext } from 'preact';
 import type { ComponentChildren } from 'preact';
 import { useContext } from 'preact/hooks';
 import type { SkillId } from '../contracts/content';
+import type { MerchantBoard } from '../contracts/game';
 import type { Item, ItemLocation } from '../contracts/items';
 import { signal, type Signal } from './store';
 import type { Cell, Size } from './lib/grid';
+import { createGuideLive, type GuideLive } from './guide/live';
 
 export interface AnchorRect {
   left: number;
@@ -23,7 +25,7 @@ export type TooltipSpec =
    * A detached item (merchant preview, a trade partner's offer). `compare` adds the Alt comparison with your
    * equipped gear; `label` is a small caption above the card.
    */
-  | { kind: 'preview'; item: Item; note?: string; compare?: boolean; label?: string }
+  | { kind: 'preview'; item: Item; note?: string; compare?: boolean; label?: string; price?: { text: string; poor: boolean }; appraisal?: string[] }
   | { kind: 'skill'; skillId: SkillId }
   | { kind: 'text'; title?: string; lines: string[]; tone?: 'info' | 'bad' | 'good' }
   /** Anything else; `owner` lets the element that opened it close it again (e.g. when it unmounts). */
@@ -72,6 +74,8 @@ export interface SlotHandler {
   onDrop(drag: { uid: string; item: Item; from: ItemLocation }): void;
   /** Ghost label on a valid drop ("Use as passage"). */
   tag?: string;
+  /** The item was released over the slot but refused (`reason`): the panel may explain more than the cursor hint can (the area modal's "Go to ..." button). */
+  onRefused?(drag: { uid: string; item: Item; from: ItemLocation }, reason: string | null): void;
 }
 
 /** A merchant stock row being dragged onto the backpack (nothing is removed from anywhere; dropping buys). */
@@ -121,9 +125,14 @@ export interface CursorHint {
 
 export interface MerchantSale { uids: string[]; busy: boolean }
 
+/** Rook's wares board as the server last sent it, with the monotonic time (performance.now) it arrived, for the countdown. */
+export interface BoardView { board: MerchantBoard; receivedAt: number; characterId: string }
+
 export interface Local {
   /** Selection only; items stay in the backpack until a confirmed sale. null = Buy tab. */
   merchantSale: Signal<MerchantSale | null>;
+  /** Rook's wares board (kept while the panel is closed, so reopening shows it at once and refreshes it). */
+  merchantBoard: Signal<BoardView | null>;
   playerMenu: Signal<{ name: string; characterId?: string; x: number; y: number } | null>;
   tooltip: Signal<TooltipState | null>;
   drag: Signal<DragState | null>;
@@ -137,6 +146,12 @@ export interface Local {
   mapTier: Signal<number | null>;
   /** Panel-owned drop slots by id (data-slot): registered while their panel is mounted. */
   slots: Map<string, SlotHandler>;
+  /** Backpack uids an open panel suggests dragging (the Atlas area modal's subtle highlight); null = no suggestion. */
+  fits: Signal<ReadonlySet<string> | null>;
+  /** The first-run guide's browser-local state (see ui/guide/live.ts). */
+  guide: Signal<GuideLive>;
+  /** performance.now() when Esc last closed something: the Esc that follows (a double press) must not open the menu. */
+  escClosedAt: number;
   /** performance.now() when the UI last opened the chat (keys typed before the field has focus go to it). */
   chatOpenedAt: number;
   showTooltip(spec: TooltipSpec, el: Element, placement?: 'side' | 'above'): void;
@@ -151,6 +166,7 @@ export function createLocal(): Local {
   let hintId = 0;
   const local: Local = {
     merchantSale: signal<MerchantSale | null>(null),
+    merchantBoard: signal<BoardView | null>(null),
     playerMenu: signal<{ name: string; characterId?: string; x: number; y: number } | null>(null),
     tooltip,
     drag: signal<DragState | null>(null),
@@ -160,6 +176,9 @@ export function createLocal(): Local {
     search: signal(''),
     mapTier: signal<number | null>(null),
     slots: new Map<string, SlotHandler>(),
+    fits: signal<ReadonlySet<string> | null>(null),
+    guide: createGuideLive(),
+    escClosedAt: -Infinity,
     chatOpenedAt: -Infinity,
     showTooltip(spec, el, placement = 'side') {
       const r = el.getBoundingClientRect();

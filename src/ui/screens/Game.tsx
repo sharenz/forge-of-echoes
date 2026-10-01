@@ -15,7 +15,13 @@ import { InventoryPanel } from '../panels/Inventory';
 import { MapDevicePanel } from '../panels/MapDevice';
 import { MerchantPanel } from '../panels/Merchant';
 import { DebugMerchantPanel } from '../panels/DebugMerchant';
-import { HelpModal, MenuModal, RunSummaryModal } from '../panels/Modals';
+import { MenuModal, RunSummaryModal } from '../panels/Modals';
+import { CheatSheet, CoachCard } from '../guide/Dock';
+import { DragHand } from '../guide/Hand';
+import { GuideDriver } from '../guide/Driver';
+import { HelpWindow } from '../guide/Help';
+import { MenuBar } from '../guide/MenuBar';
+import { WorldGuide } from '../guide/World';
 import { PartyPanel } from '../panels/Party';
 import { SkillsPanel } from '../panels/Skills';
 import { StashPanel } from '../panels/Stash';
@@ -88,18 +94,27 @@ export function GameScreen() {
 
   return (
     <div class={cx('fe-game', vis.left && 'fe-game--left', vis.right && 'fe-game--right')}>
+      <GuideDriver />
+      <WorldGuide />
       <TopHud />
       <Toasts />
       <LevelUpBurst />
       <Chat />
       <CommandDeck />
+      <MenuBar side="l" />
+      <MenuBar side="r" />
+      <div class="fe-guidedock" aria-label="Tips">
+        <CheatSheet />
+        <CoachCard />
+      </div>
+      <DragHand />
       <DebuffBar />
       <NetStats />
       <DeathOverlay />
       {vis.left && <LeftPanel key={vis.left} panel={vis.left} />}
       {vis.right && <InventoryPanel />}
       {vis.modal === 'menu' && <MenuModal />}
-      {vis.modal === 'help' && <HelpModal />}
+      {vis.modal === 'help' && <HelpWindow />}
       <RunSummaryModal />
       <AffixChoicePopover />
       <PlayerMenu />

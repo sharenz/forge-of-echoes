@@ -2,7 +2,7 @@
 // with { t: 'result', id, ok, error?, message?, offers? }. Pending requests resolve on that answer, on a timeout,
 // or when the connection drops (then with `lost: true`: the answer may never come, and the server re-sends the
 // whole state on reconnect, so callers stay quiet instead of toasting one error per pending command).
-import type { MerchantOffer } from '../contracts/game';
+import type { MerchantBoard, MerchantOffer } from '../contracts/game';
 import type { Command } from '../contracts/net';
 
 export interface CommandResult {
@@ -10,6 +10,7 @@ export interface CommandResult {
   error?: string;
   message?: string;
   offers?: MerchantOffer[];
+  board?: MerchantBoard;
   /** Failed only because the connection dropped (or the session ended) before the server answered. */
   lost?: boolean;
 }

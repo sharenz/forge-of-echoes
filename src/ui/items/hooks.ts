@@ -10,6 +10,8 @@ import { withdrawCount } from '../lib/stash';
 import { visiblePanels } from '../lib/panels';
 import { offerAddError, offerWith, offerWithout } from '../lib/trade';
 import { findScarab } from '../../data/scarabs';
+import { findAtlasArea } from '../../data/progression/atlas';
+import { areaModalSignal, mapFit } from '../atlas/area-modal';
 
 export type CraftMark = 'armed' | 'valid' | 'invalid' | null;
 
@@ -145,10 +147,23 @@ export function quickMoveItem(store: UiStore, local: Local, e: MouseEvent, uid: 
     return;
   }
   if (item.kind === 'map' && from.kind !== 'mapDevice' && s.isOwnHideout && s.openPanels.includes('mapDevice')) {
+    // The Atlas: a quick load goes to the area modal that is open (a map of another area is refused with its reason), or opens the
+    // modal of the map's own area and loads it there.
+    const open = areaModalSignal.get();
+    const target = findAtlasArea(open ?? item.areaId);
+    const known = !!target && (s.character?.atlas?.discovered ?? []).includes(target.id);
+    const fit = target ? mapFit(item, target) : null;
+    if (!target || !known || (fit && !fit.ok)) {
+      store.actions.uiSound('error');
+      local.flashHint(fit && !fit.ok ? fit.reason : 'That area is not charted yet.', at.x, at.y);
+      return;
+    }
+    if (!open) areaModalSignal.set(target.id);
     if (store.actions.moveItem(uid, { kind: 'mapDevice' })) store.actions.uiSound('click');
     return;
   }
   if (item.kind === 'currency' && findScarab(item.currencyId) && from.kind !== 'scarabSlot' && s.isOwnHideout && left === 'mapDevice') {
+    if (!areaModalSignal.get()) { local.flashHint('Click an area on the chart first, then socket scarabs into its ring.', at.x, at.y); return; }
     const index = Array.from({ length: 4 }, (_, i) => s.character?.mapScarabs?.[i] ?? null).findIndex(i => !i);
     if (index < 0) { local.flashHint('All four scarab sockets are filled.', at.x, at.y); return; }
     if (store.actions.moveItem(uid, { kind: 'scarabSlot', index })) store.actions.uiSound('click');

@@ -27,6 +27,8 @@ export interface PresentInput {
   hoverPropId: number;
   /** Drop id under the cursor (label / sprite highlight), or -1. */
   hoverDropId: number;
+  /** Optional framing offset in world units (the hideout leans north so its Map Device is always fully in view). Eased by the camera. */
+  cameraBias?: { x: number; y: number };
   settings: { screenShake: number };
   /** Menu open: render normally but damp camera shake; the world keeps running online. */
   paused: boolean;

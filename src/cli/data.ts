@@ -72,6 +72,24 @@ export function atlasSummary(db: DatabaseSync, accountId: string): { tier: numbe
   } catch { return { tier: 0, clears: 0, completed: 0, stashTabs: 0 }; }
 }
 
+/** The first-run guide of an account (account storage `guide`): its mode, the steps done with their completion times (the funnel) and the hints shown. */
+export interface GuideSummary { mode: string; skippedBy: string | null; done: string[]; hints: number; replays: number; steps: { id: string; at: number }[] }
+
+export function guideSummary(db: DatabaseSync, accountId: string): GuideSummary | null {
+  const row = db.prepare('SELECT data FROM account_storage WHERE account_id = ?').get(accountId) as Row | undefined;
+  if (!row) return null;
+  try {
+    const g = (JSON.parse(str(row.data)) as { guide?: { mode?: unknown; skippedBy?: unknown; done?: unknown; hints?: unknown; replays?: unknown; t?: unknown } }).guide;
+    if (!g || typeof g.mode !== 'string') return null;
+    const t = typeof g.t === 'object' && g.t !== null ? (g.t as Record<string, unknown>) : {};
+    const done = Array.isArray(g.done) ? (g.done as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+    return {
+      mode: g.mode, skippedBy: typeof g.skippedBy === 'string' ? g.skippedBy : null, done, hints: Array.isArray(g.hints) ? g.hints.length : 0, replays: num(g.replays),
+      steps: done.filter((id) => typeof t[id] === 'number').map((id) => ({ id, at: t[id] as number })).sort((a, b) => a.at - b.at),
+    };
+  } catch { return null; }
+}
+
 export function listCharacters(db: DatabaseSync, accountId?: string): CharacterSummary[] {
   const rows = db.prepare(
     `SELECT c.id, c.account_id, a.username, c.name, c.class_id, c.level, c.created, c.updated,

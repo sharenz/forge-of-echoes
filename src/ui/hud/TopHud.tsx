@@ -22,6 +22,9 @@ import { visiblePanels } from '../lib/panels';
 import { zoneLabel } from '../lib/zone';
 import { locationText } from '../lib/party';
 import { shallowEqual, useStore, useUi } from '../store';
+import { EVENT_GOALS, glossaryFor, gt } from '../../data/guide/strings';
+import { Tracker } from '../guide/Tracker';
+import { WhatNext } from '../guide/WhatNext';
 import { EventGlyph } from './EventGlyph';
 import { MonsterHover } from './MonsterHover';
 
@@ -253,6 +256,7 @@ function MapEventCard({ event, area, compact }: { event: MapEventView; area: str
           <span class={cx('fe-event__grade ui-type-caption', `fe-event__grade--${event.grade}`)}>{over ? (event.grade > 0 ? `${grade} Trophy` : 'Lost') : `On track: ${grade}`}</span>
         )}
       </div>
+      {!over && !compact && <div class="fe-event__goal ui-type-secondary">{EVENT_GOALS[event.kind]}</div>}
       {event.phase !== 'active' && <div class="fe-event__kicker ui-type-caption">{kicker}</div>}
       {!over && event.objectives.map((o) => (
         <div class="fe-event__bar" key={`o${o.id}`}>
@@ -327,6 +331,7 @@ function announce(title: string, rest: string): string {
 }
 
 function TellBanner() {
+  const local = useLocal();
   const tell = useUi((s) => (s.hud?.run?.phase === 'tell' ? s.hud.run.tell : null));
   const baseId = useUi((s) => s.run?.map.baseId ?? null);
   if (!tell) return null;
@@ -348,7 +353,9 @@ function TellBanner() {
         <div class="fe-tell__brings">
           <span>Brings</span>
           {threats.map((d) => (
-            <span key={d} class="fe-tell__debuff">
+            <span key={d} class="fe-tell__debuff fe-solid"
+              onPointerEnter={(e) => local.showTooltip({ kind: 'text', title: DEBUFF_INFO[d].name, lines: [DEBUFF_INFO[d].effect, `Counter: ${DEBUFF_INFO[d].counter}`] }, e.currentTarget, 'above')}
+              onPointerLeave={() => local.hideTooltip()}>
               <PixelIcon id={`icon/debuff/${d}`} width={16} height={16} />
               {DEBUFF_INFO[d].name}
             </span>
@@ -417,7 +424,7 @@ export function ZoneInfo() {
             class="fe-solid"
             onPointerEnter={(e) =>
               local.showTooltip(
-                { kind: 'text', title: 'Your item quantity', lines: ['This map plus your own gear. More drops, same rarity.'] },
+                { kind: 'text', title: 'Your item quantity', lines: ['This map plus your own gear. More drops, same rarity.', 'Surge charges and scarabs add to it (see Surge in Help).'] },
                 e.currentTarget,
               )
             }
@@ -441,18 +448,27 @@ export function ZoneInfo() {
         {mods.length > 0 && (
           <ul class="fe-zoneinfo__mods">
             {mods.map((m, i) => (
-              <li key={i} class={cx(modClass(m.tone))}>
+              <li key={i} class={cx(modClass(m.tone), 'fe-solid')}
+                onPointerEnter={(e) => { const g = glossaryFor(m.text); if (g) local.showTooltip({ kind: 'text', title: g.term, lines: [g.def] }, e.currentTarget); }}
+                onPointerLeave={() => local.hideTooltip()}>
                 {m.text}
               </li>
             ))}
           </ul>
         )}
-        <div class={cx('fe-zoneinfo__portals', run.portalsRemaining === 0 && 'fe-zoneinfo__portals--spent')}>
-          <PortalPips remaining={run.portalsRemaining} total={run.portalsTotal} />
-          <span>
-            {run.portalsRemaining}/{run.portalsTotal} portals left
-          </span>
-        </div>
+        {run.phase === 'cleared' ? (
+          // A won map is no failure: the entries are spent, the way home is the return portal.
+          <div class="fe-zoneinfo__portals fe-zoneinfo__portals--cleared" data-return-portal-card>
+            <span>{gt('portalCard.cleared')}</span>
+          </div>
+        ) : (
+          <div class={cx('fe-zoneinfo__portals', run.portalsRemaining === 0 && 'fe-zoneinfo__portals--spent')}>
+            <PortalPips remaining={run.portalsRemaining} total={run.portalsTotal} />
+            <span>
+              {run.portalsRemaining}/{run.portalsTotal} portals left
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -525,7 +541,7 @@ function ZoneChip() {
                 </ul>
               )}
               <div class="fe-zonetip__portals">
-                {run.portalsRemaining}/{run.portalsTotal} portals left
+                {run.phase === 'cleared' ? gt('portalCard.clearedBody') : `${run.portalsRemaining}/${run.portalsTotal} portals left`}
               </div>
             </div>
           ),
@@ -556,7 +572,7 @@ function ZoneChip() {
       class={cx(
         'fe-zonechip',
         (run || portal) && 'fe-solid',
-        (run?.portalsRemaining === 0 || portal?.remaining === 0) && 'fe-zonechip--spent',
+        ((run?.portalsRemaining === 0 && run.phase !== 'cleared') || portal?.remaining === 0) && 'fe-zonechip--spent',
       )}
       onPointerEnter={(e) => showDetails(e.currentTarget)}
       onPointerLeave={() => local.hideTooltip()}
@@ -568,12 +584,16 @@ function ZoneChip() {
             <span class="fe-zonechip__tier">T{run.tier}</span>
           </span>
           {run.monsterLevel !== null && <span class="fe-zonechip__tier">Monster level {run.monsterLevel}</span>}
-          <span class="fe-zonechip__group">
-            <PortalPips remaining={run.portalsRemaining} total={run.portalsTotal} />
-            <span class="fe-zonechip__count">
-              {run.portalsRemaining}/{run.portalsTotal}
+          {run.phase === 'cleared' ? (
+            <span class="fe-zonechip__group"><span class="fe-zonechip__count">{gt('portalCard.cleared')}</span></span>
+          ) : (
+            <span class="fe-zonechip__group">
+              <PortalPips remaining={run.portalsRemaining} total={run.portalsTotal} />
+              <span class="fe-zonechip__count">
+                {run.portalsRemaining}/{run.portalsTotal}
+              </span>
             </span>
-          </span>
+          )}
         </>
       ) : portal ? (
         <>
@@ -642,6 +662,8 @@ export function TopHud() {
     <div class="fe-hudarea">
       <div class="fe-hudgrid">
         <div class="fe-leftcol">
+          <Tracker />
+          <WhatNext />
           <PartyFrames />
           <Invites />
           <TradeRequests />

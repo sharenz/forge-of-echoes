@@ -3,6 +3,7 @@
 // the hideout-only rule (withdrawing too), crafting straight from a slot, trade locks, an old-format character
 // loaded from SQLite, and conservation under random command sequences. In-process: fake connections on a fake
 // clock, the shared rules behind the server's authority checks.
+import { refillBelt } from '../../src/game/progression/flasks';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -528,6 +529,8 @@ describe('special stash tabs: characters saved before them', () => {
     expect(loaded.stash[0].grid.entries.every((e) => e.item.uid.startsWith(loaded.uidNamespace!))).toBe(true);
     expect(loaded.mapDevice?.uid.startsWith(loaded.uidNamespace!)).toBe(true);
     const expected = structuredClone({ ...fixture, currencyStash: {}, mapStash: [] });
+    // Logging in to a hideout tops the flask belt up for free (first-run guide).
+    expected.belt = refillBelt(expected)?.character.belt ?? expected.belt;
     // Equipment also migrates to the new affix revision; this starter roll keeps its value.
     for (const item of [...Object.values(expected.equipment), ...(expected.mapDevice ? [expected.mapDevice] : []), ...expected.backpack.entries.map((e) => e.item),
       ...expected.stash.flatMap((s) => s.grid.entries.map((e) => e.item))]) {

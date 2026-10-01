@@ -1,7 +1,7 @@
 // The chart of the Cartography Table (brief A): a canvas-drawn Ember Chart with one DOM <button data-area> per node
 // on top (keyboard, screen readers, the existing browser scenarios), region banners, names and a hover tooltip as DOM
 // text on the shared type scale, discrete 1x/2x/3x zoom, drag/arrow-key panning and the discovery cinematic.
-// The inspector rail and the dock live beside it (src/ui/atlas/Rail.tsx, Dock.tsx); MapDevice.tsx composes them.
+// Clicking an area opens its modal (src/ui/atlas/AreaModal.tsx); MapDevice.tsx composes the table.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { AtlasAreaId, AtlasProgress } from '../../contracts/atlas';
 import { ATLAS_AREAS, findAtlasArea } from '../../data/progression/atlas';
@@ -78,7 +78,7 @@ export interface ChartExtras {
   onFocus: (id: AtlasAreaId) => void;
 }
 
-export function AtlasChart({ progress, inspected, onInspect, courseId, tier, corrupted, keys, rail, compactRail, railOpen, tab, extras }: {
+export function AtlasChart({ progress, inspected, onInspect, courseId, tier, corrupted, keys, modalOpen, tab, extras }: {
   progress: AtlasProgress;
   inspected: AtlasAreaId;
   onInspect: (id: AtlasAreaId) => void;
@@ -87,9 +87,8 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
   tier: number | null;
   corrupted: boolean;
   keys: ReadonlySet<string>;
-  rail: (model: NodeModel) => preact.ComponentChildren;
-  compactRail: boolean;
-  railOpen: boolean;
+  /** An area modal is open over the chart: the chart is inert behind it. */
+  modalOpen: boolean;
   tab: 'chart' | 'codex';
   extras?: ChartExtras;
 }) {
@@ -383,7 +382,6 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
     for (const m of models) if (m.known && !m.area.sealed) counts[m.ceiling]++;
     return counts;
   }, [models]);
-  const areaModel = byId.get(inspected)!;
   const sourceShare = useMemo(() => new Map((extras?.edges ?? []).map((e) => [e.to as string, { label: e.pending ? 'next' : formatShare(e.share), pinned: e.pinned, pending: e.pending }])), [extras?.edges]);
   // DOM order is graph order (depth, then chart y), so Tab walks the chart the way the roads run
   const ordered = useMemo(() => [...models].sort((a, b) => a.area.depth - b.area.depth || a.y - b.y), [models]);
@@ -391,7 +389,7 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
 
   return (
     <div class={'fe-chartwrap'} hidden={tab !== 'chart'}>
-      <div class="fe-chart" ref={viewport} role="application" aria-label="Atlas chart. Arrow keys pan, plus and minus zoom, F fits the charted area." tabIndex={-1}
+      <div class="fe-chart" ref={viewport} role="application" aria-label="Atlas chart. Arrow keys pan, plus and minus zoom, F fits the charted area. Enter on an area opens it." tabIndex={-1} inert={modalOpen ? true : undefined}
         onKeyDown={onKey as never} onScroll={(e) => { const el = e.currentTarget as HTMLElement; if (el.scrollLeft || el.scrollTop) el.scrollTo(0, 0); }} onPointerDown={onPointerDown as never} onPointerMove={onPointerMove as never} onPointerUp={onPointerUp as never} onPointerCancel={onPointerUp as never}>
         <canvas class="fe-chart__canvas" ref={canvas} aria-hidden="true" />
         {!assets && <div class="fe-chart__loading ui-type-secondary" role="status">Unrolling the chart…</div>}
@@ -478,6 +476,7 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
             <span class="ui-type-caption fe-chart__tip-meta">{tip.area.sealed ? 'Sealed' : ({ frontier: 'Frontier', forge: 'Forge', crypt: 'Crypt', arena: 'Arena', vault: 'Dead end', reliquary: 'Sealed' } as const)[tip.area.type]} · {THEMES[tip.area.baseId].label} · T1–T{tip.ceiling}</span>
             <span class="ui-type-secondary">{tip.area.noBoss ? 'No final boss' : `Boss: ${tipBoss(tip)}`}</span>
             <span class={cx('ui-type-caption fe-chart__tip-status', tip.tooShallow && 'fe-chart__tip-status--bad')}>{tip.status}</span>
+            <span class="ui-type-caption fe-chart__tip-meta fe-chart__tip-open">Click to open</span>
             {(tip.pinned || tip.stock) && <span class="ui-type-caption fe-chart__tip-meta">{tip.pinned ? `Pinned: x${extras?.pinMultiplier ?? 3} map drops` : ''}{tip.pinned && tip.stock ? ' · ' : ''}{tip.stock ? `You hold ${tip.stock.count} map${tip.stock.count === 1 ? '' : 's'}` : ''}</span>}
           </div>
         )}
@@ -495,7 +494,6 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
           ))}
         </div>
       </div>
-      <div class={cx('fe-railslot', compactRail && 'fe-railslot--compact', compactRail && railOpen && 'fe-railslot--open')} data-rail-slot>{rail(areaModel)}</div>
     </div>
   );
 }

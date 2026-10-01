@@ -2,6 +2,7 @@
 // brazier (docs/atlas-rework/A-atlas-visuals.md section 8, B-atlas-tree.md). A canvas draws board, threads and plates
 // (render.ts); one DOM <button data-map-node> per node sits on top for pointer, keyboard and screen readers; names,
 // tooltips, counters and the inspector rail are DOM text on the shared type scale.
+import { gt } from '../../data/guide/strings';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { AtlasAreaId } from '../../contracts/atlas';
 import type { MapItem } from '../../contracts/items';
@@ -398,7 +399,7 @@ export function CodexView({ onBack, areaId }: CodexProps) {
           </div>
           <label class="fe-cx__search">
             <span class="fe-cx__sr">Search the Codex</span>
-            <input ref={search} type="search" class="ui-type-secondary" placeholder="Search: essence, keystone, boss…" value={query} autocomplete="off" spellcheck={false}
+            <input ref={search} type="search" class="ui-type-secondary" placeholder="Search: essence, keystone, boss…" value={query} disabled={earned === 0 && spent === 0} autocomplete="off" spellcheck={false}
               onInput={(e) => setQuery((e.currentTarget as HTMLInputElement).value)} />
             {searching && <span class="fe-cx__count ui-type-caption" role="status">{matches.size ? (matchAt >= 0 ? `${matchAt + 1} / ${matches.size}` : `${matches.size} found`) : 'none'}</span>}
           </label>
@@ -415,6 +416,10 @@ export function CodexView({ onBack, areaId }: CodexProps) {
         </div>
 
         {notice && <div class="fe-cx__notice fe-atlas__error ui-type-secondary" role="alert">{notice}</div>}
+        {earned === 0 && spent === 0 && (
+          // Nothing earned yet: say so calmly instead of leaving a new player alone with a 145-node wheel.
+          <div class="fe-cx__empty ui-type-body" data-codex-empty role="note">{gt('codex.empty')}</div>
+        )}
 
         {tipNode && tipPos && (
           <div class="fe-cx__tip" ref={tipRef} style={{ left: tipPos.x, top: tipPos.y, '--tone': TONES[tipNode.tone].css }} role="tooltip">

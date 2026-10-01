@@ -12,6 +12,7 @@ import { PLAYER_DEBUFFS } from '../contracts/bestiary';
 import { ATLAS_AREA_IDS } from '../contracts/atlas';
 import { MAP_TREE_NODE_IDS } from '../data/progression/map-tree';
 import { ATLAS_KEYS } from '../data/progression/atlas';
+import { GUIDE_HINT_IDS, GUIDE_OPS, GUIDE_PROPS, GUIDE_STEP_IDS } from '../contracts/guide';
 import { ATTRIBUTES, EQUIP_SLOTS, ITEM_CLASSES, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
 import {
   BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_SLOTS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
@@ -246,12 +247,25 @@ function command(v: unknown): Command {
     case 'addStashTab':
     case 'depositAllCurrency':
     case 'clearNewFlags':
+    case 'sortBackpack':
     case 'merchantOffers':
+    case 'merchantWares':
     case 'partyLeave':
     case 'leaveMap':
     case 'respawn':
       shape(v, c, ['c']);
       return { c };
+    case 'guide': {
+      const o = shape(v, c, ['c', 'op'], ['id']);
+      const op = oneOf(o.op, 'op', GUIDE_OPS);
+      if (op === 'skip' || op === 'replay' || op === 'finish') {
+        if (o.id !== undefined) fail('id: not used by this operation');
+        return { c, op };
+      }
+      if (op === 'done') return { c, op, id: oneOf(o.id, 'id', GUIDE_STEP_IDS) };
+      if (op === 'hint') return { c, op, id: oneOf(o.id, 'id', GUIDE_HINT_IDS) };
+      return { c, op, id: oneOf(o.id, 'id', GUIDE_PROPS) };
+    }
     case 'setMapTreeNode': {
       const o = shape(v, c, ['c', 'nodeId', 'allocate']);
       return { c, nodeId: oneOf(o.nodeId, 'nodeId', MAP_TREE_NODE_IDS), allocate: bool(o.allocate, 'allocate') };
@@ -307,6 +321,14 @@ function command(v: unknown): Command {
     case 'buyOffer': {
       const o = shape(v, c, ['c', 'offerId'], ['at']);
       return { c, offerId: token(o.offerId, 'offerId'), ...(o.at === undefined ? {} : { at: cell(o.at) }) };
+    }
+    case 'buyWare': {
+      const o = shape(v, c, ['c', 'wareId'], ['at']);
+      return { c, wareId: token(o.wareId, 'wareId'), ...(o.at === undefined ? {} : { at: cell(o.at) }) };
+    }
+    case 'rerollWares': {
+      const o = shape(v, c, ['c', 'epoch', 'cost']);
+      return { c, epoch: token(o.epoch, 'epoch'), cost: int(o.cost, 'cost', 0, 1_000_000) };
     }
     case 'partyInvite': {
       const o = shape(v, c, ['c', 'name']);
@@ -692,13 +714,17 @@ export function validateServerMessage(v: unknown): ParseResult<ServerMessage> {
         break;
       }
       case 'result': {
-        const o = shape(v, 'result', ['t', 'id', 'ok'], ['error', 'message', 'offers']);
+        const o = shape(v, 'result', ['t', 'id', 'ok'], ['error', 'message', 'offers', 'board']);
         int(o.id, 'id', 0, Number.MAX_SAFE_INTEGER);
         bool(o.ok, 'ok');
         if (o.error !== undefined) str(o.error, 'error', 2000);
         if (o.message !== undefined) str(o.message, 'message', 2000);
         if (o.offers !== undefined) {
           for (const off of arr(o.offers, 'offers', 500)) if (!isObj(off) || typeof off.id !== 'string') fail('offers: malformed');
+        }
+        if (o.board !== undefined) {
+          if (!isObj(o.board) || typeof o.board.epoch !== 'string' || !Array.isArray(o.board.wares)) fail('board: malformed');
+          for (const w of arr((o.board as Record<string, unknown>).wares, 'wares', 64)) if (!isObj(w) || typeof w.id !== 'string') fail('wares: malformed');
         }
         break;
       }

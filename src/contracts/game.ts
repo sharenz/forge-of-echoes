@@ -204,6 +204,8 @@ export interface RunSetup {
   entranceKey?: import('./content').CurrencyId;
   /** Owner's chosen Hunting Ground reward class, fixed for the expedition and its party. */
   lootClass?: import('./content').ItemClass;
+  /** The account's first map (first-run guide): a gentle opening, see RunConfig.warmup. Set by the server at activation; not persisted across restarts. */
+  warmup?: true;
   seed: number;
   monsterLevel: number;
   /** Map-side item quantity % (100 = base): tier + mods + quality + implicit. Excludes any player's gear. */
@@ -238,6 +240,41 @@ export interface MerchantOffer {
   gambleClass?: ItemClass;
   price: { currencyId: CurrencyId; count: number }[];
   affordable: boolean;
+}
+
+/** How lucky a ware is: the luck model of Rook's wares board (GAME_SPEC §9). */
+export type WareQuality = 'junk' | 'okay' | 'good' | 'jackpot';
+
+/** One slot of a character's wares board: the exact item (a preview with uid `ware:<epoch>:<slot>`), its price and whether it is sold. */
+export interface MerchantWare {
+  /** `ware:<epoch>:<slot>`: what `buyWare` takes. The epoch is part of the id, so a stale purchase is refused. */
+  id: string;
+  /** 0-3 maps (0 is Rook's plain map), 4-11 items (4 is Rook's pick). */
+  slot: number;
+  kind: 'map' | 'item';
+  item: Item;
+  quality: WareQuality;
+  /** The first item slot: doubled odds of a good find. */
+  featured: boolean;
+  /** The one cheap plain map every board carries. */
+  guaranteed: boolean;
+  price: { currencyId: CurrencyId; count: number }[];
+  sold: boolean;
+}
+
+/** A character's wares board, built by the server (stock is deterministic per epoch; the client never rolls it). */
+export interface MerchantBoard {
+  /** `<rotation>.<level>.<rerolls>`: any change means new wares. */
+  epoch: string;
+  rotation: number;
+  level: number;
+  rerolls: number;
+  wares: MerchantWare[];
+  /** Server time (ms) the rotation ends, and the server time this board was built at. */
+  nextRotationAt: number;
+  serverNow: number;
+  /** Scrap price of "Ask for new wares" right now. */
+  rerollCost: number;
 }
 
 export interface DebugMerchantOptions {
@@ -379,9 +416,21 @@ export interface GameRulesApi {
 
   // --- merchant ---
   merchantOffers(ch: CharacterSave): MerchantOffer[];
-  /** Areas Rook sells maps of (cleared ones plus the starting area), and the T1-T2 quality grades he offers for one (brief D 5.4). */
+  /**
+   * Legacy picker rows (cleared areas x T1-T2 x quality grades, `map:<area>:<tier>:<grade>`). Rook no longer sells them (the server refuses these ids and the UI has no
+   * Maps tab): maps come from the wares board. Kept as a pure fixture for tests and simulations.
+   */
   rookMapAreas(ch: CharacterSave): AtlasAreaId[];
   rookMapOffers(ch: CharacterSave, areaId: AtlasAreaId): MerchantOffer[];
+  /**
+   * Rook's wares board (GAME_SPEC §9): a deterministic function of the character, the 6-hour rotation (`now`, server ms), the
+   * character level and the reroll count. Returns the board and the character with its wares state initialised (the server saves it).
+   */
+  waresBoard(ch: CharacterSave, now: number): { character: CharacterSave; board: MerchantBoard };
+  /** Buy one ware by its id (`ware:<epoch>:<slot>`); refused when the epoch changed, the slot is sold or the price cannot be paid. */
+  buyWare(ch: CharacterSave, wareId: string, now: number, at?: { x: number; y: number }): Result<{ character: CharacterSave; item: Item }>;
+  /** "Ask for new wares": pays the doubling Scrap price, bumps the reroll count (a fresh salt) and clears the sold slots. */
+  rerollWares(ch: CharacterSave, now: number, expect?: { epoch: string; cost: number }): Result<{ character: CharacterSave }>;
   sellQuote(item: Item): { scrap: number; lines: string[] } | null;
   sellItems(ch: CharacterSave, uids: readonly string[], expectedScrap: number): Result<{ character: CharacterSave; scrap: number }>;
   buyOffer(ch: CharacterSave, offerId: string, at?: { x: number; y: number }): Result<{ character: CharacterSave; item: Item }>;

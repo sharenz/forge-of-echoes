@@ -9,21 +9,21 @@ import { normalizeCharacterReport } from '../game/progression';
 import { findCurrency } from '../data/items';
 import { newAtlas } from '../game/progression/atlas';
 
-export type AccountStorage = Pick<CharacterSave, 'stash' | 'stashCapacity' | 'currencyStash' | 'mapStash' | 'atlas' | 'craftSlot'>;
+export type AccountStorage = Pick<CharacterSave, 'stash' | 'stashCapacity' | 'currencyStash' | 'mapStash' | 'atlas' | 'craftSlot' | 'guide'>;
 
 export function storageOf(ch: CharacterSave): AccountStorage {
   // The work slot is null when empty (never undefined), so a character row and the storage row agree on "empty".
-  return { stash: ch.stash, stashCapacity: ch.stashCapacity, currencyStash: ch.currencyStash, mapStash: ch.mapStash, atlas: ch.atlas, craftSlot: ch.craftSlot ?? null };
+  return { stash: ch.stash, stashCapacity: ch.stashCapacity, currencyStash: ch.currencyStash, mapStash: ch.mapStash, atlas: ch.atlas, craftSlot: ch.craftSlot ?? null, ...(ch.guide ? { guide: ch.guide } : {}) };
 }
 
 export function sameStorage(a: AccountStorage, b: AccountStorage): boolean {
   return a.stash === b.stash && a.currencyStash === b.currencyStash && a.mapStash === b.mapStash && a.stashCapacity === b.stashCapacity && a.atlas === b.atlas
-    && (a.craftSlot ?? null) === (b.craftSlot ?? null);
+    && (a.craftSlot ?? null) === (b.craftSlot ?? null) && a.guide === b.guide;
 }
 
 /** Shared fields are a wire/rules projection, never a second persisted copy on a character. */
 export function withoutStorage(ch: CharacterSave): CharacterSave {
-  const { stashCapacity: _capacity, atlas: _atlas, craftSlot: _craftSlot, ...rest } = ch;
+  const { stashCapacity: _capacity, atlas: _atlas, craftSlot: _craftSlot, guide: _guide, ...rest } = ch;
   return { ...rest, stash: [], currencyStash: {}, mapStash: [] };
 }
 

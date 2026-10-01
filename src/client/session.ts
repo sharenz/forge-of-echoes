@@ -5,7 +5,7 @@
 // tests drive a session with a fake `send`.
 import type { SfxId } from '../contracts/audio';
 import type { SkillId } from '../contracts/content';
-import type { GameRulesApi, MerchantOffer, Result, RunSetup } from '../contracts/game';
+import type { GameRulesApi, MerchantBoard, MerchantOffer, Result, RunSetup } from '../contracts/game';
 import { CURRENCY_STASH_MAX } from '../contracts/items';
 import type { CharacterSave, Item, ItemLocation } from '../contracts/items';
 import { TRADE_ACCEPT_LOCK_MS, TRADE_MAX_ITEMS } from '../contracts/net';
@@ -13,6 +13,9 @@ import type { ClientMessage, Command, InputMessage, PortalInfo, ServerMessage, T
 import type { SimEvent } from '../contracts/sim';
 import type { HudState, Toast, UiState } from '../contracts/ui';
 import { tradeOfferError } from '../game';
+import { applyGuideOp } from '../game/progression/guide';
+import { sortBackpack } from '../game/items/sort';
+import type { GuideCommand, GuideInput } from '../contracts/guide';
 import { SNAPSHOT_VERSION, createClientWorld, createEventTimeline } from '../net';
 import type { EventTimeline, NetClientWorld } from '../net';
 import { leadAim, pickAutoTarget, type Point } from './autoattack';
@@ -24,7 +27,7 @@ import { hoveredMonster } from './monster-hover';
 import { shouldSendInput, toInputMessage, type InputSample } from './input';
 import { CharacterSync } from './optimistic';
 import {
-  addInvite, addTradeRequest, closePanel, pushChat, pushToast, removeInvite, removeTradeRequest, visibleLeftPanel,
+  addInvite, addTradeRequest, pushChat, pushToast, removeInvite, removeTradeRequest, visibleLeftPanel,
   withCharacter, withParty, withRunSummary, withServerClockOffset, withTrade, withZone,
 } from './state';
 import type { StateBox } from './store';
@@ -317,7 +320,7 @@ export class GameSession {
         else this.timeline.push(msg.tick, msg.events);
         break;
       case 'result':
-        this.commands.settle(msg.id, { ok: msg.ok, error: msg.error, message: msg.message, offers: msg.offers });
+        this.commands.settle(msg.id, { ok: msg.ok, error: msg.error, message: msg.message, offers: msg.offers, board: msg.board });
         break;
       case 'toast':
         this.toast(msg.text, msg.tone);
@@ -1191,6 +1194,31 @@ export class GameSession {
     });
   }
 
+  /**
+   * The first-run guide: applied at once (predicted with the same pure rule the server runs) and confirmed by the server, which
+   * persists it on the account. A no-op (already recorded) is never sent. Never toasts: a guide must stay silent when it fails.
+   */
+  guide(input: GuideInput): void {
+    const base = this.character.base;
+    if (!base?.guide) return;
+    const cmd = { c: 'guide', ...input } as GuideCommand;
+    const now = Date.now();
+    if (!applyGuideOp(base.guide, cmd, now)) return;
+    void this.command(cmd, {
+      predict: (b) => {
+        const next = b.guide ? applyGuideOp(b.guide, cmd, now) : null;
+        return next ? { ok: true, value: { ...b, guide: next } } : { ok: false, error: 'Nothing to record.' };
+      },
+      quiet: true,
+      onOk: () => undefined,
+    });
+  }
+
+  /** Sort the backpack: predicted with the same pure rule the server runs. */
+  sortBackpack(): void {
+    void this.command({ c: 'sortBackpack' }, { predict: (base) => sortBackpack(base), onPredicted: () => this.deps.sound('equip'), quiet: false, onOk: () => undefined });
+  }
+
   activateMapDevice(opts: { lootClass?: import('../contracts/content').ItemClass; passageKey?: import('../contracts/content').CurrencyId; pit?: true; useSurge?: boolean } = {}): void {
     void this.command({
       c: 'activateMapDevice',
@@ -1199,9 +1227,9 @@ export class GameSession {
       ...(opts.pit ? { pit: true as const } : {}),
       ...(opts.useSurge !== undefined ? { useSurge: opts.useSurge } : {}),
     }, {
+      // The Atlas stays open: its area modal closes by itself when the portal appears, the node flares and the status line offers the portal.
       onOk: (r) => {
         if (r.message) this.toast(r.message, 'good');
-        this.box.update((s) => closePanel(s, 'mapDevice'));
       },
     });
   }
@@ -1219,6 +1247,28 @@ export class GameSession {
       },
     });
   }
+  /** Rook's wares board: built and judged by the server (stock is deterministic per epoch, never rolled here). Null when it could not be read. */
+  async merchantWares(): Promise<MerchantBoard | null> {
+    const r = await this.command({ c: 'merchantWares' }, { quiet: true });
+    return r.ok ? r.board ?? null : null;
+  }
+
+  /** Buy one ware (`at`: the backpack cell it was dragged onto). Answers with the fresh board, or null when it was refused. */
+  async buyWare(wareId: string, at?: { x: number; y: number }): Promise<MerchantBoard | null> {
+    const r = await this.command({ c: 'buyWare', wareId, ...(at ? { at } : {}) }, {
+      onOk: (res) => { this.deps.sound('buy'); this.toast(res.message ?? 'Bought.', 'good'); },
+    });
+    return r.ok ? r.board ?? null : null;
+  }
+
+  /** "Ask for new wares" at the price the player saw. Answers with the fresh board, or null when it was refused. */
+  async rerollWares(epoch: string, cost: number): Promise<MerchantBoard | null> {
+    const r = await this.command({ c: 'rerollWares', epoch, cost }, {
+      onOk: (res) => { this.deps.sound('buy'); this.toast(res.message ?? 'New wares.', 'info'); },
+    });
+    return r.ok ? r.board ?? null : null;
+  }
+
   async sellItems(uids: string[], expectedScrap: number): Promise<boolean> {
     const result = await this.command({ c: 'sellItems', uids, expectedScrap }, {
       onOk: r => { this.deps.sound('buy'); this.toast(r.message ?? 'Items sold.', 'good'); },

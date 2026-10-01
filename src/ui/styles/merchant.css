@@ -1,5 +1,5 @@
-/* Merchants (panels/Merchant*.tsx, DebugMerchant.tsx): a vendor beside the inventory. Stock rows are drag sources (drop on
- * the backpack to buy); Rook's Sell tab is an offer window (drop gear in). Type sizes come from the shared tokens only. */
+/* Merchants (panels/Merchant*.tsx, DebugMerchant.tsx): a vendor beside the inventory. Rook's window is a plain item grid with tabs
+ * (items/VendorGrid.tsx, the stash look); gamble rows and the Testing Merchant's rows are drag sources too. Type sizes come from the shared tokens only. */
 
 /* ---- filters ---- */
 .fe-stockfilters { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
@@ -21,48 +21,53 @@
 .fe-offer--poor .fe-offer__img { opacity: 0.7; }
 .fe-stocklist { padding-right: 2px; }
 
-/* ---- Rook: tabs, sale window ---- */
+/* ---- Rook: tabs and vendor window (stash look) ---- */
 .fe-rook .fe-panel__body { overflow: hidden; padding-bottom: 12px; gap: 8px; mask-image: none; -webkit-mask-image: none; }
 .fe-rook .fe-panel__body > * { flex-shrink: 0; }
 .fe-rook .fe-merchant__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.fe-rook__tabs { display: flex; gap: 6px; }
-.fe-rook__tabs button { flex: 1; padding: 6px 10px; color: var(--ash); border: 1px solid var(--bronze); background: #120e10; font-size: var(--font-ui-body); cursor: pointer; }
-.fe-rook__tabs button:hover:not(:disabled) { color: var(--parchment); }
-.fe-rook__tabs button[aria-selected="true"] { color: var(--parchment); border-color: var(--gold); background: #342319; box-shadow: inset 0 -2px 0 var(--ember); }
-.fe-rook__tabs button:disabled { opacity: 0.6; cursor: default; }
-.fe-sell__intro { margin: 0; color: var(--ash); }
+.fe-rook__tabs { width: auto; margin-bottom: 0; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid #3a2c1d; }
+.fe-rook__tabs .fe-tab { padding: 0 12px; font-size: var(--font-ui-caption); }
+.fe-rook__tabs .fe-tab:disabled { opacity: 0.6; cursor: default; }
 
-.fe-rook .fe-panel__body > .fe-sell__window { flex: 1 1 auto; min-height: 96px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 5px;
-  background: rgba(0, 0, 0, 0.28); border: 1px dashed var(--bronze); transition: border-color 0.12s, background 0.12s, box-shadow 0.12s; }
-.fe-sell__window--ready { border-color: var(--gold); background: rgba(224, 176, 74, 0.06); }
-.fe-sell__window--valid { border-style: solid; border-color: #80ab63; background: rgba(143, 191, 106, 0.1); box-shadow: inset 0 0 18px rgba(143, 191, 106, 0.14); }
-.fe-sell__window--invalid { border-style: solid; border-color: #c15c50; background: rgba(224, 96, 90, 0.08); }
-.fe-sell__empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--ash); text-align: center; }
-.fe-sell__empty-mark { width: 28px; height: 28px; margin-bottom: 4px; border: 1px solid var(--bronze); transform: rotate(45deg); box-shadow: inset 0 0 0 4px #120e10, inset 0 0 0 5px var(--bronze-dark); }
-.fe-sell__empty-sub { color: var(--stone-light); }
+/* the grid scrolls inside the panel when a stock runs longer than the stash grid (never on a typical board) */
+.fe-wares, .fe-vendor__scroll { min-height: 0; }
+.fe-rook .fe-panel__body > .fe-wares { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; }
+.fe-wares__grid, .fe-vendor__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 2px 2px 0; }
+.fe-rook .fe-panel__body > .fe-vendor__scroll { flex: 1 1 auto; }
+.fe-wares__grid { position: relative; }
+.fe-wares__loading { position: absolute; top: 14px; left: 0; right: 0; margin: 0; text-align: center; pointer-events: none; }
+.fe-vendor__hint { margin: 0; color: var(--ash); }
+.fe-vendorgrid { margin: 0 auto; }
 
-.fe-sell__item { display: flex; flex-direction: column; border: 1px solid #36281f; background: #151014; cursor: grab; user-select: none; touch-action: none; }
-.fe-sell__item--selected { border-color: #7a5a2a; background: linear-gradient(90deg, #392817, #21170f); }
-.fe-sell__item:hover { border-color: var(--gold); }
-.fe-sell__head { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto 28px; align-items: center; gap: 8px; padding: 2px 2px 2px 2px; }
-.fe-sell__who { display: flex; flex-direction: column; min-width: 0; }
-.fe-sell__name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-ui-secondary); font-weight: 700; }
-.fe-sell__meta { display: block; color: var(--ash); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fe-sell__price { display: inline-flex; gap: 4px; align-items: center; padding: 4px 8px; color: var(--gold); background: #1e1713; border: 1px solid var(--bronze-dark); cursor: pointer; }
-.fe-sell__price:hover, .fe-sell__price[aria-expanded="true"] { border-color: var(--gold); }
-.fe-sell__price img, .fe-price img { image-rendering: pixelated; }
-.fe-sell__remove { width: 28px; height: 28px; line-height: 1; color: var(--ash); background: none; border: 0; cursor: pointer; }
-.fe-sell__remove:hover:not(:disabled) { color: var(--bad); }
-.fe-sell__lines { list-style: none; margin: 0; padding: 4px 10px 6px 46px; display: flex; flex-direction: column; gap: 1px; color: var(--bone); border-top: 1px solid #2c2219; }
-.fe-sell__lines li { display: flex; justify-content: space-between; gap: 10px; }
-.fe-sell__lines li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fe-sell__lines b { flex-shrink: 0; font-weight: 400; color: var(--parchment); }
-.fe-sell__line--total { margin-top: 2px; padding-top: 2px; border-top: 1px solid #2c2219; color: var(--gold); }
-.fe-sell__line--total b { color: var(--gold); }
+/* items on the vendor grid: the inventory's item box, plus a quiet price number on hover only */
+.fe-item--vendor { cursor: grab; touch-action: none; }
+.fe-item--vendor:active { cursor: grabbing; }
+.fe-item--vendor.fe-item--lifted { opacity: 0.55; }
+.fe-item__price { position: absolute; z-index: 2; right: 2px; bottom: 1px; padding: 0 3px; line-height: 1.2; color: var(--gold); background: rgba(10, 7, 8, 0.78); opacity: 0; pointer-events: none; transition: opacity 0.1s; }
+.fe-item--vendor:hover .fe-item__price { opacity: 0.9; }
+.fe-item--poor .fe-item__price { color: var(--bad); }
+.fe-item--vendor:has(.fe-item__tier) .fe-item__price { bottom: auto; top: 1px; }
 
-.fe-sell__footer { display: flex; flex-direction: column; gap: 8px; }
+/* the sale window takes the drag highlight on its whole frame */
+.fe-vendorgrid--ready { border-color: var(--bronze-light); }
+.fe-vendorgrid--valid { border-color: rgba(150, 220, 130, 0.85); box-shadow: 0 0 0 1px #000, inset 0 0 26px rgba(120, 200, 110, 0.18); }
+.fe-vendorgrid--invalid { border-color: rgba(240, 100, 90, 0.85); box-shadow: 0 0 0 1px #000, inset 0 0 26px rgba(224, 70, 60, 0.18); }
+
+/* luck: no chrome. One soft glint over a good find the first time the board is seen (the chime plays too); reduced motion gets nothing */
+.fe-wares--reveal .fe-item--good::after, .fe-wares--reveal .fe-item--jackpot::after {
+  content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 231, 168, 0.5) 50%, transparent 65%);
+  transform: translateX(-100%); animation: fe-vendor-glint 1.3s ease-out 0.2s 1 forwards; }
+@keyframes fe-vendor-glint { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .fe-wares--reveal .fe-item--good::after, .fe-wares--reveal .fe-item--jackpot::after { display: none; } }
+
+/* footer: one quiet line and a small button */
+.fe-wares__foot { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding-top: 6px; border-top: 1px solid #2c2219; }
+.fe-wares__clock { color: var(--ash); white-space: nowrap; }
+
+.fe-sell__footer { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px solid #2c2219; }
 .fe-sell__total { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; color: var(--parchment); }
-.fe-sell__total strong { color: var(--gold); }
+.fe-sell__total strong { color: var(--gold); font-weight: 700; }
 .fe-sell__actions { display: flex; gap: 8px; }
 .fe-sell__actions > * { flex: 1; }
 
@@ -77,19 +82,4 @@
 /* Short windows: tighter rows so the list keeps room beside the inventory. */
 @media (max-height: 699px) {
   .fe-stock, .fe-offer { gap: 8px; }
-  .fe-rook__tabs button { padding: 4px 8px; }
-  .fe-rook .fe-panel__body > .fe-sell__window { min-height: 84px; }
 }
-
-/* ---- Rook's Maps tab (brief D 5.4) -------------------------------------------------------------------------- */
-.fe-rookmaps { display: flex; flex-direction: column; gap: 10px; }
-.fe-rookmaps__intro { margin: 0; }
-.fe-rookmaps__areas { display: flex; flex-wrap: wrap; gap: 5px; }
-.fe-rookmaps__area { display: inline-flex; align-items: center; gap: 5px; }
-.fe-rookmaps__held { color: var(--gold); }
-.fe-rookmaps__pick { display: flex; flex-wrap: wrap; gap: 8px 18px; }
-.fe-rookmaps__group { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.fe-rookmaps__label { color: var(--bronze-light); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 2px; }
-.fe-rookmaps__table { width: 100%; border-collapse: collapse; color: var(--ash); }
-.fe-rookmaps__table th, .fe-rookmaps__table td { padding: 2px 8px; text-align: left; border-bottom: 1px solid #2b2219; }
-.fe-rookmaps__row--on { color: var(--parchment); }

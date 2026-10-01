@@ -374,4 +374,17 @@ describe('normalizeCharacter', () => {
       { affixId: 'unique:thePatientSpark:1', tier: 1, value: -15 },
     ]);
   });
+
+  it("keeps Rook's wares state (optional, repaired field by field) and reads an older save without it", () => {
+    const ch = rules.createCharacter('Wara', 9);
+    expect('wares' in normalizeCharacter(ch)!).toBe(false);
+    const wares = { rotation: 480, level: 9, rerolls: 2, sold: [3, 1, 3, 40, -2, 'x', 1.5], tier: 4, areas: ['cinderCrossing', 'nowhere', 'emberRoad', 'emberRoad'] };
+    expect(normalizeCharacter({ ...ch, wares })!.wares).toEqual({ rotation: 480, level: 9, rerolls: 2, sold: [1, 3], tier: 4, areas: ['cinderCrossing', 'emberRoad'] });
+    for (const broken of [null, 5, 'x', { rotation: 'soon', areas: ['cinderCrossing'] }, { rotation: 5, areas: [] }, { rotation: 5, areas: ['nowhere'] }]) {
+      expect('wares' in normalizeCharacter({ ...ch, wares: broken })!).toBe(false);
+    }
+    expect(normalizeCharacter({ ...ch, wares: { ...wares, level: 9999, rerolls: -4, tier: 99 } })!.wares).toMatchObject({ rerolls: 0, tier: 15 });
+    const again = normalizeCharacter(JSON.parse(JSON.stringify(normalizeCharacter({ ...ch, wares })!)))!;
+    expect(again.wares).toEqual(normalizeCharacter({ ...ch, wares })!.wares);
+  });
 });

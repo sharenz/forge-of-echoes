@@ -4,6 +4,9 @@
 // (HUD values animate at ~15 Hz). Like the server, the rules are wrapped with the trade locks (withItemLocks): items
 // in your trade offer cannot be moved, merged into, crafted, spent or dropped; the swap itself uses the plain rules.
 // Dev-only: presentation code, so Math.random / Date.now are fine here.
+import { sortBackpack } from '../../game/items/sort';
+import { applyGuideOp } from '../../game/progression/guide';
+import type { GuideCommand } from '../../contracts/guide';
 import type { ArtBundle } from '../../contracts/art';
 import { PLAYER_DEBUFFS, THEME_ROSTER, type PlayerDebuff } from '../../contracts/bestiary';
 import type { CurrencyId, EquipSlot, MapBaseId, MonsterKind } from '../../contracts/content';
@@ -1272,6 +1275,25 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       setCharacter(result.value.character);
       toast(result.value.message, 'good');
     },
+    async merchantWares() {
+      const out = rules.waresBoard(ch, Date.now());
+      if (out.character !== ch) setCharacter(out.character);
+      return out.board;
+    },
+    async buyWare(id, at) {
+      const r = rules.buyWare(ch, id, Date.now(), at);
+      if (!r.ok) { fail(r.error); return null; }
+      setCharacter(r.value.character);
+      toast(`Bought ${rules.describeItem(r.value.item, ch).title}`, 'good');
+      return rules.waresBoard(ch, Date.now()).board;
+    },
+    async rerollWares(epoch, cost) {
+      const r = rules.rerollWares(ch, Date.now(), { epoch, cost });
+      if (!r.ok) { fail(r.error); return null; }
+      setCharacter(r.value.character);
+      toast('Rook rummages for new wares.', 'info');
+      return rules.waresBoard(ch, Date.now()).board;
+    },
     buyOffer(id, at) {
       const r = rules.buyOffer(ch, id, at);
       if (!r.ok) {
@@ -1348,6 +1370,18 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
     },
     dismissToast(id) {
       set({ toasts: state.toasts.filter((x) => x.id !== id) });
+    },
+    toast(text, tone) {
+      toast(text, tone);
+    },
+    sortBackpack() {
+      const r = sortBackpack(ch);
+      if (!r.ok) fail(r.error); else setCharacter(r.value);
+    },
+    guide(input) {
+      if (!ch.guide) return;
+      const next = applyGuideOp(ch.guide, { c: 'guide', ...input } as GuideCommand, Date.now());
+      if (next) setCharacter({ ...ch, guide: next });
     },
     uiSound() {
       // The real client plays procedural UI sounds here.

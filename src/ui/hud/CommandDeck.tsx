@@ -15,6 +15,7 @@ import { counterplay } from '../lib/debuffs';
 import { allowSkillDrop, beginSkillDrag, droppedSkill } from '../lib/loadout';
 import { safe } from '../items/hooks';
 import { formatCooldown, formatInt, fraction } from '../lib/format';
+import { gt } from '../../data/guide/strings';
 import { shallowEqual, useStore, useUi } from '../store';
 
 function Globe({ kind }: { kind: 'life' | 'focus' }) {
@@ -80,6 +81,7 @@ function Globe({ kind }: { kind: 'life' | 'focus' }) {
             title: label,
             lines: [
               `${formatInt(v.cur)} / ${formatInt(v.max)}`,
+              gt(kind === 'life' ? 'deck.life' : 'deck.focus'),
               ...(v.ward > 0 ? [`Cinder Ward: ${Math.round(v.ward * 100)}% remaining`] : []),
             ],
           },
@@ -191,6 +193,8 @@ function flaskEq(a: HudFlask | null, b: HudFlask | null): boolean {
 }
 
 function FlaskSlot({ index }: { index: number }) {
+  const store = useStore();
+  const local = useLocal();
   const f = useUi((s) => s.hud?.flasks[index] ?? null, flaskEq);
   // A flask that removes an active debuff (Life: burning, bleeding; Focus: withered) glows while it has charges.
   const counter = useUi((s) => {
@@ -204,6 +208,7 @@ function FlaskSlot({ index }: { index: number }) {
       </div>
     );
   }
+  const info = store.rules.content.flasks[f.flaskId as keyof typeof store.rules.content.flasks];
   return (
     <div
       class={cx(
@@ -213,6 +218,24 @@ function FlaskSlot({ index }: { index: number }) {
         f.count === 0 && 'fe-flask--dry',
         counter && 'fe-flask--counter',
       )}
+      data-flask={index}
+      aria-label={`${info?.name ?? 'Flask'}, key ${f.key}, ${f.count} ${f.count === 1 ? 'charge' : 'charges'}${f.count === 0 ? ', empty' : ''}`}
+      onPointerEnter={(e) =>
+        local.showTooltip(
+          {
+            kind: 'text',
+            title: `${info?.name ?? 'Flask'} (${f.key})`,
+            lines: [
+              `${f.count} ${f.count === 1 ? 'charge' : 'charges'}`,
+              ...(info ? [info.description] : []),
+              ...(f.count === 0 ? [gt('deck.flaskEmpty'), gt('deck.flaskEmptyHome')] : [gt('deck.flaskReady', { key: f.key })]),
+            ],
+          },
+          e.currentTarget,
+          'above',
+        )
+      }
+      onPointerLeave={() => local.hideTooltip()}
     >
       <div class="fe-flask__fill" style={{ height: `${(f.active * 100).toFixed(1)}%` }} />
       <PixelIcon id={`icon/flask/${f.flaskId}`} class="fe-flask__icon" width="var(--slot-icon)" height="var(--slot-icon)" />
@@ -266,7 +289,7 @@ function PointBadges() {
       type="button"
       class={cx('fe-pbadge__chip', `fe-pbadge__chip--${e.kind}`, gain?.kinds.includes(e.kind) && 'fe-pbadge__chip--gain', calm && 'fe-pbadge__chip--calm')}
       data-gain={gain?.kinds.includes(e.kind) ? gain.n : undefined}
-      aria-label={`${e.label}. Opens the ${e.panel === 'character' ? 'Character' : e.panel === 'skills' ? 'Skills' : 'Cartography Table'} panel`}
+      aria-label={`${e.label}. Opens the ${e.panel === 'character' ? 'Character' : e.panel === 'skills' ? 'Skills' : 'Atlas'} panel`}
       onPointerEnter={(ev) => local.showTooltip({ kind: 'text', title: POINT_TITLE[e.kind], lines: [e.label], tone: 'good' }, ev.currentTarget, 'above')}
       onPointerLeave={() => local.hideTooltip()}
       onClick={() => {

@@ -145,6 +145,7 @@ export function hudRun(input: HudInput): HudRun | null {
   if (zone.kind !== 'map') return null;
   const r = view.run;
   const tell = activeTell(input.tell, r.wave, input.now);
+  const chest = view.props.find((p) => p.kind === 'chest');
   return {
     mapName: zone.mapName,
     tier: zone.tier,
@@ -166,6 +167,7 @@ export function hudRun(input: HudInput): HudRun | null {
     modLines: input.modLines,
     portalsRemaining: input.portal?.remaining ?? 0,
     portalsTotal: input.portal?.total ?? PORTALS_PER_MAP,
+    ...(chest ? { chest: chest.state > 0 ? ('open' as const) : ('closed' as const) } : {}),
   };
 }
 

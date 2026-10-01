@@ -198,6 +198,15 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
       }
       return base.benchRecipes(maskLocked(ch, locked).character, targetUid);
     },
+    buyWare: (ch, wareId, now, at) => guard(ch, [], (c) => base.buyWare(c, wareId, now, at), outcomeCharacter, withOutcomeCharacter),
+    rerollWares: (ch, now, expect) => guard(ch, [], (c) => base.rerollWares(c, now, expect), outcomeCharacter, withOutcomeCharacter),
+    waresBoard: (ch, now) => {
+      const locked = locksOf(ch);
+      if (!locked) return base.waresBoard(ch, now);
+      // Affordability is judged without the stacks in the trade offer; the saved state is the unmasked character's.
+      const { board } = base.waresBoard(maskLocked(ch, locked).character, now);
+      return { character: base.waresBoard(ch, now).character, board };
+    },
     merchantOffers: (ch) => {
       const locked = locksOf(ch);
       return base.merchantOffers(locked ? maskLocked(ch, locked).character : ch);
