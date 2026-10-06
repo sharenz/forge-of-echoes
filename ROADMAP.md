@@ -15,7 +15,7 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped).
 2. **Power rework, release R1 "Power": Done, deployed 2026-10-06.** Next releases of the same design (`docs/power-rework/build-plan.md`):
    R2 "Skills I" (C2 contracts and protocol 27, SK0 skill executor and save migration, SK1 Skills panel v2, SK2 ten new skills), then
    R3/R4 (remaining skills and augments), R5 "Orrery" passive tree, R6 balance pass.
-3. **Finish wave 3: anchor-aware events (E1), polish (F1).** B1 beacons and sigils, "Surge n/3 today" and the Re-chart tooltip entry
+3. **Finish wave 3: polish (F1).** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today" and the Re-chart tooltip entry
    are done (2026-10-06). Left over from B1: the other section 9 re-roles (Milestone/Signpost pin slots, Charter Ink, Chart Keeper x4,
    Far Horizon, Master Surveyor, Wagered Charts, theme seals' routing weight) and sigil crafting.
 4. **Make the art keep its promises.** Lava cracks, ice lakes, hazard stripes and sand rings look like mechanics but are cosmetic. Add the
@@ -56,7 +56,9 @@ layout engine plus hand-crafted layouts for all 25 areas (L0 to L3), and monster
 guarantees no player trap. Protocol 22.
 **B1 beacons and sigils: Done 2026-10-06** (25 beacons, 36 sigils in 12 kinds x 3 strengths, beacon slots in the area modal by drag from
 the inventory, the Territory lens, Rook sells Faint sigils, T3+ bosses drop them, Survey Stake / Lamp Oil re-roles and the Lightkeeper
-notable; protocol 27). **Wave 3 still to build:** E1 anchor-aware events (the Event Director asks the layout for anchors via `layoutAnchors`), F1 polish (discovery,
+notable; protocol 27). **E1 anchor-aware events: Done 2026-10-06** (events in the 25 hand-crafted areas stand on the layout's declared anchors on their own
+seeded stream, with the old site picking as fallback; layout validator check 10; a few anchors moved inward after a bot sweep). Watch Host in
+Heart of the Forge and Hollow Ossuary (96 to 90 clears of 100 in the sweep). **Wave 3 still to build:** F1 polish (discovery,
 pin and surge sounds and banners, reduced motion, telemetry).
 **Watch in playtest:** deaths with layouts live (a balance probe needed its damage lowered from 1.8x to 1.5x), maps per run (about 7.5),
 surge income (about +10% for a rotating player; Hourglass Sand slightly above 3%, lever `HOURGLASS_SAND.bossChance` 5% to 4%).
