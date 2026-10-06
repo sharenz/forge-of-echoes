@@ -4,6 +4,7 @@ import { EQUIP_SLOTS } from '../../contracts/content';
 import type { CharacterSave } from '../../contracts/items';
 import { BELT_SLOT_CAPACITY } from '../../data/items';
 import { itemModifiers } from '../items';
+import { passiveTotalsOf } from './passive-rules';
 
 /** Kill charge rule (power rework 10.3): each assigned belt slot gains one charge per this many kills. */
 export const FLASK_KILLS_PER_CHARGE = 40;
@@ -18,7 +19,10 @@ export function killsPerCharge(ch: CharacterSave): number {
     if (!item || item.kind !== 'equipment') continue;
     for (const m of itemModifiers(item)) if (m.stat === 'flaskChargeOnKill' && m.mode === 'flat') sooner += m.value;
   }
-  return Math.max(FLASK_KILLS_PER_CHARGE_MIN, Math.round(FLASK_KILLS_PER_CHARGE - sooner));
+  const base = Math.max(FLASK_KILLS_PER_CHARGE_MIN, Math.round(FLASK_KILLS_PER_CHARGE - sooner));
+  // Quick Recovery (the Orrery): a charge every N kills at the latest.
+  const passive = passiveTotalsOf(ch)?.min('flaskChargePerKills') ?? 0;
+  return passive > 0 ? Math.max(FLASK_KILLS_PER_CHARGE_MIN, Math.min(base, Math.round(passive))) : base;
 }
 
 /**

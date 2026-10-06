@@ -157,11 +157,14 @@ export function ledgerUnits(mods: readonly PassiveMod[]): number | null {
 // Rules: which structural rules the game reads yet
 // ---------------------------------------------------------------------------------------------
 
-const off = (penalty = false): PassiveRuleInfo => ({ live: false, side: 'offence', ...(penalty ? { penalty: true as const } : {}) });
-const def = (penalty = false): PassiveRuleInfo => ({ live: false, side: 'defence', ...(penalty ? { penalty: true as const } : {}) });
-const util = (penalty = false): PassiveRuleInfo => ({ live: false, side: 'utility', ...(penalty ? { penalty: true as const } : {}) });
+const off = (penalty = false): PassiveRuleInfo => ({ live: true, side: 'offence', ...(penalty ? { penalty: true as const } : {}) });
+const def = (penalty = false): PassiveRuleInfo => ({ live: true, side: 'defence', ...(penalty ? { penalty: true as const } : {}) });
+const util = (penalty = false): PassiveRuleInfo => ({ live: true, side: 'utility', ...(penalty ? { penalty: true as const } : {}) });
 
-/** Every rule id. None is live in PT0: the numbers are stored, shown and audited; the sim reads them in a later slice. */
+/**
+ * Every rule id. PT0 stored, showed and audited them; PT4 made them live: the rules resolve them into PlayerCombatStats.passives
+ * and the skill numbers (src/game/progression/passive-rules.ts, passive-runtime.ts) and the sim applies them (src/sim/passives.ts).
+ */
 export const PASSIVE_RULES: Record<PassiveRuleId, PassiveRuleInfo> = {
   igniteDuration: off(), igniteEffect: off(), shockEffect: off(), shockEffectPct: off(), shockDuration: off(), chillEffect: def(),
   chillEffectSet: def(), exposureEffect: off(), exposureDuration: off(), decayDuration: off(), decayEffect: off(), decayStacks: off(),
@@ -173,7 +176,18 @@ export const PASSIVE_RULES: Record<PassiveRuleId, PassiveRuleInfo> = {
   damageTakenTyped: def(), burnOnYouDuration: def(), chilledDealLess: def(), regenPercent: def(), lifePerStr: def(),
   flaskChargePerKills: def(), flaskGuard: def(), focusFlaskLife: def(), flaskDuration: def(), noLifeFlasks: def(true), armourBigHits: def(),
   armourFormula: def(), armourVsElements: def(), evadeChance: def(), evadeCap: def(), wardEffect: def(), damageFromFocus: def(),
+  damageTakenHits: def(), regenLowLife: def(),
 };
+
+/** Whether the game applies a passive rule (the Orrery stops showing "Not active yet" for it). */
+export function isPassiveRuleLive(id: string): boolean {
+  return (PASSIVE_RULES as Record<string, PassiveRuleInfo | undefined>)[id]?.live === true;
+}
+
+/** Whether every structural rule of a node (and of its mastery riders) is live. */
+export function isPassiveNodeLive(node: Pick<PassiveNode, 'rules' | 'choices'>): boolean {
+  return node.rules.every((r) => isPassiveRuleLive(r.id)) && (node.choices ?? []).every((c) => c.rules.every((r) => isPassiveRuleLive(r.id)));
+}
 
 // ---------------------------------------------------------------------------------------------
 // The build: table → nodes

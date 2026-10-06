@@ -149,8 +149,10 @@ function excludesEither(a: AugmentInfo, b: AugmentInfo): boolean {
   return (a.excludes ?? []).includes(b.id) || (b.excludes ?? []).includes(a.id);
 }
 
-export function augmentGraph(info: SkillInfo, rank: number, picked: readonly string[], points: number): AugmentGraph {
-  const slots = augmentSlotsAt(rank);
+/** `bonus`: slots the Orrery adds to this skill (Primary Practice on the first loadout skill; rules passiveAugmentSlots). */
+export function augmentGraph(info: SkillInfo, rank: number, picked: readonly string[], points: number, bonus = 0): AugmentGraph {
+  const own = augmentSlotsAt(rank);
+  const slots = own + bonus;
   const pickedInfos = info.augments.filter((a) => picked.includes(a.id));
   const used = pickedInfos.length;
   const stateOf = (a: AugmentInfo): { state: AugmentState; excludedBy: string | null } => {
@@ -180,9 +182,9 @@ export function augmentGraph(info: SkillInfo, rank: number, picked: readonly str
     })
     .filter((t) => t.nodes.length > 0);
   let nextSlotRank: number | null = null;
-  if (slots < AUGMENT_RULES.maxSlots) nextSlotRank = (slots + 1) * AUGMENT_RULES.ranksPerSlot;
+  if (own < AUGMENT_RULES.maxSlots) nextSlotRank = (own + 1) * AUGMENT_RULES.ranksPerSlot;
   if (nextSlotRank !== null && nextSlotRank > info.maxRank) nextSlotRank = null;
-  return { tiers, slots, used, maxSlots: AUGMENT_RULES.maxSlots, nextSlotRank };
+  return { tiers, slots, used, maxSlots: AUGMENT_RULES.maxSlots + bonus, nextSlotRank };
 }
 
 /** The character with one more augment picked (for before/after previews; the rules resolve augments by id). */

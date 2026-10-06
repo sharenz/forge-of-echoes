@@ -71,7 +71,9 @@ import { recycleMaps, recycleQuote } from './items/bench';
 import { rookMapAreas, rookMapOffers } from './progression/merchant';
 import { buyWare, rerollWares, waresBoard } from './progression/wares';
 import { buyDebugOffer } from './progression/debug-merchant';
-import type { ContentInfo, GameRulesApi } from '../contracts/game';
+import type { ContentInfo, GameRulesApi, Result } from '../contracts/game';
+import type { CharacterSave } from '../contracts/items';
+import { trimAugments } from './progression/skills';
 import {
   BASE_INFO, CURRENCY_INFO, FLASK_INFO, UNIQUE_INFO, addStashTab, addToBackpack, applyBenchRecipe, benchRecipes, benchServices, canEquip,
   clearCraftedAffix, clearNewFlags, depositAllCurrency, discardItem, findItem, itemSize, moveItem, quickMove, renameStashTab,
@@ -106,6 +108,11 @@ export { stowItem, tradeItems, tradeOfferError } from './items';
 export type { Stowed } from './items';
 export { restoreRunSetup } from './progression';
 
+/** A successful change with augments beyond their skill's slots refunded (Primary Practice: progression/skills.ts trimAugments). */
+function trimmed(r: Result<CharacterSave>): Result<CharacterSave> {
+  return r.ok ? { ...r, value: trimAugments(r.value) } : r;
+}
+
 export const rules: GameRulesApi = {
   content,
 
@@ -122,7 +129,8 @@ export const rules: GameRulesApi = {
   allocateAttribute,
   canRankUpSkill,
   rankUpSkill,
-  setLoadoutSlot,
+  // A skill leaving the first loadout slot gives Primary Practice's extra augment slot back (its augment is refunded).
+  setLoadoutSlot: (ch, slot, skillId) => trimmed(setLoadoutSlot(ch, slot, skillId)),
   skillSheet: (ch, skillId, rank) => skillSheetFor(ch, skillId, rank),
   skillPointsTotal,
   canPickAugment,
@@ -130,13 +138,13 @@ export const rules: GameRulesApi = {
   respecPrice,
   refundAugment,
   respec,
-  setPreset,
+  setPreset: (ch, preset, op, name) => trimmed(setPreset(ch, preset, op, name)),
 
   // --- the Orrery ---
   passivePoints,
   allocatePassive,
   passiveRefundPrice,
-  refundPassive,
+  refundPassive: (ch, id) => trimmed(refundPassive(ch, id)),
   masteryChangePrice,
   chooseMastery,
 

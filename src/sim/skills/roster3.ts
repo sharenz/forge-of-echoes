@@ -172,7 +172,8 @@ export function emitHorizon(w: World, p: PlayerState, def: SkillRuntimeDef, b: H
   spawnArea(w, 'eventHorizon', at.x, at.y, pullRadius, duration, { hurts: 'none', debuff: null, source: p.id });
   roster3Player(p).horizons.push({
     x: at.x, y: at.y, age: 0, duration, pullRadius,
-    pull: b.pull * (hasFlag(p, def, b.heavy) ? SKILL_TIMING.heavyCollapsePull : 1),
+    // Gravity's Grip (the Orrery): pulls are stronger.
+    pull: b.pull * (hasFlag(p, def, b.heavy) ? SKILL_TIMING.heavyCollapsePull : 1) * (p.stats.passives ? p.stats.passives.pullMore : 1),
     radius: def.radius > 0 ? def.radius : b.radius,
     def,
     feast: hasFlag(p, def, b.feast) ? SKILL_TIMING.voidFeastFocus : 0,

@@ -210,7 +210,9 @@ export function applyDebuff(
       if (!(hit > 0)) return false;
       const dps = (BURN_FRACTION * hit) / BURN_DURATION;
       d.burnDps = wasActive ? Math.max(d.burnDps, dps) : dps;
-      refresh(d, k, (duration ?? BURN_DURATION) * scale);
+      // Scorch Ward (the Orrery): Burning on you lasts shorter.
+      const pr = p.stats.passives;
+      refresh(d, k, pr ? (duration ?? BURN_DURATION) * scale * pr.burnOnYou : (duration ?? BURN_DURATION) * scale);
       d.stacks[k] = 1;
       break;
     }

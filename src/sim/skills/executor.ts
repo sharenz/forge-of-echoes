@@ -109,7 +109,9 @@ function spendEchoSigil(w: World, p: PlayerState, def: SkillRuntimeDef, b: Skill
   if (e.casts <= 0 || e.time <= 0 || def.id === 'echoSigil' || def.id === 'emberLance' || !(def.damage > 0)) return;
   if (b.emitter === 'buff' || b.emitter === 'dash') return;
   e.casts--;
-  p.pendingNovas.push({ at: w.time + e.delay, def: { ...def, damage: def.damage * e.damage } });
+  // Reservoir of Echoes (the Orrery): echoes deal more.
+  const more = p.stats.passives ? p.stats.passives.echoMore : 1;
+  p.pendingNovas.push({ at: w.time + e.delay, def: { ...def, damage: def.damage * e.damage * more } });
   if (e.refund > 0 && def.focusCost > 0) p.focus = Math.min(p.stats.maxFocus, p.focus + def.focusCost * e.refund);
   // The last charge spent ends the sigil's aura.
   if (e.casts === 0) {
@@ -123,6 +125,11 @@ function spendEchoSigil(w: World, p: PlayerState, def: SkillRuntimeDef, b: Skill
  * a picked augment's at its share; when both apply the better value counts (no stacking). Echoes never queue echoes.
  */
 function queueEcho(w: World, p: PlayerState, def: SkillRuntimeDef, b: SkillBehaviour): void {
+  const pr = p.stats.passives;
+  if (pr) {
+    passiveEcho(w, p, def, b, pr);
+    return;
+  }
   if (b.emitter !== 'projectile' && b.emitter !== 'burst' && b.emitter !== 'pulse') return;
   const aug = augmentOf(def, 'echo');
   const granted = hasFlag(p, def, 'echo' in b ? b.echo : undefined);
@@ -130,6 +137,25 @@ function queueEcho(w: World, p: PlayerState, def: SkillRuntimeDef, b: SkillBehav
   const share = Math.max(granted ? 1 : 0, aug ? aug.damage : 0);
   const at = w.time + (aug ? aug.delay : NOVA_ECHO_DELAY);
   p.pendingNovas.push({ at, def: share === 1 ? def : { ...def, damage: def.damage * share } });
+}
+
+/**
+ * queueEcho for a player with passives: Echo Cascade echoes every damaging skill (any emitter but a buff or a blink) at its share,
+ * the better of it and an item or augment echo counts (no stacking), and Reservoir of Echoes multiplies the echo's damage.
+ */
+function passiveEcho(w: World, p: PlayerState, def: SkillRuntimeDef, b: SkillBehaviour, pr: NonNullable<PlayerState['stats']['passives']>): void {
+  const own = b.emitter === 'projectile' || b.emitter === 'burst' || b.emitter === 'pulse';
+  const aug = own ? augmentOf(def, 'echo') : undefined;
+  const granted = own && hasFlag(p, def, 'echo' in b ? b.echo : undefined);
+  const cascade = pr.echoAll > 0 && def.damage > 0 && b.emitter !== 'buff' && b.emitter !== 'dash' ? pr.echoAll : 0;
+  if (!aug && !granted && cascade <= 0) return;
+  const item = granted ? 1 : 0;
+  const picked = aug ? aug.damage : 0;
+  const best = Math.max(item, picked, cascade);
+  const share = best * pr.echoMore;
+  // The echo that counts keeps its own delay.
+  const delay = cascade > 0 && cascade >= best ? pr.echoDelay : aug ? aug.delay : NOVA_ECHO_DELAY;
+  p.pendingNovas.push({ at: w.time + delay, def: share === 1 ? def : { ...def, damage: def.damage * share } });
 }
 
 /** Pending echoes (from wherever the player is when they fire, toward the current aim); echoes never queue echoes. */

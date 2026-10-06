@@ -2,7 +2,7 @@
 import type { PlayerDebuff } from '../contracts/bestiary';
 import { DAMAGE_TYPES, type DamageType, type MonsterKind } from '../contracts/content';
 import { DECAY, DOT_RESIST_FACTOR, EXPOSURE, PEN_CAP, STAT_CAPS, WITHER } from '../data/progression/combat';
-import { MONSTER_ANIM, type MonsterRarity, type RootSource, type SimEvent } from '../contracts/sim';
+import { MONSTER_ANIM, type MonsterRarity, type PassiveRuntime, type RootSource, type SimEvent } from '../contracts/sim';
 import { ELITE, KIND_BY_INDEX, KIND_INDEX } from './archetypes';
 import { removeOwnedAreas, spawnArea } from './areas';
 import {
@@ -22,6 +22,8 @@ import { monsterDefs } from './rosters';
 import { MFLAG } from './stores';
 import { markTakenMult, wardCapOf } from './skills/primitives/state';
 import { clearRoster3, roster3Taken, surgeResist } from './skills/roster3-state';
+import { flaskGuardOf, shockBonusOf } from './passives-state';
+import { captureVictim, notePassiveChill, notePassiveShock, passiveHitFactor, passiveKill, passiveLeech, type PassiveVictim } from './passives';
 import type { PlayerState, World } from './world';
 
 export const DT_PHYSICAL = DAMAGE_INDEX.physical;
@@ -48,13 +50,14 @@ export function isHittable(w: World, i: number): boolean {
  * `penPoints` is the attacker's penetration for this damage type in percentage points. Returns a fraction; damage taken
  * is `1 - r3`. A monster already below the exposure floor keeps its own (lower) resistance.
  */
-export function monsterResist(w: World, i: number, dtype: number, penPoints = 0): number {
+export function monsterResist(w: World, i: number, dtype: number, penPoints = 0, penCap = PEN_CAP): number {
   const m = w.monsters;
   const r1 = Math.min(MONSTER_RESIST_CAP, m.res[i * 5 + dtype]);
-  const pen = Math.min(PEN_CAP, Math.max(0, penPoints)) / 100;
+  const pen = Math.min(penCap, Math.max(0, penPoints)) / 100;
   const r2 = r1 - Math.min(pen, Math.max(0, r1));
-  // Withered (Wither Field, power rework SK3) is one more exposure source: the strongest source per type applies.
-  const wither = m.witherTime[i] > 0 ? (m.witherStacks[i] * WITHER.points) / 100 : 0;
+  // Withered (Wither Field, power rework SK3) is one more exposure source: the strongest source per type applies. It never goes past
+  // the exposure cap (Withering Gaze's extra stack: passive-tree.md 3.4).
+  const wither = m.witherTime[i] > 0 ? Math.min(EXPOSURE.max, m.witherStacks[i] * WITHER.points) / 100 : 0;
   if (m.exposeTime[i] <= 0 && wither <= 0) return r2;
   const raw = Math.max(m.exposeTime[i] > 0 ? m.expose[i * 5 + dtype] : 0, wither);
   if (raw <= 0) return r2;
@@ -65,15 +68,18 @@ export function monsterResist(w: World, i: number, dtype: number, penPoints = 0)
 /**
  * Expose a monster to a damage type: `points` percentage points (at most EXPOSURE.max) for EXPOSURE.duration seconds.
  * Exposure never stacks: the strongest value per type applies, and every application refreshes the shared timer.
- * (Applied by skills and augments, never by gear; bosses and lieutenants take half when it is read.)
+ * (Applied by skills and augments, never by gear; bosses and lieutenants take half when it is read.) `source` is the applying
+ * player: the Orrery's exposure rules (Sundering Mark, Brittle Bones, Entropy Lens, Rime Attunement) add points and seconds.
  */
-export function exposeMonster(w: World, i: number, dtype: number, points: number): void {
+export function exposeMonster(w: World, i: number, dtype: number, points: number, source = 0): void {
   const m = w.monsters;
   if (!m.alive[i] || !(points > 0)) return;
+  const pr = source > 0 ? w.playerById[source]?.stats.passives : undefined;
   if (m.exposeTime[i] <= 0) for (let k = 0; k < 5; k++) m.expose[i * 5 + k] = 0;
-  const v = Math.min(EXPOSURE.max, points) / 100;
+  const v = Math.min(EXPOSURE.max, pr ? points + pr.exposurePoints[dtype] : points) / 100;
   if (v > m.expose[i * 5 + dtype]) m.expose[i * 5 + dtype] = v;
-  m.exposeTime[i] = EXPOSURE.duration;
+  const duration = pr ? EXPOSURE.duration + pr.exposureDuration : EXPOSURE.duration;
+  m.exposeTime[i] = Math.max(m.exposeTime[i], duration);
 }
 
 /** Count exposure down one tick; the whole row is cleared when it runs out. */
@@ -106,6 +112,21 @@ export function damageMonster(
   const m = w.monsters;
   const rng = w.combatRng;
   const player = source > 0 ? w.playerById[source] : undefined;
+  // The Orrery's rules of the attacker (absent for a player without passives: nothing below changes).
+  const pr = player?.stats.passives;
+  if (pr) {
+    // Pyre Doctrine: every hit is fire. Frostfire Gate, Rift Spark: a share of one type converts (an augment's own conversion of
+    // this hit already carries the passive share: the rules fold them together).
+    if (pr.convertAll >= 0) {
+      dtype = pr.convertAll;
+      convTo = -1;
+      convShare = 0;
+    } else if (convTo < 0 && pr.convertTo[dtype] >= 0) {
+      convTo = pr.convertTo[dtype];
+      convShare = pr.convertShare[dtype];
+    }
+    knock *= pr.knockback;
+  }
   const distance = hit && player?.flags.has('closeQuarters') ? Math.hypot(m.x[i] - player.x, m.y[i] - player.y) : 100;
   let dmg = amount * (distance <= 80 ? 1.25 : distance > 200 ? 0.75 : 1) * rng.range(ROLL_MIN, ROLL_MAX);
   let crit = false;
@@ -113,21 +134,27 @@ export function damageMonster(
     crit = true;
     dmg *= critMult > 1 ? critMult : 1.5;
   }
+  if (pr) dmg *= passiveHitFactor(w, pr, player, i, dtype, crit);
   // Ailments build from the hit with DOT_RESIST_FACTOR of the resistance (a proof rare still burns); shock, Warded and
   // armour apply to the hit itself (and live, per tick, to the burn), so a brute's armour is the thing ignite gets around.
   const pen = player?.stats.pen;
+  const penCap = pr ? pr.penCap : PEN_CAP;
   const share2 = convTo >= 0 && convShare > 0 ? Math.min(1, convShare) : 0;
-  const r1 = monsterResist(w, i, dtype, pen?.[DAMAGE_TYPES[dtype]] ?? 0);
+  const r1 = monsterResist(w, i, dtype, pen?.[DAMAGE_TYPES[dtype]] ?? 0, penCap);
   let resisted: number;
   let shown = dtype;
+  let voidPart = 0;
   if (share2 === 0) {
     resisted = dmg * (1 - r1);
+    if (dtype === DT_VOID) voidPart = resisted;
     if (ailmentChance > 0) applyAilment(w, i, dmg * (1 - DOT_RESIST_FACTOR * r1), dtype, ailmentChance, source);
   } else {
-    const r2 = monsterResist(w, i, convTo, pen?.[DAMAGE_TYPES[convTo]] ?? 0);
+    const r2 = monsterResist(w, i, convTo, pen?.[DAMAGE_TYPES[convTo]] ?? 0, penCap);
     const d1 = dmg * (1 - share2);
     const d2 = dmg * share2;
     resisted = d1 * (1 - r1) + d2 * (1 - r2);
+    if (dtype === DT_VOID) voidPart += d1 * (1 - r1);
+    if (convTo === DT_VOID) voidPart += d2 * (1 - r2);
     if (share2 > 0.5) shown = convTo;
     if (ailmentChance > 0) {
       if (d1 > 0) applyAilment(w, i, d1 * (1 - DOT_RESIST_FACTOR * r1), dtype, ailmentChance, source);
@@ -137,6 +164,8 @@ export function damageMonster(
   // Roster batch 3 (SK4): Blizzard's brittle cold, Lightning Skin on shocked enemies (×1 without them).
   dmg = resisted * takenMult(w, i) * roster3Taken(w, i, dtype, source);
   if (hit && m.hitReduction[i] > 0) dmg *= 1 - m.hitReduction[i];
+  // Soul Tithe: a share of the void damage dealt comes back as Focus.
+  if (pr && voidPart > 0 && player && resisted > 0) passiveLeech(w, player, pr, dmg * (voidPart / resisted));
   if (knock > 0 && m.knockback[i] > 0) {
     const l = Math.hypot(dirX, dirY);
     if (l > 1e-6) {
@@ -178,7 +207,8 @@ export function damageMonsterFraction(w: World, i: number, frac: number, dtype: 
 function takenMult(w: World, i: number): number {
   const m = w.monsters;
   let f = exposedMult(w, i);
-  if (m.shockTime[i] > 0) f *= 1 + SHOCK_BONUS;
+  // A passive player's stronger shock (Static Charge, Stormbound) holds while it runs (SHOCK_BONUS without one).
+  if (m.shockTime[i] > 0) f *= 1 + shockBonusOf(w, i, SHOCK_BONUS);
   // Skill marks (power rework SK5: Conductive Mark, Pinning); exactly 1 when nothing is marked.
   f *= markTakenMult(w, i);
   if (m.flags[i] & MFLAG.shielded) f *= 1 - WARDED_REDUCTION;
@@ -221,11 +251,13 @@ export function applyAilment(w: World, i: number, hitDamage: number, dtype: numb
   if (dtype !== DT_FIRE && dtype !== DT_COLD && dtype !== DT_LIGHTNING) return;
   if (w.combatRng.next() >= chance) return;
   const m = w.monsters;
+  // The Orrery's ailment rules of the inflicting player (Slow Burn, Cinder Attunement, Static Charge, Overload, Frostbound…).
+  const pr = source > 0 ? w.playerById[source]?.stats.passives : undefined;
   let fresh: boolean;
   let name: 'burning' | 'chilled' | 'shocked';
   if (dtype === DT_FIRE) {
     fresh = m.igniteTime[i] <= 0;
-    const dps = (hitDamage * IGNITE_FRACTION) / IGNITE_DURATION;
+    const dps = pr ? ((hitDamage * IGNITE_FRACTION) / IGNITE_DURATION) * pr.igniteMore : (hitDamage * IGNITE_FRACTION) / IGNITE_DURATION;
     // Ignites don't stack: the strongest burn wins (and its player gets the credit); the
     // duration refreshes.
     if (fresh || dps >= m.igniteDps[i]) {
@@ -233,15 +265,17 @@ export function applyAilment(w: World, i: number, hitDamage: number, dtype: numb
       m.igniteSrc[i] = source;
     }
     if (fresh) m.igniteEventTimer[i] = IGNITE_EVENT_INTERVAL;
-    m.igniteTime[i] = IGNITE_DURATION;
+    m.igniteTime[i] = pr ? Math.max(m.igniteTime[i], IGNITE_DURATION * (1 + pr.igniteDuration)) : IGNITE_DURATION;
     name = 'burning';
   } else if (dtype === DT_COLD) {
     fresh = m.chillTime[i] <= 0;
-    m.chillTime[i] = CHILL_DURATION;
+    m.chillTime[i] = pr ? Math.max(m.chillTime[i], CHILL_DURATION) : CHILL_DURATION;
+    if (pr) notePassiveChill(w, i, pr, CHILL_DURATION);
     name = 'chilled';
   } else {
     fresh = m.shockTime[i] <= 0;
-    m.shockTime[i] = SHOCK_DURATION;
+    m.shockTime[i] = pr ? Math.max(m.shockTime[i], SHOCK_DURATION + pr.shockDuration) : SHOCK_DURATION;
+    if (pr) notePassiveShock(w, i, pr, SHOCK_DURATION + pr.shockDuration);
     name = 'shocked';
   }
   if (fresh && w.events.lowOpen) w.events.low({ t: 'ailment', ailment: name, x: m.x[i], y: m.y[i] });
@@ -292,20 +326,23 @@ export function applyDecay(w: World, i: number, hit: number, share: number, sour
   if (!isHittable(w, i) || !(hit > 0) || !(share > 0)) return;
   const m = w.monsters;
   const player = source > 0 ? w.playerById[source] : undefined;
-  const r = monsterResist(w, i, DT_VOID, player?.stats.pen?.void ?? 0);
-  const dps = (hit * share * (1 - DOT_RESIST_FACTOR * r)) / DECAY.duration;
+  const pr = player?.stats.passives;
+  const r = monsterResist(w, i, DT_VOID, player?.stats.pen?.void ?? 0, pr ? pr.penCap : PEN_CAP);
+  const dps = pr ? ((hit * share * (1 - DOT_RESIST_FACTOR * r)) / DECAY.duration) * pr.decayMore : (hit * share * (1 - DOT_RESIST_FACTOR * r)) / DECAY.duration;
   if (m.decayTime[i] <= 0) {
     m.decayStacks[i] = 0;
     m.decayDps[i] = 0;
     m.decayAccum[i] = 0;
     m.decayEventTimer[i] = IGNITE_EVENT_INTERVAL;
   }
-  m.decayStacks[i] = Math.min(DECAY.maxStacks, m.decayStacks[i] + 1);
+  // Rotting Touch, Hollow Attunement, Hollow Pact: Decay lasts longer and stacks higher for the player who applies it.
+  if (pr) m.decayStacks[i] = Math.max(m.decayStacks[i], Math.min(DECAY.maxStacks + pr.decayStacks, m.decayStacks[i] + 1));
+  else m.decayStacks[i] = Math.min(DECAY.maxStacks, m.decayStacks[i] + 1);
   if (dps >= m.decayDps[i]) {
     m.decayDps[i] = dps;
     m.decaySrc[i] = source;
   }
-  m.decayTime[i] = DECAY.duration;
+  m.decayTime[i] = pr ? Math.max(m.decayTime[i], DECAY.duration + pr.decayDuration) : DECAY.duration;
 }
 
 /** Decay damage over time for one tick (like tickIgnite: hit numbers every IGNITE_EVENT_INTERVAL). Returns true on a kill. */
@@ -325,6 +362,11 @@ export function tickDecay(w: World, i: number, dt: number): boolean {
   m.decayEventTimer[i] -= dt;
   const dummy = m.kind[i] === DUMMY;
   m.life[i] -= dmg;
+  // Soul Tithe: Decay is void damage dealt too.
+  if (source > 0 && dmg > 0) {
+    const sp = w.playerById[source];
+    if (sp?.stats.passives) passiveLeech(w, sp, sp.stats.passives, dmg);
+  }
   const killed = !dummy && m.life[i] <= 0;
   if (killed || m.decayEventTimer[i] <= 0 || m.decayTime[i] <= 0) {
     if (killed) w.events.push(monsterHitEvent(w, i, m.decayAccum[i], DT_VOID, false, true, source));
@@ -377,6 +419,10 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
   const summoned = (flags & MFLAG.summoned) !== 0;
   const rarity = RARITY_NAMES[m.rarity[i]];
   const def = monsterDefs()[m.kind[i]];
+  // The Orrery's on-kill rules read the victim as it died (only when the killer or its igniter carries passives).
+  const igniter = m.igniteTime[i] > 0 ? m.igniteSrc[i] : 0;
+  const victim: PassiveVictim | null = (credited && source > 0 && w.playerById[source]?.stats.passives)
+    || (igniter > 0 && w.playerById[igniter]?.stats.passives) ? captureVictim(w, i) : null;
   w.events.push({ t: 'death', kind, rarity: m.rarity[i], x, y, facing: m.facing[i], damageType: damageTypeAt(dtype) });
 
   const pk = m.pack[i];
@@ -432,6 +478,7 @@ export function killMonster(w: World, i: number, dtype: number, credited: boolea
     }
   }
   if (xp > 0) grantXp(w, xp);
+  if (victim) passiveKill(w, victim, dtype, credited, source, igniter);
 }
 
 /** Extra damage multiplier for a player whose level trails the monster level by more than the grace (1 otherwise). */
@@ -475,10 +522,11 @@ export function hitPlayer(
   const damaging = amount > 0;
   if (!damaging && !debuff) return -1;
   const s = p.stats;
+  const pr = s.passives;
   const rng = w.combatRng;
-  // Phase Stride's Slipstream adds evade chance while the stride lasts (still capped).
+  // Phase Stride's Slipstream adds evade chance while the stride lasts (still capped; Phantom Weave raises the cap).
   const evasion = p.stride.time > 0 ? s.evasion + p.stride.evasion : s.evasion;
-  if ((kind === 'melee' || kind === 'projectile') && evasion > 0 && rng.next() < Math.min(EVASION_CAP, evasion)) {
+  if ((kind === 'melee' || kind === 'projectile') && evasion > 0 && rng.next() < Math.min(pr ? pr.evadeCap : EVASION_CAP, evasion)) {
     w.events.push({ t: 'evade', playerId: p.id, x: p.x, y: p.y, target: 'player' });
     return -1;
   }
@@ -487,12 +535,15 @@ export function hitPlayer(
   if (damaging) {
     // Damage over time derives from a hit that already carried the level gap, so it is not scaled again.
     dmg = kind === 'dot' ? amount : amount * rng.range(ROLL_MIN, ROLL_MAX) * levelGapMult(w.config.monsters.level, p.level);
-    if (dtype === DT_PHYSICAL && s.armor > 0) dmg *= 1 - s.armor / (s.armor + 10 * dmg);
+    if (pr) dmg = passiveArmour(p, pr, dmg, dtype, kind);
+    else if (dtype === DT_PHYSICAL && s.armor > 0) dmg *= 1 - s.armor / (s.armor + 10 * dmg);
     // Tempest Surge, Lightning Skin (SK4): more lightning resistance, never above the hard ceiling (+0 without it).
     const res = effectiveResist(p, type) + aegisResist(p, dtype);
     const skin = surgeResist(p, dtype);
     dmg *= 1 - (res + (skin > 0 ? Math.max(0, Math.min(skin, STAT_CAPS.maxResistHard / 100 - res)) : 0) - w.pactResist);
     if (Number.isFinite(s.damageTaken) && s.damageTaken >= 0) dmg *= s.damageTaken;
+    // Scorch Ward, Grounding Rod, Bloodied Resolve: never past the tree's damage-taken floor (passive-tree.md 1.3).
+    if (pr) dmg *= passiveTaken(w, p, pr, dtype, kind);
     if (isActive(p, 'shocked')) dmg *= shockMult(p);
     if (p.ward.time > 0) dmg *= 1 - Math.min(wardCapOf(p, WARD_REDUCTION_CAP), Math.max(0, p.ward.reduction));
     // Static Aegis, then Rime Bulwark's barrier (power rework SK3).
@@ -504,7 +555,12 @@ export function hitPlayer(
   if (dmg > 0) {
     if (kind !== 'dot' && dtype === DT_PHYSICAL && p.ward.time > 0 && p.ward.renewOnHit)
       p.ward.time = Math.min(p.ward.duration, p.ward.time + 0.5);
-    p.life -= dmg;
+    // Iron Mind: a share of the damage is drawn from Focus first (what Focus cannot pay falls on life).
+    if (pr && pr.damageFromFocus > 0 && p.focus > 0) {
+      const drawn = Math.min(p.focus, dmg * pr.damageFromFocus);
+      p.focus -= drawn;
+      p.life -= dmg - drawn;
+    } else p.life -= dmg;
     p.hitFlash = 1;
     if (!p.cast && p.dashTime <= 0) p.hitTime = HIT_ANIM;
     w.events.push({
@@ -518,6 +574,28 @@ export function hitPlayer(
   }
   if (debuff) applyDebuff(w, p, debuff, dmg, source);
   return dmg;
+}
+
+/**
+ * Armour against one hit of a player with passives (after the roll): physical hits as always, with Heavy Plate's formula and Brace's
+ * extra effectiveness against hits above 20% of life; Eternal Bastion's armour against elemental hits at its effectiveness.
+ */
+function passiveArmour(p: PlayerState, pr: PassiveRuntime, dmg: number, dtype: number, kind: PlayerHitKind): number {
+  const s = p.stats;
+  if (!(s.armor > 0) || !(dmg > 0)) return dmg;
+  const elemental = dtype === DT_FIRE || dtype === DT_COLD || dtype === DT_LIGHTNING;
+  if (dtype !== DT_PHYSICAL && !(elemental && pr.armourVsElements > 0)) return dmg;
+  const armour = kind !== 'dot' && pr.armourBigHits > 0 && dmg > s.maxLife * 0.2 ? s.armor * (1 + pr.armourBigHits) : s.armor;
+  const reduction = armour / (armour + pr.armourPerDamage * dmg);
+  return dmg * (1 - (dtype === DT_PHYSICAL ? reduction : reduction * pr.armourVsElements));
+}
+
+/** The passive damage-taken factor of one hit on `p` (typed lines, the flask guard), never below the tree's floor. */
+function passiveTaken(w: World, p: PlayerState, pr: PassiveRuntime, dtype: number, kind: PlayerHitKind): number {
+  let f = kind === 'dot' ? pr.takenDot[dtype] : pr.takenHit[dtype];
+  const guard = flaskGuardOf(w, p);
+  if (guard > 0) f *= 1 - guard;
+  return f < pr.takenFloor ? pr.takenFloor : f;
 }
 
 /**

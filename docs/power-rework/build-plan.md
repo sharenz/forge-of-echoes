@@ -1,6 +1,6 @@
 # E. Build plan: slices, file ownership, tests, migration
 
-Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06, R3 (SK3 and SK5) built 2026-10-06, R4's SK4 built 2026-10-06, R5's PT1 built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
+Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06, R3 (SK3 and SK5) built 2026-10-06, R4's SK4 built 2026-10-06, R5's PT1 built 2026-10-06, PT4 (the passive rules live) built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
 `power-curve.md` (P), `skills.md` (SK) and `passive-tree.md` (PT) hold the designs these slices implement; `overview.md` has the pillars and the migration summary.
 
 ---
@@ -288,7 +288,7 @@ Stormbound 30% more lightning with 40% less Focus regeneration and +10% Focus co
 Throne 10% less damage dealt (25/10), Gambler's Edge non-crits 25% less (30/10); small families on the ledger (+10% DoT, +1% cast speed,
 +6% area, +2 void pen, 1 life regen, +1% move and +4% pickup, +20 life, +2 all attributes).
 
-Not live yet (data only, `PASSIVE_RULES` all `live: false`): every structural rule (ailment strength and duration, exposure, Decay and
+Not live in PT0 (data only then, `PASSIVE_RULES` all `live: false`; **PT4 made every one live**, see below): every structural rule (ailment strength and duration, exposure, Decay and
 Wither stacks, conditional damage, conversion and Pyre Doctrine's convert-all, on-kill triggers, echoes, Primary Practice's augment slot,
 Focus costs, typed damage taken, % life regeneration, flask rules, armour vs elements / big hits / formula, evade chance and cap, ward
 effect, Razor Doctrine's penetration cap, Iron Mind's damage from Focus, Hardy). Their nodes' stat lines apply. Wiring them is a follow-up
@@ -332,6 +332,49 @@ Owner lane **codex-ui**. Depends on PT0, PT1. Files: `src/ui/panels/Orrery.tsx`,
 
 ### PT3: Boss Marks, respec services, polish (S)
 Boss mark HUD feedback, respec price breakdown in the hideout, free-respec token flow, Scrap services.
+
+### PT4: The passive rules live in play (M)
+**Status: built 2026-10-06.** Every id of `PASSIVE_RULES` is `live: true`; `isPassiveRuleLive(id)` / `isPassiveNodeLive(node)` (data) tell
+the Orrery UI to stop showing "Not active yet". Two ids were split out so the sim can tell them apart: `damageTakenHits` (Grounding Rod's
+"from hits") and `regenLowLife` (Unending Vigil's 6% below half life); the ledger split of their nodes is unchanged.
+
+Plumbing (the way unique flags and augment primitives travel): `passive-rules.ts` sums the resolved rules (`passiveTotalsOf(ch)`, memoised
+per allocation) and writes the sheet's "Orrery Effects" lines; the player model carries the totals (`PlayerModel.passives`, plus the first
+loadout skill and Cinder Ward's rank for Primary Practice and Last Ember); `resolveSkill` applies the skill-side rules; `computeCombat`
+applies the stat-side ones and hangs `passive-runtime.ts`'s `PassiveRuntime` on `PlayerCombatStats.passives` (absent without passives, so
+the sim skips every hook and the goldens are bit-identical). Sim: `src/sim/passives-state.ts` (leaf; WeakMaps keyed by World / PlayerState
+as SK5 did: per-monster shocks and chills of passive players, per-player kill count, leech bucket, ward cooldown, flask guard) and
+`src/sim/passives.ts` (hit factor, kill triggers, Last Ember, Vigil, flask riders); hooks in `combat.ts` (damageMonster, applyAilment,
+applyDecay / tickDecay, exposeMonster's new `source`, killMonster, hitPlayer), `ai.ts` (chill slow), `behaviour.ts` (Permafrost),
+`player.ts` (flasks, the tick), `executor.ts` (echoes), `roster2.ts` (Withered), `roster3.ts` (Event Horizon's pull),
+`primitives/state.ts` (ward cap). Rules: `skills.ts` (Pyre's fire and both pools, conversion shares, Primary Practice's `less` and slot,
+crit multiplier and area by type, blink recovery, zone and orb duration, Focus cost, range, ward and barrier strength, pulls, the echo
+estimate), `stats.ts` (% regeneration, life per kill, evade chance and cap, armour notes), `model.ts` (Hardy, the penetration cap),
+`character.ts` (flask duration), `flasks.ts` (kill charges), `save.ts` and `game/index.ts` (the extra augment slot is normalised on
+load and refunded by `trimAugments` when the skill leaves the first slot or the node is refunded), `ui/lib/skilltree.ts` (the graph
+shows the slot). `AILMENT_BASE` (data) mirrors the sim's shock, chill, ward-cap and evade-cap constants (a test keeps them equal).
+
+Readings where `passive-tree.md` left room: "increased X against Burning / Chilled" joins the increased pool of the hit's type (spell, type,
+elemental) as a factor; the conditional `more` lines (Pyroclasm, Absolute Zero) and the ailment, Decay and echo `more` lines are each
+held under `moreRoom` = min(×2.0 / the tree's unconditional `more`, MORE_CAP / the worst damage type's whole `more` pool) (augment `more`
+lines are not in that worst case); typed damage taken and the flask guard are floored at max(0.75 / the tree's damage-taken lines, 0.60 /
+the character's damage taken); shocks are 20 + points, ×1.5 with Stormbound, per monster (the strongest running one counts); chill slow
+is 30 (or Absolute Zero's 40) + points, at most 90; exposure points stay under 25; Withered's extra stack is bounded by the 25-point cap;
+passive conversion splits every hit of the type in `damageMonster` (any emitter) with each share's own ailment, and adds to an augment's
+conversion to the same type only; Pyre Doctrine turns every hit to fire, sets every skill's type to fire with both modifier pools, ignores
+Frostfire Gate / Rift Spark and drops augment conversions to another type (Decay stays void: it is damage over time, not a hit); on-kill
+triggers count credited kills, use the killing blow's type ("fire kill"), and share SK5's per-tick limit of 8; Last Whisper's radius is 60;
+Soul Tithe counts Decay; Last Ember casts Cinder Ward at its rank (1 when unlearned) with its augments; Echo Cascade covers the basic
+attack and every emitter but buffs and blinks; Slippery's points need an evasion rating; Barrier Study raises the ward cap by 40% of its
+effect (60% to 66%) and barriers by its full 25%; Iron Mind pays 30% of each hit's final damage from Focus while Focus lasts; Quick
+Recovery sets the kill-charge interval to at most 30; Rejuvenating Surge stretches the same recovery over a longer flask.
+
+Wire: no change. `PlayerCombatStats` stays on the server (the client derives its own runtime from the save it already has, protocol 33).
+
+Tests: `tests/sim/passive-rules.test.ts`: one test per rule id (the sim's number equals the node's text, and a coverage check that every
+id has its test), plumbing (no `passives` without nodes, every rule and node live, the sheet lines, the constant mirror) and 2,000 random
+connected 70-point builds at level 60 never past the penetration cap, the `more` room or the damage-taken floors. Out of scope and still
+data only: the unique flags that read like rules (Focus shield, crits penetrate, non-crits less), which the uniques' `awaits` still gate.
 
 ### B1: Balance and spec sync (M)  (R6)
 Owner lane **balance**. All `BALANCE=1` harness runs; knob tuning of `power-curve.md` 12; GAME_SPEC §3, §4, §5, §7, §8 rewritten; ROADMAP updated (items 2 and 5 done, new open items); `docs/power-rework` kept as the history.

@@ -67,8 +67,8 @@ export const PRESETS_ALLOCATE_PASSIVES = false;
 export function detectCapabilities(): Capabilities {
   const api = rules as unknown as Record<string, unknown>;
   // The Orrery's rules exist since PT0 (rules.allocatePassive), but the presets below still name their passives by design label (not
-  // node ids) and most keystone behaviours are structural rules that are not live yet (PASSIVE_RULES): the tree's credit stays a
-  // band-model stand-in until each preset allocates real nodes through the rules (harness lane, with B1).
+  // node ids); the structural rules are live since PT4 (PASSIVE_RULES), yet the tree's credit stays a band-model stand-in until each
+  // preset allocates real nodes through the rules (harness lane, with B1).
   const passives = typeof api.allocatePassive === 'function' && PRESETS_ALLOCATE_PASSIVES;
   const augments = Object.values(SKILLS).some((s) => 'augments' in (s as object));
   return {

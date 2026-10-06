@@ -5,7 +5,7 @@ import { exposeMonster } from '../../combat';
 import type { World } from '../../world';
 
 /** Expose monster slot `i` by the primitive's points per damage type (DAMAGE_TYPES order). */
-export function applyExposure(w: World, i: number, e: Extract<AugmentRuntime, { p: 'expose' }>): void {
+export function applyExposure(w: World, i: number, e: Extract<AugmentRuntime, { p: 'expose' }>, owner = 0): void {
   const pts = e.points;
-  for (let k = 0; k < pts.length; k++) if (pts[k] > 0) exposeMonster(w, i, k, pts[k]);
+  for (let k = 0; k < pts.length; k++) if (pts[k] > 0) exposeMonster(w, i, k, pts[k], owner);
 }

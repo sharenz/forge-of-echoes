@@ -35,7 +35,7 @@ const GROUND = registerAreaEffect({
       const dy = m.y[i] - a.y;
       const r = a.radius + m.radius[i];
       if (dx * dx + dy * dy > r * r) continue;
-      if (x.expose > 0) exposeMonster(w, i, a.dtype, x.expose);
+      if (x.expose > 0) exposeMonster(w, i, a.dtype, x.expose, a.source);
       if (!x.ailment) continue;
       if (a.kind === 'staticField') {
         if (m.shockTime[i] <= 0 && w.events.lowOpen) w.events.low({ t: 'ailment', ailment: 'shocked', x: m.x[i], y: m.y[i] });

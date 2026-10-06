@@ -23,6 +23,8 @@ import {
 } from './skills';
 import type { ResolvedSkill } from './skills';
 import { clean, oneDecimal, percent, plainNumber, signedPercent } from './util';
+import { passiveRuntimeOf } from './passive-runtime';
+import { passiveRuleLines } from './passive-rules';
 
 // ---------------------------------------------------------------------------------------------
 // Breakdown text
@@ -93,11 +95,17 @@ export function computeCombat(model: PlayerModel): Computed {
   const maxFocus = maxFocusOf(model);
   const focusRegenBd = focusRegenBreakdown(model);
   bds.focusRegen = focusRegenBd;
-  const lifeRegen = Math.max(0, take('lifeRegen', 0).value);
+  const pas = model.passives;
+  // Steady Breath, Heart Attunement (c), Unending Vigil: regenerate a share of maximum life (the Orrery, PT4).
+  const regenPct = pas ? pas.sum('regenPercent') : 0;
+  const lifeRegen = Math.max(0, take('lifeRegen', 0).value) + (regenPct > 0 ? (maxLife * regenPct) / 100 : 0);
   const armor = Math.max(0, Math.floor(take('armor', 0).value));
   const evasionRating = Math.max(0, Math.floor(take('evasion').value));
   const evasionConstant = evasionConstantFor(cls, model.monsterLevel);
-  const evasion = Math.min(cls.evasionCap, evasionRating / (evasionRating + evasionConstant));
+  // Slippery (+points, the cap still applies) and Phantom Weave (a higher cap).
+  const evadeCap = pas ? Math.min(0.95, cls.evasionCap + pas.sum('evadeCap') / 100) : cls.evasionCap;
+  const evadeAdd = pas && evasionRating > 0 ? pas.sum('evadeChance') / 100 : 0;
+  const evasion = Math.min(evadeCap, evasionRating / (evasionRating + evasionConstant) + evadeAdd);
 
   const resistUncapped = { fire: 0, cold: 0, lightning: 0, void: 0 };
   // Resistance is handed to the sim UNCAPPED (the map penalty is already subtracted): the sim caps it at maxResist after
@@ -123,7 +131,8 @@ export function computeCombat(model: PlayerModel): Computed {
     damageTaken: Math.max(0, take('damageTaken').value),
     moveSpeed: Math.max(0, take('moveSpeed').value),
     pickupRadius: Math.max(0, take('pickupRadius').value),
-    lifeOnKill: Math.max(0, take('lifeOnKill', 0).value),
+    // Second Wind: Life per Kill is doubled.
+    lifeOnKill: Math.max(0, take('lifeOnKill', 0).value) * (pas ? 1 + pas.sum('lifeOnKillMore') / 100 : 1),
     focusOnKill: Math.max(0, take('focusOnKill', 0).value),
     flaskEffect: Math.max(0, take('flaskEffect').value / 100),
     pen: {
@@ -134,6 +143,9 @@ export function computeCombat(model: PlayerModel): Computed {
     maxResist,
     flags: [...model.flags],
   };
+  // The Orrery's structural rules for the sim (absent without passives).
+  const passives = passiveRuntimeOf(model, combat);
+  if (passives) combat.passives = passives;
   // Offence and luck breakdowns (read by the sheet and debugging tooltips).
   for (const stat of [
     'projectileDamage', 'areaDamage', 'damageOverTime', 'spellDamage', 'fireDamage', 'coldDamage', 'lightningDamage', 'voidDamage', 'physicalDamage', 'elementalDamage',
@@ -194,9 +206,18 @@ function resourceSection(c: Computed): SheetSection {
   const b = c.breakdowns;
   const lines: SheetLine[] = [
     line('Maximum Life', String(c.combat.maxLife), breakdownLines(b.maxLife!)),
-    line('Life Regeneration', `${oneDecimal(c.combat.lifeRegen)} per second`, breakdownLines(b.lifeRegen!, { unit: ' per second' })),
+    line('Life Regeneration', `${oneDecimal(c.combat.lifeRegen)} per second`, [
+      ...breakdownLines(b.lifeRegen!, { unit: ' per second' }),
+      // The Orrery's share-of-life regeneration (Steady Breath, Unending Vigil) is on top of the stat.
+      ...(c.combat.lifeRegen > Math.max(0, b.lifeRegen!.value) + 1e-9
+        ? [`+${oneDecimal(c.combat.lifeRegen - Math.max(0, b.lifeRegen!.value))} per second from the Orrery (a share of maximum Life)`] : []),
+    ]),
   ];
-  if (c.combat.lifeOnKill > 0) lines.push(line('Life per Kill', oneDecimal(c.combat.lifeOnKill), breakdownLines(b.lifeOnKill!)));
+  if (c.combat.lifeOnKill > 0) {
+    const bl = breakdownLines(b.lifeOnKill!);
+    if (c.combat.lifeOnKill > Math.max(0, b.lifeOnKill!.value) + 1e-9) bl.push('Multiplied by the Orrery (Second Wind)');
+    lines.push(line('Life per Kill', oneDecimal(c.combat.lifeOnKill), bl));
+  }
   lines.push(line('Maximum Focus', String(c.combat.maxFocus), breakdownLines(b.maxFocus!)));
   lines.push(line('Focus Regeneration', `${oneDecimal(c.combat.focusRegen)} per second`, breakdownLines(b.focusRegen!, { unit: ' per second' })));
   if (c.combat.focusOnKill > 0) lines.push(line('Focus per Kill', oneDecimal(c.combat.focusOnKill), breakdownLines(b.focusOnKill!)));
@@ -213,16 +234,23 @@ function defenceSection(c: Computed, model: PlayerModel): SheetSection {
   // Armour already loses effectiveness against larger hits. Scale the example with monster damage,
   // rather than applying a second, hidden level penalty to the actual armour rating.
   const sample = round1(20 * monsterDamageScale(monsterLevel));
+  // Heavy Plate (the Orrery) changes the formula's damage factor; Eternal Bastion lets armour apply to elemental hits.
+  const k = c.combat.passives?.armourPerDamage ?? 10;
   const armourNote = armor > 0
-    ? `A ${sample} damage physical hit is reduced by ${percent(armor / (armor + 10 * sample))}; a ${round1(sample * 3)} damage hit by ${percent(armor / (armor + 30 * sample))}`
-    : 'Armour reduces physical hits: armour / (armour + 10 x damage)';
+    ? `A ${sample} damage physical hit is reduced by ${percent(armor / (armor + k * sample))}; a ${round1(sample * 3)} damage hit by ${percent(armor / (armor + 3 * k * sample))}`
+    : `Armour reduces physical hits: armour / (armour + ${k} x damage)`;
+  const vsElements = c.combat.passives?.armourVsElements ?? 0;
   const lines: SheetLine[] = [
-    line('Armour', String(armor), [...breakdownLines(b.armor!), armourNote, 'Armour applies to physical damage only', `Example hit at monster level ${monsterLevel}; larger hits receive less reduction`]),
+    line('Armour', String(armor), [
+      ...breakdownLines(b.armor!), armourNote,
+      vsElements > 0 ? `Armour applies to physical damage, and to elemental damage at ${percent(vsElements)} effectiveness` : 'Armour applies to physical damage only',
+      `Example hit at monster level ${monsterLevel}; larger hits receive less reduction`,
+    ]),
     line('Evasion Rating', String(c.evasionRating), breakdownLines(b.evasion!)),
     line('Chance to Evade', percent(c.combat.evasion, 1), [
       `Evasion Rating ${c.evasionRating}`,
       `Monster Accuracy ${evasionConstantFor(cls, model.monsterLevel)}`,
-      `Chance = rating / (rating + ${evasionConstantFor(cls, model.monsterLevel)}), at most ${percent(cls.evasionCap)}`,
+      `Chance = rating / (rating + ${evasionConstantFor(cls, model.monsterLevel)}), at most ${percent(c.combat.passives?.evadeCap ?? cls.evasionCap)}`,
       model.monsterLevel === null
         ? `Against monster level ${MONSTER_LEVEL_SCALING.referenceLevel}: ${cls.evasionPerMonsterLevel} per monster level`
         : `Against monster level ${model.monsterLevel}: ${cls.evasionPerMonsterLevel} per monster level`,
@@ -409,6 +437,33 @@ function uniqueSection(model: PlayerModel): SheetSection | null {
 }
 
 /**
+ * The Orrery's structural rules (PT4): one line per rule with its combined number and every source, plus the caps that bind them.
+ * Null without passives.
+ */
+function passiveSection(c: Computed, model: PlayerModel): SheetSection | null {
+  if (!model.passives) return null;
+  const lines = passiveRuleLines(model.passives).map((l) => line(l.text, 'Orrery', l.sources));
+  const pr = c.combat.passives;
+  if (pr) {
+    const conditional = pr.moreNearBurning.some((v) => v > 0) || pr.moreVsChilled > 0 || pr.igniteMore > 1 || pr.decayMore > 1 || pr.echoMore > 1;
+    if (conditional) {
+      lines.push(line('Conditional more damage', `at most ×${pr.moreRoom.toFixed(2)}`, [
+        'Pyroclasm, Absolute Zero and the ignite, Decay and echo lines never lift a hit past the tree\'s ×2.0 more damage',
+        'nor the ×3.5 cap of the whole more pool (the leftover of your strongest damage type counts)',
+      ]));
+    }
+    const typed = pr.takenHit.some((v) => v !== 1) || pr.flaskGuard > 0;
+    if (typed) {
+      lines.push(line('Passive damage taken floor', percent(pr.takenFloor), [
+        'Scorch Ward, Grounding Rod and Bloodied Resolve never take damage taken below the tree\'s ×0.75 (with its own damage taken lines)',
+        'nor below ×0.60 with all your damage taken',
+      ]));
+    }
+  }
+  return lines.length ? { title: 'Orrery Effects', lines } : null;
+}
+
+/**
  * Everything the character sheet shows, from an already-built model. `setup` (inside a map) adds the
  * personal luck lines of that map; the model must already carry its player penalties.
  */
@@ -426,6 +481,8 @@ export function deriveFromModel(ch: CharacterSave, model: PlayerModel, setup: Ru
   ];
   const unique = uniqueSection(model);
   if (unique) sections.push(unique);
+  const orrery = passiveSection(c, model);
+  if (orrery) sections.push(orrery);
   return {
     combat: c.combat,
     attributes: { ...model.attributes },

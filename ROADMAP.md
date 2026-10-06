@@ -57,8 +57,9 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "
    *brain* (monsters that circle to the back on their own) if flank groups prove too gentle, and frost pools that chill.
 5. **P2 character depth: more Sorceress skills and a deeper skill tree, then the passive tree** (about 250 nodes). Designed together
    with the balance work in 2 so the new power has a curve to live in. Skills: all 32 playable (R2 to R4). Passive tree: the Orrery's
-   data, rules, save fields and server commands are built (R5 C3/PT0, 2026-10-06); its panel (PT2) is the remaining piece before
-   players can allocate.
+   data, rules, save fields and server commands are built (R5 C3/PT0, 2026-10-06), and every structural rule is live in play (PT4,
+   2026-10-06: ailments, exposure, conversion, triggers, echoes, the augment slot, the armour and evade rules, the penetration cap,
+   Iron Mind; `isPassiveRuleLive`); its panel (PT2) is the remaining piece before players can allocate.
 
 Also pending: gated tree nodes (Voidtouched Atlas, Warded Hunts, Stragglers' Cull, Lantern-Bearer's siblings, Wagered Charts), Twin Omens'
 Backlash, dead drawer code and the Ctrl+Shift stash-to-bench shortcut, footsteps, Echo Exchange, leagues, more map bases, Barbarian.

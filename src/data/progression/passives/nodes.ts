@@ -69,7 +69,7 @@ export const NAMED: Record<'hub' | 'bridge' | PassiveSector, NamedDef[]> = {
     { key: 'overload', name: 'Overload', kind: 'notable', text: ['Shocks you cause last 2 seconds longer'], mods: [], rules: [rule('shockDuration', 2)], gross: 4, engine: 'E0' },
     { key: 'quickenedPulse', name: 'Quickened Pulse', kind: 'notable', text: ['+8% increased Cast Speed'], mods: [inc('castSpeed', 8)], gross: 6, engine: 'E0' },
     { key: 'tempestReach', name: 'Tempest Reach', kind: 'notable', text: ['+15% increased Projectile Speed', '+10% increased Area of Effect for Lightning skills'], mods: [inc('projectileSpeed', 15)], rules: [rule('areaTyped', 10, { type: 'lightning' })], gross: 4, engine: 'E0' },
-    { key: 'groundingRod', name: 'Grounding Rod', kind: 'notable', text: ['+10% to Lightning Resistance', 'Take 20% less Lightning Damage from hits'], mods: [flat('lightningRes', 10)], rules: [rule('damageTakenTyped', -20, { type: 'lightning' })], gross: 6, engine: 'E0' },
+    { key: 'groundingRod', name: 'Grounding Rod', kind: 'notable', text: ['+10% to Lightning Resistance', 'Take 20% less Lightning Damage from hits'], mods: [flat('lightningRes', 10)], rules: [rule('damageTakenHits', -20, { type: 'lightning' })], gross: 6, engine: 'E0' },
     { key: 'surgeOfStatic', name: 'Surge of Static', kind: 'notable', text: ['Killing a Shocked enemy restores 4 Focus'], mods: [], rules: [rule('focusOnKillShocked', 4)], gross: 5, engine: 'E0' },
     {
       key: 'mastery', name: 'Storm Attunement', kind: 'mastery', text: ['Choose one rider'], mods: [], gross: 5, engine: 'E1',
@@ -196,7 +196,7 @@ export const NAMED: Record<'hub' | 'bridge' | PassiveSector, NamedDef[]> = {
     {
       key: 'unendingVigil', name: 'Unending Vigil', kind: 'keystone', engine: 'E1', gross: 28, price: 14,
       text: ['Regenerate 3% of maximum Life per second (6% while below 50% Life)', 'You cannot use Life Flasks', '15% less maximum Life'],
-      mods: [more('maxLife', -15)], rules: [rule('regenPercent', 3), rule('noLifeFlasks', 1)],
+      mods: [more('maxLife', -15)], rules: [rule('regenPercent', 3), rule('regenLowLife', 3), rule('noLifeFlasks', 1)],
     },
     {
       key: 'wanderersStride', name: "Wanderer's Stride", kind: 'keystone', engine: 'E1', gross: 22, price: 12,
