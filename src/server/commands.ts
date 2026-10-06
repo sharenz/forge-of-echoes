@@ -379,6 +379,26 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       s.instance?.updateRuntime(s);
       return { ok: true, message: price.scrap > 0 ? `Refunded for ${price.scrap} Forge Scrap.` : 'Refunded.' };
     }
+    // --- the Orrery (passive-tree.md 5) -----------------------------------------------------
+    case 'allocatePassive':
+      // Spending a point is allowed anywhere, like a skill rank: it reaches the sim at once.
+      return applyResult(game, s, r.allocatePassive(ch, cmd.nodeId), true);
+    case 'refundPassive':
+    case 'chooseMastery': {
+      // A refund (or a change of a chosen mastery rider) is a hideout service paid in Scrap: the price is checked against what the
+      // client showed, and the Scrap, the point and the node are one character value written in one commit.
+      const change = cmd.c === 'refundPassive' || ch.masteries?.[cmd.nodeId] !== undefined;
+      if (change && !inHideout(s)) return fail('Passive nodes are refunded in a hideout.');
+      const price = cmd.c === 'refundPassive' ? r.passiveRefundPrice(ch, cmd.nodeId) : r.masteryChangePrice(ch, cmd.nodeId);
+      if (price.scrap !== cmd.expectedScrap) return fail(`This costs ${price.scrap} Forge Scrap now. Look again and confirm.`);
+      const done = cmd.c === 'refundPassive' ? r.refundPassive(ch, cmd.nodeId) : r.chooseMastery(ch, cmd.nodeId, cmd.choice);
+      if (!done.ok) return fail(done.error);
+      if (!game.store.commit(s.record, done.value)) return fail('The Orrery could not be saved. Nothing was refunded or paid; try again.');
+      s.pushCharacter('now');
+      s.instance?.updateRuntime(s);
+      if (cmd.c === 'chooseMastery' && !change) return OK;
+      return { ok: true, message: price.scrap > 0 ? `Refunded for ${price.scrap} Forge Scrap.` : 'Refunded.' };
+    }
     case 'setPreset':
       // Presets switch the whole bar: only between maps (skills.md 9), saving and renaming anywhere.
       if (cmd.op === 'load' && !inHideout(s)) return fail('Loadout presets are switched in a hideout.');

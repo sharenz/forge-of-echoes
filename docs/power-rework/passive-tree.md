@@ -1,6 +1,7 @@
 # D. The Sorceress passive tree: "the Orrery"
 
-Status: design brief (no code written). Numbers are first pass: the structure, the ledger, the caps and the tests are the decisions. It is built with the method of `docs/atlas-rework/B-atlas-tree.md`
+Status: data, rules, save and server built (PT0, 2026-10-06; the code is the source of truth for numbers: `src/data/progression/passives/`,
+and `build-plan.md` PT0 lists every number PT0 moved onto the ledger, e.g. Warded Throne's 10% less damage). Numbers are first pass: the structure, the ledger, the caps and the tests are the decisions. It is built with the method of `docs/atlas-rework/B-atlas-tree.md`
 (unit ledger, net-value bands, hard caps, exclusion pairs, archetype bots) but it is a **different tree** with its own data, currency and screen. Read `power-curve.md` section 3 (layers) and `skills.md` (augments) first.
 
 ---

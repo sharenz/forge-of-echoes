@@ -90,6 +90,26 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 - **Belt:** 2 Life Flask slots (3 charges each) and 1 Focus Flask slot (3 charges).
 - **Skills:** Ember Lance at rank 1 in loadout slot 0, plus **1 unspent skill point**.
 
+### 3b. The Orrery (passive tree)
+
+Design: `docs/power-rework/passive-tree.md`. Data and rules shipped (slice PT0); the panel (hotkey `O`, slice PT2) is not built yet, so
+nobody can allocate in the game until it lands. Per character (`CharacterSave.passives`, `masteries`, `bossMarks`), never shared with the
+account's Atlas tree (own ids `pas.*`, own points, own commands).
+
+| Rule | Value |
+|---|---|
+| Size | 252 nodes: Spark (start), 152 small, 77 notable (60 sector notables, 7 gates, 7 bridges, 3 cross-hub), 7 masteries, 15 keystones. Seven sectors clockwise from the top: Fire, Lightning, Cold, Bulwark, Vitality, Void, Arcana; a 768 × 768 wheel |
+| Shape | Spark touches the seven gates; a ring of seven hub smalls joins adjacent gates; the cross-hub notables (Frostfire Gate, Rift Spark, Mind and Blood) sit inside the ring, 3 points from Spark; Perfect Tempo and Iron Mind sit at the hub, 4 points from Spark. Each sector is a ten-node spine (gate side to rim: three rhythm smalls, notable, two smalls, notable, small, mastery, keystone = 12 points from Spark) with spurs beside it; bridges join adjacent sectors at mid-radius |
+| Points | 1 per level 2 to 50, 1 per even level 52 to 80, 1 per **Boss Mark** (the first kill of each of the six final bosses by this character): **70**. A level-17 character has 16. Existing characters start with every point unspent |
+| Costs | 1 point per node, keystones 2. Spark is free and lights (its +10 int / +5 str / +5 dex apply) with the first allocated node |
+| Allocation | Anywhere, at once: a node must touch Spark or an allocated node, its hard exclusion must not be allocated (Pyre Doctrine / Absolute Zero / Stormbound; Glass Orrery / Warded Throne and Iron Mind; Gambler's Edge / Perfect Tempo; Eternal Bastion / Phantom Weave) |
+| Masteries | One per sector: allocate (1 point), then choose one of three riders (free). Changing the rider is a refund |
+| Refunds | Hideout only, leaf first. The first 10 refunds or rider changes of a character are free, then small 5, notable (gates, bridges) 15, mastery 10, keystone 40, rider change 10 Forge Scrap; at most 250 Scrap per respec session (a new session starts when a map is opened). The Scrap and the change are one save |
+| Boss Marks | Credited to every character present when a final boss falls (dead ones too), once per boss. A character from before the Orrery is credited the distinct final bosses of its account's Atlas first kills once, when it is first loaded |
+| Caps (tree only) | increased damage +220% (all damage stats summed), `more` damage ×2.0, cast speed +30% (+35% more room with Perfect Tempo), crit chance +180%, crit multiplier +80, penetration +20 per type, area +40%, extra projectiles +1, movement +25%, maximum life +80%, armour and evasion +100% each, resistances +25 per element (all-resistance included), maximum resistances +11, maximum Focus +120, Focus regeneration +60%, flask effect +50%, damage taken ≥ ×0.75, augment slots +1. Over a cap, the resolver scales the contributing lines down proportionally |
+| Sheet | Every line is a labelled modifier: "Orrery: Kindle", "Orrery: Cinder Attunement"; smalls of one stat merge into "Orrery: small nodes" |
+| Not live yet | Behaviour the stat model cannot express is stored as a rule (`PASSIVE_RULES`, none live in PT0): ailment strength and duration, exposure, Decay and Wither stacks, conditional damage, conversion, on-kill triggers, echoes, the augment slot, Focus costs, typed damage taken, % regeneration, flask rules, the armour rules, the evade cap, wards, the penetration cap, damage drawn from Focus. Nodes that are only rules (e.g. Absolute Zero, Brace) change nothing in play until a later slice wires them; their stat lines (e.g. Pyre Doctrine's 30% more fire damage) apply now |
+
 ## 4. Skills (rules own the numbers; the sim owns the behaviour)
 
 Design: `docs/power-rework/skills.md` (32 skills, augments, points economy). A rank costs 1 skill point, and each level grants 2 points

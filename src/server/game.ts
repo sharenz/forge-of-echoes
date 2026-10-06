@@ -31,6 +31,8 @@ import { killCharge, refillBelt } from '../game/progression/flasks';
 import { markWarmed, wantsWarmup } from '../game/progression/guide';
 import { atlasCreditFor, creditEventCompletion, discoverAfterBoss, newAtlas, paidTerritoryFee } from '../game/progression/atlas';
 import { paidEntranceKey } from '../game/progression/runs';
+import { creditBossMark } from '../game/progression/character';
+import { bossMarkKindFor } from '../game/progression/passives';
 import { normalizeRunSurge, refundSurge } from '../game/progression/surge';
 import { TerritoryCounts } from './territory-counts';
 import { normalizeRunTerritory, refundTerritoryUses, territoryRevealChance } from '../game/progression/territory';
@@ -1167,6 +1169,7 @@ export class Game implements InstanceHost {
         if (inst instanceof MapInstance && inst.setup.atlasAreaId && !findAtlasArea(inst.setup.atlasAreaId)?.encounters) {
           this.queueAtlasCredit(inst);
         }
+        if (inst instanceof MapInstance) this.creditBossMarks(inst);
         break;
       case 'enterPortal': {
         const s = inst.members.get(o.playerId);
@@ -1200,6 +1203,24 @@ export class Game implements InstanceHost {
         }
         break;
       }
+    }
+  }
+
+  /**
+   * Boss Marks (passive-tree.md 4): every character present when the final boss falls (dead ones too, like the Atlas receipt) is
+   * credited the boss once. An idempotent set insertion on the character, so a repeat kill or a restart cannot double it.
+   */
+  private creditBossMarks(map: MapInstance): void {
+    const boss = bossMarkKindFor(map.setup);
+    if (!boss) return;
+    for (const s of [...map.members.values()]) {
+      const before = s.record.ch;
+      const next = creditBossMark(before, boss);
+      if (next === before) continue;
+      const fresh = !(before.bossMarks ?? []).includes(boss) && next.bossMarks!.includes(boss);
+      this.setCharacter(s, next);
+      this.flushSave(s);
+      if (fresh) s.toast('Boss Mark earned: one passive point.', 'good');
     }
   }
 

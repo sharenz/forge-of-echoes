@@ -17,6 +17,8 @@ import {
 } from '../items';
 import { createMapItem } from './maps';
 import { normalizePresets } from './skills';
+import { normalizeBossMarks, seedBossMarks } from './passives';
+import { BOSS_MARK_KINDS } from '../../data/progression/passives';
 import { fail, ok } from './util';
 
 // ---------------------------------------------------------------------------------------------
@@ -157,6 +159,7 @@ export function createCharacter(name: string, seed: number): CharacterSave {
       loadoutPresets: normalizePresets([]),
       respecTokens: 0,
       respecFreeUsed: 0,
+      bossMarks: [],
       equipment: {},
       backpack: createGrid(BACKPACK_SIZE.w, BACKPACK_SIZE.h),
       stash: DEFAULT_STASH_TABS.map((t) => createStashTab(t)),
@@ -259,6 +262,18 @@ export function applyRunEnd(ch: CharacterSave, input: RunEndInput): CharacterSav
   stats.uniquesFound += Math.floor(n(input.uniquesFound));
   stats.playSeconds += n(input.seconds);
   return { ...ch, stats };
+}
+
+/**
+ * A Boss Mark (passive-tree.md 4): the first kill of a final boss by this character, credited on the boss-defeated outcome for
+ * every character present. An idempotent set insertion, so a restart or a second kill can neither lose nor double it; an unknown
+ * boss kind changes nothing. A character from before the Orrery is seeded from its account's Atlas first (seedBossMarks).
+ */
+export function creditBossMark(ch: CharacterSave, boss: string | null): CharacterSave {
+  if (!boss || !BOSS_MARK_KINDS.includes(boss)) return ch;
+  const seeded = seedBossMarks(ch);
+  if (seeded.bossMarks!.includes(boss)) return seeded;
+  return { ...seeded, bossMarks: normalizeBossMarks([...seeded.bossMarks!, boss]) };
 }
 
 /**

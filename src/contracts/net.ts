@@ -151,6 +151,15 @@ export type Command =
    * `expectedScrap` must equal the server's price (the client shows it before confirming).
    */
   | { c: 'respec'; skillId: SkillId | null; token: boolean; expectedScrap: number }
+  /** The Orrery: spend passive points on a node linked to Spark or an allocated node (anywhere; it takes effect at once). */
+  | { c: 'allocatePassive'; nodeId: import('./passives').PassiveNodeId }
+  /** The Orrery, hideout only: refund a leaf node; `expectedScrap` must equal the server's price (free for the first refunds). */
+  | { c: 'refundPassive'; nodeId: import('./passives').PassiveNodeId; expectedScrap: number }
+  /**
+   * The Orrery: choose the rider (0 to 2) of an allocated mastery. The first choice is free and allowed anywhere; changing it is a
+   * refund (hideout only, `expectedScrap` as the server prices it).
+   */
+  | { c: 'chooseMastery'; nodeId: import('./passives').PassiveNodeId; choice: number; expectedScrap: number }
   // hideout
   | { c: 'setMapTreeNode'; nodeId: import('./atlas').MapTreeNodeId; allocate: boolean }
   /** Pin or unpin an Atlas area (brief D 5.1): free, instant, account-wide. */

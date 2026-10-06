@@ -163,6 +163,9 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
       ch, [targetUid], (c) => base.clearCraftedAffix(c, targetUid), outcomeCharacter, withOutcomeCharacter,
     ),
     setMapTreeNode: (ch, id, allocate) => guard(ch, [], c => base.setMapTreeNode(c, id, allocate), plain, replace),
+    // Passive refunds and mastery changes pay Scrap: never with a stack in the trade offer.
+    refundPassive: (ch, id) => guard(ch, [], (c) => base.refundPassive(c, id), plain, replace),
+    chooseMastery: (ch, id, choice) => guard(ch, [], (c) => base.chooseMastery(c, id, choice), plain, replace),
     recycleMaps: (ch, uids, areaId) => guard(ch, uids, (c) => base.recycleMaps(c, uids, areaId), outcomeCharacter, withOutcomeCharacter),
     recycleQuote: (ch, uids, areaId) => {
       const locked = locksOf(ch);
