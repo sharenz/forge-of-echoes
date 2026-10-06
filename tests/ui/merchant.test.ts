@@ -8,6 +8,7 @@ import { addBoughtItem } from '../../src/game/progression/merchant';
 import { bareCharacter, currency, expectOk } from '../game-progression/fixtures';
 import {
   dropCell, gamblePreview, luckiest, newWaresText, rerollBlocked, revealFor, roomAnywhere, rotationMsLeft, stockFit, unaffordableReason, wareBlocked, packVendor, priceLine, vendorTabOf, VENDOR_COLS,
+  VENDOR_MIN_ROWS, VENDOR_PRICED_MIN_ROWS, WARES_EXPLAINER, shelfEmptyText,
 } from '../../src/ui/lib/merchant';
 
 const flask = (count = 1): Item => ({ kind: 'flask', uid: 'f', flaskId: 'lifeFlask', count } as Item);
@@ -176,5 +177,34 @@ describe("Rook's wares board helpers", () => {
   it('words the reroll refusal', () => {
     expect(rerollBlocked({ rerollCost: 6 }, 6)).toBeNull();
     expect(rerollBlocked({ rerollCost: 6 }, 2)).toBe("Can't afford: needs 6 Forge Scrap (you have 2).");
+  });
+});
+
+describe("Rook's prices and empty shelves (F-17)", () => {
+  const twoHours = 2 * 3600_000;
+  it('says nothing while something on the shelf is for sale', () => {
+    expect(shelfEmptyText('gear', { total: 3, unsold: 1 }, twoHours)).toBeNull();
+    expect(shelfEmptyText('supplies', { total: 4, unsold: 4 }, twoHours)).toBeNull();
+  });
+  it('has its own empty state per tab, with when the board changes', () => {
+    const gear = shelfEmptyText('gear', { total: 0, unsold: 0 }, twoHours)!;
+    const maps = shelfEmptyText('maps', { total: 0, unsold: 0 }, twoHours)!;
+    const supplies = shelfEmptyText('supplies', { total: 0, unsold: 0 }, twoHours)!;
+    expect(gear).toMatch(/^No gear/);
+    expect(maps).toMatch(/^No maps or scarabs/);
+    expect(supplies).toMatch(/supplies/);
+    expect(new Set([gear, maps, supplies]).size).toBe(3);
+    expect(gear).toContain(newWaresText(twoHours));
+    expect(gear).toMatch(/ask for new wares/);
+  });
+  it('says "sold out" once everything on a shelf is bought', () => {
+    expect(shelfEmptyText('maps', { total: 4, unsold: 0 }, twoHours)).toMatch(/^Sold out\. New wares in/);
+  });
+  it('explains the prices in one short line, and the priced grid stays about as tall as the stash', () => {
+    expect(WARES_EXPLAINER).toMatch(/Forge Scrap/);
+    expect(WARES_EXPLAINER.length).toBeLessThanOrEqual(80);
+    expect(VENDOR_PRICED_MIN_ROWS).toBeLessThan(VENDOR_MIN_ROWS);
+    // 5 rows of (36 px cell + 20 px price line) against 8 plain rows of 36 px
+    expect(Math.abs(VENDOR_PRICED_MIN_ROWS * (36 + 20) - VENDOR_MIN_ROWS * 36)).toBeLessThanOrEqual(36);
   });
 });

@@ -5,6 +5,7 @@ import type { UiState } from '../../contracts/ui';
 import { DetachedItemTooltip, OwnedItemTooltip } from '../items/ItemTooltip';
 import { useLocal, type AnchorRect } from '../local';
 import { itemIconId } from '../lib/items';
+import { MAP_BRIEF_LINGER_MS } from '../lib/map-brief';
 import { shallowEqual, useSignal, useStore, useUi } from '../store';
 import { SkillTooltip } from '../panels/SkillTooltip';
 import { Button, Frame, PanelHead, PixelIcon, cx } from './common';
@@ -47,6 +48,16 @@ export function TooltipHost() {
   const drag = useSignal(local.drag);
   const { ch, alt, armed } = useUi(tooltipSel, shallowEqual);
   const ref = useRef<HTMLDivElement>(null);
+  // A map tooltip opens short and grows into its full card after a short hover (F-28). Keyed by the hovered item, so moving to
+  // another item starts short again, and a re-shown tooltip of the same item keeps its state.
+  const key = tip ? (tip.spec.kind === 'item' ? `item:${tip.spec.uid}` : tip.spec.kind === 'preview' ? `preview:${tip.spec.item.uid}` : null) : null;
+  const [lingered, setLingered] = useState<string | null>(null);
+  useEffect(() => {
+    if (!key) { setLingered(null); return; }
+    const t = setTimeout(() => setLingered(key), MAP_BRIEF_LINGER_MS);
+    return () => clearTimeout(t);
+  }, [key]);
+  const full = key !== null && lingered === key;
 
   // Measure after every render (content changes with Alt / crafting) and place without a state round trip.
   useLayoutEffect(() => {
@@ -76,7 +87,7 @@ export function TooltipHost() {
   let content = null;
   const spec = tip.spec;
   if (spec.kind === 'item') {
-    if (ch) content = <OwnedItemTooltip store={store} ch={ch} uid={spec.uid} alt={alt} armed={armed} />;
+    if (ch) content = <OwnedItemTooltip store={store} ch={ch} uid={spec.uid} alt={alt} armed={armed} full={full} />;
   } else if (spec.kind === 'preview') {
     if (ch)
       content = (
@@ -90,6 +101,7 @@ export function TooltipHost() {
           compare={spec.compare}
           price={spec.price}
           appraisal={spec.appraisal}
+          full={full}
         />
       );
   } else if (spec.kind === 'skill') {

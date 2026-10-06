@@ -2,7 +2,8 @@
 // The board (four maps and eight items, mostly junk, sometimes a really good find) comes from the server and stays deterministic per epoch;
 // the staples (flasks, Kindling, Map Dust) are always in stock. Which tab shelves an item is decided here by its class (lib/merchant.ts
 // vendorTabOf); where it sits is decided by packVendor (slot order, first fit), so the layout is stable all epoch and a sold item leaves a gap.
-// The price lives in the hover card. Buying: drag an item onto your backpack, or Ctrl/Cmd-click / right-click it.
+// Every tile prints its price (Forge Scrap) on a line under it; the hover card repeats it. Each tab has its own empty state.
+// Buying: drag an item onto your backpack, or Ctrl/Cmd-click / right-click it.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { MerchantBoard, MerchantOffer, MerchantWare } from '../../contracts/game';
 import type { CurrencyId } from '../../contracts/content';
@@ -10,7 +11,9 @@ import { cx } from '../components/common';
 import { safe } from '../items/hooks';
 import { VendorGrid, type VendorEntry } from '../items/VendorGrid';
 import { useLocal } from '../local';
-import { newWaresText, priceLine, rerollBlocked, revealFor, rotationMsLeft, vendorTabOf, wareBlocked, type VendorTab } from '../lib/merchant';
+import {
+  WARES_EXPLAINER, newWaresText, priceLine, rerollBlocked, revealFor, rotationMsLeft, shelfEmptyText, vendorTabOf, wareBlocked, type VendorTab,
+} from '../lib/merchant';
 import { currencyHoldings } from '../lib/stash';
 import { useSignal, useStore, useUi } from '../store';
 
@@ -131,12 +134,15 @@ export function MerchantWares({ tab, onShelf }: { tab: VendorTab; onShelf?: (tab
   const entries = [...staples.flatMap(staple), ...(board?.wares.map(ware) ?? [])].filter((e) => vendorTabOf(e.item) === tab);
   const blockedReroll = board ? rerollBlocked(board, scrap) : 'Rook is looking.';
 
+  const empty = board ? shelfEmptyText(tab, { total: entries.length, unsold: entries.filter((e) => !e.hidden).length }, left) : null;
+
   return (
     <div class={cx('fe-wares', reveal && `fe-wares--reveal fe-wares--reveal-${reveal}`)} data-testid="rook-wares" data-epoch={board?.epoch} data-vendor-tab={tab}>
+      <p class="fe-vendor__hint ui-type-caption" data-testid="rook-explainer">{WARES_EXPLAINER}</p>
       <div class="fe-wares__grid">
-        <VendorGrid entries={entries} label={`Rook's ${tab}`} testId={`rook-grid-${tab}`} />
-        {!board ? <p class="fe-panel__note fe-wares__loading">Rook is digging through his crates...</p>
-          : entries.every((e) => e.hidden) && <p class="fe-panel__note fe-wares__loading">Nothing here right now.</p>}
+        <VendorGrid entries={entries} priced label={`Rook's ${tab}`} testId={`rook-grid-${tab}`} />
+        {!board ? <p class="fe-panel__note fe-wares__loading ui-type-secondary">Rook is digging through his crates...</p>
+          : empty && <p class="fe-panel__note fe-wares__loading fe-wares__empty ui-type-secondary" data-testid="rook-empty" data-empty-tab={tab}>{empty}</p>}
       </div>
       {board && (
         <div class="fe-wares__foot">

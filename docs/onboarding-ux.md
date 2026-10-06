@@ -13,7 +13,7 @@ and the onboarding itself: it took me ~2 minutes to figure out I need to drag a 
 
 Built: the tracker with its 11 steps and the closing card, world markers and name plates, the controls cheat-sheet, 17 hints, Help (`H`), panel buttons,
 account-level `GuideState` with the veteran rule, warm-up, free flask refill, and fixes F-1 to F-16, F-18 to F-19, F-20 to F-27, F-29 to F-36 (see the list
-in `GAME_SPEC.md` section 12b). Not done: F-17 (Rook's prices, owned by the vendor rebuild), F-28 (the short map tooltip). The e2e `--only guide` plays it at
+in `GAME_SPEC.md` section 12b). Done since: F-17 (a price line under every tile of Rook's wares, a one-line explainer and an empty state per tab), F-28 (the short map tooltip, with the full card after 600 ms or Alt; the full card also shows "Surge n/3 today" and a Re-chart pointer), a scroll fade on the area modal's middle (F-21), and the hideout camera leaning west at short windows so the anvil is not hidden behind the Life globe at 1024x600. The e2e `--only guide` plays it at
 both sizes; its screenshots are in `.shots/e2e-guide-*`. Deviations from the design: the chest opens by walking up to it (it is not clickable), so step 8 says
 "walk up"; the one-line hint "flasksRefilled" is the toast of the refill itself; the tracker's `Skip` sits in its footer from the start.
 
