@@ -233,6 +233,14 @@ export interface UiActions {
   allocateAttribute(attr: 'str' | 'dex' | 'int'): void;
   rankUpSkill(skillId: SkillId): void;
   setLoadoutSlot(slot: number, skillId: SkillId | null): void;
+  /** Spend points on an augment of a learned skill (net command pickAugment). */
+  pickAugment(skillId: SkillId, augmentId: string): void;
+  /** Refund one augment at the Scrap price the player confirmed (`expectedScrap` = rules.respecPrice; hideout only). */
+  refundAugment(skillId: SkillId, augmentId: string, expectedScrap: number): void;
+  /** Refund one skill (or every skill: null) at the confirmed price; `token` spends a free respec instead of Scrap. */
+  respec(skillId: SkillId | null, token: boolean, expectedScrap: number): void;
+  /** Loadout presets: save the bar into `preset`, load it (hideout only) or rename it. */
+  setPreset(preset: number, op: 'save' | 'load' | 'rename', name?: string): void;
 
   // hideout
   setMapTreeNode(nodeId: import('./atlas').MapTreeNodeId, allocate: boolean): void;

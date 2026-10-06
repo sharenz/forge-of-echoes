@@ -10,12 +10,14 @@ import { ATTRIBUTE_INFO } from '../lib/content';
 import { formatInt, fraction } from '../lib/format';
 import { useStore, useUi } from '../store';
 import { PanelShell } from './PanelShell';
+import { confirmRefund } from './Skills';
 
 export function CharacterPanel() {
   const store = useStore();
   const local = useLocal();
   const ch = useUi((s) => s.character);
   const derived = useUi((s) => s.derived);
+  const inHideout = useUi((s) => s.zone === 'hideout');
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const portrait = usePortrait(128);
   if (!ch) return null;
@@ -23,6 +25,9 @@ export function CharacterPanel() {
   const points = ch.unspentAttributePoints;
   const sections = (derived?.sections ?? []).filter((s) => s.title !== 'Attributes');
   const attrSection = derived?.sections.find((s) => s.title === 'Attributes');
+  const skillPoints = ch.unspentSkillPoints ?? 0;
+  const spent = Math.max(0, store.rules.skillPointsTotal(ch.level) - skillPoints);
+  const tokens = Math.max(0, Math.floor(ch.respecTokens ?? 0));
 
   return (
     <PanelShell panel="character" title="Character" class="fe-char">
@@ -96,6 +101,50 @@ export function CharacterPanel() {
         <div class="fe-char__wants ui-type-caption" data-class-wants>
           {SORCERESS.name}: {SORCERESS.perAttribute.map(attributeRuleText).join(' · ')}.
         </div>
+      </div>
+
+      <div class="fe-char__skills" data-char-skills>
+        <span class={cx('fe-char__skillpts ui-type-caption', skillPoints > 0 && 'fe-char__points--has')}>
+          {skillPoints > 0 ? `${skillPoints} skill point${skillPoints === 1 ? '' : 's'} to spend` : `${spent} skill points spent`}
+        </span>
+        <button
+          class={cx('fe-btn fe-btn--small', skillPoints > 0 && 'fe-btn--ember')}
+          onClick={() => {
+            store.actions.uiSound('open');
+            store.actions.openPanel('skills');
+          }}
+        >
+          Skills (K)
+        </button>
+        {tokens > 0 && (
+          <button
+            class="fe-btn fe-btn--small"
+            disabled={!inHideout}
+            title={inHideout ? undefined : 'Respec in a hideout.'}
+            onClick={() => {
+              local.dialog.set({
+                title: 'Use a free respec?',
+                confirmLabel: 'Respec for free',
+                body: `Every skill, augment and attribute point comes back to spend again (Ember Lance keeps rank 1). You have ${tokens} free respec${tokens === 1 ? '' : 's'}.`,
+                onConfirm: () => store.actions.respec(null, true, 0),
+              });
+            }}
+          >
+            Free respec ({tokens})
+          </button>
+        )}
+        <button
+          class="fe-btn fe-btn--small fe-btn--ghost"
+          disabled={!inHideout || spent <= 0}
+          title={!inHideout ? 'Skills are refunded in a hideout.' : spent <= 0 ? 'No skill points are spent.' : undefined}
+          onClick={() =>
+            confirmRefund(store, local, ch, inHideout, { title: 'Refund every skill?', target: { all: true } }, (scrap) =>
+              store.actions.respec(null, false, scrap),
+            )
+          }
+        >
+          Refund all skills
+        </button>
       </div>
 
       <div class="fe-char__sheet fe-scrollfade">

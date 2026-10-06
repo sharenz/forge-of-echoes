@@ -472,6 +472,25 @@
   color: var(--flame);
   font-weight: 700;
 }
+.fe-char__attrs .fe-char__wants {
+  grid-column: 1 / -1;
+}
+/* skill points and the respec entry (the Skills panel does the spending) */
+.fe-char__skills {
+  flex: none;
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 8px;
+  padding: 6px 0;
+  border-top: 1px solid #2c2219;
+  border-bottom: 1px solid #2c2219;
+}
+.fe-char__skillpts {
+  color: var(--stone-light);
+}
 .fe-char__sheet {
   flex: 1;
   min-height: 0;
@@ -551,230 +570,577 @@
   border-left: 1px solid var(--bronze-dark);
 }
 
-/* ---- skills ---- */
+/* ---- skills (v2: book rail, selected skill with its augment graph, loadout bar and presets) ---- */
+/* Wider than the other docked panels, but always leaves room for the inventory on the right (1024x600: 562 px). */
+.fe-panel.fe-skills {
+  width: var(--skills-w);
+}
 .fe-skills .fe-panel__body {
   align-items: stretch;
   gap: 4px;
+  padding: 10px 14px 12px;
   overflow: hidden;
 }
-.fe-skills__scroll {
+.fe-sk {
   flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  gap: 12px;
+}
+@keyframes fe-sk-ready {
+  50% {
+    box-shadow:
+      0 0 0 1px #000,
+      0 0 14px rgba(232, 102, 42, 0.85);
+  }
+}
+
+/* rail */
+.fe-sk-rail {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+}
+.fe-sk-rail__search {
+  flex: none;
+  height: 32px;
+  padding: 0 10px;
+}
+.fe-sk-rail__list {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  margin: 0 -12px;
-  padding: 0 12px 22px;
-}
-.fe-tree__branches {
-  position: relative;
-  height: 20px;
-}
-.fe-tree__branch {
-  position: absolute;
-  top: 0;
-  text-align: center;
-  font-family: var(--font-title);
-  font-size: var(--font-ui-caption);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--bronze-light);
-}
-.fe-tree {
-  position: relative;
-  flex: none;
-}
-.fe-tree__divider {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: linear-gradient(180deg, rgba(138, 106, 62, 0.35), rgba(138, 106, 62, 0.08));
-}
-.fe-tree__edges {
-  position: absolute;
-  inset: 0;
-  overflow: visible;
-  pointer-events: none;
-}
-.fe-edge line {
-  stroke: #3a2e22;
-  stroke-width: 3;
-}
-.fe-edge--lit line {
-  stroke: var(--ember);
-  filter: drop-shadow(0 0 3px rgba(255, 154, 60, 0.9));
-}
-.fe-edge__req {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  display: grid;
-  place-items: center;
-  font-size: var(--font-ui-caption);
-  font-weight: 700;
-  color: var(--ash);
-  background: #120e10;
-  border: 1px solid #3a2e22;
-  border-radius: 9px;
-}
-.fe-edge__req--lit {
-  color: #fff3dc;
-  border-color: var(--flame);
-}
-.fe-node {
-  position: absolute;
-  width: 104px;
-  margin-left: -52px;
-  padding-top: 22px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 3px;
+  gap: 8px;
+  padding: 0 4px 14px 0;
 }
-.fe-node__icon {
+.fe-sk-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fe-sk-group__title {
+  padding: 0 4px 2px;
+  font-family: var(--font-title);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bronze-light);
+  border-bottom: 1px solid #2c2219;
+}
+.fe-sk-group__title--fire {
+  color: var(--flame);
+}
+.fe-sk-group__title--cold {
+  color: #9fd8f0;
+}
+.fe-sk-group__title--lightning {
+  color: #f0dc78;
+}
+.fe-sk-group__title--void {
+  color: #b99cf0;
+}
+.fe-sk-group__title--physical {
+  color: #d8c69a;
+}
+.fe-sk-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.fe-sk-row__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  text-align: left;
+  color: var(--parchment);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.fe-sk-row__main:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: #3a2e22;
+}
+.fe-sk-row__main:focus-visible {
+  outline: 1px solid var(--flame);
+  outline-offset: -1px;
+}
+.fe-sk-row--sel .fe-sk-row__main {
+  background: linear-gradient(90deg, rgba(232, 102, 42, 0.2), rgba(232, 102, 42, 0.02));
+  border-color: #6b5132;
+}
+.fe-sk-row__icon {
   position: relative;
-  width: 52px;
-  height: 52px;
+  flex: none;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
+  background: radial-gradient(circle, #1c1618, #0a0708);
+  border: 1px solid #4a3621;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px #000;
+}
+.fe-sk-row__icon img {
+  image-rendering: pixelated;
+}
+.fe-sk-row--learned .fe-sk-row__icon {
+  border-color: var(--bronze-light);
+}
+.fe-sk-row--locked .fe-sk-row__icon img {
+  filter: grayscale(1) brightness(0.45);
+}
+.fe-sk-row--picked .fe-sk-row__icon {
+  border-color: var(--hot);
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 12px rgba(255, 154, 60, 0.75);
+}
+.fe-sk-row--target .fe-sk-row__icon {
+  animation: fe-sk-ready 1s ease-in-out infinite;
+}
+.fe-sk-row__slot {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+}
+.fe-sk-row__slot .fe-key {
+  height: 16px;
+  padding: 0 3px;
+}
+.fe-sk-row__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fe-sk-row__name {
+  overflow: hidden;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.fe-sk-row__sub {
+  color: var(--ash);
+  white-space: nowrap;
+}
+.fe-sk-row__augs {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 7px;
+  vertical-align: middle;
+}
+.fe-sk-row__augs i {
+  width: 5px;
+  height: 5px;
+  background: var(--gold);
+  transform: rotate(45deg);
+}
+.fe-sk-row--locked .fe-sk-row__name,
+.fe-sk-row--locked .fe-sk-row__sub {
+  color: var(--stone-light);
+}
+.fe-sk-row--learnable .fe-sk-row__sub {
+  color: var(--parchment);
+}
+.fe-sk-row__plus {
+  flex: none;
+  width: 26px;
+  height: 26px;
   padding: 0;
+  font-size: var(--font-ui-body);
+  font-weight: 700;
+  line-height: 1;
+  color: #fff3dc;
+  background: linear-gradient(180deg, #e27434, #8a2a10);
+  border: 1px solid #f0a060;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(232, 102, 42, 0.6);
+  cursor: pointer;
+}
+.fe-sk-row__plus:hover {
+  filter: brightness(1.15);
+}
+.fe-sk-row__plus:focus-visible {
+  outline: 1px solid var(--hot);
+  outline-offset: 2px;
+}
+.fe-sk-row--ready.fe-sk-row--learnable .fe-sk-row__plus {
+  animation: fe-sk-ready 1.4s ease-in-out infinite;
+}
+.fe-sk-rail__coming {
+  padding: 6px 4px 0;
+  color: var(--ash);
+  font-style: italic;
+  border-top: 1px dashed #2c2219;
+}
+
+/* the selected skill */
+.fe-sk-detail {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 4px 14px 0;
+}
+.fe-sk-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fe-sk-head__icon {
+  flex: none;
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
   background: radial-gradient(circle, #1c1618, #0a0708);
   border: 1px solid #4a3621;
   border-radius: 3px;
   box-shadow:
     0 0 0 1px #000,
     inset 0 0 10px rgba(0, 0, 0, 0.9);
-  cursor: pointer;
-  transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
 }
-.fe-node__icon img {
+.fe-sk-head__icon img {
   image-rendering: pixelated;
 }
-.fe-node--learned .fe-node__icon {
+.fe-sk-head__icon--learned {
   border-color: var(--bronze-light);
 }
-.fe-node--max .fe-node__icon {
+.fe-sk-head__id {
+  min-width: 0;
+}
+.fe-sk-head__name {
+  font-family: var(--font-title);
+  font-weight: 700;
+  line-height: 1.15;
+  color: #fff3dc;
+}
+.fe-sk-head__tags {
+  color: var(--ash);
+}
+.fe-sk-pips {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+}
+.fe-sk-pips i {
+  width: 12px;
+  height: 6px;
+  background: #2a2226;
+  box-shadow: 0 0 0 1px #000;
+}
+.fe-sk-pips i.tier {
+  box-shadow: 0 0 0 1px #8a6a3e;
+}
+.fe-sk-pips i.on {
+  background: var(--gold);
+}
+.fe-sk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fe-sk-note {
+  color: var(--ash);
+}
+.fe-sk-note--bad {
+  color: var(--bad);
+}
+.fe-sk-box {
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #2c2219;
+  border-left: 2px solid var(--flame);
+}
+.fe-sk-box__cap {
+  margin-bottom: 2px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bronze-light);
+}
+.fe-sk-deltas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.fe-sk-delta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--font-ui-caption);
+  font-variant-numeric: tabular-nums;
+}
+.fe-sk-delta__label {
+  flex: 1 1 auto;
+  color: var(--parchment);
+}
+.fe-sk-delta__from,
+.fe-sk-delta__arrow {
+  color: var(--ash);
+}
+.fe-sk-delta__to {
+  font-weight: 700;
+}
+.fe-sk-delta--up .fe-sk-delta__to,
+div.fe-sk-delta--up {
+  color: var(--good);
+}
+.fe-sk-delta--down .fe-sk-delta__to {
+  color: var(--bad);
+}
+.fe-sk-desc {
+  color: var(--parchment);
+}
+.fe-sk-lines {
+  margin: 0;
+  padding: 0 0 0 14px;
+  color: var(--ash);
+}
+.fe-sk-lines__dps {
+  color: var(--parchment);
+}
+.fe-sk-lines--aug {
+  color: var(--gold);
+}
+.fe-sk-refund {
+  display: block;
+  margin: 0 0 6px;
+}
+
+/* augment graph: three tiers of Codex-style plates */
+.fe-augs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #2c2219;
+}
+.fe-augs__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+.fe-augs__title {
+  font-family: var(--font-title);
+  font-weight: 700;
+  color: var(--bronze-light);
+}
+.fe-augs__slots {
+  color: var(--parchment);
+}
+.fe-augs__tierlabel {
+  margin-bottom: 4px;
+  color: var(--bronze-light);
+}
+.fe-augs__tier--locked .fe-augs__tierlabel {
+  color: var(--stone-light);
+}
+.fe-augs__plates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 6px;
+}
+.fe-aug {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  text-align: left;
+  color: var(--parchment);
+  background: linear-gradient(180deg, #221b1e, #141012);
+  border: 1px solid #4a3621;
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 1px #000,
+    inset 0 1px 0 rgba(255, 228, 186, 0.06);
+  cursor: pointer;
+}
+.fe-aug:focus-visible {
+  outline: 1px solid var(--hot);
+  outline-offset: 1px;
+}
+.fe-aug__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+.fe-aug__name {
+  font-weight: 700;
+  line-height: 1.2;
+}
+.fe-aug__cost {
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: var(--gold);
+  background: #1a1416;
+  border: 1px solid #6b5132;
+  border-radius: 50%;
+}
+.fe-aug--t3 .fe-aug__cost {
+  border-color: var(--gold);
+}
+.fe-aug__text {
+  line-height: 1.3;
+  color: var(--ash);
+}
+.fe-aug__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  color: var(--stone-light);
+}
+.fe-aug__status {
+  font-weight: 700;
+}
+.fe-aug__chain {
+  color: #b98a6a;
+}
+.fe-aug--open {
+  border-color: var(--flame);
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 10px rgba(232, 102, 42, 0.4);
+}
+.fe-aug--open:hover {
+  filter: brightness(1.15);
+}
+.fe-aug--picked {
+  background: linear-gradient(180deg, #3a2a16, #1e150c);
   border-color: var(--gold);
   box-shadow:
     0 0 0 1px #000,
-    0 0 0 3px rgba(224, 176, 74, 0.25),
-    0 0 12px rgba(224, 176, 74, 0.4);
+    0 0 10px rgba(224, 176, 74, 0.35);
 }
-.fe-node--ready .fe-node__icon {
-  border-color: var(--flame);
-  animation: fe-node-ready 1.4s ease-in-out infinite;
+.fe-aug--picked .fe-aug__status {
+  color: var(--gold);
 }
-@keyframes fe-node-ready {
-  50% {
-    box-shadow:
-      0 0 0 1px #000,
-      0 0 16px rgba(232, 102, 42, 0.8);
-  }
-}
-.fe-node--locked .fe-node__icon img:first-child {
-  filter: grayscale(1) brightness(0.4);
-}
-.fe-node__lock {
-  position: absolute;
-  right: -6px;
-  bottom: -6px;
-}
-.fe-node--picked .fe-node__icon {
-  border-color: var(--hot);
-  box-shadow:
-    0 0 0 1px #000,
-    0 0 0 3px rgba(255, 154, 60, 0.6),
-    0 0 18px rgba(255, 154, 60, 0.7);
-}
-.fe-node--target .fe-node__icon {
-  animation: fe-node-ready 1s ease-in-out infinite;
-}
-.fe-node__icon:hover {
-  border-color: var(--hot);
-}
-.fe-node__slot {
-  position: absolute;
-  left: 50%;
-  bottom: -9px;
-  transform: translateX(-50%);
-}
-.fe-node__slot .fe-key {
-  height: 16px;
-  padding: 0 4px;
-}
-.fe-node__rank {
-  position: absolute;
-  top: 12px;
-  left: calc(50% + 18px);
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  font-size: var(--font-ui-body);
-  font-weight: 700;
-  line-height: 1;
-  color: #6b5c52;
-  background: #1a1416;
-  border: 1px solid #3a2e22;
-  border-radius: 50%;
-  cursor: not-allowed;
-  z-index: 1;
-}
-.fe-node__rank--on {
-  color: #fff3dc;
-  background: linear-gradient(180deg, #e27434, #8a2a10);
-  border-color: #f0a060;
-  box-shadow: 0 0 10px rgba(232, 102, 42, 0.7);
-  cursor: pointer;
-}
-.fe-node__name {
-  margin-top: 6px;
-  font-size: var(--font-ui-caption);
-  font-weight: 700;
+.fe-aug--picked .fe-aug__text {
   color: var(--parchment);
-  white-space: nowrap;
 }
-.fe-node--locked .fe-node__name {
-  color: var(--stone-light);
+.fe-aug--needsRank,
+.fe-aug--coming {
+  opacity: 0.55;
 }
-.fe-node__pips {
-  display: flex;
-  gap: 1px;
+.fe-aug--coming {
+  border-style: dashed;
 }
-.fe-node__pips i {
-  width: 3px;
-  height: 5px;
-  background: #2a2226;
+.fe-aug--excluded {
+  opacity: 0.6;
 }
-.fe-node__pips i.on {
-  background: var(--gold);
-  box-shadow: 0 0 3px rgba(224, 176, 74, 0.7);
+.fe-aug--excluded .fe-aug__status {
+  color: var(--bad);
 }
-.fe-node__rankval {
-  font-size: var(--font-ui-caption);
-  color: var(--ash);
-  line-height: 1.1;
+.fe-aug--noSlot,
+.fe-aug--noPoints {
+  opacity: 0.8;
 }
+
+/* loadout bar and presets */
 .fe-loadout {
   flex: none;
-  margin-top: 6px;
-  padding-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid #2c2219;
   box-shadow: inset 0 1px 0 rgba(201, 160, 100, 0.08);
+}
+.fe-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.fe-presets__tab {
+  min-width: 0;
+  max-width: 128px;
+  height: 26px;
+  padding: 0 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ash);
+  background: #141012;
+  border: 1px solid #3a2e22;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.fe-presets__tab:hover {
+  color: var(--parchment);
+}
+.fe-presets__tab:focus-visible {
+  outline: 1px solid var(--flame);
+}
+.fe-presets__tab--sel {
+  color: #fff3dc;
+  background: #2a2226;
+  border-color: var(--bronze-light);
+}
+.fe-presets__tab--active::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--good);
+  border-radius: 50%;
+}
+.fe-presets__rename {
+  width: 128px;
+  height: 26px;
+  padding: 0 8px;
+}
+.fe-presets__ops {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
 }
 .fe-loadout__label {
   margin-bottom: 8px;
   text-align: center;
-  font-size: var(--font-ui-caption);
   color: var(--ash);
 }
-/* Eight slots (LMB RMB Q E R F Space Z) fit the narrowest panel (12 cells of 32 px at 1024x600). */
+/* Short screens keep the book and the augments tall: the idle how-to line goes, the "choose a slot" prompt stays. */
+@media (max-height: 699px) {
+  .fe-loadout__label--idle {
+    display: none;
+  }
+  .fe-presets {
+    margin-bottom: 8px;
+  }
+  /* plates show name, cost and state; the full text is on hover (with the before/after numbers) */
+  .fe-aug__text {
+    display: none;
+  }
+}
+.fe-sk-numbers {
+  padding-top: 8px;
+  border-top: 1px solid #2c2219;
+}
+/* Eight slots (LMB RMB Q E R F Space Z). */
 .fe-loadout__slots {
   display: flex;
   gap: 6px;
@@ -801,6 +1167,10 @@
 }
 .fe-lslot:hover {
   border-color: var(--bronze-light);
+}
+.fe-lslot:focus-visible {
+  outline: 1px solid var(--flame);
+  outline-offset: 2px;
 }
 .fe-lslot__empty {
   width: 14px;
@@ -831,6 +1201,29 @@
   box-shadow:
     0 0 0 1px #000,
     0 0 14px rgba(255, 154, 60, 0.7);
+}
+/* augment pips on a slot (Skills panel bar and HUD skill bar): one gold diamond per picked augment */
+.fe-augpips {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  pointer-events: none;
+}
+.fe-augpips i {
+  width: 5px;
+  height: 5px;
+  background: var(--gold);
+  box-shadow: 0 0 0 1px #000;
+  transform: rotate(45deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fe-sk-row--target .fe-sk-row__icon,
+  .fe-sk-row--ready.fe-sk-row--learnable .fe-sk-row__plus {
+    animation: none;
+  }
 }
 
 /* ---- map device ---- */

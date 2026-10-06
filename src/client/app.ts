@@ -1067,6 +1067,10 @@ export class ClientApp {
       allocateAttribute: (attr) => inGame((g) => g.allocateAttribute(attr), undefined),
       rankUpSkill: (id) => inGame((g) => g.rankUpSkill(id), undefined),
       setLoadoutSlot: (slot, id) => inGame((g) => g.setLoadoutSlot(slot, id), undefined),
+      pickAugment: (id, aug) => inGame((g) => g.pickAugment(id, aug), undefined),
+      refundAugment: (id, aug, scrap) => inGame((g) => g.refundAugment(id, aug, scrap), undefined),
+      respec: (id, token, scrap) => inGame((g) => g.respec(id, token, scrap), undefined),
+      setPreset: (preset, op, name) => inGame((g) => g.setPreset(preset, op, name), undefined),
 
       setMapTreeNode: (nodeId, allocate) => inGame((g) => g.setMapTreeNode(nodeId, allocate), undefined),
       pinArea: (areaId, pinned) => inGame((g) => g.pinArea(areaId, pinned), undefined),

@@ -100,11 +100,26 @@ be ranked to go on the bar. The roster has 32 skill ids; the seven below are pla
 (Phase Stride 5, Glacial Nova 7, Spark 8, Cinder Mortar 9 ... Event Horizon 62) and cannot be learned until their behaviour ships.
 
 **Loadout:** eight slots labelled `LMB`, `RMB`, `Q`, `E`, `R`, `F`, `Space`, `Z` (the HUD keycap shows `Spc`). Any learned skill,
-including Ember Lance, can occupy any slot; each skill appears at most once. Drag a learned skill from the tree or either slot row
-onto a slot, or click a skill and then a slot in the skills panel. Moving an assigned skill swaps occupied slots.
-Right-click a slot in the skills panel to clear it. Saves from six slots pad the two new slots with empty ones. Auto-attack follows
+including Ember Lance, can occupy any slot; each skill appears at most once. Drag a learned skill from the skill book or either slot row
+onto a slot, or click a skill and then a slot (or a slot and then a skill) in the skills panel; Ctrl/Cmd-click a skill puts it on the
+first empty slot. Moving an assigned skill swaps occupied slots. Right-click (or Delete on) a slot in the skills panel to clear it.
+Saves from six slots pad the two new slots with empty ones. Auto-attack follows
 Ember Lance wherever assigned, and is idle while it is unassigned. Ember Lance remains the basic attack for cast priority and movement
 regardless of its slot. **Presets:** three named loadouts per character; saving and renaming work anywhere, loading one only in a hideout.
+
+**Skills panel** (`K`, `skills.md` 10; it is wider than the other docked panels but leaves room for the inventory at 1024x600). Left: the
+skill book, grouped Fire, Cold, Lightning, Void, Physical, Utility with a search box; a learned skill shows its rank and one gold diamond per
+augment, a learnable one "Not learned · 1 point", a locked one its unlock level ("Level 12"); skills whose behaviour has not shipped are
+hidden and one line says how many more are coming. A glowing `+` on a row spends a point. Centre: the selected skill with rank pips (tier
+ranks 2, 5, 8 marked), "Learn" / "Rank up · 1 point", the "If you rank up" numbers (old → new), its description, the augment graph (three
+tier rows of plates with cost, state and exclusion chain; "n of m slots used · next slot at rank r"; a hover card shows the augment's
+numbers before and after, or what it adds when already picked) and the current numbers. Clicking an open plate picks it; clicking a picked
+plate, "Refund skill" or the Character panel's "Refund all skills" opens a confirmation that states the points back and the exact Scrap
+price (or why it is free), and the price shown is the one the server must match. Bottom: the three preset tabs (Load, Save, Rename,
+double-click a tab to rename) and the eight slots. Holding Alt over a skill compares its numbers with the selected skill. Keyboard: Tab into
+the book, arrows move, `+` ranks up, `1`–`8` put the skill on that slot, Enter picks an augment. The HUD skill bar shows the same augment
+diamonds on each slot. The Character panel shows the unspent skill points with a button to the Skills panel, the free respec (when the
+character has a token) and "Refund all skills".
 
 | Skill | Unlock | Cost / cast / cooldown | Behaviour & numbers |
 |---|---|---|---|

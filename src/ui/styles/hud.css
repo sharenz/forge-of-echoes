@@ -11,6 +11,9 @@
 .fe-game--left {
   --free-l: calc(var(--panel-w) + 12px);
 }
+.fe-game--left.fe-game--wide {
+  --free-l: calc(var(--skills-w) + 12px);
+}
 .fe-game--right {
   --free-r: calc(var(--panel-w) + 12px);
 }
@@ -377,6 +380,10 @@
 }
 .fe-skill__charges--out {
   color: var(--stone-light);
+}
+/* augment pips (.fe-augpips in panels.css) stay visible over the cooldown sweep */
+.fe-skill__augs {
+  z-index: 2;
 }
 .fe-skill__key {
   position: absolute;
