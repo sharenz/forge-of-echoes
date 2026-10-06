@@ -19,6 +19,7 @@ import { DAMAGE_INDEX, damageTypeAt } from './math';
 import { refreshLiving } from './player';
 import { monsterDefs } from './rosters';
 import { MFLAG } from './stores';
+import { markTakenMult, wardCapOf } from './skills/primitives/state';
 import type { PlayerState, World } from './world';
 
 export const DT_PHYSICAL = DAMAGE_INDEX.physical;
@@ -173,6 +174,8 @@ function takenMult(w: World, i: number): number {
   const m = w.monsters;
   let f = exposedMult(w, i);
   if (m.shockTime[i] > 0) f *= 1 + SHOCK_BONUS;
+  // Skill marks (power rework SK5: Conductive Mark, Pinning); exactly 1 when nothing is marked.
+  f *= markTakenMult(w, i);
   if (m.flags[i] & MFLAG.shielded) f *= 1 - WARDED_REDUCTION;
   return f;
 }
@@ -207,7 +210,7 @@ function monsterHitEvent(w: World, i: number, amount: number, dtype: number, cri
   };
 }
 
-function applyAilment(w: World, i: number, hitDamage: number, dtype: number, chance: number, source: number): void {
+export function applyAilment(w: World, i: number, hitDamage: number, dtype: number, chance: number, source: number): void {
   if (dtype !== DT_FIRE && dtype !== DT_COLD && dtype !== DT_LIGHTNING) return;
   if (w.combatRng.next() >= chance) return;
   const m = w.monsters;
@@ -481,7 +484,7 @@ export function hitPlayer(
     dmg *= 1 - (effectiveResist(p, type) - w.pactResist);
     if (Number.isFinite(s.damageTaken) && s.damageTaken >= 0) dmg *= s.damageTaken;
     if (isActive(p, 'shocked')) dmg *= shockMult(p);
-    if (p.ward.time > 0) dmg *= 1 - Math.min(WARD_REDUCTION_CAP, Math.max(0, p.ward.reduction));
+    if (p.ward.time > 0) dmg *= 1 - Math.min(wardCapOf(p, WARD_REDUCTION_CAP), Math.max(0, p.ward.reduction));
   }
   if (dmg > 0) {
     if (kind !== 'dot' && dtype === DT_PHYSICAL && p.ward.time > 0 && p.ward.renewOnHit)

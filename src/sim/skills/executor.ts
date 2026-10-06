@@ -9,6 +9,7 @@ import { emitRestore, emitStride, emitWard } from './buffs';
 import { burstFanArc, emitBurst, emitChain, emitDash, emitProjectiles } from './emitters';
 import { emitBlast, emitLob, emitOrb, emitSpikes, emitStrikes } from './roster';
 import { aimAngle, augmentOf, hasFlag } from './projectile-mods';
+import { tickAugments } from './primitives';
 import type { SkillBehaviour } from './types';
 
 /** Release a skill: the effect happens now, from the player's current position. */
@@ -45,7 +46,7 @@ export function releaseSkill(w: World, p: PlayerState, def: SkillRuntimeDef, aim
       emitLob(w, p, def, b, aimX, aimY, angle);
       break;
     case 'orb':
-      emitOrb(w, p, def, b, angle);
+      emitOrb(w, p, def, b, angle, aimX, aimY);
       break;
     case 'strikes':
       emitStrikes(w, p, def, b, aimX, aimY);
@@ -73,6 +74,8 @@ function queueEcho(w: World, p: PlayerState, def: SkillRuntimeDef, b: SkillBehav
 
 /** Pending echoes (from wherever the player is when they fire, toward the current aim); echoes never queue echoes. */
 export function tickPendingNovas(w: World, p: PlayerState): void {
+  // Flagship augment upkeep (SK5): scheduled bursts, lodges, pruning (nothing without augment state).
+  tickAugments(w, p);
   const list = p.pendingNovas;
   if (list.length === 0) return;
   let write = 0;

@@ -40,6 +40,7 @@ import type { PostState } from './post';
 import type { PropPainter } from './props';
 import type { SpriteTable } from './sprites';
 import { RosterFx } from './skills/roster';
+import { AugmentFx } from './skills/augments';
 
 const DT_INDEX: Record<DamageType, number> = { physical: 0, fire: 1, cold: 2, lightning: 3, void: 4 };
 const KIND_INDEX = Object.fromEntries(MONSTER_KINDS.map((k, i) => [k, i])) as Record<MonsterKind, number>;
@@ -144,6 +145,7 @@ export interface EventKit {
 export class EventFx {
   /** The power rework's roster batch 1 (SK2): muzzles, Glacial Nova, buff auras, impacts, strikes and spikes. */
   readonly roster: RosterFx;
+  readonly augments: AugmentFx;
   /** Per-frame budgets. */
   private bursts = 0;
   private pulses = 0;
@@ -174,6 +176,7 @@ export class EventFx {
 
   constructor(private readonly k: EventKit) {
     this.roster = new RosterFx({ pen: k.pen, fx: k.fx, pos: k.players.pos });
+    this.augments = new AugmentFx({ pen: k.pen, fx: k.fx });
     const t = k.table;
     this.frames.impact = t.get('fx/impact').frames;
     this.frames.levelUp = t.get('fx/levelUp').frames;
@@ -198,6 +201,7 @@ export class EventFx {
   /** Start a frame (`dt` real seconds since the last one). */
   beginFrame(dt: number): void {
     this.bursts = 0;
+    this.augments.beginFrame();
     this.pulses = 0;
     this.dust = 0;
     this.big = 0;
@@ -359,6 +363,11 @@ export class EventFx {
       }
       case 'buff':
         this.roster.buff(e);
+        return;
+      case 'augment':
+        // Flagship augment cues (power rework SK5, skills/augments.ts).
+        this.augments.event(e, e.playerId === local);
+        if (e.playerId === local && (e.fx === 'detonate' || e.fx === 'blast')) this.shake(0.06);
         return;
       case 'ward': {
         fx.rings.spawn(e.x, e.y - 8, 8, 44, 0.45, C.hot, 2, 0.9, 1);

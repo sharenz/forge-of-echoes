@@ -12,6 +12,8 @@ import { resolvePlayerAt } from '../movement';
 import { PROJ, projSpec, spawnProjectile } from '../projectiles';
 import type { PlayerState, World } from '../world';
 import { augmentOf, fanSpread, hasFlag, projectileCount, projectilePierce, projectileRadius } from './projectile-mods';
+import { afterBlink, attachRider, convertSpec, emitChainAugmented, needsRider, prim, schedule } from './primitives';
+import type { CastTally } from './primitives/state';
 import type { BurstBehaviour, ChainBehaviour, DashBehaviour, ProjectileBehaviour } from './types';
 
 /** A fan of straight projectiles centred on `angle`. */
@@ -33,12 +35,19 @@ export function emitProjectiles(w: World, p: PlayerState, def: SkillRuntimeDef, 
   s.pierce = projectilePierce(p, def, b);
   const bounce = augmentOf(def, 'bounce');
   const decay = augmentOf(def, 'decay');
+  // Flagship augments (SK5): conversion, the rehit of Slow Tide, Hollow Shell's pierce, and the rider of everything else.
+  const conv = def.augments ? prim(def, 'convert') : undefined;
+  const rehit = def.augments ? prim(def, 'rehit') : undefined;
+  if (def.augments && prim(def, 'falloff')) s.pierce = -1;
+  const rider = needsRider(def);
+  const cast: CastTally | null = rider && prim(def, 'refund') ? { ids: [], done: false } : null;
   for (let k = 0; k < count; k++) {
     // Roster riders (spawnProjectile resets them on projSpec after every spawn, so they are set per bolt).
     s.bounce = bounce ? bounce.count : 0;
-    s.rehit = b.rehit ?? 0;
+    s.rehit = rehit ? rehit.interval : b.rehit ?? 0;
     s.knock = b.knock ?? 1;
     s.decay = decay ? decay.share : 0;
+    if (conv) convertSpec(s, def, conv);
     const a = count === 1 ? angle : angle - spread / 2 + (spread * k) / (count - 1);
     s.angle = a;
     // A muzzle inside a tall prop (she stands against it) fires from her centre: the shot meets the prop, it does not skip it.
@@ -47,7 +56,8 @@ export function emitProjectiles(w: World, p: PlayerState, def: SkillRuntimeDef, 
     const inside = insideCover(w.propGrid, mx, my);
     s.x = inside ? p.x : mx;
     s.y = inside ? p.y : my;
-    spawnProjectile(w, s);
+    const slot = spawnProjectile(w, s);
+    if (rider && slot >= 0) attachRider(w, slot, def, p.id, false, cast);
   }
 }
 
@@ -60,6 +70,10 @@ export function burstFanArc(p: PlayerState, def: SkillRuntimeDef, b: BurstBehavi
 
 /** A ring of projectiles bursting outward from the player, rotated so one leads toward the aim; a fan concentrates them. */
 export function emitBurst(w: World, p: PlayerState, def: SkillRuntimeDef, b: BurstBehaviour, angle: number): void {
+  if (def.augments && (prim(def, 'rings') || prim(def, 'spiral'))) {
+    shapedBurst(w, p, def, b, angle);
+    return;
+  }
   const count = projectileCount(def);
   const range = def.range > 0 ? def.range : b.range;
   const arc = burstFanArc(p, def, b);
@@ -76,15 +90,73 @@ export function emitBurst(w: World, p: PlayerState, def: SkillRuntimeDef, b: Bur
   s.critMult = def.critMultiplier;
   s.ailmentChance = def.ailmentChance;
   s.pierce = Math.max(0, Math.floor(def.pierce));
+  const rider = needsRider(def);
+  const cast: CastTally | null = rider && prim(def, 'refund') ? { ids: [], done: false } : null;
   for (let k = 0; k < count; k++) {
     s.angle = arc !== null
       ? angle + (count === 1 ? 0 : -arc / 2 + arc * k / (count - 1))
       : angle + (k / count) * TAU;
     s.x = p.x;
     s.y = p.y;
-    spawnProjectile(w, s);
+    const slot = spawnProjectile(w, s);
+    if (rider && slot >= 0) attachRider(w, slot, def, p.id, false, cast);
   }
   w.events.push({ t: 'nova', playerId: p.id, skill: def.id, x: p.x, y: p.y, radius: range });
+}
+
+/** One flame of a shaped burst (Spiral Arms) from her current position. */
+function burstFlame(w: World, p: PlayerState, def: SkillRuntimeDef, b: BurstBehaviour, angle: number, cast: CastTally | null): void {
+  const s = projSpec;
+  s.kind = PROJ[b.kind];
+  s.hostile = false;
+  s.owner = p.id;
+  s.speed = def.projectileSpeed > 0 ? def.projectileSpeed : b.speed;
+  s.range = def.range > 0 ? def.range : b.range;
+  s.radius = b.radius;
+  s.damage = def.damage;
+  s.dtype = DAMAGE_INDEX[def.damageType];
+  s.critChance = def.critChance;
+  s.critMult = def.critMultiplier;
+  s.ailmentChance = def.ailmentChance;
+  s.pierce = Math.max(0, Math.floor(def.pierce));
+  s.angle = angle;
+  s.x = p.x;
+  s.y = p.y;
+  const slot = spawnProjectile(w, s);
+  if (slot >= 0 && needsRider(def)) attachRider(w, slot, def, p.id, false, cast);
+}
+
+/**
+ * Ember Nova's shapes (SK5): Triple Ring (concentric waves of `flames`, `gap` s apart, reaching evenly out to the range, without
+ * pierce: the later rings ride the echo queue, which never echoes) and Spiral Arms (two arms turning half a circle over `seconds`).
+ */
+function shapedBurst(w: World, p: PlayerState, def: SkillRuntimeDef, b: BurstBehaviour, angle: number): void {
+  const range = def.range > 0 ? def.range : b.range;
+  const rings = prim(def, 'rings');
+  if (rings) {
+    const rest = (def.augments ?? []).filter((a) => a.p !== 'rings' && a.p !== 'echo' && a.p !== 'spiral');
+    for (let k = 0; k < rings.count; k++) {
+      const ring: SkillRuntimeDef = {
+        ...def, range: (range * (k + 1)) / rings.count, projectiles: rings.flames, pierce: 0, augments: rest,
+      };
+      if (k === 0) emitBurst(w, p, ring, b, angle);
+      else p.pendingNovas.push({ at: w.time + rings.gap * k, def: ring });
+    }
+    return;
+  }
+  const spiral = prim(def, 'spiral')!;
+  const count = projectileCount(def);
+  const perArm = Math.max(1, Math.ceil(count / 2));
+  const cast: CastTally | null = prim(def, 'refund') ? { ids: [], done: false } : null;
+  w.events.push({ t: 'nova', playerId: p.id, skill: def.id, x: p.x, y: p.y, radius: range });
+  for (let k = 0; k < perArm; k++) {
+    const turn = (k / perArm) * Math.PI;
+    const fire = (ww: World, pp: PlayerState) => {
+      for (let arm = 0; arm < 2; arm++) if (k * 2 + arm < count) burstFlame(ww, pp, def, b, angle + turn + arm * Math.PI, cast);
+    };
+    if (k === 0) fire(w, p);
+    else schedule(p, w.time + (spiral.seconds * k) / perArm, fire);
+  }
 }
 
 /**
@@ -119,6 +191,11 @@ export function emitChain(
     }
   }
   const dtype = DAMAGE_INDEX[def.damageType];
+  if (def.augments && (prim(def, 'fork') || prim(def, 'return') || prim(def, 'ramp') || prim(def, 'mark') || prim(def, 'onKill'))) {
+    // Flagship augments (SK5): the same targeting, with fork / return / ramp / mark / on-kill.
+    emitChainAugmented(w, p, def, def.radius > 0 ? def.radius : b.jump, hasFlag(p, def, b.revisit), aimX, aimY, dirX, dirY);
+    return;
+  }
   const points: number[] = [p.x + dirX * MUZZLE_OFFSET, p.y + dirY * MUZZLE_OFFSET];
   if (best < 0) {
     // Nothing in reach: the bolt forks harmlessly toward the cursor.
@@ -173,6 +250,8 @@ export function emitDash(
   w: World, p: PlayerState, def: SkillRuntimeDef, b: DashBehaviour, aimX: number, aimY: number, dirX: number, dirY: number,
 ): void {
   const maxDist = def.distance > 0 ? def.distance : b.distance;
+  const fromX = p.x;
+  const fromY = p.y;
   const toCursor = Math.hypot(aimX - p.x, aimY - p.y);
   // Blink to the cursor when it is closer than the full distance.
   const dist = toCursor > 1 ? Math.min(maxDist, Math.max(12, toCursor)) : maxDist;
@@ -210,4 +289,6 @@ export function emitDash(
       w.events.low({ t: 'ailment', ailment: 'chilled', x: m.x[i], y: m.y[i] });
     }
   }
+  // Flagship augments (SK5): Afterimage, Static Arrival, Phase Weave.
+  if (def.augments) afterBlink(w, p, def, fromX, fromY, tx, ty);
 }

@@ -16,10 +16,32 @@ export interface ProjectileEffect {
   onHit?(w: World, slot: number, p: PlayerState): void;
   /** A lob landed at (x, y) (after its splash). */
   onLand?(w: World, slot: number, x: number, y: number): void;
-  /** A flat projectile ran out of range (or left the arena) without hitting anyone. */
-  onExpire?(w: World, slot: number): void;
+  /**
+   * A flat projectile ran out of range (or left the arena) without hitting anyone. Returning true keeps it alive (the effect
+   * turned it around: Tide Returns).
+   */
+  onExpire?(w: World, slot: number): boolean | void;
   /** Every tick before it moves (player skill projectiles: Frost Orb fires its shards from here). */
   onTick?(w: World, slot: number): void;
+  // Player projectiles (power rework SK5 augment riders, sim/skills/primitives):
+  /** May it hit monster slot `j` now (checked before its contact is resolved)? false skips the monster this tick. */
+  canHit?(w: World, slot: number, j: number): boolean;
+  /** It hit monster slot `j` (after damage and Decay); `hit` describes the target as it was. true = it ends here (lodged). */
+  onMonsterHit?(w: World, slot: number, j: number, hit: MonsterHitInfo): boolean | void;
+  /** A flat player projectile ends here (a body used up its pierce, tall cover, the end of its range) and is about to be removed. */
+  onEnd?(w: World, slot: number, x: number, y: number): void;
+}
+
+/** The target of a player projectile's hit as it was before the hit (one shared object, valid only during onMonsterHit). */
+export interface MonsterHitInfo {
+  id: number;
+  x: number;
+  y: number;
+  maxLife: number;
+  shocked: boolean;
+  chilled: boolean;
+  igniteDps: number;
+  killed: boolean;
 }
 
 export interface AreaEffect {

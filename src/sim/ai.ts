@@ -22,6 +22,7 @@ import { monsterDefs } from './rosters';
 import { navBeginTick, navDrift, navSteer } from './nav';
 import { FLOW_AIR, FLOW_BOSS, FLOW_HEAVY, FLOW_MONSTER, flowOut, flowVelocity } from '../data/layouts/flow';
 import { MFLAG } from './stores';
+import { augmentStatusBits } from './skills/primitives/state';
 import type { PlayerState, World } from './world';
 
 const RETARGET2 = RETARGET_RATIO * RETARGET_RATIO;
@@ -103,6 +104,7 @@ export function updateMonsters(w: World): void {
     if (m.flags[i] & MFLAG.frozen) bits |= AILMENT_BIT.frozen;
     if (m.flags[i] & MFLAG.fixture) bits |= AILMENT_BIT.fixture;
     if (m.decayTime[i] > 0) bits |= AILMENT_BIT.decayed;
+    bits |= augmentStatusBits(w, i); // power rework SK5: lodged / marked
     if (w.mapEvent && (w.mapEvent.members.size > 0 || w.mapEvent.exposed.size > 0)) bits |= eventAilments(w, m.id[i]);
     m.ailments[i] = bits;
 

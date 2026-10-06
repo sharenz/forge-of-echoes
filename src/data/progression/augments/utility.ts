@@ -28,7 +28,7 @@ export const UTILITY_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     },
     {
       id: 'chargedReprieve', name: 'Charged Reprieve', tier: 3, text: 'Your next 3 skill casts cost 25% less Focus',
-      effects: [{ k: 'planned', primitive: 'refund', note: 'cheaper casts' }],
+      effects: [{ k: 'rt', rt: { p: 'cheapCasts', casts: 3, pct: 0.25 } }],
     },
   ],
 };

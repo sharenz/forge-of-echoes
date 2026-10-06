@@ -6,7 +6,7 @@ export const VOID_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
   riftStep: [
     {
       id: 'afterimage', name: 'Afterimage', tier: 1, text: 'Leaves an afterimage for 1.5 seconds that explodes for 1.2× effectiveness as void in a radius of 50',
-      effects: [{ k: 'planned', primitive: 'summon' }],
+      effects: [{ k: 'blast', at: 'origin', delay: 1.5, effectiveness: 1.2, radius: 50, damageType: 'void', ailment: 0 }],
     },
     {
       id: 'longerStride', name: 'Longer Stride', tier: 1, text: '30% longer blinks and 0.3 seconds of invulnerability; costs 2 more Focus',
@@ -18,15 +18,17 @@ export const VOID_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     },
     {
       id: 'riftEcho', name: 'Rift Echo', tier: 2, text: '1 more charge; a third blink within 4 seconds costs no Focus',
-      effects: [{ k: 'add', stat: 'charges', value: 1 }, { k: 'planned', primitive: 'refund', note: 'free third blink' }],
+      effects: [{ k: 'add', stat: 'charges', value: 1 }, { k: 'rt', rt: { p: 'freeCast', nth: 3, window: 4 } }],
     },
     {
       id: 'staticArrival', name: 'Static Arrival', tier: 3, text: 'A lightning nova at the landing (2× effectiveness, radius 80) shocks; cooldown +0.5 seconds',
-      effects: [{ k: 'planned', primitive: 'shape', note: 'landing nova' }],
+      effects: [
+        { k: 'blast', at: 'landing', delay: 0, effectiveness: 2, radius: 80, damageType: 'lightning', ailment: 1 }, { k: 'add', stat: 'cooldown', value: 0.5 },
+      ],
     },
     {
       id: 'phaseWeave', name: 'Phase Weave', tier: 3, text: 'After landing: 25% more movement speed for 2 seconds, no crowd slow, chill and root removed',
-      effects: [{ k: 'planned', primitive: 'summon', note: 'landing buff' }],
+      effects: [{ k: 'rt', rt: { p: 'weave', seconds: 2, speed: 0.25 } }],
     },
   ],
   umbralBolt: [
@@ -36,7 +38,7 @@ export const VOID_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     },
     {
       id: 'hollowShell', name: 'Hollow Shell', tier: 1, text: 'Pierces every enemy; hits after the first deal 25% less damage',
-      excludes: ['soulbindLodge', 'gravitySeed'], effects: [{ k: 'planned', primitive: 'rehit', note: 'pierce falloff' }],
+      excludes: ['soulbindLodge', 'gravitySeed'], effects: [{ k: 'flag', flag: 'pierceAll' }, { k: 'rt', rt: { p: 'falloff', share: 0.75 } }],
     },
     {
       id: 'gravitySeed', name: 'Gravity Seed', tier: 2,
@@ -45,16 +47,18 @@ export const VOID_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     },
     {
       id: 'entropicSplit', name: 'Entropic Split', tier: 2, text: 'On hit splits into 2 bolts at ±25°, each dealing 60% damage',
-      excludes: ['soulbindLodge'], effects: [{ k: 'planned', primitive: 'split' }],
+      excludes: ['soulbindLodge'],
+      effects: [{ k: 'rt', rt: { p: 'split', on: 'hit', count: 2, share: 0.6, range: 150, arc: (50 * Math.PI) / 180, seek: 0 } }],
     },
     {
-      id: 'voidExposure', name: 'Void Exposure', tier: 3, text: 'Hits expose Void −20 pp and every element −8 pp for 4 seconds; 15% less damage',
-      effects: [{ k: 'planned', primitive: 'expose' }],
+      id: 'voidExposure', name: 'Void Exposure', tier: 3,
+      text: 'Hits expose Void −20 pp and Fire, Cold and Lightning −8 pp for 4 seconds (half on bosses); 15% less damage',
+      effects: [{ k: 'rt', rt: { p: 'expose', points: [0, 8, 8, 8, 20] } }, { k: 'more', pct: -15 }],
     },
     {
       id: 'soulbindLodge', name: 'Soulbind Lodge', tier: 3,
-      text: 'The bolt lodges for 2 seconds and detonates on the timer or the death of its host for 300% in a radius of 70',
-      excludes: ['hollowShell', 'entropicSplit'], effects: [{ k: 'planned', primitive: 'lodge' }],
+      text: 'The bolt lodges for 2 seconds and detonates on the timer or the death of its host for 300% in a radius of 70; at most 8 lodged',
+      excludes: ['hollowShell', 'entropicSplit'], effects: [{ k: 'rt', rt: { p: 'lodge', share: 3, radius: 70, fuse: 2, burst: 0, max: 8 } }],
     },
   ],
   kineticLance: [
@@ -69,19 +73,21 @@ export const VOID_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     {
       id: 'shatterRounds', name: 'Shatter Rounds', tier: 2,
       text: 'Kills explode for 12% of the dead enemy’s maximum life as physical damage in a radius of 40 (at most 3 deep)',
-      effects: [{ k: 'planned', primitive: 'onKill' }],
+      effects: [{ k: 'rt', rt: { p: 'onKill', of: 'life', share: 0.12, radius: 40, damageType: 'physical', needs: 'any', depth: 3 } }],
     },
     {
       id: 'armourPiercing', name: 'Armour Piercing', tier: 2, text: 'Ignores the hit reduction of armoured enemies; +10 physical penetration',
       effects: [{ k: 'planned', primitive: 'cap', note: 'armour piercing' }],
     },
     {
-      id: 'voidConvert', name: 'Void Convert', tier: 3, text: '50% of Physical damage is converted to Void; hits apply Decay',
-      effects: [{ k: 'planned', primitive: 'convert' }],
+      id: 'voidConvert', name: 'Void Convert', tier: 3,
+      text: '50% of Physical damage is converted to Void; hits apply Decay (40% of the hit as Void over 4 seconds, up to 5 stacks)',
+      effects: [{ k: 'convert', to: 'void', pct: 50, ailment: 'decay', decay: 0.4 }],
     },
     {
-      id: 'pinning', name: 'Pinning', tier: 3, text: 'Hits slow by 25% for 2 seconds and make the target take 10% more damage',
-      effects: [{ k: 'planned', primitive: 'mark' }],
+      id: 'pinning', name: 'Pinning', tier: 3,
+      text: 'Hits pin the target for 2 seconds: it is chilled (30% slower) and takes 10% more damage',
+      effects: [{ k: 'rt', rt: { p: 'mark', seconds: 2, taken: 0.1, shock: 0, chill: true, first: false } }],
     },
   ],
 };

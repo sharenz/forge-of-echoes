@@ -31,7 +31,11 @@ describe('skill executor', () => {
   });
 
   it('handles every augment primitive of the contract', () => {
-    expect([...AUGMENT_PRIMITIVES].sort()).toEqual(['bounce', 'decay', 'echo', 'fan', 'ground', 'invulnerable', 'restore', 'stride']);
+    expect([...AUGMENT_PRIMITIVES].sort()).toEqual([
+      'blast', 'bounce', 'cheapCasts', 'convert', 'core', 'decay', 'echo', 'expose', 'falloff', 'fan', 'fork', 'freeCast', 'fuse', 'ground',
+      'hover', 'ignite', 'invulnerable', 'lodge', 'mark', 'onKill', 'ramp', 'refund', 'rehit', 'restore', 'return', 'rings', 'scatter',
+      'skip', 'spiral', 'split', 'stride', 'trail', 'wardCap', 'weave',
+    ]);
   });
 
   it('ignores a skill without a behaviour (no cast event, nothing spawned)', () => {

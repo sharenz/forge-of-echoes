@@ -12,6 +12,10 @@ import { DAMAGE_INDEX, TAU } from '../math';
 import { PROJ, projSpec, spawnProjectile } from '../projectiles';
 import type { PendingStrike, PlayerState, World } from '../world';
 import { augmentOf, hasFlag } from './projectile-mods';
+import {
+  afterShellAt, attachRider, blastsOf, conductFrom, convertSpec, novaAugmented, novaBlast, orbEnded, orbFaded, orbNeedsRider, orbRate,
+  orbRider, orbShardDef, prim, shellLanded, spawnTrail,
+} from './primitives';
 import { COLD_BEHAVIOURS } from './behaviours/cold';
 import type { BlastBehaviour, LobBehaviour, OrbBehaviour, SpikesBehaviour, StrikesBehaviour } from './types';
 
@@ -44,6 +48,11 @@ function blastAt(
 export function emitBlast(w: World, p: PlayerState, def: SkillRuntimeDef, b: BlastBehaviour): void {
   const radius = def.radius > 0 ? def.radius : b.radius;
   w.events.push({ t: 'nova', playerId: p.id, skill: def.id, x: p.x, y: p.y, radius });
+  // Freezing Core / Shatter (SK5).
+  if (novaAugmented(def)) {
+    novaBlast(w, p, def, radius, b.knock);
+    return;
+  }
   blastAt(w, p.x, p.y, radius, def.damage, DAMAGE_INDEX[def.damageType], def.critChance, def.critMultiplier, def.ailmentChance, p.id, b.knock);
 }
 
@@ -53,8 +62,10 @@ export function emitBlast(w: World, p: PlayerState, def: SkillRuntimeDef, b: Bla
  * The shell landed: the blast (radius = its splash), then the burning ground (fireTrail areas hurt monsters, one tick per interval
  * per monster however many overlap).
  */
-const MORTAR_SHELL = registerProjectileEffect({
+const MORTAR_SHELL: number = registerProjectileEffect({
   onLand(w, slot, x, y) {
+    // Cluster Shell / Delayed Fuse take the landing over (SK5).
+    if (shellLanded(w, slot, x, y, MORTAR_SHELL)) return;
     const pr = w.projectiles;
     const owner = pr.owner[slot];
     blastAt(w, x, y, pr.splash[slot], pr.damage[slot], pr.dtype[slot], pr.critChance[slot], pr.critMult[slot], pr.ailmentChance[slot], owner, 1);
@@ -64,6 +75,8 @@ const MORTAR_SHELL = registerProjectileEffect({
         source: owner,
       });
     }
+    // Skip Shot, Magma Core (SK5).
+    afterShellAt(w, slot, x, y);
   },
 });
 
@@ -71,8 +84,26 @@ const MORTAR_SHELL = registerProjectileEffect({
 export function emitLob(w: World, p: PlayerState, def: SkillRuntimeDef, b: LobBehaviour, aimX: number, aimY: number, angle: number): void {
   const maxRange = def.range > 0 ? def.range : b.range;
   const dist = Math.min(maxRange, Math.max(12, Math.hypot(aimX - p.x, aimY - p.y)));
-  let tx = p.x + Math.cos(angle) * dist;
-  let ty = p.y + Math.sin(angle) * dist;
+  const scatter = def.augments ? prim(def, 'scatter') : undefined;
+  if (!scatter) {
+    lobAt(w, p, def, b, p.x + Math.cos(angle) * dist, p.y + Math.sin(angle) * dist, angle);
+    return;
+  }
+  // Rain of Shells (SK5): shells at random points round the cursor.
+  const cx = p.x + Math.cos(angle) * dist;
+  const cy = p.y + Math.sin(angle) * dist;
+  const rng = w.combatRng;
+  for (let k = 0; k < scatter.count; k++) {
+    const r = scatter.radius * Math.sqrt(rng.next());
+    const a = rng.next() * TAU;
+    const tx = cx + Math.cos(a) * r;
+    const ty = cy + Math.sin(a) * r;
+    lobAt(w, p, def, b, tx, ty, Math.atan2(ty - p.y, tx - p.x));
+  }
+}
+
+/** One shell toward (tx, ty), kept inside the arena. */
+function lobAt(w: World, p: PlayerState, def: SkillRuntimeDef, b: LobBehaviour, tx: number, ty: number, angle: number): void {
   const lim = Math.max(0, w.arenaRadius - 8);
   const d2 = tx * tx + ty * ty;
   if (d2 > lim * lim) {
@@ -109,6 +140,7 @@ export function emitLob(w: World, p: PlayerState, def: SkillRuntimeDef, b: LobBe
     pr.groundRadius[slot] = ground.radius;
     pr.groundTick[slot] = ground.interval;
   }
+  if (def.augments && (prim(def, 'split') || prim(def, 'fuse') || prim(def, 'skip') || prim(def, 'trail'))) attachRider(w, slot, def, p.id, false);
 }
 
 // --- Frost Orb -------------------------------------------------------------------------------------------------------------
@@ -118,12 +150,22 @@ const ORB_SHARD: OrbBehaviour['shard'] = COLD_BEHAVIOURS.frostOrb.shard;
 
 /** Each tick: count down to the next shard; then fire one at the nearest enemy in reach that the orb can see. */
 const FROST_ORB = registerProjectileEffect({
+  onExpire(w, slot) {
+    orbEnded(w, slot); // Shatter (SK5)
+  },
   onTick(w, slot) {
     const pr = w.projectiles;
     const shard = ORB_SHARD;
+    // Frozen Heart (SK5): a hovering orb fades by its timer (it does not travel), and fires faster.
+    if (orbFaded(w, slot)) {
+      orbEnded(w, slot);
+      if (w.events.lowOpen) w.events.low({ t: 'projectileEnd', kind: 'frostOrb', x: pr.x[slot], y: pr.y[slot] });
+      pr.release(slot);
+      return;
+    }
     pr.timer[slot] -= DT;
     if (pr.timer[slot] > 1e-6) return;
-    pr.timer[slot] += shard.interval;
+    pr.timer[slot] += shard.interval / orbRate(w, slot);
     const ox = pr.x[slot];
     const oy = pr.y[slot];
     const reach = pr.splash[slot];
@@ -162,16 +204,30 @@ const FROST_ORB = registerProjectileEffect({
     s.critMult = pr.critMult[slot];
     s.ailmentChance = pr.ailmentChance[slot];
     s.pierce = 0;
-    spawnProjectile(w, s);
+    // Static Frost (SK5): the shards convert and chain once.
+    const sd = orbShardDef(w, slot);
+    if (sd) {
+      const conv = prim(sd, 'convert');
+      if (conv) convertSpec(s, sd, conv);
+    }
+    const shot = spawnProjectile(w, s);
+    if (sd && shot >= 0) attachRider(w, shot, sd, s.owner, true);
   },
 });
 
 /** Frost Orb: slow orbs toward the cursor that live the def's duration and fire a shard every `shard.interval` seconds. */
-export function emitOrb(w: World, p: PlayerState, def: SkillRuntimeDef, b: OrbBehaviour, angle: number): void {
+export function emitOrb(
+  w: World, p: PlayerState, def: SkillRuntimeDef, b: OrbBehaviour, angle: number, aimX = p.aimX, aimY = p.aimY,
+): void {
   const count = Math.max(1, Math.floor(def.projectiles));
   const speed = def.projectileSpeed > 0 ? def.projectileSpeed : b.speed;
   const duration = def.duration > 0 ? def.duration : b.duration;
   const s = projSpec;
+  const hover = def.augments ? prim(def, 'hover') : undefined;
+  if (hover) {
+    hoverOrbs(w, p, def, b, angle, count, duration, aimX, aimY);
+    return;
+  }
   for (let k = 0; k < count; k++) {
     s.kind = PROJ[b.kind];
     s.hostile = false;
@@ -194,6 +250,50 @@ export function emitOrb(w: World, p: PlayerState, def: SkillRuntimeDef, b: OrbBe
     w.projectiles.splash[slot] = def.radius > 0 ? def.radius : b.seek;
     w.projectiles.timer[slot] = b.shard.interval;
     w.projectiles.effect[slot] = FROST_ORB;
+    if (orbNeedsRider(def)) orbRider(w, slot, def, p.id, duration);
+  }
+}
+
+/** Frozen Heart (SK5): the orbs hover at the cursor (within the orb's normal reach), side by side, for the def's duration. */
+const HOVER_REACH = 300;
+function hoverOrbs(
+  w: World, p: PlayerState, def: SkillRuntimeDef, b: OrbBehaviour, angle: number, count: number, duration: number, aimX: number, aimY: number,
+): void {
+  const aimD = Math.min(HOVER_REACH, Math.hypot(aimX - p.x, aimY - p.y));
+  const lim = Math.max(0, w.arenaRadius - 8);
+  const s = projSpec;
+  for (let k = 0; k < count; k++) {
+    // Twin orbs hover 30 units apart across the aim.
+    const off = count === 1 ? 0 : (k - (count - 1) / 2) * 30;
+    let x = p.x + Math.cos(angle) * aimD - Math.sin(angle) * off;
+    let y = p.y + Math.sin(angle) * aimD + Math.cos(angle) * off;
+    const d2 = x * x + y * y;
+    if (d2 > lim * lim) {
+      const d = Math.sqrt(d2);
+      x = (x / d) * lim;
+      y = (y / d) * lim;
+    }
+    s.kind = PROJ[b.kind];
+    s.hostile = false;
+    s.owner = p.id;
+    s.angle = angle;
+    s.x = x;
+    s.y = y;
+    s.speed = 0;
+    s.range = 1;
+    s.radius = 8;
+    s.damage = def.damage;
+    s.dtype = DAMAGE_INDEX[def.damageType];
+    s.critChance = def.critChance;
+    s.critMult = def.critMultiplier;
+    s.ailmentChance = def.ailmentChance;
+    s.pierce = -1;
+    const slot = spawnProjectile(w, s);
+    if (slot < 0) continue;
+    w.projectiles.splash[slot] = def.radius > 0 ? def.radius : b.seek;
+    w.projectiles.effect[slot] = FROST_ORB;
+    orbRider(w, slot, def, p.id, duration);
+    w.projectiles.timer[slot] = b.shard.interval / orbRate(w, slot);
   }
 }
 
@@ -229,6 +329,11 @@ export function emitStrikes(w: World, p: PlayerState, def: SkillRuntimeDef, b: S
     }
     queueStrike(w, p, 'stormCall', x, y, radius, b.telegraph, at, def, null);
   }
+  // Eye of the Storm (SK5): a final strike at the cursor after the last one.
+  for (const f of def.augments ? blastsOf(def, 'final') : []) {
+    const fin: SkillRuntimeDef = { ...def, damage: f.damage, augments: def.augments!.filter((a) => a.p !== 'blast') };
+    queueStrike(w, p, 'stormCall', cx, cy, f.radius, b.telegraph + f.delay, at + f.delay, fin, null);
+  }
 }
 
 /** Glacial Spikes: `projectiles` spikes evenly along `range` toward the cursor, erupting in sequence; Twin Lines makes two rows. */
@@ -243,6 +348,9 @@ export function emitSpikes(w: World, p: PlayerState, def: SkillRuntimeDef, b: Sp
     const cos = Math.cos(a);
     const sin = Math.sin(a);
     const group: number[] = [];
+    let lastX = NaN;
+    let lastY = NaN;
+    let lastDelay = 0;
     for (let k = 0; k < count; k++) {
       const d = (length * (k + 1)) / count;
       const x = p.x + cos * d;
@@ -250,6 +358,16 @@ export function emitSpikes(w: World, p: PlayerState, def: SkillRuntimeDef, b: Sp
       if (x * x + y * y > lim * lim) break;
       const delay = b.lead + b.step * k;
       queueStrike(w, p, 'frostSpike', x, y, radius, delay, w.time + delay, def, group);
+      lastX = x;
+      lastY = y;
+      lastDelay = delay;
+    }
+    // Shattering Rows (SK5): the row's last spike explodes.
+    if (Number.isNaN(lastX)) continue;
+    for (const f of def.augments ? blastsOf(def, 'rowEnd') : []) {
+      const end: SkillRuntimeDef = { ...def, damage: f.damage, augments: def.augments!.filter((a) => a.p !== 'blast' && a.p !== 'trail') };
+      const delay = lastDelay + b.step + f.delay;
+      queueStrike(w, p, 'frostSpike', lastX, lastY, f.radius, delay, w.time + delay, end, null);
     }
   }
 }
@@ -265,7 +383,16 @@ function queueStrike(
 
 function resolveStrike(w: World, p: PlayerState, e: PendingStrike): void {
   const def = e.def;
-  blastAt(w, e.x, e.y, e.radius, def.damage, DAMAGE_INDEX[def.damageType], def.critChance, def.critMultiplier, def.ailmentChance, p.id, 0.5, e.group);
+  // Conduction (SK5) needs the strike's victims: a private group (it never spares anything the strike itself would hit).
+  const fork = def.augments ? prim(def, 'fork') : undefined;
+  const group = e.group ?? (fork ? [] : null);
+  const before = group ? group.length : 0;
+  blastAt(w, e.x, e.y, e.radius, def.damage, DAMAGE_INDEX[def.damageType], def.critChance, def.critMultiplier, def.ailmentChance, p.id, 0.5, group);
+  if (!def.augments) return;
+  // Frost Comb / Thunder Mark (SK5): ground under the strike.
+  const trail = prim(def, 'trail');
+  if (trail && trail.at === 'strike') spawnTrail(w, p.id, trail, e.x, e.y, e.radius);
+  if (fork && group) conductFrom(w, p, def, e.x, e.y, group.slice(before), { links: fork.links, share: fork.share, jump: fork.jump });
 }
 
 /** Strikes whose telegraph ran out fall now (dropped if she died meanwhile). */
