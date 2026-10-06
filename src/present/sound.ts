@@ -892,6 +892,16 @@ export class SoundDirector {
         else this.play(id, e.x, e.y, ALLY_VOLUME, this.jitter(0.03));
         return;
       }
+      case 'augment': {
+        // Flagship augments (SK5): detonations, bursts and corpse explosions reuse the element's blast sounds; the rest is silent.
+        if (e.fx !== 'detonate' && e.fx !== 'blast' && e.fx !== 'explode') return;
+        const id: SfxId = e.damageType === 'fire' ? 'mortarBlast' : e.damageType === 'cold' ? 'glacialNovaBurst'
+          : e.damageType === 'lightning' ? 'stormCallStrike' : e.damageType === 'void' ? 'wellCollapse' : 'hitPhysical';
+        const vol = e.fx === 'explode' ? 0.7 : 0.9;
+        if (e.playerId === localId) this.play(id, e.x, e.y, vol, this.jitter(0.06));
+        else this.play(id, e.x, e.y, ALLY_VOLUME * vol, this.jitter(0.06));
+        return;
+      }
       case 'buff':
         // Voiced by its 'cast' event; a zero-length Rime Bulwark buff is the barrier breaking.
         if (e.skill === 'rimeBulwark' && e.duration <= 0) {

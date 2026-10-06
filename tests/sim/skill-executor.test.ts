@@ -32,7 +32,9 @@ describe('skill executor', () => {
 
   it('handles every augment primitive of the contract', () => {
     expect([...AUGMENT_PRIMITIVES].sort()).toEqual([
-      'aegis', 'barrier', 'bounce', 'decay', 'echo', 'echoSigil', 'fan', 'ground', 'invulnerable', 'restore', 'stride', 'zone',
+      'aegis', 'barrier', 'blast', 'bounce', 'cheapCasts', 'convert', 'core', 'decay', 'echo', 'echoSigil', 'expose', 'falloff', 'fan',
+      'fork', 'freeCast', 'fuse', 'ground', 'hover', 'ignite', 'invulnerable', 'lodge', 'mark', 'onKill', 'ramp', 'refund', 'rehit',
+      'restore', 'return', 'rings', 'scatter', 'skip', 'spiral', 'split', 'stride', 'trail', 'wardCap', 'weave', 'zone',
     ]);
   });
 

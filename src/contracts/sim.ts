@@ -130,12 +130,103 @@ export type AugmentRuntime =
    */
   | { p: 'aegis'; gap: number; resist: number; pulse: number }
   /** Echo Sigil: your next `casts` damaging skill casts repeat once after `delay` s at `damage` × the hit, refunding `refund` × their cost. */
-  | { p: 'echoSigil'; casts: number; delay: number; damage: number; refund: number };
+  | { p: 'echoSigil'; casts: number; delay: number; damage: number; refund: number }
+  // Flagship augments (power rework SK5, src/sim/skills/primitives). Shares are of the skill's own hit; absolute `damage` numbers
+  // are resolved by the rules from an effectiveness (so a non-damaging skill's burst still scales with spell power).
+  /** Hits expose the target: `points[k]` percentage points of DAMAGE_TYPES[k] resistance for EXPOSURE.duration s (strongest wins). */
+  | { p: 'expose'; points: readonly number[] }
+  /**
+   * `share` of the hit is converted to `to` (both types' modifiers already in the damage). `ailment`: 'keep' = each part rolls its
+   * own type's ailment; 'always' = hits always inflict `to`'s ailment (Frostfire Core); 'instead' = only `to`'s ailment, at the
+   * skill's chance (Inverted Heat, Static Frost); 'decay' = no elemental ailment, hits apply Decay at `decay` share (Void Convert).
+   */
+  | { p: 'convert'; to: DamageType; share: number; ailment: 'keep' | 'always' | 'instead' | 'decay'; decay?: number }
+  /**
+   * The projectile sticks in the first enemy it hits (after the hit) and detonates `fuse` s later, on its host's death, or when
+   * `burst` (> 0) lodges of the same skill sit in one host, for `share` × the hit in `radius`. At most `max` lodged per player.
+   */
+  | { p: 'lodge'; share: number; radius: number; fuse: number; burst: number; max: number }
+  /**
+   * Child projectiles at `share` damage: on a kill (`on` 'kill', aimed at the nearest enemies within `seek`), at the end of the
+   * flight ('end', spread evenly round), on the first hit ('hit', at ±arc/2), or where a lobbed shell lands ('land': bomblets
+   * landing within `range`). `range` is the children's reach (or the bomblets' scatter).
+   */
+  | { p: 'split'; on: 'kill' | 'end' | 'hit' | 'land'; count: number; share: number; range: number; arc: number; seek: number }
+  /** A chain forks at its last link into `branches` chains of `links` jumps at `share` (Storm Call: each strike chains once). */
+  | { p: 'fork'; branches: number; links: number; share: number; jump: number }
+  /** A projectile at its maximum range turns back and hits again at `share`; a chain's last link returns to its first target. */
+  | { p: 'return'; share: number }
+  /** Chain links deal `start` + `step` × link more (Overcharge: −20%, +12% per jump). */
+  | { p: 'ramp'; start: number; step: number }
+  /**
+   * Marks a target for `seconds`: it takes `taken` more damage from everything; the marking skill gains `shock` ailment chance on
+   * it; `chill` pins it (a chill). `first`: only the first target of a cast (Conductive Mark), else every hit (Pinning).
+   */
+  | { p: 'mark'; seconds: number; taken: number; shock: number; chill: boolean; first: boolean }
+  /**
+   * Ground left behind: along the projectile's path ('path', every `spacing` units), where it ends ('end'), at each strike or spike
+   * ('strike'), or where a shell lands ('land'). `damage` per `interval` s for `duration` s in `radius`; `ailment` chills/shocks
+   * monsters inside each tick; `expose` points of the area's damage type while inside (Magma Core).
+   */
+  | {
+    p: 'trail'; area: 'fireTrail' | 'frostGround' | 'staticField'; at: 'path' | 'end' | 'strike' | 'land'; radius: number;
+    duration: number; interval: number; damage: number; damageType: DamageType; ailment: boolean; expose: number; spacing: number;
+  }
+  /**
+   * An extra burst of `damage` (`damageType`) in `radius`, `delay` s after the trigger: at the blink's origin or landing, when the
+   * ward or the orb ends, after the last strike at the cursor ('final'), at the end of a spike row ('rowEnd'). `ailment` chance.
+   */
+  | {
+    p: 'blast'; at: 'origin' | 'landing' | 'wardEnd' | 'orbEnd' | 'final' | 'rowEnd'; delay: number; damage: number; radius: number;
+    damageType: DamageType; ailment: number;
+  }
+  /**
+   * A killed enemy explodes: `share` of the killing hit ('hit') or of its maximum life ('life') as `damageType` in `radius`, if it
+   * was `needs` (shocked / chilled / any) when it died; explosions that kill chain at most `depth` deep.
+   */
+  | { p: 'onKill'; of: 'hit' | 'life'; share: number; radius: number; damageType: DamageType; needs: 'any' | 'shocked' | 'chilled'; depth: number }
+  /** A ring bursts as `count` concentric waves of `flames` flames, `gap` s apart, reaching evenly out to the range (Triple Ring). */
+  | { p: 'rings'; count: number; flames: number; gap: number }
+  /** A ring released as two rotating arms over `seconds` (Spiral Arms). */
+  | { p: 'spiral'; seconds: number }
+  /** `count` shells land at random points within `radius` of the cursor (Rain of Shells). */
+  | { p: 'scatter'; count: number; radius: number }
+  /** The shell lies `delay` s after landing, then explodes for `more` more damage in a `radiusPct`% larger radius (Delayed Fuse). */
+  | { p: 'fuse'; delay: number; more: number; radiusPct: number }
+  /** The shell bounces `count` more times `gap` units apart toward the cursor, each blast at `share` (Skip Shot). */
+  | { p: 'skip'; count: number; gap: number; share: number }
+  /** Enemies within `radius` of the caster take `more` more from the blast (Freezing Core). */
+  | { p: 'core'; radius: number; more: number }
+  /** The orb hovers at the cursor and fires `rate` × as often (Frozen Heart). */
+  | { p: 'hover'; rate: number }
+  /** A cast hitting at least `hits` enemies refunds `focus` × its cost and `cooldown` s of its cooldown (Heartfire). */
+  | { p: 'refund'; hits: number; focus: number; cooldown: number }
+  /** Every `nth` use within `window` s costs no Focus (Rift Echo's third blink). */
+  | { p: 'freeCast'; nth: number; window: number }
+  /** After the cast, your next `casts` skill casts cost `pct` less Focus (Charged Reprieve). */
+  | { p: 'cheapCasts'; casts: number; pct: number }
+  /** Ignites this skill inflicts deal `more` more damage (Overheat). */
+  | { p: 'ignite'; more: number }
+  /** A projectile may hit the same enemy again every `interval` s, at most `max` times (Slow Tide). */
+  | { p: 'rehit'; interval: number; max: number }
+  /** Every hit after a projectile's first deals `share` of the first (Hollow Shell). */
+  | { p: 'falloff'; share: number }
+  /** The ward's damage reduction cap (Hardened Ember: 0.7). */
+  | { p: 'wardCap'; cap: number }
+  /** After the blink: `speed` more movement speed and no crowd slow for `seconds`; chill and root removed (Phase Weave). */
+  | { p: 'weave'; seconds: number; speed: number };
 
 /** Every AugmentRuntime primitive tag (the executor's coverage test reads this). */
 export const AUGMENT_PRIMITIVES = [
   'echo', 'fan', 'invulnerable', 'ground', 'decay', 'bounce', 'stride', 'restore', 'zone', 'barrier', 'aegis', 'echoSigil',
+  // SK5 flagship augments
+  'expose', 'convert', 'lodge', 'split', 'fork', 'return', 'ramp', 'mark', 'trail', 'blast', 'onKill', 'rings', 'spiral', 'scatter',
+  'fuse', 'skip', 'core', 'hover', 'refund', 'freeCast', 'cheapCasts', 'ignite', 'rehit', 'falloff', 'wardCap', 'weave',
 ] as const satisfies readonly AugmentRuntime['p'][];
+
+/** Cosmetic cues of the flagship augments (SimEvent 'augment'); the presenter draws each in the event's damage type. */
+export const AUGMENT_FX = ['lodge', 'detonate', 'split', 'mark', 'explode', 'blast', 'return', 'refund'] as const;
+export type AugmentFx = (typeof AUGMENT_FX)[number];
 
 export interface FlaskRuntime {
   flaskId: FlaskId;
@@ -337,7 +428,9 @@ export const AILMENT_BIT = { burning: 1, chilled: 2, shocked: 4, shielded: 8, em
   /** Power rework (SK2): Decay stacks (Umbral Bolt's void damage over time). */
   decayed: 512,
   /** Power rework (SK3): Withered stacks (Wither Field) / inside an Entropy Hex (exposed, deals less damage). */
-  withered: 1024, hexed: 2048 } as const;
+  withered: 1024, hexed: 2048,
+  /** Power rework SK5 (taken from the top of the u16 mask): projectiles lodged in it (Lodge Ember, Lodged Ice, Soulbind Lodge) / a skill mark (Conductive Mark, Pinning). */
+  marked: 16384, lodged: 32768 } as const;
 
 export const PROJECTILE_KINDS = [
   'emberLance', 'novaFlame', 'flameWave', 'rimeShard', // player
@@ -371,6 +464,9 @@ export const AREA_KINDS = [
   'entropyHex',       // Entropy Hex: the cursed circle for its duration
   'witherField',      // Wither Field: the rotting zone for its duration
   'immolationSigil',  // Immolation Sigil: the brand's telegraph; the pillar erupts when it resolves
+  // Flagship augments (power rework SK5): the player's ground effects that hurt monsters only
+  'frostGround',      // Frost Comb: chilling ground left by Glacial Spikes
+  'staticField',      // Thunder Mark: a shocking static field left by a Storm Call strike
 ] as const;
 export type AreaKind = (typeof AREA_KINDS)[number];
 
@@ -624,7 +720,9 @@ export type SimEvent =
   /** A flanking stream group (roadmap 4) just spawned round (x, y), behind `playerId`: the edge warning's cue. */
   | { t: 'flank'; playerId: number; x: number; y: number }
   /** A map event beat: `n` is a per-beat number (step index, resonance, grade). */
-  | { t: 'mapEvent'; kind: import('./map-events').MapEventKind; beat: import('./map-events').MapEventBeat; x: number; y: number; n: number };
+  | { t: 'mapEvent'; kind: import('./map-events').MapEventKind; beat: import('./map-events').MapEventBeat; x: number; y: number; n: number }
+  /** A flagship augment's cue (power rework SK5): a lodge sticking, a detonation, a split, a mark, an on-kill explosion, a burst. */
+  | { t: 'augment'; playerId: number; fx: AugmentFx; x: number; y: number; radius: number; damageType: DamageType };
 
 // ---------------------------------------------------------------------------
 // Outcomes (authoritative; never dropped; consumed by the app)

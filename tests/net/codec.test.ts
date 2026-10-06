@@ -640,6 +640,8 @@ describe('snapshot codec: bestiary rosters and player debuffs', () => {
       'stormStrike', 'rendStrike', 'echoMark', 'faultWedge', 'voidTide', 'stormCall', 'frostSpike',
       // Roster batch 2 (power rework SK3)
       'gravityWell', 'entropyHex', 'witherField', 'immolationSigil',
+      // Flagship augments (power rework SK5)
+      'frostGround', 'staticField',
     ]);
   });
 

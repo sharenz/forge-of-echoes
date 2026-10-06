@@ -2,6 +2,7 @@
 // Runtime state (CharacterSave, MapItem…) stores only ids + rolled numbers; everything else lives here.
 import type { SkillInfo, MapBaseInfo } from '../../contracts/game';
 import type { ModifierMode, StatId } from '../../contracts/items';
+import type { AugmentRuntime } from '../../contracts/sim';
 import type {
   Attribute, CurrencyId, DamageType, FlaskId, ItemClass, MapBaseId, MonsterKind, PlayerFlag,
 } from '../../contracts/content';
@@ -86,7 +87,8 @@ export type SkillEmitter = 'projectile' | 'burst' | 'strike' | 'zone' | 'chain' 
 
 /** Runtime fields an augment can change before player modifiers apply (base numbers of the skill at its rank). */
 export type AugmentStat =
-  | 'castTime' | 'cooldown' | 'range' | 'radius' | 'spread' | 'focusCost' | 'distance' | 'duration' | 'damageReductionCap' | 'charges';
+  | 'castTime' | 'cooldown' | 'range' | 'radius' | 'spread' | 'focusCost' | 'distance' | 'duration' | 'damageReductionCap' | 'charges'
+  | 'projectileSpeed';
 
 /** Primitives of the behaviour grammar that have no executor yet (SK5/SK6): an augment using one is listed but not pickable. */
 export type PlannedPrimitive =
@@ -123,6 +125,25 @@ export type AugmentEffect =
   | { k: 'flag'; flag: string }
   /** A behaviour number of the skill's own primitives (SkillPrimitives) gains `add` (Napalm, Withering Touch, Ricochet Storm…). */
   | { k: 'tune'; key: TuneKey; add: number }
+  /** The skill's ailment chance gains `add` percentage points (Searing Brand's +25% ignite chance). */
+  | { k: 'ailmentChance'; add: number }
+  /**
+   * A flagship primitive (SK5) whose numbers are shares, radii and seconds: handed to the executor as is, so the tooltip text and
+   * the sim read the same data (tests compare them).
+   */
+  | { k: 'rt'; rt: AugmentRuntime }
+  /** `pct`% of the hit is converted to `to`; the hit takes both types' modifiers (power-curve.md 3.2). See AugmentRuntime 'convert'. */
+  | { k: 'convert'; to: DamageType; pct: number; ailment: 'keep' | 'always' | 'instead' | 'decay'; decay?: number }
+  /** An extra burst of `effectiveness` × spell power (the skill's modifiers apply) in `radius`; see AugmentRuntime 'blast'. */
+  | {
+    k: 'blast'; at: 'origin' | 'landing' | 'wardEnd' | 'orbEnd' | 'final' | 'rowEnd'; delay: number; effectiveness: number; radius: number;
+    damageType?: DamageType; ailment: number;
+  }
+  /** Ground left behind dealing `effectiveness` × spell power per `interval` s (0 = none); see AugmentRuntime 'trail'. */
+  | {
+    k: 'trail'; area: 'fireTrail' | 'frostGround' | 'staticField'; at: 'path' | 'end' | 'strike' | 'land'; radius: number; duration: number;
+    interval: number; effectiveness: number; damageType?: DamageType; ailment: boolean; expose: number; spacing: number;
+  }
   /** A primitive whose executor ships later; `note` says what it will do. */
   | { k: 'planned'; primitive: PlannedPrimitive; note?: string };
 

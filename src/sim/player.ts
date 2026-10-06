@@ -21,6 +21,7 @@ import { clamp, dirFromVector, finiteOr } from './math';
 import { CAST_SLOW, combineSlow, playerFlowDrift, playerSlow, readMove, resolvePlayerAt, slowedSpeed } from './movement';
 import { releaseSkill, tickFireTrail, tickPendingNovas, tickPendingStrikes, tickRoster2, tickSelfBuffs, tickWard } from './skills';
 import { MFLAG, MSTATE } from './stores';
+import { castCost, noteCast } from './skills/primitives/state';
 import type { FlaskState, PlayerState, SkillChargeState, World } from './world';
 
 function maxCharges(def: SkillRuntimeDef): number {
@@ -253,8 +254,13 @@ function tickCharges(p: PlayerState): void {
   }
 }
 
-function canAfford(p: PlayerState, def: SkillRuntimeDef): boolean {
-  return p.focus + 1e-9 >= Math.max(0, def.focusCost);
+/** Focus a cast costs now: the def's cost, unless an augment makes it cheaper (power rework SK5: Rift Echo, Charged Reprieve). */
+function costOf(p: PlayerState, def: SkillRuntimeDef, now: number): number {
+  return castCost(p, def, now);
+}
+
+function canAfford(p: PlayerState, def: SkillRuntimeDef, now: number): boolean {
+  return p.focus + 1e-9 >= costOf(p, def, now);
 }
 
 function updateCasting(w: World, p: PlayerState): void {
@@ -289,14 +295,16 @@ function updateCasting(w: World, p: PlayerState): void {
     // Only one timed cast at a time, but any skill may cut short the (free) basic attack.
     if (!instant && p.cast && !(p.cast.def.id === 'emberLance' && id !== 'emberLance')) continue;
     if (ch.charges < 1) continue;
-    if (!canAfford(p, def)) {
+    if (!canAfford(p, def, w.time)) {
       if (!p.prevHeld[slot] || p.focusWarnCd <= 0) {
         w.events.push({ t: 'notEnoughFocus', playerId: p.id });
         p.focusWarnCd = NOT_ENOUGH_FOCUS_REPEAT;
       }
       continue;
     }
-    p.focus -= Math.max(0, def.focusCost);
+    const paid = costOf(p, def, w.time);
+    p.focus -= paid;
+    noteCast(p, def, paid, w.time);
     if (def.cooldown > 0) {
       ch.charges--;
       if (ch.timer <= 0) ch.timer = def.cooldown;
@@ -631,7 +639,8 @@ export function writePlayerView(p: PlayerState): void {
     sv.charges = ch.charges;
     sv.maxCharges = maxCharges(def);
     sv.focusCost = def.focusCost;
-    sv.usable = !p.dead && ch.charges >= 1 && canAfford(p, def);
+    // The view has no clock: a free use (Rift Echo) is not foreseen here, a discount is.
+    sv.usable = !p.dead && ch.charges >= 1 && canAfford(p, def, Infinity);
   }
   for (let k = 0; k < BELT_SLOTS; k++) {
     const f = p.flasks[k];

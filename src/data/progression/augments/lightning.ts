@@ -6,7 +6,7 @@ export const LIGHTNING_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
   arcChain: [
     {
       id: 'forkingArc', name: 'Forking Arc', tier: 1, text: 'At the last link the bolt forks into 2 branches of 3 links at 50% damage',
-      excludes: ['longReach', 'overcharge'], effects: [{ k: 'planned', primitive: 'fork' }],
+      excludes: ['longReach', 'overcharge'], effects: [{ k: 'rt', rt: { p: 'fork', branches: 2, links: 3, share: 0.5, jump: 0 } }],
     },
     {
       id: 'longReach', name: 'Long Reach', tier: 1, text: '50% longer jumps and 2 more chains, 10% less damage', excludes: ['forkingArc'],
@@ -14,19 +14,20 @@ export const LIGHTNING_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     },
     {
       id: 'conductiveMark', name: 'Conductive Mark', tier: 2, text: 'The first target is marked for 3 seconds: it takes 15% more damage and +30% shock chance',
-      effects: [{ k: 'planned', primitive: 'mark' }],
+      effects: [{ k: 'rt', rt: { p: 'mark', seconds: 3, taken: 0.15, shock: 0.3, chill: false, first: true } }],
     },
     {
       id: 'overcharge', name: 'Overcharge', tier: 2, text: 'Each jump deals 12% more than the last, starting 20% lower', excludes: ['forkingArc'],
-      effects: [{ k: 'planned', primitive: 'mark', note: 'ramping jumps' }],
+      effects: [{ k: 'rt', rt: { p: 'ramp', start: -0.2, step: 0.12 } }],
     },
     {
       id: 'stormReturn', name: 'Storm Return', tier: 3, text: 'The final link returns to the first target for a second hit at 80%',
-      effects: [{ k: 'planned', primitive: 'return' }],
+      effects: [{ k: 'rt', rt: { p: 'return', share: 0.8 } }],
     },
     {
-      id: 'staticDischarge', name: 'Static Discharge', tier: 3, text: 'Enemies killed while Shocked explode for 150% of the hit as lightning in a radius of 60',
-      effects: [{ k: 'planned', primitive: 'onKill' }],
+      id: 'staticDischarge', name: 'Static Discharge', tier: 3,
+      text: 'Enemies killed while Shocked explode for 150% of the hit as lightning in a radius of 60 (at most 3 deep)',
+      effects: [{ k: 'rt', rt: { p: 'onKill', of: 'hit', share: 1.5, radius: 60, damageType: 'lightning', needs: 'shocked', depth: 3 } }],
     },
   ],
   spark: [
@@ -58,16 +59,19 @@ export const LIGHTNING_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     },
     {
       id: 'thunderMark', name: 'Thunder Mark', tier: 2, text: 'Each strike leaves a static field for 3 seconds (0.4× effectiveness per 0.5 seconds, shocks)',
-      excludes: ['tetheredStrikes'], effects: [{ k: 'planned', primitive: 'trail' }],
+      excludes: ['tetheredStrikes'],
+      effects: [{
+        k: 'trail', area: 'staticField', at: 'strike', radius: 0, duration: 3, interval: 0.5, effectiveness: 0.4, ailment: true, expose: 0, spacing: 0,
+      }],
     },
     {
       id: 'eyeOfTheStorm', name: 'Eye of the Storm', tier: 3,
       text: '1 second after the last strike a final strike lands at the cursor for 3× effectiveness in a radius of 60',
-      effects: [{ k: 'planned', primitive: 'delay' }],
+      effects: [{ k: 'blast', at: 'final', delay: 1, effectiveness: 3, radius: 60, ailment: 0 }],
     },
     {
-      id: 'conduction', name: 'Conduction', tier: 3, text: 'Each strike chains to 1 nearby enemy at 60%; 20% less damage',
-      effects: [{ k: 'planned', primitive: 'fork', note: 'chain from strike' }],
+      id: 'conduction', name: 'Conduction', tier: 3, text: 'Each strike chains to 1 enemy within 90 units at 60%; 20% less damage',
+      effects: [{ k: 'rt', rt: { p: 'fork', branches: 1, links: 1, share: 0.6, jump: 90 } }, { k: 'more', pct: -20 }],
     },
   ],
   // Roster batch 2 (SK3), skills.md 6

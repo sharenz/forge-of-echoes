@@ -13,7 +13,7 @@ import { ATLAS_AREA_IDS } from '../contracts/atlas';
 import { MAP_TREE_NODE_IDS } from '../data/progression/map-tree';
 import { ATLAS_KEYS } from '../data/progression/atlas';
 import { GUIDE_HINT_IDS, GUIDE_OPS, GUIDE_PROPS, GUIDE_STEP_IDS } from '../contracts/guide';
-import { ATTRIBUTES, EQUIP_SLOTS, ITEM_CLASSES, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
+import { ATTRIBUTES, DAMAGE_TYPES, EQUIP_SLOTS, ITEM_CLASSES, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
 import {
   BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_PRESETS, LOADOUT_SLOTS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
 } from '../contracts/items';
@@ -21,7 +21,7 @@ import type { ItemLocation, SpecialStashTab } from '../contracts/items';
 import { TRADE_MAX_ITEMS } from '../contracts/net';
 import type { ClientMessage, Command, ServerMessage } from '../contracts/net';
 import { MAP_EVENT_BEATS, MAP_EVENT_KINDS } from '../contracts/map-events';
-import { AREA_KINDS, PROJECTILE_KINDS } from '../contracts/sim';
+import { AREA_KINDS, AUGMENT_FX, PROJECTILE_KINDS } from '../contracts/sim';
 import type { SimEvent } from '../contracts/sim';
 import { HELD_MASK_ALL } from './input';
 import { PROP_KIND_CODES } from './protocol';
@@ -55,7 +55,7 @@ export const SIM_EVENT_TYPES = [
   'cast', 'nova', 'dash', 'ward', 'chain', 'hit', 'evade', 'projectileEnd', 'death', 'monsterAttack', 'debuff',
   'cleanse', 'blocked', 'pull', 'monsterSpawn', 'ailment', 'areaResolve', 'dropSpawn', 'pickup', 'mote', 'flask',
   'waveTell', 'waveStart', 'bossSpawn', 'bossPhase', 'cleared', 'chestOpen', 'portal', 'playerDeath', 'playerJoin',
-  'notEnoughFocus', 'mapEvent', 'flank', 'buff',
+  'notEnoughFocus', 'mapEvent', 'flank', 'buff', 'augment',
 ] as const satisfies readonly SimEvent['t'][];
 
 type MonsterAttack = Extract<SimEvent, { t: 'monsterAttack' }>['attack'];
@@ -665,6 +665,10 @@ function simEvent(e: unknown): void {
       break;
     case 'areaResolve':
       oneOf(e.kind, 'areaResolve.kind', AREA_KINDS);
+      break;
+    case 'augment':
+      oneOf(e.fx, 'augment.fx', AUGMENT_FX);
+      oneOf(e.damageType, 'augment.damageType', DAMAGE_TYPES);
       break;
     case 'flank':
       int(e.playerId, 'flank.playerId', 0, 255);

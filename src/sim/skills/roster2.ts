@@ -16,6 +16,7 @@ import type { PlayerState, SkillArea, World } from '../world';
 import { blastAt } from './roster';
 import { tickDefence } from './defence';
 import { augmentOf, hasFlag } from './projectile-mods';
+import { explodeVictim, prim } from './primitives';
 import type { ConeBehaviour, LashBehaviour, PillarBehaviour, PulseBehaviour, ZoneBehaviour } from './types';
 
 const DT_FIRE = DAMAGE_INDEX.fire;
@@ -207,6 +208,8 @@ export function emitCone(w: World, p: PlayerState, def: SkillRuntimeDef, b: Cone
   const m = w.monsters;
   const half = def.spread / 2;
   const dtype = DAMAGE_INDEX[def.damageType];
+  // Shatter (SK5 onKill): kills explode.
+  const shatter = def.augments ? prim(def, 'onKill') : undefined;
   for (const i of inside(w, p.x, p.y, def.range)) {
     const dx = m.x[i] - p.x;
     const dy = m.y[i] - p.y;
@@ -216,7 +219,11 @@ export function emitCone(w: World, p: PlayerState, def: SkillRuntimeDef, b: Cone
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       if (Math.abs(diff) > half + Math.asin(Math.min(1, m.radius[i] / d))) continue;
     }
-    damageMonster(w, i, def.damage, dtype, def.critChance, def.critMultiplier, def.ailmentChance, dx, dy, b.knock, true, p.id);
+    const victim = shatter
+      ? { id: m.id[i], x: m.x[i], y: m.y[i], maxLife: m.maxLife[i], shocked: m.shockTime[i] > 0, chilled: m.chillTime[i] > 0 }
+      : null;
+    const killed = damageMonster(w, i, def.damage, dtype, def.critChance, def.critMultiplier, def.ailmentChance, dx, dy, b.knock, true, p.id);
+    if (killed && shatter && victim) explodeVictim(w, p.id, shatter, victim, def.damage);
   }
 }
 

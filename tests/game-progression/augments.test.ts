@@ -19,6 +19,40 @@ function withSkills(ranks: Partial<Record<SkillId, number>>, extra: Partial<Char
 const model = buildPlayerModel(bareCharacter({ level: 30 }));
 const rt = (id: SkillId, rank: number, augs: string[] = []) => resolveSkill(model, id, rank, augs);
 
+/** The augments SK5 turned on (flagship primitives), in tree order per skill. */
+const SK5_LIVE = [
+  'emberLance.lodgeEmber', 'emberLance.cinderFragments', 'emberLance.frostfireCore', 'emberLance.searingBrand',
+  'emberNova.spiralArms', 'emberNova.kilnRing', 'emberNova.tripleRing', 'emberNova.heartfire',
+  'flameWave.burningWake', 'flameWave.tideReturns', 'flameWave.overheat', 'flameWave.slowTide',
+  'rimeShards.brittleShards', 'rimeShards.splintering', 'rimeShards.lodgedIce', 'rimeShards.invertedHeat',
+  'arcChain.forkingArc', 'arcChain.conductiveMark', 'arcChain.overcharge', 'arcChain.stormReturn', 'arcChain.staticDischarge',
+  'riftStep.afterimage', 'riftStep.riftEcho', 'riftStep.staticArrival', 'riftStep.phaseWeave',
+  'cinderWard.pyreBurst', 'cinderWard.hardenedEmber',
+  'glacialNova.freezingCore', 'glacialNova.shatter',
+  'cinderMortar.clusterShell', 'cinderMortar.delayedFuse', 'cinderMortar.skipShot', 'cinderMortar.magmaCore', 'cinderMortar.rainOfShells',
+  'arcaneReprieve.chargedReprieve',
+  'umbralBolt.hollowShell', 'umbralBolt.entropicSplit', 'umbralBolt.voidExposure', 'umbralBolt.soulbindLodge',
+  'kineticLance.shatterRounds', 'kineticLance.voidConvert', 'kineticLance.pinning',
+  'frostOrb.shatter', 'frostOrb.frozenHeart', 'frostOrb.staticFrost',
+  'stormCall.thunderMark', 'stormCall.eyeOfTheStorm', 'stormCall.conduction',
+  'glacialSpikes.frostComb', 'glacialSpikes.shatteringRows',
+  // An SK3 augment that waited on an SK5 primitive (onKill).
+  'concussiveBlast.shatter',
+];
+
+/** Augments still waiting for a primitive (sorted). */
+const STILL_PLANNED = [
+  'concussiveBlast.crushingForce', 'entropyHex.sharedPain', 'entropyHex.witherSpread', 'frostOrb.heavyChill', 'frostOrb.orbit',
+  'kineticLance.armourPiercing', 'kineticLance.heavyImpact', 'umbralBolt.gravitySeed', 'voltaicPulse.overload',
+];
+
+/** Position of `skill.augment` in SKILL_IDS order, then tree order (how the live list is enumerated). */
+function order(key: string): number {
+  const [skill, aug] = key.split('.');
+  const id = skill as (typeof SKILL_IDS)[number];
+  return SKILL_IDS.indexOf(id) * 100 + SKILLS[id].augmentDefs.findIndex((a) => a.id === aug);
+}
+
 describe('skill points', () => {
   it('total 1 + 2 (L − 1): L10 19, L20 39, L40 79, L80 159', () => {
     expect([1, 10, 20, 40, 80].map((l) => rules.skillPointsTotal(l))).toEqual([1, 19, 39, 79, 159]);
@@ -72,7 +106,8 @@ describe('augment data', () => {
   it('exposes tier, cost and rank gate to the UI, and only primitives the executor handles become runtime augments', () => {
     const info = rules.content.skills.emberLance.augments;
     expect(info.find((a) => a.id === 'piercingFlame')).toMatchObject({ tier: 1, cost: 1, rankRequired: 2, available: true });
-    expect(info.find((a) => a.id === 'searingBrand')).toMatchObject({ tier: 3, cost: 2, rankRequired: 8, available: false });
+    expect(info.find((a) => a.id === 'searingBrand')).toMatchObject({ tier: 3, cost: 2, rankRequired: 8, available: true });
+    expect(rules.content.skills.kineticLance.augments.find((a) => a.id === 'heavyImpact')).toMatchObject({ tier: 1, available: false });
     expect(AUGMENT_RULES.tierRank).toEqual({ 1: 2, 2: 5, 3: 8 });
     for (const id of SKILL_IDS) {
       for (const a of SKILLS[id].augmentDefs.filter(augmentAvailable)) {
@@ -82,7 +117,7 @@ describe('augment data', () => {
     }
   });
 
-  it('has 59 augments live (17 of SK0, 17 of the SK2 roster, 25 of the SK3 roster); the rest wait for their primitives', () => {
+  it('has 110 augments live (17 of SK0, 17 of the SK2 roster, 25 of the SK3 roster, 51 of SK5); the rest wait for their primitives', () => {
     const live = SKILL_IDS.flatMap((id) => SKILLS[id].augmentDefs.filter(augmentAvailable).map((a) => `${id}.${a.id}`));
     expect(live).toEqual([
       'emberLance.piercingFlame', 'emberLance.twinStrand', 'emberLance.rapidSpark',
@@ -114,7 +149,12 @@ describe('augment data', () => {
       'staticLash.arcLash', 'staticLash.rapidLash', 'staticLash.tetheredChain',
       'echoSigil.tripleEcho', 'echoSigil.quickEcho', 'echoSigil.costless',
       'witherField.hollowGround', 'witherField.rottingFields', 'witherField.lingeringWither',
-    ]);
+    ].concat(SK5_LIVE).sort((a, b) => order(a) - order(b)));
+  });
+
+  it('keeps planned only the augments whose primitive is still missing (knockback, armour, chill effect, orbit, pull, SK3 waits)', () => {
+    const planned = SKILL_IDS.flatMap((id) => SKILLS[id].augmentDefs.filter((a) => !augmentAvailable(a)).map((a) => `${id}.${a.id}`));
+    expect(planned.sort()).toEqual(STILL_PLANNED);
   });
 });
 
@@ -138,8 +178,8 @@ describe('picking augments', () => {
     const ch = withSkills({ emberLance: 10 }, { unspentSkillPoints: 9, augments: { emberLance: ['twinStrand'] } });
     expect(rules.canPickAugment(ch, 'emberLance', 'rapidSpark').reason).toBe('Rapid Spark cannot be combined with Twin Strand.');
     expect(rules.canPickAugment(ch, 'emberLance', 'nope').reason).toBe('Ember Lance has no such augment.');
-    expect(rules.canPickAugment(ch, 'emberLance', 'lodgeEmber').reason).toBe('Lodge Ember arrives in a later update.');
-    expect(expectErr(rules.pickAugment(ch, 'emberLance', 'searingBrand'))).toMatch(/later update/);
+    expect(rules.canPickAugment(ch, 'kineticLance', 'heavyImpact').reason).toBe('Heavy Impact arrives in a later update.');
+    expect(expectErr(rules.pickAugment(ch, 'umbralBolt', 'gravitySeed'))).toMatch(/later update/);
   });
 
   it('keeps picks in tree order', () => {
@@ -162,7 +202,7 @@ describe('resolving augments', () => {
     expect(rapid.castTime).toBeCloseTo(base.castTime * 0.82, 10);
     expect(rapid.damage).toBeCloseTo(base.damage * 0.92, 10);
     // An augment that was not picked, or an unknown id, changes nothing.
-    expect(rt('emberLance', 5, ['lodgeEmber', 'bogus']).runtime).toEqual(base);
+    expect(rt('emberLance', 5, ['heavyImpact', 'bogus']).runtime).toEqual(base);
   });
 
   it('Ember Nova: Wider Ring, Ember Fan (a 120° fan the sim reads) and Echoing Ring (70%, counted in the estimates)', () => {

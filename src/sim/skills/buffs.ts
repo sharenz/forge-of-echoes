@@ -8,6 +8,7 @@ import { DT, WARD_PULSE_INTERVAL, WARD_RADIUS, WARD_REDUCTION_CAP } from '../con
 import { DAMAGE_INDEX, clamp } from '../math';
 import type { PlayerState, World } from '../world';
 import { augmentOf, hasFlag } from './projectile-mods';
+import { augPlayer, prim, wardCapOf, wardCast, wardEnded } from './primitives';
 import type { RestoreBehaviour, StrideBehaviour, WardBehaviour } from './types';
 
 export function emitWard(w: World, p: PlayerState, def: SkillRuntimeDef, b: WardBehaviour): void {
@@ -15,7 +16,9 @@ export function emitWard(w: World, p: PlayerState, def: SkillRuntimeDef, b: Ward
   const duration = def.duration > 0 ? def.duration : b.duration;
   ward.time = duration;
   ward.duration = duration;
-  ward.reduction = clamp(def.damageReduction, 0, WARD_REDUCTION_CAP);
+  // Hardened Ember raises the cap (SK5); wardCast also remembers Pyre Burst for when the ward ends.
+  wardCast(p, def);
+  ward.reduction = clamp(def.damageReduction, 0, wardCapOf(p, WARD_REDUCTION_CAP));
   ward.pulse = WARD_PULSE_INTERVAL * 0.5;
   ward.damage = def.damage;
   ward.critChance = def.critChance;
@@ -50,6 +53,14 @@ export function emitRestore(w: World, p: PlayerState, def: SkillRuntimeDef, b: R
   p.restore.focusRate = s ? (Math.max(0, s.focus) * p.stats.maxFocus) / duration : 0;
   p.restore.lifeRate = s ? (Math.max(0, s.life) * p.stats.maxLife) / duration : 0;
   cleanseDebuffs(w, p, REPRIEVE_CLEANSE);
+  // Charged Reprieve (SK5): the next casts cost less.
+  const cheap = def.augments ? prim(def, 'cheapCasts') : undefined;
+  if (cheap) {
+    const st = augPlayer(p);
+    st.cheapLeft = cheap.casts;
+    st.cheapPct = cheap.pct;
+    st.cheapFrom = def.id;
+  }
   w.events.push({ t: 'buff', playerId: p.id, skill: def.id, x: p.x, y: p.y, duration });
 }
 
@@ -72,6 +83,7 @@ export function tickWard(w: World, p: PlayerState): void {
   ward.time -= DT;
   if (ward.time <= 0) {
     ward.time = 0;
+    wardEnded(w, p); // Pyre Burst (SK5)
     return;
   }
   ward.pulse -= DT;

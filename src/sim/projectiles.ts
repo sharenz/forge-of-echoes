@@ -27,7 +27,7 @@ import { spawnArea } from './areas';
 import { applyDecay, damageMonster, hitPlayer, isHittable } from './combat';
 import { CHAIN_PULL_DISTANCE, DT, PLAYER_RADIUS, SPIT_SPLASH_RADIUS, TAR_POOL_DURATION, TAR_POOL_RADIUS } from './constants';
 import { ROOT_SOURCES } from './debuffs';
-import { projectileEffect } from './effects';
+import { projectileEffect, type MonsterHitInfo } from './effects';
 import { coverHit, coverNormal, coverNormalOut } from './cover';
 import { sweepCircle } from './math';
 import { pullPlayer } from './player';
@@ -241,6 +241,9 @@ function land(w: World, i: number, x: number, y: number): void {
   fx?.onLand?.(w, i, x, y);
 }
 
+/** The shared hit description handed to onMonsterHit (player projectiles with an effect only). */
+const HIT_INFO: MonsterHitInfo = { id: 0, x: 0, y: 0, maxLife: 0, shocked: false, chilled: false, igniteDps: 0, killed: false };
+
 export function updateProjectiles(w: World): void {
   const pr = w.projectiles;
   if (pr.count === 0) return;
@@ -313,6 +316,7 @@ export function updateProjectiles(w: World): void {
         (ax < bx ? ax : bx) - pad, (ay < by ? ay : by) - pad, (ax > bx ? ax : bx) + pad, (ay > by ? ay : by) + pad, cand,
       );
       const rehit = pr.rehit[i];
+      const pfx = pr.effect[i] > 0 ? projectileEffect(pr.effect[i]) : undefined;
       // Gather every contact along this tick's segment, then resolve them in travel order.
       let hits = 0;
       for (let k = 0; k < n; k++) {
@@ -325,6 +329,7 @@ export function updateProjectiles(w: World): void {
           const last = pr.lastHitAge(i, m.id[j]);
           if (last >= 0 && pr.age[i] - last < rehit) continue;
         } else if (pr.hasHit(i, m.id[j])) continue;
+        if (pfx?.canHit && !pfx.canHit(w, i, j)) continue;
         // insertion sort by t (hit lists per tick are tiny)
         let h = hits++;
         while (h > 0 && hitT[h - 1] > t) {
@@ -347,9 +352,22 @@ export function updateProjectiles(w: World): void {
           break;
         }
         pr.recordHit(i, m.id[j]);
-        damageMonster(w, j, pr.damage[i], pr.dtype[i], pr.critChance[i], pr.critMult[i], pr.ailmentChance[i], vx, vy, pr.knock[i], true, pr.owner[i],
+        const info = pfx?.onMonsterHit ? HIT_INFO : null;
+        if (info) {
+          info.id = m.id[j]; info.x = m.x[j]; info.y = m.y[j]; info.maxLife = m.maxLife[j];
+          info.shocked = m.shockTime[j] > 0; info.chilled = m.chillTime[j] > 0; info.igniteDps = m.igniteDps[j];
+        }
+        const killed = damageMonster(w, j, pr.damage[i], pr.dtype[i], pr.critChance[i], pr.critMult[i], pr.ailmentChance[i], vx, vy, pr.knock[i], true, pr.owner[i],
           pr.convShare[i] > 0 ? pr.convTo[i] : -1, pr.convShare[i]);
         if (pr.decay[i] > 0) applyDecay(w, j, pr.damage[i], pr.decay[i], pr.owner[i]);
+        if (info) {
+          info.killed = killed;
+          if (pfx!.onMonsterHit!(w, i, j, info) === true) {
+            endT = hitT[k];
+            ended = true;
+            break;
+          }
+        }
         const pierce = pr.pierce[i];
         if (pierce === 0) {
           endT = hitT[k];
@@ -369,6 +387,7 @@ export function updateProjectiles(w: World): void {
           pr.bounce[i]--;
         } else ended = true;
       }
+      if (ended && pfx?.onEnd) pfx.onEnd(w, i, ax + (bx - ax) * endT, ay + (by - ay) * endT);
     }
 
     if (!pr.alive[i]) continue; // an effect removed it
@@ -391,7 +410,9 @@ export function updateProjectiles(w: World): void {
     }
     if (ended) endProjectile(w, i);
     else if ((flight <= 0 && pr.range[i] <= 0) || nx * nx + ny * ny > outR2) {
-      if (pr.effect[i] > 0) projectileEffect(pr.effect[i])?.onExpire?.(w, i);
+      const fx = pr.effect[i] > 0 ? projectileEffect(pr.effect[i]) : undefined;
+      if (fx?.onExpire?.(w, i) === true && pr.alive[i]) continue;
+      if (pr.alive[i] && !pr.hostile[i] && fx?.onEnd) fx.onEnd(w, i, pr.x[i], pr.y[i]);
       if (pr.alive[i]) endProjectile(w, i);
     }
   }

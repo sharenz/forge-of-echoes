@@ -36,6 +36,7 @@ import { LIGHT_CAPS, lightInView, type FrameCtx } from './context';
 import { clamp01, hash1, TAU } from './math';
 import { MonsterNameCache } from './names';
 import type { Pen } from './pen';
+import { drawAugmentStatus } from './skills/augments';
 import type { Hotspots, SpriteMeta, SpriteTable } from './sprites';
 
 const ANIM_COUNT = 6;
@@ -653,6 +654,8 @@ export class MonsterPainter {
         sh.thickness = 1;
         r.ring(x, midY, m.radius[i] + 5, sh);
       }
+      // Flagship augments (SK5): lodged projectiles, a skill mark.
+      drawAugmentStatus(pen, f, x, y, h, m.radius[i], ail, this.phase[i]);
 
       // Rising motes: gold for rare leaders, the boss's and lieutenant's own (heat, frost, embers).
       if (isRare && Math.random() < fxDt * 3) {

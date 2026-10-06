@@ -6,7 +6,7 @@ export const COLD_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
   rimeShards: [
     {
       id: 'brittleShards', name: 'Brittle Shards', tier: 1, text: 'Hits expose Cold −12 pp for 4 seconds (half on bosses)',
-      effects: [{ k: 'planned', primitive: 'expose' }],
+      effects: [{ k: 'rt', rt: { p: 'expose', points: [0, 0, 12, 0, 0] } }],
     },
     {
       id: 'hoarfrostSpread', name: 'Hoarfrost Spread', tier: 1, text: '2 more shards in a 50% wider fan, each 15% less damage',
@@ -15,16 +15,17 @@ export const COLD_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     {
       id: 'splintering', name: 'Splintering', tier: 2,
       text: 'At the end of its flight (range or wall) a shard bursts into 3 splinters dealing 40% damage (range 90)', excludes: ['lodgedIce'],
-      effects: [{ k: 'planned', primitive: 'split' }],
+      effects: [{ k: 'rt', rt: { p: 'split', on: 'end', count: 3, share: 0.4, range: 90, arc: 0, seek: 0 } }],
     },
     {
       id: 'lodgedIce', name: 'Lodged Ice', tier: 2,
-      text: 'Shards stick in the first enemy hit; 3 lodged shards (or 1 second) detonate for 150% each in a radius of 40', excludes: ['splintering'],
-      effects: [{ k: 'planned', primitive: 'lodge' }],
+      text: 'Shards stick in the first enemy hit; 3 lodged shards (or 1 second) detonate for 150% each in a radius of 40; at most 8 lodged',
+      excludes: ['splintering'],
+      effects: [{ k: 'rt', rt: { p: 'lodge', share: 1.5, radius: 40, fuse: 1, burst: 3, max: 8 } }],
     },
     {
       id: 'invertedHeat', name: 'Inverted Heat', tier: 3, text: '60% of Cold damage is converted to Fire; hits ignite instead of chilling',
-      effects: [{ k: 'planned', primitive: 'convert' }],
+      effects: [{ k: 'convert', to: 'fire', pct: 60, ailment: 'instead' }],
     },
     {
       id: 'glacialEcho', name: 'Glacial Echo', tier: 3, text: 'Repeats after 0.4 seconds at 60% damage, at no Focus cost', grantedBy: 'rimeEcho',
@@ -38,11 +39,11 @@ export const COLD_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     },
     {
       id: 'freezingCore', name: 'Freezing Core', tier: 2, text: 'Enemies within 40 units of you take 60% more damage from it',
-      effects: [{ k: 'planned', primitive: 'shape', note: 'inner core' }],
+      effects: [{ k: 'rt', rt: { p: 'core', radius: 40, more: 0.6 } }],
     },
     {
       id: 'shatter', name: 'Shatter', tier: 3, text: 'Chilled enemies it kills explode for 10% of their life as cold in a radius of 40',
-      effects: [{ k: 'planned', primitive: 'onKill' }],
+      effects: [{ k: 'rt', rt: { p: 'onKill', of: 'life', share: 0.1, radius: 40, damageType: 'cold', needs: 'chilled', depth: 1 } }],
     },
   ],
   frostOrb: [
@@ -60,16 +61,19 @@ export const COLD_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     },
     {
       id: 'shatter', name: 'Shatter', tier: 2, text: 'When it expires the orb bursts for 4× effectiveness as cold in a radius of 70',
-      excludes: ['frozenHeart'], effects: [{ k: 'planned', primitive: 'onKill', note: 'on expiry' }],
+      excludes: ['frozenHeart'],
+      effects: [{ k: 'blast', at: 'orbEnd', delay: 0, effectiveness: 4, radius: 70, damageType: 'cold', ailment: 0 }],
     },
     {
-      id: 'frozenHeart', name: 'Frozen Heart', tier: 3, text: 'Hovers at the cursor for 7 seconds and fires twice as fast, 20% less damage',
-      excludes: ['orbit', 'shatter'], effects: [{ k: 'planned', primitive: 'shape', note: 'stationary' }],
+      id: 'frozenHeart', name: 'Frozen Heart', tier: 3,
+      text: 'Hovers at the cursor (up to 300 units away) for 7 seconds and fires twice as fast, 20% less damage',
+      excludes: ['orbit', 'shatter'],
+      effects: [{ k: 'set', stat: 'duration', value: 7 }, { k: 'rt', rt: { p: 'hover', rate: 2 } }, { k: 'more', pct: -20 }],
     },
     {
       id: 'staticFrost', name: 'Static Frost', tier: 3,
-      text: '40% of Cold damage is converted to Lightning; shards chain once and shock instead of chilling',
-      effects: [{ k: 'planned', primitive: 'convert' }],
+      text: '40% of Cold damage is converted to Lightning; shards chain once (to an enemy within 90 units) and shock instead of chilling',
+      effects: [{ k: 'convert', to: 'lightning', pct: 40, ailment: 'instead' }, { k: 'rt', rt: { p: 'fork', branches: 1, links: 1, share: 1, jump: 90 } }],
     },
   ],
   glacialSpikes: [
@@ -79,11 +83,13 @@ export const COLD_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     },
     {
       id: 'frostComb', name: 'Frost Comb', tier: 2, text: 'Spikes leave chilling ground for 3 seconds',
-      effects: [{ k: 'planned', primitive: 'trail' }],
+      effects: [{
+        k: 'trail', area: 'frostGround', at: 'strike', radius: 0, duration: 3, interval: 0.5, effectiveness: 0, ailment: true, expose: 0, spacing: 0,
+      }],
     },
     {
       id: 'shatteringRows', name: 'Shattering Rows', tier: 3, text: 'The last spike of a row explodes for 2× effectiveness in a radius of 40',
-      effects: [{ k: 'planned', primitive: 'delay', note: 'end burst' }],
+      effects: [{ k: 'blast', at: 'rowEnd', delay: 0, effectiveness: 2, radius: 40, ailment: 0 }],
     },
   ],
   // Roster batch 2 (SK3), skills.md 6

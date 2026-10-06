@@ -183,12 +183,18 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
 
   const type = skillId === 'cinderWard' && flags.includes('cold') ? 'cold' : def.runtimeDamageType;
 
-  // Damage
+  // Damage. A converted skill (SK5: Frostfire Core, Inverted Heat, Void Convert) takes both types' modifiers (power-curve.md 3.2).
   const effectiveness = rv(def.effectiveness);
-  const damageMods = model.of(...damageStatsFor(type, def.tags));
+  const convert = effects.find((e): e is Extract<AugmentEffect, { k: 'convert' }> => e.k === 'convert');
+  const damageMods = model.of(...(convert ? damageStatsFor(convert.to, def.tags, [type]) : damageStatsFor(type, def.tags)));
   const increased = damageMods.filter((m) => m.mode === 'increased').reduce((s, m) => s + m.value, 0);
   let moreRaw = damageMods.filter((m) => m.mode === 'more').reduce((p, m) => p * (1 + m.value / 100), 1);
-  for (const e of effects) if (e.k === 'more') moreRaw *= 1 + e.pct / 100;
+  let augmentMore = 1;
+  for (const e of effects) {
+    if (e.k !== 'more') continue;
+    moreRaw *= 1 + e.pct / 100;
+    augmentMore *= 1 + e.pct / 100;
+  }
   const moreMultiplier = Math.min(MORE_CAP, moreRaw);
   const penetration = penetrationOf(model, type).value;
   const added = model.breakdown('addedSpellDamage', 0).value;
@@ -210,8 +216,9 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const ailmentStat = AILMENT_STAT[type];
   const alwaysAilment = (skillId === 'emberLance' && flags.includes('alwaysIgnite'))
     || (skillId === 'cinderWard' && flags.includes('cold')) || effects.some((e) => e.k === 'alwaysAilment');
+  const ailmentAdd = effects.reduce((s, e) => s + (e.k === 'ailmentChance' ? e.add : 0), 0);
   const ailmentChance = damage > 0 && alwaysAilment ? 1 : damage > 0 && ailmentStat
-    ? clamp(resolveModes(def.ailmentChance, model.of(ailmentStat)) / 100, 0, 1)
+    ? clamp((resolveModes(def.ailmentChance, model.of(ailmentStat)) + ailmentAdd) / 100, 0, 1)
     : 0;
 
   // Shape
@@ -227,8 +234,16 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
     flagTexts.push('Hits deal 25% more damage within 80 units of you, and 25% less beyond 200 units (Victor’s Debt); estimates assume the middle distance');
 
   let baseProjectiles = rv(def.projectiles);
-  for (const e of effects) if (e.k === 'count') baseProjectiles = (baseProjectiles + (e.add ?? 0)) * (e.mult ?? 1);
-  const projectiles = projectileSkill ? Math.max(1, baseProjectiles + extraProjectiles) : baseProjectiles;
+  for (const e of effects) {
+    if (e.k !== 'count') continue;
+    baseProjectiles = (baseProjectiles + (e.add ?? 0)) * (e.mult ?? 1);
+    // A fractional multiplier (Spiral Arms' 130%) rounds to whole flames.
+    if (e.mult !== undefined && !Number.isInteger(e.mult)) baseProjectiles = Math.round(baseProjectiles);
+  }
+  // Triple Ring (SK5): each concentric ring has its own fixed number of flames, without pierce.
+  const ringsEffect = effects.find((e) => e.k === 'rt' && e.rt.p === 'rings');
+  const rings = ringsEffect?.k === 'rt' && ringsEffect.rt.p === 'rings' ? ringsEffect.rt : null;
+  const projectiles = rings ? rings.flames : projectileSkill ? Math.max(1, baseProjectiles + extraProjectiles) : baseProjectiles;
   const augPierce = effects.reduce((s, e) => s + (e.k === 'pierce' ? e.add : 0), 0);
   const augChains = effects.reduce((s, e) => s + (e.k === 'chain' ? e.add : 0), 0);
   const baseChains = Math.max(0, Math.floor(rv(def.chains)) + augChains);
@@ -249,6 +264,28 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   runtimeAugments.push(...primitiveRuntimes(def, effects, damage, effectiveness, runtimeRadius, runtimeDuration));
   // Roster batch 2 (SK3): zones, barrier, aegis, echo buff; `power` is the damage per point of effectiveness.
   runtimeAugments.push(...roster2Runtimes(def, effects, rank, Math.max(0, basePower * Math.max(0, 1 + increased / 100) * moreMultiplier)));
+  // Flagship primitives (SK5): passed through, or resolved from an effectiveness with the skill's own modifiers.
+  const damageFor = (t: DamageType, eff: number): number => {
+    const mods = model.of(...damageStatsFor(t, def.tags));
+    const inc = mods.filter((m) => m.mode === 'increased').reduce((s, m) => s + m.value, 0);
+    const more = mods.filter((m) => m.mode === 'more').reduce((p, m) => p * (1 + m.value / 100), 1) * augmentMore;
+    return Math.max(0, basePower * eff * Math.max(0, 1 + inc / 100) * Math.min(MORE_CAP, more));
+  };
+  for (const e of effects) {
+    if (e.k === 'rt') runtimeAugments.push(e.rt);
+    else if (e.k === 'convert') {
+      runtimeAugments.push({ p: 'convert', to: e.to, share: e.pct / 100, ailment: e.ailment, ...(e.decay !== undefined ? { decay: e.decay } : {}) });
+    } else if (e.k === 'blast') {
+      const t = e.damageType ?? type;
+      runtimeAugments.push({ p: 'blast', at: e.at, delay: e.delay, damage: damageFor(t, e.effectiveness), radius: e.radius, damageType: t, ailment: e.ailment });
+    } else if (e.k === 'trail') {
+      const t = e.damageType ?? type;
+      runtimeAugments.push({
+        p: 'trail', area: e.area, at: e.at, radius: e.radius, duration: e.duration, interval: e.interval,
+        damage: e.effectiveness > 0 ? damageFor(t, e.effectiveness) : 0, damageType: t, ailment: e.ailment, expose: e.expose, spacing: e.spacing,
+      });
+    }
+  }
 
   const spread = fanArc !== null ? fanArc
     : flags.includes('fan') ? UNIQUE_FAN_ARC
@@ -268,8 +305,8 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
     critMultiplier,
     ailmentChance,
     projectiles,
-    pierce: projectileSkill ? rv(def.pierce) + augPierce + extraPierce : rv(def.pierce) + augPierce,
-    projectileSpeed: projectileSkill ? def.projectileSpeed * projSpeedMult : def.projectileSpeed,
+    pierce: rings ? 0 : projectileSkill ? rv(def.pierce) + augPierce + extraPierce : rv(def.pierce) + augPierce,
+    projectileSpeed: projectileSkill ? augmented(effects, 'projectileSpeed', def.projectileSpeed) * projSpeedMult : def.projectileSpeed,
     range: def.areaScales === 'range' ? range * areaRadiusMult : range,
     spread,
     radius: runtimeRadius,
@@ -312,6 +349,12 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
       if (ground && ground.interval > 0) {
         perCast += ground.damage * Math.floor(ground.duration / ground.interval + 1e-9);
         if (dps !== null) dps += (ground.damage / ground.interval) * Math.min(1, ground.duration / interval);
+      }
+      // A lodge detonates once per lodged projectile (SK5).
+      const lodge = runtime.augments?.find((a) => a.p === 'lodge');
+      if (lodge) {
+        perCast += hit * lodge.share * once;
+        if (dps !== null) dps += (hit * lodge.share * singleTargetHits) / interval;
       }
       const decay = runtime.augments?.find((a) => a.p === 'decay');
       if (decay) {
@@ -363,6 +406,13 @@ function primitiveRuntimes(
   return out;
 }
 
+/** Shards one Frost Orb fires over its life (Frozen Heart fires `rate` × as often). */
+export function orbShards(rt: SkillRuntimeDef): number {
+  const hover = rt.augments?.find((a) => a.p === 'hover');
+  const rate = hover?.p === 'hover' ? hover.rate : 1;
+  return Math.max(1, Math.floor((rt.duration * rate) / SKILL_TIMING.orbShardInterval + 1e-9));
+}
+
 /** Storm Call's estimate: how far a strike's centre may land from an enemy at the cursor and still reach it (a body's radius). */
 const STRIKE_BODY = 12;
 
@@ -377,7 +427,7 @@ export function hitCounts(def: SkillDef, rt: SkillRuntimeDef): { once: number; s
   if (batch2) return batch2;
   switch (def.id) {
     case 'frostOrb': {
-      const shards = Math.max(1, Math.floor(rt.duration / SKILL_TIMING.orbShardInterval + 1e-9));
+      const shards = orbShards(rt);
       return { once: Math.max(1, rt.projectiles) * shards, single: shards };
     }
     case 'stormCall': {
@@ -390,10 +440,15 @@ export function hitCounts(def: SkillDef, rt: SkillRuntimeDef): { once: number; s
       const lines = rt.flags.includes('twinLines') ? 2 : 1;
       return { once: Math.max(1, Math.floor(rt.projectiles)) * lines, single: 1 };
     }
-    default:
+    default: {
+      const rings = rt.augments?.find((a) => a.p === 'rings');
+      if (rings?.p === 'rings') return { once: rings.flames * rings.count, single: 1 };
+      const rehit = rt.augments?.find((a) => a.p === 'rehit');
+      if (rehit?.p === 'rehit') return { once: Math.max(1, rt.projectiles), single: rehit.max };
       if (def.shape === 'chain') return { once: rt.chains + 1, single: 1 };
       if (def.shape === 'area' || def.shape === 'buff') return { once: 1, single: 1 };
       return { once: Math.max(1, rt.projectiles), single: 1 };
+    }
   }
 }
 
@@ -807,7 +862,10 @@ export function skillLines(r: ResolvedSkill): string[] {
     lines.push(`Range ${Math.round(rt.range)} · projectile speed ${Math.round(rt.projectileSpeed)}`);
   }
   if (rt.damage > 0) lines.push(critText(rt));
-  const ailment = AILMENT_NAME[rt.damageType];
+  // A conversion whose ailment changes type (Inverted Heat ignites instead of chilling; Void Convert decays instead).
+  const conv = rt.augments?.find((a) => a.p === 'convert');
+  const ailmentType = conv?.p === 'convert' && conv.ailment === 'instead' ? conv.to : rt.damageType;
+  const ailment = conv?.p === 'convert' && conv.ailment === 'decay' ? undefined : AILMENT_NAME[ailmentType];
   if (ailment && rt.ailmentChance > 0) lines.push(`${percent(rt.ailmentChance)} chance to ${ailment}`);
   lines.push(rt.castTime > 0 ? `Cast time ${seconds(rt.castTime)}` : 'Instant');
   if (rt.cooldown > 0) {
@@ -877,7 +935,7 @@ function rosterLines(r: ResolvedSkill): string[] | null {
     case 'kineticLance':
       return [`Deals ${dmg}`, `Fires a fast bolt toward the cursor that knocks enemies back ${SKILL_TIMING.kineticKnockback}× as far`, ...bounceLine];
     case 'frostOrb': {
-      const shards = Math.max(1, Math.floor(rt.duration / SKILL_TIMING.orbShardInterval + 1e-9));
+      const shards = orbShards(rt);
       return [
         `${rt.projectiles > 1 ? `${plural(rt.projectiles, 'orb')} drift` : 'An orb drifts'} toward the cursor at ${Math.round(rt.projectileSpeed)} units per second for ${seconds(rt.duration)}`,
         `Every ${seconds(SKILL_TIMING.orbShardInterval)} each orb fires a shard at the nearest enemy within ${Math.round(rt.radius)} units (${shards} shards): ${dmg} each`,
