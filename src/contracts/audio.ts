@@ -51,6 +51,9 @@ export const SFX_IDS = [
   // collapse, the barrier breaking
   'castGravityWell', 'wellCollapse', 'castHex', 'castWither', 'castSigil', 'sigilPillar', 'barrierUp', 'barrierBreak', 'aegisUp',
   'voltaicPulse', 'concussiveBlast', 'castLash', 'echoSigil',
+  // power rework SK4 roster batch 3: casts (Meteor Rain, Blizzard, Event Horizon), Tempest Surge's charge, a meteor landing, Storm
+  // Step's strike, Event Horizon's collapse
+  'castMeteor', 'meteorImpact', 'stormStepStrike', 'tempestSurge', 'castBlizzard', 'castHorizon', 'horizonCollapse',
 ] as const;
 export type SfxId = (typeof SFX_IDS)[number];
 

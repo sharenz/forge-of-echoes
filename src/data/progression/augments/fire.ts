@@ -185,4 +185,22 @@ export const FIRE_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'flag', flag: 'brand' }],
     },
   ],
+  // Roster batch 3 (SK4), skills.md 6
+  meteorRain: [
+    {
+      id: 'heavyRain', name: 'Heavy Rain', tier: 1, text: '30% fewer meteors, each dealing 80% more damage',
+      effects: [{ k: 'count', mult: 0.7 }, { k: 'more', pct: 80 }],
+    },
+    {
+      id: 'wideSkies', name: 'Wide Skies', tier: 2, text: 'Meteors strike a 30% larger radius',
+      effects: [{ k: 'scale', stat: 'radius', pct: 30 }],
+    },
+    {
+      id: 'burningGround', name: 'Burning Ground', tier: 3,
+      text: 'Each meteor leaves burning ground for 3 seconds (0.35× effectiveness every 0.5 seconds)',
+      effects: [{
+        k: 'trail', area: 'fireTrail', at: 'strike', radius: 0, duration: 3, interval: 0.5, effectiveness: 0.35, ailment: false, expose: 0, spacing: 0,
+      }],
+    },
+  ],
 };

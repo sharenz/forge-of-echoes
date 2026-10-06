@@ -141,6 +141,11 @@ export interface DashBehaviour {
   distance: number;
   cleanse?: FlagRef;
   chillLanding?: FlagRef;
+  /**
+   * Storm Step (SK4): lightning strikes where the blink left and where it landed (the def's hit in the def's radius, `radius` when
+   * that is 0); `third` adds one halfway. An enemy is struck at most once per blink.
+   */
+  strikes?: { radius: number; third: FlagRef };
 }
 
 /** A timed buff on the caster (Cinder Ward). */
@@ -216,8 +221,54 @@ export interface EchoSigilBehaviour {
   duration: number;
 }
 
+// --- Roster batch 3 (power rework SK4) ---------------------------------------------------------------------------------------
+
+/**
+ * Meteor Rain: the def's `projectiles` meteors at random points within the def's range of the cursor (clamped to `reach`), one after
+ * another over the def's duration; each lands `telegraph` s after its circle appears and strikes the def's radius (ground damage).
+ */
+export interface MeteorsBehaviour {
+  emitter: 'meteors';
+  telegraph: number;
+  reach: number;
+  /** Fallbacks when the runtime def leaves them at 0. */
+  scatter: number;
+  radius: number;
+  duration: number;
+}
+
+/** Tempest Surge: cast speed and lightning pulses on every enemy within the def's radius for the def's duration. */
+export interface SurgeBehaviour {
+  emitter: 'buff';
+  buff: 'surge';
+  duration: number;
+  radius: number;
+  /** Seconds between pulses. */
+  pulse: number;
+  castSpeed: number;
+  tempo: FlagRef;
+  skin: FlagRef;
+}
+
+/**
+ * Event Horizon: a point at the cursor (clamped to `reach`) pulls every enemy within the def's range toward it at `pull` units/s for the
+ * def's duration, then detonates for the def's hit in the def's radius.
+ */
+export interface HorizonBehaviour {
+  emitter: 'horizon';
+  reach: number;
+  pull: number;
+  /** Fallbacks when the runtime def leaves them at 0. */
+  pullRadius: number;
+  radius: number;
+  duration: number;
+  heavy: FlagRef;
+  echo: FlagRef;
+  feast: FlagRef;
+}
+
 export type SkillBehaviour =
   | ProjectileBehaviour | BurstBehaviour | ChainBehaviour | DashBehaviour | WardBehaviour
   | BlastBehaviour | LobBehaviour | OrbBehaviour | StrikesBehaviour | SpikesBehaviour | StrideBehaviour | RestoreBehaviour
   | ZoneBehaviour | PillarBehaviour | PulseBehaviour | ConeBehaviour | LashBehaviour | BarrierBehaviour | AegisBehaviour
-  | EchoSigilBehaviour;
+  | EchoSigilBehaviour | MeteorsBehaviour | SurgeBehaviour | HorizonBehaviour;

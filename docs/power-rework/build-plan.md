@@ -1,6 +1,6 @@
 # E. Build plan: slices, file ownership, tests, migration
 
-Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06, R3 (SK3 and SK5) built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
+Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06, R3 (SK3 and SK5) built 2026-10-06, R4's SK4 built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
 `power-curve.md` (P), `skills.md` (SK) and `passive-tree.md` (PT) hold the designs these slices implement; `overview.md` has the pillars and the migration summary.
 
 ---
@@ -186,6 +186,30 @@ this), Overload and the other planned augments above.
 
 ### SK4: Roster batch 3 (M)  (R4)
 Meteor Rain, Storm Step, Tempest Surge, Blizzard, Event Horizon (levels 44 to 62).
+
+**Status: built 2026-10-06** (one lane, beside SK6). All five are `available`, so every one of the 32 skills is playable (the Skills
+panel's "n more skills arrive" line no longer shows; the unlearnable-skill guard stays for a future skill). Behaviour through the executor,
+new code in `src/sim/skills/roster3.ts`: Meteor Rain is a `meteors` emitter (the meteors' points are drawn at the cast from
+`combatRng`; meteor k's telegraph appears k × duration / count later through the SK5 `schedule` queue and its strike resolves through the
+SK2 pending strikes, so Burning Ground is the `trail` at 'strike'); Storm Step is Rift Step's `dash` with `strikes` (origin and landing,
+Third Strike halfway, one hit per enemy per blink; Forking Step reuses the `fork` primitive from the landing, Static Cloud a `trail` at the
+new 'origin'); Tempest Surge is a `surge` buff (cast progress × (1 + cast speed) in `player.ts`, pulses on every enemy within its radius,
+Lightning Skin's resistance in `hitPlayer` and its bonus on shocked enemies through `roster3Taken`); Blizzard is an SK3 `zone` whose ticks
+mark chilled enemies inside as brittle (more cold damage from every source while they stay, `zoneLinger` after); Event Horizon is a
+`horizon` emitter (the SK3 pull, `pullMonster` now shared, then the detonation; Echo Collapse via `schedule`, Void Feast counts the ids
+inside that are gone the next tick). Their state lives in `src/sim/skills/roster3-state.ts` (WeakMaps, a leaf module the core reads:
+×1 / +0 when nobody casts them), so the determinism goldens are unchanged. No new `AugmentRuntime` primitive: the behaviour numbers are
+`SKILL_TIMING` constants (meteor telegraph 0.6 s, surge cast speed 25% / Overcharged Tempo +35%, pulse 0.5 s, Lightning Skin 20% and 10%,
+brittle 15% / Brittle Cold +20%, pull 80 / Heavy Collapse ×1.5, Echo Collapse 0.6 s at 50%, Void Feast 3 Focus) that the tooltips in
+`game/progression/skills-roster3.ts` read too. All 15 augments live (125 in all). Presenter `src/present/skills/roster3.ts` (the meteor
+dropping onto its circle and its impact, Storm Step's bolts, the surge aura, the storm with driving snow, the horizon's well and its
+detonation), 7 SFX (`audio/sfx-skills3.ts`, borrowed trims). Contract appends: `AREA_KINDS` meteorRain, blizzardStorm, eventHorizon;
+`trail.at` 'origin'; 7 SFX ids; the wire changes, so **protocol 31 → 32** (left to the integrator). Numbers kept from skills.md 3 except
+Tempest Surge, whose first pass had no ailment chance and no crit while the table lists "shock": 25% shock and 5% crit. Text choices where
+the design left a number open: Forking Step forks within 120 at 60%, Static Cloud and Burning Ground state their ground (0.4× and 0.35×
+effectiveness every 0.5 s), Heavy Collapse pulls 1.5× as hard. Budget (skill-budget.test.ts): Meteor Rain a burst (3.2 Lance hits per cast
+at an enemy at the cursor), Storm Step the area band, Tempest Surge control, Blizzard the area band's index at 2.2 Focus/s, Event Horizon an
+ultimate band of its own (7 Lance hits per cast, 2.2 Focus/s).
 
 ### SK5: Flagship augments (L)  (R3)
 Owner lane **augments**. The 13 flagship skills' 80 augments (data) plus every primitive they need (`lodge`, `split`, `fork`, `convert`, `expose`, `bounce`/`return`, `mark`, `shape`, `trail`, `onKill`); unique flags mapped.

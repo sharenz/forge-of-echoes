@@ -161,4 +161,19 @@ export const VOID_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'rt', rt: { p: 'onKill', of: 'life', share: 0.1, radius: 40, damageType: 'physical', needs: 'any', depth: 1 } }],
     },
   ],
+  // Roster batch 3 (SK4), skills.md 6
+  eventHorizon: [
+    {
+      id: 'heavyCollapse', name: 'Heavy Collapse', tier: 1, text: 'Pulls 50% harder; the detonation deals 30% more damage',
+      effects: [{ k: 'flag', flag: 'heavyCollapse' }, { k: 'more', pct: 30 }],
+    },
+    {
+      id: 'echoCollapse', name: 'Echo Collapse', tier: 2, text: 'A second detonation follows 0.6 seconds later at 50% damage',
+      effects: [{ k: 'flag', flag: 'echoCollapse' }],
+    },
+    {
+      id: 'voidFeast', name: 'Void Feast', tier: 3, text: 'Each enemy that dies while it pulls refunds 3 Focus',
+      effects: [{ k: 'flag', flag: 'voidFeast' }],
+    },
+  ],
 };

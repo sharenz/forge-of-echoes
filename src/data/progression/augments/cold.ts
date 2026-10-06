@@ -107,4 +107,19 @@ export const COLD_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'tune', key: 'barrierRegen', add: 0.03 }],
     },
   ],
+  // Roster batch 3 (SK4), skills.md 6
+  blizzard: [
+    {
+      id: 'brittleCold', name: 'Brittle Cold', tier: 1, text: 'Chilled enemies in the storm take 20% more cold damage (35% in all)',
+      effects: [{ k: 'flag', flag: 'brittleCold' }],
+    },
+    {
+      id: 'wideStorm', name: 'Wide Storm', tier: 2, text: 'Radius +40%',
+      effects: [{ k: 'scale', stat: 'radius', pct: 40 }],
+    },
+    {
+      id: 'frozenGround', name: 'Frozen Ground', tier: 3, text: 'Enemies in the storm are slowed by 50%',
+      effects: [{ k: 'tune', key: 'zoneSlow', add: 0.5 }],
+    },
+  ],
 };

@@ -97,7 +97,7 @@ Columns: Unlock (character level) · Focus · Cast time (s) · Cooldown (s) · E
 | 27 | **Wither Field** | Void, zone | 40 | 22 | 0.5 | 10 | 0.5 (dot) | – | decay | r80 zone for 6 s: decay ticks, **Withered** stacks −8 pp all resistances (3 stacks = −24, the exposure cap) | Spell Area Duration Void | M |
 | 28 | **Meteor Rain** | Fire, burst | 44 | 26 | 0.6 | 12 | 2.0 → 4.2 per meteor | 6 | ignite 30 | 6 → 12 telegraphed meteors over 2.5 s in r120 at the cursor, radius 34 each | Spell Area Fire | S (the boss meteor rain exists) |
 | 29 | **Storm Step** | Lightning, movement | 48 | 10 | 0 | 4 / charge | 1.5 → 3.0 | 7 | shock | blink 140; lightning strikes at origin and landing (r60); 2 charges | Movement Lightning Area | S |
-| 30 | **Tempest Surge** | Lightning, buff | 52 | 25 | 0.3 | 18 → 14 | 0.6 per pulse | – | shock | 6 s: +25% cast speed, nearby enemies (r100) pulse with lightning every 0.5 s | Spell Buff Duration Lightning | S |
+| 30 | **Tempest Surge** | Lightning, buff | 52 | 25 | 0.3 | 18 → 14 | 0.6 per pulse | 5 (SK4; was –) | shock 25 (SK4) | 6 s: +25% cast speed, nearby enemies (r100) pulse with lightning every 0.5 s | Spell Buff Duration Lightning | S |
 | 31 | **Blizzard** | Cold, zone | 56 | 22 | 0.5 | 10 | 0.7 → 1.5 per tick | 5 | chill | r90 zone for 6 s, ticks every 0.5 s, chilled enemies take +15% cold damage | Spell Area Duration Cold | S |
 | 32 | **Event Horizon** | Void, ultimate | 62 | 40 | 0.8 | 24 → 18 | 8 → 16 | 10 | – | pulls everything within r200 toward a point over 2.5 s then detonates r120 | Spell Area Void | M |
 

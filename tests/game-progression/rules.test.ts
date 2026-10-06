@@ -57,6 +57,8 @@ describe('rules assembly', () => {
       // SK3 roster batch 2 (levels 20 to 40)
       'gravityWell', 'rimeBulwark', 'immolationSigil', 'staticAegis', 'voltaicPulse', 'entropyHex', 'concussiveBlast', 'staticLash',
       'echoSigil', 'witherField',
+      // SK4 roster batch 3 (levels 44 to 62): all 32 are playable
+      'meteorRain', 'stormStep', 'tempestSurge', 'blizzard', 'eventHorizon',
     ]);
   });
 

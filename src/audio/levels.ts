@@ -121,6 +121,9 @@ export const SFX_TRIM_DB: Partial<Record<SfxId, number>> = {
   // re-run the calibration
   castGravityWell: -6.1, wellCollapse: -15.7, castHex: -6.1, castWither: -6.1, castSigil: -12.4, sigilPillar: -15.7, barrierUp: -3.6,
   barrierBreak: -7.7, aegisUp: 2.3, voltaicPulse: -13.2, concussiveBlast: -7.6, castLash: 2.3, echoSigil: -0.6,
+  // power rework SK4 roster batch 3 (sfx-skills3.ts): borrowed from the recipe each one varies (castMortar, mortarBlast,
+  // stormCallStrike, aegisUp, castOrb, castUmbral, mortarBlast); re-run the calibration
+  castMeteor: -12.4, meteorImpact: -15.7, stormStepStrike: 2.4, tempestSurge: 2.3, castBlizzard: -3.6, castHorizon: -6.1, horizonCollapse: -15.7,
 };
 
 /**

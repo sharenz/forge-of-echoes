@@ -1,7 +1,7 @@
 // Damage resolution for both sides, ailments and kill credit.
 import type { PlayerDebuff } from '../contracts/bestiary';
 import { DAMAGE_TYPES, type DamageType, type MonsterKind } from '../contracts/content';
-import { DECAY, DOT_RESIST_FACTOR, EXPOSURE, PEN_CAP, WITHER } from '../data/progression/combat';
+import { DECAY, DOT_RESIST_FACTOR, EXPOSURE, PEN_CAP, STAT_CAPS, WITHER } from '../data/progression/combat';
 import { MONSTER_ANIM, type MonsterRarity, type RootSource, type SimEvent } from '../contracts/sim';
 import { ELITE, KIND_BY_INDEX, KIND_INDEX } from './archetypes';
 import { removeOwnedAreas, spawnArea } from './areas';
@@ -21,6 +21,7 @@ import { refreshLiving } from './player';
 import { monsterDefs } from './rosters';
 import { MFLAG } from './stores';
 import { markTakenMult, wardCapOf } from './skills/primitives/state';
+import { clearRoster3, roster3Taken, surgeResist } from './skills/roster3-state';
 import type { PlayerState, World } from './world';
 
 export const DT_PHYSICAL = DAMAGE_INDEX.physical;
@@ -133,7 +134,8 @@ export function damageMonster(
       applyAilment(w, i, d2 * (1 - DOT_RESIST_FACTOR * r2), convTo, ailmentChance, source);
     }
   }
-  dmg = resisted * takenMult(w, i);
+  // Roster batch 3 (SK4): Blizzard's brittle cold, Lightning Skin on shocked enemies (×1 without them).
+  dmg = resisted * takenMult(w, i) * roster3Taken(w, i, dtype, source);
   if (hit && m.hitReduction[i] > 0) dmg *= 1 - m.hitReduction[i];
   if (knock > 0 && m.knockback[i] > 0) {
     const l = Math.hypot(dirX, dirY);
@@ -486,7 +488,10 @@ export function hitPlayer(
     // Damage over time derives from a hit that already carried the level gap, so it is not scaled again.
     dmg = kind === 'dot' ? amount : amount * rng.range(ROLL_MIN, ROLL_MAX) * levelGapMult(w.config.monsters.level, p.level);
     if (dtype === DT_PHYSICAL && s.armor > 0) dmg *= 1 - s.armor / (s.armor + 10 * dmg);
-    dmg *= 1 - (effectiveResist(p, type) + aegisResist(p, dtype) - w.pactResist);
+    // Tempest Surge, Lightning Skin (SK4): more lightning resistance, never above the hard ceiling (+0 without it).
+    const res = effectiveResist(p, type) + aegisResist(p, dtype);
+    const skin = surgeResist(p, dtype);
+    dmg *= 1 - (res + (skin > 0 ? Math.max(0, Math.min(skin, STAT_CAPS.maxResistHard / 100 - res)) : 0) - w.pactResist);
     if (Number.isFinite(s.damageTaken) && s.damageTaken >= 0) dmg *= s.damageTaken;
     if (isActive(p, 'shocked')) dmg *= shockMult(p);
     if (p.ward.time > 0) dmg *= 1 - Math.min(wardCapOf(p, WARD_REDUCTION_CAP), Math.max(0, p.ward.reduction));
@@ -538,6 +543,7 @@ export function killPlayer(w: World, p: PlayerState): void {
   p.barrier.amount = 0;
   p.aegis.time = 0;
   p.echoSigil.casts = 0;
+  clearRoster3(p);
   p.portalDwell = 0;
   p.portalDwellId = 0;
   for (const f of p.flasks) if (f) f.active = 0;

@@ -31,6 +31,7 @@ import type { PlayerModel } from './model';
 import { spendCurrency } from './merchant';
 import { clamp, fail, oneDecimal, ok, percent, rankValue, resolveModes, seconds } from './util';
 import { roster2Dot, roster2HitCounts, roster2Lines, roster2Runtimes } from './skills-roster2';
+import { roster3HitCounts, roster3Lines } from './skills-roster3';
 
 // ---------------------------------------------------------------------------------------------
 // Content info
@@ -414,7 +415,7 @@ export function orbShards(rt: SkillRuntimeDef): number {
 }
 
 /** Storm Call's estimate: how far a strike's centre may land from an enemy at the cursor and still reach it (a body's radius). */
-const STRIKE_BODY = 12;
+export const STRIKE_BODY = 12;
 
 /**
  * Hits of one cast if every one lands (`once`), and how many of them one enemy takes (`single`, the DPS estimate): one per
@@ -423,7 +424,7 @@ const STRIKE_BODY = 12;
  * Spikes and the other area skills hit an enemy once per cast (per line).
  */
 export function hitCounts(def: SkillDef, rt: SkillRuntimeDef): { once: number; single: number } {
-  const batch2 = roster2HitCounts(def, rt);
+  const batch2 = roster2HitCounts(def, rt) ?? roster3HitCounts(def, rt);
   if (batch2) return batch2;
   switch (def.id) {
     case 'frostOrb': {
@@ -954,7 +955,7 @@ function rosterLines(r: ResolvedSkill): string[] | null {
         `Each spike deals ${dmg} in a radius of ${Math.round(rt.radius)}; an enemy is struck once per line`,
       ];
     default:
-      return roster2Lines(r);
+      return roster2Lines(r) ?? roster3Lines(r);
   }
 }
 

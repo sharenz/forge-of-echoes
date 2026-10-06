@@ -20,4 +20,10 @@ export const LIGHTNING_BEHAVIOURS = {
     emitter: 'lash', arc: { skill: 'arcLash', player: 'arcLash' }, second: SKILL_TIMING.lashSecondShare, jump: SKILL_TIMING.lashJump,
     chainShare: SKILL_TIMING.lashChainShare,
   },
+  // Roster batch 3 (SK4)
+  stormStep: { emitter: 'dash', distance: 140, strikes: { radius: 60, third: { skill: 'thirdStrike', player: 'thirdStrike' } } },
+  tempestSurge: {
+    emitter: 'buff', buff: 'surge', duration: 6, radius: 100, pulse: SKILL_TIMING.surgePulse, castSpeed: SKILL_TIMING.surgeCastSpeed,
+    tempo: { skill: 'overchargedTempo', player: 'overchargedTempo' }, skin: { skill: 'lightningSkin', player: 'lightningSkin' },
+  },
 } satisfies Record<string, SkillBehaviour>;

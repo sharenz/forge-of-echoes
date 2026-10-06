@@ -83,6 +83,8 @@ describe('augment data', () => {
       'glacialNova', 'spark', 'phaseStride', 'arcaneReprieve', 'glacialSpikes',
       // SK3 roster batch 2 (Entropy Hex is a flagship: 6)
       'gravityWell', 'rimeBulwark', 'immolationSigil', 'staticAegis', 'voltaicPulse', 'concussiveBlast', 'staticLash', 'echoSigil', 'witherField',
+      // SK4 roster batch 3
+      'meteorRain', 'stormStep', 'tempestSurge', 'blizzard', 'eventHorizon',
     ];
     for (const id of SKILL_IDS.filter((s) => SKILLS[s].available)) {
       const tree = SKILLS[id].augmentDefs;
@@ -117,7 +119,7 @@ describe('augment data', () => {
     }
   });
 
-  it('has 110 augments live (17 of SK0, 17 of the SK2 roster, 25 of the SK3 roster, 51 of SK5); the rest wait for their primitives', () => {
+  it('has 125 augments live (17 of SK0, 17 of the SK2 roster, 25 of the SK3 roster, 51 of SK5, 15 of the SK4 roster); the rest wait for their primitives', () => {
     const live = SKILL_IDS.flatMap((id) => SKILLS[id].augmentDefs.filter(augmentAvailable).map((a) => `${id}.${a.id}`));
     expect(live).toEqual([
       'emberLance.piercingFlame', 'emberLance.twinStrand', 'emberLance.rapidSpark',
@@ -149,6 +151,12 @@ describe('augment data', () => {
       'staticLash.arcLash', 'staticLash.rapidLash', 'staticLash.tetheredChain',
       'echoSigil.tripleEcho', 'echoSigil.quickEcho', 'echoSigil.costless',
       'witherField.hollowGround', 'witherField.rottingFields', 'witherField.lingeringWither',
+      // SK4 roster batch 3
+      'meteorRain.heavyRain', 'meteorRain.wideSkies', 'meteorRain.burningGround',
+      'stormStep.thirdStrike', 'stormStep.forkingStep', 'stormStep.staticCloud',
+      'tempestSurge.longStorm', 'tempestSurge.overchargedTempo', 'tempestSurge.lightningSkin',
+      'blizzard.brittleCold', 'blizzard.wideStorm', 'blizzard.frozenGround',
+      'eventHorizon.heavyCollapse', 'eventHorizon.echoCollapse', 'eventHorizon.voidFeast',
     ].concat(SK5_LIVE).sort((a, b) => order(a) - order(b)));
   });
 
@@ -371,9 +379,17 @@ describe('saving augments', () => {
     expect(back.unspentSkillPoints).toBe(3);
   });
 
-  it('refunds ranks a hand-edited save put on a roster skill that has not shipped', () => {
-    const back = normalizeCharacter({ ...withSkills({}, { unspentSkillPoints: 1 }), skillRanks: { emberLance: 1, meteorRain: 4 } })!;
-    expect(back.skillRanks.meteorRain).toBe(0);
-    expect(back.unspentSkillPoints).toBe(5);
+  it('refunds ranks a hand-edited save put on a roster skill that has not shipped (all have since SK4: a stand-in is hidden)', () => {
+    const def = SKILLS.meteorRain as { available: boolean };
+    def.available = false;
+    try {
+      const back = normalizeCharacter({ ...withSkills({}, { unspentSkillPoints: 1 }), skillRanks: { emberLance: 1, meteorRain: 4 } })!;
+      expect(back.skillRanks.meteorRain).toBe(0);
+      expect(back.unspentSkillPoints).toBe(5);
+    } finally {
+      def.available = true;
+    }
+    const kept = normalizeCharacter({ ...withSkills({}, { unspentSkillPoints: 1 }), skillRanks: { emberLance: 1, meteorRain: 4 } })!;
+    expect(kept.skillRanks.meteorRain).toBe(4);
   });
 });

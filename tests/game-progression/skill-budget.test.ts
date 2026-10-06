@@ -129,3 +129,56 @@ describe('skill power budget (skills.md 2), roster batch 2 at rank 10 without ge
     }
   });
 });
+
+// Roster batch 3 (SK4). Meteor Rain is a burst like Immolation Sigil, counted as the meteors an enemy at the cursor expects (its
+// share of the scattered rain): 2.5 to 3.5 Ember Lance hits per cast at 2 to 4 Focus per second. Event Horizon is the ultimate: one
+// detonation of 6 to 8 Lance hits every 18 s at 2 to 4 Focus per second. Storm Step is a blink whose strikes sit in the area band.
+// Tempest Surge's pulses are control (on the side of the cast speed). Blizzard deals area-band damage over 6 s for 2.2 Focus per
+// second, under the area band's Focus (a zone placed once per cooldown).
+const ROWS3: readonly { id: SkillId; band: 'burst' | 'ultimate' | 'area' | 'control' | 'zone' }[] = [
+  { id: 'meteorRain', band: 'burst' },
+  { id: 'stormStep', band: 'area' },
+  { id: 'tempestSurge', band: 'control' },
+  { id: 'blizzard', band: 'zone' },
+  { id: 'eventHorizon', band: 'ultimate' },
+];
+
+describe('skill power budget (skills.md 2), roster batch 3 at rank 10 without gear', () => {
+  const model = buildPlayerModel(bareCharacter({ level: 62 }));
+
+  it.each(ROWS3)('$id sits in its band', ({ id, band }) => {
+    const r = resolveSkill(model, id, 10);
+    expect(SKILLS[id].available).toBe(true);
+    const interval = Math.max(r.runtime.castTime, r.runtime.cooldown / r.runtime.charges);
+    expect(interval).toBeCloseTo(r.interval, 10);
+    const index = (r.effectiveness * r.singleTargetHits) / interval / LANCE_INDEX;
+    const focus = r.runtime.focusCost / interval;
+    const lanceHits = (r.effectiveness * r.singleTargetHits) / 2.3;
+    const area = BANDS.area;
+    switch (band) {
+      case 'burst':
+      case 'ultimate': {
+        const [lo, hi] = band === 'burst' ? [2.5, 3.5] : [6, 8];
+        expect(lanceHits, `${id} Lance hits per cast`).toBeGreaterThanOrEqual(lo);
+        expect(lanceHits, `${id} Lance hits per cast`).toBeLessThanOrEqual(hi);
+        expect(focus).toBeGreaterThanOrEqual(2);
+        expect(focus).toBeLessThanOrEqual(4);
+        break;
+      }
+      case 'control':
+        expect(r.runtime.damage).toBeGreaterThan(0);
+        expect(index, `${id} index`).toBeLessThan(0.2);
+        expect(focus, `${id} Focus/s`).toBeLessThanOrEqual(8);
+        break;
+      default:
+        expect(index, `${id} index`).toBeGreaterThanOrEqual(area.index[0] - 1e-9);
+        expect(index, `${id} index`).toBeLessThanOrEqual(area.index[1] + 1e-9);
+        if (band === 'area') expect(focus, `${id} Focus/s`).toBeGreaterThanOrEqual(area.focus[0] - 1e-9);
+        expect(focus, `${id} Focus/s`).toBeLessThanOrEqual(area.focus[1] + 1e-9);
+    }
+  });
+
+  it('every one of the 32 skills is playable now', () => {
+    expect(Object.values(SKILLS).every((s) => s.available)).toBe(true);
+  });
+});

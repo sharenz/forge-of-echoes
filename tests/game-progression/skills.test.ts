@@ -6,7 +6,7 @@ import type { SkillId } from '../../src/contracts/content';
 import { rules } from '../../src/game';
 import { damageRange } from '../../src/game/progression/skills';
 import { normalizeCharacter } from '../../src/game/progression/save';
-import { SORCERESS } from '../../src/data/progression';
+import { SKILLS, SORCERESS } from '../../src/data/progression';
 import { bareCharacter, expectErr, expectOk, unique } from './fixtures';
 
 function withRanks(ranks: Partial<Record<SkillId, number>>, extra: Partial<CharacterSave> = {}): CharacterSave {
@@ -85,11 +85,18 @@ describe('learning and ranking', () => {
     for (const info of Object.values(rules.content.skills)) expect(info.prerequisite).toBeNull();
   });
 
-  it('refuses roster skills whose behaviour has not shipped', () => {
+  it('refuses roster skills whose behaviour has not shipped (all 32 have since SK4: the guard is kept for a future skill)', () => {
     const ch = bareCharacter({ unspentSkillPoints: 5, level: 80 });
-    expect(rules.content.skills.meteorRain.available).toBe(false);
-    expect(rules.canRankUpSkill(ch, 'meteorRain')).toEqual({ ok: false, reason: 'Meteor Rain arrives in a later update.' });
-    expect(expectErr(rules.rankUpSkill(ch, 'eventHorizon'))).toMatch(/later update/);
+    expect(Object.values(rules.content.skills).every((s) => s.available)).toBe(true);
+    const def = SKILLS.meteorRain as { available: boolean };
+    def.available = false;
+    try {
+      expect(rules.canRankUpSkill(ch, 'meteorRain')).toEqual({ ok: false, reason: 'Meteor Rain arrives in a later update.' });
+      expect(expectErr(rules.rankUpSkill(ch, 'meteorRain'))).toMatch(/later update/);
+    } finally {
+      def.available = true;
+    }
+    expect(rules.canRankUpSkill(ch, 'eventHorizon').ok).toBe(true);
   });
 
   it('stops at the maximum rank', () => {

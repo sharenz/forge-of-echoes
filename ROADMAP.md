@@ -29,7 +29,11 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "
    expose, mark, trail, blast, on-kill, rings, spiral, scatter, fuse, skip, core, hover, refund, free and cheap casts, ignite, rehit,
    falloff, ward cap, weave) and 51 more live augments (110 in all); nine wait for a later primitive (Heavy Chill, Orbit, Gravity Seed,
    Heavy Impact, Crushing Force, Armour Piercing, Overload, Wither Spread, Shared Pain). Needs a protocol bump (the `augment` event, two
-   area kinds, the lodged and marked ailment bits). R3 is complete with it. Then R4 (SK4, SK6), R5 "Orrery" passive tree, R6 balance pass.
+   area kinds, the lodged and marked ailment bits). R3 is complete with it. R4 "Skills III": **SK4 built 2026-10-06:** the last five
+   skills playable, so all 32 are (Meteor Rain 44, Storm Step 48 with strikes at both ends of the blink, Tempest Surge 52 with cast speed
+   and lightning pulses, Blizzard 56 whose chilled enemies take more cold damage, Event Horizon 62 pulling everything to a detonation),
+   with all 15 of their augments (125 live in all); needs protocol 32 (three area kinds, 7 SFX ids). SK6 (the remaining augments) is
+   next; then R5 "Orrery" passive tree, R6 balance pass.
 3. **Finish wave 3: leftovers.** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today", the Re-chart tooltip entry and
    F1 polish are done (2026-10-06; F1: eleven Atlas/pin/surge sounds, pin and surge banners, Calm also follows Screen shake 0 and
    stills the table's CSS motion, Atlas counts in the server status log). Still open from F1: the ambient table bed of brief A 5.5

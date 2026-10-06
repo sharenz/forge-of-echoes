@@ -64,6 +64,9 @@ const GROUPS: { key: SfxGroup[]; title: string; accent: string; ids: SfxId[] }[]
     key: ['skill', 'combat', 'player'], title: 'Roster batch 2 (SK3)', accent: 'var(--mana)',
     ids: ['castGravityWell', 'wellCollapse', 'castHex', 'castWither', 'castSigil', 'sigilPillar', 'barrierUp', 'barrierBreak', 'aegisUp',
       'voltaicPulse', 'concussiveBlast', 'castLash', 'echoSigil'],
+  }, {
+    key: ['skill', 'combat'], title: 'Roster batch 3 (SK4)', accent: 'var(--mana)',
+    ids: ['castMeteor', 'meteorImpact', 'stormStepStrike', 'tempestSurge', 'castBlizzard', 'castHorizon', 'horizonCollapse'],
   },
 ];
 
@@ -103,6 +106,8 @@ const LABELS: Record<SfxId, string> = {
   castGravityWell: 'Gravity Well', wellCollapse: 'Singularity', castHex: 'Entropy Hex', castWither: 'Wither Field',
   castSigil: 'Immolation Sigil', sigilPillar: 'Fire pillar', barrierUp: 'Rime Bulwark', barrierBreak: 'Barrier breaks', aegisUp: 'Static Aegis',
   voltaicPulse: 'Voltaic Pulse', concussiveBlast: 'Concussive Blast', castLash: 'Static Lash', echoSigil: 'Echo Sigil',
+  castMeteor: 'Meteor Rain', meteorImpact: 'Meteor lands', stormStepStrike: 'Storm Step strike', tempestSurge: 'Tempest Surge',
+  castBlizzard: 'Blizzard', castHorizon: 'Event Horizon', horizonCollapse: 'Horizon collapse',
 };
 
 const TRACK_LABELS: Record<MusicId, { name: string; note: string }> = {

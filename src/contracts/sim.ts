@@ -165,11 +165,11 @@ export type AugmentRuntime =
   | { p: 'mark'; seconds: number; taken: number; shock: number; chill: boolean; first: boolean }
   /**
    * Ground left behind: along the projectile's path ('path', every `spacing` units), where it ends ('end'), at each strike or spike
-   * ('strike'), or where a shell lands ('land'). `damage` per `interval` s for `duration` s in `radius`; `ailment` chills/shocks
+   * ('strike'), where a shell lands ('land'), or where a blink left from ('origin', Static Cloud). `damage` per `interval` s for `duration` s in `radius`; `ailment` chills/shocks
    * monsters inside each tick; `expose` points of the area's damage type while inside (Magma Core).
    */
   | {
-    p: 'trail'; area: 'fireTrail' | 'frostGround' | 'staticField'; at: 'path' | 'end' | 'strike' | 'land'; radius: number;
+    p: 'trail'; area: 'fireTrail' | 'frostGround' | 'staticField'; at: 'path' | 'end' | 'strike' | 'land' | 'origin'; radius: number;
     duration: number; interval: number; damage: number; damageType: DamageType; ailment: boolean; expose: number; spacing: number;
   }
   /**
@@ -467,6 +467,10 @@ export const AREA_KINDS = [
   // Flagship augments (power rework SK5): the player's ground effects that hurt monsters only
   'frostGround',      // Frost Comb: chilling ground left by Glacial Spikes
   'staticField',      // Thunder Mark: a shocking static field left by a Storm Call strike
+  // Roster batch 3 (power rework SK4): the player's own telegraphs and zones, harmless to players (the skill code acts on monsters)
+  'meteorRain',       // Meteor Rain: one meteor's telegraph at its impact point; the meteor lands when it resolves
+  'blizzardStorm',    // Blizzard: the player's storm zone for its duration (not the Warden's hostile 'blizzard')
+  'eventHorizon',     // Event Horizon: the pull's reach for its duration; it detonates when it resolves
 ] as const;
 export type AreaKind = (typeof AREA_KINDS)[number];
 

@@ -372,8 +372,9 @@ export function emitSpikes(w: World, p: PlayerState, def: SkillRuntimeDef, b: Sp
   }
 }
 
-function queueStrike(
-  w: World, p: PlayerState, kind: 'stormCall' | 'frostSpike', x: number, y: number, radius: number, delay: number, at: number,
+/** A telegraphed ground strike of the player's (Storm Call, Glacial Spikes, Meteor Rain): its harmless telegraph now, the hit at `at`. */
+export function queueStrike(
+  w: World, p: PlayerState, kind: 'stormCall' | 'frostSpike' | 'meteorRain', x: number, y: number, radius: number, delay: number, at: number,
   def: SkillRuntimeDef, group: number[] | null,
 ): void {
   // The telegraph is the player's own: harmless to players (hurts 'none', no rider); the strike's damage is dealt below.

@@ -117,4 +117,37 @@ export const LIGHTNING_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'chain', add: 1 }],
     },
   ],
+  // Roster batch 3 (SK4), skills.md 6
+  stormStep: [
+    {
+      id: 'thirdStrike', name: 'Third Strike', tier: 1, text: 'A third strike lands halfway along the blink',
+      effects: [{ k: 'flag', flag: 'thirdStrike' }],
+    },
+    {
+      id: 'forkingStep', name: 'Forking Step', tier: 2, text: 'Lightning forks from the landing to 2 more enemies within 120 units for 60% damage',
+      effects: [{ k: 'rt', rt: { p: 'fork', branches: 2, links: 1, share: 0.6, jump: 120 } }],
+    },
+    {
+      id: 'staticCloud', name: 'Static Cloud', tier: 3,
+      text: 'Leaves a shocking cloud where you left for 2 seconds (0.4× effectiveness every 0.5 seconds)',
+      effects: [{
+        k: 'trail', area: 'staticField', at: 'origin', radius: 0, duration: 2, interval: 0.5, effectiveness: 0.4, ailment: true, expose: 0, spacing: 0,
+      }],
+    },
+  ],
+  tempestSurge: [
+    {
+      id: 'longStorm', name: 'Long Storm', tier: 1, text: 'Lasts 3 seconds longer',
+      effects: [{ k: 'add', stat: 'duration', value: 3 }],
+    },
+    {
+      id: 'overchargedTempo', name: 'Overcharged Tempo', tier: 2, text: '35% more cast speed while it lasts (60% in all); pulses deal 30% less damage',
+      effects: [{ k: 'flag', flag: 'overchargedTempo' }, { k: 'more', pct: -30 }],
+    },
+    {
+      id: 'lightningSkin', name: 'Lightning Skin', tier: 3,
+      text: '+20% lightning resistance while it lasts, and your hits deal 10% more damage to shocked enemies',
+      effects: [{ k: 'flag', flag: 'lightningSkin' }],
+    },
+  ],
 };

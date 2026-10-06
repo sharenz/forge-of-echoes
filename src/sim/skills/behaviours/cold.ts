@@ -21,4 +21,6 @@ export const COLD_BEHAVIOURS = {
   },
   // Roster batch 2 (SK3)
   rimeBulwark: { emitter: 'buff', buff: 'barrier', duration: 6 },
+  // Roster batch 3 (SK4): a zone (its `zone` primitive ticks the cold hit); chilled enemies inside take more cold damage.
+  blizzard: { emitter: 'zone', area: 'blizzardStorm', reach: SKILL_TIMING.zoneReach, radius: 90, duration: 6 },
 } satisfies Record<string, SkillBehaviour>;

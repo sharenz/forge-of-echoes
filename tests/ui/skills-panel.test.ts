@@ -59,11 +59,12 @@ describe('skill book', () => {
   });
 
   it('shows a new skill as soon as its data turns available (no hard-coded list)', () => {
-    // Meteor Rain (roster batch 3) has not shipped yet; Phase Stride did with SK2, Gravity Well with SK3.
-    const flipped = skills.map((s) => (s.id === 'meteorRain' ? { ...s, available: true } : s));
+    // Every skill has shipped (Meteor Rain with SK4): a copy of the data with Meteor Rain not yet available stands for "before".
+    const hidden = skills.map((s) => (s.id === 'meteorRain' ? { ...s, available: false } : s));
     const ch = character(10);
-    const before = skillBook(skills, ch);
-    const after = skillBook(flipped, ch);
+    const before = skillBook(hidden, ch);
+    const after = skillBook(skills, ch);
+    expect(after.coming).toBe(0);
     expect(before.order).toContain('phaseStride');
     expect(before.order).toContain('gravityWell');
     expect(before.order).not.toContain('meteorRain');

@@ -10,6 +10,7 @@ import { emitAegis, emitBarrier, emitEchoSigil } from './defence';
 import { burstFanArc, emitBurst, emitChain, emitDash, emitProjectiles } from './emitters';
 import { emitBlast, emitLob, emitOrb, emitSpikes, emitStrikes } from './roster';
 import { emitCone, emitLash, emitPillar, emitPulse, emitZone } from './roster2';
+import { emitHorizon, emitMeteors, emitSurge, stormStepStrikes } from './roster3';
 import { aimAngle, augmentOf, hasFlag } from './projectile-mods';
 import { tickAugments } from './primitives';
 import type { SkillBehaviour } from './types';
@@ -31,9 +32,15 @@ export function releaseSkill(w: World, p: PlayerState, def: SkillRuntimeDef, aim
       case 'barrier': emitBarrier(w, p, def, b); break;
       case 'aegis': emitAegis(w, p, def, b); break;
       case 'echoSigil': emitEchoSigil(w, p, def, b); break;
+      case 'surge': emitSurge(w, p, def, b); break;
     }
-  } else if (b.emitter === 'dash') emitDash(w, p, def, b, aimX, aimY, dirX, dirY);
-  else emitAt(w, p, def, b, aimX, aimY, angle);
+  } else if (b.emitter === 'dash') {
+    const fromX = p.x;
+    const fromY = p.y;
+    emitDash(w, p, def, b, aimX, aimY, dirX, dirY);
+    // Storm Step (SK4): lightning where she left and where she landed.
+    if (b.strikes) stormStepStrikes(w, p, def, b, fromX, fromY, p.x, p.y);
+  } else emitAt(w, p, def, b, aimX, aimY, angle);
   queueEcho(w, p, def, b);
   spendEchoSigil(w, p, def, b);
 }
@@ -81,6 +88,12 @@ function emitAt(w: World, p: PlayerState, def: SkillRuntimeDef, b: SkillBehaviou
       break;
     case 'lash':
       emitLash(w, p, def, b, dirX, dirY);
+      break;
+    case 'meteors':
+      emitMeteors(w, p, def, b, aimX, aimY);
+      break;
+    case 'horizon':
+      emitHorizon(w, p, def, b, aimX, aimY);
       break;
     default:
       break;
