@@ -14,8 +14,9 @@ import { moveAlong, setAnim, stop } from '../behaviour';
 import { DT } from '../constants';
 import { GOLDEN_ANGLE } from '../math';
 import type { PlayerState, World } from '../world';
+import { layoutAnchors } from '../layout';
 import {
-  beat, canOnset, damageFixture, dismissMember, dwell, eventFixture, finish, fixtureLife, hasRoom, markOnset, mods, nearestLivingDist,
+  anchorSite, anchorSpot, beat, canOnset, damageFixture, dismissMember, dwell, eventFixture, finish, fixtureLife, hasRoom, markOnset, mods, nearestLivingDist,
   pay, pickSite, placeAt,
 } from './kit';
 import type { EventInstance, EventKill, EventScript } from './types';
@@ -55,11 +56,32 @@ export function stageAt(t: number): number {
   return t >= ORCHARD_STAGE_SECONDS[2] ? 3 : t >= ORCHARD_STAGE_SECONDS[1] ? 2 : t >= ORCHARD_STAGE_SECONDS[0] ? 1 : 0;
 }
 
-function sitesFor(w: World, angle: number): { x: number; y: number }[] {
-  const first = pickSite(w, angle, { minPlayer: ORCHARD_CLEARANCE, rim: 110, from: 0.1, to: 0.6 });
+/**
+ * The bloom sites: the first on a layout orchard anchor (E1) or the radial rule, then each further plot on another orchard anchor that
+ * keeps the spacing window to every plot so far and clears the party (authored order), else the golden-angle search round the first.
+ */
+function sitesFor(w: World, e: EventInstance): { x: number; y: number }[] {
+  const angle = e.plan.angle;
+  const rule = { minPlayer: ORCHARD_CLEARANCE, rim: 110 };
+  const at = anchorSite(w, e, 'orchard', rule);
+  const first = at ? { x: at.x, y: at.y } : pickSite(w, angle, { ...rule, from: 0.1, to: 0.6 });
   const out = [first];
   const [lo, hi] = ORCHARD_SPACING;
+  const extra: { id: string; x: number; y: number }[] = [];
+  if (at) {
+    for (const a of layoutAnchors(w, 'orchard')) {
+      const p = a.id !== at.anchor.id ? anchorSpot(w, 'orchard', a, rule) : null;
+      if (p) extra.push({ id: a.id, x: p.x, y: p.y });
+    }
+  }
   for (let b = 1; b < ORCHARD_BLOOMS; b++) {
+    const plot = extra.find(a => out.every(o => { const d = Math.hypot(a.x - o.x, a.y - o.y); return d >= lo && d <= hi; }));
+    if (plot) {
+      out.push(placeAt(plot.x, plot.y, w.arenaRadius, w.props));
+      e.anchors!.push(plot.id);
+      extra.splice(extra.indexOf(plot), 1);
+      continue;
+    }
     let best = placeAt(first.x, first.y, w.arenaRadius, w.props), bestScore = -Infinity;
     for (let k = 0; k < 64; k++) {
       const a = angle + k * GOLDEN_ANGLE;
@@ -81,7 +103,7 @@ function sitesFor(w: World, angle: number): { x: number; y: number }[] {
 
 function reveal(w: World, e: EventInstance): boolean {
   if (!canOnset(w) || !hasRoom(w, ORCHARD_BLOOMS)) return false;
-  const sites = sitesFor(w, e.plan.angle);
+  const sites = sitesFor(w, e);
   const blooms: Bloom[] = [];
   for (let k = 0; k < ORCHARD_BLOOMS; k++) {
     const i = eventFixture(w, e, sites[k].x, sites[k].y, ORCHARD_LIFE, ORCHARD_RADIUS);

@@ -1,6 +1,6 @@
 # D. Territory: area-bound maps, chart-driven drops, surge, beacons and hand-crafted areas
 
-**Status: slices T0 (bound maps + migration), R1 (chart-driven drop routing), U1 (chart and dock UI, since reworked into the area modal, see "Area modal as built"), P1 (pins, Re-chart, Recycle, Rook maps), S1 (area-bias scarabs) and G1 (daily surge) are built; everything else here is still design.** As built, where T0 differs from or
+**Status: slices T0 (bound maps + migration), R1 (chart-driven drop routing), U1 (chart and dock UI, since reworked into the area modal, see "Area modal as built"), P1 (pins, Re-chart, Recycle, Rook maps), S1 (area-bias scarabs), G1 (daily surge) and E1 (anchor-aware events, see "E1 as built" in 10.5a) are built; everything else here is still design.** As built, where T0 differs from or
 fills in the text below:
 - `MapItem` also carries load-only `unbound?: true` (a legacy map wearing a provisional binding until the account's Atlas is known) and
   `migrated?: 'theme' | 'fog'` (the one-time tooltip note); `rechart?` is typed for P1. `bindLegacyMaps`, `bindLegacyChoice`,
@@ -685,6 +685,33 @@ colliders are circles only; no new collision primitive).
   `[]` = no layout or none declared = keep the radial rules; `fallback: true` synthesises deterministic Charter-respecting sites for
   point-like kinds. `pickLayoutAnchor(w, kind, rng, filter?)` picks with the caller's seeded rng.
 
+- **E1 as built (slice E1, shipped).** Every event script asks for its anchor kind before its radial rule (`src/sim/events/kit.ts`
+  `anchorSite` / `anchorSpot` / `anchorRng`): hunted -> `perch`, echoRift -> `echo`, wound -> `fault` (field centred on the anchor, wedge
+  boundaries aligned with its line), pactAltar -> `altar`, orchard -> `orchard` (first plot, then further orchard anchors inside the
+  250-450 u spacing window, else the old search round the first), ring -> `ring`, host -> `host`, anvil -> `anvil`, bellwatch -> `bell`,
+  blackout -> three `relay` anchors >= RELAY_SPACING apart, vaultbreakers -> a `road` path driven from whichever end is >= 250 u from
+  every player (both clear: plan variant bit 2), secondCrown -> `bossStage.second` when declared. voidBreach stays central (no kind).
+  - The pick uses its own stream (run seed x event uid x kind), never the director's, so a layout with anchors never shifts the
+    other event rolls; `fallback: true` synthesis is not used (an area without a usable anchor keeps the radial rules exactly).
+  - An anchor is **blocked** when the seated point is closer to a living player than the event's own clearance (the radial rule's
+    `minPlayer`), or its tier window excludes the map. **Seating** (`src/data/progression/events/anchors.ts`): each kind has the radial
+    rule's rim margin (`EVENT_ANCHOR_RIM`, e.g. bell 280 u, fault 260 u); an anchor up to `ANCHOR_SEAT` = 100 u over it slides straight
+    towards the centre, farther it is blocked. Blocked or absent: `pickSite` exactly as before (goldens of layout-free runs unchanged).
+  - `EventInstance.anchors` (server-only) records the anchor ids used; the layout sweep prints them (`anchored`: a / r / -), and
+    `LAYOUT_SWEEP_ANCHORS=0` strips every anchor for before/after comparisons.
+  - Validator **check 10** (seating): every anchor seats its event (<= 100 u over its rim, the slid point clear of solids and
+    reachable), and relay anchors come as a triad (>= 3) or not at all. Shipped anchors moved for it: Ember Road `bell-1` and Pit
+    of Echoes `bell-1` (pulled in so the rings fit). Moved after the before/after layout sweep (bot, `LAYOUT_SWEEP_ANCHORS=0` vs
+    live): Heart of the Forge `echo-s1/s4` (from the outer sectors into the bellows ring: the interception chase crossed uncleared
+    sectors, 10 of 12 runs died against 4 of 12 radial), Hollow Ossuary `altar-1`, `bell-2` and `fault-n` (from the outer ring into
+    the open heart: the 130 u spiral corridor cannot hold the wide fields, Fault grades and Pact pacts kept collapsed out there).
+  - Sweep (25 areas x 12 events x 2 seeds, live vs stripped): clears 511 vs 514 of 600, grade points 1117 vs 1123, finished
+    events 565 vs 567, no hook errors; about 75% of reveals stand on an anchor (the rest are blocked by the party and use the radial
+    rule), before the four moves above.
+  - Tests: `tests/sim-events/anchors.test.ts` (every shipped area x every point event from the landing, relay triads, caravan roads,
+    Rival's second stage, seeded and stream-neutral pick, tier windows, blocked and absent fallbacks, seating), validator check 10 in
+    `tests/layouts/validate.test.ts`.
+
 - **Spawn placement and pockets (layouts live in real runs).** `spawnMonster` (`src/sim/spawn.ts`) resolves every spawn (packs, stream groups,
   lieutenant, boss, summons, event spawns) to the nearest point clear of every solid prop (`freeSpawnPoint`: a fixed outward ring search on the
   `propGrid`, no RNG, so streams stay stable; the old generator shares it). Check 8 of `layout-validate.ts` (`findPockets`, `findCornerTraps`):
@@ -950,7 +977,7 @@ parallel and are referenced where they touch.
 | **L1** | **Ashen + Chapel packs (10 areas)** | L | layouts 1 to 10 + art kit 1 | `src/data/layouts/{ashen,chapel}/*`, prop art for `vat`, `bellows`, `altar`, `statue` | L0 |
 | **L2** | **Ossuary + Crypt packs (8 areas)** | M-L | layouts 11 to 18 + art kit 2 | `src/data/layouts/{ossuary,crypt}/*`, `ribArch`, `iceColumn`, `sarcophagus`, `choirStall` | L0 (parallel with L1) |
 | **L3** | **Chainworks + Coliseum packs (7 areas)** | M-L | layouts 19 to 25 + art kit 3 | `src/data/layouts/{chainworks,coliseum}/*`, `crate`, `chainPost`, `hoist`, `gate`, `weaponRack`, `obelisk` | L0 (parallel) |
-| **E1** | **Anchor-aware events** | M | Event Director asks the layout for anchors; fallbacks | `src/sim/events/*` (C owns; this is a small PR in their slice) | L0, C slice 4 |
+| **E1** | **Anchor-aware events** (built, 10.5a) | M | Event Director asks the layout for anchors; fallbacks | `src/sim/events/*` (C owns; this is a small PR in their slice) | L0, C slice 4 |
 | **F1** | **Polish** | S-M | discovery/pin/surge sounds and banners (A 5.5 ids), reduced motion, telemetry counts, `GAME_SPEC` rewrite (section 14) | `src/audio/sfx.ts`, `src/contracts/audio.ts` (append ids), docs | all |
 
 **Parallel plan for a team of build agents:** T0 -> (R1 and L0 in parallel) -> (U1, P1, S1, G1 in parallel, with disjoint file

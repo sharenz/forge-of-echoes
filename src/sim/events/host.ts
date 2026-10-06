@@ -16,7 +16,7 @@ import { monsterDef } from '../rosters';
 import { MFLAG } from '../stores';
 import type { World } from '../world';
 import {
-  beat, canOnset, dismissMember, eventArea, eventDamage, eventFixture, eventMonster, familyKind, finish, fixtureLife, hasRoom, lootBonus,
+  anchorSite, beat, canOnset, dismissMember, eventArea, eventDamage, eventFixture, eventMonster, familyKind, finish, fixtureLife, hasRoom, lootBonus,
   markOnset, mods, pickSite, placeAt, releaseMembers, skinOf, thawStatue,
 } from './kit';
 import type { EventInstance, EventKill, EventScript } from './types';
@@ -53,7 +53,9 @@ const count = (w: World) => Math.max(8, Math.round(HOST_STATUES * (mods(w).hostC
 function reveal(w: World, e: EventInstance): boolean {
   const n = count(w);
   if (!canOnset(w) || !hasRoom(w, n + 1)) return false;
-  const center = pickSite(w, e.plan.angle, { minPlayer: HOST_CLEARANCE, rim: HOST_OUTER_RADIUS + 25, from: 0.05, to: 0.9 });
+  const rule = { minPlayer: HOST_CLEARANCE, rim: HOST_OUTER_RADIUS + 25 };
+  const at = anchorSite(w, e, 'host', rule) ?? pickSite(w, e.plan.angle, { ...rule, from: 0.05, to: 0.9 });
+  const center = { x: at.x, y: at.y };
   const s: HostState = { center, prism: -1, order: [], alive: new Set(), total: 0, thawed: 0, bar: 0, t: 0, lastKills: w.kills, shattered: false, shock: -1, hint: 0 };
   e.s = s;
   const pi = eventFixture(w, e, center.x, center.y, HOST_PRISM_LIFE, HOST_PRISM_RADIUS, familyKind(w, 'bruiser', 'hunter'));

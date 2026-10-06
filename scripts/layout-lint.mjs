@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Layout lint (docs/atlas-rework/D-territory.md 10.3/10.4): runs the seven validator checks over every registered
+// Layout lint (docs/atlas-rework/D-territory.md 10.3/10.4): runs the validator checks (1 to 10, see src/sim/layout-validate.ts) over every registered
 // layout (src/data/layouts AREA_LAYOUTS) and prints one line per issue for PR review. Exit code 1 when any check fails.
 //
 //   npm run layout:lint                  registered layouts (none until a pack lands)
@@ -44,5 +44,5 @@ for (const layout of layouts) {
     for (const line of formatIssues({ ...report, issues })) console.log(line);
   }
 }
-console.log(failed === 0 ? `layout-lint: ${layouts.length} layout(s) pass all 7 checks` : `layout-lint: ${failed} of ${layouts.length} layout(s) failed`);
+console.log(failed === 0 ? `layout-lint: ${layouts.length} layout(s) pass all checks` : `layout-lint: ${failed} of ${layouts.length} layout(s) failed`);
 process.exit(failed === 0 ? 0 : 1);

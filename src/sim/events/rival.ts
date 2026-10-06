@@ -25,7 +25,7 @@ import { monsterDef } from '../rosters';
 import { allocPack, spawnMonster } from '../spawn';
 import { MFLAG } from '../stores';
 import type { World } from '../world';
-import { beat, eventArea, finish, hasRoom, lootBonus, mods, pickSite, skinOf } from './kit';
+import { beat, eventArea, finish, hasRoom, lootBonus, mods, nearestLivingDist, pickSite, placeAt, skinOf } from './kit';
 import type { EventInstance, EventKill, EventScript } from './types';
 
 interface RivalState {
@@ -74,7 +74,14 @@ export function rivalPending(e: EventInstance): boolean {
 
 function reveal(w: World, e: EventInstance): boolean {
   const a = w.director.bossId;
-  const site = pickSite(w, e.plan.angle, { minPlayer: RIVAL_CLEARANCE, rim: 90, from: 0.85, to: 1 });
+  // E1: a layout's second boss stage (D 10.2 `bossStage.second`) when it clears the party, else the far rim.
+  const rule = { minPlayer: RIVAL_CLEARANCE, rim: 90 };
+  const second = w.layout?.compiled.bossStage.second;
+  let site: { x: number; y: number };
+  if (second && Math.hypot(second.x, second.y) <= w.arenaRadius - rule.rim && nearestLivingDist(w, second.x, second.y) >= rule.minPlayer) {
+    site = placeAt(second.x, second.y, w.arenaRadius, w.props);
+    e.anchors = ['bossStage.second'];
+  } else site = pickSite(w, e.plan.angle, { ...rule, from: 0.85, to: 1 });
   e.s = { a, b: 0, stage: 'wait', countdown: RIVAL_ARRIVAL_SECONDS, site, kind: rivalKind(w, e.plan.variant ?? 0), fight: 0, fallen: 0, spoils: false,
     offset: 0, held: 0, feudT: 0, enraged: 0, feudKills: 0 } satisfies RivalState;
   const i = a >= 0 ? w.monsters.slotOf(a) : -1;

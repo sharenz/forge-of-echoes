@@ -22,7 +22,7 @@ import { monsterDef } from '../rosters';
 import { MFLAG } from '../stores';
 import type { Area, PlayerState, World } from '../world';
 import {
-  beat, canOnset, eventArea, eventDamage, eventMonster, finish, hasRoom, makeStone, markOnset, mods, nearestLivingDist,
+  anchorSite, beat, canOnset, eventArea, eventDamage, eventMonster, finish, hasRoom, makeStone, markOnset, mods, nearestLivingDist,
   pickSite, placeAt, releaseMembers, ringPoints, skinOf, stoneZones, tickStones, type Stone,
 } from './kit';
 import type { EventInstance, EventKill, EventScript } from './types';
@@ -94,7 +94,9 @@ function championKind(w: World): MonsterKind {
 }
 
 function reveal(w: World, e: EventInstance): boolean {
-  const center = pickSite(w, e.plan.angle, { minPlayer: RING_SITE_CLEARANCE, rim: RING_RADIUS + 30, from: 0.1, to: 0.85 });
+  const rule = { minPlayer: RING_SITE_CLEARANCE, rim: RING_RADIUS + 30 };
+  const at = anchorSite(w, e, 'ring', rule) ?? pickSite(w, e.plan.angle, { ...rule, from: 0.1, to: 0.85 });
+  const center = { x: at.x, y: at.y };
   const stones = ringPoints(w, center.x, center.y, RING_STONE_SPACING, 3, e.plan.angle).map((p, k) => makeStone(p.x, p.y, RING_STONE_RADIUS, k));
   e.s = { center, stones, vow: -1, champion: 0, t: 0, next: 2.5, nextKind: 'lane', move: null, outside: new Map(), left: false, spikeAt: 3, hint: 0 } satisfies RingState;
   e.phase = 'available';

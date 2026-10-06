@@ -695,6 +695,15 @@ Coliseum and Chainworks).
 | bellwatch | Bellwatch | T5 | 3 to 5 | silence four cantors before the bell tolls the arena to a frenzy | cantors cut down before toll 4 (2 / 3 / 4) |
 | voidBreach | Void Breach | T6, or forced | 3 to 4 | the arena shrinks under a void tide; seal the breach | seal time (<= 86 s / <= 61.5 s; x0.93 Ossuary, x0.85 Coliseum) |
 
+**Where events happen (anchors).** In a hand-crafted area the Event Director places each event on one of the layout's
+declared anchors of its kind (the Stalker on a perch with cover between it and the landing, the Echoing on an echo anchor,
+the Caravan along the area's road, the Fault on its fault line with the first crack along it, the Ember Relay on the
+area's three relay braziers, Pact Altar, Orchard plots, Champion's Ring, Stasis Host, Wayside Anvil and Bellwatch on
+their own anchors, Rival Crowns on a second boss stage when the area has one). Which anchor is picked with the run seed,
+so the same area always uses the same handful of sites. An anchor must keep the event's usual distance from every player
+and fit its footprint inside the arena (one up to 100 units over the rim slides inward); when none qualifies, or an
+anchor's tier window excludes the map, the event falls back to the old radial placement. The Void Breach stays central.
+
 Area bonuses are kept and extended: forge adds +5 Stalker and +5 Ember Relay (+3 Fault, +4 Wayside Anvil), arena +10 Stalker and
 +5 Rival Crowns (+5 Champion's Ring), crypt +10 The Echoing and +5 Fault (+3 Stasis Host, +5 Bellwatch), vault +5 The Echoing and
 +10 Laden Caravan (+5 Pact Altar), frontier +6 Ashseed Orchard; Commanded adds +8 Stalker, Restless +5 Stalker,

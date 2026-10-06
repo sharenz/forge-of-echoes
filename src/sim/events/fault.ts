@@ -18,7 +18,8 @@ import { isHeld } from '../rosters/pressure';
 import type { Area, World } from '../world';
 import type { RosterSkin } from './kit';
 import {
-  beat, canOnset, eventArea, eventDamage, eventMonster, familyKind, finish, hasRoom, markOnset, mods, nearestLivingDist, pickSite, skinOf, placeAt } from './kit';
+  anchorSite, beat, canOnset, eventArea, eventDamage, eventMonster, familyKind, finish, hasRoom, markOnset, mods, nearestLivingDist, pickSite, skinOf,
+  placeAt } from './kit';
 import type { EventInstance, EventKill, EventScript } from './types';
 
 interface FaultState {
@@ -94,8 +95,15 @@ const overflowAfter = (w: World) => FAULT_OVERFLOW_SECONDS * (mods(w).timerScale
 const faultScale = (w: World) => (mods(w).timerScale ?? 1) * (1 + (mods(w).gradeEase ?? 0));
 
 function reveal(w: World, e: EventInstance): boolean {
-  const center = pickSite(w, e.plan.angle, { minPlayer: FAULT_CLEARANCE, rim: FAULT_RADIUS + 20, from: 0.05, to: 0.9 });
-  e.s = { center, base: e.plan.angle, t: 0, pulses: 0, nextPulseAt: 1, marked: false, guardians: new Set(), bornId: 0, queue: [], hotIn: -1,
+  // A layout's fault (E1): the field sits on the authored line and its first crack runs along it (wedge boundaries are base + k x 90
+  // degrees). The whole field must fit inside the arena, as with the radial rule.
+  const rule = { minPlayer: FAULT_CLEARANCE, rim: FAULT_RADIUS + 20 };
+  const at = anchorSite(w, e, 'fault', rule);
+  const line = at?.anchor.path;
+  const base = line && line.length >= 2 ? Math.atan2(line[line.length - 1].y - line[0].y, line[line.length - 1].x - line[0].x) : e.plan.angle;
+  const site = at ?? pickSite(w, e.plan.angle, { ...rule, from: 0.05, to: 0.9 });
+  const center = { x: site.x, y: site.y };
+  e.s = { center, base, t: 0, pulses: 0, nextPulseAt: 1, marked: false, guardians: new Set(), bornId: 0, queue: [], hotIn: -1,
     hotArea: null, hotWedge: -1, overflowAt: 0, sealed: false } satisfies FaultState;
   e.phase = 'available';
   beat(w, e, 'omen', center.x, center.y);

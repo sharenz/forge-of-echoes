@@ -12,7 +12,9 @@ import {
 import { DT } from '../constants';
 import { TAU } from '../math';
 import type { PlayerState, World } from '../world';
-import { beat, canOnset, eventMonster, familyKind, finish, hasRoom, markOnset, mods, pickSite, placeAt } from './kit';
+import { EVENT_ANCHOR_RIM } from '../../data/progression/events/anchors';
+import { layoutAnchors } from '../layout';
+import { anchorRng, anchorSpot, beat, canOnset, eventMonster, familyKind, finish, hasRoom, markOnset, mods, pickSite, placeAt } from './kit';
 import type { EventInstance, EventKill, EventScript } from './types';
 
 interface Brazier { x: number; y: number; lit: boolean; progress: number }
@@ -42,15 +44,42 @@ export function relayGrade(lit: number, lost: number, seconds = 0, scale = 1): M
 
 const paceScale = (w: World) => (mods(w).timerScale ?? 1) * (1 + (mods(w).gradeEase ?? 0));
 
+/** Braziers keep this far inside the rim (the radial triangle's own margin). */
+const RELAY_RIM = EVENT_ANCHOR_RIM.relay;
+
+/**
+ * E1: three of the layout's relay anchors, at least RELAY_SPACING apart (the validator keeps every authored relay that far from the
+ * others), taken in a seeded order; null when the area has no layout or fewer than three fit (the radial triangle stands in).
+ */
+function layoutTriad(w: World, e: EventInstance): { x: number; y: number }[] | null {
+  if (!w.layout) return null;
+  const R = w.arenaRadius;
+  const fits: { id: string; x: number; y: number }[] = [];
+  for (const a of layoutAnchors(w, 'relay')) {
+    const p = anchorSpot(w, 'relay', a, { minPlayer: 0 });
+    if (p) fits.push({ id: a.id, x: p.x, y: p.y });
+  }
+  if (fits.length < RELAY_BRAZIERS) return null;
+  const pick: typeof fits = [];
+  for (const a of anchorRng(w, e, 'relay').shuffle(fits)) {
+    if (pick.every(b => Math.hypot(a.x - b.x, a.y - b.y) >= RELAY_SPACING)) pick.push(a);
+    if (pick.length === RELAY_BRAZIERS) break;
+  }
+  if (pick.length < RELAY_BRAZIERS) return null;
+  e.anchors = pick.map(a => a.id);
+  return pick.map(a => placeAt(a.x, a.y, R, w.props));
+}
+
 function reveal(w: World, e: EventInstance): boolean {
   if (!canOnset(w)) return false;
-  // A triangle around the arena's heart, at least RELAY_SPACING apart.
+  // The layout's relay triad, else a triangle around the arena's heart, at least RELAY_SPACING apart.
   const R = w.arenaRadius;
-  const radius = Math.max(RELAY_SPACING / Math.sqrt(3) + 10, Math.min(R * 0.55, R - 130));
+  const radius = Math.max(RELAY_SPACING / Math.sqrt(3) + 10, Math.min(R * 0.55, R - RELAY_RIM));
   const braziers: Brazier[] = [];
+  const triad = layoutTriad(w, e);
   for (let k = 0; k < RELAY_BRAZIERS; k++) {
     const a = e.plan.angle + k * TAU / RELAY_BRAZIERS;
-    const p = placeAt(Math.cos(a) * radius, Math.sin(a) * radius, R, w.props);
+    const p = triad ? triad[k] : placeAt(Math.cos(a) * radius, Math.sin(a) * radius, R, w.props);
     braziers.push({ x: p.x, y: p.y, lit: false, progress: 0 });
   }
   e.s = { braziers, lit: 0, lost: 0, ember: null, bearers: [], nextBearer: 4 } satisfies RelayState;
