@@ -5,16 +5,16 @@
 // States: locked (cold iron), ready (a neighbour is allocated: brass, half lit), on (allocated: lit, emissive) and
 // gated (specified but its engine is not live: blueprint-cold with hatching). Exclusion is drawn on top by the renderer.
 // Odd frame sizes so the glyph and the plate centre share a pixel; lit from the top-left like all game art.
+// Colours come from a TonePalette (the Atlas Codex's by default); a seal wears the palette's emblem, or its glyph.
 import { Frame } from '../frame';
 import { C, RAMPS, hexToColor, type Color, type Ramp } from '../palette';
 import { ca, mix, rgba } from '../raster';
-import { emblem } from '../atlas/emblems';
-import type { MapBaseId } from '../../contracts/content';
 import { glyphMask, type GlyphId } from './glyphs';
-import { PLATE_R, PLATE_SIZE, TONES, type PlateClass, type Tone } from './tones';
+import { CODEX_PALETTE, PLATE_R, PLATE_SIZE, type PlateClass, type Tone, type TonePalette } from './tones';
 
 export type PlateState = 'locked' | 'ready' | 'on' | 'gated';
-export interface PlateSpec { cls: PlateClass; tone: Tone; /** Second branch of a bridge: tints the rim. */ tone2?: Tone; glyph: GlyphId; state: PlateState }
+/** One plate. `T` is the palette's tone id (the Atlas Codex: `Tone`). */
+export interface PlateSpec<T extends string = Tone> { cls: PlateClass; tone: T; /** Second branch of a bridge: tints the rim. */ tone2?: T; glyph: GlyphId; state: PlateState }
 
 const BAYER = [0, 2, 3, 1];
 const dith = (x: number, y: number): number => (BAYER[(y & 1) * 2 + (x & 1)] / 4 - 0.375) * 0.9;
@@ -32,8 +32,8 @@ const BRASS: Ramp = [C.goldDark, C.ochre, C.gold, C.goldHi, C.hot];
 
 interface Look { rim: Ramp; face: Ramp; faceLo: number; faceHi: number; glyph: { body: Color; hi: Color; lo: Color }; lit: boolean }
 
-function look(spec: PlateSpec): Look {
-  const t = TONES[spec.tone], t2 = TONES[spec.tone2 ?? spec.tone];
+function look(spec: PlateSpec<string>, palette: TonePalette): Look {
+  const t = palette.tones[spec.tone], t2 = palette.tones[spec.tone2 ?? spec.tone];
   switch (spec.state) {
     case 'on': return { rim: tint(BRASS, t2.face[4], 0.16), face: t.face, faceLo: 0.26, faceHi: 0.86, glyph: t.glyph, lit: true };
     case 'ready': return { rim: tint(IRON, t2.face[4], 0.22), face: lerpRamp(dim(t.face, 0.5), t.face, 0.4), faceLo: 0.16, faceHi: 0.62, glyph: { body: mix(t.glyph.body, C.stone, 0.42), hi: mix(t.glyph.hi, C.stoneLight, 0.35), lo: C.ink }, lit: false };
@@ -88,13 +88,13 @@ function chains(f: Frame, cx: number, cy: number, broken: boolean): void {
   strand(cx + 16, cy - 16, cx - 16, cy + 16, 2);
 }
 
-/** A plate frame (colour + emissive). Deterministic. */
-export function plateFrame(spec: PlateSpec): Frame {
+/** A plate frame (colour + emissive) in a palette (the Atlas Codex's by default). Deterministic. */
+export function plateFrame(spec: PlateSpec<string>, palette: TonePalette = CODEX_PALETTE): Frame {
   const size = PLATE_SIZE[spec.cls], R = PLATE_R[spec.cls], c = (size - 1) / 2;
   const f = new Frame(size, size);
-  const lk = look(spec);
+  const lk = look(spec, palette);
   const rimW = RIM_W[spec.cls];
-  const t = TONES[spec.tone];
+  const t = palette.tones[spec.tone];
   const { cls, state } = spec;
   const coreR = 8.6;
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
@@ -172,8 +172,8 @@ export function plateFrame(spec: PlateSpec): Frame {
   f.outline({ selective: false, color: state === 'gated' ? C.ossDeep : C.ink });
 
   // face decoration
-  if (cls === 'seal') {
-    const emb = emblem(spec.tone as MapBaseId);
+  const emb = cls === 'seal' ? palette.emblem?.(spec.tone) : undefined;
+  if (emb) {
     const em = emb.clone();
     if (state !== 'on') {
       em.c.map((col) => { const l = (0.3 * (col >>> 24) + 0.5 * ((col >>> 16) & 255) + 0.2 * ((col >>> 8) & 255)) * (state === 'ready' ? 0.9 : 0.5); return (mix(rgba(l, l * 0.96, l * 0.92, 255), col, state === 'ready' ? 0.35 : 0.08) & 0xffffff00) | ca(col); });
@@ -197,10 +197,10 @@ export function plateFrame(spec: PlateSpec): Frame {
 }
 
 const cache = new Map<string, Frame>();
-export function cachedPlate(spec: PlateSpec): Frame {
-  const key = `${spec.cls}|${spec.tone}|${spec.tone2 ?? ''}|${spec.glyph}|${spec.state}`;
+export function cachedPlate(spec: PlateSpec<string>, palette: TonePalette = CODEX_PALETTE): Frame {
+  const key = `${palette.id}|${spec.cls}|${spec.tone}|${spec.tone2 ?? ''}|${spec.glyph}|${spec.state}`;
   let f = cache.get(key);
-  if (!f) { f = plateFrame(spec); cache.set(key, f); }
+  if (!f) { f = plateFrame(spec, palette); cache.set(key, f); }
   return f;
 }
 

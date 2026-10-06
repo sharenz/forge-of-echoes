@@ -1,23 +1,25 @@
-// The Codex renderer: plain 2D canvases, no engine library. The board, threads and node plates come from the pixel
+// The tree renderer behind the Atlas Codex (and every other tree view): plain 2D canvases, no engine library. The board, threads and node plates come from the pixel
 // art in src/art/codex and are drawn at a whole zoom (or an exact half for the overview) so nothing smears. All text
 // (names, tooltips, branch banners, counters) is DOM on the shared type scale; this file draws none.
 //
 // Feedback beats (brief A, 8.3): allocation runs an ember along the thread into the node (0.25 s), then the plate
 // takes a hammer flash and a spark burst; keystones add a shockwave across the table and thicken the ambient embers;
 // refunds crumble the plate to ash and let the thread go dark; hovering a far node lights the cheapest path.
+// Everything tree-specific (nodes, edges, origin, world size, board, colours) comes from the view (view.ts).
 import { hexToColor } from '../../art/palette';
 import { Raster } from '../../art/raster';
 import { haloRaster } from '../../art/atlas/plates';
 import { drawFrameSurface, frameToSurface, newCanvas, rasterToCanvas, ctx2d, type FrameSurface, type Surface } from '../../art/atlas/canvas';
-import { boardRaster, paintThread, slateTile, CODEX_C, CODEX_H, CODEX_W } from '../../art/codex/board';
-import { cachedPlate, excludeBadge, padlockBadge } from '../../art/codex/plates';
-import { PLATE_SIZE, TONES } from '../../art/codex/tones';
-import { CX_BY_ID, CX_EDGES, CX_NODES, exclusionOf, nodeState, type CxNode, type CxState, type PathPreview } from './model';
+import { paintThread } from '../../art/codex/board';
+import { excludeBadge, padlockBadge } from '../../art/codex/plates';
+import { PLATE_SIZE, type ToneDef } from '../../art/codex/tones';
+import type { PathPreview, TreeModel, TreeNode, TreeNodeData, TreeState } from './tree';
+import type { TreeView } from './view';
 
 export const ZOOMS = [0.5, 1, 2, 3] as const;
-export type CxZoom = (typeof ZOOMS)[number];
+export type TreeZoom = (typeof ZOOMS)[number];
 
-export interface CxInput {
+export interface TreeInput {
   allocated: ReadonlySet<string>;
   selected: string | null;
   hovered: string | null;
@@ -28,14 +30,14 @@ export interface CxInput {
   reduceMotion: boolean;
 }
 
-export interface CxEvents {
+export interface TreeEvents<N extends TreeNodeData = TreeNodeData, T extends string = string> {
   onTransform?(ox: number, oy: number, zoom: number): void;
-  onBeat?(beat: 'impact' | 'refund', node: CxNode): void;
+  onBeat?(beat: 'impact' | 'refund', node: TreeNode<N, T>): void;
 }
 
 interface Spark { x: number; y: number; vx: number; vy: number; age: number; life: number; col: string; size: number; g: number }
 interface Run { to: string; from: string; t: number; dur: number }
-interface Ghost { node: CxNode; t: number }
+interface Ghost<Nd> { node: Nd; t: number }
 interface Ring { x: number; y: number; t: number; maxR: number; col: string; dur: number }
 
 const ease = (t: number): number => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
@@ -61,32 +63,30 @@ function ringPixels(r: number): [number, number][] {
   return list;
 }
 
-let baked: { board: Surface; dim: Surface; tile: Surface } | null = null;
-/** The board, the dim threads and the slate tile never change: bake them once per page, not once per tab visit. */
-function staticAssets(): { board: Surface; dim: Surface; tile: Surface } {
-  if (baked) return baked;
-  const dim = new Raster(CODEX_W, CODEX_H);
-  for (const { a, b } of CX_EDGES) paintThread(dim, a.x, a.y, b.x, b.y, 'dim');
-  baked = { board: rasterToCanvas(boardRaster()), dim: rasterToCanvas(dim), tile: rasterToCanvas(slateTile()) };
-  return baked;
-}
-
-const BY_Y: readonly CxNode[] = [...CX_NODES].sort((p, q) => p.y - q.y);
-
-export class CodexRenderer {
-  zoom: CxZoom = 1;
-  camX = CODEX_C;
-  camY = CODEX_C;
-  private tx = CODEX_C;
-  private ty = CODEX_C;
+export class TreeRenderer<N extends TreeNodeData = TreeNodeData, T extends string = string> {
+  zoom: TreeZoom = 1;
+  camX: number;
+  camY: number;
+  private tx: number;
+  private ty: number;
+  private readonly m: TreeModel<N, T>;
+  private readonly tones: Readonly<Record<T, ToneDef>>;
+  private readonly origin: string;
+  /** World size and centre (the board's). */
+  private readonly W: number;
+  private readonly H: number;
+  private readonly CX: number;
+  private readonly CY: number;
+  /** Nodes back to front (by y), so lower plates overlap the ones above them. */
+  private readonly byY: readonly TreeNode<N, T>[];
   private vw = 800;
   private vh = 500;
   private dpr = 1;
-  private input: CxInput | null = null;
+  private input: TreeInput | null = null;
   private vis = new Set<string>();
   private pending = new Map<string, Run>();
   private runs: Run[] = [];
-  private ghosts: Ghost[] = [];
+  private ghosts: Ghost<TreeNode<N, T>>[] = [];
   private flash = new Map<string, number>();
   private rings: Ring[] = [];
   private sparks: Spark[] = [];
@@ -105,18 +105,29 @@ export class CodexRenderer {
   private slate: CanvasPattern | null = null;
   private board: Surface;
   private dim: Surface;
-  private lit = newCanvas(CODEX_W, CODEX_H);
-  private reach = newCanvas(CODEX_W, CODEX_H);
-  private glow = newCanvas(CODEX_W, CODEX_H);
-  private states = new Map<string, CxState>();
+  private lit: Surface;
+  private reach: Surface;
+  private glow: Surface;
+  private states = new Map<string, TreeState>();
   private clashing = new Set<string>();
   private flow: { ax: number; ay: number; bx: number; by: number; len: number; col: string }[] = [];
   private badge = frameToSurface(padlockBadge());
   private xbadge = frameToSurface(excludeBadge());
   private seed = 7;
 
-  constructor(private canvas: HTMLCanvasElement, private events: CxEvents = {}) {
-    const st = staticAssets();
+  constructor(private view: TreeView<N, T>, private canvas: HTMLCanvasElement, private events: TreeEvents<N, T> = {}) {
+    const { model, board, palette } = view;
+    this.m = model;
+    this.tones = palette.tones;
+    this.origin = model.originId;
+    this.W = board.w; this.H = board.h; this.CX = board.cx; this.CY = board.cy;
+    this.camX = this.tx = board.cx;
+    this.camY = this.ty = board.cy;
+    this.byY = [...model.nodes].sort((p, q) => p.y - q.y);
+    this.lit = newCanvas(board.w, board.h);
+    this.reach = newCanvas(board.w, board.h);
+    this.glow = newCanvas(board.w, board.h);
+    const st = view.staticAssets();
     this.board = st.board;
     this.dim = st.dim;
     const ctx = canvas.getContext('2d');
@@ -158,7 +169,7 @@ export class CodexRenderer {
   private clamp(x: number, y: number, z: number = this.zoom): [number, number] {
     const over = 70 / z;
     const cl = (v: number, size: number, half: number): number => (size + 2 * over <= half * 2 ? size / 2 : Math.max(half - over, Math.min(size - half + over, v)));
-    return [cl(x, CODEX_W, this.vw / (2 * z)), cl(y, CODEX_H, this.vh / (2 * z))];
+    return [cl(x, this.W, this.vw / (2 * z)), cl(y, this.H, this.vh / (2 * z))];
   }
   private clampTarget(): void {
     [this.tx, this.ty] = this.clamp(this.tx, this.ty);
@@ -176,7 +187,7 @@ export class CodexRenderer {
     this.dirty = true;
   }
   setDragging(on: boolean): void { this.dragging = on; }
-  setZoom(z: CxZoom, focus?: { x: number; y: number }): void {
+  setZoom(z: TreeZoom, focus?: { x: number; y: number }): void {
     if (z === this.zoom) return;
     this.zoom = z;
     if (focus) { this.tx = focus.x; this.ty = focus.y; }
@@ -193,7 +204,7 @@ export class CodexRenderer {
   }
 
   // ---- input -------------------------------------------------------------------------------------------------
-  setInput(next: CxInput, first = false): void {
+  setInput(next: TreeInput, first = false): void {
     const prev = this.input;
     this.input = next;
     this.dirty = true;
@@ -207,10 +218,10 @@ export class CodexRenderer {
     // newly allocated: run an ember along the thread, then land
     for (const id of next.allocated) {
       if (this.vis.has(id) || this.pending.has(id)) continue;
-      const n = CX_BY_ID.get(id);
+      const n = this.m.byId.get(id);
       if (!n) continue;
       if (next.reduceMotion) { this.vis.add(id); this.land(n, true); changed = true; continue; }
-      const from = n.node.links.find((l) => l === 'origin' || this.vis.has(l)) ?? 'origin';
+      const from = n.node.links.find((l) => l === this.origin || this.vis.has(l)) ?? this.origin;
       const run: Run = { to: id, from, t: 0, dur: RUN_TIME };
       this.pending.set(id, run);
       this.runs.push(run);
@@ -218,7 +229,7 @@ export class CodexRenderer {
     // refunded: crumble to ash, the thread goes dark
     for (const id of [...this.vis]) {
       if (next.allocated.has(id)) continue;
-      const n = CX_BY_ID.get(id);
+      const n = this.m.byId.get(id);
       this.vis.delete(id);
       changed = true;
       if (n) this.crumble(n, next.reduceMotion);
@@ -229,26 +240,26 @@ export class CodexRenderer {
 
   /** A short shockwave and spark burst at a node (search jumps, "you are here"). */
   pulse(id: string): void {
-    const n = CX_BY_ID.get(id);
+    const n = this.m.byId.get(id);
     if (!n || this.input?.reduceMotion) return;
     this.rings.push({ x: n.x, y: n.y, t: 0, maxR: 26, col: '#ffe7a8', dur: 0.5 });
     this.dirty = true;
   }
 
-  private land(n: CxNode, quiet: boolean): void {
+  private land(n: TreeNode<N, T>, quiet: boolean): void {
     this.flash.set(n.id, 0);
     this.events.onBeat?.('impact', n);
     if (quiet) return;
     const big = n.cls === 'keystone', mid = n.cls !== 'small';
-    this.burst(n.x, n.y, big ? 46 : mid ? 24 : 12, TONES[n.tone].css, big ? 110 : 70);
+    this.burst(n.x, n.y, big ? 46 : mid ? 24 : 12, this.tones[n.tone].css, big ? 110 : 70);
     if (big) {
       this.freeze = 0.25;
-      this.rings.push({ x: n.x, y: n.y, t: 0, maxR: 380, col: TONES[n.tone].css, dur: 1.1 });
+      this.rings.push({ x: n.x, y: n.y, t: 0, maxR: 380, col: this.tones[n.tone].css, dur: 1.1 });
       this.rings.push({ x: n.x, y: n.y, t: -0.12, maxR: 300, col: '#ffe7a8', dur: 0.9 });
       this.ambient = 1;
-    } else if (mid) this.rings.push({ x: n.x, y: n.y, t: 0, maxR: 40, col: TONES[n.tone].css, dur: 0.5 });
+    } else if (mid) this.rings.push({ x: n.x, y: n.y, t: 0, maxR: 40, col: this.tones[n.tone].css, dur: 0.5 });
   }
-  private crumble(n: CxNode, quiet: boolean): void {
+  private crumble(n: TreeNode<N, T>, quiet: boolean): void {
     this.events.onBeat?.('refund', n);
     if (quiet) return;
     this.ghosts.push({ node: n, t: 0 });
@@ -273,26 +284,27 @@ export class CodexRenderer {
 
   // ---- baked thread layers -----------------------------------------------------------------------------------
   private rebuildWires(): void {
-    const lit = new Raster(CODEX_W, CODEX_H), reach = new Raster(CODEX_W, CODEX_H), glow = new Raster(CODEX_W, CODEX_H);
-    const on = (n: CxNode): boolean => n.id === 'origin' || this.vis.has(n.id);
+    const { W, H, CX, CY } = this;
+    const lit = new Raster(W, H), reach = new Raster(W, H), glow = new Raster(W, H);
+    const on = (n: TreeNode<N, T>): boolean => n.id === this.origin || this.vis.has(n.id);
     const flow: typeof this.flow = [];
-    for (const { a, b } of CX_EDGES) {
+    for (const { a, b } of this.m.edges) {
       const ao = on(a), bo = on(b);
       if (ao && bo) {
         // inner endpoint first so the ember flows outward; the colour is the outer node's light
-        const [p, q] = Math.hypot(a.x - CODEX_C, a.y - CODEX_C) <= Math.hypot(b.x - CODEX_C, b.y - CODEX_C) ? [a, b] : [b, a];
-        const col = TONES[(q.id === 'origin' ? p : q).tone].light;
+        const [p, q] = Math.hypot(a.x - CX, a.y - CY) <= Math.hypot(b.x - CX, b.y - CY) ? [a, b] : [b, a];
+        const col = this.tones[(q.id === this.origin ? p : q).tone].light;
         paintThread(lit, a.x, a.y, b.x, b.y, 'lit', col, glow);
         flow.push({ ax: p.x, ay: p.y, bx: q.x, by: q.y, len: Math.hypot(q.x - p.x, q.y - p.y), col: hex(col) });
       } else if (ao !== bo) {
         const other = ao ? b : a;
-        if (nodeState(other.node, this.vis) === 'ready') paintThread(reach, a.x, a.y, b.x, b.y, 'reach');
+        if (this.m.nodeState(other.node, this.vis) === 'ready') paintThread(reach, a.x, a.y, b.x, b.y, 'reach');
       }
     }
     for (const [layer, raster] of [[this.lit, lit], [this.reach, reach], [this.glow, glow]] as const) {
       const c = ctx2d(layer);
-      c.clearRect(0, 0, CODEX_W, CODEX_H);
-      const id = c.createImageData(CODEX_W, CODEX_H);
+      c.clearRect(0, 0, W, H);
+      const id = c.createImageData(W, H);
       id.data.set(raster.data);
       c.putImageData(id, 0, 0);
     }
@@ -300,17 +312,17 @@ export class CodexRenderer {
     // per-node state, once per change instead of once per frame
     this.states.clear();
     this.clashing.clear();
-    for (const n of CX_NODES) {
-      const st: CxState = n.id === 'origin' || this.vis.has(n.id) ? 'on' : nodeState(n.node, this.vis);
+    for (const n of this.m.nodes) {
+      const st: TreeState = n.id === this.origin || this.vis.has(n.id) ? 'on' : this.m.nodeState(n.node, this.vis);
       this.states.set(n.id, st);
-      if (st === 'locked' && exclusionOf(n.node, this.vis)) this.clashing.add(n.id);
+      if (st === 'locked' && this.m.exclusionOf(n.node, this.vis)) this.clashing.add(n.id);
     }
   }
 
-  private surface(n: CxNode, state: CxState): FrameSurface {
+  private surface(n: TreeNode<N, T>, state: TreeState): FrameSurface {
     const key = `${n.cls}|${n.tone}|${n.tone2 ?? ''}|${n.glyph}|${state}`;
     let s = this.surfaces.get(key);
-    if (!s) { s = frameToSurface(cachedPlate({ cls: n.cls, tone: n.tone, ...(n.tone2 ? { tone2: n.tone2 } : {}), glyph: n.glyph, state })); this.surfaces.set(key, s); }
+    if (!s) { s = frameToSurface(this.view.plate(n, state)); this.surfaces.set(key, s); }
     return s;
   }
   private halo(css: string): Surface {
@@ -385,7 +397,7 @@ export class CodexRenderer {
       if (run.t < run.dur) continue;
       this.runs = this.runs.filter((r) => r !== run);
       this.pending.delete(run.to);
-      const n = CX_BY_ID.get(run.to);
+      const n = this.m.byId.get(run.to);
       if (n && this.input?.allocated.has(run.to)) { this.vis.add(run.to); this.rebuildWires(); this.land(n, false); }
     }
     for (const [id, t0] of this.flash) { const nt = t0 + dt; if (nt > 0.3) this.flash.delete(id); else this.flash.set(id, nt); }
@@ -404,15 +416,15 @@ export class CodexRenderer {
         const pool = this.emberPool();
         if (!pool.length) break;
         const n = pool[Math.floor(this.rand() * pool.length)];
-        this.sparks.push({ x: n.x + (this.rand() - 0.5) * n.r, y: n.y - n.r * 0.4, vx: (this.rand() - 0.5) * 6, vy: -(6 + this.rand() * 9), age: 0, life: 1 + this.rand() * 1.4, col: this.rand() < 0.4 ? '#ffe7a8' : TONES[n.tone].css, size: 1, g: -3 });
+        this.sparks.push({ x: n.x + (this.rand() - 0.5) * n.r, y: n.y - n.r * 0.4, vx: (this.rand() - 0.5) * 6, vy: -(6 + this.rand() * 9), age: 0, life: 1 + this.rand() * 1.4, col: this.rand() < 0.4 ? '#ffe7a8' : this.tones[n.tone].css, size: 1, g: -3 });
       }
     }
   }
   private emberBudget = 0;
-  private emberCache: { key: number; list: CxNode[] } = { key: -1, list: [] };
-  private emberPool(): CxNode[] {
+  private emberCache: { key: number; list: TreeNode<N, T>[] } = { key: -1, list: [] };
+  private emberPool(): TreeNode<N, T>[] {
     if (this.emberCache.key !== this.vis.size) {
-      this.emberCache = { key: this.vis.size, list: CX_NODES.filter((n) => (n.id === 'origin' || (this.vis.has(n.id) && n.cls !== 'small'))) };
+      this.emberCache = { key: this.vis.size, list: this.m.nodes.filter((n) => (n.id === this.origin || (this.vis.has(n.id) && n.cls !== 'small'))) };
     }
     return this.emberCache.list;
   }
@@ -436,14 +448,14 @@ export class CodexRenderer {
     if (!this.runs.length) return;
     ctx.globalCompositeOperation = 'lighter';
     for (const run of this.runs) {
-      const a = CX_BY_ID.get(run.from), b = CX_BY_ID.get(run.to);
+      const a = this.m.byId.get(run.from), b = this.m.byId.get(run.to);
       if (!a || !b) continue;
       const u = ease(run.t / run.dur);
       for (let i = 0; i < 12; i++) {
         const d = Math.max(0, u - i * 0.035);
         const x = Math.round(a.x + (b.x - a.x) * d), y = Math.round(a.y + (b.y - a.y) * d);
         ctx.globalAlpha = 1 - i / 12;
-        ctx.fillStyle = i < 2 ? '#ffffff' : i < 5 ? '#ffe7a8' : TONES[b.tone].css;
+        ctx.fillStyle = i < 2 ? '#ffffff' : i < 5 ? '#ffe7a8' : this.tones[b.tone].css;
         const w = i < 3 ? 3 : 2;
         ctx.fillRect(x - 1, y - 1, w, w);
       }
@@ -457,9 +469,9 @@ export class CodexRenderer {
     const pv = this.input?.preview;
     if (!pv || !pv.nodes.length) return;
     const ok = this.input!.previewOk;
-    const first = CX_BY_ID.get(pv.nodes[0])!;
-    const startId = first.node.links.find((l) => l === 'origin' || this.vis.has(l)) ?? 'origin';
-    const chain = [CX_BY_ID.get(startId)!, ...pv.nodes.map((id) => CX_BY_ID.get(id)!)];
+    const first = this.m.byId.get(pv.nodes[0])!;
+    const startId = first.node.links.find((l) => l === this.origin || this.vis.has(l)) ?? this.origin;
+    const chain = [this.m.byId.get(startId)!, ...pv.nodes.map((id) => this.m.byId.get(id)!)];
     ctx.globalCompositeOperation = 'lighter';
     const off = motion ? Math.floor(t * 12) : 0;
     for (let i = 1; i < chain.length; i++) {
@@ -477,7 +489,7 @@ export class CodexRenderer {
     }
     ctx.globalAlpha = 1;
     for (const id of pv.nodes) {
-      const n = CX_BY_ID.get(id)!;
+      const n = this.m.byId.get(id)!;
       ctx.fillStyle = ok ? '#ffe7a8' : '#e08070';
       const r = ringPixels(Math.round(n.r + 2.5));
       ctx.globalAlpha = id === pv.nodes[pv.nodes.length - 1] ? 0.95 : 0.6;
@@ -491,10 +503,10 @@ export class CodexRenderer {
   private drawExclusion(ctx: CanvasRenderingContext2D, t: number, motion: boolean): void {
     const input = this.input!;
     const focus = new Set([input.selected, input.hovered].filter((x): x is string => !!x));
-    for (const n of CX_NODES) {
+    for (const n of this.m.nodes) {
       if (!n.node.excludes.length) continue;
       for (const oid of n.node.excludes) {
-        const o = CX_BY_ID.get(oid);
+        const o = this.m.byId.get(oid);
         if (!o || o.i < n.i) continue;
         const held = this.vis.has(n.id) || this.vis.has(o.id);
         const shown = focus.has(n.id) || focus.has(o.id);
@@ -503,12 +515,13 @@ export class CodexRenderer {
       }
     }
   }
-  private chain(ctx: CanvasRenderingContext2D, a: CxNode, b: CxNode, alpha: number, t: number, motion: boolean, held: boolean): void {
+  private chain(ctx: CanvasRenderingContext2D, a: TreeNode<N, T>, b: TreeNode<N, T>, alpha: number, t: number, motion: boolean, held: boolean): void {
+    const { CX, CY } = this;
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    const da = Math.hypot(a.x - CODEX_C, a.y - CODEX_C) || 1, db = Math.hypot(b.x - CODEX_C, b.y - CODEX_C) || 1;
-    let dx = (a.x - CODEX_C) / da + (b.x - CODEX_C) / db, dy = (a.y - CODEX_C) / da + (b.y - CODEX_C) / db;
+    const da = Math.hypot(a.x - CX, a.y - CY) || 1, db = Math.hypot(b.x - CX, b.y - CY) || 1;
+    let dx = (a.x - CX) / da + (b.x - CX) / db, dy = (a.y - CY) / da + (b.y - CY) / db;
     let m = Math.hypot(dx, dy);
-    if (m < 0.35) { dx = -(a.y - CODEX_C) / da; dy = (a.x - CODEX_C) / da; m = 1; }
+    if (m < 0.35) { dx = -(a.y - CY) / da; dy = (a.x - CX) / da; m = 1; }
     const bow = Math.hypot(a.x - b.x, a.y - b.y) < 90 ? 46 : 150;
     const cx = mx + (dx / m) * bow, cy = my + (dy / m) * bow;
     const len = Math.hypot(a.x - b.x, a.y - b.y) + bow;
@@ -541,10 +554,10 @@ export class CodexRenderer {
 
   private drawNodes(ctx: CanvasRenderingContext2D, t: number, motion: boolean): void {
     const input = this.input!;
-    for (const n of BY_Y) {
+    for (const n of this.byY) {
       const id = n.id;
-      const isOrigin = id === 'origin';
-      const state: CxState = this.states.get(id) ?? 'locked';
+      const isOrigin = id === this.origin;
+      const state: TreeState = this.states.get(id) ?? 'locked';
       const match = !input.searching || input.matches.has(id) || isOrigin;
       const alpha = match ? 1 : 0.26;
       const surf = this.surface(n, state);
@@ -554,7 +567,7 @@ export class CodexRenderer {
       const fl = this.flash.get(id);
       // halo
       if (state === 'on' || isOrigin) {
-        const css = TONES[n.tone].css;
+        const css = this.tones[n.tone].css;
         const sz = Math.round(n.r * (n.cls === 'keystone' ? 5.4 : n.cls === 'small' ? 4 : 4.6));
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = alpha * (n.cls === 'keystone' ? 0.5 + pulse * 0.2 : n.cls === 'small' ? 0.2 : 0.3 + pulse * 0.08);
@@ -596,7 +609,7 @@ export class CodexRenderer {
           const a = t * (n.cls === 'keystone' ? 0.7 : 1.3) + (i * Math.PI * 2) / count + n.x;
           const px = Math.round(n.x + Math.cos(a) * (n.r + 0.5)), py = Math.round(n.y + Math.sin(a) * (n.r + 0.5));
           ctx.globalAlpha = 0.9; ctx.fillStyle = '#ffe7a8'; ctx.fillRect(px, py, 1, 1);
-          ctx.globalAlpha = 0.3; ctx.fillStyle = TONES[n.tone].css; ctx.fillRect(px - 1, py - 1, 3, 3);
+          ctx.globalAlpha = 0.3; ctx.fillStyle = this.tones[n.tone].css; ctx.fillRect(px - 1, py - 1, 3, 3);
         }
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';
@@ -653,7 +666,7 @@ export class CodexRenderer {
     }
   }
 
-  private drawBrazier(ctx: CanvasRenderingContext2D, n: CxNode, t: number): void {
+  private drawBrazier(ctx: CanvasRenderingContext2D, n: TreeNode<N, T>, t: number): void {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 6; i++) {
       const ph = (t * 1.6 + i * 0.37) % 1;
