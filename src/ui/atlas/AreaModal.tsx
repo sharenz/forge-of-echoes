@@ -267,7 +267,7 @@ export function AreaModal({ area, model, pin, compact, gear, onClose, onGoto }: 
       <div ref={root} class={cx('fe-amodal fe-solid', compact && 'fe-amodal--compact')} role="dialog" aria-modal="true" aria-labelledby={headingId} aria-describedby={reasonId} tabIndex={-1}
         data-area-modal={area.id} data-map-state={mapState} onKeyDown={onKeyDown as never}>
         <AreaHero area={area} model={model} pin={pin} headingId={headingId} onClose={() => { store.actions.uiSound('close'); onClose(); }} />
-        <div class="fe-amodal__scroll">
+        <div class="fe-amodal__scroll fe-scrollfade">
           <AreaFacts area={area} model={model} />
           <div class="fe-amodal__main">
             <section class="fe-amodal__device" aria-label="Map device">

@@ -7,7 +7,7 @@ import type { JSX } from 'preact';
 import type { Item } from '../../contracts/items';
 import { PixelIcon, cx } from '../components/common';
 import { itemIconId, itemTone, stackCount } from '../lib/items';
-import { VENDOR_COLS, packVendor, roomAnywhere } from '../lib/merchant';
+import { VENDOR_COLS, VENDOR_PRICED_MIN_ROWS, packVendor, roomAnywhere } from '../lib/merchant';
 import { useLocal, type TooltipSpec } from '../local';
 import { useSignal, useStore } from '../store';
 import { beginPointerDrag } from './dnd';
@@ -28,7 +28,7 @@ export interface VendorEntry {
   slot?: number;
   /** A very subtle cue for a lucky find. */
   luck?: 'good' | 'jackpot';
-  /** The small price number shown over the item on hover only. */
+  /** The price number: printed under the tile on a priced grid, else shown over the item on hover. */
   priceTag?: string;
   /** Poor: the price cannot be paid (the number turns red). */
   poor?: boolean;
@@ -39,7 +39,10 @@ export interface VendorEntry {
   sale?: { from: { x: number; y: number }; remove(): void };
 }
 
-function VendorItem({ entry, x, y }: { entry: VendorEntry; x: number; y: number }) {
+/** A priced grid's rows: one cell plus the price line under it (--vendor-band, merchant.css). */
+const pitches = (n: number): string => `calc((var(--cell) + var(--vendor-band)) * ${n})`;
+
+function VendorItem({ entry, x, y, priced }: { entry: VendorEntry; x: number; y: number; priced: boolean }) {
   const store = useStore();
   const local = useLocal();
   const ref = useRef<HTMLDivElement>(null);
@@ -88,7 +91,9 @@ function VendorItem({ entry, x, y }: { entry: VendorEntry; x: number; y: number 
         'fe-item', `fe-item--${tone}`, 'fe-item--grid', 'fe-item--vendor', entry.poor && 'fe-item--poor',
         entry.luck && `fe-item--${entry.luck}`, drag?.uid === item.uid && 'fe-item--lifted',
       )}
-      style={{ left: cells(x), top: cells(y), width: cells(size.w), height: cells(size.h) }}
+      style={priced
+        ? { left: cells(x), top: pitches(y), width: cells(size.w), height: `calc(${pitches(size.h)} - var(--vendor-band))` }
+        : { left: cells(x), top: cells(y), width: cells(size.w), height: cells(size.h) }}
       data-uid={item.uid}
       data-tone={tone}
       data-kind={item.kind}
@@ -104,15 +109,21 @@ function VendorItem({ entry, x, y }: { entry: VendorEntry; x: number; y: number 
       <PixelIcon id={itemIconId(item)} class="fe-item__icon" width={`calc(var(--icon-cell) * ${size.w})`} height={`calc(var(--icon-cell) * ${size.h})`} />
       {count !== null && count > 1 && <span class="fe-item__count">{count}</span>}
       {tier !== null && <span class="fe-item__tier">T{tier}</span>}
-      {entry.priceTag && <span class="fe-item__price ui-type-caption">{entry.priceTag}</span>}
+      {entry.priceTag && (priced
+        ? <span class="fe-item__price fe-item__price--below ui-type-secondary" aria-label={`Price ${entry.priceTag} Forge Scrap`}>{entry.priceTag}</span>
+        : <span class="fe-item__price ui-type-caption">{entry.priceTag}</span>)}
     </div>
   );
 }
 
-/** Items on a plain grid. `state` colours the frame while a drag hovers (the sale window); `dropKind` marks it as a drop target. */
-export function VendorGrid({ entries, rows: minRows, state, dropKind, label, testId }: {
+/**
+ * Items on a plain grid. `state` colours the frame while a drag hovers (the sale window); `dropKind` marks it as a drop target.
+ * `priced` (Rook's wares) gives every row a price line under its cells, so each tile shows what it costs without a hover.
+ */
+export function VendorGrid({ entries, rows: minRows, state, dropKind, label, testId, priced = false }: {
   entries: VendorEntry[];
   rows?: number;
+  priced?: boolean;
   state?: 'ready' | 'valid' | 'invalid' | null;
   dropKind?: 'sale';
   label: string;
@@ -120,12 +131,12 @@ export function VendorGrid({ entries, rows: minRows, state, dropKind, label, tes
 }) {
   const store = useStore();
   const sizes = entries.map((e) => ({ key: e.key, ...safe(() => store.rules.itemSize(e.item), { w: 1, h: 1 }) }));
-  const { placements, rows } = packVendor(sizes, VENDOR_COLS, minRows);
+  const { placements, rows } = packVendor(sizes, VENDOR_COLS, minRows ?? (priced ? VENDOR_PRICED_MIN_ROWS : undefined));
   const at = new Map(placements.map((p) => [p.key, p]));
   return (
     <div
-      class={cx('fe-grid fe-solid fe-vendorgrid', state && `fe-vendorgrid--${state}`)}
-      style={{ width: cells(VENDOR_COLS), height: cells(rows) }}
+      class={cx('fe-grid fe-solid fe-vendorgrid', priced && 'fe-vendorgrid--priced', state && `fe-vendorgrid--${state}`)}
+      style={{ width: cells(VENDOR_COLS), height: priced ? pitches(rows) : cells(rows) }}
       data-drop={dropKind}
       data-testid={testId}
       role="group"
@@ -133,7 +144,7 @@ export function VendorGrid({ entries, rows: minRows, state, dropKind, label, tes
     >
       {entries.map((e) => {
         const p = at.get(e.key);
-        return p && !e.hidden ? <VendorItem key={e.key} entry={e} x={p.x} y={p.y} /> : null;
+        return p && !e.hidden ? <VendorItem key={e.key} entry={e} x={p.x} y={p.y} priced={priced} /> : null;
       })}
     </div>
   );

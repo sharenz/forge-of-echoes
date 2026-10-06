@@ -892,8 +892,9 @@ export class ClientApp {
           cursorWorld: this.cursorWorld,
           hoverPropId: hover,
           hoverDropId: hoverDrop >= 0 ? hoverDrop : session.walk.dropId,
-          // The hideout leans north: its Map Device (the first thing a new player must find) is always fully on screen.
-          ...(zone.kind === 'hideout' ? { cameraBias: { x: 0, y: hideoutCameraBias(this.el.canvas.clientHeight || window.innerHeight) } } : {}),
+          // The hideout leans north: its Map Device (the first thing a new player must find) is always fully on screen; in a short
+          // window it also leans west so the anvil is not hidden behind the Life globe.
+          ...(zone.kind === 'hideout' ? { cameraBias: hideoutCameraBias(this.el.canvas.clientHeight || window.innerHeight) } : {}),
           settings: { screenShake: s.settings.screenShake },
           paused: s.paused,
         });

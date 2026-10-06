@@ -145,6 +145,24 @@ export const VENDOR_TABS: readonly { id: VendorTab; label: string }[] = [
 export const VENDOR_COLS = 12;
 /** The vendor grid is never shorter than the stash grid. */
 export const VENDOR_MIN_ROWS = 8;
+/** A priced grid (Rook's wares: a price line under every row) is about as tall as the stash with fewer, taller rows. */
+export const VENDOR_PRICED_MIN_ROWS = 5;
+
+/** The one-line explanation above Rook's wares (F-17). */
+export const WARES_EXPLAINER = 'Prices are in Forge Scrap. Drag an item onto your backpack to buy it.';
+
+/**
+ * The empty state of a wares tab: nothing of that class on this board, or everything sold. Null when something is for sale.
+ * `msLeft` is the time to the next rotation (the board changes then, or now for a reroll).
+ */
+export function shelfEmptyText(tab: VendorTab, shelf: { total: number; unsold: number }, msLeft: number): string | null {
+  if (shelf.unsold > 0) return null;
+  const when = `${newWaresText(msLeft)}, or ask for new wares below.`;
+  if (shelf.total > 0) return `Sold out. ${when}`;
+  if (tab === 'gear') return `No gear on Rook's board this time. ${when}`;
+  if (tab === 'maps') return `No maps or scarabs on Rook's board this time. ${when}`;
+  return 'Rook has no supplies to sell right now.';
+}
 
 /** Which vendor tab shelves an item, decided by its class alone: equipment, maps and scarabs, then everything else (flasks, Kindling, Map Dust, currency). */
 export function vendorTabOf(item: Item): VendorTab {

@@ -446,6 +446,8 @@
 .fe-amodal__pin .fe-pinglyph { width: 12px; height: 16px; }
 
 .fe-amodal__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 10px 14px 14px; }
+/* F-21: the footer (reason + Open area) stays pinned; the middle scrolls and fades at its bottom edge so more below is obvious */
+.fe-amodal__scroll.fe-scrollfade { padding-bottom: 24px; }
 .fe-amodal__facts { display: flex; flex-wrap: wrap; gap: 6px; }
 .fe-amodal__main { display: grid; grid-template-columns: minmax(268px, 304px) minmax(0, 1fr); gap: 14px 22px; align-items: start; }
 .fe-amodal__device { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }

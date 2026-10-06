@@ -8,10 +8,21 @@ import type { PropKind, PropView } from '../contracts/sim';
 export const HIDEOUT_CAMERA_BIAS_Y = -52;
 /** Short windows (1024x600 shows only 300 world units of height) lean a little further so the table keeps its top. */
 export const HIDEOUT_CAMERA_BIAS_SHORT_Y = -68;
+/**
+ * ...and, in a short window, a little west. The north lean pushes the anvil (the Crafting Bench, south-west of the spawn) down to
+ * the command deck, where it sat behind the Life globe at 1024x600; leaning west slides it right, clear of the globe and above the
+ * flask slots, while Rook (east) stays inside the window. The deck is centred, so this holds at any short window width.
+ */
+export const HIDEOUT_CAMERA_BIAS_SHORT_X = -36;
+/** Below this window height (CSS px) the short lean applies (the HUD's own short tier starts at 699 px). */
+export const HIDEOUT_SHORT_HEIGHT = 680;
 
-/** The hideout camera's northward lean for a window `cssHeight` px tall. */
-export function hideoutCameraBias(cssHeight: number): number {
-  return cssHeight < 680 ? HIDEOUT_CAMERA_BIAS_SHORT_Y : HIDEOUT_CAMERA_BIAS_Y;
+const TALL_BIAS = { x: 0, y: HIDEOUT_CAMERA_BIAS_Y } as const;
+const SHORT_BIAS = { x: HIDEOUT_CAMERA_BIAS_SHORT_X, y: HIDEOUT_CAMERA_BIAS_SHORT_Y } as const;
+
+/** The hideout camera's lean (world units) for a window `cssHeight` px tall. Constant objects: read every frame. */
+export function hideoutCameraBias(cssHeight: number): { readonly x: number; readonly y: number } {
+  return cssHeight < HIDEOUT_SHORT_HEIGHT ? SHORT_BIAS : TALL_BIAS;
 }
 
 /** Footprint radius and sprite height (world units) of the props the guide can mark. */
