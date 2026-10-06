@@ -1,6 +1,6 @@
 # E. Build plan: slices, file ownership, tests, migration
 
-Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06, SK3 of R3 built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
+Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06, R3 (SK3 and SK5) built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
 `power-curve.md` (P), `skills.md` (SK) and `passive-tree.md` (PT) hold the designs these slices implement; `overview.md` has the pillars and the migration summary.
 
 ---
@@ -190,6 +190,31 @@ Meteor Rain, Storm Step, Tempest Surge, Blizzard, Event Horizon (levels 44 to 62
 ### SK5: Flagship augments (L)  (R3)
 Owner lane **augments**. The 13 flagship skills' 80 augments (data) plus every primitive they need (`lodge`, `split`, `fork`, `convert`, `expose`, `bounce`/`return`, `mark`, `shape`, `trail`, `onKill`); unique flags mapped.
 Files: `src/data/progression/augments/*.ts`, `src/sim/skills/primitives/*.ts`, `src/present/skills/augments.ts` (status icons, lodge/mark visuals), tests per primitive. Depends on SK0; runs in parallel with SK3 (different files).
+
+**Status: built 2026-10-06.** `src/sim/skills/primitives/` (state, burst, riders, expose, convert, lodge, split, mark, onkill, chain, trail,
+blast, mortar, shape, tick): per-world and per-player state lives in WeakMaps (a world without augments carries none, so the determinism
+goldens are bit-identical); player projectiles of augmented skills carry a rider (new optional `ProjectileEffect` hooks `canHit`,
+`onMonsterHit`, `onEnd`, and `onExpire` may keep a shot alive); combat reads only `markTakenMult` (×1 when nothing is marked) and the ward
+cap, and exports `applyAilment`; ai sets `AILMENT_BIT.lodged`/`marked`; the cast cost goes through `castCost` (Rift Echo, Charged Reprieve).
+34 new `AugmentRuntime` primitives; augment data gained `rt` (a primitive with share/radius/seconds numbers, passed through so the text and
+the sim read the same data), `convert` (both types' modifiers), `blast` and `trail` (resolved from an effectiveness with the skill's
+modifiers) and `ailmentChance`. **51 augments switched on** (the flagship trees of the twelve shipped flagship skills, Glacial Nova's and
+Glacial Spikes' two, Arcane Reprieve's Charged Reprieve, and SK3's Concussive Blast Shatter; Entropy Hex's six are SK3's): 110 live in all.
+The deferred SK0 items shipped too: Hardened Ember's raised ward cap (`wardCap`, honoured by the hit pipeline), Overheat's ignite bonus
+(`ignite`), Rift Echo's free third blink (`freeCast`). Text changes where the design left a number open: Kiln Ring and Burning Wake state
+their burn (0.35× effectiveness per 0.5 s), Triple Ring's rings reach a third / two thirds / all of the range, Cluster Shell's bomblets
+blast in 60% of the radius, Lodged Ice and Soulbind Lodge cap at 8 lodged, Pinning's slow is a chill (30%), Frozen Heart hovers up to 300
+away, Conduction and Static Frost chain within 90. Caps: on-kill triggers at most 8 per tick per player, explosions chain at most `depth`
+deep, lodges at most 8 per player, children never split. Presenter: `src/present/skills/augments.ts` (cues of the new `augment` event in
+the element palette, lodged/marked monster statuses, chilling ground and static fields), detonations voiced with the element blast sounds.
+**Protocol bump needed** (left to the integrator): SimEvent `augment`, AREA_KINDS `frostGround`, `staticField`, AILMENT_BIT `marked`
+(16384) and `lodged` (32768). Still planned (a later primitive): Heavy Chill (chill strength), Orbit (an orbiting turret), Gravity Seed
+(projectile pull), Heavy Impact and Crushing Force (wall impacts of knockback), Armour Piercing (skill-specific penetration and hit
+reduction), Overload (shock strength), Wither Spread and Shared Pain (Hex links). Unique flags: the shipped item-granted behaviours keep
+mapping to augment effects; the gated ones (Twice-Struck Bell `lodgeTwice`, Bellwether) stay with SK6. Tests:
+`tests/sim/augment-primitives.test.ts` (each primitive in the sim with the rules' numbers, determinism),
+`tests/game-progression/augments-sk5.test.ts` (canPickAugment for every augment, text numbers = primitive numbers, scaling, tooltips, the
+`more` cap over every pickable combination), `tests/present/augments.test.ts`.
 
 ### SK6: Remaining augments (M)  (R4)
 The 19 other skills' 57 augments, polish of tooltips and the augment UI; `Bellwether` and `Twice-Struck Bell` uniques go live (they depend on slots and lodge).

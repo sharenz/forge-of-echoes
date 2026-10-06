@@ -397,6 +397,20 @@ describe('on kill', () => {
   });
 });
 
+describe('on kill (SK3 skill)', () => {
+  it('Concussive Blast Shatter: kills in the cone explode for 10% of their maximum life in a radius of 40', () => {
+    const a = armed('concussiveBlast', ['shatter'], { ailmentChance: 0 });
+    const v = target(a, 60, 0, 3000);
+    a.world.monsters.life[v] = 1;
+    const behind = target(a, 60, -110);
+    const near = target(a, 60, -35);
+    cast(a, a.def, 100, 0);
+    expect(lost(a, behind)).toBe(0);
+    // It stands in the cone too: the blast's hit plus the explosion (10% of 3000).
+    close(lost(a, near), a.def.damage + 300);
+  });
+});
+
 describe('trail', () => {
   it('Burning Wake: waves leave fire trails (radius 14, 2 s) burning 0.35× effectiveness every 0.5 s', () => {
     const a = armed('flameWave', ['burningWake'], { projectiles: 1 });

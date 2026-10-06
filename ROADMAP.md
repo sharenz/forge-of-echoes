@@ -25,8 +25,11 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "
    R3 "Skills II": **SK3 built 2026-10-06:** ten more skills playable (Gravity Well 20 with pull, Rime Bulwark 22 with a barrier,
    Immolation Sigil 24, Static Aegis 26, Voltaic Pulse 28, Entropy Hex 30 applying exposure, Concussive Blast 32, Static Lash 34, Echo
    Sigil 36, Wither Field 40 with Withered on monsters), 25 more live augments (59 in all); needs protocol 30 (four area kinds, two
-   ailment bits, 13 SFX ids). Still to do in R3: SK5 flagship augments (in progress). Then R4 (SK4, SK6), R5 "Orrery" passive tree,
-   R6 balance pass.
+   ailment bits, 13 SFX ids). **SK5 built 2026-10-06:** the flagship augment primitives (lodge, split, fork, return, ramp, convert,
+   expose, mark, trail, blast, on-kill, rings, spiral, scatter, fuse, skip, core, hover, refund, free and cheap casts, ignite, rehit,
+   falloff, ward cap, weave) and 51 more live augments (110 in all); nine wait for a later primitive (Heavy Chill, Orbit, Gravity Seed,
+   Heavy Impact, Crushing Force, Armour Piercing, Overload, Wither Spread, Shared Pain). Needs a protocol bump (the `augment` event, two
+   area kinds, the lodged and marked ailment bits). R3 is complete with it. Then R4 (SK4, SK6), R5 "Orrery" passive tree, R6 balance pass.
 3. **Finish wave 3: leftovers.** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today", the Re-chart tooltip entry and
    F1 polish are done (2026-10-06; F1: eleven Atlas/pin/surge sounds, pin and surge banners, Calm also follows Screen shake 0 and
    stills the table's CSS motion, Atlas counts in the server status log). Still open from F1: the ambient table bed of brief A 5.5

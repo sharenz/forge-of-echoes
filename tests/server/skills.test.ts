@@ -39,7 +39,8 @@ describe('skill commands', () => {
     expect(p.session.record.ch.unspentSkillPoints).toBe(9);
     const bad = p.command({ c: 'pickAugment', skillId: 'emberNova', augmentId: 'tripleRing' });
     expect(bad).toMatchObject({ ok: false });
-    expect(bad.error).toMatch(/later update/);
+    // Triple Ring is live since SK5; at rank 6 its tier gate refuses it.
+    expect(bad.error).toMatch(/needs Ember Nova rank 8/);
     expect(p.command({ c: 'pickAugment', skillId: 'emberNova', augmentId: 'nope' }).ok).toBe(false);
   });
 

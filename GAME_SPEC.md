@@ -155,7 +155,7 @@ character has a token) and "Refund all skills".
 rank 8; T1 and T2 cost 1 skill point, T3 costs 2. A skill has `floor(rank / 2)` augment slots (at most 5). Some augments exclude each other
 (both directions). Augment damage lines ("8% less damage", "60% more damage") join the global `more` pool. A unique that grants an augment's
 behaviour (Echo of the Matriarch, The Second Verse, The Last Rite, Winterstride, Stillwinter, Vigil of Ash, The Unbowed Crown) needs no slot,
-and when the same effect is also picked the better value applies (no stacking). Playable now (59): Ember Lance Piercing Flame (pierce 2),
+and when the same effect is also picked the better value applies (no stacking). Playable now (110): Ember Lance Piercing Flame (pierce 2),
 Twin Strand (2 bolts 12° apart, 25% less each), Rapid Spark (18% shorter cast, 8% less); Ember Nova Wider Ring (+30% range, +4 flames, 8%
 less), Echoing Ring (repeats after 0.4 s at 70%), Ember Fan (120° cone, 60% more, +30% range); Flame Wave Wide Front (+2 waves, 40% wider,
 20% less), Ring of Waves (double waves in a full circle, 30% less); Rime Shards Hoarfrost Spread (+2 shards, 50% wider, 15% less), Glacial
@@ -177,7 +177,39 @@ Bleak Mark (25% less damage dealt, 20% slower); Concussive Blast Widened Arc (16
 second-nearest at 60%), Rapid Lash (20% shorter cast, 10% less), Tethered Chain (one jump at 50%); Echo Sigil Triple Echo (4 casts at 63%),
 Quick Echo (0.25 s), Costless (echoed skills refund 25% of their Focus); Wither Field Hollow Ground (+40% radius), Rotting Fields (+40%
 ticks), Lingering Wither (Withered lasts 3 s after leaving).
-The other augments of the tables are listed and wait for their primitive (lodge, split, fork, convert, expose, trail, ...).
+
+**Flagship augments** (power rework SK5, `src/sim/skills/primitives`; the tooltip quotes the numbers the sim uses). Ember Lance Lodge Ember
+(sticks in the first enemy, detonates after 1.2 s or on its death for 240% in r46, at most 8 lodged per player), Cinder Fragments (a kill
+releases 3 fragments at 55% aimed at the nearest enemies within 140), Frostfire Core (50% of fire converted to cold, hits always chill),
+Searing Brand (hits expose fire 15 points for 4 s, half on bosses, +25% ignite chance, 12% less); Ember Nova Spiral Arms (two arms turning
+over 0.5 s, 130% flames, 15% less), Kiln Ring (flames leave burning ground r16 for 2 s, 0.35× effectiveness every 0.5 s), Triple Ring (three
+concentric rings of 8 flames, 0.15 s apart, out to a third, two thirds and all of the range, no pierce, cooldown +1 s), Heartfire (hitting 6
+enemies refunds 40% of the Focus and 1 s of cooldown; costs 25% more); Flame Wave Burning Wake (fire trail r14 for 2 s along the waves),
+Tide Returns (at full range the waves turn back and hit again at 60%), Overheat (always ignites, ignites 50% stronger, cooldown +1 s), Slow
+Tide (40% slower, 60% wider, 35% more, rehits every 0.3 s up to 3 times); Cinder Ward Pyre Burst (5× effectiveness fire r90 when the ward
+ends), Hardened Ember (cap 70%, cooldown +3 s); Cinder Mortar Cluster Shell (3 bomblets within 40 at 45% in 60% of the radius), Delayed Fuse
+(lies 1.2 s, then 60% more in a 20% larger radius), Skip Shot (two more blasts 60 apart at 70%), Magma Core (a molten pool r40 for 4 s that
+chills and exposes fire 10 points), Rain of Shells (3 shells within 70 of the cursor, 25% less, cooldown +1.5 s); Rime Shards Brittle Shards
+(expose cold 12), Splintering (3 splinters at 40%, range 90, where a shard ends), Lodged Ice (3 lodged shards or 1 s detonate for 150% each in
+r40), Inverted Heat (60% of cold converted to fire, ignites instead of chilling); Glacial Nova Freezing Core (60% more within 40 of you),
+Shatter (chilled enemies it kills explode for 10% of their life as cold in r40); Frost Orb Shatter (4× effectiveness cold r70 where the orb
+fades), Frozen Heart (hovers at the cursor up to 300 away for 7 s, fires twice as fast, 20% less), Static Frost (40% of cold converted to
+lightning, shards chain once within 90 and shock instead of chilling); Glacial Spikes Frost Comb (chilling ground under each spike for 3 s),
+Shattering Rows (the row's end explodes for 2× effectiveness in r40); Arc Chain Forking Arc (2 branches of 3 links at 50% from the last
+link), Conductive Mark (the first target takes 15% more damage for 3 s and Arc Chain gains 30% shock chance on it), Overcharge (links from
+80% rising 12% per jump), Storm Return (the last link returns to the first target at 80%), Static Discharge (shocked enemies it kills explode
+for 150% of the hit in r60, at most 3 deep); Storm Call Thunder Mark (a static field under each strike for 3 s, 0.4× effectiveness every
+0.5 s, shocks), Eye of the Storm (1 s after the last strike, 3× effectiveness in r60 at the cursor), Conduction (each strike chains to one
+enemy within 90 at 60%, 20% less); Rift Step Afterimage (1.2× effectiveness void r50 at the origin 1.5 s later), Rift Echo (+1 charge, a
+third blink within 4 s costs no Focus), Static Arrival (2× effectiveness lightning r80 at the landing, shocks, cooldown +0.5 s), Phase
+Weave (25% more movement speed and no crowd slow for 2 s after landing, chill and root removed); Arcane Reprieve Charged Reprieve (the next 3
+other casts cost 25% less); Umbral Bolt Hollow Shell (pierces all, hits after the first 25% less), Entropic Split (on its first hit, 2 bolts
+at ±25° at 60%), Void Exposure (expose void 20 and fire, cold, lightning 8; 15% less), Soulbind Lodge (lodges 2 s, 300% in r70); Kinetic Lance
+Shatter Rounds (kills explode for 12% of their maximum life as physical in r40, at most 3 deep), Void Convert (50% converted to void, hits
+apply Decay), Pinning (hits chill 2 s and the target takes 10% more damage); Concussive Blast Shatter (kills explode for 10% of their life
+in r40). On-kill effects trigger at most 8 times per tick per player. Lodged and marked monsters show it (a glowing lodge, a reticle).
+Still waiting for their primitive: Heavy Chill (chill strength), Orbit, Gravity Seed (pull of a projectile), Heavy Impact and Crushing
+Force (wall impacts), Armour Piercing, Overload (shock strength), Wither Spread and Shared Pain (Hex links).
 
 **Respec** (a hideout service): refunding an augment or a whole skill (Ember Lance keeps rank 1) costs 4 Scrap per point (a T3 augment, 2
 points, costs 8); it is free below level 20, and the first 15 refunded points of a character are free. Scrap is taken from the backpack,
