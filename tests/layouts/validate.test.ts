@@ -115,6 +115,14 @@ describe('each check fails on a broken layout', () => {
     // The forge claims fault, relay and anvil as native: two of each.
     expect(checks(broken(SLAG_YARD, (l) => { l.anchors = l.anchors.filter((a) => a.id !== 'anvil-s'); }))).toContain(6);
   });
+  it('10: an anchor that cannot seat its event, a relay pair without a third', () => {
+    // The Bellwatch's rings need the bell 280 u inside the rim: 131 u over cannot be seated (at most ANCHOR_SEAT = 100 u).
+    const far = broken(SLAG_YARD, (l) => { l.anchors.find((a) => a.id === 'bell-1')!.at = { r: 0.85, a: 90 }; });
+    expect(validateLayout(far).issues.filter((i) => i.check === 10).map((i) => i.id)).toEqual(['bell-1']);
+    // 62 u over is seated (slid inward) and passes.
+    expect(checks(broken(SLAG_YARD, (l) => { l.anchors.find((a) => a.id === 'bell-1')!.at = { r: 0.78, a: 90 }; }))).not.toContain(10);
+    expect(checks(broken(SLAG_YARD, (l) => { l.anchors = l.anchors.filter((a) => a.id !== 'relay-3'); }))).toContain(10);
+  });
   it('7: determinism catches a layout whose fixed props vary', () => {
     // A layout may not depend on the run: this passes for the fixtures (checked above); here we only prove the helper reports
     // identical-pack failures when two seeds are forced equal.

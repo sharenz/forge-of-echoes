@@ -20,7 +20,7 @@ import { isHeld } from '../rosters/pressure';
 import { MFLAG } from '../stores';
 import type { Area, PlayerState, World } from '../world';
 import {
-  beat, canOnset, eventArea, eventMonster, finish, hasRoom, hunterKind, livingCentroid, markOnset, mods, pickSite, segmentBlocked,
+  anchorSite, beat, canOnset, eventArea, eventMonster, finish, hasRoom, hunterKind, livingCentroid, markOnset, mods, pickSite, segmentBlocked,
   skinOf, straggler, placeAt } from './kit';
 import type { EventInstance, EventKill, EventScript } from './types';
 
@@ -75,7 +75,10 @@ function rider(w: World): 'burning' | 'chilled' | 'bleeding' {
 
 function reveal(w: World, e: EventInstance): boolean {
   if (!hasRoom(w, 1) || !canOnset(w)) return false;
-  const site = pickSite(w, e.plan.angle, { minPlayer: STALKER_SPAWN_CLEARANCE, rim: 50, from: 0.93, to: 1 });
+  // A layout's perch (E1: cover between it and the landing is validated), else the radial rule: the rim band.
+  const rule = { minPlayer: STALKER_SPAWN_CLEARANCE, rim: 50 };
+  const at = anchorSite(w, e, 'perch', rule) ?? pickSite(w, e.plan.angle, { ...rule, from: 0.93, to: 1 });
+  const site = { x: at.x, y: at.y };
   const s: StalkerState = { site, id: 0, spawnedAt: 0, hunt: 0, whiffs: 0, nextPounce: 0, pounce: null, recover: 0,
     frenzy: false, rogue: false, ghost: false, x: site.x, y: site.y };
   e.s = s;

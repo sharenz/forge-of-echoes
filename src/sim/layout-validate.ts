@@ -20,6 +20,9 @@
 //                 knocked into a sealed pocket or a wedge could never leave it (flood fill on a 4 u grid); and every concave
 //                 corner (a standing spot touching two or more solids) can be slid out of with the real movement code
 //                 (src/sim/movement.ts resolvePlayerAt, the one the client predicts with)
+//  10 seating     (E1, anchor-aware events) every anchor can seat its event: the event's footprint fits inside the rim
+//                 (EVENT_ANCHOR_RIM) once the anchor slides at most ANCHOR_SEAT u towards the centre, and a slid anchor still
+//                 stands clear of solids and reachable; relay anchors come as a triad (>= 3) or not at all
 //
 // Interpretation notes (one place to change them): "a 400 u disc" and "a 300 u disc" are read as DIAMETERS (free radius
 // 200 around the boss stage, 150 round the landing; the default start clearing alone is 140 u), because a 400 u radius
@@ -28,6 +31,8 @@
 import type { AtlasAreaId } from '../contracts/atlas';
 import type { RunConfig } from '../contracts/sim';
 import { areaRadius, areaType, NATIVE_ANCHORS } from '../data/layouts/area';
+import { ANCHOR_SEAT, EVENT_ANCHOR_RIM, seatAnchor } from '../data/progression/events/anchors';
+import { RELAY_BRAZIERS } from '../data/progression/map-events';
 import {
   compileLayout, distToPath, distToSegment, pathLength, type CompiledLayout, type CompiledProp, type XY,
 } from '../data/layouts/compile';
@@ -85,7 +90,7 @@ export const LAYOUT_RULES = {
 } as const;
 
 export interface LayoutIssue {
-  check: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  check: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   /** Authoring id the issue is about (or 'layout'). */
   id: string;
   message: string;
@@ -472,6 +477,21 @@ export function validateLayout(layout: AreaLayout, opts: { R?: number } = {}): L
 
   // --- 9: flow zones
   if (c.flows.length > 0) checkFlows(layout, c, idx, lim, add);
+
+  // --- 10: every anchor can seat its event (E1)
+  for (const a of c.anchors) {
+    const s = seatAnchor(a.fits, a.x, a.y, R);
+    if (!s) {
+      add(10, a.id, `${a.fits} ${a.id}: the event's footprint needs its centre >= ${EVENT_ANCHOR_RIM[a.fits]} u inside the rim; the anchor is ${Math.round(Math.hypot(a.x, a.y) - (R - EVENT_ANCHOR_RIM[a.fits]))} u over (seating slides at most ${ANCHOR_SEAT} u)`);
+      continue;
+    }
+    if (s.moved > 0) {
+      if (idx.clearance(s.x, s.y, rules.anchorClear + 1) < rules.anchorClear) add(10, a.id, `${a.fits} ${a.id} seats at (${Math.round(s.x)}, ${Math.round(s.y)}), inside or within ${rules.anchorClear} u of a solid prop`);
+      else if (!reachableAt(reach, s.x, s.y)) add(10, a.id, `${a.fits} ${a.id} seats at (${Math.round(s.x)}, ${Math.round(s.y)}), which is not reachable from the start`);
+    }
+  }
+  const relayCount = count('relay');
+  if (relayCount > 0 && relayCount < RELAY_BRAZIERS) add(10, 'relay', `${relayCount} relay anchor(s): the Ember Relay needs a triad of ${RELAY_BRAZIERS} (fewer are never used)`);
 
   return {
     areaId: layout.areaId, R, issues,

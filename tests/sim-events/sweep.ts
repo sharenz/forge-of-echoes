@@ -139,6 +139,8 @@ export interface SweepResult {
   /** Longest stretch (s) a wave tell was held by an event. */
   maxHold: number;
   errors: number;
+  /** Layout anchors the forced event was placed on ([] = the radial rules; absent = it never revealed). */
+  anchors?: string[];
   /** For a 'stuck' run: where and when (diagnostics for the layout sweep). */
   stuckAt?: string;
   deaths: number;
@@ -165,6 +167,7 @@ export function sweepRun(kind: MapEventKind | 'none', theme: Theme, seed: number
   let result: SweepResult['result'] = 'timeout';
   let deaths = 0, eventDeaths = 0, hold = 0, maxHold = 0, activeAt = -1, finishedAt = -1;
   let anchorX = 0, anchorY = 0, anchorT = 0, stuckAt = '';
+  let anchors: string[] | undefined;
   const ticks = Math.round((Math.max(1, o.minutes ?? 20) * 60) / SIM_DT);
   for (let t = 0; t < ticks; t++) {
     for (let k = 0; k < party; k++) {
@@ -189,6 +192,7 @@ export function sweepRun(kind: MapEventKind | 'none', theme: Theme, seed: number
     run.drainEvents();
     const e = world.mapEvent?.live.find(x => x.kind === kind);
     if (e && e.phase === 'active' && activeAt < 0) activeAt = world.time;
+    if (e && !anchors) anchors = e.anchors ? [...e.anchors] : [];
     if (world.mapEvent?.results.some(r => r.kind === kind) && finishedAt < 0) finishedAt = world.time;
     // A wave tell that stays on screen while an event is live is the "hold": boss-time events may hold it a few seconds only.
     hold = world.director.tellWave > 0 && world.mapEvent?.live.some(x => x.hold > 0) ? hold + SIM_DT : 0;
@@ -218,7 +222,7 @@ export function sweepRun(kind: MapEventKind | 'none', theme: Theme, seed: number
   return {
     kind, theme, seed, result, minutes: world.tick * SIM_DT / 60, ...(r ? { event: { grade: r.grade, tally: r.tally } } : {}),
     eventSeconds: activeAt >= 0 ? Math.max(0, (finishedAt >= 0 ? finishedAt : world.time) - activeAt) : 0, maxHold,
-    errors: world.hookErrors.total, deaths, eventDeaths, ...(stuckAt ? { stuckAt } : {}),
+    errors: world.hookErrors.total, deaths, eventDeaths, ...(stuckAt ? { stuckAt } : {}), ...(anchors ? { anchors } : {}),
   };
 }
 

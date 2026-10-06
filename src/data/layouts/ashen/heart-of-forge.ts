@@ -82,8 +82,10 @@ export const HEART_OF_FORGE: AreaLayout = defineLayout({
   anchors: [
     ...p.anchors,
     ...SPOKES.map((a) => ({ id: `altar-${a}`, fits: 'altar' as const, at: { r: 0.84, a: a + 10 } })),
-    { id: 'echo-s1', fits: 'echo', at: { r: 0.7, a: 228 } },
-    { id: 'echo-s4', fits: 'echo', at: { r: 0.7, a: 48 } },
+    // Echo anchors inside the bellows ring (E1): the echoes walk home through the open core, not across the spoke walls (on the
+    // outer sectors the interception chase led through uncleared sectors: 10 of 12 bot runs died there against 4 of 12).
+    { id: 'echo-s1', fits: 'echo', at: { r: 0.15, a: 270 } },
+    { id: 'echo-s4', fits: 'echo', at: { r: 0.15, a: 90 } },
     { id: 'relay-1', fits: 'relay', at: { r: 0.62, a: 240 } },
     { id: 'relay-2', fits: 'relay', at: { r: 0.62, a: 0 } },
     { id: 'relay-3', fits: 'relay', at: { r: 0.62, a: 120 } },

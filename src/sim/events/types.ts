@@ -51,6 +51,8 @@ export interface EventInstance {
   /** Event age when it turned active (-1 before): the soft timeout counts from here. */
   activeAge: number;
   view: MapEventView;
+  /** E1: ids of the hand-crafted layout anchors the event was placed on (absent = the radial rules placed it). Server-only. */
+  anchors?: string[];
   /** The script's own state. */
   s: unknown;
 }

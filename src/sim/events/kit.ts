@@ -6,7 +6,12 @@ import { MONSTER_ANIM, type MonsterRarity } from '../../contracts/sim';
 import {
   EVENT_LARGE_RADIUS, EVENT_MIN_TELEGRAPH, EVENT_MIN_TELEGRAPH_LARGE, EVENT_ONSET_GAP, EVENT_RESULT_SECONDS,
 } from '../../data/progression/map-events';
+import type { Rng } from '../../contracts/rng';
+import { createRng, hashU32 } from '../../core/rng';
+import { EVENT_ANCHOR_KINDS, type EventAnchorKind } from '../../data/layouts/schema';
+import { seatAnchor } from '../../data/progression/events/anchors';
 import { spawnArea, type AreaOptions } from '../areas';
+import { pickLayoutAnchor, type WorldAnchor } from '../layout';
 import { killMonster, livingIds } from '../combat';
 import { DT, WAVE_DAMAGE_GROWTH } from '../constants';
 import { rollEventRewardSpecs } from '../hooks';
@@ -118,6 +123,56 @@ export function pickSite(w: World, angle: number, o: SiteOptions): { x: number; 
     if (score > bestScore) { bestScore = score; best = p; }
   }
   return best;
+}
+
+// --- E1: layout anchors (docs/atlas-rework/D-territory.md 8 and 10.5a) -----------------------------------------------------------
+
+const ANCHOR_SALT = 0xa7c4e1;
+
+/**
+ * The stream an event picks its anchor with: the run seed, the event's uid and the anchor kind. Never the director's stream, so
+ * a layout that offers anchors never shifts the other event rolls (pack mix, boons, variants) of the run.
+ */
+export function anchorRng(w: World, e: EventInstance, kind: EventAnchorKind): Rng {
+  const k = EVENT_ANCHOR_KINDS.indexOf(kind) + 1;
+  return createRng(hashU32((w.config.seed ^ ANCHOR_SALT ^ Math.imul(e.uid, 0x9e3779b1) ^ Math.imul(k, 0x85ebca6b)) >>> 0));
+}
+
+/** An event's placement rule for the anchor search: clearance from every living player (F4) and points to keep away from. */
+export interface AnchorRule {
+  minPlayer: number;
+  avoid?: { x: number; y: number; d: number }[];
+}
+
+/**
+ * Where an event of `kind` would stand on `a` (seated inside its rim, see seatAnchor), or null when the anchor is blocked: its
+ * footprint cannot be seated, or the seated point is too close to a living player or to an `avoid` point.
+ */
+export function anchorSpot(w: World, kind: EventAnchorKind, a: { x: number; y: number }, o: AnchorRule): { x: number; y: number } | null {
+  const p = seatAnchor(kind, a.x, a.y, w.arenaRadius);
+  if (!p) return null;
+  if (w.living.length > 0 && nearestLivingDist(w, p.x, p.y) < o.minPlayer) return null;
+  for (const av of o.avoid ?? []) if (Math.hypot(p.x - av.x, p.y - av.y) < av.d) return null;
+  return p;
+}
+
+/** An anchor the event took and the standing ground it resolved to. */
+export interface AnchorSite { x: number; y: number; anchor: WorldAnchor }
+
+/**
+ * E1: the hand-crafted layout's anchor of `kind` for this event, or null when the radial rules (pickSite) must place it: no layout
+ * (the procedural generator), no anchor of the kind for the map's tier, or every candidate blocked (too close to a living player,
+ * its footprint unseatable inside the rim, or refused by `ok`). Picked with the run seed among the candidates that fit, and
+ * recorded on the instance (`e.anchors`).
+ */
+export function anchorSite(w: World, e: EventInstance, kind: EventAnchorKind, o: AnchorRule, ok?: (a: WorldAnchor) => boolean): AnchorSite | null {
+  if (!w.layout) return null;
+  const a = pickLayoutAnchor(w, kind, anchorRng(w, e, kind), (c) => anchorSpot(w, kind, c, o) !== null && (!ok || ok(c)));
+  if (!a) return null;
+  const at = anchorSpot(w, kind, a, o)!;
+  e.anchors = [a.id];
+  const p = placeAt(at.x, at.y, w.arenaRadius, w.props);
+  return { x: p.x, y: p.y, anchor: a };
 }
 
 /** resolvePlayerAt with a fresh result (the movement helper returns one shared scratch object). */

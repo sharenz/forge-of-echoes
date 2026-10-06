@@ -70,13 +70,16 @@ export const HOLLOW_OSSUARY: AreaLayout = defineLayout({
     { id: 'host-1', fits: 'host', at: f.p(-80, 0), r: 80 },
     { id: 'host-2', fits: 'host', at: f.pp(cpt(300)), r: 60 },
     { id: 'bell-1', fits: 'bell', at: f.p(80, 0) },
-    { id: 'bell-2', fits: 'bell', at: f.pol(630, 120) },
+    // Bell and fault fields are wide (E1 check 10) and the 130 u corridor cannot hold them (bot runs in the spiral turn lost the
+    // Fault's grade and died more at the bell): both sit in the open heart, like the radial rules put them.
+    { id: 'bell-2', fits: 'bell', at: f.p(-60, 60) },
     { id: 'road-spiral', fits: 'road', at: f.pp(cpt(80)), path: Array.from({ length: 11 }, (_, k) => corridor(k * 15)) },
-    { id: 'fault-n', fits: 'fault', at: f.pol(630, 0), path: [f.pol(620, 345), f.pol(620, 15)] },
+    { id: 'fault-n', fits: 'fault', at: f.p(0, 0), path: [f.p(-130, 0), f.p(130, 0)] },
     { id: 'relay-1', fits: 'relay', at: f.pol(630, 300) },
     { id: 'relay-2', fits: 'relay', at: f.pol(630, 60) },
     { id: 'relay-3', fits: 'relay', at: f.pol(630, 0) },
-    { id: 'altar-1', fits: 'altar', at: f.pol(630, 120) },
+    // In the heart (E1): out on the ring past the rib arches the pact stones took too long to reach (bot pacts kept fell to 0).
+    { id: 'altar-1', fits: 'altar', at: f.p(0, 0) },
     { id: 'orchard-1', fits: 'orchard', at: f.pol(630, 250) },
     { id: 'ring-1', fits: 'ring', at: f.p(0, 70) },
     { id: 'anvil-1', fits: 'anvil', at: f.p(0, -70) },

@@ -11,7 +11,7 @@ import {
 } from '../../data/progression/events/anvil';
 import { DT } from '../constants';
 import type { World } from '../world';
-import { beat, canOnset, finish, makeStone, markOnset, mods, pickSite, ringPoints, stoneZones, tickStones, type Stone } from './kit';
+import { anchorSite, beat, canOnset, finish, makeStone, markOnset, mods, pickSite, ringPoints, stoneZones, tickStones, type Stone } from './kit';
 import type { EventInstance, EventKill, EventScript } from './types';
 
 interface AnvilState {
@@ -45,7 +45,9 @@ export const anvilNeed = (w: World) => Math.max(1, Math.round(ANVIL_CHARGE * (mo
 
 function reveal(w: World, e: EventInstance): boolean {
   if (!canOnset(w)) return false;
-  const site = pickSite(w, e.plan.angle, { minPlayer: ANVIL_CLEARANCE, rim: 140, from: 0.1, to: 0.5 });
+  const rule = { minPlayer: ANVIL_CLEARANCE, rim: 140 };
+  const at = anchorSite(w, e, 'anvil', rule) ?? pickSite(w, e.plan.angle, { ...rule, from: 0.1, to: 0.5 });
+  const site = { x: at.x, y: at.y };
   e.s = { site, charge: 0, need: anvilNeed(w), t: 0, stage: 'charge', round: 0, stones: [], offered: [], taken: [], chargedAt: 0, grade: 1, lastStep: 0 } satisfies AnvilState;
   e.phase = 'warning';
   e.timer = MAP_EVENT_WARNING_SECONDS;
