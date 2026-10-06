@@ -116,6 +116,11 @@ export const SFX_TRIM_DB: Partial<Record<SfxId, number>> = {
   // hitVoid, evade, castFrost, dash, flaskFocus, wardenNova, eruption, hitLightning, glacialSpikes); re-run the calibration
   castSpark: 2.3, castMortar: -12.4, castUmbral: -6.1, castKinetic: -7.6, castOrb: -3.6, castStormCall: -2, phaseStride: -7.4,
   arcaneReprieve: -0.6, glacialNovaBurst: -13.2, mortarBlast: -15.7, stormCallStrike: 2.4, frostSpike: -7.7,
+  // power rework SK3 roster batch 2 (sfx-skills2.ts): borrowed from the recipe each one varies (castUmbral, mortarBlast, castUmbral,
+  // castUmbral, castMortar, mortarBlast, castOrb, frostSpike, castSpark, glacialNovaBurst, castKinetic, castSpark, arcaneReprieve);
+  // re-run the calibration
+  castGravityWell: -6.1, wellCollapse: -15.7, castHex: -6.1, castWither: -6.1, castSigil: -12.4, sigilPillar: -15.7, barrierUp: -3.6,
+  barrierBreak: -7.7, aegisUp: 2.3, voltaicPulse: -13.2, concussiveBlast: -7.6, castLash: 2.3, echoSigil: -0.6,
 };
 
 /**

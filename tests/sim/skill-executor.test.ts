@@ -31,13 +31,15 @@ describe('skill executor', () => {
   });
 
   it('handles every augment primitive of the contract', () => {
-    expect([...AUGMENT_PRIMITIVES].sort()).toEqual(['bounce', 'decay', 'echo', 'fan', 'ground', 'invulnerable', 'restore', 'stride']);
+    expect([...AUGMENT_PRIMITIVES].sort()).toEqual([
+      'aegis', 'barrier', 'bounce', 'decay', 'echo', 'echoSigil', 'fan', 'ground', 'invulnerable', 'restore', 'stride', 'zone',
+    ]);
   });
 
   it('ignores a skill without a behaviour (no cast event, nothing spawned)', () => {
     const a = armed('emberNova', []);
     a.world.events.drain();
-    releaseSkill(a.world, a.player, makeSkill('gravityWell'), 100, 0);
+    releaseSkill(a.world, a.player, makeSkill('meteorRain'), 100, 0);
     expect(a.world.events.drain()).toEqual([]);
     expect(a.world.projectiles.count).toBe(0);
   });

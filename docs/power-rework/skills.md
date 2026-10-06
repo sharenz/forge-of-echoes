@@ -93,7 +93,7 @@ Columns: Unlock (character level) · Focus · Cast time (s) · Cooldown (s) · E
 | 23 | **Entropy Hex** | Void, exposure | 30 | 14 | 0.4 | 5 | – | – | – | r80 at the cursor for 6 s: **exposes −15 pp to fire, cold, lightning, void**; enemies deal 10% less damage; bosses take half exposure | Spell Area Duration Void Curse | M (exposure) |
 | 24 | **Concussive Blast** | Physical, cone | 32 | 18 | 0.45 | 3 | 2.5 → 5.5 | 7 | – | 100° cone, reach 150, knockback ×3; physical | Spell Area Physical | S |
 | 25 | **Static Lash** | Lightning, spam | 34 | 4 | 0.15 | – | 0.3 → 0.7 | 9 | shock 15 | beam to the nearest enemy within 200, every 0.15 s while held; needs line of sight | Spell Chaining Lightning | M |
-| 26 | **Echo Sigil** | Utility buff | 36 | 20 | 0.3 | 14 | – | – | – | your next 3 skill casts echo once after 0.4 s at 70% damage, no Focus | Spell Buff | S (echo exists) |
+| 26 | **Echo Sigil** | Utility buff | 36 | 20 | 0.3 | 14 | – | – | – | your next 3 skill casts echo once after 0.4 s at 70% damage, no Focus (SK3: within 12 s; not the basic attack, buffs or blinks) | Spell Buff | S (echo exists) |
 | 27 | **Wither Field** | Void, zone | 40 | 22 | 0.5 | 10 | 0.5 (dot) | – | decay | r80 zone for 6 s: decay ticks, **Withered** stacks −8 pp all resistances (3 stacks = −24, the exposure cap) | Spell Area Duration Void | M |
 | 28 | **Meteor Rain** | Fire, burst | 44 | 26 | 0.6 | 12 | 2.0 → 4.2 per meteor | 6 | ignite 30 | 6 → 12 telegraphed meteors over 2.5 s in r120 at the cursor, radius 34 each | Spell Area Fire | S (the boss meteor rain exists) |
 | 29 | **Storm Step** | Lightning, movement | 48 | 10 | 0 | 4 / charge | 1.5 → 3.0 | 7 | shock | blink 140; lightning strikes at origin and landing (r60); 2 charges | Movement Lightning Area | S |

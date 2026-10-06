@@ -40,6 +40,7 @@ import type { PostState } from './post';
 import type { PropPainter } from './props';
 import type { SpriteTable } from './sprites';
 import { RosterFx } from './skills/roster';
+import { Roster2Fx } from './skills/roster2';
 
 const DT_INDEX: Record<DamageType, number> = { physical: 0, fire: 1, cold: 2, lightning: 3, void: 4 };
 const KIND_INDEX = Object.fromEntries(MONSTER_KINDS.map((k, i) => [k, i])) as Record<MonsterKind, number>;
@@ -102,6 +103,8 @@ const SKILL_COLOR: Partial<Record<SkillId, RGB>> = {
   cinderWard: C.hot,
   phaseStride: C.voidGlow, glacialNova: C.frost, spark: C.storm, cinderMortar: C.flame, arcaneReprieve: C.mana, umbralBolt: C.voidGlow,
   kineticLance: C.gold, frostOrb: C.frost, stormCall: C.storm, glacialSpikes: C.frost,
+  gravityWell: C.voidGlow, rimeBulwark: C.frost, immolationSigil: C.flame, staticAegis: C.storm, voltaicPulse: C.storm, entropyHex: C.voidGlow,
+  concussiveBlast: C.gold, staticLash: C.storm, echoSigil: C.mana, witherField: C.voidGlow,
 };
 
 const PROJECTILE_END: Record<ProjectileKind, readonly [RGB, RGB, number]> = {
@@ -144,6 +147,8 @@ export interface EventKit {
 export class EventFx {
   /** The power rework's roster batch 1 (SK2): muzzles, Glacial Nova, buff auras, impacts, strikes and spikes. */
   readonly roster: RosterFx;
+  /** Roster batch 2 (SK3): muzzles, the cone, rings, buff auras, the sigil's pillar. */
+  readonly roster2: Roster2Fx;
   /** Per-frame budgets. */
   private bursts = 0;
   private pulses = 0;
@@ -174,6 +179,7 @@ export class EventFx {
 
   constructor(private readonly k: EventKit) {
     this.roster = new RosterFx({ pen: k.pen, fx: k.fx, pos: k.players.pos });
+    this.roster2 = new Roster2Fx({ pen: k.pen, fx: k.fx, pos: k.players.pos });
     const t = k.table;
     this.frames.impact = t.get('fx/impact').frames;
     this.frames.levelUp = t.get('fx/levelUp').frames;
@@ -245,6 +251,7 @@ export class EventFx {
     this.bursts3.fill(-1e9);
     this.k.tethers?.clear();
     this.roster.reset();
+    this.roster2.reset();
   }
 
   /** Request screen shake for this frame (applied once in endFrame). */
@@ -269,8 +276,9 @@ export class EventFx {
         // Muzzle flashes: allies' a step quieter, and a party casting shoulder to shoulder shares one cell's
         // budget, so three wands firing together never fuse into a white ball over the casters.
         const pk = (e.playerId === local ? 1 : ALLY_FX) * (this.heat.touch(x, y, f.time) >= 2 ? 0 : 1);
-        if (this.roster.cast(e.skill, x, y, ang, pk)) {
-          // power rework SK2 roster batch 1 (skills/roster.ts)
+        if (this.roster.cast(e.skill, x, y, ang, pk) || this.roster2.cast(e.skill, x, y, ang, pk)) {
+          // power rework SK2 / SK3 roster batches (skills/roster.ts, skills/roster2.ts)
+          if (e.skill === 'concussiveBlast' && e.playerId === local) this.shake(0.08);
         } else if (e.skill === 'flameWave') {
           const b = pen.burst(x, y, 16, C.hot, C.ember);
           pen.speed(40, 110);
@@ -309,6 +317,10 @@ export class EventFx {
         return;
       }
       case 'nova': {
+        if (this.roster2.nova(e, e.playerId === local)) {
+          if (e.playerId === local) this.shake(0.08);
+          return;
+        }
         if (e.skill === 'glacialNova') {
           this.roster.nova(e, e.playerId === local);
           if (e.playerId === local) this.shake(0.1);
@@ -358,7 +370,7 @@ export class EventFx {
         return;
       }
       case 'buff':
-        this.roster.buff(e);
+        if (!this.roster2.buff(e)) this.roster.buff(e);
         return;
       case 'ward': {
         fx.rings.spawn(e.x, e.y - 8, 8, 44, 0.45, C.hot, 2, 0.9, 1);
@@ -972,6 +984,10 @@ export class EventFx {
     const near = clamp01(1 - dist / 420);
     if (this.roster.areaResolve(e, this.frames.iceSpike, this.lifeOf.iceSpike)) {
       if (e.kind === 'stormCall') this.shake(0.06 * near);
+      return;
+    }
+    if (this.roster2.areaResolve(e)) {
+      if (e.kind === 'immolationSigil') this.shake(0.08 * near);
       return;
     }
     switch (e.kind) {

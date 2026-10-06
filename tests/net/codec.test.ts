@@ -638,6 +638,8 @@ describe('snapshot codec: bestiary rosters and player debuffs', () => {
     expect(AREA_KINDS.slice(7, 7 + NEW_AREA_KINDS.length)).toEqual([...NEW_AREA_KINDS]);
     expect(AREA_KINDS.slice(7 + NEW_AREA_KINDS.length)).toEqual([
       'stormStrike', 'rendStrike', 'echoMark', 'faultWedge', 'voidTide', 'stormCall', 'frostSpike',
+      // Roster batch 2 (power rework SK3)
+      'gravityWell', 'entropyHex', 'witherField', 'immolationSigil',
     ]);
   });
 

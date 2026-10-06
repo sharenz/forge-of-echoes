@@ -54,7 +54,7 @@ export const VOID_SKILLS = {
     primitives: { decay: { share: 0.4 } },
     projectileNoun: 'bolt',
   }),
-  gravityWell: plannedSkill('gravityWell', {
+  gravityWell: skill('gravityWell', {
     name: 'Gravity Well',
     description: 'A vortex at the cursor pulls enemies in, slows them and grinds them with void.',
     branch: 'destruction',
@@ -69,15 +69,18 @@ export const VOID_SKILLS = {
     focusCost: 18,
     castTime: 0.45,
     cooldown: 8,
+    // 0.3 effectiveness per 0.5 s tick (first pass: 0.3 at every rank; the rank grows the vortex, r70 to r90).
     effectiveness: 0.3,
     critChance: 0,
     ailmentChance: 0,
-    radius: 70,
+    radius: { lerp: [70, 90] },
     duration: 3,
     pulseInterval: 0.5,
     areaScales: 'radius',
+    primitives: { zone: { interval: 0.5, pull: 60, slow: 0.4, collapseRadius: 90 } },
+    projectileNoun: 'tick',
   }),
-  entropyHex: plannedSkill('entropyHex', {
+  entropyHex: skill('entropyHex', {
     name: 'Entropy Hex',
     description: 'Curses an area: enemies inside are exposed to fire, cold, lightning and void and deal less damage.',
     branch: 'destruction',
@@ -98,8 +101,9 @@ export const VOID_SKILLS = {
     radius: 80,
     duration: 6,
     areaScales: 'radius',
+    primitives: { zone: { interval: 0.5, exposure: 15, weaken: 0.1 } },
   }),
-  witherField: plannedSkill('witherField', {
+  witherField: skill('witherField', {
     name: 'Wither Field',
     description: 'A rotting zone that decays enemies and strips their resistances.',
     branch: 'destruction',
@@ -114,6 +118,7 @@ export const VOID_SKILLS = {
     focusCost: 22,
     castTime: 0.5,
     cooldown: 10,
+    // Every 0.5 s tick is a Decay stack worth 0.5 effectiveness (first pass: the same at every rank).
     effectiveness: 0.5,
     critChance: 0,
     ailmentChance: 0,
@@ -121,6 +126,7 @@ export const VOID_SKILLS = {
     duration: 6,
     pulseInterval: 0.5,
     areaScales: 'radius',
+    primitives: { zone: { interval: 0.5, withered: 1, decay: true } },
   }),
   eventHorizon: plannedSkill('eventHorizon', {
     name: 'Event Horizon',
@@ -168,7 +174,7 @@ export const VOID_SKILLS = {
     range: 360,
     projectileNoun: 'bolt',
   }),
-  concussiveBlast: plannedSkill('concussiveBlast', {
+  concussiveBlast: skill('concussiveBlast', {
     name: 'Concussive Blast',
     description: 'A cone of force in front of you that hurls enemies back: physical damage.',
     branch: 'destruction',

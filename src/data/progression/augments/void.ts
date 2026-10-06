@@ -84,4 +84,74 @@ export const VOID_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'planned', primitive: 'mark' }],
     },
   ],
+  // Roster batch 2 (SK3), skills.md 5.13 and 6
+  gravityWell: [
+    {
+      id: 'heavyWell', name: 'Heavy Well', tier: 1, text: 'Lasts 40% longer; the pull is 20% weaker',
+      effects: [{ k: 'scale', stat: 'duration', pct: 40 }, { k: 'tune', key: 'zonePullPct', add: -20 }],
+    },
+    {
+      id: 'crushing', name: 'Crushing', tier: 2, text: 'Enemies inside take 20% more damage',
+      effects: [{ k: 'tune', key: 'zoneTaken', add: 0.2 }],
+    },
+    {
+      id: 'singularity', name: 'Singularity', tier: 3, text: 'Collapses at the end for 3× effectiveness as void damage in a radius of 90',
+      effects: [{ k: 'tune', key: 'zoneCollapse', add: 3 }],
+    },
+  ],
+  entropyHex: [
+    {
+      id: 'linger', name: 'Linger', tier: 1, text: 'Lasts 9 seconds instead of 6',
+      effects: [{ k: 'add', stat: 'duration', value: 3 }],
+    },
+    {
+      id: 'wideHex', name: 'Wide Hex', tier: 1, text: 'Radius ×1.5',
+      effects: [{ k: 'scale', stat: 'radius', pct: 50 }],
+    },
+    {
+      id: 'witherSpread', name: 'Wither Spread', tier: 2,
+      text: 'When a Hexed enemy dies the Hex jumps to the nearest enemy within 120 units for its remaining duration',
+      effects: [{ k: 'planned', primitive: 'onKill', note: 'hex jumps' }],
+    },
+    {
+      id: 'sharedPain', name: 'Shared Pain', tier: 2, text: 'Hexed enemies share 20% of the damage they take with other Hexed enemies within 90 units',
+      effects: [{ k: 'planned', primitive: 'mark', note: 'shared damage' }],
+    },
+    {
+      id: 'absoluteExposure', name: 'Absolute Exposure', tier: 3, text: 'Exposure 25 points instead of 15 (bosses 12.5); cooldown +3 seconds',
+      excludes: ['bleakMark'], effects: [{ k: 'tune', key: 'hexExposure', add: 10 }, { k: 'add', stat: 'cooldown', value: 3 }],
+    },
+    {
+      id: 'bleakMark', name: 'Bleak Mark', tier: 3, text: 'Hexed enemies deal 25% less damage and move 20% slower',
+      excludes: ['absoluteExposure'], effects: [{ k: 'tune', key: 'hexWeaken', add: 0.15 }, { k: 'tune', key: 'zoneSlow', add: 0.2 }],
+    },
+  ],
+  witherField: [
+    {
+      id: 'hollowGround', name: 'Hollow Ground', tier: 1, text: 'Radius +40%',
+      effects: [{ k: 'scale', stat: 'radius', pct: 40 }],
+    },
+    {
+      id: 'rottingFields', name: 'Rotting Fields', tier: 2, text: 'Its ticks deal 40% more damage',
+      effects: [{ k: 'more', pct: 40 }],
+    },
+    {
+      id: 'lingeringWither', name: 'Lingering Wither', tier: 3, text: 'Withered lasts 3 seconds after an enemy leaves the field',
+      effects: [{ k: 'tune', key: 'witherLinger', add: 2 }],
+    },
+  ],
+  concussiveBlast: [
+    {
+      id: 'widenedArc', name: 'Widened Arc', tier: 1, text: 'A 160° cone; 20% less damage',
+      effects: [{ k: 'set', stat: 'spread', value: (160 * Math.PI) / 180 }, { k: 'more', pct: -20 }],
+    },
+    {
+      id: 'crushingForce', name: 'Crushing Force', tier: 2, text: 'Knockback ×2; an enemy driven into a wall takes 50% more from the impact',
+      effects: [{ k: 'planned', primitive: 'knockback' }],
+    },
+    {
+      id: 'shatter', name: 'Shatter', tier: 3, text: 'Kills explode for 10% of the dead enemy’s maximum life as physical damage',
+      effects: [{ k: 'planned', primitive: 'onKill' }],
+    },
+  ],
 };

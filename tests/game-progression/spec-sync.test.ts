@@ -15,7 +15,7 @@ import {
 } from '../../src/sim/constants';
 import { monsterDef } from '../../src/sim/rosters';
 import type { SkillId } from '../../src/contracts/content';
-import { DECAY, SKILLS, SKILL_TIMING, type RankValue } from '../../src/data/progression';
+import { DECAY, EXPOSURE, SKILLS, SKILL_TIMING, WITHER, type RankValue } from '../../src/data/progression';
 
 const SPEC = readFileSync(new URL('../../GAME_SPEC.md', import.meta.url), 'utf8');
 
@@ -145,5 +145,33 @@ describe('GAME_SPEC matches the implemented numbers', () => {
     expect(s4).toContain(`every ${SKILL_TIMING.orbShardInterval} s it fires an ice shard (speed ${SKILL_TIMING.orbShardSpeed}, reach ${SKILL_TIMING.orbShardRange})`);
     expect(s4).toContain(`at most every ${SKILL_TIMING.sparkRehit} s`);
     expect(s4).toContain(`(the first after ${SKILL_TIMING.spikeLead} s, then every ${SKILL_TIMING.spikeStep} s)`);
+  });
+
+  it('§4 roster batch 2 rows (SK3): unlock, cost / cast / cooldown, effectiveness and the shared timings come from the data', () => {
+    const s4 = section(4);
+    const num = (v: number) => String(v);
+    const range = (v: RankValue, unit = '') => {
+      if (typeof v === 'number') return `${unit ? v.toFixed(1) : num(v)}${unit}`;
+      if ('lerp' in v) return `${num(v.lerp[0])} → ${num(v.lerp[1])}${unit}`;
+      throw new Error('unexpected rank curve');
+    };
+    const ids: readonly SkillId[] = [
+      'gravityWell', 'rimeBulwark', 'immolationSigil', 'staticAegis', 'voltaicPulse', 'entropyHex', 'concussiveBlast', 'staticLash',
+      'echoSigil', 'witherField',
+    ];
+    for (const id of ids) {
+      const d = SKILLS[id];
+      expect(d.available, id).toBe(true);
+      const cast = d.castTime > 0 ? `${d.castTime} s` : 'instant';
+      const cd = d.cooldown === 0 ? '–' : range(d.cooldown, ' s');
+      expect(s4, id).toContain(`| **${d.name}** | ${d.unlockLevel} | ${d.focusCost} / ${cast} / ${cd} |`);
+      if (d.effectiveness !== 0) expect(s4, id).toContain(`Effectiveness ${range(d.effectiveness)}`);
+    }
+    expect(s4).toContain(`after ${SKILL_TIMING.sigilTelegraph} s a pillar`);
+    expect(s4).toContain(`at ${SKILL_TIMING.pulseSpeed} units per second`);
+    expect(s4).toContain(`at most every ${SKILL_TIMING.aegisGap} s`);
+    expect(s4).toContain(`−${WITHER.points} points to every resistance, at most ${WITHER.maxStacks}: −${WITHER.points * WITHER.maxStacks}`);
+    expect(s4).toContain(`lasts ${WITHER.linger} s after it leaves`);
+    expect(s4).toContain(`lasts ${EXPOSURE.duration} s after they leave`);
   });
 });

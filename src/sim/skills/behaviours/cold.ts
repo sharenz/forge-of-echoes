@@ -19,4 +19,6 @@ export const COLD_BEHAVIOURS = {
     emitter: 'spikes', length: 200, radius: 20, lead: SKILL_TIMING.spikeLead, step: SKILL_TIMING.spikeStep,
     twin: { skill: 'twinLines', player: 'twinLines' }, twinAngle: SKILL_TIMING.twinLineAngle,
   },
+  // Roster batch 2 (SK3)
+  rimeBulwark: { emitter: 'buff', buff: 'barrier', duration: 6 },
 } satisfies Record<string, SkillBehaviour>;

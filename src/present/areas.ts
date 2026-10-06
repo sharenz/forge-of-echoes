@@ -26,6 +26,7 @@ import type { AreaView } from '../contracts/sim';
 import { FAULT_WEDGE_HALF_ANGLE, areaAngle, voidTideInner } from '../sim/area-geometry';
 import { BestiaryAreaPainter, type AreaAppear } from './bestiary-areas';
 import { drawRosterArea } from './skills/roster';
+import { drawRoster2Area } from './skills/roster2';
 import { C } from './colors';
 import { CHARGE_MAX_RADIUS, LIGHT_CAPS, type FrameCtx } from './context';
 import { Proximity } from './heat';
@@ -159,7 +160,7 @@ export class AreaPainter {
           break;
         default:
           // The player's own Storm Call / Glacial Spike telegraphs (power rework SK2), else the bestiary's kinds.
-          if (!drawRosterArea(pen, f, ar)) this.bestiary?.draw(pen, f, ar);
+          if (!drawRosterArea(pen, f, ar) && !drawRoster2Area(pen, f, ar)) this.bestiary?.draw(pen, f, ar);
       }
     }
   }

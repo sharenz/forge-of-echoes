@@ -54,6 +54,9 @@ describe('rules assembly', () => {
       // SK2 roster batch 1 (levels 5 to 18)
       'phaseStride', 'glacialNova', 'spark', 'cinderMortar', 'arcaneReprieve', 'umbralBolt', 'kineticLance', 'frostOrb', 'stormCall',
       'glacialSpikes',
+      // SK3 roster batch 2 (levels 20 to 40)
+      'gravityWell', 'rimeBulwark', 'immolationSigil', 'staticAegis', 'voltaicPulse', 'entropyHex', 'concussiveBlast', 'staticLash',
+      'echoSigil', 'witherField',
     ]);
   });
 

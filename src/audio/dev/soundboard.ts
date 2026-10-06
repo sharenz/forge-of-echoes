@@ -60,6 +60,10 @@ const GROUPS: { key: SfxGroup[]; title: string; accent: string; ids: SfxId[] }[]
     key: ['skill', 'combat'], title: 'Roster batch 1 (SK2)', accent: 'var(--mana)',
     ids: ['castSpark', 'castMortar', 'castUmbral', 'castKinetic', 'castOrb', 'castStormCall', 'phaseStride', 'arcaneReprieve',
       'glacialNovaBurst', 'mortarBlast', 'stormCallStrike', 'frostSpike'],
+  }, {
+    key: ['skill', 'combat', 'player'], title: 'Roster batch 2 (SK3)', accent: 'var(--mana)',
+    ids: ['castGravityWell', 'wellCollapse', 'castHex', 'castWither', 'castSigil', 'sigilPillar', 'barrierUp', 'barrierBreak', 'aegisUp',
+      'voltaicPulse', 'concussiveBlast', 'castLash', 'echoSigil'],
   },
 ];
 
@@ -96,6 +100,9 @@ const LABELS: Record<SfxId, string> = {
   castSpark: 'Spark', castMortar: 'Mortar launch', castUmbral: 'Umbral Bolt', castKinetic: 'Kinetic Lance', castOrb: 'Frost Orb',
   castStormCall: 'Storm Call', phaseStride: 'Phase Stride', arcaneReprieve: 'Arcane Reprieve', glacialNovaBurst: 'Glacial Nova',
   mortarBlast: 'Mortar blast', stormCallStrike: 'Storm bolt', frostSpike: 'Glacial Spike',
+  castGravityWell: 'Gravity Well', wellCollapse: 'Singularity', castHex: 'Entropy Hex', castWither: 'Wither Field',
+  castSigil: 'Immolation Sigil', sigilPillar: 'Fire pillar', barrierUp: 'Rime Bulwark', barrierBreak: 'Barrier breaks', aegisUp: 'Static Aegis',
+  voltaicPulse: 'Voltaic Pulse', concussiveBlast: 'Concussive Blast', castLash: 'Static Lash', echoSigil: 'Echo Sigil',
 };
 
 const TRACK_LABELS: Record<MusicId, { name: string; note: string }> = {

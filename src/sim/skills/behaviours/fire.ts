@@ -21,4 +21,8 @@ export const FIRE_BEHAVIOURS = {
     restoreFocus: { skill: 'restoreFocus', player: 'wardFocus' }, renew: { skill: 'renew', player: 'wardRenew' },
   },
   cinderMortar: { emitter: 'lob', kind: 'cinderShell', flight: SKILL_TIMING.mortarFlight, range: 320, radius: 36 },
+  // Roster batch 2 (SK3)
+  immolationSigil: {
+    emitter: 'pillar', telegraph: SKILL_TIMING.sigilTelegraph, reach: SKILL_TIMING.zoneReach, radius: 50, offset: SKILL_TIMING.sigilTwinOffset,
+  },
 } satisfies Record<string, SkillBehaviour>;

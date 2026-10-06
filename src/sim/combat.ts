@@ -1,7 +1,7 @@
 // Damage resolution for both sides, ailments and kill credit.
 import type { PlayerDebuff } from '../contracts/bestiary';
 import { DAMAGE_TYPES, type DamageType, type MonsterKind } from '../contracts/content';
-import { DECAY, DOT_RESIST_FACTOR, EXPOSURE, PEN_CAP } from '../data/progression/combat';
+import { DECAY, DOT_RESIST_FACTOR, EXPOSURE, PEN_CAP, WITHER } from '../data/progression/combat';
 import { MONSTER_ANIM, type MonsterRarity, type RootSource, type SimEvent } from '../contracts/sim';
 import { ELITE, KIND_BY_INDEX, KIND_INDEX } from './archetypes';
 import { removeOwnedAreas, spawnArea } from './areas';
@@ -12,6 +12,7 @@ import {
   SHOCK_BONUS, SHOCK_DURATION, WARD_REDUCTION_CAP, WARDED_REDUCTION,
 } from './constants';
 import { applyDebuff, cleanseAll, clearDebuffs, effectiveResist, isActive, shockMult } from './debuffs';
+import { absorbBarrier, aegisResist, onStruck } from './skills/defence';
 import { rollKillLoot } from './hooks';
 import { crownPending, exposedMult, mapEventKill, notePlayerHit } from './map-events';
 import { grantXp, spawnDrops } from './loot';
@@ -50,8 +51,10 @@ export function monsterResist(w: World, i: number, dtype: number, penPoints = 0)
   const r1 = Math.min(MONSTER_RESIST_CAP, m.res[i * 5 + dtype]);
   const pen = Math.min(PEN_CAP, Math.max(0, penPoints)) / 100;
   const r2 = r1 - Math.min(pen, Math.max(0, r1));
-  if (m.exposeTime[i] <= 0) return r2;
-  const raw = m.expose[i * 5 + dtype];
+  // Withered (Wither Field, power rework SK3) is one more exposure source: the strongest source per type applies.
+  const wither = m.witherTime[i] > 0 ? (m.witherStacks[i] * WITHER.points) / 100 : 0;
+  if (m.exposeTime[i] <= 0 && wither <= 0) return r2;
+  const raw = Math.max(m.exposeTime[i] > 0 ? m.expose[i * 5 + dtype] : 0, wither);
   if (raw <= 0) return r2;
   const expo = m.flags[i] & (MFLAG.boss | MFLAG.lieutenant) ? raw * EXPOSURE.bossFactor : raw;
   return Math.min(r2, Math.max(EXPOSURE.floor / 100, r2 - expo));
@@ -174,6 +177,8 @@ function takenMult(w: World, i: number): number {
   let f = exposedMult(w, i);
   if (m.shockTime[i] > 0) f *= 1 + SHOCK_BONUS;
   if (m.flags[i] & MFLAG.shielded) f *= 1 - WARDED_REDUCTION;
+  // Inside a Gravity Well with Crushing (power rework SK3).
+  if (m.vulnTime[i] > 0) f *= 1 + m.vulnBonus[i];
   return f;
 }
 
@@ -478,11 +483,16 @@ export function hitPlayer(
     // Damage over time derives from a hit that already carried the level gap, so it is not scaled again.
     dmg = kind === 'dot' ? amount : amount * rng.range(ROLL_MIN, ROLL_MAX) * levelGapMult(w.config.monsters.level, p.level);
     if (dtype === DT_PHYSICAL && s.armor > 0) dmg *= 1 - s.armor / (s.armor + 10 * dmg);
-    dmg *= 1 - (effectiveResist(p, type) - w.pactResist);
+    dmg *= 1 - (effectiveResist(p, type) + aegisResist(p, dtype) - w.pactResist);
     if (Number.isFinite(s.damageTaken) && s.damageTaken >= 0) dmg *= s.damageTaken;
     if (isActive(p, 'shocked')) dmg *= shockMult(p);
     if (p.ward.time > 0) dmg *= 1 - Math.min(WARD_REDUCTION_CAP, Math.max(0, p.ward.reduction));
+    // Static Aegis, then Rime Bulwark's barrier (power rework SK3).
+    if (p.aegis.time > 0) dmg *= 1 - Math.max(0, p.aegis.reduction);
+    if (dmg > 0 && p.barrier.amount > 0) dmg = absorbBarrier(w, p, dmg);
   }
+  // An enemy's hit (not a burn) wakes the barrier's chill and the aegis' retaliation.
+  if (kind !== 'dot' && (p.aegis.time > 0 || p.barrier.time > 0)) onStruck(w, p);
   if (dmg > 0) {
     if (kind !== 'dot' && dtype === DT_PHYSICAL && p.ward.time > 0 && p.ward.renewOnHit)
       p.ward.time = Math.min(p.ward.duration, p.ward.time + 0.5);
@@ -520,6 +530,11 @@ export function killPlayer(w: World, p: PlayerState): void {
   p.pendingStrikes.length = 0;
   p.stride.time = 0;
   p.restore.time = 0;
+  p.skillAreas.length = 0;
+  p.barrier.time = 0;
+  p.barrier.amount = 0;
+  p.aegis.time = 0;
+  p.echoSigil.casts = 0;
   p.portalDwell = 0;
   p.portalDwellId = 0;
   for (const f of p.flasks) if (f) f.active = 0;

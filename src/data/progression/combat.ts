@@ -22,6 +22,13 @@ export const DOT_RESIST_FACTOR = 0.5;
  */
 export const DECAY = { duration: 4, maxStacks: 5 } as const;
 
+/**
+ * Withered on monsters (skills.md 4.3, Wither Field): each stack lowers every resistance by `points` percentage points, up to
+ * `maxStacks` (3 × 8 = 24, under the exposure cap). It counts as one exposure source (the strongest source per type applies, half
+ * on bosses and lieutenants) and lasts `linger` seconds after the last stack unless an augment lengthens it.
+ */
+export const WITHER = { points: 8, maxStacks: 3, linger: 1 } as const;
+
 /** Ceiling of the multiplicative pool (passives + augments + uniques); gear stays additive. */
 export const MORE_CAP = 3.5;
 

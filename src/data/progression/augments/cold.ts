@@ -86,4 +86,19 @@ export const COLD_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'planned', primitive: 'delay', note: 'end burst' }],
     },
   ],
+  // Roster batch 2 (SK3), skills.md 6
+  rimeBulwark: [
+    {
+      id: 'thickIce', name: 'Thick Ice', tier: 1, text: 'The barrier absorbs 30% more',
+      effects: [{ k: 'tune', key: 'barrierPct', add: 30 }],
+    },
+    {
+      id: 'brittleRetort', name: 'Brittle Retort', tier: 2, text: 'When the barrier breaks, a nova of ice deals 2× effectiveness as cold damage and chills',
+      effects: [{ k: 'tune', key: 'barrierRetort', add: 2 }],
+    },
+    {
+      id: 'resolute', name: 'Resolute', tier: 3, text: 'The barrier regenerates 3% of its size per second while you stand still',
+      effects: [{ k: 'tune', key: 'barrierRegen', add: 0.03 }],
+    },
+  ],
 };
