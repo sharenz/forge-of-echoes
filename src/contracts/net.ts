@@ -46,7 +46,9 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 31: power rework SK5 flagship augments: SimEvent 'augment' (lodge, detonate, split, mark, explode, blast, return, refund); area kinds
 //     frostGround, staticField; AILMENT_BIT marked and lodged (all appended).
 // 32: power rework SK4 roster batch 3: area kinds meteorRain, blizzardStorm, eventHorizon; new SFX ids (appended).
-export const PROTOCOL_VERSION = 32;
+// 33: power rework R5 C3/PT0 (the Orrery): commands allocatePassive, refundPassive, chooseMastery; CharacterSave passives, masteries,
+//     bossMarks, passiveRefunds, passiveRespecSpent (optional).
+export const PROTOCOL_VERSION = 33;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -151,6 +153,15 @@ export type Command =
    * `expectedScrap` must equal the server's price (the client shows it before confirming).
    */
   | { c: 'respec'; skillId: SkillId | null; token: boolean; expectedScrap: number }
+  /** The Orrery: spend passive points on a node linked to Spark or an allocated node (anywhere; it takes effect at once). */
+  | { c: 'allocatePassive'; nodeId: import('./passives').PassiveNodeId }
+  /** The Orrery, hideout only: refund a leaf node; `expectedScrap` must equal the server's price (free for the first refunds). */
+  | { c: 'refundPassive'; nodeId: import('./passives').PassiveNodeId; expectedScrap: number }
+  /**
+   * The Orrery: choose the rider (0 to 2) of an allocated mastery. The first choice is free and allowed anywhere; changing it is a
+   * refund (hideout only, `expectedScrap` as the server prices it).
+   */
+  | { c: 'chooseMastery'; nodeId: import('./passives').PassiveNodeId; choice: number; expectedScrap: number }
   // hideout
   | { c: 'setMapTreeNode'; nodeId: import('./atlas').MapTreeNodeId; allocate: boolean }
   /** Pin or unpin an Atlas area (brief D 5.1): free, instant, account-wide. */

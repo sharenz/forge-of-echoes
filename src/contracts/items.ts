@@ -4,6 +4,7 @@ import type {
 } from './content';
 import type { AtlasAreaId, AtlasProgress } from './atlas';
 import type { GuideState } from './guide';
+import type { PassiveNodeId } from './passives';
 
 // ---------------------------------------------------------------------------
 // Modifiers & stats
@@ -297,6 +298,22 @@ export interface CharacterSave {
    * restore them. Its presence also marks the character as migrated.
    */
   legacySkillRanks?: Partial<Record<SkillId, number>>;
+  /**
+   * The Orrery (docs/power-rework/passive-tree.md): allocated passive nodes in canonical order (Spark is implicit, never listed).
+   * Missing on older saves = nothing allocated: every earned point is unspent.
+   */
+  passives?: PassiveNodeId[];
+  /** Chosen rider (0 to MASTERY_CHOICES − 1) of each allocated mastery; an allocated mastery without an entry has none yet. */
+  masteries?: Partial<Record<PassiveNodeId, number>>;
+  /**
+   * Boss Marks: the final bosses (monster kinds) this character has killed, one passive point each. Missing = a character from
+   * before the Orrery, credited once from the account's Atlas first kills when it is loaded.
+   */
+  bossMarks?: string[];
+  /** Passive refunds and mastery changes made so far (the first PASSIVE_RESPEC.freeRefunds are free). */
+  passiveRefunds?: number;
+  /** Scrap paid for passive refunds in the current respec session (capped; reset when a map is opened). */
+  passiveRespecSpent?: number;
   equipment: Partial<Record<EquipSlot, EquipmentItem>>;
   backpack: GridContainer;
   stash: StashTab[];

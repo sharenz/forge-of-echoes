@@ -246,11 +246,68 @@ The 19 other skills' 57 augments, polish of tooltips and the augment UI; `Bellwe
 ### C3: Contract steward, release 5 (S)
 `CharacterSave` gains `passives`, `masteries`, `bossMarks`; `PassiveNodeId`; commands `allocatePassive`, `refundPassive`, `chooseMastery`; **protocol 27 → 28**; `StatModifier` source label "Orrery".
 
+**Status: built 2026-10-06** (with PT0). `src/contracts/passives.ts` (`PassiveNodeId` = `pas.${string}`, sectors, kinds, `MASTERY_CHOICES`,
+`ORRERY_SOURCE` = "Orrery", `PassiveRefundPrice`); `CharacterSave` gains the optional, append-only `passives`, `masteries`, `bossMarks`,
+`passiveRefunds`, `passiveRespecSpent` (no name shared with SK6's skill and attribute respec fields); `Command` gains `allocatePassive
+{nodeId}`, `refundPassive {nodeId, expectedScrap}`, `chooseMastery {nodeId, choice, expectedScrap}` (validated in `net/messages.ts` against
+the node ids); `GameRulesApi` gains `passivePoints`, `allocatePassive`, `passiveRefundPrice`, `refundPassive`, `masteryChangePrice`,
+`chooseMastery`. Save version unchanged (the fields are optional; old saves load with every point unspent). **Protocol bump needed** (left to
+the integrator: one bump for the release, after SK6's 33). No `UiActions` yet (PT2 adds them with the panel).
+
 ### PT0: Passive data, rules, save, server (L)
 Owner lane **passives-core**. Depends on C3, SK5 (vocabulary), P1.
 Files: `src/data/progression/passives/` (`nodes.ts` generated from a table, `layout.ts` the 768×768 coordinates, `index.ts`), `src/game/progression/passives.ts` (`resolvePassives`, allocation/refund validation, caps, exclusion, points-earned function), `model.ts` hook (a one-line include of passive modifiers; coordinate with combat-core after R1),
 `src/game/progression/character.ts` (boss mark credit on `bossDefeated`), `src/server/*` commands.
 Tests: static audit, ledger audit, random-build bots (`passive-tree.md` 8), migration.
+
+**Status: built 2026-10-06.** Data: `src/data/progression/passives/nodes.ts` is the table (the 100 named nodes with numbers, rules,
+audits and engine tags; the small families; each sector's spine and spurs as rows 0-9 × columns −2..2; bridges; the hub) and
+`index.ts` builds the 252 nodes from it (ids `pas.<region>.<key>`, smalls `pas.<region>.s<n>` in generation order, so the table is
+append-only once released) with `layout.ts`'s polar coordinates in the 768 × 768 world (Spark centre, Fire at the top, clockwise; plates
+at least 20 px apart). Also: the point function (`passivePointsEarned`), `BOSS_MARK_KINDS`, prices (`PASSIVE_RESPEC`), caps
+(`ORRERY_CAPS`), the ledger exchange rates (`LEDGER_RATES`) and `PASSIVE_RULES` (which structural rules are live: none yet). Rules:
+`src/game/progression/passives.ts` (`resolvePassives` with every cap of 1.3, scaling contributing lines proportionally, `more` in log
+space; allocation/refund/mastery validation with connectivity, exclusions and points; `normalizePassives` for saves; Boss Mark helpers),
+the one-line hook in `model.ts` (`passiveModifiers(ch)`, memoised per allocation array), `creditBossMark` in `character.ts`, the session
+reset in `openMap`. Server: the three commands in `commands.ts` (allocation anywhere; refunds and rider changes in a hideout, priced
+against `expectedScrap`, one commit; first rider choice anywhere), Boss Marks on `bossDefeated` for every present member
+(`game.ts`, written at once), the one-time seed from the account Atlas's `bossesSeen` on load (`characters.ts`); `withItemLocks` wraps
+the two paid rules.
+
+Decisions taken where the design left room: Spark lights (its attributes apply) with the first allocated node, so an untouched tree
+changes no sheet; masteries are allocated first and their rider chosen after (free), a rider change counts as a refund; refund and
+rider changes share the first 10 free refunds and the 250-Scrap session cap, a session ends when a map is opened; hub keystones are 4
+points from Spark (two smalls), rim keystones 12. **Numbers changed from the first pass** so every pure-stat node sits on its own ledger
+(the audit test checks each within ×1.5): +1% cast speed reads as 0.8u (the reading Quickened Pulse's 8% = 6u implies; the table's
+"0.8% = 1u" would make Perfect Tempo worth 44u), life `more` counts half like life increased; Gate of Plate +8% armour and evasion, Gate
+of Insight +9% spell damage and +20 Focus, Mind and Blood +20 Focus and +1 Focus per kill, Ice Plate +12% armour and +6 cold res,
+Prismatic Skin +6 all res, Elemental Veil +5 void and +3 other res, Honed Edge +24% crit chance and +12 multiplier, Expanse +30% area
+damage, Frost Plate +10% armour and +5 cold res, Overcharge +2% cast speed, Grounding Rod +10 lightning res; mastery riders Spell (b)
++14% area and +20% area damage, (c) +40% projectile damage, Heart (b) +8 life per kill, Hollow (c) +4 Focus per kill; keystones
+Stormbound 30% more lightning with 40% less Focus regeneration and +10% Focus costs (33/13), Hollow Pact 30% more DoT (32/13), Warded
+Throne 10% less damage dealt (25/10), Gambler's Edge non-crits 25% less (30/10); small families on the ledger (+10% DoT, +1% cast speed,
++6% area, +2 void pen, 1 life regen, +1% move and +4% pickup, +20 life, +2 all attributes).
+
+Not live yet (data only, `PASSIVE_RULES` all `live: false`): every structural rule (ailment strength and duration, exposure, Decay and
+Wither stacks, conditional damage, conversion and Pyre Doctrine's convert-all, on-kill triggers, echoes, Primary Practice's augment slot,
+Focus costs, typed damage taken, % life regeneration, flask rules, armour vs elements / big hits / formula, evade chance and cap, ward
+effect, Razor Doctrine's penetration cap, Iron Mind's damage from Focus, Hardy). Their nodes' stat lines apply. Wiring them is a follow-up
+slice (sim and rules: combat-core and skills-core lanes).
+
+Tests: `tests/game-progression/passive-tree.test.ts` (census 252 by kind and region, the 15 keystones, reciprocal links, reachability,
+costs and path lengths, exclusion pairs, leaves, ledger bands per class, smalls and pure-stat nodes on the exchange rate, ledger totals of a
+70-point build, the full tree inside every cap, the point function, layout), `passives.test.ts` (allocation, exclusions, leaf-first
+refunds, prices and free refunds, session cap and its reset, masteries, labels in the sheet, caps, memo, Boss Marks and their seed, old
+saves loading with every point unspent, normalisation, trade locks), `passive-bots.test.ts` with `passive-tree-harness.ts` (random
+builds grown by "uniform random growth with reachability": a random reachable target, its cheapest path; a growth by uniform choice over
+the frontier puts 77% of builds in a hub keystone and almost none on a rim, so it is kept only as a documented alternative; an analytic
+power index on the ledger with the unmodelled share of rule nodes; a greedy best build): always 400 builds at ML60 (spread 1.53, median
+0.43 of best, no must-take beyond trunk nodes, no keystone in more than 40% of the top 10%), with `BALANCE=1` 2,000 builds at ML28/60/88
+including every keystone in 3% to 40% of the top 5% (all pass). Trunk rule for (c): spine rows 0-1 are on every path into a sector, so a
+node may be in more than 70% of the top builds when that is within 15 points of its share among all builds. B1 note: the greedy best
+takes five or six keystones (the design expects two or three), keystones may be cheap for their net. `tests/server/passives.test.ts`
+(commands, hideout rules, the price check, a failed write changing nothing, restart, Boss Marks once per boss, the seed on load),
+`tests/net/messages.test.ts` (shapes).
 
 ### PT1: Generalise the Codex model and renderer (M)
 Owner lane **codex-ui**. Depends on nothing (can start in R3). Files: `src/ui/codex/{model,render,Rail,Codex}.ts(x)` → `TreeModel<N>` and a `createTreeView` factory; `src/art/codex/*` tones; **the Atlas Codex must be unchanged** (screenshot tests of the Atlas at both sizes, the existing atlas e2e). Exit: Atlas and a test graph render through the same code.

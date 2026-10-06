@@ -10,6 +10,7 @@ import { PEN_CAP, SORCERESS, STAT_CAPS } from '../../data/progression';
 import type { ClassDef } from '../../data/progression';
 import { STAT_LABEL } from '../../data/items';
 import { itemFlags, itemModifiers } from '../items';
+import { passiveModifiers } from './passives';
 
 /** Stats whose value is a percentage resolved against a base of 100 (value − 100 = total % increase). */
 export const PERCENT_STATS: ReadonlySet<StatId> = new Set<StatId>([
@@ -78,7 +79,7 @@ export function buildPlayerModel(
   const steps = level - 1;
   const items = equippedItems(ch);
   const gear = items.flatMap((item) => itemModifiers(item));
-  const all = [...gear, ...extra];
+  const all = [...gear, ...passiveModifiers(ch), ...extra];
   const isAttr = (m: StatModifier) => (ATTRIBUTES as readonly string[]).includes(m.stat);
 
   const attributes = {} as Record<Attribute, number>;

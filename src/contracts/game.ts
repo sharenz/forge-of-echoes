@@ -10,6 +10,7 @@ import type {
 import type { DropSpec, KillLootContext, PlayerCombatStats, PlayerRuntime, RunConfig, RunHooks, SkillRuntimeDef } from './sim';
 import type { Rng } from './rng';
 import type { AtlasAreaId, MapTreeNodeId } from './atlas';
+import type { PassiveNodeId, PassiveRefundPrice } from './passives';
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -408,6 +409,20 @@ export interface GameRulesApi {
   respec(ch: CharacterSave, skillId: SkillId | null, token: boolean): Result<CharacterSave>;
   /** Loadout presets: save the loadout into a preset, load one, or rename one. */
   setPreset(ch: CharacterSave, preset: number, op: 'save' | 'load' | 'rename', name?: string): Result<CharacterSave>;
+
+  // --- the Orrery (passive tree, docs/power-rework/passive-tree.md) ---
+  /** Passive points: earned (levels and Boss Marks), spent, free, Boss Marks, the next level that grants one. */
+  passivePoints(ch: CharacterSave): { earned: number; spent: number; free: number; bossMarks: number; nextLevel: number | null };
+  /** Allocate one node linked to Spark or an allocated node (exclusions and points checked). */
+  allocatePassive(ch: CharacterSave, nodeId: PassiveNodeId): Result<CharacterSave>;
+  /** Scrap a refund of `nodeId` costs right now. */
+  passiveRefundPrice(ch: CharacterSave, nodeId: PassiveNodeId): PassiveRefundPrice;
+  /** Refund one leaf node; the Scrap is paid in the same value (atomic). The server allows it in a hideout only. */
+  refundPassive(ch: CharacterSave, nodeId: PassiveNodeId): Result<CharacterSave>;
+  /** Scrap a change of the mastery's rider costs right now (0 for the first choice). */
+  masteryChangePrice(ch: CharacterSave, nodeId: PassiveNodeId): PassiveRefundPrice;
+  /** Choose (or change, paid like a refund) the rider of an allocated mastery. */
+  chooseMastery(ch: CharacterSave, nodeId: PassiveNodeId, choice: number): Result<CharacterSave>;
 
   // --- items & inventory ---
   describeItem(item: Item, ch?: CharacterSave): ItemDescription;

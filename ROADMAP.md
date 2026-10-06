@@ -33,7 +33,12 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "
    skills playable, so all 32 are (Meteor Rain 44, Storm Step 48 with strikes at both ends of the blink, Tempest Surge 52 with cast speed
    and lightning pulses, Blizzard 56 whose chilled enemies take more cold damage, Event Horizon 62 pulling everything to a detonation),
    with all 15 of their augments (125 live in all); needs protocol 32 (three area kinds, 7 SFX ids). SK6 (the remaining augments) is
-   next; then R5 "Orrery" passive tree, R6 balance pass.
+   next; then R5 "Orrery" passive tree, R6 balance pass. R5: **C3 and PT0 built 2026-10-06** (GAME_SPEC 3b): the 252-node Orrery as
+   data (`src/data/progression/passives/`, table + 768×768 layout), its rules (`game/progression/passives.ts`: points from levels and
+   Boss Marks, allocation, leaf-first refunds for Scrap, masteries, exclusions, the tree's hard caps, "Orrery:" labelled modifiers in the
+   player model), Boss Marks on the boss-defeated outcome with the one-time Atlas seed, the `allocatePassive` / `refundPassive` /
+   `chooseMastery` commands; needs a protocol bump (new commands and CharacterSave fields). Structural rules (ailments, conversion,
+   triggers, armour rules...) are stored but not live. Next: PT1/PT2 (the Orrery panel), PT3, then the rules.
 3. **Finish wave 3: leftovers.** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today", the Re-chart tooltip entry and
    F1 polish are done (2026-10-06; F1: eleven Atlas/pin/surge sounds, pin and surge banners, Calm also follows Screen shake 0 and
    stills the table's CSS motion, Atlas counts in the server status log). Still open from F1: the ambient table bed of brief A 5.5
@@ -51,7 +56,9 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "
    Still open: the Chainworks hazard stripes (a press or crusher line along them is the natural mechanic), a tram road, a flanker
    *brain* (monsters that circle to the back on their own) if flank groups prove too gentle, and frost pools that chill.
 5. **P2 character depth: more Sorceress skills and a deeper skill tree, then the passive tree** (about 250 nodes). Designed together
-   with the balance work in 2 so the new power has a curve to live in.
+   with the balance work in 2 so the new power has a curve to live in. Skills: all 32 playable (R2 to R4). Passive tree: the Orrery's
+   data, rules, save fields and server commands are built (R5 C3/PT0, 2026-10-06); its panel (PT2) is the remaining piece before
+   players can allocate.
 
 Also pending: gated tree nodes (Voidtouched Atlas, Warded Hunts, Stragglers' Cull, Lantern-Bearer's siblings, Wagered Charts), Twin Omens'
 Backlash, dead drawer code and the Ctrl+Shift stash-to-bench shortcut, footsteps, Echo Exchange, leagues, more map bases, Barbarian.

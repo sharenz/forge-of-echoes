@@ -63,6 +63,7 @@
 //   gearLuck(ch)              % item quantity / rarity from gear alone
 //   deriveRunStats(ch, setup) deprecated alias of rules.deriveStats(ch, setup)
 import { setMapTreeNode } from './progression/map-tree';
+import { allocatePassive, chooseMastery, masteryChangePrice, passivePoints, passiveRefundPrice, refundPassive } from './progression/passives';
 import { setPin } from './progression/atlas';
 import { refillSurge } from './progression/surge';
 import { slotSigil, unslotSigil } from './progression/territory';
@@ -130,6 +131,14 @@ export const rules: GameRulesApi = {
   refundAugment,
   respec,
   setPreset,
+
+  // --- the Orrery ---
+  passivePoints,
+  allocatePassive,
+  passiveRefundPrice,
+  refundPassive,
+  masteryChangePrice,
+  chooseMastery,
 
   // --- items & inventory ---
   describeItem,
