@@ -41,6 +41,8 @@ import { augmentCost, augmentSlots, normalizeLoadout, normalizePresets, skillRan
 import { LEGACY_MAX_SKILL_RANK, migrateSkillsV3 } from './migrate-skills';
 import { normalizeAtlas } from './atlas';
 import { normalizeGuide } from './guide';
+import { normalizeBossMarks, normalizeMasteries, normalizePassives } from './passives';
+import { passivePointsEarned } from '../../data/progression/passives';
 import { findAtlasArea } from '../../data/progression/atlas';
 import { bindLegacyMaps, savedBinding } from './map-binding';
 import { findScarab } from '../../data/scarabs';
@@ -624,6 +626,14 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
   }
 
   const guide = normalizeGuide(raw.guide);
+  // The Orrery: Boss Marks (a save from before them is seeded from the account's Atlas when it is part of the data; the server
+  // seeds character rows when it merges the shared storage in), then the allocation within the points earned.
+  const bossMarks = Array.isArray(raw.bossMarks) ? normalizeBossMarks(raw.bossMarks)
+    : isObj(raw.atlas) ? normalizeBossMarks(raw.atlas.bossesSeen) : undefined;
+  const passives = normalizePassives(raw.passives, passivePointsEarned(level, bossMarks?.length ?? 0));
+  const masteries = normalizeMasteries(raw.masteries, passives);
+  const passiveRefunds = intIn(raw.passiveRefunds, 0, 1e6, 0);
+  const passiveRespecSpent = intIn(raw.passiveRespecSpent, 0, 1e6, 0);
   const character: CharacterSave = {
     id,
     name,
@@ -644,6 +654,11 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     respecTokens: intIn(raw.respecTokens, 0, 99, 0),
     respecFreeUsed: intIn(raw.respecFreeUsed, 0, 1e6, 0),
     ...normalizeLegacyRanks(raw.legacySkillRanks),
+    ...(passives.length ? { passives } : {}),
+    ...(Object.keys(masteries).length ? { masteries } : {}),
+    ...(bossMarks ? { bossMarks } : {}),
+    ...(passiveRefunds ? { passiveRefunds } : {}),
+    ...(passiveRespecSpent ? { passiveRespecSpent } : {}),
     equipment,
     backpack: bp,
     stash,

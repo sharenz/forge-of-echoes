@@ -11,6 +11,8 @@
 import { PLAYER_DEBUFFS } from '../contracts/bestiary';
 import { ATLAS_AREA_IDS } from '../contracts/atlas';
 import { MAP_TREE_NODE_IDS } from '../data/progression/map-tree';
+import { PASSIVE_NODE_IDS } from '../data/progression/passives';
+import { MASTERY_CHOICES } from '../contracts/passives';
 import { ATLAS_KEYS } from '../data/progression/atlas';
 import { GUIDE_HINT_IDS, GUIDE_OPS, GUIDE_PROPS, GUIDE_STEP_IDS } from '../contracts/guide';
 import { ATTRIBUTES, DAMAGE_TYPES, EQUIP_SLOTS, ITEM_CLASSES, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
@@ -328,6 +330,21 @@ function command(v: unknown): Command {
       return {
         c, preset: int(o.preset, 'preset', 0, LOADOUT_PRESETS - 1), op: oneOf(o.op, 'op', ['save', 'load', 'rename'] as const),
         ...(o.name !== undefined ? { name: text(o.name, 'name', 24) } : {}),
+      };
+    }
+    case 'allocatePassive': {
+      const o = shape(v, c, ['c', 'nodeId']);
+      return { c, nodeId: oneOf(o.nodeId, 'nodeId', PASSIVE_NODE_IDS) };
+    }
+    case 'refundPassive': {
+      const o = shape(v, c, ['c', 'nodeId', 'expectedScrap']);
+      return { c, nodeId: oneOf(o.nodeId, 'nodeId', PASSIVE_NODE_IDS), expectedScrap: int(o.expectedScrap, 'expectedScrap', 0, 100000) };
+    }
+    case 'chooseMastery': {
+      const o = shape(v, c, ['c', 'nodeId', 'choice', 'expectedScrap']);
+      return {
+        c, nodeId: oneOf(o.nodeId, 'nodeId', PASSIVE_NODE_IDS), choice: int(o.choice, 'choice', 0, MASTERY_CHOICES - 1),
+        expectedScrap: int(o.expectedScrap, 'expectedScrap', 0, 100000),
       };
     }
     case 'respec': {

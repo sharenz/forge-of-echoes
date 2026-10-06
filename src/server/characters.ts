@@ -8,6 +8,7 @@ import type { CharacterSave } from '../contracts/items';
 import { rules, validateCharacterName } from '../game';
 import { bindLegacyMaps } from '../game/progression';
 import { decideGuide, recheckGuide, type GuideEvidence } from '../game/progression/guide';
+import { seedBossMarks } from '../game/progression/passives';
 import type { GameDatabase, CharacterRow } from './db';
 import type { Logger } from './log';
 import { mergeLegacyStorage, namespaceItems, parseAccountStorage, sameStorage, storageOf, withoutStorage, type AccountStorage } from './account-storage';
@@ -131,6 +132,13 @@ export class CharacterStore {
     // them once; set() persists the result (and the shared storage, if a last-resort binding charted an area).
     const bound = bindLegacyMaps(ch);
     if (bound !== ch) this.set(rec, bound);
+    // Boss Marks (passive-tree.md 4): a character from before the Orrery is credited once with the distinct final bosses of its
+    // account's Atlas first kills (the row has no Atlas of its own), written at once so the credit is never re-derived.
+    const marked = seedBossMarks(rec.ch);
+    if (marked !== rec.ch) {
+      this.set(rec, marked);
+      this.flush(rec);
+    }
     // The first-run guide is account-wide: an account without one (brand new, or from before the guide) gets it decided
     // exactly once, here, from everything the account has done (veterans are skipped for good).
     if (!rec.ch.guide) {

@@ -26,6 +26,7 @@ import { bindLegacyMaps, isMapAddress } from './map-binding';
 import { attachRouting, buildRouting, normalizeRouting, routingBiasFor } from './map-routing';
 import { atlasAccessError, newAtlas, paidTerritoryFee, territoryEntryFee } from './atlas';
 import { spendCurrency } from './merchant';
+import { resetPassiveSession } from './passives';
 import { mapEventRules } from './map-event-rules';
 import { normalizeMapEvent, rollMapEvent } from './map-events';
 import { findScarab, isWaveScarab, scarabEffects, validScarabs } from '../../data/scarabs';
@@ -199,7 +200,8 @@ export function openMap(character: CharacterSave, opts: OpenMapOptions = {}): Re
   }
   // The surge banner (brief D slice F1): said with the opening, with what is left of the area's day.
   if (surge && typeof opts.now === 'number') notices.unshift(surgeNotice(surge, atlas, opts.now));
-  return ok({ character: { ...next, ...(atlas ? { atlas } : {}), mapDevice: null, ...(ch.mapScarabs ? { mapScarabs: [null, null, null, null] } : {}), rngState: rng.state() }, setup, ...(notices.length ? { notices } : {}) });
+  // Opening a map ends the passive respec session (its Scrap cap starts over).
+  return ok({ character: { ...resetPassiveSession(next), ...(atlas ? { atlas } : {}), mapDevice: null, ...(ch.mapScarabs ? { mapScarabs: [null, null, null, null] } : {}), rngState: rng.state() }, setup, ...(notices.length ? { notices } : {}) });
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
