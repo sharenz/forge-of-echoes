@@ -39,7 +39,9 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 28: power rework R2 "Skills I": 32 skill ids (appended), 8 loadout slots (Space, Z), skill ranks 1 to 10 with 2 points per level,
 //     augments (pickAugment / refundAugment), loadout presets (setPreset), respec; CharacterSave.augments / loadoutPresets / respecTokens /
 //     respecFreeUsed / legacySkillRanks; SkillRuntimeDef.augments.
-export const PROTOCOL_VERSION = 28;
+// 29: power rework SK2 roster batch 1: projectile kinds spark, cinderShell, umbralBolt, kineticLance, frostOrb; area kinds stormCall,
+//     frostSpike; SimEvent 'buff'; AILMENT_BIT.decayed; flank event (art keeps its promises); new SFX ids (all appended).
+export const PROTOCOL_VERSION = 29;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
