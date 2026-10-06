@@ -422,6 +422,7 @@ function everyEvent(): SimEvent[] {
     { t: 'playerJoin', playerId: 2, x: 0, y: 0 },
     { t: 'notEnoughFocus', playerId: 1 },
     { t: 'mapEvent', kind: 'hunted', beat: 'whiff', x: 10, y: -4, n: 2 },
+    { t: 'flank', playerId: 1, x: -380, y: 40 },
   ];
 }
 

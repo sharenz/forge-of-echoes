@@ -17,7 +17,7 @@
 //   [e + telegraph, + ramp)         it accelerates in the new direction up to full speed (ease)
 // so the signed scale is continuous: velocity never jumps (prediction stays smooth) and a belt is readable before it turns.
 import { createRng, hashString, hashU32 } from '../../core/rng';
-import type { LayoutFlow, FlowBody } from './schema';
+import type { LayoutFlow, FlowBody, FlowLook } from './schema';
 import { FLOW_STRENGTH_DEFAULT, resolvePt, type Pt } from './schema';
 
 interface XY { x: number; y: number }
@@ -49,6 +49,8 @@ export interface CompiledFlow {
   strength: readonly number[];
   reverse: { mode: 'pingpong' | 'random'; every: [number, number]; telegraph: number; ramp: number } | null;
   feather: number;
+  /** Presenter look (cosmetic): belt, frost current, turning sand. */
+  look: FlowLook;
   /** band */
   path: XY[];
   width: number;
@@ -79,7 +81,7 @@ export function compileFlowZones(flows: readonly LayoutFlow[] | undefined, R: nu
       : null;
     const z: CompiledFlow = {
       id: f.id, shape: f.shape, speed: f.speed, sense: f.sense, group: f.group ?? `~${f.id}`, strength, reverse: rv,
-      feather: f.feather ?? FLOW_FEATHER, path: [], width: 0, segs: [], cx: 0, cy: 0, r0: 0, r1: 0, x0: 0, y0: 0, x1: 0, y1: 0,
+      feather: f.feather ?? FLOW_FEATHER, look: f.look ?? 'belt', path: [], width: 0, segs: [], cx: 0, cy: 0, r0: 0, r1: 0, x0: 0, y0: 0, x1: 0, y1: 0,
     };
     if (f.shape === 'annulus') {
       const at = f.at ? resolvePt(f.at, R) : { x: 0, y: 0 };

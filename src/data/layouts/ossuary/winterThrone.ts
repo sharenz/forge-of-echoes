@@ -57,6 +57,13 @@ export const WINTER_THRONE: AreaLayout = defineLayout({
     { id: 'frost-ne', kind: 'pool', at: f.pol(800, 40), r: 80 },
     { id: 'frost-sw', kind: 'pool', at: f.pol(780, 235), r: 90 },
   ],
+  // The frozen lake is a frost current (D 10.5a, roadmap 4 "the art keeps its promises"): the ice between the dais wall and
+  // r 335 drifts round the throne at 34 u/s, clockwise or counter-clockwise by the run's flow seed, turning every 35 to 55 s
+  // with a 2 s telegraph (the streaks slow and flicker) and a 1 s ramp. It stops short of the boss stage (r 350) and the
+  // landing clearing (r >= 360 on the south side). The stair roads cross it: the lake carries whoever stands on them.
+  flows: [
+    { id: 'lake-current', shape: 'annulus', at: [0, 0], r0: 240, r1: 335, speed: 34, sense: 'random', look: 'frost', reverse: { mode: 'pingpong', every: [35, 55] } },
+  ],
   lanes: [
     { id: 'ring', path: [...f.arc(520, 0, 360, 24)], width: 160, weight: 2.5, favours: ['fast'] },
     { id: 'north-stair', path: [f.pol(300, 0), f.pol(560, 0)], width: 130, weight: 1, wave: [3, 9], favours: ['melee'] },

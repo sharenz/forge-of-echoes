@@ -15,6 +15,7 @@ import { CHAINWORKS_COLISEUM_LAYOUTS } from './packs/chainworksColiseum';
 export * from './schema';
 export { compileLayout, type CompiledLayout } from './compile';
 export * from './flow';
+export * from './hazards';
 
 /** Shipped layouts. Packs add `areaId: layout` entries here. */
 export const AREA_LAYOUTS: Partial<Record<AtlasAreaId, AreaLayout>> = {

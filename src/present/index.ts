@@ -285,6 +285,7 @@ class WorldPresenter implements Presenter {
       const dot = e.t === 'hit' && e.target === 'player' && this.debuffs.isDotTick(e, world);
       this.events.handle(e, f, dot);
       this.sound.handle(e, input.localPlayerId, dot);
+      if (e.t === 'flank' && e.playerId === input.localPlayerId) this.indicators.flank(e.x, e.y, f.time);
     }
     this.events.endFrame(f);
     this.sound.syncLocalDebuffs(local && !local.dead ? local.debuffs : null);

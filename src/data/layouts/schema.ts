@@ -104,6 +104,22 @@ export interface LayoutDecal {
   at?: Pt;
   r?: number;
   width?: number;
+  /** The decal is a real hazard (roadmap 4: the art keeps its promises): see `LayoutHazard`. */
+  hazard?: LayoutHazard;
+}
+
+/**
+ * Burning ground on a decal (src/data/layouts/hazards.ts, applied by src/sim/layout-hazards.ts): a `pool` burns as a disc of its
+ * `r`, a `crack` as a band `width` u wide along its path (default 26). Cracks flare on a cycle by default (HAZARD_CRACK_CYCLE: a
+ * telegraph glow, then a burning flare), pools burn always; `cycle: null` / an explicit cycle overrides either. Players standing on
+ * a burning hazard take fire damage every half second and catch fire; monsters are unharmed (they are at home in the forge).
+ */
+export interface LayoutHazard {
+  kind: 'burn';
+  /** Band width of a crack / diameter override of a pool, u. */
+  width?: number;
+  /** Flare schedule in seconds (telegraph >= 1, every >= telegraph + active + 2); null = always burning. */
+  cycle?: { every: number; telegraph: number; active: number } | null;
 }
 
 export interface LayoutLane {
@@ -186,7 +202,15 @@ export interface LayoutFlow {
   strength?: FlowStrength;
   reverse?: LayoutFlowReverse;
   feather?: number;
+  /**
+   * How the presenter draws it (cosmetic only, the mechanic is identical): 'belt' (default) a Chainworks conveyor, 'frost' a
+   * frost current on ice (pale streaks drifting with the flow), 'sand' a raked sand ring turning (the Coliseum).
+   */
+  look?: FlowLook;
 }
+
+export const FLOW_LOOKS = ['belt', 'frost', 'sand'] as const;
+export type FlowLook = (typeof FLOW_LOOKS)[number];
 
 export interface LayoutBossStage {
   at: Pt;

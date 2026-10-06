@@ -10,11 +10,13 @@ import type { AtlasAreaId } from '../contracts/atlas';
 import type { Theme } from '../contracts/content';
 import type { RGB } from '../contracts/render';
 import { compileLayout, type CompiledDecal, type CompiledLandmark, type CompiledLayout, type XY } from '../data/layouts/compile';
+import { hazardState, type CompiledHazard } from '../data/layouts/hazards';
 import { flowFieldFor, flowPhaseAt, flowScaleAt, flowStep, flowVelocity, flowOut, FLOW_PLAYER, FLOW_MONSTER, layoutFor, type FlowField, type FlowZone } from '../data/layouts';
 import { C, hexRgb } from './colors';
 import type { FrameCtx } from './context';
 import { hash01, TAU } from './math';
 import type { Pen } from './pen';
+import { drawCurrent } from './layout-art-currents';
 import { drawBelt, themeGlyph, themeRoad, type BeltLook } from './layout-art-chainworks-coliseum';
 
 interface DecalLook {
@@ -84,6 +86,8 @@ export class LayoutArt {
   private look: DecalLook = LOOKS.hideout;
   /** Crack polylines (jittered once per build) by decal index. */
   private cracks = new Map<string, XY[]>();
+  /** Burning ground (roadmap 4) by decal id: the same compiled shapes and flare schedule the sim burns players with. */
+  private hazards = new Map<string, CompiledHazard>();
 
   /** (Re)build for a zone; no layout (or no area) clears everything. */
   build(areaId: AtlasAreaId | undefined, radius: number, theme: Theme, flowSeed = 0): void {
@@ -99,7 +103,9 @@ export class LayoutArt {
     this.theme = theme;
     this.look = LOOKS[theme];
     this.cracks.clear();
+    this.hazards.clear();
     if (!this.compiled) return;
+    for (const h of this.compiled.hazards) this.hazards.set(h.id, h);
     for (const d of this.compiled.decals) if (d.kind === 'crack') this.cracks.set(d.id, jitter(d.path, hashOf(d.id)));
   }
 
@@ -119,8 +125,8 @@ export class LayoutArt {
     if (this.field) this.flows(pen, f, vis);
     for (const d of c.decals) {
       if (d.kind === 'road') { if (!themeRoad(this.theme, pen, f, d, vis)) this.road(pen, d, vis); }
-      else if (d.kind === 'crack') this.crack(pen, f, d, vis);
-      else if (d.kind === 'pool') this.pool(pen, d, vis);
+      else if (d.kind === 'crack') { const h = this.hazards.get(d.id); if (h) this.lavaCrack(pen, f, d, h, vis); else this.crack(pen, f, d, vis); }
+      else if (d.kind === 'pool') { const h = this.hazards.get(d.id); if (h) this.slagPool(pen, f, h, vis); else this.pool(pen, d, vis); }
       else if (d.kind === 'glyph') { if (!themeGlyph(this.theme, pen, f, d, vis)) this.glyph(pen, f, d, vis); }
     }
   }
@@ -141,6 +147,13 @@ export class LayoutArt {
       if (d.kind === 'light' && d.r > 0 && d.x + d.r >= v.x0 && d.x - d.r <= v.x1 && d.y + d.r >= v.y0 && d.y - d.r <= v.y1) {
         pen.light(d.x, d.y, d.r, acc, 0.45, 0.1);
       }
+    }
+    for (const h of c.hazards) {
+      if (h.x1 < v.x0 - 60 || h.x0 > v.x1 + 60 || h.y1 < v.y0 - 60 || h.y0 > v.y1 + 60) continue;
+      const st = hazardState(h, f.world.time);
+      const glow = st.state === 2 ? 0.7 : st.state === 1 ? 0.25 + 0.35 * st.u : 0.15;
+      if (h.shape === 'disc') pen.light(h.x, h.y, h.r * 1.8, C.ember, glow, 0.4);
+      else for (const p of h.path) pen.light(p.x, p.y, 70, C.ember, glow * 0.8, 0.4);
     }
     for (const l of c.landmarks) {
       if (l.prop || l.x + l.r < v.x0 || l.x - l.r > v.x1 || l.y + l.r < v.y0 || l.y - l.r > v.y1) continue;
@@ -175,7 +188,8 @@ export class LayoutArt {
         sign: ph.sign, scroll: this.scroll[k], speed: Math.abs(scale), warn: ph.phase === 1, time: f.time, calm: this.calm,
         ...(this.theme === 'chainworks' ? {} : { tint: this.look.accent }),
       };
-      drawBelt(pen, f, this.flowPaths[k], this.flowWidths[k], look, vis);
+      if (z.look === 'belt') drawBelt(pen, f, this.flowPaths[k], this.flowWidths[k], look, vis);
+      else drawCurrent(pen, f, z.look, this.flowPaths[k], this.flowWidths[k], look, vis);
       if (Math.abs(scale) > 0.15) riding = true;
     }
     if (riding && !this.calm) this.dust(pen, f);
@@ -257,6 +271,89 @@ export class LayoutArt {
       if (!vis((a.x + b.x) / 2, (a.y + b.y) / 2, 60)) continue;
       r.line(a.x, a.y, b.x, b.y, S(pen, col, 0.4 * pulse, { thickness: 6, additive: true, emissive: 0.7 }));
       r.line(a.x, a.y, b.x, b.y, S(pen, C.flame, 0.85 * pulse, { thickness: 2, additive: true, emissive: 1 }));
+    }
+  }
+
+  /**
+   * A burning slag pool (always burning): a molten disc with a dark crust rim, a hot core and rising embers, so it reads as
+   * ground you do not stand on. Its footprint is the hazard's own disc.
+   */
+  private slagPool(pen: Pen, f: FrameCtx, h: CompiledHazard, vis: (x: number, y: number, r: number) => boolean): void {
+    if (!vis(h.x, h.y, h.r + 10)) return;
+    const r = pen.r;
+    const pulse = 0.85 + 0.15 * Math.sin(f.time * 2.1 + h.x * 0.03);
+    r.circle(h.x, h.y, h.r, pen.shape(C.lavaDeep, 0.85));
+    r.circle(h.x, h.y, h.r * 0.82, S(pen, C.lavaDark, 0.75 * pulse, { emissive: 0.6 }));
+    r.circle(h.x, h.y, h.r * 0.5, S(pen, C.ember, 0.4 * pulse, { additive: true, emissive: 0.9 }));
+    r.ring(h.x, h.y, h.r, S(pen, C.char, 0.8, { thickness: 4 }));
+    r.ring(h.x, h.y, h.r - 3, S(pen, C.flame, 0.55 * pulse, { thickness: 1.5, additive: true, emissive: 1 }));
+    if (Math.random() < f.fxDt * (h.r / 12)) {
+      const a = Math.random() * TAU;
+      const rr = Math.random() * h.r * 0.75;
+      const b = pen.burst(h.x + Math.cos(a) * rr, h.y + Math.sin(a) * rr, 1, C.hot, C.ember);
+      b.sprite = 'fx/ember';
+      pen.speed(4, 12);
+      pen.life(0.6, 1.2);
+      pen.size(0.4, 0.8);
+      b.angle = -Math.PI / 2;
+      b.spread = 1;
+      b.gravity = -20;
+      pen.emit();
+    }
+  }
+
+  /**
+   * A lava crack that flares (roadmap 4): dormant it is a dim crack; through the telegraph a glow widens from the crack to the full
+   * burning width and flickers faster as the flare nears; while it burns the whole band is molten, bright and spitting embers.
+   */
+  private lavaCrack(pen: Pen, f: FrameCtx, d: CompiledDecal, h: CompiledHazard, vis: (x: number, y: number, r: number) => boolean): void {
+    const pts = this.cracks.get(d.id) ?? d.path;
+    const st = hazardState(h, f.world.time);
+    const state = st.state;
+    const u = st.u;
+    const r = pen.r;
+    const w = h.half * 2;
+    const flick = this.calm ? 1 : 0.75 + 0.25 * Math.sin(f.time * (8 + 16 * u));
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      if (!vis((a.x + b.x) / 2, (a.y + b.y) / 2, 60 + w)) continue;
+      if (state === 2) {
+        r.line(a.x, a.y, b.x, b.y, S(pen, C.lavaDark, 0.75, { thickness: w, emissive: 0.6 }));
+        r.line(a.x, a.y, b.x, b.y, S(pen, C.ember, 0.55, { thickness: w * 0.7, additive: true, emissive: 0.9 }));
+        r.line(a.x, a.y, b.x, b.y, S(pen, C.hot, 0.8, { thickness: 3, additive: true, emissive: 1 }));
+      } else if (state === 1) {
+        // The warning: an outline of the full burning band, and a glow growing towards it.
+        const gw = 6 + (w - 6) * u;
+        r.line(a.x, a.y, b.x, b.y, S(pen, C.ember, (0.18 + 0.32 * u) * flick, { thickness: gw, additive: true, emissive: 0.8 }));
+        r.line(a.x, a.y, b.x, b.y, S(pen, C.flame, 0.9 * flick, { thickness: 2.5, additive: true, emissive: 1 }));
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        if (len > 0) {
+          const nx = (-(b.y - a.y) / len) * h.half;
+          const ny = ((b.x - a.x) / len) * h.half;
+          for (const sd of [-1, 1]) r.line(a.x + nx * sd, a.y + ny * sd, b.x + nx * sd, b.y + ny * sd, S(pen, C.flame, 0.35 * flick, { thickness: 1.5, additive: true }));
+        }
+      } else {
+        r.line(a.x, a.y, b.x, b.y, S(pen, C.lavaDeep, 0.6, { thickness: 7 }));
+        r.line(a.x, a.y, b.x, b.y, S(pen, C.ember, 0.45, { thickness: 2, additive: true, emissive: 0.7 }));
+      }
+    }
+    if (state === 2 && !this.calm && pts.length > 1 && Math.random() < f.fxDt * 10) {
+      const k = 1 + Math.floor(Math.random() * (pts.length - 1));
+      const t = Math.random();
+      const x = pts[k - 1].x + (pts[k].x - pts[k - 1].x) * t;
+      const y = pts[k - 1].y + (pts[k].y - pts[k - 1].y) * t;
+      if (vis(x, y, 10)) {
+        const bb = pen.burst(x, y, 1, C.hot, C.ember);
+        bb.sprite = 'fx/ember';
+        pen.speed(10, 30);
+        pen.life(0.4, 0.9);
+        pen.size(0.5, 0.9);
+        bb.angle = -Math.PI / 2;
+        bb.spread = 1.4;
+        bb.gravity = -10;
+        pen.emit();
+      }
     }
   }
 

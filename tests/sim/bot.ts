@@ -10,6 +10,50 @@ import {
 } from '../../src/sim/area-geometry';
 import { coverOf } from '../../src/data/propCover';
 import { Nav } from './nav';
+import { compileLayout, layoutFor, type CompiledHazard } from '../../src/data/layouts';
+import { hazardState } from '../../src/data/layouts/hazards';
+
+const hazardCache = new Map<string, CompiledHazard[]>();
+/** The burning ground of the view's area layout (derived from the area alone, like the presenter does). */
+function layoutHazards(view: WorldView): CompiledHazard[] {
+  if (!view.areaId) return [];
+  const key = `${view.areaId}:${view.arenaRadius}`;
+  let hz = hazardCache.get(key);
+  if (!hz) {
+    const l = layoutFor(view.areaId);
+    hz = l ? compileLayout(l, view.arenaRadius).hazards : [];
+    hazardCache.set(key, hz);
+  }
+  return hz;
+}
+
+/** Push (unit vector and weight) away from the nearest point of a hazard's footprint within `margin` of its edge, or null. */
+function hazardPush(h: CompiledHazard, x: number, y: number, margin: number): { x: number; y: number; w: number } | null {
+  let cx = h.x;
+  let cy = h.y;
+  let reach = h.r + margin;
+  if (h.shape === 'band') {
+    let best = Infinity;
+    for (let i = 1; i < h.path.length; i++) {
+      const a = h.path[i - 1];
+      const b = h.path[i];
+      const ex = b.x - a.x;
+      const ey = b.y - a.y;
+      const l2 = ex * ex + ey * ey;
+      const u = l2 > 0 ? Math.max(0, Math.min(1, ((x - a.x) * ex + (y - a.y) * ey) / l2)) : 0;
+      const qx = a.x + ex * u;
+      const qy = a.y + ey * u;
+      const d2 = (x - qx) ** 2 + (y - qy) ** 2;
+      if (d2 < best) { best = d2; cx = qx; cy = qy; }
+    }
+    reach = h.half + margin;
+  }
+  const dx = x - cx;
+  const dy = y - cy;
+  const d = Math.hypot(dx, dy);
+  if (d >= reach) return null;
+  return { x: d > 1e-3 ? dx / d : 1, y: d > 1e-3 ? dy / d : 0, w: 4 * (1 - d / reach) + 1 };
+}
 
 /** What a per-archetype cast script sees when it decides whether one loadout slot is held this tick. */
 export interface CastContext {
@@ -415,6 +459,16 @@ export function createBot(opts: BotOptions = {}): Bot {
         const uy = d > 1e-3 ? dy / d : 0;
         fx += ux * wgt;
         fy += uy * wgt;
+      }
+      // Burning ground of the area's layout (slag pools always, lava cracks while they flare or warn): step off it.
+      for (const h of layoutHazards(view)) {
+        const st = hazardState(h, view.time).state;
+        if (st === 0) continue;
+        const push = hazardPush(h, p.x, p.y, 20);
+        if (!push) continue;
+        inDanger = true;
+        fx += push.x * push.w;
+        fy += push.y * push.w;
       }
       // Threat without the arena-edge push: a drop lying near the rim must not flip the decision every tick (walking out to it
       // raises the rim push, which would cancel the walk, which lowers the push again...).

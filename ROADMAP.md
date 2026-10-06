@@ -2,7 +2,7 @@
 
 Maintained at the owner's request. Ask "what's next" and it is read from here; ideas and decisions
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
-Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped).
+Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "art keeps its promises" built).
 
 ## Next up, in order (reprioritised 2026-10-01 after the first outside player review)
 
@@ -21,6 +21,14 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped).
 4. **Make the art keep its promises.** Lava cracks, ice lakes, hazard stripes and sand rings look like mechanics but are cosmetic. Add the
    mechanics (flow zones are built: candidates are frost currents in Frozen Passage and Winter Throne, a slag channel, a lava rill, a
    rotating sand ring, a tram road), plus flanker monsters so standing still is not a strategy and the level gap in the monster hover.
+   Done 2026-10-06 (GAME_SPEC 7 "Flow zones" and "Burning ground", 8 "Flankers", the monster hover): frost currents (Winter Throne's lake
+   drifts round the dais, Frozen Passage's outer bridges run opposite ways; `look: 'frost'`), Pit of Echoes' two raked sand corridors
+   counter-rotate (`look: 'sand'`), every Ashen Forge slag pool burns and every lava crack flares on an 8 s cycle with a 1.5 s telegraph
+   (`hazard` on the decal, validator check 11, the bot steps off it), stream flankers from wave 2 (every third group comes from behind
+   the player, opposite the hunters already on her, with a "Flank!" edge marker and a panned horn; a first pincer version that split
+   groups made the bot's Tier 5 clears easier, 13/16 vs 7/16 seeds, and was dropped), and "Level 34 · 6 above you · deals 15% more damage" on the hover.
+   Still open: the Chainworks hazard stripes (a press or crusher line along them is the natural mechanic), a tram road, a flanker
+   *brain* (monsters that circle to the back on their own) if flank groups prove too gentle, and frost pools that chill.
 5. **P2 character depth: more Sorceress skills and a deeper skill tree, then the passive tree** (about 250 nodes). Designed together
    with the balance work in 2 so the new power has a curve to live in.
 

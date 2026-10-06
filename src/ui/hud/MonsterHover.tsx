@@ -1,6 +1,7 @@
 import { ELITE_BIT } from '../../contracts/sim';
 import { Bar, cx } from '../components/common';
 import { monsterTitle } from '../lib/content';
+import { levelGapInfo } from '../lib/level-gap';
 import { shallowEqual, useUi } from '../store';
 
 const MODS = [
@@ -22,10 +23,14 @@ const MODS = [
 
 export function MonsterHover() {
   const monster = useUi((s) => s.hud?.hoveredMonster ?? null, shallowEqual);
+  const monsterLevel = useUi((s) => s.hud?.run?.monsterLevel ?? null);
+  const playerLevel = useUi((s) => s.hud?.level ?? 0);
   if (!monster) return null;
+  const gap = levelGapInfo(monsterLevel, playerLevel);
   return <div class={cx('fe-monster-hover', `fe-monster-hover--${monster.rarity}`)} role="status">
     <strong>{monsterTitle(monster.kind)} <span>{monster.rarity === 'rare' ? 'Rare' : 'Magic'}</span></strong>
     <Bar kind="life" value={monster.life} />
+    {gap && <div class={cx('fe-monster-hover__level', `fe-monster-hover__level--${gap.tone}`)}>{gap.text}</div>}
     {MODS.filter(([bit]) => monster.mods & bit).map(([bit, name, effect]) => <div key={bit}><b>{name}</b> · {effect}</div>)}
   </div>;
 }

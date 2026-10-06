@@ -57,6 +57,14 @@ export const FROZEN_PASSAGE: AreaLayout = defineLayout({
     { id: 'window-sw', kind: 'light', at: f.p(-340, 430), r: 110 },
     { id: 'window-se', kind: 'light', at: f.p(340, 430), r: 110 },
   ],
+  // Frost currents on the two outer bridges (D 10.5a, roadmap 4): the ice of each bridge runs north or south at 40 u/s, drawn
+  // per run from the flow seed as a group (one bridge always runs each way), turning every 32 to 52 s with a 2 s telegraph and
+  // a 1 s ramp. Both ends open onto a gallery, so the current never delivers anyone into a dead end. The centre bridge (the
+  // well's own stair) stays still.
+  flows: [-BRIDGE_X, BRIDGE_X].map((x) => ({
+    id: `current-${x < 0 ? 'w' : 'e'}`, shape: 'band' as const, path: [f.p(x, -320), f.p(x, 320)], width: 110, speed: 40,
+    sense: 'random' as const, group: 'bridges', look: 'frost' as const, reverse: { mode: 'pingpong' as const, every: [32, 52] as [number, number] },
+  })),
   lanes: [
     { id: 'bridge-w', path: [f.p(-BRIDGE_X, -220), f.p(-BRIDGE_X, 220)], width: 120, weight: 1.6, favours: ['melee'] },
     { id: 'bridge-e', path: [f.p(BRIDGE_X, -220), f.p(BRIDGE_X, 220)], width: 120, weight: 1.6, favours: ['melee'] },

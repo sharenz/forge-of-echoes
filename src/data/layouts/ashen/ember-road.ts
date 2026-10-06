@@ -65,9 +65,9 @@ export const EMBER_ROAD: AreaLayout = defineLayout({
     { id: 'bay-w-glyph', kind: 'glyph', at: [-0.5, 0], r: 76 },
     { id: 'bay-e-glyph', kind: 'glyph', at: [0.5, 0], r: 76 },
     { id: 'vault-glow', kind: 'light', at: { r: 0.84, a: 322 }, r: 110 },
-    { id: 'crack-w', kind: 'crack', path: [[-0.72, 0.1], [-0.66, -0.02], [-0.72, -0.12]] },
-    { id: 'crack-e', kind: 'crack', path: [[0.7, -0.3], [0.64, -0.2], [0.7, -0.1]] },
-    { id: 'slag-s', kind: 'pool', at: [0.52, 0.62], r: 46 },
+    { id: 'crack-w', kind: 'crack', path: [[-0.72, 0.1], [-0.66, -0.02], [-0.72, -0.12]], hazard: { kind: 'burn' } },
+    { id: 'crack-e', kind: 'crack', path: [[0.7, -0.3], [0.64, -0.2], [0.7, -0.1]], hazard: { kind: 'burn' } },
+    { id: 'slag-s', kind: 'pool', at: [0.52, 0.62], r: 46, hazard: { kind: 'burn' } },
   ],
   lanes: [
     // The street: quiet early (the bays and yard take the first packs), the main stage of waves 3 to 6.

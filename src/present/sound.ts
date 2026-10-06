@@ -894,6 +894,10 @@ export class SoundDirector {
       case 'notEnoughFocus':
         if (e.playerId === localId) this.play('notEnoughFocus', undefined, undefined, 1, 1);
         return;
+      case 'flank':
+        // Flankers coming from behind: the tell horn, higher and panned to where they come from.
+        if (e.playerId === localId) this.play('waveTell', e.x, e.y, 0.8, 1.25);
+        return;
     }
   }
 }

@@ -31,6 +31,16 @@ describe('check 9: flow zones', () => {
     }
   });
 
+  it('the art keeps its promises: frost currents (Winter Throne, Frozen Passage) and sand rings (Pit of Echoes) pass check 9', () => {
+    const looks = { winterThrone: 'frost', frozenPassage: 'frost', pitOfEchoes: 'sand' } as const;
+    for (const [id, look] of Object.entries(looks) as [keyof typeof looks, string][]) {
+      const l = layoutFor(id)!;
+      expect(l.flows?.length, id).toBeGreaterThan(0);
+      expect(l.flows!.every((f) => f.look === look), id).toBe(true);
+      expect(check9(l), id).toEqual([]);
+    }
+  });
+
   it('a layout without flows has nothing to check', () => {
     expect(check9(SLAG_YARD)).toEqual([]);
   });

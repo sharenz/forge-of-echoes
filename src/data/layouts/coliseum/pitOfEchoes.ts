@@ -59,6 +59,13 @@ export const PIT_OF_ECHOES: AreaLayout = defineLayout({
     { id: 'rim-way', kind: 'road', path: [pol(585, 180), pol(420, 180)], width: 110 },
     { id: 'core-light', kind: 'light', at: [0, 0], r: 220 },
   ],
+  // The two raked sand rings turn (D 10.5a, roadmap 4): each corridor between the tiers is an annulus flow zone (30 u/s), drawn per
+  // run as a group so the rings always counter-rotate, turning every 30 to 50 s with a 2 s telegraph and a 1 s ramp. Closed loops:
+  // a ring always brings you past its gaps.
+  flows: [
+    { id: 'ring-bc', shape: 'annulus', at: [0, 0], r0: 326, r1: 386, speed: 30, sense: 'random', group: 'rings', look: 'sand', reverse: { mode: 'pingpong', every: [30, 50] } },
+    { id: 'ring-ab', shape: 'annulus', at: [0, 0], r0: 242, r1: 302, speed: 30, sense: 'random', group: 'rings', look: 'sand', reverse: { mode: 'pingpong', every: [30, 50] } },
+  ],
   lanes: [
     { id: 'corridor-bc', path: circle(356, 15), width: 56, weight: 2.2, favours: ['fast'] },
     { id: 'corridor-ab', path: circle(272, 15), width: 56, weight: 2.2, favours: ['melee'], wave: [2, 9] },

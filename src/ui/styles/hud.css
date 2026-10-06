@@ -49,6 +49,9 @@
 .fe-monster-hover--magic > strong { color: #9fc2e8; }
 .fe-monster-hover--rare > strong { color: var(--gold); }
 .fe-monster-hover .fe-bar { height: 6px; margin: 5px 0; }
+.fe-monster-hover__level { font-size: var(--font-ui-caption); color: var(--ash); }
+.fe-monster-hover__level--near { color: var(--bone); }
+.fe-monster-hover__level--over { color: var(--flame); font-weight: 600; }
 /* Medium: a panel covers one side of a small screen. The map block folds into the zone chip. */
 @container fe-hud (max-width: 819px) {
   .fe-hudgrid {

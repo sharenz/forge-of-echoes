@@ -16,6 +16,7 @@ import { EventBuffer } from './events';
 import { createEventDirector, updateMapEvent } from './map-events';
 import { PropGrid, SpatialGrid } from './grid';
 import { flowStep } from '../data/layouts/flow';
+import { updateLayoutHazards } from './layout-hazards';
 import { applyLayout, layoutForConfig, layoutStart } from './layout';
 import { createHookErrorLog } from './hooks';
 import { removeDrop, removePlayerDrops, requestPickup, spawnFloorDrop, updateDrops } from './loot';
@@ -289,6 +290,7 @@ export function stepWorld(w: World): void {
   w.grid.build(w.monsters);
   updateProjectiles(w);
   updateAreas(w);
+  updateLayoutHazards(w); // burning slag and lava cracks of the area's layout (roadmap 4)
   updateDrops(w);
   updatePropInteractions(w);
   syncView(w);

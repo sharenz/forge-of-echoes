@@ -542,6 +542,8 @@ export type SimEvent =
   | { t: 'playerDeath'; playerId: number; x: number; y: number }
   | { t: 'playerJoin'; playerId: number; x: number; y: number }
   | { t: 'notEnoughFocus'; playerId: number }
+  /** A flanking stream group (roadmap 4) just spawned round (x, y), behind `playerId`: the edge warning's cue. */
+  | { t: 'flank'; playerId: number; x: number; y: number }
   /** A map event beat: `n` is a per-beat number (step index, resonance, grade). */
   | { t: 'mapEvent'; kind: import('./map-events').MapEventKind; beat: import('./map-events').MapEventBeat; x: number; y: number; n: number };
 

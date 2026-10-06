@@ -134,6 +134,22 @@ users; the format (`flows` in a layout, D-territory.md 10.5a) is generic, so cur
   flicker, amber rails, a low metal clank), then it accelerates the other way over 1 s. Velocity never jumps.
 - Wide road decals in Chainworks areas (aprons, the Gilded Vault's gold road) are static deck plating and never show chevrons: only a flow zone draws
   moving ones, so art, direction and mechanic cannot disagree.
+- **Frost currents and turning sand rings** use the same format and rules with their own look (`look: 'frost' | 'sand'`; pale ice streaks or rake marks
+  slide at the live velocity, the rim flickers amber through a reversal's telegraph). The **Winter Throne**'s frozen lake drifts round the dais (r 240 to
+  335, 34 u/s, turning every 35 to 55 s; it stops short of the boss stage and the landing). The **Frozen Passage**'s two outer bridges are currents
+  (40 u/s, one always runs north and one south, turning every 32 to 52 s; the centre bridge stays still). The **Pit of Echoes**' two raked sand corridors
+  between the tiers turn (30 u/s, always counter-rotating, turning every 30 to 50 s).
+
+**Burning ground (slag pools and lava cracks).** In the Ashen Forge areas (Furnace Yard, Crown Foundry, Ember Road, Shattered Forge, Cinder Crossing, Heart
+of the Forge) and the Ember Citadel, every glowing slag pool and lava crack is a real hazard (`hazard` on the decal; `src/data/layouts/hazards.ts`):
+- A **slag pool** always burns, over its drawn disc: molten fill, crust rim, rising embers.
+- A **lava crack** flares on a cycle (every 8 s): dim while dormant, then a **1.5 s telegraph** (a glow widening from the crack to the full 26 u band,
+  flickering faster as the flare nears), then **2.5 s burning** (the whole band molten, spitting embers). Each crack's phase comes from its id, so the
+  cracks of one area flare at different moments; it is the same for every run and needs no wire field.
+- A player whose feet touch burning ground takes fire damage every 0.5 s (3 × the map's monster damage multiplier × the wave's growth, rolled and
+  level-gapped like any hit) and catches **burning**. Monsters are unharmed. Nothing burns after the map is cleared.
+- The layout validator (check 11) keeps burning ground off the landing clearing and keeps always-burning ground off the boss stage (a flaring crack may
+  cross it: it warns before every flare), and requires a readable cycle (telegraph >= 1 s, period >= telegraph + burn + 2 s).
 
 **Cover (props and shots).** Every solid prop has a cover height (`src/data/propCover.ts`): **tall** props stop straight-flying projectiles, **low** props are
 flown over (they still block walking), and props with radius 0 (walk-through decor, portals) never block anything. Tall: pillar, standing stone, ruin wall,
@@ -418,7 +434,7 @@ from it (a discovered area of that theme accepting its tier, else any discovered
 | Rimed Ossuary | Frosted bone-tiles, cold blue light, ice crystals | 900 | Rime Essences 3× as likely; +20% monster life; +15% item rarity |
 | Iron Coliseum | Rusted iron plates, sand, torchlight | 650 | +25% monster count; armour bases +2 stability |
 
-**Tier and monster level:** tiers 1–15. Monster level = `min(90, 6·tier − 2)` (Tier 1 = 4, Tier 4 = 22, Tier 15 = 88), and it is the item level of every drop. **Monster stats scale with monster level, not tier** (Path of Exile style): life ×1.09 and damage ×1.09 per level above the reference level 10 (the level at which the sim's base monster table applies unchanged) up to monster level 16, then life ×1.11 and damage ×1.11 per level beyond it with life also gaining a flat +0.25 (of base) per level past 16, **unchanged up to monster level 28**; from monster level 28 the curve bends (curve v3): life ×1.061 per level to monster level 40, ×1.0545 to 60 and ×1.0384 beyond, damage ×1.04, ×1.028 and ×1.019 (life ×18.1 and damage ×9.4 at monster level 40, ×52.2 and ×16.3 at 60, ×149.8 and ×27.7 at 88); below the reference level monsters shrink gently (life ×1.09, damage ×1.065 per level), shown as "more" or "less" from "Monster level N" in the readout. **Level gap:** a monster more than 3 levels above the character it hits deals +5% damage per further level, up to +100% (nothing when the character is at or above monster level; damage over time is not scaled twice); shown in the map tooltip. Tier still drives experience (Tier 1 gives ×0.5, then ×1.28 per tier above 1: T2 ×1.28, T3 ×1.64, T4 ×2.10, T5 ×2.68) and +5% item rarity per tier (additive). Tier 1 experience is deliberately halved so a new character needs about ten Tier 1 maps to reach level 10, where Tier 2 is on-level; a fresh character is expected at level 4 after the first Tier 1 clear, 6 after three, 9 after eight.
+**Tier and monster level:** tiers 1–15. Monster level = `min(90, 6·tier − 2)` (Tier 1 = 4, Tier 4 = 22, Tier 15 = 88), and it is the item level of every drop. **Monster stats scale with monster level, not tier** (Path of Exile style): life ×1.09 and damage ×1.09 per level above the reference level 10 (the level at which the sim's base monster table applies unchanged) up to monster level 16, then life ×1.11 and damage ×1.11 per level beyond it with life also gaining a flat +0.25 (of base) per level past 16, **unchanged up to monster level 28**; from monster level 28 the curve bends (curve v3): life ×1.061 per level to monster level 40, ×1.0545 to 60 and ×1.0384 beyond, damage ×1.04, ×1.028 and ×1.019 (life ×18.1 and damage ×9.4 at monster level 40, ×52.2 and ×16.3 at 60, ×149.8 and ×27.7 at 88); below the reference level monsters shrink gently (life ×1.09, damage ×1.065 per level), shown as "more" or "less" from "Monster level N" in the readout. **Level gap:** a monster more than 3 levels above the character it hits deals +5% damage per further level, up to +100% (nothing when the character is at or above monster level; damage over time is not scaled twice); shown in the map tooltip and on the monster hover. Tier still drives experience (Tier 1 gives ×0.5, then ×1.28 per tier above 1: T2 ×1.28, T3 ×1.64, T4 ×2.10, T5 ×2.68) and +5% item rarity per tier (additive). Tier 1 experience is deliberately halved so a new character needs about ten Tier 1 maps to reach level 10, where Tier 2 is on-level; a fresh character is expected at level 4 after the first Tier 1 clear, 6 after three, 9 after eight.
 
 **Defences scale with monster level too.** Evade chance = `rating / (rating + 30 × monster level)` (at most 75%): the same evasion rating avoids fewer hits from higher-level monsters, so roughly half of all hits can only be avoided with focused high-end gear. Monster accuracy is the `30 × monster level` term. Armour retains its hit-size formula (`armor / (armor + 10 × damage)`): higher-level hits already reduce its effectiveness, so there is no second armour penalty. The sheet's example physical hit scales from 20 at monster level 10 with the same damage curve.
 
@@ -887,6 +903,11 @@ legacy maps event-free.
 **Wave budget:** `baseMonsters 40 + 18·(wave−1)` × countMultiplier, over 60 s.
 - 60% of the budget is placed at wave start as **packs** (4–8 monsters) around the arena, at least 250 units from the player. Hunting them is the "PoE" part.
 - 40% **streams** from just off-screen toward the player over the wave. This is the "VS" pressure.
+- **Flankers.** From wave 2, every third stream group of a wave **flanks**: instead of a random bearing it arrives from behind the player, the side
+  opposite the hunters already on her (their centroid within 450 u, ± 26°), or from one of her sides when her back is the arena wall; with nobody on her it
+  is an ordinary group. It is announced the moment it spawns: a red "Flank!" marker blinks at the screen edge pointing where it comes from (3 s) and the
+  tell horn sounds, higher, panned to that side. Like every stream member it starts just past the view edge, so it is seen before it arrives. Facing one
+  way and holding ground is not a strategy.
 - A wave ends when its monsters are dead **or** at 60 s. Waves can stack.
 
 **Per-wave growth** (sim-side): +8% monster life and +4% damage per wave.
@@ -894,7 +915,7 @@ legacy maps event-free.
 **Pack rarity:**
 - Magic chance: 10% × magicPackChance multiplier. The whole pack is magic and shares one mod: Swift (+30% speed), Stout (+70% life) or Fierce (+40% damage). Blue outline.
 - Rare chance: 3% × multiplier. A single rare leader gets 2 mods from Juggernaut (+200% life), Frenzied (+50% speed), Ember-touched (fire burst on death, telegraphed) and Warded (40% less damage while allies are near); from deeper tiers the pool also holds strikes (Stormcalled, Rending) and **proofs**: Fire, Cold and Lightning proof (from Tier 2, weight 0.6 each, full at Tier 8), **Void-proof** (from Tier 8, weight 0.5, full at Tier 12) and **Physical-proof** (from Tier 10, weight 0.4, full at Tier 14), each 90% resistance to one damage type. From Tier 12 a fifth of rares with a proof swap another mod for a second proof of a different type (never more than two; the mod count per tier is unchanged). Gold outline and its name floats above it. The rest of the pack is normal.
-- Hovering a magic or rare monster shows its name, rarity, life and modifier explanations at the top centre.
+- Hovering a magic or rare monster shows its name, rarity, life and modifier explanations at the top centre, and its **level against yours**: "Level 34 · 6 above you · deals 15% more damage" (the level gap rule of §7; muted when it is not above you, bone within the three grace levels, flame once it hits harder).
   The card clears over UI or empty space and when the monster dies.
 
 **Rarity strength:** every magic monster has ×1.5 life and ×1.2 damage; a rare leader has ×3 life and ×1.5
@@ -1317,7 +1338,7 @@ Monsters and bosses apply debuffs to players. Each debuff has a clear visual on 
 | **Chilled** (cold) | −30% move and cast speed, 2 s. Refreshes; doesn't stack | Rimeshade touches, Glacial Wisp bursts, Ossuary Golem frost slams, the Choir Wave, the Hollow Warden's novas, spikes and blizzards | Cold resistance shortens it |
 | **Frozen** (cold) | Can't move, cast or attack (a cast in progress holds; flasks still work), 0.8 s, then **3 s immunity** to freeze: a freeze during the immunity is only a chill. Only from **telegraphed** attacks | The Hollow Warden's Ice Prison, a Glacial Wisp bursting at point blank | Dodge the telegraph (walk out of the prison, step away from the wisp); Cold resistance shortens it |
 | **Rooted** | Can't move on your own, can still cast, 1.4 s. Roots don't chain: while rooted and for **3 s** after a root ends, new roots are ignored (a chain hook still drags) | Frost Weaver web shots, chain hooks (Chain Thralls, the Chainmaster), tar pools | **Rift Step breaks it** |
-| **Burning** (fire) | Fire damage over 3 s (40% of the triggering hit). Re-applying refreshes the duration and keeps the strongest | Cinder Spitter lobs, the Matriarch's orbs, fire pools, Volcanic eruptions | The Life flask removes it; Fire resistance shortens it |
+| **Burning** (fire) | Fire damage over 3 s (40% of the triggering hit). Re-applying refreshes the duration and keeps the strongest | Cinder Spitter lobs, the Matriarch's orbs, fire pools, Volcanic eruptions, burning slag and flaring lava cracks | The Life flask removes it; Fire resistance shortens it |
 | **Bleeding** (physical) | 20% of the hit over 4 s; **×2 while moving**; stacks up to 3 | Pit Hound bites, crossbow bolts, the Chainmaster's whirling chains, Varkus's charge and whirlwind | The Life flask removes it |
 | **Shocked** (lightning) | +20% damage taken, 2 s | (future storm family) | Lightning resistance shortens it |
 | **Withered** (void) | −12% to all non-physical resistances per stack, 4 s (one shared timer); stacks up to 3 | Rift Stalker leaps, the Herald's void orbs | The Focus flask removes it |
@@ -1340,7 +1361,7 @@ Each of six map bases has its own theme, wave family and final boss. Wave 3 has 
 ### Ashen Forge (fire): existing roster
 
 The roster (Ashling, Ember Skitter, Cinder Spitter, Rift Stalker, Ironhide Brute, **Cinder Matriarch**) now applies these debuffs:
-- Burning from Cinder Spitter lobs, Matriarch orbs, fire pools and Volcanic eruptions.
+- Burning from Cinder Spitter lobs, Matriarch orbs, fire pools, Volcanic eruptions and the Ashen Forge's burning ground (slag pools, flaring lava cracks).
 - Withered from Rift Stalker leaps. The Herald’s void orbs now appear in Cinder Chapel.
 
 ### Rimed Ossuary (cold, bone)

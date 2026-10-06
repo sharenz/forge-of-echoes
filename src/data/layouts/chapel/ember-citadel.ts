@@ -63,8 +63,8 @@ export const EMBER_CITADEL: AreaLayout = defineLayout({
     { id: 'street-w', kind: 'road', path: [[-0.22, 0], [-0.86, 0]], width: 110 },
     { id: 'plaza-glyph', kind: 'glyph', at: [0, 0], r: 170 },
     { id: 'plaza-inner', kind: 'glyph', at: [0, 0], r: 96 },
-    { id: 'crack-a', kind: 'crack', path: [{ r: 0.8, a: 20 }, { r: 0.86, a: 28 }, { r: 0.78, a: 36 }] },
-    { id: 'slag-w', kind: 'pool', at: { r: 0.84, a: 250 }, r: 40 },
+    { id: 'crack-a', kind: 'crack', path: [{ r: 0.8, a: 20 }, { r: 0.86, a: 28 }, { r: 0.78, a: 36 }], hazard: { kind: 'burn' } },
+    { id: 'slag-w', kind: 'pool', at: { r: 0.84, a: 250 }, r: 40, hazard: { kind: 'burn' } },
   ],
   lanes: [
     // Streets carry the middle waves; the outer ring takes the first, the plaza the last.

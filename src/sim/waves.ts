@@ -14,7 +14,7 @@ import { DT_FIRE, killMonster } from './combat';
 import { cleanseAll } from './debuffs';
 import { bossStagePoint, layoutPackPoints, packProfile } from './layout';
 import {
-  DT, HAZARD_MAX_INTERVAL, HAZARD_MIN_INTERVAL, INTRO_DELAY, MAX_LIVE_MONSTERS, PACK_MIN_DISTANCE,
+  DT, FLANK_EVERY, FLANK_FROM_WAVE, FLANK_JITTER, FLANK_MIN_GROUP, HAZARD_MAX_INTERVAL, HAZARD_MIN_INTERVAL, INTRO_DELAY, MAX_LIVE_MONSTERS, PACK_MIN_DISTANCE,
   PACK_SHARE, PARTY_BUDGET_PER_PLAYER, PARTY_ELITE_PER_PLAYER, PRESSURE_BASE, PRESSURE_CHECK_TICKS, PRESSURE_PER_WAVE,
   PRESSURE_RADIUS, STREAM_ARC, STREAM_DEPTH, STREAM_FIRST_DELAY, STREAM_GROUP_AVG, STREAM_MARGIN, STREAM_MIN_GAP,
   STREAM_WINDOW, VIEW_HALF_H, VIEW_HALF_W, WAVE_DAMAGE_GROWTH,
@@ -49,7 +49,7 @@ export function createDirector(mode: 'hideout' | 'map'): Director {
     tellTimer: 0,
     plan: null,
     planPlayers: 1,
-    stream: { wave: 0, remaining: 0, timer: 0, interval: 1, sinceLast: 0, weights: [] },
+    stream: { wave: 0, remaining: 0, timer: 0, interval: 1, sinceLast: 0, weights: [], groups: 0 },
     hazardTimer: 3,
     bossId: -1,
     lieutenantId: -1,
@@ -270,7 +270,7 @@ function startWave(w: World, wave: number): void {
   const groups = Math.max(1, Math.ceil(count / STREAM_GROUP_AVG));
   const interval = Math.max(0.5, (STREAM_WINDOW * Math.max(1, cfg.waveDuration)) / groups);
   d.stream = {
-    wave, remaining: count, timer: Math.max(STREAM_FIRST_DELAY, interval * 0.5), interval, sinceLast: 0, weights: plan.streamWeights,
+    wave, remaining: count, timer: Math.max(STREAM_FIRST_DELAY, interval * 0.5), interval, sinceLast: 0, weights: plan.streamWeights, groups: 0,
   };
   if (plan.lieutenant) spawnLieutenant(w, wave);
   if (plan.boss) spawnBoss(w, wave);
@@ -447,6 +447,7 @@ function spawnStreamGroup(w: World, pulled: PlayerState | null): void {
   const rng = w.worldRng;
   const count = groupSize(s.remaining, rng);
   s.remaining -= count;
+  s.groups++;
   const p = pulled ?? anyLiving(w);
   const lim = w.arenaRadius - 30;
   // A bearing whose whole arc (centre and both ends) lies inside the arena and off every other
@@ -463,8 +464,63 @@ function spawnStreamGroup(w: World, pulled: PlayerState | null): void {
   if (!found) bearing = Number.isNaN(fallback) ? Math.atan2(-p.y, -p.x) : fallback;
   const members: MonsterKind[] = [];
   for (let k = 0; k < count; k++) members.push((rng.weighted(s.weights, (e) => e.weight) ?? s.weights[0]).kind);
+  // A flank (FLANK_*): the group comes from BEHIND the player, the side opposite the hunters already on her (their centroid
+  // within PRESSURE_RADIUS), or failing that from one of her sides. With no hunters near her there is nothing to flank.
+  let rear = Number.NaN;
+  if (s.wave >= FLANK_FROM_WAVE && count >= FLANK_MIN_GROUP && s.groups % FLANK_EVERY === 0) {
+    const front = threatBearing(w, p);
+    if (!Number.isNaN(front)) {
+      const back = front + Math.PI + rng.range(-FLANK_JITTER, FLANK_JITTER);
+      for (const a of [back, front + Math.PI / 2, front - Math.PI / 2]) {
+        if (arcPointClear(w, p, a, lim)) {
+          rear = a;
+          break;
+        }
+      }
+    }
+  }
+  if (Number.isNaN(rear)) {
+    spawnArc(w, p, bearing, members, lim);
+    return;
+  }
+  const at = spawnArc(w, p, rear, members, lim);
+  w.events.push({ t: 'flank', playerId: p.id, x: at.x, y: at.y });
+}
+
+/** Bearing from p to the centroid of the hunting monsters within PRESSURE_RADIUS of her (NaN when there are none). */
+function threatBearing(w: World, p: PlayerState): number {
+  const m = w.monsters;
+  const r2 = PRESSURE_RADIUS * PRESSURE_RADIUS;
+  let sx = 0;
+  let sy = 0;
+  let n = 0;
+  for (let i = 0; i < m.hwm; i++) {
+    if (!m.alive[i]) continue;
+    const pk = m.pack[i];
+    if (pk >= 0 && !w.packs[pk].aggro) continue;
+    const dx = m.x[i] - p.x;
+    const dy = m.y[i] - p.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > r2 || d2 < 1) continue;
+    const d = Math.sqrt(d2);
+    sx += dx / d;
+    sy += dy / d;
+    n++;
+  }
+  return n > 0 && sx * sx + sy * sy > 1e-6 ? Math.atan2(sy, sx) : Number.NaN;
+}
+
+/**
+ * Spawn `kinds` as one hunting pack on an arc of +-STREAM_ARC around `bearing`, each member just past p's view edge along its
+ * own bearing. Returns the arc's centre point (where the group comes from), inside the arena.
+ */
+function spawnArc(w: World, p: PlayerState, bearing: number, kinds: readonly MonsterKind[], lim: number): { x: number; y: number } {
+  const s = w.director.stream;
+  const rng = w.worldRng;
+  const count = kinds.length;
   const r0 = viewEdgeDistance(bearing) + STREAM_MARGIN + STREAM_DEPTH * 0.5;
-  const pack = allocPack(w, p.x + Math.cos(bearing) * r0, p.y + Math.sin(bearing) * r0, s.wave, true, 'normal', true);
+  const centre = { x: p.x + Math.cos(bearing) * r0, y: p.y + Math.sin(bearing) * r0 };
+  const pack = allocPack(w, centre.x, centre.y, s.wave, true, 'normal', true);
   for (let k = 0; k < count; k++) {
     const u = count > 1 ? k / (count - 1) - 0.5 : 0;
     const a = bearing + u * 2 * STREAM_ARC + rng.range(-0.04, 0.04);
@@ -483,8 +539,14 @@ function spawnStreamGroup(w: World, pulled: PlayerState | null): void {
       x *= lim / dd;
       y *= lim / dd;
     }
-    spawnMonster(w, members[k], x, y, { pack, wave: s.wave });
+    spawnMonster(w, kinds[k], x, y, { pack, wave: s.wave });
   }
+  const dc = Math.hypot(centre.x, centre.y);
+  if (dc > lim) {
+    centre.x *= lim / dc;
+    centre.y *= lim / dc;
+  }
+  return centre;
 }
 
 const hunterCounts = new Int32Array(8);
