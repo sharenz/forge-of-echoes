@@ -29,6 +29,7 @@ import { useSignal, useStore, useUi } from '../store';
 import { setOpeningArea, useActivation } from './activation';
 import { fittingUids, mapFit, openAreaBlock, passageNeed, planIsEmpty, readSetups, rememberSetup, currentSetup, setupPlan, whereToFind, type WhereToFind } from './area-modal';
 import { AreaDetails, AreaFacts, AreaHero, type AreaPin } from './AreaInfo';
+import { BeaconPanel } from './BeaconPanel';
 import type { NodeModel } from './model';
 import { PassageSlot } from './PassageSlot';
 import { passageOptions } from './passage';
@@ -385,6 +386,7 @@ export function AreaModal({ area, model, pin, compact, gear, onClose, onGoto }: 
                   <p class="ui-type-secondary fe-amodal__mute">{need.kind === 'key' ? `Place the ${need.label} in the passage slot to see what this run holds.` : `The Pit needs a Bounty map of ${area.neighbours.map((n) => findAtlasArea(n)?.name).join(' or ')}.`}</p>
                 </div>
               ) : null}
+              <BeaconPanel area={area} atlas={progress} onGoto={onGoto} />
               {find && heldMaps === 0 && <WhereTo find={find} area={area} onGoto={onGoto} />}
               <MapsHeld area={area} pin={pin} />
               <AreaDetails area={area} tier={map?.tier ?? null} map={runArea?.id === area.id ? map : null} odds={runArea?.id === area.id ? odds : null} />

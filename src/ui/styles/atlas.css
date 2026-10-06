@@ -557,3 +557,13 @@
   .fe-amodal__scrim { padding: 6px; }
   .fe-amodal__hero { min-height: 60px; }
 }
+
+/* ---- beacons (brief D 6): the area modal's beacon section, slots are panel-owned drop targets ---------------------- */
+.fe-beacon { padding-top: 2px; }
+.fe-beacon__slots { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.fe-beacon__slotrow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.fe-beacon__socket.fe-device-slot { width: 46px; height: 46px; }
+.fe-beacon__slottext { display: flex; flex-direction: column; gap: 2px; min-width: 0; color: var(--parchment); }
+.fe-beacon__reaching { display: flex; flex-direction: column; gap: 4px; }
+.fe-beacon__list { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; color: var(--bone); }
+.fe-beacon__list b { color: var(--parchment); }

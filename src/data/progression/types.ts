@@ -138,7 +138,9 @@ export type MapStat =
   | 'bossLife' | 'bossUnique' | 'bossLoot' | 'chestLoot' | 'chestRareChance' | 'chestCurrency'
   | 'waveDuration' | 'territoryFee' | 'revealChance' | 'dangerModStrength' | 'corruptedModStrength'
   // Daily surge (brief D 7.5; read by game/progression/surge.ts and loot.ts, never resolved on a map)
-  | 'surgeCharges' | 'surgeKeep' | 'sandChance';
+  | 'surgeCharges' | 'surgeKeep' | 'sandChance'
+  // Beacons and sigils (brief D 6, 9; read by game/progression/territory.ts, never resolved on a map)
+  | 'beaconSlots' | 'beaconRadius' | 'sigilUses';
 
 export interface MapEffectDef {
   stat: MapStat;

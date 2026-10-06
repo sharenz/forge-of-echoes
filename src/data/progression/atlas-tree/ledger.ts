@@ -34,6 +34,8 @@ export const UNIT_RATES: Readonly<Record<string, Rate>> = {
   'currencyWeight:increased': R(8), 'currencyWeight:more': R(8),
   // Daily surge (brief D 7.5): a charge on every area is about 4u (Second Wind), Afterglow's 10% 1u, +50% Sand chance 1u.
   'surgeCharges:flat': R(0.25), 'surgeKeep:flat': R(10), 'sandChance:increased': R(50),
+  // Beacons (brief D 9): Lightkeeper's second slot on every one-slot beacon about 4u, Survey Stake's +20 px radius 1u, +3 sigil uses about 0.5u.
+  'beaconSlots:flat': R(0.25), 'beaconRadius:flat': R(20), 'sigilUses:flat': R(6),
 };
 
 const NIL: AtlasUnits = { reward: 0, danger: 0 };
@@ -98,6 +100,9 @@ const FLAT: Readonly<Record<string, (v: number) => string>> = {
   hazards: () => 'volcanic eruptions burst around you',
   surgeCharges: v => `${v < 0 ? '-' : '+'}${num(v)} daily surge charge${Math.abs(v) === 1 ? '' : 's'}`,
   surgeKeep: v => `a spent surge charge has a ${num(v)}% chance not to be consumed`,
+  beaconSlots: v => `every one-slot beacon gains ${num(v)} more sigil slot${Math.abs(v) === 1 ? '' : 's'}`,
+  beaconRadius: v => `beacons reach ${num(v)} chart pixels further`,
+  sigilUses: v => `sigils you slot last ${num(v)} more use${Math.abs(v) === 1 ? '' : 's'}`,
 };
 
 function scope(w: AtlasCondition | undefined): string {

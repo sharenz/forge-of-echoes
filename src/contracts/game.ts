@@ -144,6 +144,17 @@ export interface MapSummaryLine {
 /** How a map reaches an area other than its own (brief D 2.5). */
 export type RunPassage = { kind: 'key'; currencyId: import('./content').CurrencyId } | { kind: 'bounty' };
 
+/** One sigil frozen into an expedition (brief D 6.3): which beacon slot it sat in and the share it works at (stacking rule). */
+export interface RunTerritory {
+  sigilId: import('./content').SigilId;
+  /** The beacon (a completed area) holding the sigil. */
+  fromAreaId: AtlasAreaId;
+  /** The slot index in that beacon: a server-loss refund gives the use back to exactly this slot. */
+  slot: number;
+  /** 1 = the strongest sigil of its kind on this run, 0.5 = every other one of that kind. */
+  share: number;
+}
+
 /** How a routing candidate relates to the run's area (brief D 4.2); the readout groups by it. */
 export type RouteKind = 'own' | 'neighbour' | 'deadEnd' | 'wander' | 'pending' | 'pinned';
 
@@ -194,8 +205,12 @@ export interface RunSetup {
    * nothing was spent, so nothing is refunded. Frozen, persisted and restored with the run; guests get the bonus but never spend.
    */
   surge?: { areaId: AtlasAreaId; quantityMore: number; rarityMore: number; day: number; kept?: true };
-  /** Sigil effects applied (slice B1; unused in T0). */
-  territory?: { sigilId: string; fromAreaId: AtlasAreaId; effects: { stat: string; mode: string; value: number }[] }[];
+  /**
+   * Territory (brief D 6, slice B1): the sigils of the opener's beacons covering the run's area, frozen at activation (I5). One entry per
+   * sigil whose effect applied (that sigil spent one use); `share` is 1 for the strongest of a kind and 0.5 for every other of that kind.
+   * The effects are read by the rules through `territory.ts` (map modifiers, event chance, reveal chance, currency and class weights).
+   */
+  territory?: RunTerritory[];
   /** Layout edition run (slice L0; unused in T0). */
   layoutV?: number;
   /** Actual Scrap entry fee paid; absent on legacy/free maps. Returned only for server-side run loss. */
@@ -387,12 +402,19 @@ export interface GameRulesApi {
   // --- maps & runs ---
   mapSummary(ch: CharacterSave, map: MapItem): MapSummaryLine[];
   /** Consume the map in the device and produce run parameters (map-side luck only). */
-  openMap(ch: CharacterSave, opts?: OpenMapOptions): Result<{ character: CharacterSave; setup: RunSetup }>;
+  openMap(ch: CharacterSave, opts?: OpenMapOptions): Result<{ character: CharacterSave; setup: RunSetup; /** Beacon slots that burned out at activation (the banner). */ notices?: string[] }>;
   /**
    * Use one Hourglass Sand on an Atlas area, or one Grand Hourglass on every area (brief D 7.4): the item leaves the inventory or stash and
    * the daily surge ledger is reset. Refused, spending nothing, when everything it would refill is already full. `now` is the server clock.
    */
   refillSurge(ch: CharacterSave, target: { kind: 'area'; areaId: AtlasAreaId } | { kind: 'all' }, now: number): Result<{ character: CharacterSave; message: string }>;
+  /**
+   * Slot one sigil from the backpack stack `uid` into slot `slot` of the beacon `areaId` (brief D 6, a completed area). A filled slot is
+   * replaced: the old sigil is consumed (a never-used one goes back to the backpack). Atomic; validated like the server.
+   */
+  slotSigil(ch: CharacterSave, areaId: AtlasAreaId, slot: number, uid: string): Result<{ character: CharacterSave; message: string }>;
+  /** Take the sigil out of a beacon slot: a never-used one returns to the backpack, a used one is consumed (its uses cannot be recovered). */
+  unslotSigil(ch: CharacterSave, areaId: AtlasAreaId, slot: number): Result<{ character: CharacterSave; message: string }>;
   /** Build the instance sim config (players join separately via SimRun.addPlayer). `setup` null = hideout. */
   buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConfig;
   /** One player's resolved stats/skills/loadout/belt for an instance (after joining, level-ups, gear or flask changes). */

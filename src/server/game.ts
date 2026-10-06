@@ -32,6 +32,7 @@ import { markWarmed, wantsWarmup } from '../game/progression/guide';
 import { atlasCreditFor, creditEventCompletion, discoverAfterBoss, newAtlas, paidTerritoryFee } from '../game/progression/atlas';
 import { paidEntranceKey } from '../game/progression/runs';
 import { normalizeRunSurge, refundSurge } from '../game/progression/surge';
+import { normalizeRunTerritory, refundTerritoryUses, territoryRevealChance } from '../game/progression/territory';
 import { atlasEventIdOf } from '../game/progression/map-event-rules';
 import { PORTALS_PER_MAP, PROTOCOL_VERSION } from '../contracts/net';
 import type { Command, PartyInfo, PartyMemberInfo, PortalInfo, RunSummaryInfo, ServerMessage } from '../contracts/net';
@@ -883,7 +884,9 @@ export class Game implements InstanceHost {
     const text = `${s.name} opened ${map.mapName} (Tier ${map.tier}): ${map.portalsTotal} portals.`;
     this.systemChat(this.parties.partyOf(s.characterId)?.members ?? [], text);
     this.log.info('map opened', { character: s.name, map: map.id, name: map.mapName, tier: map.tier });
-    return { ok: true, message: `The portals to ${map.mapName} are open.` };
+    // A beacon slot that burned out at activation (brief D 6.3) is said once, with the opening.
+    const notices = opened.value.notices ?? [];
+    return { ok: true, message: `The portals to ${map.mapName} are open.${notices.length ? ` ${notices.join(' ')}` : ''}` };
   }
 
   /** Portal count / state of a map changed: hideout portal prop, 'portal' messages, party frames. */
@@ -941,7 +944,7 @@ export class Game implements InstanceHost {
   private refundMap(map: MapInstance): void {
     const item = map.sourceItem;
     if (!item) return;
-    if (this.refundMapItem(map.ownerId, item, map.mapKey, () => this.db.deleteOpenMap(map.mapKey), paidEntranceKey(map.setup), map.setup.entranceScrap, map.setup.scarabs, map.setup.surge)) map.sourceItem = null;
+    if (this.refundMapItem(map.ownerId, item, map.mapKey, () => this.db.deleteOpenMap(map.mapKey), paidEntranceKey(map.setup), map.setup.entranceScrap, map.setup.scarabs, map.setup.surge, map.setup.territory)) map.sourceItem = null;
   }
 
   /**
@@ -949,14 +952,15 @@ export class Game implements InstanceHost {
    * with `alsoWrite` (the deletion of the map's row). All or nothing: when the write fails (logged) the
    * character is unchanged and false is returned.
    */
-  private refundMapItem(ownerId: string, item: MapItem, mapKey: string, alsoWrite: () => void, refundKey?: import('../contracts/content').CurrencyId, entranceScrap = 0, scarabs: readonly import('../contracts/content').ScarabId[] = [], surge?: RunSetup['surge']): boolean {
+  private refundMapItem(ownerId: string, item: MapItem, mapKey: string, alsoWrite: () => void, refundKey?: import('../contracts/content').CurrencyId, entranceScrap = 0, scarabs: readonly import('../contracts/content').ScarabId[] = [], surge?: RunSetup['surge'], territory?: RunSetup['territory']): boolean {
     const extra: Item[] = refundKey ? [{ kind: 'currency', currencyId: refundKey, count: 1, uid: `refund-key:${mapKey}` }] : [];
     scarabs.forEach((currencyId, index) => extra.push({ kind: 'currency', currencyId, count: 1, uid: `refund-scarab:${mapKey}:${index}` }));
     const fee = paidTerritoryFee(entranceScrap);
     if (fee) extra.push({ kind: 'currency', currencyId: 'scrap', count: fee, uid: `refund-scrap:${mapKey}` });
     // An unrestorable run also gives its surge charge back (D 7.2): same transaction, exact (nothing once the forge day has turned over).
-    const restoreSurge = surge ? (ch: CharacterSave): CharacterSave => {
-      const atlas = refundSurge(ch.atlas, surge, this.now());
+    // ... and the sigil uses it spent (brief D 2.2), exact per beacon slot.
+    const restoreSurge = surge || territory?.length ? (ch: CharacterSave): CharacterSave => {
+      const atlas = refundTerritoryUses(refundSurge(ch.atlas, surge, this.now()), territory);
       return atlas === ch.atlas || !atlas ? ch : { ...ch, atlas };
     } : undefined;
     return this.returnToOwner(ownerId, item, { what: 'map refund', done: 'map refunded' }, { map: mapKey }, alsoWrite, extra, restoreSurge);
@@ -1211,7 +1215,8 @@ export class Game implements InstanceHost {
       try {
         if (rec.accountId !== accountId) { this.db.deleteAtlasCredit(map.mapKey, accountId); map.atlasPendingCredits.delete(accountId); this.persistMap(map); continue; }
         const rng = createRng(map.setup.seed ^ hashString(accountId));
-        const result = discoverAfterBoss(rec.ch.atlas ?? newAtlas(), areaId, rng.chance(ATLAS_RARE_DOOR_CHANCE), atlasCreditFor(areaId, map.setup.map.tier, rng.next()));
+        // Survey sigils of the expedition (brief D 6.5) add to the extra-reveal fraction; the rolls stay the same draws.
+        const result = discoverAfterBoss(rec.ch.atlas ?? newAtlas(), areaId, rng.chance(ATLAS_RARE_DOOR_CHANCE), atlasCreditFor(areaId, map.setup.map.tier, rng.next(), territoryRevealChance(map.setup.territory)));
         const credited = new Set(map.atlasCredits).add(accountId);
         const pending = new Map(map.atlasPendingCredits);
         pending.delete(accountId);
@@ -1662,7 +1667,7 @@ export class Game implements InstanceHost {
     if (!setup || !owner || this.instances.activeMapOf(row.ownerId)) {
       // The run cannot come back: the map item goes back to its owner, if it is still a valid map.
       const item = restoreRunSetup(isRecord(parsed) ? (parsed.sourceMap ?? parsed.map) : null, 0)?.map ?? null;
-      if (owner && item) this.refundMapItem(row.ownerId, item, row.mapId, () => this.db.deleteOpenMap(row.mapId), paidEntranceKey(parsed), isRecord(parsed) ? paidTerritoryFee(parsed.entranceScrap) : 0, isRecord(parsed) && Array.isArray(parsed.scarabs) ? parsed.scarabs.slice(0, 4).filter(isScarabId) : [], isRecord(parsed) ? normalizeRunSurge(parsed.surge) : undefined);
+      if (owner && item) this.refundMapItem(row.ownerId, item, row.mapId, () => this.db.deleteOpenMap(row.mapId), paidEntranceKey(parsed), isRecord(parsed) ? paidTerritoryFee(parsed.entranceScrap) : 0, isRecord(parsed) && Array.isArray(parsed.scarabs) ? parsed.scarabs.slice(0, 4).filter(isScarabId) : [], isRecord(parsed) ? normalizeRunSurge(parsed.surge) : undefined, isRecord(parsed) ? normalizeRunTerritory(parsed.territory) : undefined);
       else {
         this.db.deleteOpenMap(row.mapId);
         this.log.error('open map could not be restored', { map: row.mapId, owner: row.ownerName });

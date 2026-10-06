@@ -17,6 +17,7 @@ import { ATLAS_AREAS, findAtlasArea } from '../../data/progression/atlas';
 import { atlasNodeAllocatable, mapTreeNodes } from '../../data/progression/map-tree';
 import { SURGE_BONUS, SURGE_CHARGES, SURGE_DAY_MS, SURGE_MAX_CHARGES, SURGE_RESET_UTC_HOUR } from '../../data/progression/territory';
 import { spendCurrency } from './merchant';
+import { tideCharges } from './territory';
 import { fail, ok } from './util';
 
 const HOUR_MS = 3_600_000;
@@ -67,10 +68,12 @@ const isDeadOrSealed = (areaId: AtlasAreaId | undefined): boolean => {
   return !!area && (area.deadEnd === true || area.sealed === true);
 };
 
-/** Charges an area holds per day: 3 plus the tree (Second Wind +1 everywhere, Lamp Oil +1 on dead-end and sealed areas). */
-export function surgeMaxCharges(areaId: AtlasAreaId, nodes: readonly MapTreeNodeId[] | undefined): number {
+/**
+ * Charges an area holds per day: 3 plus the tree (Second Wind +1 everywhere, Lamp Oil +1 on dead-end and sealed areas) plus `extra`
+ * (a covering Bright or Blazing Tide sigil, brief D 6.3: `tideCharges`).
+ */
+export function surgeMaxCharges(areaId: AtlasAreaId, nodes: readonly MapTreeNodeId[] | undefined, extra = 0): number {
   const dead = isDeadOrSealed(areaId);
-  let extra = 0;
   for (const node of mapTreeNodes(nodes ?? []).filter(atlasNodeAllocatable)) {
     for (const e of node.effects) {
       if (e.stat !== 'surgeCharges') continue;
@@ -81,11 +84,16 @@ export function surgeMaxCharges(areaId: AtlasAreaId, nodes: readonly MapTreeNode
   return Math.max(0, Math.min(SURGE_MAX_CHARGES, SURGE_CHARGES + Math.floor(extra)));
 }
 
-/** Chance (0..1) that a spent charge is not consumed: Afterglow (tree). Tide sigils (slice B1) will add their own roll. */
-export function surgeKeepChances(nodes: readonly MapTreeNodeId[] | undefined): number[] {
+/**
+ * Chances (0..1) that a spent charge is not consumed, each rolled on its own stream: Afterglow (tree) first, then a Blazing Tide sigil
+ * (`tideKeep`, brief D 7.5). Afterglow keeps index 0 whether or not a Tide roll follows, so adding a sigil never moves its roll.
+ */
+export function surgeKeepChances(nodes: readonly MapTreeNodeId[] | undefined, tideKeep = 0): number[] {
   const afterglow = mapTreeNodes(nodes ?? []).filter(atlasNodeAllocatable)
     .flatMap(n => n.effects).filter(e => e.stat === 'surgeKeep').reduce((n, e) => n + e.value, 0);
-  return afterglow > 0 ? [Math.min(1, afterglow / 100)] : [];
+  const own = Math.min(1, Math.max(0, afterglow / 100));
+  if (tideKeep > 0) return [own, Math.min(1, tideKeep)];
+  return own > 0 ? [own] : [];
 }
 
 /** Whether the charge survives: each chance is rolled independently from the map seed, any success keeps it. */
@@ -100,8 +108,9 @@ export function surgeKept(seed: number, chances: readonly number[]): boolean {
 }
 
 /** The bonus a spent charge gives (the tree may scale it later; today it is the constant). */
-export function surgeBonusFor(_atlas?: AtlasProgress): { quantityMore: number; rarityMore: number } {
-  return { quantityMore: SURGE_BONUS.quantityMore, rarityMore: SURGE_BONUS.rarityMore };
+export function surgeBonusFor(_atlas?: AtlasProgress, multiplier = 1): { quantityMore: number; rarityMore: number } {
+  const m = Math.max(1, multiplier);
+  return { quantityMore: Math.round(SURGE_BONUS.quantityMore * m * 100) / 100, rarityMore: Math.round(SURGE_BONUS.rarityMore * m * 100) / 100 };
 }
 
 /** The ledger as it stands at `now`: today's, or an empty one when the stored day is before today. */
@@ -122,15 +131,23 @@ export interface SurgeStatus {
   resetsInMs: number;
 }
 
-export function surgeStatus(atlas: Pick<AtlasProgress, 'surge' | 'nodes'> | undefined, areaId: AtlasAreaId, now: number): SurgeStatus {
+/** The Atlas fields the surge reads: the ledger and the tree, and (for Tide sigils) the beacons. */
+export type SurgeAtlas = Pick<AtlasProgress, 'surge' | 'nodes'> & Partial<Pick<AtlasProgress, 'beacons' | 'completed'>>;
+
+/** Tide charges covering `areaId` (0 without beacons). */
+function tideExtra(atlas: SurgeAtlas | undefined, areaId: AtlasAreaId): number {
+  return atlas?.beacons ? tideCharges({ completed: atlas.completed ?? [], beacons: atlas.beacons, ...(atlas.nodes ? { nodes: atlas.nodes } : {}) }, areaId) : 0;
+}
+
+export function surgeStatus(atlas: SurgeAtlas | undefined, areaId: AtlasAreaId, now: number): SurgeStatus {
   const ledger = surgeLedgerAt(atlas, now);
-  const max = surgeMaxCharges(areaId, atlas?.nodes);
+  const max = surgeMaxCharges(areaId, atlas?.nodes, tideExtra(atlas, areaId));
   const spent = Math.max(0, Math.min(max, Math.floor(ledger.spent[areaId] ?? 0)));
   return { areaId, max, spent, remaining: Math.max(0, max - spent), day: ledger.day, resetsInMs: msUntilReset(now) };
 }
 
 /** Every area's status (the chart draws pips on every node). */
-export function surgeStatusAll(atlas: Pick<AtlasProgress, 'surge' | 'nodes'> | undefined, now: number): Record<AtlasAreaId, SurgeStatus> {
+export function surgeStatusAll(atlas: SurgeAtlas | undefined, now: number): Record<AtlasAreaId, SurgeStatus> {
   return Object.fromEntries(ATLAS_AREAS.map(a => [a.id, surgeStatus(atlas, a.id, now)])) as Record<AtlasAreaId, SurgeStatus>;
 }
 
@@ -148,11 +165,11 @@ export interface SurgeSpend {
  * Spend one charge of `areaId` (the area actually run, passage destinations included) at activation. Undefined when the area has
  * no charge left: the run is then simply normal. `seed` is the map seed (Afterglow's roll): a kept charge still gives the bonus.
  */
-export function spendSurge(base: AtlasProgress, areaId: AtlasAreaId, now: number, seed: number): SurgeSpend | undefined {
+export function spendSurge(base: AtlasProgress, areaId: AtlasAreaId, now: number, seed: number, tide: { bonusMultiplier?: number; keepChance?: number } = {}): SurgeSpend | undefined {
   const status = surgeStatus(base, areaId, now);
   if (status.remaining < 1) return undefined;
-  const kept = surgeKept(seed, surgeKeepChances(base.nodes));
-  const bonus = surgeBonusFor(base);
+  const kept = surgeKept(seed, surgeKeepChances(base.nodes, tide.keepChance ?? 0));
+  const bonus = surgeBonusFor(base, tide.bonusMultiplier ?? 1);
   const surge: SurgeSpend['surge'] = { areaId, ...bonus, day: status.day, ...(kept ? { kept: true as const } : {}) };
   if (kept) return { atlas: base, surge };
   const ledger = surgeLedgerAt(base, now);
@@ -213,7 +230,7 @@ export function refillSurge(ch: CharacterSave, target: SurgeRefill, now: number)
 // ---------------------------------------------------------------------------------------------
 
 /** A persisted ledger back to a valid one (unknown areas and bad numbers dropped, charges clamped); undefined when nothing is recorded. */
-export function normalizeSurge(raw: unknown, nodes?: readonly MapTreeNodeId[]): AtlasSurge | undefined {
+export function normalizeSurge(raw: unknown, nodes?: readonly MapTreeNodeId[], extraFor: (areaId: AtlasAreaId) => number = () => 0): AtlasSurge | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
   const value = raw as Record<string, unknown>;
   if (typeof value.day !== 'number' || !Number.isInteger(value.day) || Math.abs(value.day) > 1e7) return undefined;
@@ -222,7 +239,7 @@ export function normalizeSurge(raw: unknown, nodes?: readonly MapTreeNodeId[]): 
     for (const [id, n] of Object.entries(value.spent as Record<string, unknown>)) {
       const area = findAtlasArea(id);
       if (!area || typeof n !== 'number' || !Number.isFinite(n)) continue;
-      const count = Math.max(0, Math.min(surgeMaxCharges(area.id, nodes), Math.floor(n)));
+      const count = Math.max(0, Math.min(surgeMaxCharges(area.id, nodes, extraFor(area.id)), Math.floor(n)));
       if (count > 0) spent[area.id] = count;
     }
   }

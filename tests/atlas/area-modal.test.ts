@@ -3,7 +3,7 @@ import type { AtlasAreaId, AtlasProgress } from '../../src/contracts/atlas';
 import type { CharacterSave, MapItem } from '../../src/contracts/items';
 import { findAtlasArea } from '../../src/data/progression/atlas';
 import {
-  currentSetup, fittingUids, keyForArea, mapFit, openAreaBlock, passageNeed, planIsEmpty, readSetups, rememberSetup, setupPlan, whereToFind,
+  beaconDropError, beaconSlotId, currentSetup, fittingUids, freeBeaconSlot, keyForArea, mapFit, openAreaBlock, passageNeed, planIsEmpty, readSetups, rememberSetup, setupPlan, whereToFind,
 } from '../../src/ui/atlas/area-modal';
 
 const area = (id: string) => findAtlasArea(id)!;
@@ -112,6 +112,31 @@ describe('The inventory highlight shows what fits, not a list', () => {
     expect([...fittingUids(char(items, [scarab('hasteScarab3', 'z'), null, null, null]), area('emberRoad'))]).toEqual(['m1']);
     const full = [scarab('hasteScarab3', 'a'), scarab('invasionScarab1', 'b'), scarab('wayfarerScarab1', 'c'), scarab('quarryScarab1', 'd')];
     expect([...fittingUids(char(items, full), area('emberRoad'))]).toEqual(['m1']);
+  });
+});
+
+describe('Beacon slots take sigils dragged from the inventory (slice B1)', () => {
+  const sigil = scarab('omenSigil1', 'g1', 3);
+  const atlas = { discovered: ['cinderCrossing', 'emberRoad'], completed: ['cinderCrossing', 'emberCitadel'], clears: 2, beacons: { emberCitadel: [{ sigilId: 'fortuneSigil1', uses: 4, max: 12 }] } } as unknown as AtlasProgress;
+  it('accepts a sigil from the backpack and says why anything else is refused', () => {
+    expect(beaconSlotId(1)).toBe('beacon:1');
+    expect(beaconDropError(sigil as never, { kind: 'backpack', x: 0, y: 0 })).toBeNull();
+    expect(beaconDropError(sigil as never, { kind: 'stash', tab: 0, x: 0, y: 0 })).toMatch(/inventory first/);
+    expect(beaconDropError(scarab('hasteScarab1') as never, { kind: 'backpack', x: 0, y: 0 })).toBe('Only a sigil fits a beacon slot.');
+    expect(beaconDropError(map('emberRoad') as never, { kind: 'backpack', x: 0, y: 0 })).toBe('Only a sigil fits a beacon slot.');
+  });
+  it('quick-slots into the first empty slot of a cleared area only', () => {
+    expect(freeBeaconSlot(atlas, 'cinderCrossing')).toBe(0);
+    expect(freeBeaconSlot(atlas, 'emberCitadel')).toBe(1);
+    expect(freeBeaconSlot(atlas, 'emberRoad')).toBe(-1);
+    expect(freeBeaconSlot(undefined, 'cinderCrossing')).toBe(-1);
+    const full = { ...atlas, beacons: { cinderCrossing: [{ sigilId: 'omenSigil1', uses: 2, max: 12 }] } } as AtlasProgress;
+    expect(freeBeaconSlot(full, 'cinderCrossing')).toBe(-1);
+  });
+  it('lights sigils in the inventory only while the open area is a beacon with a free slot', () => {
+    expect([...fittingUids(char([sigil], undefined, { atlas } as Partial<CharacterSave>), area('cinderCrossing'))]).toEqual(['g1']);
+    expect([...fittingUids(char([sigil], undefined, { atlas } as Partial<CharacterSave>), area('emberRoad'))]).toEqual([]);
+    expect([...fittingUids(char([sigil]), area('cinderCrossing'))]).toEqual([]);
   });
 });
 

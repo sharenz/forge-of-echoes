@@ -163,6 +163,13 @@ export {
   surgeLedgerAt, surgeMaxCharges, surgeStatus, surgeStatusAll,
 } from './surge';
 export type { SurgeRefill, SurgeStatus } from './surge';
+//   territory: beaconSlotCount / beaconRadius / beaconCoverage / coveringSigils (beacons, D 6.1-6.2), territoryFor + spendTerritoryUses
+//              (activation), refundTerritoryUses (server-loss refund), slotSigil / unslotSigil (hideout commands)
+export {
+  beaconAreas, beaconCoverage, beaconRadius, beaconSlotCount, beaconSlots, chartDistance, coveringSigils, normalizeBeacons, normalizeRunTerritory,
+  refundTerritoryUses, sigilApplies, sigilFullUses, slotSigil, spendTerritoryUses, territoryFor, territoryLines, tideCharges, unslotSigil,
+} from './territory';
+export type { CoveringSigil } from './territory';
 export { lootLuckWithoutSurge } from './luck';
 export { gearLuck, lootLuck, lootLuckLines } from './luck';
 export type { Luck } from './luck';

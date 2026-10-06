@@ -5,7 +5,8 @@ import { CURRENCY_STACK, RARE_CURRENCY_STACK } from './rules';
 import type { CurrencyDef } from './types';
 import { SCARABS } from '../scarabs';
 import type { ScarabId } from '../../contracts/content';
-import { GRAND_HOURGLASS, HOURGLASS_SAND, SURGE_CHARGES } from '../progression/territory';
+import { GRAND_HOURGLASS, HOURGLASS_SAND, ROOK_SIGIL_PRICE, SIGIL_DROPS, SIGIL_STACK, SIGIL_USES, SIGILS, SURGE_CHARGES, sigilEffectText } from '../progression/territory';
+import type { SigilId } from '../../contracts/content';
 
 type Spec = Omit<CurrencyDef, 'id' | 'maxStack'> & { maxStack?: number };
 
@@ -31,6 +32,11 @@ export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
     name: s.name, description: `${s.description} Place in a Map Device scarab socket; consumed when the map opens. Drops from monster level ${s.minMonsterLevel}+. Higher-level monsters can also drop lower tiers.`,
     family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: 20, dropTier: 'rare',
   })])) as Record<ScarabId, CurrencyDef>,
+  ...Object.fromEntries(SIGILS.map(s => [s.id, currency(s.id, {
+    name: s.name,
+    description: `Lights a beacon: ${sigilEffectText(s).replace(/^[A-Z]/, (c) => c.toLowerCase())}. Slot it into a beacon (an Atlas area you have cleared) on the Atlas in a hideout: it works on every map opened in an area within the beacon's reach, and each such map spends one of its ${SIGIL_USES[s.strength]} uses. Found from final bosses on Tier ${SIGIL_DROPS.bossMinTier}+ maps${s.strength === 1 ? `; Rook sells Faint ones (${s.theme ? ROOK_SIGIL_PRICE.theme : ROOK_SIGIL_PRICE.generic} Scrap${s.theme ? ', once you have cleared an area of the theme' : ''})` : ''}. Tradeable.`,
+    family: 'map', stabilityCost: 0, needsAffixChoice: false, maxStack: SIGIL_STACK, dropTier: 'rare',
+  })])) as Record<SigilId, CurrencyDef>,
   hourglassSand: currency('hourglassSand', {
     name: 'Hourglass Sand',
     description: `Refills the daily surge of one Atlas area to its full charges. Select the area on the Atlas chart in your hideout and use it there; refused when the area is already full. Found from final bosses on Tier ${HOURGLASS_SAND.bossMinTier}+ maps (${HOURGLASS_SAND.bossChance * 100}%, doubled in sealed areas), completion chests (${HOURGLASS_SAND.chestChance * 100}%) and Gold-grade encounters (${HOURGLASS_SAND.goldEventChance * 100}%). Tradeable.`,

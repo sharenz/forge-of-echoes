@@ -14,6 +14,7 @@ import type { MapSummaryLine } from '../../contracts/game';
 import { atlasKeyDestination, atlasTierCeiling, findAtlasArea, ATLAS_AREA_TYPE_LABELS } from '../../data/progression/atlas';
 import type { AtlasAreaId, AtlasProgress } from '../../contracts/atlas';
 import { areaForTheme } from './map-binding';
+import { territoryModifiers } from './territory';
 import type {
   ItemDescription, MapItem, ModifierMode, Rarity, RolledMapMod, StatModifier, TooltipLine,
 } from '../../contracts/items';
@@ -257,6 +258,9 @@ const MAP_STAT_TEXT: Record<MapStat, Templates> = {
   surgeCharges: { flat: '{+v} daily surge charge{s} for each area' },
   surgeKeep: { flat: '{v}% chance a spent surge charge is not consumed' },
   sandChance: { increased: 'Hourglass Sand is {v}% {inc} likely to drop' },
+  beaconSlots: { flat: 'Every one-slot beacon gains {+v} sigil slot{s}' },
+  beaconRadius: { flat: 'Beacons reach {+v} chart pixels further' },
+  sigilUses: { flat: 'Sigils you slot last {+v} use{s} longer' },
 };
 
 /**
@@ -327,6 +331,8 @@ export function mapModifiers(map: MapItem, nodes: readonly MapTreeNodeId[] = [],
       out.push({ stat: e.stat, mode: e.mode, value: effectMagnitude(e, rolled.value) * (e.fixed ? 1 : strength), source: mapModName(def, map.baseId) });
     }
   }
+  // Beacons (brief D 6): the expedition's frozen sigils, labelled "Territory: <sigil> (<beacon>)".
+  if (tree.territory?.length) out.push(...territoryModifiers(tree.territory, { ...(tree.areaId ? { areaId: tree.areaId } : {}), baseId: map.baseId }));
   return out;
 }
 

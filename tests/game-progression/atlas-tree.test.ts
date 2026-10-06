@@ -16,11 +16,12 @@ const REAL_MAP_STATS = new Set([
   'chestUpgradeChance', 'chestQuality', 'droppedMapQuality', 'scarabDropChance', 'rareQuantity', 'normalQuantity', 'equipmentStability',
   'equipmentDropChance', 'bossIngredientChance', 'bossLife', 'bossUnique', 'bossLoot', 'chestLoot', 'chestRareChance', 'chestCurrency', 'waveDuration',
   'territoryFee', 'revealChance', 'dangerModStrength', 'corruptedModStrength', 'surgeCharges', 'surgeKeep', 'sandChance',
+  'beaconSlots', 'beaconRadius', 'sigilUses',
 ]);
 
 describe('atlas tree shape', () => {
   it('has about 148 nodes in the promised classes', () => {
-    expect(ALL.length).toBe(145);
+    expect(ALL.length).toBe(146); // 145 + Lightkeeper (brief D 9)
     expect(Math.abs(ALL.length - 148)).toBeLessThanOrEqual(6);
     expect(byKind('keystone')).toHaveLength(14);
     expect(byKind('tier')).toHaveLength(5);
