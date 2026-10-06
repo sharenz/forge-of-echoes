@@ -128,7 +128,7 @@ describe('playerRuntime', () => {
     const rt = rules.playerRuntime(ch, null);
     expect(rt.stats.maxLife).toBe(rules.deriveStats(ch).combat.maxLife);
     expect(rt.skills.map((s) => s.id)).toEqual(['emberLance']);
-    expect(rt.loadout).toEqual(['emberLance', null, null, null, null, null]);
+    expect(rt.loadout).toEqual(['emberLance', null, null, null, null, null, null, null]);
     expect(rt.flasks).toEqual([
       { flaskId: 'lifeFlask', count: 3, resource: 'life', amount: 48, duration: 3 },
       { flaskId: 'lifeFlask', count: 3, resource: 'life', amount: 48, duration: 3 },

@@ -155,7 +155,7 @@ const RAISE_WINDOW = 1.6;
  * Sound for a cast of `skill`. Rift Step plays through its 'dash' event and Ember Nova through its 'nova' event
  * (a Nova echo emits only 'nova', so voicing the nova keeps echoes audible and never doubles a cast).
  */
-export const CAST_SFX: Record<SkillId, SfxId | null> = {
+export const CAST_SFX: Partial<Record<SkillId, SfxId | null>> = {
   emberLance: 'castEmber',
   emberNova: null,
   flameWave: 'castWave',

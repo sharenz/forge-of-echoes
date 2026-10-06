@@ -4,7 +4,8 @@ import type { AtlasAreaId } from '../../contracts/atlas';
 import type { Settings } from '../../contracts/items';
 
 /** Current save schema version. parseSave migrates anything older and normalises everything. */
-export const SAVE_VERSION = 2;
+// 3: the skill rework (ranks 1 to 10, 2 points per level, 8 loadout slots, augments): game/progression/migrate-skills.ts.
+export const SAVE_VERSION = 3;
 
 export const DEFAULT_SETTINGS: Settings = {
   masterVolume: 0.8,

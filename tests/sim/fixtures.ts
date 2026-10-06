@@ -23,7 +23,11 @@ export interface SkillOpts {
 
 const lerpRank = (a: number, b: number, rank: number) => a + ((b - a) * (rank - 1)) / 19;
 
-/** A SkillRuntimeDef resolved the way GAME_SPEC §4 describes. */
+/**
+ * A SkillRuntimeDef resolved the way GAME_SPEC §4 described it before the skill rework (ranks on the old 1-to-20 scale). These
+ * numbers are pinned on purpose: they feed the determinism goldens, which pin the sim's behaviour for a given runtime def, not the
+ * rules' rank curves (tests/game-progression/skills.test.ts pins those).
+ */
 export function makeSkill(id: SkillId, rank = 1, o: SkillOpts = {}): SkillRuntimeDef {
   const level = o.level ?? 1;
   const power = 5 + 1.6 * (level - 1) + (o.addedSpellDamage ?? 0);
@@ -74,6 +78,9 @@ export function makeSkill(id: SkillId, rank = 1, o: SkillOpts = {}): SkillRuntim
         ...base, focusCost: 20, castTime: 0.3 / cs, cooldown: lerpRank(14, 9, rank), duration: lerpRank(4, 7, rank),
         damageReduction: lerpRank(0.35, 0.55, rank), radius: 40, damage: dmg(0.25),
       };
+    default:
+      // Roster skills whose behaviour has not shipped (SK2 to SK4): the executor ignores them.
+      return base;
   }
 }
 

@@ -8,12 +8,14 @@
 import { BELT_SLOTS, LOADOUT_SLOTS } from '../contracts/items';
 import type { HeldMask, InputMessage } from '../contracts/net';
 
-/** Keyboard slots 2..5; slots 0 and 1 are the left and right mouse buttons. */
+/** Keyboard slots 2..7; slots 0 and 1 are the left and right mouse buttons. */
 export const SLOT_CODES: Readonly<Record<string, number>> = {
   KeyQ: 2,
   KeyE: 3,
   KeyR: 4,
   KeyF: 5,
+  Space: 6,
+  KeyZ: 7,
 };
 
 export const FLASK_CODES: Readonly<Record<string, number>> = {

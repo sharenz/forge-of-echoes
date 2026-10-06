@@ -223,9 +223,19 @@ export interface CharacterStatsLog {
   playSeconds: number;
 }
 
-/** Six freely assignable slots: LMB, RMB, Q, E, R, F. */
-export const LOADOUT_SLOTS = 6;
-export const LOADOUT_KEYS = ['LMB', 'RMB', 'Q', 'E', 'R', 'F'] as const;
+/** Eight freely assignable slots: LMB, RMB, Q, E, R, F, Space, Z (power rework R2; saves from six slots pad with null). */
+export const LOADOUT_SLOTS = 8;
+export const LOADOUT_KEYS = ['LMB', 'RMB', 'Q', 'E', 'R', 'F', 'Space', 'Z'] as const;
+/** Named loadout presets per character (switched in the hideout only). */
+export const LOADOUT_PRESETS = 3;
+
+/** One saved loadout (CharacterSave.loadoutPresets). */
+export interface LoadoutPreset {
+  /** Player-chosen label (at most 24 characters). */
+  name: string;
+  /** LOADOUT_SLOTS entries; a skill unlearned since saving reads as an empty slot. */
+  loadout: (SkillId | null)[];
+}
 export const BELT_SLOTS = 4;
 export const SCARAB_SLOTS = 4;
 export const BACKPACK_SIZE = { w: 12, h: 5 } as const;
@@ -267,9 +277,26 @@ export interface CharacterSave {
   unspentAttributePoints: number;
   allocated: Record<Attribute, number>;
   unspentSkillPoints: number;
-  skillRanks: Record<SkillId, number>;
+  /** Rank 0 (not learned) to MAX_SKILL_RANK (10) per skill; Ember Lance is always at least 1. */
+  skillRanks: Partial<Record<SkillId, number>>;
   /** LOADOUT_SLOTS entries. */
   loadout: (SkillId | null)[];
+  /**
+   * Augments picked per skill (ids of the skill's AugmentDefs, docs/power-rework/skills.md 4). Missing or absent skill = none.
+   * Item-granted augment effects (unique flags) are not listed here: they need no slot.
+   */
+  augments?: Partial<Record<SkillId, string[]>>;
+  /** LOADOUT_PRESETS saved loadouts (missing on older saves: three empty presets). */
+  loadoutPresets?: LoadoutPreset[];
+  /** Free full respecs left (skills, augments and attributes). The skill rework migration grants one. */
+  respecTokens?: number;
+  /** Skill and augment points this character has refunded for free so far (the first RESPEC.freePoints are free). */
+  respecFreeUsed?: number;
+  /**
+   * The 1-to-20 skill ranks this character had before the skill rework (save version 3), kept for one release so a revert can
+   * restore them. Its presence also marks the character as migrated.
+   */
+  legacySkillRanks?: Partial<Record<SkillId, number>>;
   equipment: Partial<Record<EquipSlot, EquipmentItem>>;
   backpack: GridContainer;
   stash: StashTab[];

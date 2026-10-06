@@ -76,7 +76,8 @@ import {
   clearCraftedAffix, clearNewFlags, depositAllCurrency, discardItem, findItem, itemSize, moveItem, quickMove, renameStashTab,
 } from './items';
 import {
-  MAP_BASE_INFO, SKILL_INFO, allocateAttribute, applyCurrency, applyRunEnd, buildRunConfig, buyOffer, canRankUpSkill,
+  MAP_BASE_INFO, SKILL_INFO, allocateAttribute, applyCurrency, applyRunEnd, buildRunConfig, buyOffer, canPickAugment, canRankUpSkill,
+  pickAugment, refundAugment, respec, respecPrice, setPreset, skillPointsTotal,
   compareWithEquipped, consumeFlask, craftPreview, craftingTargetError, createCharacter, deriveStats, describeItem, dropSpec,
   grantXp, lootLuck, mapSummary, merchantOffers, sellItems, sellQuote, newSave, openMap, parseSave, playerRuntime, rankUpSkill, rollChestLoot,
   rollEventReward, rollKillLoot, serializeSave, setLoadoutSlot, skillSheetFor, xpToNext,
@@ -122,6 +123,13 @@ export const rules: GameRulesApi = {
   rankUpSkill,
   setLoadoutSlot,
   skillSheet: (ch, skillId, rank) => skillSheetFor(ch, skillId, rank),
+  skillPointsTotal,
+  canPickAugment,
+  pickAugment,
+  respecPrice,
+  refundAugment,
+  respec,
+  setPreset,
 
   // --- items & inventory ---
   describeItem,

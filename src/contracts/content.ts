@@ -128,8 +128,18 @@ export type MapBaseId = (typeof MAP_BASE_IDS)[number];
 export const THEMES = ['hideout', ...MAP_BASE_IDS] as const;
 export type Theme = (typeof THEMES)[number];
 
-/** Sorceress skills. Icon id is `icon/skill/<id>`. `emberLance` is the innate basic attack. */
-export const SKILL_IDS = ['emberLance', 'emberNova', 'flameWave', 'rimeShards', 'arcChain', 'riftStep', 'cinderWard'] as const;
+/**
+ * Sorceress skills. Icon id is `icon/skill/<id>`. `emberLance` is the innate basic attack. Append-only (wire indices):
+ * the first seven are the original roster; the rest are the power-rework roster of docs/power-rework/skills.md 3, in unlock
+ * order. A skill whose behaviour has not shipped yet is in the data with `available: false` (it cannot be learned).
+ */
+export const SKILL_IDS = [
+  'emberLance', 'emberNova', 'flameWave', 'rimeShards', 'arcChain', 'riftStep', 'cinderWard',
+  // Power rework R2 to R4 (append-only)
+  'phaseStride', 'glacialNova', 'spark', 'cinderMortar', 'arcaneReprieve', 'umbralBolt', 'kineticLance', 'frostOrb', 'stormCall',
+  'glacialSpikes', 'gravityWell', 'rimeBulwark', 'immolationSigil', 'staticAegis', 'voltaicPulse', 'entropyHex', 'concussiveBlast',
+  'staticLash', 'echoSigil', 'witherField', 'meteorRain', 'stormStep', 'tempestSurge', 'blizzard', 'eventHorizon',
+] as const;
 export type SkillId = (typeof SKILL_IDS)[number];
 
 export const MONSTER_KINDS = [

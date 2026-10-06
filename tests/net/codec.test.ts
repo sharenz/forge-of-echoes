@@ -158,7 +158,7 @@ describe('snapshot codec', () => {
     expect(me.invulnTime).toBeCloseTo(0.15, 3);
     expect(me.hitFlash).toBeCloseTo(0.5, 2);
     expect(me.dead).toBe(false);
-    expect(me.slots.map((sl) => sl.skillId)).toEqual(['emberLance', 'emberNova', 'riftStep', null, 'cinderWard', null]);
+    expect(me.slots.map((sl) => sl.skillId)).toEqual(['emberLance', 'emberNova', 'riftStep', null, 'cinderWard', null, null, null]);
     expect(me.slots[1]).toEqual({ skillId: 'emberNova', cooldown: 1.25, cooldownTotal: 3, charges: 1, maxCharges: 2, focusCost: 12.5, usable: true });
     expect(me.slots[2].usable).toBe(false);
     expect(me.flasks[0]).toEqual({ flaskId: 'lifeFlask', count: 3, resource: 'life', active: 1.5, duration: 3 });

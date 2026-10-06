@@ -42,13 +42,15 @@ describe('rules assembly', () => {
 
   it('describes the skill tree per GAME_SPEC §4', () => {
     const s = rules.content.skills;
-    expect(s.emberLance).toMatchObject({ branch: 'basic', prerequisite: null, maxRank: 20, damageType: 'fire' });
-    expect(s.emberNova).toMatchObject({ branch: 'destruction', tier: 1, prerequisite: null });
-    expect(s.flameWave.prerequisite).toEqual({ skillId: 'emberNova', rank: 3 });
-    expect(s.rimeShards.prerequisite).toEqual({ skillId: 'emberNova', rank: 3 });
-    expect(s.arcChain).toMatchObject({ tier: 3, prerequisite: { skillId: 'rimeShards', rank: 5 }, damageType: 'lightning' });
-    expect(s.riftStep).toMatchObject({ branch: 'mobility', damageType: null });
-    expect(s.cinderWard).toMatchObject({ branch: 'survival' });
+    expect(s.emberLance).toMatchObject({ branch: 'basic', prerequisite: null, maxRank: 10, damageType: 'fire', unlockLevel: 1, available: true });
+    expect(s.emberNova).toMatchObject({ branch: 'destruction', tier: 1, prerequisite: null, unlockLevel: 1 });
+    expect(s.flameWave).toMatchObject({ prerequisite: null, unlockLevel: 12, element: 'fire' });
+    expect(s.rimeShards).toMatchObject({ prerequisite: null, unlockLevel: 3, element: 'cold' });
+    expect(s.arcChain).toMatchObject({ tier: 3, prerequisite: null, unlockLevel: 6, damageType: 'lightning' });
+    expect(s.riftStep).toMatchObject({ branch: 'mobility', damageType: null, element: 'void' });
+    expect(s.cinderWard).toMatchObject({ branch: 'survival', unlockLevel: 2 });
+    expect(Object.values(s).filter((i) => i.available).map((i) => i.id)).toEqual(
+      ['emberLance', 'emberNova', 'flameWave', 'rimeShards', 'arcChain', 'riftStep', 'cinderWard']);
   });
 
   it('describes map bases with their implemented implicits', () => {

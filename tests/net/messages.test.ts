@@ -75,6 +75,13 @@ describe('client message validation', () => {
       { c: 'rankUpSkill', skillId: 'arcChain' },
       { c: 'setLoadoutSlot', slot: 5, skillId: null },
       { c: 'setLoadoutSlot', slot: 1, skillId: 'emberNova' },
+      { c: 'setLoadoutSlot', slot: 7, skillId: 'riftStep' },
+      { c: 'pickAugment', skillId: 'emberNova', augmentId: 'echoingRing' },
+      { c: 'refundAugment', skillId: 'emberLance', augmentId: 'piercingFlame', expectedScrap: 4 },
+      { c: 'setPreset', preset: 2, op: 'save' },
+      { c: 'setPreset', preset: 0, op: 'rename', name: 'Bosses' },
+      { c: 'respec', skillId: null, token: true, expectedScrap: 0 },
+      { c: 'respec', skillId: 'arcChain', token: false, expectedScrap: 24 },
       { c: 'activateMapDevice' },
       { c: 'setMapTreeNode', nodeId: 'crownedChallenge', allocate: true },
       { c: 'setMapTreeNode', nodeId: 'waypoint', allocate: false },
@@ -248,8 +255,19 @@ describe('client message validation', () => {
       cmd({ c: 'setMapTreeNode', nodeId: 'trailblazer', allocate: true }),
       cmd({ c: 'setMapTreeNode', nodeId: 'waypoint', allocate: 1 }),
       cmd({ c: 'setMapTreeNode', nodeId: 'waypoint', allocate: true, points: 99 }),
-      cmd({ c: 'setLoadoutSlot', slot: 6, skillId: null }),
+      cmd({ c: 'setLoadoutSlot', slot: 8, skillId: null }),
       cmd({ c: 'setLoadoutSlot', slot: 1 }),
+      cmd({ c: 'pickAugment', skillId: 'emberNova' }),
+      cmd({ c: 'pickAugment', skillId: 'nope', augmentId: 'echoingRing' }),
+      cmd({ c: 'pickAugment', skillId: 'emberNova', augmentId: 'echo ring' }),
+      cmd({ c: 'refundAugment', skillId: 'emberNova', augmentId: 'widerRing' }),
+      cmd({ c: 'refundAugment', skillId: 'emberNova', augmentId: 'widerRing', expectedScrap: -1 }),
+      cmd({ c: 'setPreset', preset: 3, op: 'save' }),
+      cmd({ c: 'setPreset', preset: 0, op: 'delete' }),
+      cmd({ c: 'setPreset', preset: 0, op: 'rename', name: '' }),
+      cmd({ c: 'setPreset', preset: 0, op: 'rename', name: 'x'.repeat(25) }),
+      cmd({ c: 'respec', skillId: null, token: 'yes', expectedScrap: 0 }),
+      cmd({ c: 'respec', skillId: null, token: true }),
       cmd({ c: 'partyRespond', inviteId: 'x', accept: 'yes' }),
       cmd({ c: 'chat', text: '' }),
       cmd({ c: 'chat', text: 'Hi', channel: 'raid' }),
@@ -516,13 +534,14 @@ describe('events channel: kinds the presenter looks up', () => {
 
 describe('input helpers', () => {
   it('packs held slots into a bitmask and back', () => {
-    const held = [true, false, true, false, false, true];
+    const held = [true, false, true, false, false, true, false, false];
     const mask = heldToMask(held);
     expect(mask).toBe(0b100101);
     expect(maskToHeld(mask)).toEqual(held);
-    const out = new Array<boolean>(6).fill(true);
+    expect(maskToHeld(0b11000000)).toEqual([false, false, false, false, false, false, true, true]);
+    const out = new Array<boolean>(8).fill(true);
     expect(maskToHeld(0, out)).toBe(out);
-    expect(out).toEqual([false, false, false, false, false, false]);
+    expect(out).toEqual([false, false, false, false, false, false, false, false]);
     expect(isSlotHeld(mask, 2)).toBe(true);
     expect(isSlotHeld(mask, 1)).toBe(false);
     expect(isSlotHeld(mask, 9)).toBe(false);
@@ -533,7 +552,7 @@ describe('input helpers', () => {
 
   it('converts wire inputs to sanitised sim intents and back', () => {
     const intent = intentFromInput({ ...input });
-    expect(intent).toEqual({ moveX: input.moveX, moveY: input.moveY, aimX: 123.5, aimY: -44, held: [true, false, false, false, false, true], flask: -1 });
+    expect(intent).toEqual({ moveX: input.moveX, moveY: input.moveY, aimX: 123.5, aimY: -44, held: [true, false, false, false, false, true, false, false], flask: -1 });
     expect(inputFromIntent(intent, 43)).toEqual({ ...input, seq: 43 });
     const reused = { moveX: 0, moveY: 0, aimX: 0, aimY: 0, held: [] as boolean[], flask: -1 };
     const heldRef = reused.held;

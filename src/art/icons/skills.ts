@@ -205,7 +205,44 @@ function cinderWard(): Frame {
   return f;
 }
 
+/**
+ * Placeholder for a roster skill whose own icon ships with its behaviour (SK2 to SK4): a rune of `spokes` rays around a core on the
+ * element's plate, so every id has a distinct, readable mark until the real one lands.
+ */
+function rosterRune(tint: Ramp, core: Color, edge: Color, spokes: number): Frame {
+  const f = plate(tint);
+  for (let i = 0; i < spokes; i++) {
+    const t = (i / spokes) * Math.PI * 2 - Math.PI / 2;
+    stroke(f, 16 + Math.cos(t) * 4, 16 + Math.sin(t) * 4, 16 + Math.cos(t) * 11, 16 + Math.sin(t) * 11, core, edge, 0);
+    px(f, 16 + Math.cos(t) * 12, 16 + Math.sin(t) * 12, edge);
+  }
+  for (let y = 12; y <= 20; y++) for (let x = 12; x <= 20; x++) {
+    const d = Math.hypot(x - 16, y - 16);
+    if (d < 3.6) px(f, x, y, d < 1.5 ? C.white : d < 2.6 ? core : edge);
+  }
+  return f;
+}
+
+const PHYSICAL_PLATE: Ramp = [C.rustDeep, C.rustDark, C.rust, C.ochre];
+
+/** Roster skills drawn with the placeholder rune: plate, core, edge, spokes. */
+const ROSTER_RUNES: Record<string, [Ramp, Color, Color, number]> = {
+  cinderMortar: [FIRE_PLATE, C.hot, C.flame, 3], immolationSigil: [FIRE_PLATE, C.hot, C.ember, 4], meteorRain: [FIRE_PLATE, C.flame, C.ember, 6],
+  glacialNova: [COLD_PLATE, C.white, C.mana, 8], frostOrb: [COLD_PLATE, C.white, C.mana, 3], glacialSpikes: [COLD_PLATE, C.white, C.mana, 4],
+  rimeBulwark: [COLD_PLATE, C.mana, C.frostMid, 6], blizzard: [COLD_PLATE, C.white, C.frostMid, 5],
+  spark: [STORM_PLATE, C.white, C.gold, 5], stormCall: [STORM_PLATE, C.white, C.gold, 3], staticAegis: [STORM_PLATE, C.gold, C.ochre, 6],
+  voltaicPulse: [STORM_PLATE, C.white, C.gold, 8], staticLash: [STORM_PLATE, C.white, C.gold, 2], stormStep: [STORM_PLATE, C.gold, C.ochre, 4],
+  tempestSurge: [STORM_PLATE, C.white, C.ochre, 7],
+  umbralBolt: [VOID_PLATE, C.voidHi, C.voidLight, 2], gravityWell: [VOID_PLATE, C.voidHi, C.voidLight, 6], entropyHex: [VOID_PLATE, C.voidHi, C.voidLight, 5],
+  witherField: [VOID_PLATE, C.voidLight, C.voidMid, 7], eventHorizon: [VOID_PLATE, C.white, C.voidHi, 8],
+  kineticLance: [PHYSICAL_PLATE, C.white, C.ochre, 2], concussiveBlast: [PHYSICAL_PLATE, C.gold, C.ochre, 3],
+  phaseStride: [WARD_PLATE, C.gold, C.ochre, 2], arcaneReprieve: [WARD_PLATE, C.white, C.gold, 4], echoSigil: [WARD_PLATE, C.gold, C.ochre, 5],
+};
+
 export const SKILL_ICONS: Record<string, () => PixelImage> = {
+  ...Object.fromEntries(Object.entries(ROSTER_RUNES).map(([id, [tint, core, edge, spokes]]) => [
+    `icon/skill/${id}`, () => finish(rosterRune(tint, core, edge, spokes)),
+  ])),
   'icon/skill/emberLance': () => finish(emberLance()),
   'icon/skill/emberNova': () => finish(emberNova()),
   'icon/skill/flameWave': () => finish(flameWave()),

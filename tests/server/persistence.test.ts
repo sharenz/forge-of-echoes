@@ -101,10 +101,10 @@ describe('persistence', () => {
       const p = await newPlayer(server.base, 'Saver');
       const c = await TestClient.connect(server.base, { token: p.token, character: p.characterId });
       await c.waitFor('zone');
-      expect((await c.command({ c: 'rankUpSkill', skillId: 'cinderWard' })).ok).toBe(true);
+      expect((await c.command({ c: 'rankUpSkill', skillId: 'emberNova' })).ok).toBe(true);
       await new Promise((r) => setTimeout(r, 200));
       const row = server.db.characterById(p.characterId)!;
-      expect(JSON.parse(row.data).skillRanks.cinderWard).toBe(1);
+      expect(JSON.parse(row.data).skillRanks.emberNova).toBe(1);
       c.close();
     } finally {
       await server.close();
