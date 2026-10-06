@@ -87,8 +87,8 @@ describe('learning and ranking', () => {
 
   it('refuses roster skills whose behaviour has not shipped', () => {
     const ch = bareCharacter({ unspentSkillPoints: 5, level: 80 });
-    expect(rules.content.skills.glacialNova.available).toBe(false);
-    expect(rules.canRankUpSkill(ch, 'glacialNova')).toEqual({ ok: false, reason: 'Glacial Nova arrives in a later update.' });
+    expect(rules.content.skills.gravityWell.available).toBe(false);
+    expect(rules.canRankUpSkill(ch, 'gravityWell')).toEqual({ ok: false, reason: 'Gravity Well arrives in a later update.' });
     expect(expectErr(rules.rankUpSkill(ch, 'eventHorizon'))).toMatch(/later update/);
   });
 

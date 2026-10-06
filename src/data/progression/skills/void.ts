@@ -29,7 +29,7 @@ export const VOID_SKILLS = {
       { playerFlag: 'riftCleanse', skillFlag: 'cleanse', text: 'Removes all harmful effects (The Broken Link)' },
     ],
   }),
-  umbralBolt: plannedSkill('umbralBolt', {
+  umbralBolt: skill('umbralBolt', {
     name: 'Umbral Bolt',
     description: 'A slow, heavy bolt of void that applies Decay: void damage over time that stacks.',
     branch: 'destruction',
@@ -50,6 +50,8 @@ export const VOID_SKILLS = {
     pierce: 1,
     projectileSpeed: 200,
     range: 300,
+    radius: 7,
+    primitives: { decay: { share: 0.4 } },
     projectileNoun: 'bolt',
   }),
   gravityWell: plannedSkill('gravityWell', {
@@ -143,7 +145,7 @@ export const VOID_SKILLS = {
     duration: 2.5,
     areaScales: 'radius',
   }),
-  kineticLance: plannedSkill('kineticLance', {
+  kineticLance: skill('kineticLance', {
     name: 'Kinetic Lance',
     description: 'A fast bolt of raw force that pierces and knocks enemies back: physical damage.',
     branch: 'destruction',

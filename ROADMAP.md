@@ -16,8 +16,11 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "
    R2 "Skills I": **C2 and SK0 built 2026-10-06** (32 skill ids, 8 loadout slots with `Space`/`Z`, ranks 1 to 10 with 2 points per level
    and unlocks by level, the augment system with 17 live augments on the seven shipped skills, respec for Scrap, three loadout presets, the
    data-driven skill executor in `src/sim/skills/` with bit-identical determinism goldens, protocol 28, save version 3: the owner's full
-   skill-point refund). Still to do in R2: SK1 Skills panel v2 (augment picking UI, presets, respec dialog), SK2 ten new skills. Then
-   R3/R4 (remaining skills and augments), R5 "Orrery" passive tree, R6 balance pass.
+   skill-point refund). **SK2 built 2026-10-06:** ten new skills playable (Phase Stride 5, Glacial Nova 7, Spark 8, Cinder Mortar 9,
+   Arcane Reprieve 10, Umbral Bolt 11 with Decay on monsters, Kinetic Lance 13, Frost Orb 14, Storm Call 16, Glacial Spikes 18), 17 more
+   live augments (34 in all), each with sim behaviour, visuals, sounds and tooltips that read the sim's numbers; needs protocol 29 (new
+   projectile and area kinds, the `buff` event, the decayed ailment bit). Still to do in R2: SK1 Skills panel v2 (augment picking UI,
+   presets, respec dialog). Then R3/R4 (remaining skills and augments), R5 "Orrery" passive tree, R6 balance pass.
 3. **Finish wave 3: leftovers.** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today", the Re-chart tooltip entry and
    F1 polish are done (2026-10-06; F1: eleven Atlas/pin/surge sounds, pin and surge banners, Calm also follows Screen shake 0 and
    stills the table's CSS motion, Atlas counts in the server status log). Still open from F1: the ambient table bed of brief A 5.5

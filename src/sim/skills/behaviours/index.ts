@@ -5,8 +5,9 @@ import type { SkillBehaviour } from '../types';
 import { COLD_BEHAVIOURS } from './cold';
 import { FIRE_BEHAVIOURS } from './fire';
 import { LIGHTNING_BEHAVIOURS } from './lightning';
+import { UTILITY_BEHAVIOURS } from './utility';
 import { VOID_BEHAVIOURS } from './void';
 
 export const SKILL_BEHAVIOURS: Readonly<Partial<Record<SkillId, SkillBehaviour>>> = {
-  ...FIRE_BEHAVIOURS, ...COLD_BEHAVIOURS, ...LIGHTNING_BEHAVIOURS, ...VOID_BEHAVIOURS,
+  ...FIRE_BEHAVIOURS, ...COLD_BEHAVIOURS, ...LIGHTNING_BEHAVIOURS, ...VOID_BEHAVIOURS, ...UTILITY_BEHAVIOURS,
 };

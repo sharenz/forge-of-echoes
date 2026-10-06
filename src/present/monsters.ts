@@ -521,7 +521,7 @@ export class MonsterPainter {
         frame = 0;
         o.emissive = Math.max(o.emissive ?? 0, 0.12);
       }
-      if (ail & (AILMENT_BIT.chilled | AILMENT_BIT.shocked | AILMENT_BIT.burning | AILMENT_BIT.empowered | AILMENT_BIT.spectral | AILMENT_BIT.frozen)) {
+      if (ail & (AILMENT_BIT.chilled | AILMENT_BIT.shocked | AILMENT_BIT.burning | AILMENT_BIT.empowered | AILMENT_BIT.spectral | AILMENT_BIT.frozen | AILMENT_BIT.decayed)) {
         tint[0] = 1;
         tint[1] = 1;
         tint[2] = 1;
@@ -546,6 +546,12 @@ export class MonsterPainter {
         if (ail & AILMENT_BIT.spectral) {
           tint[0] *= 0.86;
           tint[1] *= 0.8;
+        }
+        // Decayed (Umbral Bolt): a bruised violet cast.
+        if (ail & AILMENT_BIT.decayed) {
+          tint[0] *= 0.86;
+          tint[1] *= 0.72;
+          tint[2] *= 0.92;
         }
         if (ail & AILMENT_BIT.frozen) {
           tint[0] = 0.58;
@@ -596,6 +602,16 @@ export class MonsterPainter {
         pen.life(0.4, 0.8);
         pen.size(0.4, 0.7);
         b.gravity = 20;
+        pen.emit();
+      }
+      // Decay: violet motes seeping off the body and sinking.
+      if ((ail & AILMENT_BIT.decayed) && Math.random() < fxDt * 5) {
+        const b = pen.burst(x + (Math.random() - 0.5) * m.radius[i] * 1.8, y - Math.random() * h * 0.9, 1, C.voidHi, C.void);
+        b.sprite = 'fx/mote';
+        pen.speed(2, 8);
+        pen.life(0.5, 0.9);
+        pen.size(0.5, 0.8);
+        b.gravity = 18;
         pen.emit();
       }
       if ((ail & AILMENT_BIT.shocked) && Math.random() < fxDt * 6) {

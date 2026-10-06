@@ -125,4 +125,32 @@ export const FIRE_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'add', stat: 'damageReductionCap', value: 0.1 }, { k: 'add', stat: 'cooldown', value: 3 }, { k: 'planned', primitive: 'cap' }],
     },
   ],
+  cinderMortar: [
+    {
+      id: 'clusterShell', name: 'Cluster Shell', tier: 1, text: 'Splits into 3 bomblets landing within 40 units, each dealing 45% damage',
+      effects: [{ k: 'planned', primitive: 'split' }],
+    },
+    {
+      id: 'napalm', name: 'Napalm', tier: 1,
+      text: 'Burning ground 50% wider, lasting 2 seconds longer and burning for 0.1× effectiveness more per tick',
+      effects: [{ k: 'tune', key: 'groundRadiusPct', add: 50 }, { k: 'add', stat: 'duration', value: 2 }, { k: 'tune', key: 'groundEffectiveness', add: 0.1 }],
+    },
+    {
+      id: 'delayedFuse', name: 'Delayed Fuse', tier: 2, text: 'The shell lies for 1.2 seconds, then explodes for 60% more damage in a 20% larger radius',
+      excludes: ['skipShot'], effects: [{ k: 'planned', primitive: 'delay' }],
+    },
+    {
+      id: 'skipShot', name: 'Skip Shot', tier: 2, text: 'Bounces twice more toward the cursor, 60 units apart, each blast dealing 70% damage',
+      excludes: ['delayedFuse'], effects: [{ k: 'planned', primitive: 'bounce' }],
+    },
+    {
+      id: 'magmaCore', name: 'Magma Core', tier: 3, text: 'Leaves a molten pool (radius 40) for 4 seconds that slows by 30% and exposes Fire −10 pp',
+      effects: [{ k: 'planned', primitive: 'expose' }],
+    },
+    {
+      id: 'rainOfShells', name: 'Rain of Shells', tier: 3,
+      text: '3 shells land at random points within 70 units of the cursor, each 25% less damage; cooldown +1.5 seconds',
+      effects: [{ k: 'planned', primitive: 'shape', note: 'scatter' }],
+    },
+  ],
 };

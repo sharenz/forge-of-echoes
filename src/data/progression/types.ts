@@ -91,7 +91,7 @@ export type AugmentStat =
 /** Primitives of the behaviour grammar that have no executor yet (SK5/SK6): an augment using one is listed but not pickable. */
 export type PlannedPrimitive =
   | 'split' | 'fork' | 'lodge' | 'delay' | 'convert' | 'trail' | 'bounce' | 'return' | 'expose' | 'mark' | 'ailment' | 'onKill'
-  | 'shape' | 'rehit' | 'refund' | 'summon' | 'cap';
+  | 'shape' | 'rehit' | 'refund' | 'summon' | 'cap' | 'knockback' | 'pull';
 
 /**
  * One effect of an augment, in the behaviour grammar of docs/power-rework/skills.md 4.2. The rules fold the stat-like ones
@@ -121,8 +121,31 @@ export type AugmentEffect =
   | { k: 'alwaysAilment' }
   /** A skill behaviour flag the executor already knows (the same flags uniques grant: 'chillLanding', 'cold', 'restoreFocus', 'renew'). */
   | { k: 'flag'; flag: string }
+  /** A behaviour number of the skill's own primitives (SkillPrimitives) gains `add` (Napalm, Withering Touch, Ricochet Storm…). */
+  | { k: 'tune'; key: TuneKey; add: number }
   /** A primitive whose executor ships later; `note` says what it will do. */
   | { k: 'planned'; primitive: PlannedPrimitive; note?: string };
+
+/** The behaviour numbers a `tune` augment effect can raise (see SkillPrimitives). */
+export type TuneKey =
+  | 'groundEffectiveness' | 'groundRadiusPct' | 'decayPct' | 'bounces' | 'strideEvasion' | 'restoreFocus' | 'restoreLife';
+
+/**
+ * Base behaviour numbers of a skill beyond the shared runtime fields (power rework SK2). The rules resolve them (with `tune`
+ * augments) into SkillRuntimeDef.augments primitives, so the sim and the tooltip read the same values.
+ */
+export interface SkillPrimitives {
+  /** Burning ground where it lands: `effectiveness` per tick (the hit's damage pools), every `interval` s, for the skill's duration; radius = the skill's. */
+  ground?: { effectiveness: number; interval: number };
+  /** Hits apply Decay: one stack deals `share` × the hit as void over DECAY.duration s. */
+  decay?: { share: number };
+  /** Projectiles rebound off tall cover and the arena edge this many times. */
+  bounces?: number;
+  /** Movement buff for the skill's duration: `speed` more movement speed, `evasion` added evade chance. */
+  stride?: { speed: number; evasion: number };
+  /** Restore over the skill's duration: shares of maximum Focus and life. */
+  restore?: { focus: number; life: number };
+}
 
 export interface AugmentDef {
   /** Unique within its skill (stored in CharacterSave.augments). */
@@ -164,7 +187,7 @@ export interface SkillDef extends SkillInfo {
   projectileSpeed: number;
   range: number;
   spread: number;
-  radius: number;
+  radius: RankValue;
   duration: RankValue;
   chains: RankValue;
   distance: RankValue;
@@ -178,6 +201,8 @@ export interface SkillDef extends SkillInfo {
   areaScales?: 'range' | 'radius';
   /** Noun for the projectiles in skill text ("flame", "shard"). */
   projectileNoun?: string;
+  /** Behaviour numbers of the skill's own primitives (ground, decay, bounces, stride, restore). */
+  primitives?: SkillPrimitives;
 }
 
 // ---------------------------------------------------------------------------------------------

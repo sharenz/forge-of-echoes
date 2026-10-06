@@ -29,4 +29,45 @@ export const LIGHTNING_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'planned', primitive: 'onKill' }],
     },
   ],
+  spark: [
+    {
+      id: 'moreSparks', name: 'More Sparks', tier: 1, text: '3 more sparks, each dealing 20% less damage',
+      effects: [{ k: 'count', add: 3 }, { k: 'more', pct: -20 }],
+    },
+    {
+      id: 'ricochetStorm', name: 'Ricochet Storm', tier: 2, text: 'Sparks rebound off walls 2 more times',
+      effects: [{ k: 'tune', key: 'bounces', add: 2 }],
+    },
+    {
+      id: 'charged', name: 'Charged', tier: 3, text: 'Sparks always shock, 15% less damage',
+      effects: [{ k: 'alwaysAilment' }, { k: 'more', pct: -15 }],
+    },
+  ],
+  stormCall: [
+    {
+      id: 'wideSkies', name: 'Wide Skies', tier: 1, text: 'Strikes 40% wider, 10% less damage',
+      effects: [{ k: 'scale', stat: 'radius', pct: 40 }, { k: 'more', pct: -10 }],
+    },
+    {
+      id: 'stormCell', name: 'Storm Cell', tier: 1, text: '3 more strikes; cast time +0.2 seconds',
+      effects: [{ k: 'count', add: 3 }, { k: 'add', stat: 'castTime', value: 0.2 }],
+    },
+    {
+      id: 'tetheredStrikes', name: 'Tethered Strikes', tier: 2, text: 'Strikes land evenly along a line from you to the cursor instead of around it',
+      excludes: ['thunderMark'], effects: [{ k: 'flag', flag: 'tethered' }],
+    },
+    {
+      id: 'thunderMark', name: 'Thunder Mark', tier: 2, text: 'Each strike leaves a static field for 3 seconds (0.4× effectiveness per 0.5 seconds, shocks)',
+      excludes: ['tetheredStrikes'], effects: [{ k: 'planned', primitive: 'trail' }],
+    },
+    {
+      id: 'eyeOfTheStorm', name: 'Eye of the Storm', tier: 3,
+      text: '1 second after the last strike a final strike lands at the cursor for 3× effectiveness in a radius of 60',
+      effects: [{ k: 'planned', primitive: 'delay' }],
+    },
+    {
+      id: 'conduction', name: 'Conduction', tier: 3, text: 'Each strike chains to 1 nearby enemy at 60%; 20% less damage',
+      effects: [{ k: 'planned', primitive: 'fork', note: 'chain from strike' }],
+    },
+  ],
 };

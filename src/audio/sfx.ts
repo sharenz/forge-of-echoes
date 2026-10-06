@@ -14,6 +14,7 @@
 //    AudioBuffer variants and played as a single buffer source each (see bank.ts).
 import type { SfxId } from '../contracts/audio';
 import type { BurstPolicy } from './mixing';
+import { ROSTER_SFX } from './sfx-skills';
 import { midi, PARTIALS, type Partial as BellPartial, type VoiceBuilder } from './voice';
 
 export type SfxGroup = 'skill' | 'combat' | 'monster' | 'boss' | 'player' | 'loot' | 'flow' | 'ui' | 'craft';
@@ -1872,4 +1873,6 @@ export const SFX: Record<SfxId, SfxDef> = {
       [69, 73, 76].forEach((n, k) => v.bell({ at: 0.12 + k * 0.08, f: midi(n), partials: P.coin, gain: 0.08, decay: 0.5, wet: 0.3, fixed: true }));
     },
   },
+  // power rework SK2 roster batch 1 (sfx-skills.ts)
+  ...ROSTER_SFX,
 };

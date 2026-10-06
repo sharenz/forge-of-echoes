@@ -26,7 +26,7 @@ export const LIGHTNING_SKILLS = {
     radius: 90,
     flagsFrom: [{ playerFlag: 'arcReturns', skillFlag: 'revisit', text: 'Can revisit earlier targets, but never the same target twice in succession (Iron Refrain)' }],
   }),
-  spark: plannedSkill('spark', {
+  spark: skill('spark', {
     name: 'Spark',
     description: 'Releases slow sparks that wander and bounce off walls, shocking what they touch.',
     branch: 'destruction',
@@ -44,12 +44,16 @@ export const LIGHTNING_SKILLS = {
     critChance: 7,
     ailmentChance: 20,
     projectiles: { lerp: [4, 7], round: 'floor' },
+    // Sparks pass through enemies; each spark hits one enemy at most every 0.4 s and rebounds off walls twice.
+    pierceAll: true,
     projectileSpeed: 150,
     range: 300,
     spread: 0.8,
+    radius: 5,
+    primitives: { bounces: 2 },
     projectileNoun: 'spark',
   }),
-  stormCall: plannedSkill('stormCall', {
+  stormCall: skill('stormCall', {
     name: 'Storm Call',
     description: 'Telegraphed lightning strikes land around the cursor: ground damage that ignores shields and cover.',
     branch: 'destruction',

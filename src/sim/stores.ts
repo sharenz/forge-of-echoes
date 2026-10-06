@@ -189,6 +189,16 @@ export class MonsterStore implements MonsterStoreView {
   readonly expose: Float32Array;
   /** Seconds of exposure left (one shared timer; every application refreshes it). */
   readonly exposeTime: Float32Array;
+  /**
+   * Decay (power rework SK2, Umbral Bolt): stacks running (0..DECAY.maxStacks), the strongest stack's void damage per second, seconds
+   * left (every application refreshes it), damage accumulated for the next hit number, its timer, and the player credited.
+   */
+  readonly decayStacks: Uint8Array;
+  readonly decayDps: Float32Array;
+  readonly decayTime: Float32Array;
+  readonly decayAccum: Float32Array;
+  readonly decayEventTimer: Float32Array;
+  readonly decaySrc: Uint8Array;
 
   private readonly pool: SlotPool;
   private readonly zeroed: (Float32Array | Float64Array | Uint8Array | Uint16Array | Int8Array | Int32Array)[];
@@ -227,6 +237,8 @@ export class MonsterStore implements MonsterStoreView {
     this.res = new Float32Array(capacity * 5);
     this.expose = new Float32Array(capacity * 5);
     this.exposeTime = f();
+    this.decayStacks = u8(); this.decayDps = f(); this.decayTime = f(); this.decayAccum = f(); this.decayEventTimer = f();
+    this.decaySrc = u8();
     this.zeroed = [
       this.kind, this.rarity, this.x, this.y, this.prevX, this.prevY, this.radius, this.facing, this.anim, this.animTime,
       this.life, this.maxLife, this.hitFlash, this.ailments, this.vx, this.vy, this.target, this.igniteSrc,
@@ -237,6 +249,7 @@ export class MonsterStore implements MonsterStoreView {
       this.slide, this.slideSide,
       this.timerA, this.timerB, this.timerC, this.timerD, this.knockback, this.mods, this.flags, this.wave,
       this.dtype, this.hitReduction, this.aim, this.exposeTime,
+      this.decayStacks, this.decayDps, this.decayTime, this.decayAccum, this.decayEventTimer, this.decaySrc,
     ];
   }
 
@@ -324,6 +337,24 @@ export class ProjectileStore implements ProjectileStoreView {
   readonly splash: Float32Array;
   /** Chain hooks: pull distance (0 = CHAIN_PULL_DISTANCE). */
   readonly pull: Float32Array;
+  // Roster batch 1 (power rework SK2), player projectiles only; reset by spawnProjectile.
+  /** Rebounds left off tall cover and the arena edge (Spark, Ricochet). */
+  readonly bounce: Uint8Array;
+  /** Seconds after which the same monster may be hit again (Spark); 0 = never. */
+  readonly rehit: Float32Array;
+  /** Knockback multiplier of its hits (Kinetic Lance 2; 1 = normal). */
+  readonly knock: Float32Array;
+  /** Decay share of its hits (Umbral Bolt); 0 = none. */
+  readonly decay: Float32Array;
+  /** A skill timer (Frost Orb: seconds to its next shard). */
+  readonly timer: Float32Array;
+  /** Cinder Mortar: the burning ground its shell leaves (damage per tick, seconds, radius, tick interval; 0 = none). */
+  readonly groundDamage: Float32Array;
+  readonly groundTime: Float32Array;
+  readonly groundRadius: Float32Array;
+  readonly groundTick: Float32Array;
+  /** Age at each hit-ring entry (read only by projectiles with `rehit`). */
+  readonly hitAge: Float32Array;
   private readonly pool: SlotPool;
 
   constructor(capacity: number) {
@@ -336,6 +367,13 @@ export class ProjectileStore implements ProjectileStoreView {
     this.effect = new Uint8Array(capacity);
     this.splash = f();
     this.pull = f();
+    this.bounce = new Uint8Array(capacity);
+    this.rehit = f();
+    this.knock = f();
+    this.decay = f();
+    this.timer = f();
+    this.groundDamage = f(); this.groundTime = f(); this.groundRadius = f(); this.groundTick = f();
+    this.hitAge = new Float32Array(capacity * PROJECTILE_HIT_SLOTS);
     this.alive = new Uint8Array(capacity);
     this.id = new Uint32Array(capacity);
     this.kind = new Uint8Array(capacity);
@@ -382,9 +420,19 @@ export class ProjectileStore implements ProjectileStoreView {
     return false;
   }
 
+  /** Age of the latest recorded hit on `monsterId`, or -1 (projectiles that may hit the same monster again: `rehit`). */
+  lastHitAge(slot: number, monsterId: number): number {
+    const n = this.hitCount[slot];
+    const base = slot * PROJECTILE_HIT_SLOTS;
+    let best = -1;
+    for (let k = 0; k < n; k++) if (this.hitIds[base + k] === monsterId && this.hitAge[base + k] > best) best = this.hitAge[base + k];
+    return best;
+  }
+
   /** Remember a hit; once the ring is full the oldest entry is overwritten (only matters for pierce-all). */
   recordHit(slot: number, monsterId: number): void {
     const cur = this.hitCursor[slot];
+    this.hitAge[slot * PROJECTILE_HIT_SLOTS + cur] = this.age[slot];
     this.hitIds[slot * PROJECTILE_HIT_SLOTS + cur] = monsterId;
     this.hitCursor[slot] = (cur + 1) % PROJECTILE_HIT_SLOTS;
     if (this.hitCount[slot] < PROJECTILE_HIT_SLOTS) this.hitCount[slot]++;

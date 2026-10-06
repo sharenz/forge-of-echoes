@@ -55,6 +55,33 @@ export function coverClip(w: World, x: number, y: number, angle: number, length:
   return t < 0 ? length : Math.max(1, length * t);
 }
 
+/** Outward surface normal of the tall prop a shot touched at (x, y) (written by coverNormal). */
+export const coverNormalOut = { x: 0, y: 0 };
+
+/**
+ * The outward normal of the tall prop whose rim is nearest (x, y), a point where a shot of radius `pad` touched cover (a bouncing
+ * spark rebounds off it). Writes coverNormalOut and returns true, or false when no tall prop is near.
+ */
+export function coverNormal(grid: PropGrid, x: number, y: number, pad: number): boolean {
+  if (grid.tallCount === 0) return false;
+  const list = grid.near(x, y);
+  let best = Infinity;
+  for (let k = 0; k < list.length; k++) {
+    const p = list[k];
+    if (!p.tall) continue;
+    const dx = x - p.x;
+    const dy = y - p.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const gap = Math.abs(d - p.radius - pad);
+    if (gap < best && d > 1e-6) {
+      best = gap;
+      coverNormalOut.x = dx / d;
+      coverNormalOut.y = dy / d;
+    }
+  }
+  return best < Infinity;
+}
+
 /** Whether (x, y) lies inside a tall prop's footprint (a muzzle that must fall back to the shooter's centre). */
 export function insideCover(grid: PropGrid, x: number, y: number): boolean {
   if (grid.tallCount === 0) return false;

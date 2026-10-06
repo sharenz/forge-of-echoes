@@ -96,8 +96,8 @@ Design: `docs/power-rework/skills.md` (32 skills, augments, points economy). A r
 (`1 + 2·(L−1)` in total). Max rank is 10. Numbers below are rank 1 → rank 10 (linear unless noted). Effectiveness multiplies spell power.
 Skills **unlock by character level** (learning one costs a point and gives rank 1); there are no prerequisite chains, and a skill learned
 before its unlock level stays learned. A new character starts with Ember Lance at rank 1 (innate, free) and one banked point; a skill must
-be ranked to go on the bar. The roster has 32 skill ids; the seven below are playable, the other 25 are in the data with their unlock level
-(Phase Stride 5, Glacial Nova 7, Spark 8, Cinder Mortar 9 ... Event Horizon 62) and cannot be learned until their behaviour ships.
+be ranked to go on the bar. The roster has 32 skill ids; the seventeen below are playable, the other 15 are in the data with their unlock
+level (Gravity Well 20, Rime Bulwark 22 ... Event Horizon 62) and cannot be learned until their behaviour ships.
 
 **Loadout:** eight slots labelled `LMB`, `RMB`, `Q`, `E`, `R`, `F`, `Space`, `Z` (the HUD keycap shows `Spc`). Any learned skill,
 including Ember Lance, can occupy any slot; each skill appears at most once. Drag a learned skill from the tree or either slot row
@@ -115,17 +115,33 @@ regardless of its slot. **Presets:** three named loadouts per character; saving 
 | **Arc Chain** | 6 | 14 / 0.38 s / 1.0 s | Lightning strikes the enemy nearest the cursor (within 240) and chains 3 → 8 times (jump range 90). Effectiveness 0.9 → 2.0, shock 25%, crit 10%. |
 | **Rift Step** | 1 | 8 / instant / 3.5 s per charge | Blink toward the cursor, distance 90 → 120. 2 charges (+1 at ranks 5 and 10). 0.2 s invulnerable. Afterimages. |
 | **Cinder Ward** | 2 | 20 / 0.3 s / 14 → 9 s | For 4 → 7 s: 35% → 55% less damage taken (capped at 60%), and embers burn adjacent monsters (radius 40) for 0.25× effectiveness per 0.5 s, crit 5%. |
+| **Phase Stride** | 5 | 6 / instant / 9 → 6 s | For 3 → 4 s: 35% more movement speed, no slow from a crowd pressing in, and allies pass through you. |
+| **Glacial Nova** | 7 | 14 / 0.5 s / 3.0 s | An instant circle of frost around you, radius 90 → 120 (area scales it). Not a projectile: it passes cover and Shieldbearer shields. Effectiveness 1.5 → 3.3, chill 100%, crit 6%. |
+| **Spark** | 8 | 7 / 0.3 s / – | Fan of 4 → 7 slow sparks (spread 0.8 rad, speed 150, range 300) that pass through enemies; one spark hits an enemy at most every 0.4 s and rebounds off tall cover and the arena edge twice. Effectiveness 0.6 → 1.4, shock 20%, crit 7%. |
+| **Cinder Mortar** | 9 | 10 / 0.6 s / 1.5 s | Lobs a shell at the cursor (at most 320 away) that flies 0.9 s over cover and shields and bursts in a radius of 36 → 48, then leaves burning ground over the blast for 3 s: 0.35× effectiveness every 0.5 s (overlapping ground never stacks). Effectiveness 1.7 → 3.6, ignite 25%, crit 5%. |
+| **Arcane Reprieve** | 10 | 0 / 0.5 s / 22 → 15 s | Restores 30% of maximum Focus evenly over 3 s and removes chill and Withered at once. |
+| **Umbral Bolt** | 11 | 12 / 0.5 s / – | A slow, heavy void bolt (speed 200, range 300, pierce 1). Every hit adds a stack of **Decay**: 40% of the hit as void damage over 4 s at half the target's void resistance; up to 5 stacks run at once (the strongest stack's rate times the stacks; each hit refreshes the timer). Effectiveness 2.6 → 6.0, crit 6%. |
+| **Kinetic Lance** | 13 | 6 / 0.38 s / – | A fast bolt of physical damage (speed 520, range 360), pierce 3, knockback twice as far as other hits. Effectiveness 1.3 → 3.0, crit 6%. |
+| **Frost Orb** | 14 | 18 / 0.5 s / 6.0 s | A slow orb (speed 90) drifts toward the cursor for 3 s and touches nothing; every 0.25 s it fires an ice shard (speed 360, reach 180) at the nearest enemy it can see within 140: 12 shards. Effectiveness 0.5 → 1.1 per shard, chill 30%, crit 5%. |
+| **Storm Call** | 16 | 15 / 0.45 s / 3.0 s | 3 → 7 strikes land at random points within 70 of the cursor (the cursor counts at most 360 away) after a 0.7 s telegraph, radius 28 each. Ground damage: it ignores cover and shields. Effectiveness 1.4 → 3.0 per strike, shock 30%, crit 8%. |
+| **Glacial Spikes** | 18 | 12 / 0.4 s / 2.0 s | 8 ice spikes, radius 20, erupt one after another (the first after 0.1 s, then every 0.05 s) evenly along 200 units toward the cursor; one row strikes an enemy at most once. Effectiveness 1.1 → 2.4 per spike, chill 35%, crit 6%. |
 
 **Augments** (`skills.md` 4): each skill has a small tree of augments in three tiers. Tier 1 needs skill rank 2, tier 2 rank 5, tier 3
 rank 8; T1 and T2 cost 1 skill point, T3 costs 2. A skill has `floor(rank / 2)` augment slots (at most 5). Some augments exclude each other
 (both directions). Augment damage lines ("8% less damage", "60% more damage") join the global `more` pool. A unique that grants an augment's
 behaviour (Echo of the Matriarch, The Second Verse, The Last Rite, Winterstride, Stillwinter, Vigil of Ash, The Unbowed Crown) needs no slot,
-and when the same effect is also picked the better value applies (no stacking). Playable now (17): Ember Lance Piercing Flame (pierce 2),
+and when the same effect is also picked the better value applies (no stacking). Playable now (34): Ember Lance Piercing Flame (pierce 2),
 Twin Strand (2 bolts 12° apart, 25% less each), Rapid Spark (18% shorter cast, 8% less); Ember Nova Wider Ring (+30% range, +4 flames, 8%
 less), Echoing Ring (repeats after 0.4 s at 70%), Ember Fan (120° cone, 60% more, +30% range); Flame Wave Wide Front (+2 waves, 40% wider,
 20% less), Ring of Waves (double waves in a full circle, 30% less); Rime Shards Hoarfrost Spread (+2 shards, 50% wider, 15% less), Glacial
 Echo (repeats at 60%); Arc Chain Long Reach (+50% jump, +2 chains, 10% less); Rift Step Longer Stride (+30% distance, 0.3 s invulnerable,
-+2 Focus), Chilling Landing; Cinder Ward Banked Embers (r80), Frozen Hearth (cold, always chills), Vigil (Focus, no damage), Resolute Flame.
++2 Focus), Chilling Landing; Cinder Ward Banked Embers (r80), Frozen Hearth (cold, always chills), Vigil (Focus, no damage), Resolute Flame;
+Phase Stride Long Stride (+2 s), Slipstream (+15% evade chance while it lasts), Cleansing Stride (removes chill and root); Glacial Nova
+Wide Chill (+40% radius, 10% less); Spark More Sparks (+3, 20% less each), Ricochet Storm (+2 bounces), Charged (always shocks, 15% less);
+Cinder Mortar Napalm (ground +50% radius, +2 s, +0.1× effectiveness per tick); Arcane Reprieve Deep Well (45%, cooldown +8 s), Second Wind
+(+15% of life over the duration); Umbral Bolt Withering Touch (Decay 50% stronger); Kinetic Lance Ricochet (2 bounces, 20% less); Frost Orb
+Twin Orbs (two orbs, 35% less per shard); Storm Call Wide Skies (+40% radius, 10% less), Storm Cell (+3 strikes, +0.2 s cast), Tethered
+Strikes (evenly along the line to the cursor); Glacial Spikes Twin Lines (two rows 15° either side, 30% less).
 The other augments of the tables are listed and wait for their primitive (lodge, split, fork, convert, expose, trail, ...).
 
 **Respec** (a hideout service): refunding an augment or a whole skill (Ember Lance keeps rank 1) costs 4 Scrap per point (a T3 augment, 2
@@ -144,8 +160,8 @@ Player modifiers on skills (resolved by the rules into the sim's numbers, so too
 - Cast time = base / cast speed; cooldown = base / cooldown recovery (per charge for Rift Step).
 - Crit chance = (skill base + flat) × (1 + increased%); crit multiplier = 150% + flat.
 - Ailment chance = the skill's base + flat ignite / chill / shock chance, by damage type.
-- Extra projectiles and pierce add to projectile skills (Lance, Nova, Flame Wave, Rime Shards). A single-bolt skill fans its extra bolts 0.12 rad apart (at most 0.6 rad).
-- Area of effect multiplies Nova range and Flame Wave / Cinder Ward radius by `sqrt(1 + area%)`; skill duration scales Cinder Ward.
+- Extra projectiles and pierce add to projectile skills (Lance, Nova, Flame Wave, Rime Shards, Spark, Umbral Bolt, Kinetic Lance; Frost Orb gains orbs). A single-bolt skill fans its extra bolts 0.12 rad apart (at most 0.6 rad).
+- Area of effect multiplies Nova range and Flame Wave / Cinder Ward / Glacial Nova / Cinder Mortar / Storm Call radius by `sqrt(1 + area%)`; skill duration scales Cinder Ward, Phase Stride, Arcane Reprieve, Frost Orb's flight and Cinder Mortar's burning ground.
 
 **Flow zones (conveyor belts).** Ground can carry whoever stands on it. Iron March (five W-E belts) and the Last Kiln (the conveyor annulus) are the first
 users; the format (`flows` in a layout, D-territory.md 10.5a) is generic, so currents or lava rivers can reuse it. The rules:
@@ -185,7 +201,9 @@ bellows, choir stall, weapon rack, anvil, stash, merchant, chest. A layout can o
 parapet is low, a crate stack or a full wall is tall); the presenter draws an overridden prop taller or lower than its art. The rules:
 - A straight shot, player's or monster's, stops at the first tall prop its path touches (a spark and dust puff, a dull knock); a piercing shot stops there
   too (pierce counts bodies, never walls); a body in front of the wall is still hit first.
-- **Lobs fly over everything** (Cinder Spitter and Tar Slinger globs). **Ember Nova** rings burst over cover (a point-blank ring, not an aimed shot).
+- **Lobs fly over everything** (Cinder Spitter and Tar Slinger globs, Cinder Mortar's shell). **Ember Nova** rings burst over cover (a point-blank ring, not an aimed shot),
+  and so do **Glacial Nova**, **Storm Call** and **Glacial Spikes** (instant and ground damage). Frost Orb floats over cover, but its shards need a clear line.
+  Spark, Umbral Bolt and Kinetic Lance are straight shots: blocked like Ember Lance (sparks rebound off the wall instead).
   Ground telegraphs and areas (slams, pools, wards, fire trails) are never blocked. **Arc Chain** needs a clear line: it strikes the nearest enemy it can
   see and each jump needs a clear line to the next target. Ember Lance, Flame Wave and Rime Shards are blocked.
 - A shot that starts inside a prop's footprint (a shooter pressed against a wall) leaves it instead of vanishing, and a muzzle that falls inside a tall

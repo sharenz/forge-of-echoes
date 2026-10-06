@@ -122,6 +122,12 @@ export const SFX_LIMITS: Partial<Record<SfxId, Limit>> = {
   anvilStrike: { perFrame: 2, interval: 0.1 },
   dirge: { perFrame: 1, interval: 0.6 },
   crowdRoar: { perFrame: 1, interval: 1.2 },
+  // power rework SK2 roster batch 1
+  castSpark: { perFrame: 2, interval: 0 },
+  castKinetic: { perFrame: 2, interval: 0 },
+  mortarBlast: { perFrame: 2, interval: 0.05 },
+  stormCallStrike: { perFrame: 3, interval: 0.03 },
+  frostSpike: { perFrame: 2, interval: 0.03 },
 };
 
 /** The cue of each debuff taking hold on the local player. */
@@ -163,6 +169,17 @@ export const CAST_SFX: Partial<Record<SkillId, SfxId | null>> = {
   arcChain: 'castArc',
   riftStep: null,
   cinderWard: 'ward',
+  // power rework SK2 roster batch 1 (Glacial Nova is voiced by its 'nova' burst; the buffs by their cast)
+  phaseStride: 'phaseStride',
+  glacialNova: null,
+  spark: 'castSpark',
+  cinderMortar: 'castMortar',
+  arcaneReprieve: 'arcaneReprieve',
+  umbralBolt: 'castUmbral',
+  kineticLance: 'castKinetic',
+  frostOrb: 'castOrb',
+  stormCall: 'castStormCall',
+  glacialSpikes: 'castFrost',
 };
 
 export const HIT_SFX: Record<DamageType, SfxId> = {
@@ -791,6 +808,13 @@ export class SoundDirector {
           case 'stormStrike':
             this.play('hitLightning', e.x, e.y, 0.9, this.jitter(0.05));
             return;
+          // power rework SK2: the player's own Storm Call bolts and Glacial Spikes
+          case 'stormCall':
+            this.play('stormCallStrike', e.x, e.y, 0.85, this.jitter(0.06));
+            return;
+          case 'frostSpike':
+            this.play('frostSpike', e.x, e.y, 0.8, this.jitter(0.06));
+            return;
           case 'rendStrike':
             this.play('monsterSlam', e.x, e.y, 0.6, 1.15 * this.jitter(0.04));
             return;
@@ -806,6 +830,7 @@ export class SoundDirector {
         // Lobs announce their landing; other ends are covered by hit sounds.
         if (e.kind === 'cinderSpit') this.play('hitFire', e.x, e.y, 0.45, 0.8);
         else if (e.kind === 'tarGlob') this.play('tarSplat', e.x, e.y, 0.9, this.jitter(0.06));
+        else if (e.kind === 'cinderShell') this.play('mortarBlast', e.x, e.y, 1, this.jitter(0.05));
         return;
       case 'blocked':
         // A wall stopping a shot is a duller, lower knock than a shield's ring (same sample, pitched down, a step quieter).
@@ -840,10 +865,14 @@ export class SoundDirector {
         return;
       case 'ward':
         return; // voiced by its 'cast' event
-      case 'nova':
-        if (e.playerId === localId) this.play('castNova', undefined, undefined, 1, this.jitter(0.03));
-        else this.play('castNova', e.x, e.y, ALLY_VOLUME, this.jitter(0.03));
+      case 'nova': {
+        const id: SfxId = e.skill === 'glacialNova' ? 'glacialNovaBurst' : 'castNova';
+        if (e.playerId === localId) this.play(id, undefined, undefined, 1, this.jitter(0.03));
+        else this.play(id, e.x, e.y, ALLY_VOLUME, this.jitter(0.03));
         return;
+      }
+      case 'buff':
+        return; // voiced by its 'cast' event
       case 'chain':
         return; // visual only: Arc Chain's cast and hits carry the sound
       case 'ailment':

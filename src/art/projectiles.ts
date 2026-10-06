@@ -175,6 +175,113 @@ function orb(size: number, ramp: readonly Color[], frames: number, arms: number,
   return out;
 }
 
+// --- power rework SK2 roster batch 1 --------------------------------------------------------------------------------
+
+/** Spark: a crackling knot of lightning with jagged filaments that flicker frame to frame. */
+function spark(): Frame[] {
+  return [0, 1, 2, 3].map((k) => {
+    const f = new Frame(11, 11);
+    f.glow(5, 5, C.white, 255);
+    f.glow(4, 5, C.lightning, 240);
+    f.glow(6, 5, C.lightning, 240);
+    f.glow(5, 4, C.lightning, 230);
+    f.glow(5, 6, C.lightning, 230);
+    // four jagged arms, rotated per frame
+    for (let a = 0; a < 4; a++) {
+      const ang = (a / 4) * Math.PI * 2 + k * 0.7 + hash2(a, k, 3) * 0.6;
+      let x = 5.5;
+      let y = 5.5;
+      for (let s = 0; s < 4; s++) {
+        x += Math.cos(ang + (hash2(a, s + k * 7, 11) - 0.5) * 1.4) * 1.2;
+        y += Math.sin(ang + (hash2(a, s + k * 7, 13) - 0.5) * 1.4) * 1.2;
+        const px = Math.floor(x);
+        const py = Math.floor(y);
+        if (px < 0 || py < 0 || px > 10 || py > 10) break;
+        f.glowSoft(px, py, s < 2 ? C.lightning : C.storm, s < 2 ? 1 : 0.7, 230 - s * 35);
+      }
+    }
+    return f;
+  });
+}
+
+/** Cinder Mortar shell: an iron-banded fire bomb, glowing seams and a sputtering fuse. */
+function cinderShell(): Frame[] {
+  return [0, 1].map((k) => {
+    const f = new Frame(12, 12);
+    const c = 6;
+    for (let y = 0; y < 12; y++) {
+      for (let x = 0; x < 12; x++) {
+        const r = Math.hypot(x + 0.5 - c, y + 0.5 - c) / 4.6;
+        if (r > 1) continue;
+        const seam = Math.abs(y + 0.5 - c) < 0.8 || Math.abs(x + 0.5 - c - (k ? 0.5 : 0)) < 0.6;
+        if (seam) f.glow(x, y, r < 0.5 ? C.hot : C.flame, 220 - r * 60);
+        else f.c.set(x, y, r > 0.8 ? C.rustDeep : r > 0.45 ? C.rustDark : C.rust);
+      }
+    }
+    // highlight and fuse
+    f.c.set(4, 3, C.metalLight);
+    f.glow(9, 2, k ? C.white : C.hot, 255);
+    f.glow(10, 1, C.flame, 200);
+    f.glowSoft(11, 0 + k, C.ember, 0.7, 170);
+    return f;
+  });
+}
+
+/** Umbral Bolt: a heavy violet comet, a dark core inside a bright rim, a smoky wake behind. */
+function umbralBolt(): Frame[] {
+  return [0, 1, 2].map((k) => {
+    const f = new Frame(22, 11);
+    const hx = 15.5;
+    const cy = 5.5;
+    for (let y = 0; y < 11; y++) {
+      for (let x = 0; x < 22; x++) {
+        const dx = x + 0.5 - hx;
+        const dy = y + 0.5 - cy;
+        const r = dx > 0 ? Math.hypot(dx, dy) / 4.6 : Math.hypot(dx / (13 + k), dy / (4.6 + dx * 0.18));
+        if (r > 1) continue;
+        const n = hash2(x, y, 31 + k) * 0.25;
+        if (dx > -3 && r < 0.45) f.c.set(x, y, r < 0.25 ? C.voidDeep : C.voidDark);
+        else {
+          const v = 1 - r + n;
+          const col = v > 0.75 ? C.voidHi : v > 0.5 ? C.voidGlow : v > 0.3 ? C.voidLight : C.voidMid;
+          f.glowSoft(x, y, col, r > 0.85 ? 0.6 : 1, 110 + 140 * Math.min(1, v));
+        }
+      }
+    }
+    f.glow(20, 5, C.voidHi, 255);
+    return f;
+  });
+}
+
+/** Kinetic Lance: a slim grey-gold dart of force with a pale shock cone at its tip. */
+function kineticLance(): Frame[] {
+  return [0, 1].map((k) => {
+    const f = new Frame(18, 7);
+    for (let x = 2; x <= 15; x++) {
+      const t = (x - 2) / 13;
+      f.glow(x, 3, t > 0.7 ? C.goldHi : t > 0.35 ? C.gold : C.metalLight, 120 + 120 * t);
+      if (t > 0.5) {
+        f.c.set(x, 2, C.metalMid);
+        f.c.set(x, 4, C.metalDark);
+      }
+    }
+    // shock cone ahead of the tip
+    f.glow(16, 3, C.white, 255);
+    f.glowSoft(17, 2 + k, C.goldHi, 0.7, 200);
+    f.glowSoft(17, 4 - k, C.goldHi, 0.7, 200);
+    f.glowSoft(15, 1, C.bone, 0.5, 140);
+    f.glowSoft(15, 5, C.bone, 0.5, 140);
+    // faint streak
+    f.glowSoft(0, 3, C.metalLight, 0.4, 90);
+    return f;
+  });
+}
+
+/** Frost Orb: a slowly turning sphere of rime with a white core and frost arms. */
+function frostOrb(): Frame[] {
+  return orb(16, [C.frostDeep, C.frostDark, C.frostMid, C.mana, C.frost, C.ice, C.white], 6, 3, false);
+}
+
 export function projectileSprites(): SpriteDef[] {
   const defs: [string, Frame[], number][] = [
     ['emberLance', emberLance(), 16],
@@ -184,6 +291,12 @@ export function projectileSprites(): SpriteDef[] {
     ['cinderSpit', cinderSpit(), 8],
     ['heraldOrb', orb(12, [C.voidDeep, C.voidDark, C.voidMid, C.void, C.voidLight, C.voidGlow, C.voidHi], 4, 2, true), 10],
     ['matriarchOrb', orb(14, [C.lavaDeep, C.lavaDark, C.ember, C.flame, C.hot, C.white], 4, 3, false), 10],
+    // power rework SK2 roster batch 1
+    ['spark', spark(), 16],
+    ['cinderShell', cinderShell(), 8],
+    ['umbralBolt', umbralBolt(), 10],
+    ['kineticLance', kineticLance(), 12],
+    ['frostOrb', frostOrb(), 8],
   ];
   return defs.map(([id, frames, fps]) => toSprite(`proj/${id}`, frames, centre(frames[0], fps)));
 }

@@ -18,7 +18,9 @@ const withAtlas = (discovered: string[], over: Partial<CharacterSave> = {}): Cha
 describe('Atlas sounds (A 5.5)', () => {
   it('are appended to the frozen id list with recipes in their groups; the frequent ones are banked', () => {
     const ids = ['atlasOpen', 'atlasHover', 'atlasSelect', 'atlasRoute', 'atlasReveal', 'atlasSeal', 'atlasZoom', 'atlasPin', 'atlasUnpin', 'surgeSpend', 'surgeRefill'] as const;
-    expect(SFX_IDS.slice(-ids.length)).toEqual([...ids]);
+    // Appended as one block (later appends, such as the SK2 skill cues, follow it).
+    const at = SFX_IDS.indexOf('atlasOpen');
+    expect(SFX_IDS.slice(at, at + ids.length)).toEqual([...ids]);
     expect(SFX.atlasRoute.group).toBe('flow');
     expect(SFX.atlasReveal.group).toBe('flow');
     expect(SFX.atlasReveal.fixedPitch).toBe(true);

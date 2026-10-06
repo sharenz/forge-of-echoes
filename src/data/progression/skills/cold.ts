@@ -32,7 +32,7 @@ export const COLD_SKILLS = {
       { playerFlag: 'rimeEcho', skillFlag: 'echo', text: 'Repeats once after 0.4 seconds at no additional Focus cost (The Second Verse)' },
     ],
   }),
-  glacialNova: plannedSkill('glacialNova', {
+  glacialNova: skill('glacialNova', {
     name: 'Glacial Nova',
     description: 'An instant circle of frost around you that passes cover and shields and chills everything it touches.',
     branch: 'destruction',
@@ -46,14 +46,15 @@ export const COLD_SKILLS = {
     runtimeDamageType: 'cold',
     focusCost: 14,
     castTime: 0.5,
-    cooldown: 4,
-    effectiveness: { lerp: [1.3, 2.8] },
+    // First pass was cooldown 4 with 1.3 → 2.8: 0.13 per target, under the area band of skills.md 2 (0.2 to 0.5). SK2 tuning.
+    cooldown: 3,
+    effectiveness: { lerp: [1.5, 3.3] },
     critChance: 6,
     ailmentChance: 100,
-    radius: 90,
+    radius: { lerp: [90, 120] },
     areaScales: 'radius',
   }),
-  frostOrb: plannedSkill('frostOrb', {
+  frostOrb: skill('frostOrb', {
     name: 'Frost Orb',
     description: 'A slow orb that fires ice shards at the nearest enemy while it lives.',
     branch: 'destruction',
@@ -65,7 +66,8 @@ export const COLD_SKILLS = {
     damageType: 'cold',
     shape: 'projectile',
     runtimeDamageType: 'cold',
-    focusCost: 16,
+    // First pass 16 Focus (2.7 per second of cooldown, under the area band's 3 to 8). SK2 tuning.
+    focusCost: 18,
     castTime: 0.5,
     cooldown: 6,
     effectiveness: { lerp: [0.5, 1.1] },
@@ -73,12 +75,14 @@ export const COLD_SKILLS = {
     ailmentChance: 30,
     projectiles: 1,
     projectileSpeed: 90,
+    // The orb drifts for its duration (it flies speed × duration, not `range`) and fires a shard every SKILL_TIMING.orbShardInterval
+    // at the nearest enemy within `radius`.
     range: 270,
     radius: 140,
     duration: 3,
     projectileNoun: 'orb',
   }),
-  glacialSpikes: plannedSkill('glacialSpikes', {
+  glacialSpikes: skill('glacialSpikes', {
     name: 'Glacial Spikes',
     description: 'Ice spikes erupt in sequence along a line toward the cursor.',
     branch: 'destruction',
@@ -92,7 +96,8 @@ export const COLD_SKILLS = {
     runtimeDamageType: 'cold',
     focusCost: 12,
     castTime: 0.4,
-    cooldown: 2.5,
+    // First pass 2.5 s (0.18 per target, under the area band of skills.md 2). SK2 tuning.
+    cooldown: 2,
     effectiveness: { lerp: [1.1, 2.4] },
     critChance: 6,
     ailmentChance: 35,

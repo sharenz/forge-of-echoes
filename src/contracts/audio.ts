@@ -42,6 +42,10 @@ export const SFX_IDS = [
   // opening, pins, and the daily surge (a charge spent at activation, Hourglass Sand / Grand Hourglass refills)
   'atlasOpen', 'atlasHover', 'atlasSelect', 'atlasRoute', 'atlasReveal', 'atlasSeal', 'atlasZoom',
   'atlasPin', 'atlasUnpin', 'surgeSpend', 'surgeRefill',
+  // power rework SK2 roster batch 1: casts (Spark, Cinder Mortar, Umbral Bolt, Kinetic Lance, Frost Orb, Storm Call), the two
+  // self-buffs (Phase Stride, Arcane Reprieve), Glacial Nova's burst, the mortar's landing, a Storm Call bolt, a Glacial Spike
+  'castSpark', 'castMortar', 'castUmbral', 'castKinetic', 'castOrb', 'castStormCall', 'phaseStride', 'arcaneReprieve',
+  'glacialNovaBurst', 'mortarBlast', 'stormCallStrike', 'frostSpike',
 ] as const;
 export type SfxId = (typeof SFX_IDS)[number];
 

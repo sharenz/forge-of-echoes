@@ -5,8 +5,9 @@ import type { SkillRuntimeDef } from '../../contracts/sim';
 import { NOVA_ECHO_DELAY } from '../constants';
 import type { PlayerState, World } from '../world';
 import { SKILL_BEHAVIOURS } from './behaviours';
-import { emitWard } from './buffs';
+import { emitRestore, emitStride, emitWard } from './buffs';
 import { burstFanArc, emitBurst, emitChain, emitDash, emitProjectiles } from './emitters';
+import { emitBlast, emitLob, emitOrb, emitSpikes, emitStrikes } from './roster';
 import { aimAngle, augmentOf, hasFlag } from './projectile-mods';
 import type { SkillBehaviour } from './types';
 
@@ -33,7 +34,24 @@ export function releaseSkill(w: World, p: PlayerState, def: SkillRuntimeDef, aim
       emitDash(w, p, def, b, aimX, aimY, dirX, dirY);
       break;
     case 'buff':
-      emitWard(w, p, def, b);
+      if (b.buff === 'ward') emitWard(w, p, def, b);
+      else if (b.buff === 'stride') emitStride(w, p, def, b);
+      else emitRestore(w, p, def, b);
+      break;
+    case 'blast':
+      emitBlast(w, p, def, b);
+      break;
+    case 'lob':
+      emitLob(w, p, def, b, aimX, aimY, angle);
+      break;
+    case 'orb':
+      emitOrb(w, p, def, b, angle);
+      break;
+    case 'strikes':
+      emitStrikes(w, p, def, b, aimX, aimY);
+      break;
+    case 'spikes':
+      emitSpikes(w, p, def, b, angle);
       break;
   }
   queueEcho(w, p, def, b);
