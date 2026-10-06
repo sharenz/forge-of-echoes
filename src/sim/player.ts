@@ -19,7 +19,8 @@ import {
 } from './debuffs';
 import { clamp, dirFromVector, finiteOr } from './math';
 import { CAST_SLOW, combineSlow, playerFlowDrift, playerSlow, readMove, resolvePlayerAt, slowedSpeed } from './movement';
-import { releaseSkill, tickFireTrail, tickPendingNovas, tickPendingStrikes, tickRoster2, tickSelfBuffs, tickWard } from './skills';
+import { releaseSkill, tickFireTrail, tickPendingNovas, tickPendingStrikes, tickRoster2, tickRoster3, tickSelfBuffs, tickWard } from './skills';
+import { surgeCastRate } from './skills/roster3-state';
 import { MFLAG, MSTATE } from './stores';
 import { castCost, noteCast } from './skills/primitives/state';
 import type { FlaskState, PlayerState, SkillChargeState, World } from './world';
@@ -265,8 +266,8 @@ function canAfford(p: PlayerState, def: SkillRuntimeDef, now: number): boolean {
 
 function updateCasting(w: World, p: PlayerState): void {
   const held = p.intent.held;
-  // Chilled casts progress at 70%; frozen, a cast holds and nothing new starts.
-  const rate = castRate(p);
+  // Chilled casts progress at 70%; frozen, a cast holds and nothing new starts. Tempest Surge speeds casts up (×1 without it).
+  const rate = castRate(p) * surgeCastRate(p);
   let carry = 0;
   if (p.cast) {
     p.cast.time += rate === 1 ? DT : DT * rate;
@@ -356,6 +357,7 @@ export function updatePlayer(w: World, p: PlayerState): void {
   tickPendingNovas(w, p);
   tickPendingStrikes(w, p);
   tickRoster2(w, p);
+  tickRoster3(w, p);
 
   // Movement (the shared movePlayer rules): slowed while a timed active skill is cast (never by
   // the basic attack), by debuffs (chilled; frozen and rooted hold her still), by tar underfoot, and

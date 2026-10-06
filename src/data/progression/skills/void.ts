@@ -1,6 +1,6 @@
 // Void and physical skills (docs/power-rework/skills.md 3; one lane in build-plan.md 3). Values are rank 1 → rank 10.
 import type { SkillDef } from '../types';
-import { plannedSkill, skill } from './define';
+import { skill } from './define';
 
 export const VOID_SKILLS = {
   riftStep: skill('riftStep', {
@@ -128,9 +128,9 @@ export const VOID_SKILLS = {
     areaScales: 'radius',
     primitives: { zone: { interval: 0.5, withered: 1, decay: true } },
   }),
-  eventHorizon: plannedSkill('eventHorizon', {
+  eventHorizon: skill('eventHorizon', {
     name: 'Event Horizon',
-    description: 'Drags everything nearby toward a point, then collapses it in a void detonation.',
+    description: 'Drags everything near the cursor toward one point, then collapses it in a void detonation.',
     branch: 'destruction',
     tier: 4,
     element: 'void',
@@ -146,6 +146,7 @@ export const VOID_SKILLS = {
     effectiveness: { lerp: [8, 16] },
     critChance: 10,
     ailmentChance: 0,
+    // The pull reaches `range` around the point (at SKILL_TIMING.horizonPull units/s) for `duration`, then it detonates in `radius`.
     radius: 120,
     range: 200,
     duration: 2.5,

@@ -8,12 +8,15 @@
 //   roster2.ts          roster batch 2 emitters: zones (Gravity Well, Entropy Hex, Wither Field), Immolation Sigil's pillar,
 //                       Voltaic Pulse's ring, Concussive Blast's cone, Static Lash's beam; their ground upkeep
 //   defence.ts          Rime Bulwark's barrier, Static Aegis' retaliation, Echo Sigil's charges (hitPlayer reads the first two)
+//   roster3.ts          roster batch 3 emitters: Meteor Rain's meteors, Storm Step's strikes, Tempest Surge's pulses, Event
+//                       Horizon's pull and detonation (Blizzard is a roster2 zone); roster3-state.ts holds what core systems read
 //   ground.ts           ground left behind (fire trail)
 //   behaviours/         per-element skill data (which emitter, fallbacks, which flags)
 export { releaseSkill, tickPendingNovas } from './executor';
 export { tickSelfBuffs, tickWard } from './buffs';
 export { tickPendingStrikes } from './roster';
 export { tickRoster2 } from './roster2';
+export { tickRoster3 } from './roster3';
 export { tickFireTrail } from './ground';
 export { SKILL_BEHAVIOURS } from './behaviours';
 export type { SkillBehaviour } from './types';

@@ -45,7 +45,8 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 //     hexed on monsters; new SFX ids (all appended).
 // 31: power rework SK5 flagship augments: SimEvent 'augment' (lodge, detonate, split, mark, explode, blast, return, refund); area kinds
 //     frostGround, staticField; AILMENT_BIT marked and lodged (all appended).
-export const PROTOCOL_VERSION = 31;
+// 32: power rework SK4 roster batch 3: area kinds meteorRain, blizzardStorm, eventHorizon; new SFX ids (appended).
+export const PROTOCOL_VERSION = 32;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;

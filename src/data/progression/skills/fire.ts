@@ -1,7 +1,7 @@
 // Fire skills (docs/power-rework/skills.md 3). Values are rank 1 → rank 10. The rules own the numbers (resolved into
 // SkillRuntimeDef with every player modifier applied); the sim owns the behaviour (src/sim/skills).
 import type { SkillDef } from '../types';
-import { plannedSkill, skill } from './define';
+import { skill } from './define';
 
 export const FIRE_SKILLS = {
   emberLance: skill('emberLance', {
@@ -173,9 +173,9 @@ export const FIRE_SKILLS = {
     primitives: { ground: { effectiveness: 0.5, interval: 0.5 } },
     projectileNoun: 'pillar',
   }),
-  meteorRain: plannedSkill('meteorRain', {
+  meteorRain: skill('meteorRain', {
     name: 'Meteor Rain',
-    description: 'Calls a shower of telegraphed meteors around the cursor.',
+    description: 'Calls a shower of telegraphed meteors around the cursor, one after another.',
     branch: 'destruction',
     tier: 4,
     element: 'fire',
@@ -192,6 +192,8 @@ export const FIRE_SKILLS = {
     critChance: 6,
     ailmentChance: 30,
     projectiles: { lerp: [6, 12], round: 'floor' },
+    // Meteors land at random points within `range` of the cursor (at most SKILL_TIMING.zoneReach away), one after another over
+    // `duration`, each SKILL_TIMING.meteorTelegraph after its circle appears; blast radius `radius`.
     range: 120,
     radius: 34,
     duration: 2.5,

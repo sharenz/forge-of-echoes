@@ -1,6 +1,6 @@
 // Cold skills (docs/power-rework/skills.md 3). Values are rank 1 → rank 10.
 import type { SkillDef } from '../types';
-import { plannedSkill, skill } from './define';
+import { skill } from './define';
 
 export const COLD_SKILLS = {
   rimeShards: skill('rimeShards', {
@@ -127,9 +127,9 @@ export const COLD_SKILLS = {
     duration: 6,
     primitives: { barrier: { share: { lerp: [0.25, 0.45] }, chillRadius: 70, retortRadius: 90 } },
   }),
-  blizzard: plannedSkill('blizzard', {
+  blizzard: skill('blizzard', {
     name: 'Blizzard',
-    description: 'A storm zone at the cursor that chills and grinds down everything inside.',
+    description: 'A storm at the cursor that chills and grinds down everything inside; chilled enemies in it take more cold damage.',
     branch: 'destruction',
     tier: 4,
     element: 'cold',
@@ -149,5 +149,9 @@ export const COLD_SKILLS = {
     duration: 6,
     pulseInterval: 0.5,
     areaScales: 'radius',
+    // A zone (the SK3 primitive) whose every 0.5 s tick is the cold hit; chilled enemies inside take SKILL_TIMING.blizzardBrittle more
+    // cold damage from every source.
+    primitives: { zone: { interval: 0.5 } },
+    projectileNoun: 'tick',
   }),
 } satisfies Record<string, SkillDef>;

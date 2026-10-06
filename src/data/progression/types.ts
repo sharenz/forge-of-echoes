@@ -141,7 +141,7 @@ export type AugmentEffect =
   }
   /** Ground left behind dealing `effectiveness` × spell power per `interval` s (0 = none); see AugmentRuntime 'trail'. */
   | {
-    k: 'trail'; area: 'fireTrail' | 'frostGround' | 'staticField'; at: 'path' | 'end' | 'strike' | 'land'; radius: number; duration: number;
+    k: 'trail'; area: 'fireTrail' | 'frostGround' | 'staticField'; at: 'path' | 'end' | 'strike' | 'land' | 'origin'; radius: number; duration: number;
     interval: number; effectiveness: number; damageType?: DamageType; ailment: boolean; expose: number; spacing: number;
   }
   /** A primitive whose executor ships later; `note` says what it will do. */

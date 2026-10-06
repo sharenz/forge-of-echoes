@@ -41,7 +41,8 @@ describe('skill executor', () => {
   it('ignores a skill without a behaviour (no cast event, nothing spawned)', () => {
     const a = armed('emberNova', []);
     a.world.events.drain();
-    releaseSkill(a.world, a.player, makeSkill('meteorRain'), 100, 0);
+    // Every one of the 32 skills has shipped (SK4), so a hand-built def with an unknown id stands in for one that has not.
+    releaseSkill(a.world, a.player, { ...makeSkill('emberLance'), id: 'notASkill' as SkillId }, 100, 0);
     expect(a.world.events.drain()).toEqual([]);
     expect(a.world.projectiles.count).toBe(0);
   });

@@ -132,6 +132,9 @@ export const SFX_LIMITS: Partial<Record<SfxId, Limit>> = {
   castLash: { perFrame: 2, interval: 0.06 },
   sigilPillar: { perFrame: 2, interval: 0.05 },
   barrierBreak: { perFrame: 1, interval: 0.2 },
+  // power rework SK4 roster batch 3
+  meteorImpact: { perFrame: 2, interval: 0.06 },
+  stormStepStrike: { perFrame: 2, interval: 0.04 },
 };
 
 /** The cue of each debuff taking hold on the local player. */
@@ -195,6 +198,12 @@ export const CAST_SFX: Partial<Record<SkillId, SfxId | null>> = {
   staticLash: 'castLash',
   echoSigil: 'echoSigil',
   witherField: 'castWither',
+  // power rework SK4 roster batch 3 (Storm Step is a blink: its 'dash' and its strikes' 'nova' carry the sound)
+  meteorRain: 'castMeteor',
+  stormStep: null,
+  tempestSurge: 'tempestSurge',
+  blizzard: 'castBlizzard',
+  eventHorizon: 'castHorizon',
 };
 
 export const HIT_SFX: Record<DamageType, SfxId> = {
@@ -834,6 +843,10 @@ export class SoundDirector {
           case 'immolationSigil':
             this.play('sigilPillar', e.x, e.y, 0.95, this.jitter(0.05));
             return;
+          // power rework SK4: a meteor of Meteor Rain landing
+          case 'meteorRain':
+            this.play('meteorImpact', e.x, e.y, 0.9, this.jitter(0.06));
+            return;
           case 'rendStrike':
             this.play('monsterSlam', e.x, e.y, 0.6, 1.15 * this.jitter(0.04));
             return;
@@ -887,7 +900,9 @@ export class SoundDirector {
       case 'nova': {
         // Roster batch 2 (SK3): Voltaic Pulse's ring, Singularity's collapse, Brittle Retort's ice nova.
         const id: SfxId = e.skill === 'glacialNova' ? 'glacialNovaBurst' : e.skill === 'voltaicPulse' ? 'voltaicPulse'
-          : e.skill === 'gravityWell' ? 'wellCollapse' : e.skill === 'rimeBulwark' ? 'glacialNovaBurst' : 'castNova';
+          : e.skill === 'gravityWell' ? 'wellCollapse' : e.skill === 'rimeBulwark' ? 'glacialNovaBurst'
+            // Roster batch 3 (SK4): Storm Step's strikes, Event Horizon's detonation.
+            : e.skill === 'stormStep' ? 'stormStepStrike' : e.skill === 'eventHorizon' ? 'horizonCollapse' : 'castNova';
         if (e.playerId === localId) this.play(id, undefined, undefined, 1, this.jitter(0.03));
         else this.play(id, e.x, e.y, ALLY_VOLUME, this.jitter(0.03));
         return;

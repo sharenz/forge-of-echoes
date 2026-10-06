@@ -1,6 +1,6 @@
 // Lightning skills (docs/power-rework/skills.md 3). Values are rank 1 → rank 10.
 import type { SkillDef } from '../types';
-import { plannedSkill, skill } from './define';
+import { skill } from './define';
 
 export const LIGHTNING_SKILLS = {
   arcChain: skill('arcChain', {
@@ -141,9 +141,9 @@ export const LIGHTNING_SKILLS = {
     ailmentChance: 15,
     range: 200,
   }),
-  stormStep: plannedSkill('stormStep', {
+  stormStep: skill('stormStep', {
     name: 'Storm Step',
-    description: 'A lightning blink: strikes at the origin and at the landing.',
+    description: 'A lightning blink: lightning strikes where you leave and where you land.',
     branch: 'mobility',
     tier: 4,
     element: 'lightning',
@@ -161,9 +161,12 @@ export const LIGHTNING_SKILLS = {
     critChance: 7,
     ailmentChance: 25,
     distance: 140,
+    // The two strikes' radius (an enemy is struck once per blink).
     radius: 60,
+    areaScales: 'radius',
+    projectileNoun: 'strike',
   }),
-  tempestSurge: plannedSkill('tempestSurge', {
+  tempestSurge: skill('tempestSurge', {
     name: 'Tempest Surge',
     description: 'You cast faster, and nearby enemies pulse with lightning while it lasts.',
     branch: 'survival',
@@ -178,11 +181,15 @@ export const LIGHTNING_SKILLS = {
     focusCost: 25,
     castTime: 0.3,
     cooldown: { lerp: [18, 14] },
+    // 0.6 effectiveness per pulse (every SKILL_TIMING.surgePulse) on each enemy within `radius`; +SKILL_TIMING.surgeCastSpeed cast speed.
+    // First pass had no ailment chance and crit 0 while skills.md lists "shock": 25% shock, 5% crit like the other lightning pulses.
     effectiveness: 0.6,
-    critChance: 0,
-    ailmentChance: 0,
+    critChance: 5,
+    ailmentChance: 25,
     duration: 6,
     radius: 100,
     pulseInterval: 0.5,
+    areaScales: 'radius',
+    projectileNoun: 'pulse',
   }),
 } satisfies Record<string, SkillDef>;

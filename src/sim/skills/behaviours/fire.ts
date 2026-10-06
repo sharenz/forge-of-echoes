@@ -25,4 +25,8 @@ export const FIRE_BEHAVIOURS = {
   immolationSigil: {
     emitter: 'pillar', telegraph: SKILL_TIMING.sigilTelegraph, reach: SKILL_TIMING.zoneReach, radius: 50, offset: SKILL_TIMING.sigilTwinOffset,
   },
+  // Roster batch 3 (SK4)
+  meteorRain: {
+    emitter: 'meteors', telegraph: SKILL_TIMING.meteorTelegraph, reach: SKILL_TIMING.zoneReach, scatter: 120, radius: 34, duration: 2.5,
+  },
 } satisfies Record<string, SkillBehaviour>;

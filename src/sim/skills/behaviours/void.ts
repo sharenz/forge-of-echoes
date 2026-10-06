@@ -19,4 +19,10 @@ export const VOID_BEHAVIOURS = {
   entropyHex: { emitter: 'zone', area: 'entropyHex', reach: SKILL_TIMING.zoneReach, radius: 80, duration: 6 },
   witherField: { emitter: 'zone', area: 'witherField', reach: SKILL_TIMING.zoneReach, radius: 80, duration: 6 },
   concussiveBlast: { emitter: 'cone', knock: SKILL_TIMING.coneKnockback },
+  // Roster batch 3 (SK4): the pull toward a point, then the detonation.
+  eventHorizon: {
+    emitter: 'horizon', reach: SKILL_TIMING.zoneReach, pull: SKILL_TIMING.horizonPull, pullRadius: 200, radius: 120, duration: 2.5,
+    heavy: { skill: 'heavyCollapse', player: 'heavyCollapse' }, echo: { skill: 'echoCollapse', player: 'echoCollapse' },
+    feast: { skill: 'voidFeast', player: 'voidFeast' },
+  },
 } satisfies Record<string, SkillBehaviour>;

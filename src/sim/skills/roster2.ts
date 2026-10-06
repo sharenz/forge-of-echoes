@@ -17,6 +17,7 @@ import { blastAt } from './roster';
 import { tickDefence } from './defence';
 import { augmentOf, hasFlag } from './projectile-mods';
 import { explodeVictim, prim } from './primitives';
+import { brittleOf, markBrittle } from './roster3-state';
 import type { ConeBehaviour, LashBehaviour, PillarBehaviour, PulseBehaviour, ZoneBehaviour } from './types';
 
 const DT_FIRE = DAMAGE_INDEX.fire;
@@ -29,7 +30,7 @@ const PULL_STOP = 4;
 let cand = new Int32Array(0);
 
 /** Hittable monsters within `radius` (plus their body) of (x, y), copied out of the grid query (in grid order). */
-function inside(w: World, x: number, y: number, radius: number): number[] {
+export function inside(w: World, x: number, y: number, radius: number): number[] {
   if (cand.length < w.scratch.length) cand = new Int32Array(w.scratch.length);
   const m = w.monsters;
   const reach = radius + w.grid.maxRadius;
@@ -47,7 +48,7 @@ function inside(w: World, x: number, y: number, radius: number): number[] {
 }
 
 /** The cursor clamped to `reach` from the caster and inside the arena. */
-function landing(w: World, p: PlayerState, aimX: number, aimY: number, reach: number): { x: number; y: number } {
+export function landing(w: World, p: PlayerState, aimX: number, aimY: number, reach: number): { x: number; y: number } {
   let x = aimX;
   let y = aimY;
   const d = Math.hypot(x - p.x, y - p.y);
@@ -71,6 +72,24 @@ function addArea(p: PlayerState, kind: SkillArea['kind'], x: number, y: number, 
 
 // --- Zones ---------------------------------------------------------------------------------------------------------------------
 
+/**
+ * Pull monster slot `i` toward (x, y) at `pull` units/s this tick (bosses and heavy half; never past the centre). Several pulls on one
+ * tick add up; ai.ts integrate applies the sum on the tick it was written. Unpushable monsters, fixtures and statues stay put.
+ */
+export function pullMonster(w: World, i: number, x: number, y: number, pull: number): void {
+  const m = w.monsters;
+  if (m.flags[i] & (MFLAG.unpushable | MFLAG.fixture | MFLAG.frozen)) return;
+  const dx = x - m.x[i];
+  const dy = y - m.y[i];
+  const d = Math.hypot(dx, dy);
+  if (d <= PULL_STOP) return;
+  const speed = Math.min(pull * (m.flags[i] & (MFLAG.boss | MFLAG.heavy) ? 0.5 : 1), (d - PULL_STOP) / DT);
+  const fresh = m.pullTick[i] !== w.tick;
+  m.pullVX[i] = (fresh ? 0 : m.pullVX[i]) + (dx / d) * speed;
+  m.pullVY[i] = (fresh ? 0 : m.pullVY[i]) + (dy / d) * speed;
+  m.pullTick[i] = w.tick;
+}
+
 /** Gravity Well, Entropy Hex, Wither Field: a zone at the cursor for the def's duration and radius. */
 export function emitZone(w: World, p: PlayerState, def: SkillRuntimeDef, b: ZoneBehaviour, aimX: number, aimY: number): void {
   const z = augmentOf(def, 'zone');
@@ -89,20 +108,12 @@ function tickZone(w: World, p: PlayerState, a: SkillArea): void {
   const def = a.def;
   const list = inside(w, a.x, a.y, a.radius);
   const linger = SKILL_TIMING.zoneLinger;
+  // Blizzard (SK4): chilled enemies in the storm take more cold damage (combat reads it through roster3Taken).
+  const brittle = brittleOf(def);
   // Continuous: the pull, the slow, Crushing, the Hex.
   for (const i of list) {
-    if (z.pull > 0 && !(m.flags[i] & (MFLAG.unpushable | MFLAG.fixture | MFLAG.frozen))) {
-      const dx = a.x - m.x[i];
-      const dy = a.y - m.y[i];
-      const d = Math.hypot(dx, dy);
-      if (d > PULL_STOP) {
-        const speed = Math.min(z.pull * (m.flags[i] & (MFLAG.boss | MFLAG.heavy) ? 0.5 : 1), (d - PULL_STOP) / DT);
-        const fresh = m.pullTick[i] !== w.tick;
-        m.pullVX[i] = (fresh ? 0 : m.pullVX[i]) + (dx / d) * speed;
-        m.pullVY[i] = (fresh ? 0 : m.pullVY[i]) + (dy / d) * speed;
-        m.pullTick[i] = w.tick;
-      }
-    }
+    if (z.pull > 0) pullMonster(w, i, a.x, a.y, z.pull);
+    if (brittle > 0) markBrittle(w, m.id[i], brittle, w.time + linger);
     if (z.slow > 0) {
       m.zoneSlow[i] = m.zoneSlowTime[i] > 0 ? Math.max(m.zoneSlow[i], z.slow) : z.slow;
       m.zoneSlowTime[i] = linger;

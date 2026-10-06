@@ -174,4 +174,29 @@ describe('GAME_SPEC matches the implemented numbers', () => {
     expect(s4).toContain(`lasts ${WITHER.linger} s after it leaves`);
     expect(s4).toContain(`lasts ${EXPOSURE.duration} s after they leave`);
   });
+
+  it('§4 roster batch 3 rows (SK4): unlock, cost / cast / cooldown, effectiveness and the shared timings come from the data', () => {
+    const s4 = section(4);
+    const num = (v: number) => String(v);
+    const range = (v: RankValue, unit = '') => {
+      if (typeof v === 'number') return `${unit ? v.toFixed(1) : num(v)}${unit}`;
+      if ('lerp' in v) return `${num(v.lerp[0])} → ${num(v.lerp[1])}${unit}`;
+      throw new Error('unexpected rank curve');
+    };
+    const ids: readonly SkillId[] = ['meteorRain', 'stormStep', 'tempestSurge', 'blizzard', 'eventHorizon'];
+    for (const id of ids) {
+      const d = SKILLS[id];
+      expect(d.available, id).toBe(true);
+      const cast = d.castTime > 0 ? `${d.castTime} s` : 'instant';
+      const cd = d.cooldown === 0 ? '–' : range(d.cooldown, ' s');
+      expect(s4, id).toContain(`| **${d.name}** | ${d.unlockLevel} | ${d.focusCost} / ${cast} / ${cd} |`);
+      expect(s4, id).toContain(`Effectiveness ${range(d.effectiveness)}`);
+    }
+    expect(s4).toContain(`it lands ${SKILL_TIMING.meteorTelegraph} s later`);
+    expect(s4).toContain(`${Math.round(SKILL_TIMING.surgeCastSpeed * 100)}% more cast speed`);
+    expect(s4).toContain(`every ${SKILL_TIMING.surgePulse} s every enemy within`);
+    expect(s4).toContain(`takes ${Math.round(SKILL_TIMING.blizzardBrittle * 100)}% more cold damage from every source (it lasts ${SKILL_TIMING.zoneLinger} s`);
+    expect(s4).toContain(`toward it at ${SKILL_TIMING.horizonPull} units per second`);
+    expect(s4).toContain('all 32 below are playable');
+  });
 });

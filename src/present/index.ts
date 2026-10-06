@@ -317,6 +317,7 @@ class WorldPresenter implements Presenter {
     this.players.draw(pen, f);
     this.events.roster.draw(pen, f);
     this.events.roster2.draw(pen, f);
+    this.events.roster3.draw(pen, f);
     this.tethers.draw(pen, this.playerAt);
     this.projectiles.draw(pen, f);
     this.fx.rings.draw(pen);

@@ -41,4 +41,24 @@ export const SKILL_TIMING = {
   /** Rime Bulwark: attackers within this radius are chilled; Brittle Retort's nova radius. */
   bulwarkChillRadius: 70,
   bulwarkRetortRadius: 90,
+  // Roster batch 3 (SK4)
+  /** Meteor Rain: each meteor's telegraph (seconds from its circle appearing to the impact). */
+  meteorTelegraph: 0.6,
+  /** Tempest Surge: cast speed while it lasts (a fraction; Overcharged Tempo adds `tempoCastSpeed`), seconds between its pulses. */
+  surgeCastSpeed: 0.25,
+  tempoCastSpeed: 0.35,
+  surgePulse: 0.5,
+  /** Tempest Surge, Lightning Skin: lightning resistance it adds (a fraction) and how much more your hits deal to shocked enemies. */
+  skinResist: 0.2,
+  skinShockedTaken: 0.1,
+  /** Blizzard: chilled enemies in the storm take this much more cold damage (Brittle Cold adds `brittleCold`). */
+  blizzardBrittle: 0.15,
+  brittleCold: 0.2,
+  /** Event Horizon: pull speed (units per second; bosses and heavy half), Heavy Collapse's stronger pull (×). */
+  horizonPull: 80,
+  heavyCollapsePull: 1.5,
+  /** Event Horizon, Echo Collapse: the second detonation's delay and share; Void Feast: Focus refunded per kill during the pull. */
+  echoCollapseDelay: 0.6,
+  echoCollapseShare: 0.5,
+  voidFeastFocus: 3,
 } as const;
