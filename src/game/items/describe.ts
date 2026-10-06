@@ -2,6 +2,7 @@
 //
 // Invariant the UI relies on: for equipment, `description.affixes[i]` describes `item.affixes[i]`
 // (so an affix-choice click on line i maps to affixIndex i). Unique flag lines follow the unique mods.
+import { SIGIL_STRENGTH_NAMES, SIGIL_USES, findSigil } from '../../data/progression/territory';
 import type {
   CurrencyStack, EquipmentItem, FlaskStack, Item, ItemDescription, ItemTone, TooltipLine,
 } from '../../contracts/items';
@@ -145,6 +146,11 @@ export function describeCurrency(stack: CurrencyStack): ItemDescription {
   if (scarab) {
     properties.push({ label: 'Scarab type', value: scarab.familyName }, { label: 'Scarab tier', value: String(scarab.tier) }, { label: 'Drop monster level', value: `${scarab.minMonsterLevel}+` });
     hint = `Drag or Ctrl-click into one of the four scarab sockets in your Map Device. Consumed only when the map opens. One ${scarab.familyName} Scarab per map, whatever its tier.${scarab.kind === 'area' ? ' Changes only which areas your dropped maps are bound to, never how many drop.' : ''}`;
+  }
+  const sigil = findSigil(stack.currencyId);
+  if (sigil) {
+    properties.push({ label: 'Strength', value: SIGIL_STRENGTH_NAMES[sigil.strength] }, { label: 'Uses when slotted', value: String(SIGIL_USES[sigil.strength]) });
+    hint = 'Open a cleared area on the Atlas in your hideout and drag the sigil into its beacon slot (or Ctrl-click it). Each map opened within the beacon\'s reach spends one use.';
   }
   if (stack.currencyId === 'hourglassSand') hint = 'Select an Atlas area in your hideout and choose "Refill surge" to use one. Refused when the area is already full.';
   if (stack.currencyId === 'grandHourglass') hint = 'Choose "Refill all surges" on the Atlas table in your hideout to use one. Refused when every area is already full.';

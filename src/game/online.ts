@@ -178,6 +178,8 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
     buyDebugOffer: (ch, offerId, options, at) => guard(ch, [], c => base.buyDebugOffer(c, offerId, options, at), outcomeCharacter, withOutcomeCharacter),
     openMap: (ch, opts) => guard(ch, [ch.mapDevice?.uid], (c) => base.openMap(c, opts), outcomeCharacter, withOutcomeCharacter),
     refillSurge: (ch, target, now) => guard(ch, [], (c) => base.refillSurge(c, target, now), outcomeCharacter, withOutcomeCharacter),
+    slotSigil: (ch, areaId, slot, uid) => guard(ch, [uid], (c) => base.slotSigil(c, areaId, slot, uid), outcomeCharacter, withOutcomeCharacter),
+    unslotSigil: (ch, areaId, slot) => guard(ch, [], (c) => base.unslotSigil(c, areaId, slot), outcomeCharacter, withOutcomeCharacter),
     craftingTargetError: (ch, currencyUid, targetUid) => {
       const locked = locksOf(ch);
       if (locked && (isLocked(locked, currencyUid) || isLocked(locked, targetUid))) return LOCKED_ITEM_ERROR;

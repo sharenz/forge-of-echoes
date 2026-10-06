@@ -25,6 +25,11 @@ export interface MapEventSlateModifiers {
    * map's tier allows are forced, except an unpooled kind, which is forced at any tier.
    */
   forced?: readonly MapEventKind[];
+  /**
+   * Omen sigils (brief D 6.3): absolute chance added after the area odds and the tree, outside the tree's cap but never pushing the
+   * chance past MAP_EVENT_MAX_CHANCE (a chance already above it, e.g. Shrine Field, is not raised further).
+   */
+  territoryChance?: number;
 }
 
 function treeChance(nodes: readonly MapTreeNodeId[]): number {
@@ -52,7 +57,8 @@ export function mapEventOdds(map: MapItem, areaId?: AtlasAreaId, nodes: readonly
   const total = Object.values(odds).reduce((sum, n) => sum + n, 0);
   const scale = area?.eventMultiplier ? Math.min(area.eventMultiplier, 1 / total) : Math.min(1, MAP_EVENT_MAX_CHANCE / total);
   const current = total * scale;
-  const boosted = Math.min(1, current + treeChance(nodes) + (slate.chance ?? 0));
+  let boosted = Math.min(1, current + treeChance(nodes) + (slate.chance ?? 0));
+  if (slate.territoryChance && slate.territoryChance > 0) boosted = Math.max(boosted, Math.min(MAP_EVENT_MAX_CHANCE, boosted + slate.territoryChance));
   for (const kind of MAP_EVENT_KINDS) odds[kind] *= scale * (current > 0 ? boosted / current : 1);
   return odds;
 }

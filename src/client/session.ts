@@ -1184,6 +1184,15 @@ export class GameSession {
     void this.command(target === 'all' ? { c: 'refillSurge', all: true } : { c: 'refillSurge', areaId: target });
   }
 
+  /** Beacons: the server decides (account Atlas and the backpack change in one save); its answer is toasted. */
+  slotSigil(areaId: import('../contracts/atlas').AtlasAreaId, slot: number, uid: string): void {
+    void this.command({ c: 'slotSigil', areaId, slot, uid });
+  }
+
+  unslotSigil(areaId: import('../contracts/atlas').AtlasAreaId, slot: number): void {
+    void this.command({ c: 'unslotSigil', areaId, slot });
+  }
+
   /** Pins are free and instant: predicted, with a sound; the server's refusal (a stale chart) rolls it back. */
   pinArea(areaId: import('../contracts/atlas').AtlasAreaId, pinned: boolean): void {
     void this.command({ c: 'pinArea', areaId, pinned }, {

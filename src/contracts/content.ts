@@ -86,6 +86,20 @@ export type ScarabId = (typeof SCARAB_IDS)[number];
 /** Hourglass Sand refills one area's surge charges; the Grand Hourglass refills every area's (brief D 7.4). */
 export const HOURGLASS_IDS = ['hourglassSand', 'grandHourglass'] as const;
 export type HourglassId = (typeof HOURGLASS_IDS)[number];
+/**
+ * Sigil kinds (brief D 6.3, slice B1): six generic regional modifiers and six theme variants. A sigil is slotted into a beacon (a cleared
+ * Atlas area) and modifies every map run in the areas within the beacon's chart radius.
+ */
+export const SIGIL_KINDS = [
+  'omen', 'hoard', 'fortune', 'ingredient', 'survey', 'tide',
+  'ashen', 'chapel', 'crypt', 'ossuary', 'chainworks', 'coliseum',
+] as const;
+export type SigilKind = (typeof SIGIL_KINDS)[number];
+/** Strength 1 = Faint, 2 = Bright, 3 = Blazing. */
+export type SigilStrength = 1 | 2 | 3;
+export type SigilId = `${SigilKind}Sigil${SigilStrength}`;
+/** 12 kinds x 3 strengths, kind-major (`omenSigil1`, `omenSigil2`, `omenSigil3`, `hoardSigil1`, ...). Append-only. */
+export const SIGIL_IDS: readonly SigilId[] = SIGIL_KINDS.flatMap((k) => ([1, 2, 3] as const).map((s): SigilId => `${k}Sigil${s}`));
 export const MAP_CURRENCY_IDS = [
   'mapDust',        // normal → magic, or reroll a magic/rare map's mods
   'threatGlyph',    // add one danger mod (danger paired with reward)
@@ -98,6 +112,7 @@ export const MAP_CURRENCY_IDS = [
   'gildedKey', 'blackKey', 'huntingKey', 'riftKey', // sealed Atlas destinations
   ...SCARAB_IDS,
   ...HOURGLASS_IDS, // daily surge refills (brief D 7.4, slice G1)
+  ...SIGIL_IDS,     // beacon sigils (brief D 6.3, slice B1)
 ] as const;
 export const CURRENCY_IDS = [...EQUIPMENT_CURRENCY_IDS, ...MAP_CURRENCY_IDS] as const;
 export type CurrencyId = (typeof CURRENCY_IDS)[number];

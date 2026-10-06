@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AtlasAreaId, AtlasProgress } from '../../src/contracts/atlas';
 import type { CharacterSave, MapItem } from '../../src/contracts/items';
-import { LENSES, DEFAULT_LENS, formatShare, sourceEdges, stockBand, stockByArea, topSources } from '../../src/ui/atlas/lens';
+import { LENSES, DEFAULT_LENS, formatShare, sourceEdges, stockBand, stockByArea, territoryView, topSources } from '../../src/ui/atlas/lens';
 import { passageOptions, passageRefusal } from '../../src/ui/atlas/passage';
 import { allNodeModels, nodeModel } from '../../src/ui/atlas/model';
 import { ATLAS_AREAS, findAtlasArea } from '../../src/data/progression/atlas';
@@ -14,9 +14,25 @@ import { groupMapStash, areaSortKey } from '../../src/ui/lib/stash';
 const atlasOf = (discovered: AtlasAreaId[], extra: Partial<AtlasProgress> = {}): AtlasProgress => ({ ...newAtlas(), discovered, ...extra });
 
 describe('lens model', () => {
-  it('defaults to Stock; Territory is a stub that stays hidden until beacons ship', () => {
+  it('defaults to Stock; Territory is live since beacons shipped (slice B1)', () => {
     expect(DEFAULT_LENS).toBe('stock');
-    expect(LENSES.map((l) => [l.id, l.available])).toEqual([['stock', true], ['sources', true], ['territory', false]]);
+    expect(LENSES.map((l) => [l.id, l.available])).toEqual([['stock', true], ['sources', true], ['territory', true]]);
+  });
+
+  it('Territory: one ring per beacon (completed areas), its slots and reach, and the sigils that reach each area', () => {
+    const atlas = atlasOf(['cinderCrossing', 'emberRoad', 'boneApproach', 'emberVault', 'furnaceYard'], {
+      completed: ['cinderCrossing', 'emberRoad'],
+      beacons: { emberRoad: [{ sigilId: 'fortuneSigil1', uses: 5, max: 12 }] },
+    });
+    const view = territoryView(atlas);
+    expect(view.beacons.map((b) => b.areaId)).toEqual(['cinderCrossing', 'emberRoad']);
+    const road = view.beacons.find((b) => b.areaId === 'emberRoad')!;
+    expect(road.radius).toBe(120);
+    expect(road.slots).toEqual([{ sigilId: 'fortuneSigil1', uses: 5, max: 12 }]);
+    expect(road.coverage[0]).toBe('emberRoad');
+    for (const id of road.coverage) expect(view.coveredBy.get(id)?.[0]).toEqual({ beacon: 'emberRoad', name: 'Faint Fortune Sigil' });
+    expect(view.coveredBy.has('heartOfForge')).toBe(false);
+    expect(territoryView(undefined)).toEqual({ beacons: [], coveredBy: new Map() });
   });
 
   it('counts the maps you hold per area across backpack, stash, Map Stash and work slot, not the one in the device', () => {

@@ -237,6 +237,10 @@ export interface UiActions {
   pinArea(areaId: import('./atlas').AtlasAreaId, pinned: boolean): void;
   /** Use Hourglass Sand on an area, or a Grand Hourglass on every area (`'all'`): refills the daily surge (server clock, hideout only). */
   refillSurge(target: import('./atlas').AtlasAreaId | 'all'): void;
+  /** Slot one sigil from the backpack stack `uid` into a beacon slot (hideout; the area must be cleared). Swaps a filled slot. */
+  slotSigil(areaId: import('./atlas').AtlasAreaId, slot: number, uid: string): void;
+  /** Take a sigil out of a beacon slot (an unused one returns to the backpack, a used one is consumed). */
+  unslotSigil(areaId: import('./atlas').AtlasAreaId, slot: number): void;
   /** The map decides the area. `passageKey` (a loaded key) or `pit` (Bounty map bound to the Pit's entrance) redirect it. */
   activateMapDevice(opts?: { lootClass?: import('./content').ItemClass; passageKey?: import('./content').CurrencyId; pit?: true; useSurge?: boolean }): void;
   /** Offers computed locally from the shared rules (display); buying goes to the server. */

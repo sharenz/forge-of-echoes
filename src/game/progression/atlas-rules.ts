@@ -24,10 +24,15 @@ export interface AtlasContext {
 }
 
 /** The part of the context a caller outside maps.ts supplies (map tier, base and corruption come from the map). */
-export interface TreeContext { areaId?: AtlasAreaId; event?: boolean }
+export interface TreeContext {
+  areaId?: AtlasAreaId;
+  event?: boolean;
+  /** The expedition's frozen sigils (brief D 6): `mapModifiers` adds their modifiers after the tree's (never capped by the tree's caps). */
+  territory?: readonly NonNullable<RunSetup['territory']>[number][];
+}
 
-export function treeContextOf(setup: Pick<RunSetup, 'atlasAreaId' | 'event'>): TreeContext {
-  return { ...(setup.atlasAreaId ? { areaId: setup.atlasAreaId } : {}), event: !!setup.event };
+export function treeContextOf(setup: Pick<RunSetup, 'atlasAreaId' | 'event' | 'territory'>): TreeContext {
+  return { ...(setup.atlasAreaId ? { areaId: setup.atlasAreaId } : {}), event: !!setup.event, ...(setup.territory?.length ? { territory: setup.territory } : {}) };
 }
 
 export interface AtlasCurrencyWeight { currencies: readonly CurrencyId[]; mode: 'increased' | 'more'; value: number; source: string }

@@ -374,6 +374,14 @@ function command(v: unknown): Command {
       if (o.all !== undefined && o.all !== true) fail('all: must be true');
       return { c, ...(o.areaId === undefined ? {} : { areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS) }), ...(o.all === undefined ? {} : { all: true as const }) };
     }
+    case 'slotSigil': {
+      const o = shape(v, c, ['c', 'areaId', 'slot', 'uid']);
+      return { c, areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS), slot: int(o.slot, 'slot', 0, 1), uid: token(o.uid, 'uid') };
+    }
+    case 'unslotSigil': {
+      const o = shape(v, c, ['c', 'areaId', 'slot']);
+      return { c, areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS), slot: int(o.slot, 'slot', 0, 1) };
+    }
     case 'pinArea': {
       const o = shape(v, c, ['c', 'areaId', 'pinned']);
       return { c, areaId: oneOf(o.areaId, 'areaId', ATLAS_AREA_IDS), pinned: bool(o.pinned, 'pinned') };

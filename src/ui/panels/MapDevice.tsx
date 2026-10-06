@@ -19,7 +19,7 @@ import type { AtlasAreaId } from '../../contracts/atlas';
 import { ATLAS_AREAS, ATLAS_START, findAtlasArea } from '../../data/progression/atlas';
 import { newAtlas, pinError, pinSlotCount } from '../../game/progression/atlas';
 import { pinMultiplierFor } from '../../data/progression/routing';
-import { DEFAULT_LENS, sourceEdges, stockByArea, type ChartLens } from '../atlas/lens';
+import { DEFAULT_LENS, sourceEdges, stockByArea, territoryView, type ChartLens } from '../atlas/lens';
 import { MapTreeView } from './MapTree';
 import { mapTreeFreePoints } from '../../game/progression/map-tree';
 import { AreaModal } from '../atlas/AreaModal';
@@ -127,6 +127,8 @@ export function MapDevicePanel() {
   }, [ch]);
   // The Sources lens draws the drop table of the loaded map (the table of its own area: a passage run keeps the map's table).
   const sourcesReadout = useMemo(() => (ch && map ? routingFor(ch, map, map.areaId) : null), [ch, map]);
+  // The Territory lens: beacons, their reach and the sigils that cover each area (account Atlas).
+  const territory = useMemo(() => territoryView(ch?.atlas), [ch?.atlas]);
 
   const disabled = !own || zone !== 'hideout';
   if (!ch) return null;
@@ -189,7 +191,7 @@ export function MapDevicePanel() {
   const stock = stockByArea(ch);
   const extras: ChartExtras = {
     lens, onLens: setLens, pins, pinSlots, pinMultiplier, pinBlocked, onPin: (id, pinned) => store.actions.pinArea(id, pinned),
-    stock, sources: sourcesReadout, edges: sourceEdges(sourcesReadout), focus: focusReq, onFocus: focusArea,
+    stock, sources: sourcesReadout, edges: sourceEdges(sourcesReadout), territory, focus: focusReq, onFocus: focusArea,
   };
   // the modal's status line is about the AREA (cleared, available, needs a key); what the loaded map does is said inside the modal
   const modalModel = modalArea ? nodeModel(modalArea, { ...ctx, home: null }) : null;

@@ -6,7 +6,7 @@ import { ATLAS_TREE_VERSION } from '../../contracts/atlas';
 import { mapTreePoints, normalizeMapTree, restoreExpeditionTree } from './map-tree';
 import { atlasStat, flooredWaveDuration, resolveAtlasRules, treeContextOf } from './atlas-rules';
 import { CHEST_LOOT } from '../../data/progression/loot';
-import type { MapSummaryLine, OpenMapOptions, Result, RunPassage, RunSetup } from '../../contracts/game';
+import type { MapSummaryLine, OpenMapOptions, Result, RunPassage, RunSetup, RunTerritory } from '../../contracts/game';
 import type { AtlasAreaId, MapTreeNodeId } from '../../contracts/atlas';
 import type { CharacterSave, MapItem } from '../../contracts/items';
 import { ITEM_CLASSES, type ItemClass } from '../../contracts/content';
@@ -30,6 +30,9 @@ import { mapEventRules } from './map-event-rules';
 import { normalizeMapEvent, rollMapEvent } from './map-events';
 import { findScarab, isWaveScarab, scarabEffects, validScarabs } from '../../data/scarabs';
 import { attachSurge, normalizeRunSurge, spendSurge } from './surge';
+import { attachTerritory, normalizeRunTerritory, spendTerritoryUses, territoryEventChance, territoryFor, tideSurge } from './territory';
+import { mapEventOdds } from './map-events';
+import { findSigil } from '../../data/progression/territory';
 import { scarabRoutingLines } from './scarab-routing';
 import type { ScarabId } from '../../contracts/content';
 
@@ -52,7 +55,7 @@ function requireAll(plan: NonNullable<RunSetup['event']>): NonNullable<RunSetup[
 }
 
 /** The run parameters of `map` (an already snapshotted map) with `seed`: map-side luck only. */
-function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass?: ItemClass, nodes: MapTreeNodeId[] = [], scarabs: ScarabId[] = [], passage?: RunPassage): RunSetup {
+function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass?: ItemClass, nodes: MapTreeNodeId[] = [], scarabs: ScarabId[] = [], passage?: RunPassage, territory: readonly RunTerritory[] = []): RunSetup {
   const area = findAtlasArea(areaId);
   // The effective map is the one run: the area's theme and id (a passage runs another area than the item's own).
   const { unbound: _unbound, ...bound } = source; // a run's effective map is never "provisional"; sourceMap keeps the item as it was
@@ -60,10 +63,13 @@ function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass
   if (area?.echoWave && !map.mods.some(m => m.modId === 'echo')) map = { ...map, mods: [...map.mods, { modId: 'echo', value: 100 }] };
   // The encounter roll comes first: tree effects may depend on whether the expedition has one.
   // The tree's encounter rules (Twin Omens, Sworn to the Veil ...) shape the slate before it is rolled.
-  const slate = mapEventRules(resolveAtlasRules(nodes, { tier: clampTier(map.tier), baseId: map.baseId, corrupted: map.corrupted, ...(area ? { areaId: area.id } : {}) }), map).slate;
+  const treeSlate = mapEventRules(resolveAtlasRules(nodes, { tier: clampTier(map.tier), baseId: map.baseId, corrupted: map.corrupted, ...(area ? { areaId: area.id } : {}) }), map).slate;
+  // Omen sigils (brief D 6.3) raise the encounter chance after the area odds and the tree, outside the tree's cap.
+  const omen = territoryEventChance(territory);
+  const slate = omen > 0 ? { ...treeSlate, territoryChance: omen } : treeSlate;
   let event = rollMapEvent(map, seed, areaId, nodes, slate);
   if (event && slate.mandatory) event = requireAll(event);
-  const tree = { ...(area ? { areaId: area.id } : {}), event: !!event };
+  const tree = { ...(area ? { areaId: area.id } : {}), event: !!event, ...(territory.length ? { territory } : {}) };
   const atlas = resolveAtlasRules(nodes, { tier: clampTier(map.tier), baseId: map.baseId, corrupted: map.corrupted, ...tree });
   const luck = mapLuck(map, null, nodes, tree);
   const summary = buildMapSummary(map, nodes, tree);
@@ -87,7 +93,7 @@ function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass
       breakdown: [...mapTreeNodes(nodes).map(n => `${n.name}: ${n.text}`), ...(atlas.capped.length ? [`Capped: ${atlas.capped.join(', ')}`] : [])] });
     summary.push({ label: 'Completion map upgrade', value: `${map.tier >= 15 ? 0 : map.charted ? 100 : upgrade}%`, breakdown: ['Chance for the guaranteed chest map to be one tier higher; Tier 15 is capped.'] });
   }
-  return {
+  const setup: RunSetup = {
     ...(scarabs.length ? { scarabs: [...scarabs] } : {}),
     ...(nodes.length ? { mapTree: [...nodes], mapTreeV: ATLAS_TREE_VERSION } : {}),
     map,
@@ -101,6 +107,8 @@ function setupFor(source: MapItem, seed: number, areaId?: AtlasAreaId, lootClass
     itemRarity: clean(luck.rarity.value),
     summary,
   };
+  attachTerritory(setup, territory);
+  return setup;
 }
 
 /**
@@ -132,7 +140,7 @@ function resolvePassage(map: MapItem, passage: RunPassage | undefined): { area: 
  * as a preview. The map decides the area (`map.areaId`); there is no area argument. A legacy map that is somehow
  * still unbound is bound here with the same rules the loader uses (and may reveal its area).
  */
-export function openMap(character: CharacterSave, opts: OpenMapOptions = {}): Result<{ character: CharacterSave; setup: RunSetup }> {
+export function openMap(character: CharacterSave, opts: OpenMapOptions = {}): Result<{ character: CharacterSave; setup: RunSetup; notices?: string[] }> {
   const ch = bindLegacyMaps(character);
   const map = ch.mapDevice;
   if (!map) return fail('Place a map in the Map Device first.');
@@ -164,18 +172,32 @@ export function openMap(character: CharacterSave, opts: OpenMapOptions = {}): Re
   const rng = createRng(ch.rngState >>> 0);
   const seed = Math.floor(rng.next() * 0x100000000) >>> 0;
   const passage: RunPassage | undefined = opts.passage?.kind === 'key' ? { kind: 'key', currencyId: area.entranceKey! } : opts.passage;
-  const setup = setupFor(snapshotMap(map), seed, area.id, lootClass, normalizeMapTree(ch.atlas?.nodes, mapTreePoints(ch.atlas)), scarabs, passage);
+  const nodes = normalizeMapTree(ch.atlas?.nodes, mapTreePoints(ch.atlas));
+  // Daily surge (brief D 7.2): one charge of the area actually run, spent by the opener only (guests share the frozen bonus).
+  // Covering Tide sigils (brief D 6.3) strengthen the bonus and may keep the charge.
+  let atlas = next.atlas?.respecSpent ? { ...next.atlas, respecSpent: 0 } : next.atlas;
+  let surge: RunSetup['surge'];
+  if (opts.useSurge === true && typeof opts.now === 'number' && Number.isFinite(opts.now)) {
+    const spent = spendSurge(atlas ?? newAtlas(), area.id, opts.now, seed, tideSurge(atlas, area.id));
+    if (spent) { surge = spent.surge; atlas = spent.atlas; }
+  }
+  // Beacons (brief D 6): the opener's sigils covering the run's area, frozen with their stacking share; each spends one use below.
+  const runMap = { ...map, baseId: area.baseId, areaId: area.id };
+  const canEncounter = Object.values(mapEventOdds(runMap, area.id, nodes)).some((p) => p > 0);
+  const territory = territoryFor(atlas, { area, map: runMap, surge: !!surge, encounters: canEncounter });
+  const setup = setupFor(snapshotMap(map), seed, area.id, lootClass, nodes, scarabs, passage, territory);
   if (fee > 0) setup.entranceScrap = fee;
   if (area.entranceKey) setup.entranceKey = area.entranceKey;
   // Drop routing is frozen at activation (brief D 4, I5): centred on the map's own area, even when a passage runs another.
   attachRouting(setup, buildRouting({ from: map.areaId, runArea: area.id, tier: map.tier, bias: routingBiasFor(ch.atlas, scarabs, { from: map.areaId }), ...(ch.atlas ? { atlas: ch.atlas } : {}) }));
-  // Daily surge (brief D 7.2): one charge of the area actually run, spent by the opener only (guests share the frozen bonus).
-  let atlas = next.atlas?.respecSpent ? { ...next.atlas, respecSpent: 0 } : next.atlas;
-  if (opts.useSurge === true && typeof opts.now === 'number' && Number.isFinite(opts.now)) {
-    const spent = spendSurge(atlas ?? newAtlas(), area.id, opts.now, seed);
-    if (spent) { attachSurge(setup, spent.surge); atlas = spent.atlas; }
+  if (surge) attachSurge(setup, surge);
+  const notices: string[] = [];
+  if (territory.length && atlas) {
+    const used = spendTerritoryUses(atlas, territory);
+    atlas = used.atlas;
+    for (const e of used.emptied) notices.push(`${findSigil(e.sigilId)?.name ?? 'A sigil'} in the ${findAtlasArea(e.areaId)?.name ?? ''} beacon burned out: the slot is empty.`);
   }
-  return ok({ character: { ...next, ...(atlas ? { atlas } : {}), mapDevice: null, ...(ch.mapScarabs ? { mapScarabs: [null, null, null, null] } : {}), rngState: rng.state() }, setup });
+  return ok({ character: { ...next, ...(atlas ? { atlas } : {}), mapDevice: null, ...(ch.mapScarabs ? { mapScarabs: [null, null, null, null] } : {}), rngState: rng.state() }, setup, ...(notices.length ? { notices } : {}) });
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -218,7 +240,9 @@ export function restoreRunSetup(raw: unknown, seed: number): RunSetup | null {
   if (area?.chosenClass && (!lootClass || !Object.values(BASES).some(b => b.itemClass === lootClass && b.levelRequirement <= monsterLevelForTier(map.tier)))) return null;
   const scarabs = wrapper?.scarabs ?? [];
   if (!validScarabs(scarabs)) return null;
-  const setup = setupFor(snapshotMap(map), Math.floor(seed), area?.id, lootClass, restoreExpeditionTree(wrapper?.mapTree, wrapper?.mapTreeV), scarabs);
+  // The sigils are frozen with the expedition (brief D I5): a restart restores them, whatever the beacons hold now.
+  const territory = normalizeRunTerritory(wrapper?.territory) ?? [];
+  const setup = setupFor(snapshotMap(map), Math.floor(seed), area?.id, lootClass, restoreExpeditionTree(wrapper?.mapTree, wrapper?.mapTreeV), scarabs, undefined, territory);
   // Preserve the creation decision; pre-event maps do not gain a surprise on restart.
   if (wrapper && 'event' in wrapper) setup.event = normalizeMapEvent(wrapper.event);
   else delete setup.event;

@@ -11,7 +11,8 @@ import { visiblePanels } from '../lib/panels';
 import { offerAddError, offerWith, offerWithout } from '../lib/trade';
 import { findScarab } from '../../data/scarabs';
 import { findAtlasArea } from '../../data/progression/atlas';
-import { areaModalSignal, mapFit } from '../atlas/area-modal';
+import { areaModalSignal, freeBeaconSlot, mapFit } from '../atlas/area-modal';
+import { findSigil } from '../../data/progression/territory';
 
 export type CraftMark = 'armed' | 'valid' | 'invalid' | null;
 
@@ -167,6 +168,20 @@ export function quickMoveItem(store: UiStore, local: Local, e: MouseEvent, uid: 
     const index = Array.from({ length: 4 }, (_, i) => s.character?.mapScarabs?.[i] ?? null).findIndex(i => !i);
     if (index < 0) { local.flashHint('All four scarab sockets are filled.', at.x, at.y); return; }
     if (store.actions.moveItem(uid, { kind: 'scarabSlot', index })) store.actions.uiSound('click');
+    return;
+  }
+  // Beacons (brief D 6): with an area modal open on a cleared area, Ctrl/Cmd-click slots a sigil into its first empty beacon slot (an extra
+  // beside dragging it there).
+  if (item.kind === 'currency' && findSigil(item.currencyId) && from.kind === 'backpack' && left === 'mapDevice' && s.zone === 'hideout') {
+    const open = areaModalSignal.get();
+    const slot = open ? freeBeaconSlot(s.character?.atlas, open) : -1;
+    if (!open) { local.flashHint('Click a cleared area on the chart first, then drag the sigil into its beacon slot.', at.x, at.y); return; }
+    if (slot < 0) {
+      local.flashHint(s.character?.atlas?.completed.includes(open) ? 'This beacon has no empty slot: drag the sigil onto a slot to swap.' : 'Only a cleared area is a beacon.', at.x, at.y);
+      return;
+    }
+    store.actions.slotSigil(open, slot, uid);
+    store.actions.uiSound('click');
     return;
   }
   // A Crafting Stash slot gives a stack; with Shift exactly one.

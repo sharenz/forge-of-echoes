@@ -9,6 +9,7 @@ import type { CurrencyId } from '../../contracts/content';
 import { autoPlace, canPlace, canStack, itemSize, maxStackSize, overlappingEntries } from '../../game/items';
 import { resetCountdownText } from '../../game/progression/surge';
 import { findScarab } from '../../data/scarabs';
+import { findSigil } from '../../data/progression/territory';
 import type { Cell, Size } from './grid';
 
 export interface StockFit {
@@ -164,10 +165,10 @@ export function shelfEmptyText(tab: VendorTab, shelf: { total: number; unsold: n
   return 'Rook has no supplies to sell right now.';
 }
 
-/** Which vendor tab shelves an item, decided by its class alone: equipment, maps and scarabs, then everything else (flasks, Kindling, Map Dust, currency). */
+/** Which vendor tab shelves an item, decided by its class alone: equipment, maps, scarabs and sigils, then everything else (flasks, Kindling, Map Dust, currency). */
 export function vendorTabOf(item: Item): VendorTab {
   if (item.kind === 'equipment') return 'gear';
-  if (item.kind === 'map' || (item.kind === 'currency' && !!findScarab(item.currencyId))) return 'maps';
+  if (item.kind === 'map' || (item.kind === 'currency' && (!!findScarab(item.currencyId) || !!findSigil(item.currencyId)))) return 'maps';
   return 'supplies';
 }
 

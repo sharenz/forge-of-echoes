@@ -1068,6 +1068,8 @@ export class ClientApp {
       setMapTreeNode: (nodeId, allocate) => inGame((g) => g.setMapTreeNode(nodeId, allocate), undefined),
       pinArea: (areaId, pinned) => inGame((g) => g.pinArea(areaId, pinned), undefined),
       refillSurge: (target) => inGame((g) => g.refillSurge(target), undefined),
+      slotSigil: (areaId, slot, uid) => inGame((g) => g.slotSigil(areaId, slot, uid), undefined),
+      unslotSigil: (areaId, slot) => inGame((g) => g.unslotSigil(areaId, slot), undefined),
       activateMapDevice: (opts) => inGame((g) => g.activateMapDevice(opts), undefined),
       merchantOffers: () => inGame((g) => g.merchantOffers(), []),
       buyOffer: (id, at) => inGame((g) => g.buyOffer(id, at), undefined),

@@ -305,6 +305,25 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       s.pushCharacter('now');
       return { ok: true, message: used.value.message };
     }
+    case 'slotSigil': {
+      // Beacons (brief D 6): the sigil leaves the backpack and the account's beacon changes in one save. Hideout only, inventory first.
+      if (!inHideout(s)) return fail('Sigils are slotted on the Atlas table in a hideout.');
+      if (!rules.findItem(ch, cmd.uid)) return fail(missingItem(cmd.uid));
+      if (lockedIn(game, s, cmd.uid)) return fail(ITEM_IN_TRADE);
+      const slotted = r.slotSigil(ch, cmd.areaId, cmd.slot, cmd.uid);
+      if (!slotted.ok) return fail(slotted.error);
+      if (!game.store.commit(s.record, slotted.value.character)) return fail('The sigil could not be slotted. Nothing changed; try again.');
+      s.pushCharacter('now');
+      return { ok: true, message: slotted.value.message };
+    }
+    case 'unslotSigil': {
+      if (!inHideout(s)) return fail('Sigils are taken out on the Atlas table in a hideout.');
+      const taken = r.unslotSigil(ch, cmd.areaId, cmd.slot);
+      if (!taken.ok) return fail(taken.error);
+      if (!game.store.commit(s.record, taken.value.character)) return fail('The sigil could not be taken out. Nothing changed; try again.');
+      s.pushCharacter('now');
+      return { ok: true, message: taken.value.message };
+    }
     case 'pinArea':
       // Pins are an account setting: free, instant and allowed anywhere (the chart is read in the hideout, the result is what counts).
       return applyResult(game, s, r.setPin(ch, cmd.areaId, cmd.pinned), false);

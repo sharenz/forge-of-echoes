@@ -182,7 +182,7 @@ describe('currencies', () => {
     }
     for (const id of CURRENCY_IDS) {
       const c = CURRENCIES[id];
-      const rare = id.includes('Scarab') || id === 'fractureCore' || id === 'voidNeedle' || id.endsWith('Key') || id === 'prefixRune' || id === 'suffixRune' || ['scarBalm', 'anneal', 'graft', 'transmute', 'echoShard', 'crownFragment', 'compass', 'twinInk', 'voidSplinter', 'hourglassSand'].includes(id);
+      const rare = id.includes('Scarab') || id.includes('Sigil') || id === 'fractureCore' || id === 'voidNeedle' || id.endsWith('Key') || id === 'prefixRune' || id === 'suffixRune' || ['scarBalm', 'anneal', 'graft', 'transmute', 'echoShard', 'crownFragment', 'compass', 'twinInk', 'voidSplinter', 'hourglassSand'].includes(id);
       expect(c.maxStack, id).toBe(id === 'grandHourglass' ? 5 : rare ? 20 : 40);
       expect(c.needsAffixChoice, id).toBe(id === 'catalyst' || id === 'seal' || id === 'fractureCore' || id === 'graft');
       expect(c.description, id).toMatch(/^[A-Z][a-z]+s\b/);

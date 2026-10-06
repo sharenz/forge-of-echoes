@@ -7,9 +7,11 @@
 //   whereToFind       the empty state: which neighbours drop maps of this area, Rook, the bench
 // Plus the tiny modal bus (which area is open) shared with the Ctrl/Cmd-click quick load. No DOM here, so tests cover every refusal.
 import type { AtlasAreaId, AtlasProgress } from '../../contracts/atlas';
-import type { CharacterSave, Item, MapItem } from '../../contracts/items';
+import type { CharacterSave, Item, ItemLocation, MapItem } from '../../contracts/items';
 import { ATLAS_AREAS, ATLAS_KEYS, atlasTierCeiling, findAtlasArea, type AtlasAreaDef } from '../../data/progression/atlas';
 import { findScarab } from '../../data/scarabs';
+import { findSigil } from '../../data/progression/territory';
+import { beaconSlots } from '../../game/progression/territory';
 import { CURRENCIES } from '../../data/items';
 import { SCARAB_SLOTS } from '../../contracts/items';
 import { buildRouting, routingBiasFor, routingReadout } from '../../game/progression/map-routing';
@@ -161,20 +163,23 @@ export const planIsEmpty = (p: SetupPlan): boolean => p.moves.length === 0 && p.
 
 /**
  * Backpack items worth dragging into this area's modal: maps that fit it (and are not above the ceiling), scarabs that still have a
- * free socket and whose family is not socketed, and the key of a sealed area. A highlight only: nothing is listed or picked here.
+ * free socket and whose family is not socketed, the key of a sealed area, and sigils when the area is a beacon with a free slot.
+ * A highlight only: nothing is listed or picked here.
  */
-export function fittingUids(ch: Pick<CharacterSave, 'backpack' | 'mapScarabs' | 'mapDevice'>, area: AtlasAreaDef): Set<string> {
+export function fittingUids(ch: Pick<CharacterSave, 'backpack' | 'mapScarabs' | 'mapDevice'> & { atlas?: AtlasProgress }, area: AtlasAreaDef): Set<string> {
   const out = new Set<string>();
   const sockets = Array.from({ length: SCARAB_SLOTS }, (_, i) => ch.mapScarabs?.[i] ?? null);
   const free = sockets.some((s) => !s);
   const families = new Set(sockets.flatMap((s) => (s ? [findScarab(s.currencyId)?.family] : [])));
   const key = keyForArea(area);
+  const beaconFree = !!ch.atlas?.completed.includes(area.id) && beaconSlots(ch.atlas, area.id).some((s) => !s);
   for (const { item } of ch.backpack.entries as { item: Item }[]) {
     if (item.kind === 'map') { if (mapFit(item, area).ok) out.add(item.uid); }
     else if (item.kind === 'currency') {
       const def = findScarab(item.currencyId);
       if (def && free && !families.has(def.family)) out.add(item.uid);
       else if (key && item.currencyId === key) out.add(item.uid);
+      else if (beaconFree && findSigil(item.currencyId)) out.add(item.uid);
     }
   }
   return out;
@@ -221,4 +226,20 @@ export function whereToFind(area: AtlasAreaDef, atlas: AtlasProgress | undefined
     rechartable = held.filter((m) => m.areaId !== area.id && area.neighbours.includes(m.areaId) && m.tier <= ceiling).length;
   }
   return { sources: sources.slice(0, 4), rook: isMapAddress(area), passage: passageNeed(area), inStash, rechartable };
+}
+
+/** The first empty slot of a beacon (the Ctrl/Cmd-click quick-slot target), or -1 when the area is no beacon or every slot is filled. */
+export function freeBeaconSlot(atlas: AtlasProgress | undefined, areaId: AtlasAreaId): number {
+  if (!atlas?.completed.includes(areaId)) return -1;
+  return beaconSlots(atlas, areaId).findIndex((s) => !s);
+}
+
+/** The drop slot id of beacon slot `i` (data-slot, Local.slots). */
+export const beaconSlotId = (i: number): string => `beacon:${i}`;
+
+/** Why a dragged item cannot go into a beacon slot (null = it fits): a sigil from the backpack. The server enforces the same rule. */
+export function beaconDropError(item: Item, from: ItemLocation): string | null {
+  if (item.kind !== 'currency' || !findSigil(item.currencyId)) return 'Only a sigil fits a beacon slot.';
+  if (from.kind !== 'backpack') return 'Move the sigil into your inventory first, then drag it into the beacon slot.';
+  return null;
 }

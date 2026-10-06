@@ -19,7 +19,7 @@ import { portalOpen, useActivation, useActivationWatcher } from '../atlas/activa
 import { CURRENCIES } from '../../data/items';
 import { KEY_COLOUR } from '../../art/atlas/geometry';
 import { PixelIcon } from '../components/common';
-import { DEFAULT_LENS, LENSES, formatShare, stockBand, type ChartLens, type SourceEdge, type StockEntry } from '../atlas/lens';
+import { DEFAULT_LENS, LENSES, formatShare, stockBand, type ChartLens, type SourceEdge, type StockEntry, type TerritoryView } from '../atlas/lens';
 import { PinTray } from '../atlas/PinTray';
 import { SourcesPanel } from '../atlas/SourcesPanel';
 import type { RoutingReadout } from '../../game/progression/map-routing';
@@ -73,6 +73,8 @@ export interface ChartExtras {
   /** The slotted map's drop table (Sources lens); null with an empty slot. */
   sources: RoutingReadout | null;
   edges: readonly SourceEdge[];
+  /** Beacons and the sigils that reach each area (Territory lens). */
+  territory: TerritoryView;
   /** Pan to an area and inspect it (bumps `n` to repeat the same area). */
   focus: { id: AtlasAreaId; n: number } | null;
   onFocus: (id: AtlasAreaId) => void;
@@ -114,6 +116,9 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
   const completed = useMemo(() => new Set<string>(progress.completed), [progress.completed]);
   const pinSet = useMemo(() => new Set<string>(extras?.pins ?? []), [extras?.pins]);
   const lens = extras?.lens ?? DEFAULT_LENS;
+  const lensInput = useMemo(() => ({ lens, from: extras?.sources?.from ?? null, edges: extras?.edges ?? [], beacons: extras?.territory.beacons ?? [], inspected }),
+    [lens, extras?.sources, extras?.edges, extras?.territory, inspected]);
+  const beaconOf = useMemo(() => new Map((extras?.territory.beacons ?? []).map((b) => [b.areaId as string, b])), [extras?.territory]);
   const ctx: ChartContext = useMemo(() => ({ discovered, completed, tier, keys, fresh, corrupted, home: courseId, pins: pinSet, ...(extras ? { stock: extras.stock } : {}) }), [discovered, completed, tier, keys, fresh, corrupted, courseId, pinSet, extras?.stock]);
   const models = useMemo(() => allNodeModels(ctx), [ctx]);
   const byId = useMemo(() => new Map(models.map((m) => [m.id, m])), [models]);
@@ -179,8 +184,8 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
   useEffect(() => {
     const r = renderer.current;
     if (!r) return;
-    r.setInput({ ctx, selected: inspected, hovered, course: courseId, reduceMotion: reduce, portal, keyAnchors, lens: { lens, from: extras?.sources?.from ?? null, edges: extras?.edges ?? [] } });
-  }, [assets, ctx, inspected, hovered, courseId, reduce, portal, keyAnchors, lens, extras?.edges, extras?.sources]);
+    r.setInput({ ctx, selected: inspected, hovered, course: courseId, reduceMotion: reduce, portal, keyAnchors, lens: lensInput });
+  }, [assets, ctx, inspected, hovered, courseId, reduce, portal, keyAnchors, lensInput]);
 
   // a focus request from the pin tray, the Sources rows or "Show home": inspect the area and bring it to the middle
   const lastFocus = useRef<number>(extras?.focus?.n ?? 0);
@@ -235,7 +240,7 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
       .sort((a, b) => findAtlasArea(a)!.depth - findAtlasArea(b)!.depth)
       .map((id, i) => ({ id, from: discoverer(id, known, completed), start: i * 0.7 }));
     setFresh((prev) => { const n = new Set(prev); newIds.forEach((id) => n.add(id)); writeList(FRESH_KEY, n); return n; });
-    r.setInput({ ctx, selected: inspected, hovered, course: courseId, reduceMotion: reduce, portal, keyAnchors, lens: { lens, from: extras?.sources?.from ?? null, edges: extras?.edges ?? [] } });
+    r.setInput({ ctx, selected: inspected, hovered, course: courseId, reduceMotion: reduce, portal, keyAnchors, lens: lensInput });
     setPending(new Set(newIds));
     r.startCinematic(items, reduce);
     cineDone.current = true;
@@ -422,6 +427,15 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
                 )}
                 {extras && lens === 'sources' && m.known && !hiding && sourceShare.get(m.id) && (
                   <span class={cx('fe-chart__share ui-type-caption', sourceShare.get(m.id)!.pinned && 'fe-chart__share--pinned', sourceShare.get(m.id)!.pending && 'fe-chart__share--pending')} style={{ left: 0, top: -(30 * zoom) }} data-share={m.id}>{sourceShare.get(m.id)!.label}</span>
+                )}
+                {extras && lens === 'territory' && m.known && !hiding && (beaconOf.get(m.id) || extras.territory.coveredBy.get(m.id)) && (
+                  <span class={cx('fe-chart__share ui-type-caption', beaconOf.get(m.id) && 'fe-chart__share--pinned')} style={{ left: 0, top: -(34 * zoom) }} data-territory={m.id}
+                    title={[
+                      beaconOf.get(m.id) ? `Beacon: ${beaconOf.get(m.id)!.slots.filter(Boolean).length} of ${beaconOf.get(m.id)!.slots.length} sigil slots filled, reaches ${beaconOf.get(m.id)!.coverage.length - 1} area${beaconOf.get(m.id)!.coverage.length === 2 ? '' : 's'}` : null,
+                      ...(extras.territory.coveredBy.get(m.id) ?? []).map((c) => `${c.name} (${findAtlasArea(c.beacon)?.name ?? ''})`),
+                    ].filter(Boolean).join('\n')}>
+                    {beaconOf.get(m.id) ? `${beaconOf.get(m.id)!.slots.filter(Boolean).length}/${beaconOf.get(m.id)!.slots.length}` : `${extras.territory.coveredBy.get(m.id)!.length} sigil${extras.territory.coveredBy.get(m.id)!.length === 1 ? '' : 's'}`}
+                  </span>
                 )}
                 {extras && m.known && !hiding && !m.area.sealed && inspected === m.id && (
                   <button type="button" class="fe-chart__pinbtn" style={{ left: 20 * zoom, top: -(20 * zoom) }} aria-pressed={m.pinned} data-pin-node={m.id}

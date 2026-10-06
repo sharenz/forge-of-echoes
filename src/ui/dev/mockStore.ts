@@ -1234,6 +1234,14 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
       const r = rules.refillSurge(ch, target === 'all' ? { kind: 'all' } : { kind: 'area', areaId: target }, Date.now());
       if (!r.ok) fail(r.error); else setCharacter(r.value.character);
     },
+    slotSigil(areaId, slot, uid) {
+      const r = rules.slotSigil(ch, areaId, slot, uid);
+      if (!r.ok) fail(r.error); else setCharacter(r.value.character);
+    },
+    unslotSigil(areaId, slot) {
+      const r = rules.unslotSigil(ch, areaId, slot);
+      if (!r.ok) fail(r.error); else setCharacter(r.value.character);
+    },
     pinArea(areaId, pinned) {
       const r = rules.setPin(ch, areaId, pinned);
       if (!r.ok) fail(r.error); else setCharacter(r.value);

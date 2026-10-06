@@ -1,9 +1,11 @@
 // Chart lenses (brief D 3 and 11): what the chart overlays on its nodes besides the node's own state.
 //   Stock      a count badge per node of the maps you hold (backpack, stash, Map Stash, work slot), tinted by their tier mix
 //   Sources    "where your maps come from": the slotted map's frozen drop table drawn as arrows with shares from its home area
-//   Territory  beacons and sigils (a later slice: the lens exists, nothing draws on it yet)
+//   Territory  beacons and sigils (brief D 6): a ring per beacon (its chart radius), its slots, and the areas a beacon's sigils cover
 // Pure and shared by the chart, the rail and the tests; the numbers of Sources are `routingReadout`'s, the very ones the sim rolls.
-import type { AtlasAreaId } from '../../contracts/atlas';
+import type { AtlasAreaId, AtlasProgress, BeaconSlot } from '../../contracts/atlas';
+import { beaconAreas, beaconCoverage, beaconRadius, beaconSlots, coveringSigils } from '../../game/progression/territory';
+import { findSigil } from '../../data/progression/territory';
 import type { CharacterSave, MapItem } from '../../contracts/items';
 import { allItems } from '../../game/items';
 import type { RoutingReadout, RoutingReadoutRow } from '../../game/progression/map-routing';
@@ -15,7 +17,7 @@ export interface LensDef { id: ChartLens; label: string; hint: string; /** False
 export const LENSES: readonly LensDef[] = [
   { id: 'stock', label: 'Stock', hint: 'Maps you hold, per area', available: true },
   { id: 'sources', label: 'Sources', hint: 'Where the slotted map\'s drops go', available: true },
-  { id: 'territory', label: 'Territory', hint: 'Beacons and sigils', available: false },
+  { id: 'territory', label: 'Territory', hint: 'Beacons, their reach and the sigils they hold', available: true },
 ];
 
 export const DEFAULT_LENS: ChartLens = 'stock';
@@ -82,4 +84,33 @@ export function topSources(readout: RoutingReadout | null, n = 4): { areaId: Atl
   if (!readout) return [];
   return readout.rows.filter((r) => r.share > 0).slice(0, n)
     .map((r) => ({ areaId: r.areaId, name: r.areaId === readout.from ? 'this area' : r.name, share: r.share, pinned: r.pinned, own: r.areaId === readout.from }));
+}
+
+/** One beacon on the Territory lens: where it reaches and what it holds. */
+export interface BeaconView {
+  areaId: AtlasAreaId;
+  /** Coverage radius in chart pixels (the ring). */
+  radius: number;
+  slots: (BeaconSlot | null)[];
+  /** Areas within reach, the beacon itself first. */
+  coverage: AtlasAreaId[];
+}
+
+/** What the Territory lens draws: every beacon, and per area the sigils that reach it (with the beacon they sit in). */
+export interface TerritoryView {
+  beacons: BeaconView[];
+  coveredBy: ReadonlyMap<AtlasAreaId, { beacon: AtlasAreaId; name: string }[]>;
+}
+
+export function territoryView(atlas: Pick<AtlasProgress, 'completed' | 'beacons' | 'nodes'> | undefined): TerritoryView {
+  const beacons = beaconAreas(atlas).map((areaId): BeaconView => ({
+    areaId, radius: beaconRadius(areaId, atlas?.nodes), slots: beaconSlots(atlas, areaId), coverage: beaconCoverage(areaId, atlas?.nodes),
+  }));
+  const coveredBy = new Map<AtlasAreaId, { beacon: AtlasAreaId; name: string }[]>();
+  const areas = new Set(beacons.flatMap((b) => b.coverage));
+  for (const id of areas) {
+    const list = coveringSigils(atlas, id).map((c) => ({ beacon: c.beacon, name: findSigil(c.def.id)!.name }));
+    if (list.length) coveredBy.set(id, list);
+  }
+  return { beacons, coveredBy };
 }
