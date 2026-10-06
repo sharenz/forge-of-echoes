@@ -96,8 +96,8 @@ Design: `docs/power-rework/skills.md` (32 skills, augments, points economy). A r
 (`1 + 2·(L−1)` in total). Max rank is 10. Numbers below are rank 1 → rank 10 (linear unless noted). Effectiveness multiplies spell power.
 Skills **unlock by character level** (learning one costs a point and gives rank 1); there are no prerequisite chains, and a skill learned
 before its unlock level stays learned. A new character starts with Ember Lance at rank 1 (innate, free) and one banked point; a skill must
-be ranked to go on the bar. The roster has 32 skill ids; the seventeen below are playable, the other 15 are in the data with their unlock
-level (Gravity Well 20, Rime Bulwark 22 ... Event Horizon 62) and cannot be learned until their behaviour ships.
+be ranked to go on the bar. The roster has 32 skill ids; the twenty-seven below are playable, the other 5 are in the data with their unlock
+level (Meteor Rain 44, Storm Step 48, Tempest Surge 52, Blizzard 56, Event Horizon 62) and cannot be learned until their behaviour ships.
 
 **Loadout:** eight slots labelled `LMB`, `RMB`, `Q`, `E`, `R`, `F`, `Space`, `Z` (the HUD keycap shows `Spc`). Any learned skill,
 including Ember Lance, can occupy any slot; each skill appears at most once. Drag a learned skill from the skill book or either slot row
@@ -140,12 +140,22 @@ character has a token) and "Refund all skills".
 | **Frost Orb** | 14 | 18 / 0.5 s / 6.0 s | A slow orb (speed 90) drifts toward the cursor for 3 s and touches nothing; every 0.25 s it fires an ice shard (speed 360, reach 180) at the nearest enemy it can see within 140: 12 shards. Effectiveness 0.5 → 1.1 per shard, chill 30%, crit 5%. |
 | **Storm Call** | 16 | 15 / 0.45 s / 3.0 s | 3 → 7 strikes land at random points within 70 of the cursor (the cursor counts at most 360 away) after a 0.7 s telegraph, radius 28 each. Ground damage: it ignores cover and shields. Effectiveness 1.4 → 3.0 per strike, shock 30%, crit 8%. |
 | **Glacial Spikes** | 18 | 12 / 0.4 s / 2.0 s | 8 ice spikes, radius 20, erupt one after another (the first after 0.1 s, then every 0.05 s) evenly along 200 units toward the cursor; one row strikes an enemy at most once. Effectiveness 1.1 → 2.4 per spike, chill 35%, crit 6%. |
+| **Gravity Well** | 20 | 18 / 0.45 s / 8.0 s | A vortex at the cursor (at most 360 away), radius 70 → 90 (area scales it), for 3 s: enemies inside are pulled toward its centre at 60 units per second (bosses and heavy enemies half) and slowed 40%, and take its void hit every 0.5 s (6 ticks; damage over time, not a hit). Effectiveness 0.3 per tick. |
+| **Rime Bulwark** | 22 | 22 / 0.4 s / 16 → 11 s | A barrier of 25% → 45% of maximum life for 6 s soaks damage after armour, resistances and every reduction; a recast replaces it, and it ends when it breaks. Enemies within 70 that hit you are chilled. |
+| **Immolation Sigil** | 24 | 18 / 0.5 s / 6.0 s | Brands the cursor (at most 360 away); after 0.8 s a pillar of fire erupts in a radius of 50 (area scales it). Ground damage: it ignores cover and shields. Effectiveness 3 → 6.5, ignite 40%, crit 8%. |
+| **Static Aegis** | 26 | 18 / 0.4 s / 14 → 10 s | For 5 → 7 s you take 25% less damage, and when an enemy's hit (not a burn) reaches you every enemy within 70 takes its lightning hit and is shocked, at most every 0.25 s. Effectiveness 0.6. |
+| **Voltaic Pulse** | 28 | 15 / 0.4 s / 2.0 s | A ring of lightning expands from you to radius 150 (area scales it) at 500 units per second; each enemy is struck once and shocked (100%). Not a projectile: it passes cover and shields. Effectiveness 1.5 → 3.2, crit 7%. |
+| **Entropy Hex** | 30 | 14 / 0.4 s / 5.0 s | Curses a circle at the cursor, radius 80 (area scales it), for 6 s: enemies inside are **exposed** to fire, cold, lightning and void by 15 points (exposure, bosses and lieutenants half, lasts 4 s after they leave) and deal 10% less damage. No damage of its own. |
+| **Concussive Blast** | 32 | 18 / 0.45 s / 3.0 s | A 100° cone of force toward the cursor, reach 150 (area scales it): physical damage, knockback 3× as far. It passes cover. Effectiveness 2.5 → 5.5, crit 7%. |
+| **Static Lash** | 34 | 4 / 0.15 s / – | Lashes the nearest enemy it can see within 200 (not the one at the cursor); held, it lashes again every cast. Additional Chains jump on from it (90 units) at 50% each. Effectiveness 0.3 → 0.7, shock 15%, crit 9%. |
+| **Echo Sigil** | 36 | 20 / 0.3 s / 14.0 s | Your next 3 damaging skill casts within 12 s (not Ember Lance, buffs or blinks) repeat once 0.4 s later at 70% damage, at no Focus. |
+| **Wither Field** | 40 | 22 / 0.5 s / 10.0 s | A rotting zone at the cursor, radius 80 (area scales it), for 6 s: every 0.5 s each enemy inside gains a Decay stack worth the tick and a stack of **Withered** (−8 points to every resistance, at most 3: −24; it counts as one exposure source, so the strongest of Withered and other exposure applies, half on bosses) that lasts 1 s after it leaves. Effectiveness 0.5 per tick. |
 
 **Augments** (`skills.md` 4): each skill has a small tree of augments in three tiers. Tier 1 needs skill rank 2, tier 2 rank 5, tier 3
 rank 8; T1 and T2 cost 1 skill point, T3 costs 2. A skill has `floor(rank / 2)` augment slots (at most 5). Some augments exclude each other
 (both directions). Augment damage lines ("8% less damage", "60% more damage") join the global `more` pool. A unique that grants an augment's
 behaviour (Echo of the Matriarch, The Second Verse, The Last Rite, Winterstride, Stillwinter, Vigil of Ash, The Unbowed Crown) needs no slot,
-and when the same effect is also picked the better value applies (no stacking). Playable now (34): Ember Lance Piercing Flame (pierce 2),
+and when the same effect is also picked the better value applies (no stacking). Playable now (59): Ember Lance Piercing Flame (pierce 2),
 Twin Strand (2 bolts 12° apart, 25% less each), Rapid Spark (18% shorter cast, 8% less); Ember Nova Wider Ring (+30% range, +4 flames, 8%
 less), Echoing Ring (repeats after 0.4 s at 70%), Ember Fan (120° cone, 60% more, +30% range); Flame Wave Wide Front (+2 waves, 40% wider,
 20% less), Ring of Waves (double waves in a full circle, 30% less); Rime Shards Hoarfrost Spread (+2 shards, 50% wider, 15% less), Glacial
@@ -156,7 +166,17 @@ Wide Chill (+40% radius, 10% less); Spark More Sparks (+3, 20% less each), Ricoc
 Cinder Mortar Napalm (ground +50% radius, +2 s, +0.1× effectiveness per tick); Arcane Reprieve Deep Well (45%, cooldown +8 s), Second Wind
 (+15% of life over the duration); Umbral Bolt Withering Touch (Decay 50% stronger); Kinetic Lance Ricochet (2 bounces, 20% less); Frost Orb
 Twin Orbs (two orbs, 35% less per shard); Storm Call Wide Skies (+40% radius, 10% less), Storm Cell (+3 strikes, +0.2 s cast), Tethered
-Strikes (evenly along the line to the cursor); Glacial Spikes Twin Lines (two rows 15° either side, 30% less).
+Strikes (evenly along the line to the cursor); Glacial Spikes Twin Lines (two rows 15° either side, 30% less); Gravity Well Heavy Well
+(+40% duration, 20% weaker pull), Crushing (+20% damage taken inside), Singularity (collapses at the end for 3× effectiveness as void in a
+radius of 90); Rime Bulwark Thick Ice (+30% barrier), Brittle Retort (2× effectiveness cold nova in a radius of 90 that chills when it breaks),
+Resolute (3% of its size per second while standing still); Immolation Sigil Twin Sigils (two 80 apart across the aim, 35% less each),
+Lingering Pillar (burns 3 s, 0.5× effectiveness every 0.5 s), Brand Sigil (exposes fire 15 points); Static Aegis Thorned Storm (+60%),
+Grounded (+15% lightning resistance), Conduction Field (also strikes every 0.5 s); Voltaic Pulse Wide Pulse (+40% radius), Twice Struck
+(second ring after 0.3 s at 60%); Entropy Hex Linger (9 s), Wide Hex (radius ×1.5), Absolute Exposure (25 points, cooldown +3 s) or
+Bleak Mark (25% less damage dealt, 20% slower); Concussive Blast Widened Arc (160°, 20% less); Static Lash Arc Lash (also the
+second-nearest at 60%), Rapid Lash (20% shorter cast, 10% less), Tethered Chain (one jump at 50%); Echo Sigil Triple Echo (4 casts at 63%),
+Quick Echo (0.25 s), Costless (echoed skills refund 25% of their Focus); Wither Field Hollow Ground (+40% radius), Rotting Fields (+40%
+ticks), Lingering Wither (Withered lasts 3 s after leaving).
 The other augments of the tables are listed and wait for their primitive (lodge, split, fork, convert, expose, trail, ...).
 
 **Respec** (a hideout service): refunding an augment or a whole skill (Ember Lance keeps rank 1) costs 4 Scrap per point (a T3 augment, 2
@@ -176,7 +196,8 @@ Player modifiers on skills (resolved by the rules into the sim's numbers, so too
 - Crit chance = (skill base + flat) × (1 + increased%); crit multiplier = 150% + flat.
 - Ailment chance = the skill's base + flat ignite / chill / shock chance, by damage type.
 - Extra projectiles and pierce add to projectile skills (Lance, Nova, Flame Wave, Rime Shards, Spark, Umbral Bolt, Kinetic Lance; Frost Orb gains orbs). A single-bolt skill fans its extra bolts 0.12 rad apart (at most 0.6 rad).
-- Area of effect multiplies Nova range and Flame Wave / Cinder Ward / Glacial Nova / Cinder Mortar / Storm Call radius by `sqrt(1 + area%)`; skill duration scales Cinder Ward, Phase Stride, Arcane Reprieve, Frost Orb's flight and Cinder Mortar's burning ground.
+- Area of effect multiplies Nova range and Flame Wave / Cinder Ward / Glacial Nova / Cinder Mortar / Storm Call / Gravity Well / Immolation Sigil / Voltaic Pulse / Entropy Hex / Wither Field radius and Concussive Blast's reach by `sqrt(1 + area%)`; skill duration scales Cinder Ward, Phase Stride, Arcane Reprieve, Frost Orb's flight, Cinder Mortar's burning ground, Gravity Well, Rime Bulwark, Static Aegis, Entropy Hex and Wither Field.
+- Additional Chains add to Arc Chain and Static Lash.
 
 **Flow zones (conveyor belts).** Ground can carry whoever stands on it. Iron March (five W-E belts) and the Last Kiln (the conveyor annulus) are the first
 users; the format (`flows` in a layout, D-territory.md 10.5a) is generic, so currents or lava rivers can reuse it. The rules:
@@ -218,7 +239,8 @@ parapet is low, a crate stack or a full wall is tall); the presenter draws an ov
   too (pierce counts bodies, never walls); a body in front of the wall is still hit first.
 - **Lobs fly over everything** (Cinder Spitter and Tar Slinger globs, Cinder Mortar's shell). **Ember Nova** rings burst over cover (a point-blank ring, not an aimed shot),
   and so do **Glacial Nova**, **Storm Call** and **Glacial Spikes** (instant and ground damage). Frost Orb floats over cover, but its shards need a clear line.
-  Spark, Umbral Bolt and Kinetic Lance are straight shots: blocked like Ember Lance (sparks rebound off the wall instead).
+  Spark, Umbral Bolt and Kinetic Lance are straight shots: blocked like Ember Lance (sparks rebound off the wall instead). Voltaic Pulse, Concussive
+  Blast, Immolation Sigil and the zones (Gravity Well, Entropy Hex, Wither Field) pass cover; Static Lash, like Arc Chain, needs a clear line.
   Ground telegraphs and areas (slams, pools, wards, fire trails) are never blocked. **Arc Chain** needs a clear line: it strikes the nearest enemy it can
   see and each jump needs a clear line to the next target. Ember Lance, Flame Wave and Rime Shards are blocked.
 - A shot that starts inside a prop's footprint (a shooter pressed against a wall) leaves it instead of vanishing, and a muzzle that falls inside a tall

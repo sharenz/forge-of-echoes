@@ -45,7 +45,7 @@ export const UTILITY_SKILLS = {
     duration: 3,
     primitives: { restore: { focus: 0.3, life: 0 } },
   }),
-  echoSigil: plannedSkill('echoSigil', {
+  echoSigil: skill('echoSigil', {
     name: 'Echo Sigil',
     description: 'Your next skill casts echo once, a moment later and a little weaker, at no Focus.',
     branch: 'survival',
@@ -63,5 +63,8 @@ export const UTILITY_SKILLS = {
     effectiveness: 0,
     critChance: 0,
     ailmentChance: 0,
+    // The charges wait 12 s at most (first pass; skills.md gives no limit, the aura needs an end).
+    duration: 12,
+    primitives: { echoSigil: { casts: 3, delay: 0.4, damage: 0.7 } },
   }),
 } satisfies Record<string, SkillDef>;

@@ -57,6 +57,8 @@ const WINDUP: RGB = [1, 0.25, 0.12];
 const HIT_FLASH: RGB = [1, 0.93, 0.8];
 const BURN_LIGHT: RGB = [1, 0.48, 0.14];
 const SHIELD: RGB = [0.62, 0.78, 1];
+/** Withered (Wither Field, power rework SK3): the dust flaking off. */
+const WITHERED_MOTE: RGB = [0.62, 0.6, 0.42];
 const BAR_BG: RGB = [0.04, 0.03, 0.035];
 const BAR_LIFE: RGB = [0.78, 0.13, 0.12];
 const BAR_LAG: RGB = [1, 0.85, 0.55];
@@ -521,7 +523,8 @@ export class MonsterPainter {
         frame = 0;
         o.emissive = Math.max(o.emissive ?? 0, 0.12);
       }
-      if (ail & (AILMENT_BIT.chilled | AILMENT_BIT.shocked | AILMENT_BIT.burning | AILMENT_BIT.empowered | AILMENT_BIT.spectral | AILMENT_BIT.frozen | AILMENT_BIT.decayed)) {
+      if (ail & (AILMENT_BIT.chilled | AILMENT_BIT.shocked | AILMENT_BIT.burning | AILMENT_BIT.empowered | AILMENT_BIT.spectral | AILMENT_BIT.frozen | AILMENT_BIT.decayed
+        | AILMENT_BIT.withered | AILMENT_BIT.hexed)) {
         tint[0] = 1;
         tint[1] = 1;
         tint[2] = 1;
@@ -552,6 +555,17 @@ export class MonsterPainter {
           tint[0] *= 0.86;
           tint[1] *= 0.72;
           tint[2] *= 0.92;
+        }
+        // Withered (Wither Field): a sallow, drained cast; Hexed (Entropy Hex): a dim violet one.
+        if (ail & AILMENT_BIT.withered) {
+          tint[0] *= 0.82;
+          tint[1] *= 0.84;
+          tint[2] *= 0.62;
+        }
+        if (ail & AILMENT_BIT.hexed) {
+          tint[0] *= 0.8;
+          tint[1] *= 0.66;
+          tint[2] *= 0.9;
         }
         if (ail & AILMENT_BIT.frozen) {
           tint[0] = 0.58;
@@ -602,6 +616,16 @@ export class MonsterPainter {
         pen.life(0.4, 0.8);
         pen.size(0.4, 0.7);
         b.gravity = 20;
+        pen.emit();
+      }
+      // Withered: dusty motes flaking off and drifting up.
+      if ((ail & AILMENT_BIT.withered) && Math.random() < fxDt * 4) {
+        const b = pen.burst(x + (Math.random() - 0.5) * m.radius[i] * 1.8, y - Math.random() * h * 0.9, 1, WITHERED_MOTE, C.smokeEnd);
+        b.sprite = 'fx/mote';
+        pen.speed(2, 6);
+        pen.life(0.5, 0.9);
+        pen.size(0.4, 0.7);
+        b.gravity = -15;
         pen.emit();
       }
       // Decay: violet motes seeping off the body and sinking.

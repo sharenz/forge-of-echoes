@@ -128,6 +128,10 @@ export const SFX_LIMITS: Partial<Record<SfxId, Limit>> = {
   mortarBlast: { perFrame: 2, interval: 0.05 },
   stormCallStrike: { perFrame: 3, interval: 0.03 },
   frostSpike: { perFrame: 2, interval: 0.03 },
+  // power rework SK3 roster batch 2
+  castLash: { perFrame: 2, interval: 0.06 },
+  sigilPillar: { perFrame: 2, interval: 0.05 },
+  barrierBreak: { perFrame: 1, interval: 0.2 },
 };
 
 /** The cue of each debuff taking hold on the local player. */
@@ -180,6 +184,17 @@ export const CAST_SFX: Partial<Record<SkillId, SfxId | null>> = {
   frostOrb: 'castOrb',
   stormCall: 'castStormCall',
   glacialSpikes: 'castFrost',
+  // power rework SK3 roster batch 2 (Voltaic Pulse is voiced by its 'nova' ring)
+  gravityWell: 'castGravityWell',
+  rimeBulwark: 'barrierUp',
+  immolationSigil: 'castSigil',
+  staticAegis: 'aegisUp',
+  voltaicPulse: null,
+  entropyHex: 'castHex',
+  concussiveBlast: 'concussiveBlast',
+  staticLash: 'castLash',
+  echoSigil: 'echoSigil',
+  witherField: 'castWither',
 };
 
 export const HIT_SFX: Record<DamageType, SfxId> = {
@@ -815,6 +830,10 @@ export class SoundDirector {
           case 'frostSpike':
             this.play('frostSpike', e.x, e.y, 0.8, this.jitter(0.06));
             return;
+          // power rework SK3: the sigil's pillar erupting
+          case 'immolationSigil':
+            this.play('sigilPillar', e.x, e.y, 0.95, this.jitter(0.05));
+            return;
           case 'rendStrike':
             this.play('monsterSlam', e.x, e.y, 0.6, 1.15 * this.jitter(0.04));
             return;
@@ -866,13 +885,20 @@ export class SoundDirector {
       case 'ward':
         return; // voiced by its 'cast' event
       case 'nova': {
-        const id: SfxId = e.skill === 'glacialNova' ? 'glacialNovaBurst' : 'castNova';
+        // Roster batch 2 (SK3): Voltaic Pulse's ring, Singularity's collapse, Brittle Retort's ice nova.
+        const id: SfxId = e.skill === 'glacialNova' ? 'glacialNovaBurst' : e.skill === 'voltaicPulse' ? 'voltaicPulse'
+          : e.skill === 'gravityWell' ? 'wellCollapse' : e.skill === 'rimeBulwark' ? 'glacialNovaBurst' : 'castNova';
         if (e.playerId === localId) this.play(id, undefined, undefined, 1, this.jitter(0.03));
         else this.play(id, e.x, e.y, ALLY_VOLUME, this.jitter(0.03));
         return;
       }
       case 'buff':
-        return; // voiced by its 'cast' event
+        // Voiced by its 'cast' event; a zero-length Rime Bulwark buff is the barrier breaking.
+        if (e.skill === 'rimeBulwark' && e.duration <= 0) {
+          if (e.playerId === localId) this.play('barrierBreak', undefined, undefined, 1, this.jitter(0.04));
+          else this.play('barrierBreak', e.x, e.y, ALLY_VOLUME, this.jitter(0.04));
+        }
+        return;
       case 'chain':
         return; // visual only: Arc Chain's cast and hits carry the sound
       case 'ailment':

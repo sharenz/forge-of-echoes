@@ -59,14 +59,15 @@ describe('skill book', () => {
   });
 
   it('shows a new skill as soon as its data turns available (no hard-coded list)', () => {
-    // Gravity Well (roster batch 2) has not shipped yet; Phase Stride did with SK2.
-    const flipped = skills.map((s) => (s.id === 'gravityWell' ? { ...s, available: true } : s));
+    // Meteor Rain (roster batch 3) has not shipped yet; Phase Stride did with SK2, Gravity Well with SK3.
+    const flipped = skills.map((s) => (s.id === 'meteorRain' ? { ...s, available: true } : s));
     const ch = character(10);
     const before = skillBook(skills, ch);
     const after = skillBook(flipped, ch);
     expect(before.order).toContain('phaseStride');
-    expect(before.order).not.toContain('gravityWell');
-    expect(after.order).toContain('gravityWell');
+    expect(before.order).toContain('gravityWell');
+    expect(before.order).not.toContain('meteorRain');
+    expect(after.order).toContain('meteorRain');
     expect(after.coming).toBe(before.coming - 1);
   });
 
@@ -76,7 +77,7 @@ describe('skill book', () => {
     expect(matchesSkill(nova, 'FIRE ember')).toBe(true);
     expect(matchesSkill(nova, 'cold')).toBe(false);
     const book = skillBook(skills, character(30), 'rime');
-    expect(book.order).toEqual(['rimeShards']);
+    expect(book.order).toEqual(['rimeShards', 'rimeBulwark']);
   });
 
   it('steps through the flat order with wrap-around (arrow keys)', () => {

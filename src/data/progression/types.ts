@@ -128,7 +128,11 @@ export type AugmentEffect =
 
 /** The behaviour numbers a `tune` augment effect can raise (see SkillPrimitives). */
 export type TuneKey =
-  | 'groundEffectiveness' | 'groundRadiusPct' | 'decayPct' | 'bounces' | 'strideEvasion' | 'restoreFocus' | 'restoreLife';
+  | 'groundEffectiveness' | 'groundRadiusPct' | 'decayPct' | 'bounces' | 'strideEvasion' | 'restoreFocus' | 'restoreLife'
+  // Roster batch 2 (SK3)
+  | 'zonePullPct' | 'zoneTaken' | 'zoneSlow' | 'zoneCollapse' | 'hexExposure' | 'hexWeaken' | 'witherLinger'
+  | 'barrierPct' | 'barrierRegen' | 'barrierRetort' | 'aegisResist' | 'aegisPulse'
+  | 'echoCasts' | 'echoDamage' | 'echoDelay' | 'echoRefund';
 
 /**
  * Base behaviour numbers of a skill beyond the shared runtime fields (power rework SK2). The rules resolve them (with `tune`
@@ -145,6 +149,23 @@ export interface SkillPrimitives {
   stride?: { speed: number; evasion: number };
   /** Restore over the skill's duration: shares of maximum Focus and life. */
   restore?: { focus: number; life: number };
+  // Roster batch 2 (SK3); the rules resolve these in game/progression/skills-roster2.ts.
+  /**
+   * A ground zone at the cursor (Gravity Well, Entropy Hex, Wither Field): acts every `interval` s for the skill's duration in its
+   * radius. `pull` units/s toward the centre, `slow` and `taken` fractions while inside, Hex `exposure` (points) and `weaken`
+   * (fraction), `withered` stacks per tick with `linger` s after leaving; ticks deal the hit (as a Decay stack with `decay`);
+   * `collapse` effectiveness bursts at the end in `collapseRadius`.
+   */
+  zone?: {
+    interval: number; pull?: number; slow?: number; taken?: number; exposure?: number; weaken?: number; withered?: number; linger?: number;
+    decay?: boolean; collapse?: number; collapseRadius?: number;
+  };
+  /** A barrier of `share` × maximum life (by rank) for the skill's duration; attackers within `chillRadius` are chilled. */
+  barrier?: { share: RankValue; chillRadius: number; retortRadius: number };
+  /** Static Aegis: retaliation at most every `gap` s. */
+  aegis?: { gap: number };
+  /** Echo Sigil: the next `casts` damaging casts repeat after `delay` s at `damage` × the hit. */
+  echoSigil?: { casts: number; delay: number; damage: number };
 }
 
 export interface AugmentDef {

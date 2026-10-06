@@ -19,7 +19,7 @@ import {
 } from './debuffs';
 import { clamp, dirFromVector, finiteOr } from './math';
 import { CAST_SLOW, combineSlow, playerFlowDrift, playerSlow, readMove, resolvePlayerAt, slowedSpeed } from './movement';
-import { releaseSkill, tickFireTrail, tickPendingNovas, tickPendingStrikes, tickSelfBuffs, tickWard } from './skills';
+import { releaseSkill, tickFireTrail, tickPendingNovas, tickPendingStrikes, tickRoster2, tickSelfBuffs, tickWard } from './skills';
 import { MFLAG, MSTATE } from './stores';
 import type { FlaskState, PlayerState, SkillChargeState, World } from './world';
 
@@ -107,6 +107,13 @@ export function createPlayer(join: SimPlayerJoin, x: number, y: number): PlayerS
     pendingStrikes: [],
     stride: { time: 0, speed: 0, evasion: 0 },
     restore: { time: 0, focusRate: 0, lifeRate: 0 },
+    skillAreas: [],
+    barrier: { amount: 0, max: 0, time: 0, chillRadius: 0, regen: 0, retort: 0, retortRadius: 0 },
+    aegis: {
+      time: 0, reduction: 0, radius: 0, damage: 0, critChance: 0, critMultiplier: 1.5, ailmentChance: 0, gap: 0, cooldown: 0, resist: 0,
+      pulse: 0, pulseTimer: 0,
+    },
+    echoSigil: { casts: 0, time: 0, delay: 0, damage: 0, refund: 0 },
     portalLatch: 0,
     portalDwellId: 0,
     portalDwell: 0,
@@ -340,6 +347,7 @@ export function updatePlayer(w: World, p: PlayerState): void {
   updateCasting(w, p);
   tickPendingNovas(w, p);
   tickPendingStrikes(w, p);
+  tickRoster2(w, p);
 
   // Movement (the shared movePlayer rules): slowed while a timed active skill is cast (never by
   // the basic attack), by debuffs (chilled; frozen and rooted hold her still), by tar underfoot, and

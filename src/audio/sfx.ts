@@ -15,6 +15,7 @@
 import type { SfxId } from '../contracts/audio';
 import type { BurstPolicy } from './mixing';
 import { ROSTER_SFX } from './sfx-skills';
+import { ROSTER2_SFX } from './sfx-skills2';
 import { midi, PARTIALS, type Partial as BellPartial, type VoiceBuilder } from './voice';
 
 export type SfxGroup = 'skill' | 'combat' | 'monster' | 'boss' | 'player' | 'loot' | 'flow' | 'ui' | 'craft';
@@ -1875,4 +1876,6 @@ export const SFX: Record<SfxId, SfxDef> = {
   },
   // power rework SK2 roster batch 1 (sfx-skills.ts)
   ...ROSTER_SFX,
+  // power rework SK3 roster batch 2 (sfx-skills2.ts)
+  ...ROSTER2_SFX,
 };

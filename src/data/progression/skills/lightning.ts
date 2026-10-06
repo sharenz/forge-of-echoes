@@ -77,7 +77,7 @@ export const LIGHTNING_SKILLS = {
     areaScales: 'radius',
     projectileNoun: 'strike',
   }),
-  staticAegis: plannedSkill('staticAegis', {
+  staticAegis: skill('staticAegis', {
     name: 'Static Aegis',
     description: 'You take less damage; enemies that strike you nearby are hit by lightning and shocked.',
     branch: 'survival',
@@ -94,12 +94,14 @@ export const LIGHTNING_SKILLS = {
     cooldown: { lerp: [14, 10] },
     effectiveness: 0.6,
     critChance: 0,
-    ailmentChance: 0,
+    ailmentChance: 100,
     duration: { lerp: [5, 7] },
     damageReduction: 0.25,
     radius: 70,
+    primitives: { aegis: { gap: 0.25 } },
+    projectileNoun: 'pulse',
   }),
-  voltaicPulse: plannedSkill('voltaicPulse', {
+  voltaicPulse: skill('voltaicPulse', {
     name: 'Voltaic Pulse',
     description: 'An expanding ring of lightning that hits each enemy once and shocks it.',
     branch: 'destruction',
@@ -120,7 +122,7 @@ export const LIGHTNING_SKILLS = {
     radius: 150,
     areaScales: 'radius',
   }),
-  staticLash: plannedSkill('staticLash', {
+  staticLash: skill('staticLash', {
     name: 'Static Lash',
     description: 'A held beam that lashes the nearest enemy in sight again and again.',
     branch: 'destruction',

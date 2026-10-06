@@ -106,7 +106,7 @@ export const COLD_SKILLS = {
     radius: 20,
     projectileNoun: 'spike',
   }),
-  rimeBulwark: plannedSkill('rimeBulwark', {
+  rimeBulwark: skill('rimeBulwark', {
     name: 'Rime Bulwark',
     description: 'A barrier of ice absorbs a share of your life in damage; attackers are chilled.',
     branch: 'survival',
@@ -125,6 +125,7 @@ export const COLD_SKILLS = {
     critChance: 0,
     ailmentChance: 0,
     duration: 6,
+    primitives: { barrier: { share: { lerp: [0.25, 0.45] }, chillRadius: 70, retortRadius: 90 } },
   }),
   blizzard: plannedSkill('blizzard', {
     name: 'Blizzard',

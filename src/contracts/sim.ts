@@ -105,11 +105,36 @@ export type AugmentRuntime =
    */
   | { p: 'stride'; speed: number; evasion: number }
   /** Restores `focus` × maximum Focus and `life` × maximum life evenly over the skill's duration (Arcane Reprieve). */
-  | { p: 'restore'; focus: number; life: number };
+  | { p: 'restore'; focus: number; life: number }
+  // Roster batch 2 (SK3): the zones, barrier, retaliation and echo buff of the new skills, resolved by the rules.
+  /**
+   * A ground zone at the cursor for the skill's duration and radius (Gravity Well, Entropy Hex, Wither Field), acting every `interval`
+   * s: `pull` units/s toward its centre (bosses and heavy monsters half), `slow` (fraction) and `taken` (more damage taken, fraction)
+   * while inside; Hex `exposure` (resistance points to fire, cold, lightning and void) and `weaken` (the monster deals that fraction
+   * less damage); Wither Field's `withered` (stacks added per tick) with `linger` seconds after leaving. Each tick deals the skill's
+   * hit as damage over time (`decay`: as a Decay stack instead). `collapse` > 0: at the end it bursts for that damage in `collapseRadius`.
+   */
+  | {
+    p: 'zone'; interval: number; pull: number; slow: number; taken: number; exposure: number; weaken: number; withered: number;
+    linger: number; decay: boolean; collapse: number; collapseRadius: number;
+  }
+  /**
+   * A barrier (Rime Bulwark) absorbing `share` × maximum life for the skill's duration; attackers within `chillRadius` are chilled;
+   * it regenerates `regen` × its size per second while you stand still; when it breaks, a nova of `retort` cold damage (0 = none)
+   * in `retortRadius`.
+   */
+  | { p: 'barrier'; share: number; chillRadius: number; regen: number; retort: number; retortRadius: number }
+  /**
+   * Static Aegis for the skill's duration: the skill's damage reduction; when an enemy hits you every enemy within the skill's radius
+   * takes the skill's hit (at most every `gap` s); `resist` added lightning resistance (fraction); `pulse` > 0: also every `pulse` s.
+   */
+  | { p: 'aegis'; gap: number; resist: number; pulse: number }
+  /** Echo Sigil: your next `casts` damaging skill casts repeat once after `delay` s at `damage` × the hit, refunding `refund` × their cost. */
+  | { p: 'echoSigil'; casts: number; delay: number; damage: number; refund: number };
 
 /** Every AugmentRuntime primitive tag (the executor's coverage test reads this). */
 export const AUGMENT_PRIMITIVES = [
-  'echo', 'fan', 'invulnerable', 'ground', 'decay', 'bounce', 'stride', 'restore',
+  'echo', 'fan', 'invulnerable', 'ground', 'decay', 'bounce', 'stride', 'restore', 'zone', 'barrier', 'aegis', 'echoSigil',
 ] as const satisfies readonly AugmentRuntime['p'][];
 
 export interface FlaskRuntime {
@@ -310,7 +335,9 @@ export const AILMENT_BIT = { burning: 1, chilled: 2, shocked: 4, shielded: 8, em
   /** Map events, wave 2: a frozen statue (Stasis Host: invulnerable and inert) / a fixture (a destructible prop the presenter draws itself). */
   frozen: 128, fixture: 256,
   /** Power rework (SK2): Decay stacks (Umbral Bolt's void damage over time). */
-  decayed: 512 } as const;
+  decayed: 512,
+  /** Power rework (SK3): Withered stacks (Wither Field) / inside an Entropy Hex (exposed, deals less damage). */
+  withered: 1024, hexed: 2048 } as const;
 
 export const PROJECTILE_KINDS = [
   'emberLance', 'novaFlame', 'flameWave', 'rimeShard', // player
@@ -339,6 +366,11 @@ export const AREA_KINDS = [
   // Roster batch 1 (power rework SK2): the player's own telegraphs, harmless to players (the skill code deals the damage when they resolve)
   'stormCall',        // Storm Call: a strike's 0.7 s telegraph at its landing point; the bolt falls when it resolves
   'frostSpike',       // Glacial Spikes: one spike of the row, erupting when it resolves (spikes resolve in sequence away from her)
+  // Roster batch 2 (power rework SK3): the player's own zones and sigils, harmless to players (the skill code acts on monsters)
+  'gravityWell',      // Gravity Well: the vortex for its duration (it resolves when it ends; Singularity's collapse is that moment)
+  'entropyHex',       // Entropy Hex: the cursed circle for its duration
+  'witherField',      // Wither Field: the rotting zone for its duration
+  'immolationSigil',  // Immolation Sigil: the brand's telegraph; the pillar erupts when it resolves
 ] as const;
 export type AreaKind = (typeof AREA_KINDS)[number];
 

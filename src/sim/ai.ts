@@ -90,6 +90,14 @@ export function updateMonsters(w: World): void {
     if (m.empowerTime[i] > 0) m.empowerTime[i] -= DT;
     if (m.hasteTime[i] > 0) m.hasteTime[i] -= DT;
     if (m.groundCd[i] > 0) m.groundCd[i] -= DT;
+    // Roster batch 2 zones (power rework SK3): their slow, Crushing, the Hex and Withered run out once the monster leaves.
+    if (m.zoneSlowTime[i] > 0) m.zoneSlowTime[i] -= DT;
+    if (m.vulnTime[i] > 0) m.vulnTime[i] -= DT;
+    if (m.hexTime[i] > 0) m.hexTime[i] -= DT;
+    if (m.witherTime[i] > 0) {
+      m.witherTime[i] -= DT;
+      if (m.witherTime[i] <= 0) m.witherStacks[i] = 0;
+    }
     // Burning (a phase-immune boss lets the burn run out harmlessly; see tickIgnite).
     if (m.igniteTime[i] > 0 && tickIgnite(w, i, DT)) continue;
     if (m.decayTime[i] > 0 && tickDecay(w, i, DT)) continue;
@@ -103,6 +111,8 @@ export function updateMonsters(w: World): void {
     if (m.flags[i] & MFLAG.frozen) bits |= AILMENT_BIT.frozen;
     if (m.flags[i] & MFLAG.fixture) bits |= AILMENT_BIT.fixture;
     if (m.decayTime[i] > 0) bits |= AILMENT_BIT.decayed;
+    if (m.witherTime[i] > 0 && m.witherStacks[i] > 0) bits |= AILMENT_BIT.withered;
+    if (m.hexTime[i] > 0) bits |= AILMENT_BIT.hexed;
     if (w.mapEvent && (w.mapEvent.members.size > 0 || w.mapEvent.exposed.size > 0)) bits |= eventAilments(w, m.id[i]);
     m.ailments[i] = bits;
 
@@ -386,10 +396,16 @@ function integrate(w: World, i: number, hunting = false): void {
   if (m.empowerTime[i] > 0) f *= 1 + EMPOWER_BONUS;
   if (m.hasteTime[i] > 0) f *= 1 + HASTE_BONUS;
   if (w.mapEvent && w.mapEvent.monsterSpeed !== 1) f *= w.mapEvent.monsterSpeed;
+  if (m.zoneSlowTime[i] > 0) f *= 1 - m.zoneSlow[i];
   const x0 = m.x[i];
   const y0 = m.y[i];
   let nx = x0 + vx * f * DT + sx;
   let ny = y0 + vy * f * DT + sy;
+  // Gravity Well's pull this tick (power rework SK3; written by the player's zone before the monsters act).
+  if (m.pullTick[i] === w.tick && (m.pullVX[i] !== 0 || m.pullVY[i] !== 0)) {
+    nx += m.pullVX[i] * DT;
+    ny += m.pullVY[i] * DT;
+  }
   // Conveyor belts (D 10.5a): the ground carries every body but fixtures, ghosts and the dummy (heavy ones and bosses half), on top
   // of whatever the brain did (a leap or charge keeps its own velocity). Scenery below still stops the sum. Never more than 60% of
   // the monster's own speed, so a slow walker can always make headway against a belt.

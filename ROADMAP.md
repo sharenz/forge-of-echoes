@@ -21,8 +21,12 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "
    `e2e --only skills` at 1280x720 and 1024x600). **SK2 built 2026-10-06:** ten new skills playable (Phase Stride 5, Glacial Nova 7,
    Spark 8, Cinder Mortar 9, Arcane Reprieve 10, Umbral Bolt 11 with Decay on monsters, Kinetic Lance 13, Frost Orb 14, Storm Call 16,
    Glacial Spikes 18), 17 more live augments (34 in all), each with sim behaviour, visuals, sounds and tooltips that read the sim's
-   numbers; needs protocol 29 (new projectile and area kinds, the `buff` event, the decayed ailment bit). R2 is complete with it. Then
-   R3/R4 (remaining skills and augments), R5 "Orrery" passive tree, R6 balance pass.
+   numbers; needs protocol 29 (new projectile and area kinds, the `buff` event, the decayed ailment bit). R2 is complete with it.
+   R3 "Skills II": **SK3 built 2026-10-06:** ten more skills playable (Gravity Well 20 with pull, Rime Bulwark 22 with a barrier,
+   Immolation Sigil 24, Static Aegis 26, Voltaic Pulse 28, Entropy Hex 30 applying exposure, Concussive Blast 32, Static Lash 34, Echo
+   Sigil 36, Wither Field 40 with Withered on monsters), 25 more live augments (59 in all); needs protocol 30 (four area kinds, two
+   ailment bits, 13 SFX ids). Still to do in R3: SK5 flagship augments (in progress). Then R4 (SK4, SK6), R5 "Orrery" passive tree,
+   R6 balance pass.
 3. **Finish wave 3: leftovers.** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today", the Re-chart tooltip entry and
    F1 polish are done (2026-10-06; F1: eleven Atlas/pin/surge sounds, pin and surge banners, Calm also follows Screen shake 0 and
    stills the table's CSS motion, Atlas counts in the server status log). Still open from F1: the ambient table bed of brief A 5.5

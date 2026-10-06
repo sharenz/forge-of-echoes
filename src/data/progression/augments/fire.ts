@@ -153,4 +153,19 @@ export const FIRE_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'planned', primitive: 'shape', note: 'scatter' }],
     },
   ],
+  // Roster batch 2 (SK3), skills.md 6
+  immolationSigil: [
+    {
+      id: 'twinSigils', name: 'Twin Sigils', tier: 1, text: 'Two sigils 80 units apart at the cursor, each 35% less damage',
+      effects: [{ k: 'count', add: 1 }, { k: 'more', pct: -35 }],
+    },
+    {
+      id: 'lingeringPillar', name: 'Lingering Pillar', tier: 2, text: 'The pillar burns on for 3 seconds, 0.5× effectiveness every 0.5 seconds',
+      effects: [{ k: 'add', stat: 'duration', value: 3 }],
+    },
+    {
+      id: 'brandSigil', name: 'Brand Sigil', tier: 3, text: 'The pillar exposes fire by 15 points for 4 seconds',
+      effects: [{ k: 'flag', flag: 'brand' }],
+    },
+  ],
 };
