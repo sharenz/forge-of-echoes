@@ -27,7 +27,7 @@ import type { Rng } from '../contracts/rng';
 import { createRng, hashString } from '../core/rng';
 import type { AtlasAreaId } from '../contracts/atlas';
 import { ATLAS_RARE_DOOR_CHANCE, ATLAS_START, findAtlasArea } from '../data/progression/atlas';
-import { refillBelt } from '../game/progression/flasks';
+import { killCharge, refillBelt } from '../game/progression/flasks';
 import { markWarmed, wantsWarmup } from '../game/progression/guide';
 import { atlasCreditFor, creditEventCompletion, discoverAfterBoss, newAtlas, paidTerritoryFee } from '../game/progression/atlas';
 import { paidEntranceKey } from '../game/progression/runs';
@@ -1118,7 +1118,12 @@ export class Game implements InstanceHost {
       case 'kill':
         if (inst instanceof MapInstance && o.playerId > 0) {
           const s = inst.members.get(o.playerId);
-          if (s) inst.participant(s).kills++;
+          if (s) {
+            const kills = ++inst.participant(s).kills;
+            // Flask kill charge (power rework 10.3): every Nth kill of the run tops up the belt.
+            const r = killCharge(s.record.ch, kills);
+            if (r) { this.setCharacter(s, r.character); inst.updateRuntime(s); }
+          }
         }
         break;
       case 'flaskUsed': {

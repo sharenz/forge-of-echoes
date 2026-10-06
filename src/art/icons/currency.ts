@@ -108,6 +108,14 @@ const GLYPH = {
   bolt: ['...###.', '..###..', '.#####.', '...##..', '..##...', '.##....', '.#.....'],
   heart: ['.......', '.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'],
   wing: ['.....##', '...####', '..####.', '.####..', '.###...', '##.....', '#......'],
+  eclipse: ['..###..', '.##....', '##.....', '##.....', '##.....', '.##....', '..###..'],
+} as const;
+
+/** Marks drawn on the belly of the utility flasks (7x7): double chevron (speed), shield (resistance), quicksilver drop (Focus). */
+const FLASK_MARK = {
+  chevrons: ['#..#...', '.#..#..', '..#..#.', '...#..#', '..#..#.', '.#..#..', '#..#...'],
+  shield: ['#######', '#######', '#######', '.#####.', '.#####.', '..###..', '...#...'],
+  drop: ['...#...', '..###..', '..###..', '.#####.', '#######', '#######', '.#####.'],
 } as const;
 
 /**
@@ -307,6 +315,14 @@ function voidNeedle(): Frame {
 function flask(liquid: Ramp): Frame {
   const f = newIcon();
   flaskShape(f, 15.5, 19, 8, liquid, 0.62);
+  return f;
+}
+
+/** A flask with a bold mark etched into the glass of its belly (the utility flasks). */
+function markedFlask(liquid: Ramp, mark: readonly string[]): Frame {
+  const f = newIcon();
+  flaskShape(f, 15.5, 19, 8, liquid, 0.7);
+  glyph(f, mark, 15.5, 21.5, C.white, liquid[1]);
   return f;
 }
 
@@ -654,6 +670,7 @@ export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
   'icon/currency/essenceStorm': () => finishIcon(essence([C.voidDeep, C.voidDark, C.voidMid, C.stormMid, C.storm, C.lightning], GLYPH.bolt, C.lightning, C.voidDeep, C.lightning), C.lightning),
   'icon/currency/essenceVital': () => finishIcon(essence([C.mossDeep, C.vitalDeep, C.vitalMid, C.vitalGreen, C.vitalLight, C.white], GLYPH.heart, C.lifeLight, C.lifeDark, C.vitalLight), C.vitalLight),
   'icon/currency/essenceSwift': () => finishIcon(essence([C.frostDeep, C.swiftDeep, C.swiftMid, C.swiftTeal, C.swiftLight, C.white], GLYPH.wing, C.white, C.swiftDeep, C.swiftLight), C.swiftLight),
+  'icon/currency/umbralEssence': () => finishIcon(essence([C.voidDeep, C.voidDark, C.voidMid, C.voidHi, C.voidGlow, C.white], GLYPH.eclipse, C.white, C.voidDeep, C.voidGlow), C.voidGlow),
   'icon/currency/catalyst': () => finishIcon(catalyst(), C.goldHi),
   'icon/currency/solvent': () => finishIcon(solvent()),
   'icon/currency/seal': () => finishIcon(seal()),
@@ -671,6 +688,9 @@ export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
   'icon/currency/riftKey': () => finishIcon(atlasKey('rift'), C.voidGlow),
   'icon/flask/lifeFlask': () => finishIcon(flask([C.wineDeep, C.lifeDark, C.blood, C.life, C.lifeLight, C.hot])),
   'icon/flask/focusFlask': () => finishIcon(flask([C.frostDeep, C.frostDark, C.frostMid, C.mana, C.frost, C.ice]), C.frost),
+  'icon/flask/quickstep': () => finishIcon(markedFlask([C.mossDeep, C.vitalDeep, C.vitalMid, C.vitalGreen, C.vitalLight, C.white], FLASK_MARK.chevrons), C.vitalLight),
+  'icon/flask/aegis': () => finishIcon(markedFlask([C.ochre, C.goldDark, C.gold, C.goldHi, C.parchment, C.white], FLASK_MARK.shield), C.goldHi),
+  'icon/flask/quicksilverMind': () => finishIcon(markedFlask([C.stone, C.ashGrey, C.swiftMid, C.swiftLight, C.ice, C.white], FLASK_MARK.drop), C.swiftLight),
   'icon/map/ashenForge': () => finishIcon(mapIcon(MAP_FORGE), C.hot),
   'icon/map/rimedOssuary': () => finishIcon(mapIcon(MAP_OSSUARY), C.ice),
   'icon/map/ironColiseum': () => finishIcon(mapIcon(MAP_COLISEUM)),

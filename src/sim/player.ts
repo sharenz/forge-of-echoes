@@ -9,12 +9,12 @@ import type {
 } from '../contracts/sim';
 import { areaSlowAt } from './area-geometry';
 import {
-  ALLY_PUSH_MAX, ALLY_PUSH_RATE, CROWD_CONE_COS, CROWD_CONTACT_PAD, CROWD_SLOW_FLOOR, CROWD_SLOW_PER_MONSTER, DT, HIT_FLASH_DECAY,
+  ALLY_PUSH_MAX, ALLY_PUSH_RATE, CROWD_CONE_COS, CROWD_CONTACT_PAD, CROWD_SLOW_FLOOR, CROWD_SLOW_PER_MONSTER, DT, FLASK_FX, HIT_FLASH_DECAY,
   INSTANT_RETRIGGER, NOT_ENOUGH_FOCUS_REPEAT, PLAYER_KNOCKBACK_MAX, PLAYER_KNOCKBACK_RATE, PLAYER_RADIUS,
   PULL_MAX_DISTANCE, PULL_TIME,
 } from './constants';
 import {
-  DebuffState, applyDebuff, castRate, cleanseDebuffs, isFrozen, moveSlowOf, restoreDebuffs, tickDebuffs, writeDebuffViews,
+  DebuffState, applyDebuff, castRate, cleanseDebuffs, flaskActiveFx, isFrozen, moveSlowOf, restoreDebuffs, tickDebuffs, writeDebuffViews,
   type DebuffCarry,
 } from './debuffs';
 import { clamp, dirFromVector, finiteOr } from './math';
@@ -194,10 +194,18 @@ function useFlask(w: World, p: PlayerState, slot: number): void {
   }
   w.outcomes.push({ t: 'flaskUsed', playerId: p.id, slot });
   w.events.push({ t: 'flask', playerId: p.id, resource: rt.resource });
+  // Utility flasks (power rework): the effect is read from the active flask each tick; only these one-off parts happen here.
+  if (rt.flaskId === 'quickstep') { cleanseDebuffs(w, p, QUICKSTEP_CLEANSE); return; }
+  if (rt.flaskId === 'aegis') return;
+  if (rt.flaskId === 'quicksilverMind') {
+    p.focus = Math.min(p.stats.maxFocus, p.focus + p.stats.maxFocus * FLASK_FX.quicksilverMind.focusInstant);
+    return;
+  }
   // GAME_SPEC §13: the life flask puts out burning and stanches bleeding; the focus flask lifts withered.
   cleanseDebuffs(w, p, rt.resource === 'life' ? LIFE_FLASK_CLEANSE : FOCUS_FLASK_CLEANSE);
 }
 
+const QUICKSTEP_CLEANSE: readonly PlayerDebuff[] = ['rooted'];
 const LIFE_FLASK_CLEANSE: readonly PlayerDebuff[] = ['burning', 'bleeding'];
 const FOCUS_FLASK_CLEANSE: readonly PlayerDebuff[] = ['withered'];
 
@@ -323,7 +331,7 @@ export function updatePlayer(w: World, p: PlayerState): void {
   tickFlasks(p);
   const s = p.stats;
   if (s.lifeRegen > 0) p.life = Math.min(s.maxLife, p.life + s.lifeRegen * DT);
-  if (s.focusRegen > 0) p.focus = Math.min(s.maxFocus, p.focus + s.focusRegen * DT);
+  if (s.focusRegen > 0) p.focus = Math.min(s.maxFocus, p.focus + s.focusRegen * (1 + flaskActiveFx(p, 'quicksilverMind') * FLASK_FX.quicksilverMind.focusRegen) * DT);
   tickWard(w, p);
   updateCasting(w, p);
   tickPendingNovas(w, p);
@@ -352,7 +360,7 @@ export function updatePlayer(w: World, p: PlayerState): void {
     const crowd = ml > 0.05 && base < 1 ? crowdFactor(w, p, mx / ml, my / ml) : 1;
     // Uncrowded, the slow is exactly what a predicting client passes (see movement.ts playerSlow).
     const slow = crowd === 1 ? base : 1 - (1 - base) * crowd;
-    const speed = slowedSpeed(s.moveSpeed, slow);
+    const speed = slowedSpeed(s.moveSpeed * (1 + flaskActiveFx(p, 'quickstep') * FLASK_FX.quickstep.moveSpeed), slow);
     p.vx = mx * speed;
     p.vy = my * speed;
     // A conveyor belt underfoot adds its drift to her own velocity (movement.ts movePlayerDrifted: same expression, so client

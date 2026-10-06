@@ -119,14 +119,14 @@ describe('experience', () => {
     expect(r.character.xp).toBe(10);
   });
 
-  it('stops at level 60', () => {
-    const r = rules.grantXp(bareCharacter({ level: 59, xp: 0 }), 1e12);
-    expect(r.character.level).toBe(60);
+  it('stops at the level cap (80)', () => {
+    const r = rules.grantXp(bareCharacter({ level: 79, xp: 0 }), 1e12);
+    expect(r.character.level).toBe(80);
     expect(r.levelsGained).toBe(1);
     expect(r.character.xp).toBe(0);
     const again = rules.grantXp(r.character, 5000);
     expect(again.levelsGained).toBe(0);
-    expect(again.character.level).toBe(60);
+    expect(again.character.level).toBe(80);
     expect(again.character.xp).toBe(0);
   });
 

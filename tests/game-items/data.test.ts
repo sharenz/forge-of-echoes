@@ -131,7 +131,9 @@ describe('affixes', () => {
           const better = a.tiers[i - 1];
           expect(better.itemLevel, a.id).toBeGreaterThan(t.itemLevel);
           expect(better.weight, a.id).toBeLessThan(t.weight);
-          expect(better.min, a.id).toBeGreaterThan(t.max);
+          // Narrow integer ladders (maximum resistance moves the cap 1 to 3 points) repeat a value in neighbouring tiers.
+          if (a.id === 'maxResistance') expect(better.min, a.id).toBeGreaterThanOrEqual(t.max);
+          else expect(better.min, a.id).toBeGreaterThan(t.max);
         }
       });
       expect(a.tiers[a.tiers.length - 1].itemLevel, a.id).toBe(1);
@@ -202,7 +204,7 @@ describe('currencies', () => {
 });
 
 describe('uniques, scars, flasks, names', () => {
-  it('defines 16 uniques on real bases with valid flags', () => {
+  it('defines 26 uniques on real bases with valid flags', () => {
     expect(Object.keys(UNIQUES).sort()).toEqual([...UNIQUE_IDS].sort());
     for (const u of Object.values(UNIQUES)) {
       expect(BASES[u.baseId]).toBeDefined();
@@ -246,8 +248,8 @@ describe('uniques, scars, flasks, names', () => {
   it('exposes plain ContentInfo records', () => {
     expect(Object.keys(BASE_INFO)).toHaveLength(38);
     expect(Object.keys(CURRENCY_INFO).sort()).toEqual([...CURRENCY_IDS].sort());
-    expect(Object.keys(FLASK_INFO)).toHaveLength(2);
-    expect(Object.keys(UNIQUE_INFO)).toHaveLength(16);
+    expect(Object.keys(FLASK_INFO)).toHaveLength(5);
+    expect(Object.keys(UNIQUE_INFO)).toHaveLength(26);
     expect(BASE_INFO.ashwoodWand).toEqual({
       id: 'ashwoodWand', name: 'Ashwood Wand', itemClass: 'wand', slots: ['mainHand'], size: { w: 1, h: 3 },
       levelRequirement: 1, maxStability: 8, materialNote: BASES.ashwoodWand.materialNote,

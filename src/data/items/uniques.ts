@@ -176,4 +176,102 @@ export const UNIQUES: Record<UniqueId, UniqueDef> = {
     ],
     flags: [{ flag: 'closeQuarters', text: 'Hits deal 25% more damage within 80 units of you, and 25% less beyond 200 units' }],
   },
+  // Power rework (docs/power-rework/power-curve.md 10.4): ten build-enabling uniques. Rules: no `more` above 25%, none grants
+  // penetration above 16, none is mandatory. Flags marked `awaits` are data-complete but gated until their slice ships.
+  frostfireSpiral: {
+    id: 'frostfireSpiral', name: 'Frostfire Spiral', baseId: 'glassboneWand', levelRequirement: 30, dropWeight: 100,
+    flavor: 'The flame learned the cold, and kept the grudge.',
+    mods: [
+      { stats: ['fireDamage'], mode: 'increased', min: 25, max: 35 },
+      { stats: ['coldDamage'], mode: 'increased', min: 25, max: 35 },
+      { stats: ['castSpeed'], mode: 'increased', min: -15, max: -15 },
+    ],
+    flags: [{ flag: 'convertFireToCold', text: '40% of Fire Damage is converted to Cold Damage', awaits: 'P1 conversion' }],
+  },
+  stormcallersLattice: {
+    id: 'stormcallersLattice', name: "Stormcaller's Lattice", baseId: 'stormglassSceptre', levelRequirement: 46,
+    bossSource: 'varkus', dropWeight: 100,
+    flavor: 'Every strike finds the next willing thing.',
+    mods: [
+      { stats: ['lightningDamage'], mode: 'increased', min: 40, max: 50 },
+      { stats: ['lightningPen'], mode: 'flat', min: 12, max: 16 },
+      { stats: ['maxLife'], mode: 'increased', min: -10, max: -10 },
+    ],
+    flags: [{ flag: 'chainAll', text: 'Skills Chain 1 additional Time', awaits: 'P1 chaining' }],
+  },
+  penitentsPrism: {
+    id: 'penitentsPrism', name: "Penitent's Prism", baseId: 'prismaticAmulet', levelRequirement: 44, dropWeight: 100,
+    flavor: 'It splits every prayer into three, and charges for each.',
+    mods: [
+      { stats: ['elementalDamage'], mode: 'increased', min: 20, max: 30 },
+      { stats: ['elementalPen'], mode: 'flat', min: 10, max: 14 },
+    ],
+    flags: [{ flag: 'focusCostMore', text: 'Skills cost 15% more Focus', awaits: 'skills pass' }],
+  },
+  hollowCrown: {
+    id: 'hollowCrown', name: 'Hollow Crown', baseId: 'duskweaveRobe', levelRequirement: 52,
+    bossSource: 'hollowWarden', dropWeight: 100,
+    flavor: 'Whatever wore it was emptied first, and gladly.',
+    mods: [
+      { stats: ['voidDamage'], mode: 'increased', min: 35, max: 45 },
+      { stats: ['fireRes', 'coldRes', 'lightningRes', 'voidRes'], mode: 'flat', min: -10, max: -10, text: '{+v}% to all Resistances' },
+    ],
+    flags: [{ flag: 'decayStacks8', text: 'Decay stacks up to 8 times', awaits: 'P1 decay' }],
+  },
+  weepingHearth: {
+    id: 'weepingHearth', name: 'Weeping Hearth', baseId: 'emberSceptre', levelRequirement: 22, dropWeight: 100,
+    flavor: 'The fire does not die. It only takes longer to leave.',
+    mods: [
+      { stats: ['damageOverTime'], mode: 'increased', min: 60, max: 90 },
+      { stats: ['igniteChance'], mode: 'flat', min: -20, max: -20 },
+    ],
+    flags: [{ flag: 'igniteLingers', text: 'Ignite lasts 6 seconds and burns 40% less per second', awaits: 'P1 ignite' }],
+  },
+  gravewindBoots: {
+    id: 'gravewindBoots', name: 'Gravewind Boots', baseId: 'wayfarerGreaves', levelRequirement: 40, dropWeight: 100,
+    flavor: 'The dead walk fast when nothing holds them back.',
+    mods: [
+      { stats: ['moveSpeed'], mode: 'increased', min: 10, max: 14 },
+      { stats: ['cooldownRecovery'], mode: 'increased', min: 15, max: 25 },
+    ],
+    flags: [{ flag: 'phaseStrideLong', text: 'Phase Stride lasts twice as long', awaits: 'skills roster' }],
+  },
+  anchoritesSeal: {
+    id: 'anchoritesSeal', name: "Anchorite's Seal", baseId: 'dusksteelRing', levelRequirement: 48, dropWeight: 100,
+    flavor: 'Faith is a held breath. Hers was never let go.',
+    mods: [
+      { stats: ['maxFocus'], mode: 'flat', min: 30, max: 40 },
+      { stats: ['maxLife'], mode: 'increased', min: -8, max: -8 },
+    ],
+    flags: [{ flag: 'focusShield', text: '30% of Damage taken is drained from Focus first', awaits: 'P1 focus shield' }],
+  },
+  bellwether: {
+    id: 'bellwether', name: 'Bellwether', baseId: 'boneTalisman', levelRequirement: 38, dropWeight: 100,
+    flavor: 'One bell, rung true, is a whole choir.',
+    mods: [
+      { stats: ['str', 'dex', 'int'], mode: 'flat', min: 8, max: 12, text: '{+v} to all Attributes' },
+    ],
+    flags: [{ flag: 'slotOneAugments', text: 'The Skill in your first loadout slot has 2 additional Augment slots', awaits: 'SK0 augments' }],
+  },
+  needlepoint: {
+    id: 'needlepoint', name: 'Needlepoint', baseId: 'cinderOrb', levelRequirement: 36, dropWeight: 100,
+    flavor: 'A single, patient point, and the whole armour opens.',
+    mods: [
+      { stats: ['critChance'], mode: 'flat', min: 3, max: 4 },
+      { stats: ['critMultiplier'], mode: 'flat', min: 25, max: 35 },
+    ],
+    flags: [
+      { flag: 'nonCritLess', text: 'Hits that are not Critical Strikes deal 10% less Damage', awaits: 'P1 crit pipeline' },
+      { flag: 'critsPenetrate', text: 'Critical Strikes Penetrate 15% of enemy Resistances', awaits: 'P1 penetration' },
+    ],
+  },
+  twiceStruckBell: {
+    id: 'twiceStruckBell', name: 'Twice-Struck Bell', baseId: 'runedTome', levelRequirement: 34, dropWeight: 100,
+    flavor: 'The second note is the one that breaks the glass.',
+    mods: [
+      { stats: ['maxFocus'], mode: 'flat', min: 20, max: 30 },
+      { stats: ['cooldownRecovery'], mode: 'increased', min: 10, max: 15 },
+    ],
+    flags: [{ flag: 'lodgeTwice', text: 'Lodged detonations trigger a second time at 50% effect', awaits: 'skills roster' }],
+  },
 };

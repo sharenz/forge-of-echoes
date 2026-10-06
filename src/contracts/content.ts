@@ -41,6 +41,9 @@ export type BaseId = (typeof BASE_IDS)[number];
 export const UNIQUE_IDS = ['thePatientSpark', 'cinderwalkers', 'echoOfTheMatriarch', 'ruinheartBand',
   'everburn', 'sunkenSun', 'winterstride', 'stillwinter', 'vigilOfAsh', 'lastRite',
   'choirOfGlass', 'secondVerse', 'brokenLink', 'ironRefrain', 'unbowedCrown', 'victorsDebt',
+  // power rework R1 (append-only)
+  'frostfireSpiral', 'stormcallersLattice', 'penitentsPrism', 'hollowCrown', 'weepingHearth',
+  'gravewindBoots', 'anchoritesSeal', 'bellwether', 'needlepoint', 'twiceStruckBell',
 ] as const;
 export type UniqueId = (typeof UNIQUE_IDS)[number];
 
@@ -66,6 +69,7 @@ export const EQUIPMENT_CURRENCY_IDS = [
   'transmute',      // Change to a compatible base of the same equipment class
   'echoShard',      // Roll each unprotected affix value twice and keep the higher roll
   'crownFragment',  // Reroll a unique's numeric modifiers, preserving its special behaviour
+  'umbralEssence',  // Shape: add one void/physical damage or penetration affix (power rework)
 ] as const;
 /** Wave scarabs (slice of the first batch): four tiers each. */
 export const WAVE_SCARAB_IDS = ['hasteScarab1', 'hasteScarab2', 'hasteScarab3', 'hasteScarab4', 'invasionScarab1', 'invasionScarab2', 'invasionScarab3', 'invasionScarab4'] as const;
@@ -99,7 +103,7 @@ export const CURRENCY_IDS = [...EQUIPMENT_CURRENCY_IDS, ...MAP_CURRENCY_IDS] as 
 export type CurrencyId = (typeof CURRENCY_IDS)[number];
 
 /** Flasks. Icon id is `icon/flask/<id>`. */
-export const FLASK_IDS = ['lifeFlask', 'focusFlask'] as const;
+export const FLASK_IDS = ['lifeFlask', 'focusFlask', 'quickstep', 'aegis', 'quicksilverMind'] as const;
 export type FlaskId = (typeof FLASK_IDS)[number];
 
 /** Map bases. Icon id is `icon/map/<id>`. Each base has its own visual theme. */
@@ -139,6 +143,9 @@ export const PLAYER_FLAGS = [
   'novaEcho',         // Echo of the Matriarch: Ember Nova repeats once after 0.4 s
   'lanceIgnites', 'novaFan', 'riftChill', 'coldWard', 'wardFocus', 'flameRing',
   'shardPierceAll', 'rimeEcho', 'riftCleanse', 'arcReturns', 'wardRenew', 'closeQuarters',
+  // Power rework uniques (append-only). Their behaviour lands in later slices; see `awaits` in src/data/items/uniques.ts.
+  'convertFireToCold', 'chainAll', 'focusCostMore', 'decayStacks8', 'igniteLingers', 'phaseStrideLong', 'focusShield',
+  'slotOneAugments', 'critsPenetrate', 'nonCritLess', 'lodgeTwice',
 ] as const;
 export type PlayerFlag = (typeof PLAYER_FLAGS)[number];
 

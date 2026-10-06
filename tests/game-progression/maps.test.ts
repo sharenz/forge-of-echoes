@@ -4,7 +4,7 @@ import type { CharacterSave, MapItem, RolledMapMod } from '../../src/contracts/i
 import type { CurrencyId } from '../../src/contracts/content';
 import { createRng } from '../../src/core/rng';
 import { partyScalingLines, rules } from '../../src/game';
-import { LEVEL_GAP, MONSTER_LEVEL_SCALING, PARTY_SCALING, getMapMod, monsterDamageScale, monsterLifeScale } from '../../src/data/progression';
+import { LEVEL_CAP, LEVEL_GAP, MONSTER_LEVEL_SCALING, PARTY_SCALING, getMapMod, monsterDamageScale, monsterLifeScale } from '../../src/data/progression';
 import {
   craftMap, dangerModCount, mapCraftError, mapLuck, mapModName, monsterScaling, partyScaling, voidOutcomes, waveConfig,
 } from '../../src/game/progression';
@@ -459,6 +459,40 @@ describe('monster level curve and level gap (balance intent)', () => {
       expect(monsterLifeScale(level)).toBeGreaterThan(prev);
       prev = monsterLifeScale(level);
     }
+  });
+
+  it('pins the curve v3 table (power-curve.md 6.1): ML4..28 unchanged, new stretches beyond', () => {
+    // [monster level, life x, damage x]: rounded to 0.1 like the design table; ML <= 28 is the shipped curve, bit-for-bit.
+    const table: [number, number, number][] = [[4, 0.6, 0.7], [10, 1.0, 1.0], [16, 1.7, 1.7], [22, 4.6, 3.1], [28, 8.9, 5.9], [40, 18.1, 9.4], [60, 52.2, 16.3], [88, 149.8, 27.7]];
+    for (const [level, life, damage] of table) {
+      // The design table compounds from the rounded level-28 values (8.87, 5.87), so it can sit 0.1 above the exact curve.
+      expect(Math.abs(monsterLifeScale(level) - life), `life ML${level}`).toBeLessThan(0.1);
+      expect(Math.abs(monsterDamageScale(level) - damage), `damage ML${level}`).toBeLessThan(0.1);
+    }
+    // The old closed form, to the bit, for every level up to 28.
+    const S = MONSTER_LEVEL_SCALING;
+    for (let level = 1; level <= 28; level++) {
+      const g = level - S.referenceLevel;
+      const past = Math.max(0, level - S.steep.level);
+      const life = g <= 0 ? S.belowLife ** g : S.life ** Math.min(g, S.steep.level - S.referenceLevel) * S.steep.life ** past + S.steep.lifeFlat * past;
+      const dmg = g <= 0 ? S.belowDamage ** g : S.damage ** Math.min(g, S.steep.level - S.referenceLevel) * S.steep.damage ** past;
+      expect(monsterLifeScale(level), `life ML${level}`).toBe(life);
+      expect(monsterDamageScale(level), `damage ML${level}`).toBe(dmg);
+    }
+    // Segment boundaries compound from the previous stretch's end.
+    expect(monsterLifeScale(41) / monsterLifeScale(40)).toBeCloseTo(1.0545, 10);
+    expect(monsterLifeScale(61) / monsterLifeScale(60)).toBeCloseTo(1.0384, 10);
+    expect(monsterDamageScale(29) / monsterDamageScale(28)).toBeCloseTo(1.04, 10);
+    expect(monsterDamageScale(89) / monsterDamageScale(88)).toBeCloseTo(1.019, 10);
+    // Derived readouts: Ashling life 22x, bite 6x, Brute slam 22x.
+    expect(Math.abs(22 * monsterLifeScale(88) - 3297) / 3297).toBeLessThan(0.002);
+    expect(Math.abs(6 * monsterDamageScale(88) - 165.9)).toBeLessThan(0.2);
+  });
+
+  it('level cap 80: the tier-15 level gap for a capped character is +25%', () => {
+    expect(LEVEL_CAP).toBe(80);
+    const gap = Math.max(0, 88 - LEVEL_CAP - LEVEL_GAP.grace) * LEVEL_GAP.perLevel;
+    expect(gap).toBeCloseTo(0.25, 10);
   });
 
   it('the sim mirrors the shared level-gap constants', () => {

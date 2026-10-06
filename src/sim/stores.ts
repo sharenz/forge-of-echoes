@@ -182,6 +182,13 @@ export class MonsterStore implements MonsterStoreView {
   readonly aim: Float32Array;
   /** Resistances, 5 per monster in DAMAGE_TYPES order (resistBonus already included). */
   readonly res: Float32Array;
+  /**
+   * Exposure (power rework): resistance points lost per damage type, as a fraction, 5 per monster in DAMAGE_TYPES
+   * order. Meaningful only while `exposeTime` > 0; the whole row is cleared when that timer runs out.
+   */
+  readonly expose: Float32Array;
+  /** Seconds of exposure left (one shared timer; every application refreshes it). */
+  readonly exposeTime: Float32Array;
 
   private readonly pool: SlotPool;
   private readonly zeroed: (Float32Array | Float64Array | Uint8Array | Uint16Array | Int8Array | Int32Array)[];
@@ -218,6 +225,8 @@ export class MonsterStore implements MonsterStoreView {
     this.mods = new Uint16Array(capacity); this.flags = new Uint16Array(capacity); this.wave = u8();
     this.dtype = u8(); this.hitReduction = new Float64Array(capacity); this.aim = f();
     this.res = new Float32Array(capacity * 5);
+    this.expose = new Float32Array(capacity * 5);
+    this.exposeTime = f();
     this.zeroed = [
       this.kind, this.rarity, this.x, this.y, this.prevX, this.prevY, this.radius, this.facing, this.anim, this.animTime,
       this.life, this.maxLife, this.hitFlash, this.ailments, this.vx, this.vy, this.target, this.igniteSrc,
@@ -227,7 +236,7 @@ export class MonsterStore implements MonsterStoreView {
       this.igniteEventTimer, this.chillTime, this.shockTime, this.empowerTime, this.groundCd, this.hasteTime, this.stuckTime,
       this.slide, this.slideSide,
       this.timerA, this.timerB, this.timerC, this.timerD, this.knockback, this.mods, this.flags, this.wave,
-      this.dtype, this.hitReduction, this.aim,
+      this.dtype, this.hitReduction, this.aim, this.exposeTime,
     ];
   }
 
@@ -236,7 +245,7 @@ export class MonsterStore implements MonsterStoreView {
     const slot = this.pool.alloc();
     if (slot < 0) return -1;
     for (const arr of this.zeroed) arr[slot] = 0;
-    for (let k = 0; k < 5; k++) this.res[slot * 5 + k] = 0;
+    for (let k = 0; k < 5; k++) { this.res[slot * 5 + k] = 0; this.expose[slot * 5 + k] = 0; }
     this.pack[slot] = -1;
     this.alive[slot] = 1;
     this.id[slot] = this.pool.makeId(slot);
@@ -291,6 +300,10 @@ export class ProjectileStore implements ProjectileStoreView {
   readonly critMult: Float32Array;
   readonly ailmentChance: Float32Array;
   readonly dtype: Uint8Array;
+  /** Conversion (power rework): DAMAGE_TYPES index the `convShare` of the hit is converted to; meaningful only when convShare > 0. */
+  readonly convTo: Uint8Array;
+  /** Share (0..1) of the hit converted to `convTo`; 0 = no conversion. */
+  readonly convShare: Float32Array;
   /** Remaining pierces; -1 = pierces everything. */
   readonly pierce: Int32Array;
   /** Remaining travel distance. */
@@ -332,6 +345,8 @@ export class ProjectileStore implements ProjectileStoreView {
     this.owner = new Uint8Array(capacity);
     this.damage = f(); this.critChance = f(); this.critMult = f(); this.ailmentChance = f();
     this.dtype = new Uint8Array(capacity);
+    this.convTo = new Uint8Array(capacity);
+    this.convShare = f();
     this.pierce = new Int32Array(capacity);
     this.range = f();
     this.hitIds = new Uint32Array(capacity * PROJECTILE_HIT_SLOTS);

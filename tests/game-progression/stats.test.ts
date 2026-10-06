@@ -108,14 +108,16 @@ describe('deriveStats: gear', () => {
     expect(life.breakdown).toContain('+20 from Chain Belt (implicit)');
   });
 
-  it('caps resistances at 75% and applies all-resistances to each element', () => {
+  it('caps displayed resistance at 75% (the sim gets it uncapped, with the cap as maxResist) and applies all-resistances to each element', () => {
     const ring1 = equip({
       baseId: 'emberRing', itemLevel: 84, rarity: 'rare', name: 'Kiln Heart', implicitValues: [20],
       affixes: [{ affixId: 'fireResistance', tier: 1, value: 36 }, { affixId: 'allResistances', tier: 1, value: 13 }],
     });
     const ring2 = equip({ baseId: 'emberRing', itemLevel: 1, rarity: 'normal', implicitValues: [15] });
     const d = rules.deriveStats(bareCharacter({ level: 30, equipment: { ring1, ring2 } }));
-    expect(d.combat.resist.fire).toBe(0.75);
+    // Uncapped in combat: the buffer rule lets the sim subtract the map penalty and Withered before capping at maxResist.
+    expect(d.combat.resist.fire).toBeCloseTo(0.84, 10);
+    expect(d.combat.maxResist).toBe(75);
     expect(d.combat.resist.cold).toBeCloseTo(0.13, 10);
     expect(d.combat.resist.lightning).toBeCloseTo(0.13, 10);
     expect(d.combat.resist.void).toBeCloseTo(0.13, 10);

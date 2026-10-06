@@ -147,7 +147,7 @@ describe('normalizeCharacter', () => {
       skillRanks: { emberLance: 0, emberNova: 50, riftStep: 2, bogus: 3 },
       loadout: ['emberNova', 'emberNova', 'cinderWard', 'riftStep', 'bogus'],
     })!;
-    expect(ch.level).toBe(60);
+    expect(ch.level).toBe(80);
     expect(ch.xp).toBe(0);
     expect(ch.unspentAttributePoints).toBe(0);
     expect(ch.allocated).toEqual({ str: 2, dex: 0, int: 5 });

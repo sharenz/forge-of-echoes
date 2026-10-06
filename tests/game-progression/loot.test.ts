@@ -486,10 +486,11 @@ describe('uniques drop only where they can be worn (item level ≥ the unique\'s
     }
   });
 
-  it('the lowest tiers have no unique to roll and the top tiers have all four', () => {
+  it('the lowest tiers have no unique to roll and the top tiers have the whole world pool', () => {
     expect(wearableAt(1)).toEqual([]);
-    expect(wearableAt(15)).toEqual(wearableAt(6));
-    expect(wearableAt(6)).toHaveLength(4);
+    // Four original uniques plus the eight world uniques of the power rework (levels 22 to 48).
+    expect(wearableAt(15)).toHaveLength(12);
+    expect(wearableAt(6)).toEqual(expect.arrayContaining(['thePatientSpark', 'cinderwalkers', 'echoOfTheMatriarch', 'ruinheartBand']));
   });
 
   it('below every unique\'s level the unique roll becomes a rare (never nothing)', () => {

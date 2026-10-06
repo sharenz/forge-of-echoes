@@ -113,6 +113,15 @@ export const ROLL_MIN = 0.8;
 export const ROLL_MAX = 1.2;
 if (Math.abs((ROLL_MIN + ROLL_MAX) / 2 - 1) > 1e-9) throw new Error('damage roll range must be symmetric around 1');
 export const RESIST_CAP = 0.75;
+/**
+ * Utility flasks (power rework 10.3): effects while the flask is active. Mirrored by `utility.fx` in src/data/items/flasks.ts
+ * (tests/game-items/flasks.test.ts keeps the two equal; the sim cannot import data).
+ */
+export const FLASK_FX = {
+  quickstep: { moveSpeed: 0.3 },
+  aegis: { resist: 0.15 },
+  quicksilverMind: { focusRegen: 0.25, focusInstant: 0.15 },
+} as const;
 /** Monsters may exceed the player cap so proof rares stay a wall without being a literal immunity. */
 export const MONSTER_RESIST_CAP = 0.9;
 export const WARD_REDUCTION_CAP = 0.6;

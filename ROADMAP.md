@@ -2,7 +2,7 @@
 
 Maintained at the owner's request. Ask "what's next" and it is read from here; ideas and decisions
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
-Last reprioritised: 2026-10-01.
+Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped).
 
 ## Next up, in order (reprioritised 2026-10-01 after the first outside player review)
 
@@ -10,9 +10,9 @@ Last reprioritised: 2026-10-01.
    gentle first map). Watch real new players (the first reviewer needed 2 minutes to find the drag), then fix what they still trip on.
    Open from the audit: Rook's price copy (F-17) and the short map tooltip (F-28), return portal/anvil off screen at 1024x600, e2e for
    keyboard-only, reduced motion, parties and veterans.
-2. **Offence and gear power curve plus player penetration.** The endgame fantasy ("rush through with good gear") and the proof-rare
-   counterplay are missing: no penetration exists, damage growth from gear against monster scaling needs a pass, and every tree archetype
-   currently clears slower than an empty tree (retune Haste, Overrun Doctrine, density or the harness baseline).
+2. **Power rework, release R1 "Power": Done, deployed 2026-10-06.** Next releases of the same design (`docs/power-rework/build-plan.md`):
+   R2 "Skills I" (C2 contracts and protocol 27, SK0 skill executor and save migration, SK1 Skills panel v2, SK2 ten new skills), then
+   R3/R4 (remaining skills and augments), R5 "Orrery" passive tree, R6 balance pass.
 3. **Finish wave 3: beacons and sigils (B1), anchor-aware events (E1), polish (F1).** The Territory lens is a hidden stub; Lamp Oil's
    sigil half, Tide sigils and the tree re-roles go with it. Also the map tooltip "Surge n/3 today" and a Re-chart entry on the tooltip.
 4. **Make the art keep its promises.** Lava cracks, ice lakes, hazard stripes and sand rings look like mechanics but are cosmetic. Add the
@@ -23,6 +23,13 @@ Last reprioritised: 2026-10-01.
 
 Also pending: gated tree nodes (Voidtouched Atlas, Warded Hunts, Stragglers' Cull, Lantern-Bearer's siblings, Wagered Charts), Twin Omens'
 Backlash, dead drawer code and the Ctrl+Shift stash-to-bench shortcut, footsteps, Echo Exchange, leagues, more map bases, Barbarian.
+
+**Shipped 2026-10-06 (power rework R1 "Power", `docs/power-rework/`):** level cap 80 and the T6 to T15 monster curve, damage pipeline v2
+(player penetration capped and floored at 0, exposure down to -25%, DoT resist factor, `more` cap, overcap resistance as a buffer), void-
+and physical-proof rares from T8/T10 and double proofs from T12, the rare/magic life floor for map packs (event elites keep their own
+tuning), ten new affixes with bench penetration recipes, ten uniques (flags without behaviour yet are gated), Umbral Essence, utility
+flasks (Quickstep, Aegis, Quicksilver Mind) with kill charges, and the character harness (band model, rules path, sim bands) with the
+Atlas harness on band speed. Protocol 26.
 
 **Shipped 2026-10-01 (commits `9321c7d`, `64819c3`):** conveyor flow zones (random directions, telegraphed reversals), projectile cover
 (tall blocks, low passes, lobs fly over), animated Life/Focus globes and unspent-point badges, the Atlas area modal (click an area, map slot
@@ -65,8 +72,10 @@ Twin Omens' Backlash pack on a failed encounter and Sworn to the Veil's "withhol
 now says only what exists).
 
 **Open balance items (from the wave 1 bot harness and the owner's play):**
-- Player penetration is missing: elemental-proof and high-resistance monsters have no counterplay yet.
-- Offence versus gear power curve: damage growth from gear and levels against monster scaling needs a pass.
+- Done 2026-10-06 (R1): player penetration and the offence/gear power curve.
+- Endgame map pacing: an endgame build clears in 3.8 to 4.1 minutes at every depth (sim bot, no loot) against the design's 3 to 3.5;
+  the floor is the six 60 s waves and the paced stream, not damage. Decide in R6 whether maps should shorten for strong builds
+  (`tests/sim/character-bands.test.ts` holds the endgame band to +40% of the model until then).
 - Flanker monsters: waves are frontal; add flankers so standing still is not a strategy.
 - Level gap in the monster hover: show the monster/player level gap and its damage/hit-chance effect.
 - Speed-clear tree tuning: every archetype currently clears slower than an empty tree, so no build "speeds up" a map. Retune

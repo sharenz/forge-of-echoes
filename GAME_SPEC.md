@@ -80,8 +80,8 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Dex bonus | +1% increased evasion per 5 dex |
 | Str bonus | +1% increased max life per 10 str |
 | Crit | 150% base crit multiplier; each skill has a base crit chance |
-| XP to next level | `floor(90·L^1.75)` (L1 → 90, L10 → 5.0k, L30 → 34k). Level cap 60 in this slice. +3 attribute points and +1 skill point per level |
-| Flasks | Recover over 3 s, never instantly. Life Flask `40 + 8·L` life, Focus Flask `30 + 4·L` focus, both × flask effect. 5 charges per belt slot; pickups refill a matching belt slot first |
+| XP to next level | `floor(90·L^1.75)` (L1 → 90, L10 → 5.0k, L30 → 34k). Level cap 80 (the tier ceiling's monster level is 88, so a capped character meets a +25% level gap at Tier 15 instead of +100%). +3 attribute points and +1 skill point per level |
+| Flasks | Recover over 3 s, never instantly. Life Flask `40 + 8·L` life, Focus Flask `30 + 4·L` focus, both × flask effect. 5 charges per belt slot; pickups refill a matching belt slot first. **Utility flasks** recover nothing: Quickstep +30% move speed and breaks Roots (4 s), Aegis +15 to all resistances (6 s, still capped by the maximum), Quicksilver Mind 15% max Focus at once and +25% Focus regeneration (5 s). **Kill charge:** each assigned belt slot gains one charge per 40 kills of the run (belt affix "of Reserves" shortens it, never below 10) |
 
 **Starting kit:**
 - **Equipment:** an equipped magic ilvl 1 Ashwood Wand with a T10 "Blazing" affix (8–12% increased fire damage: the best tier item level 1 can roll) and a normal Ashen Robe.
@@ -202,7 +202,7 @@ keep their stats and material identities. Area class preferences also apply to t
 
 **Rare names** come from two word lists (for example "Ember" + "Bite", "Grave" + "Coil"), with 40 words each.
 
-**Affixes:** 39 (15 prefixes, 24 suffixes), each with 7–10 tiers (T1 best), except "of Splintering" (1 tier). Item level unlocks tiers; weights fall steeply, so the top tiers (ilvl 78–84) stay rare even on high-level items:
+**Affixes:** 52 (17 prefixes, 35 suffixes), each with 7–10 tiers (T1 best), except "of Splintering" (1 tier). Item level unlocks tiers; weights fall steeply, so the top tiers (ilvl 78–84) stay rare even on high-level items:
 
 | Tiers | Item level per tier (worst → best) | Weight per tier (worst → best) |
 |---|---|---|
@@ -213,14 +213,14 @@ keep their stats and material identities. Area class preferences also apply to t
 
 | Kind | Affixes |
 |---|---|
-| Prefixes | flat max life (T1 54–60) · flat max focus · added spell damage (wand/sceptre/focus/amulet/ring; T1 19–21) · % spell damage (weapon/focus/amulet; T1 56–62%) · % fire / cold / lightning damage (weapon/focus/amulet/ring; T1 51–56%) · % elemental damage (ring/amulet) · flat armour / flat evasion (armour pieces with that property) · % armour / % evasion (armour pieces with that property) · % item rarity (helm/gloves/boots/amulet/ring, 5–25% — *luck*) · life on kill (weapon/gloves/belt/ring) · focus on kill (weapon/focus/gloves/belt/amulet) |
-| Suffixes | % cast speed (weapon/gloves/amulet/ring) · % crit chance (weapon/focus/helm/amulet) · crit multiplier (weapon/amulet) · fire / cold / lightning resistance (armour, belt & jewellery; T1 33–36%) · void resistance (T1 22–24%) · all resistances (amulet/ring) · % move speed (boots) · % focus regen (helm/focus/amulet/ring) · life regen (chest/belt/ring) · str / dex (armour, belt & jewellery) · int (also weapons and foci) · % projectile speed (weapon) · % area (focus/amulet) · % cooldown recovery (helm/amulet) · % pickup radius (belt/boots) · % item quantity (belt/amulet, 3–14% — *luck*) · % flask effect (belt) · ignite / chill / shock chance (weapon/gloves) · **+1 projectile** ("of Splintering", wand only, T1 only, ilvl 70+, weight 15) |
+| Prefixes | flat max life (T1 54–60) · flat max focus · added spell damage (wand/sceptre/focus/amulet/ring; T1 19–21) · % spell damage (weapon/focus/amulet; T1 56–62%) · % fire / cold / lightning damage (weapon/focus/amulet/ring; T1 51–56%) · % elemental damage (ring/amulet) · % void damage ("Entropic", weapon/focus/amulet/ring; 10 tiers, T1 51–56%) · % physical damage ("Concussive", weapon/focus/amulet; 10 tiers) · flat armour / flat evasion (armour pieces with that property) · % armour / % evasion (armour pieces with that property) · % item rarity (helm/gloves/boots/amulet/ring, 5–25% — *luck*) · life on kill (weapon/gloves/belt/ring) · focus on kill (weapon/focus/gloves/belt/amulet) |
+| Suffixes | % cast speed (weapon/gloves/amulet/ring) · % crit chance (weapon/focus/helm/amulet) · crit multiplier (weapon/amulet) · fire / cold / lightning resistance (armour, belt & jewellery; T1 33–36%) · void resistance (T1 22–24%) · all resistances (amulet/ring) · % move speed (boots) · % focus regen (helm/focus/amulet/ring) · life regen (chest/belt/ring) · str / dex (armour, belt & jewellery) · int (also weapons and foci) · % projectile speed (weapon) · % area (focus/amulet) · % cooldown recovery (helm/amulet) · % pickup radius (belt/boots) · % item quantity (belt/amulet, 3–14% — *luck*) · % flask effect (belt) · ignite / chill / shock chance (weapon/gloves) · **+1 projectile** ("of Splintering", wand only, T1 only, ilvl 70+, weight 15) · **penetration** (power rework; value = percentage points taken off the target's resistance, tag `penetration`, 7 tiers, T1 at ilvl 78): fire / cold / lightning / void / physical "of … Sundering" (wand/sceptre/focus/amulet; 2–3 up to 14–15, T4 8–9 at ilvl 40, one exclusive group per type) and "of Prisms" (elemental, focus/amulet/ring; 1–2 up to 8) · % damage over time ("of Lingering", weapon/focus/gloves; 8 tiers, 10–14% up to 54–63%) · % projectile damage ("of Volleys", wand/gloves; 8 tiers, 8–12% up to 36–41%) · % area damage ("of Eruptions", focus/amulet/gloves; same ladder) · +1 to 3 maximum resistances ("of Warding", amulet/ring; 7 tiers, 1/1/1/2/2/3/3 points, never above the 85 hard ceiling; not on the bench) · flask charge on kill ("of Reserves", belt; 7 tiers, a charge 1, 2, 4, 6, 8, 11 or 15 kills sooner than the base 40) |
 
 Luck affixes (item quantity / rarity) are personal: they raise only their wearer's drops (§9, §11).
 
 **Saved equipment:** phase-2 affix revision 2 is stored per item. Older rolls migrate once to the best new tier unlocked by the old tier’s item-level gate (also bounded by the item’s level), preserving their relative roll within the range. Names, history, scars, stability, seals, fractures and bench-crafted marks survive. Lowest-tier values and the starting kit remain unchanged.
 
-**World-pool uniques (4)** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tier 1, item level 4: none; Tier 2, item level 10: The Patient Spark; Tier 3, item level 16: + Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5+: all four), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties. Only Crown Fragments can reroll their numeric modifiers; ordinary and bench crafts cannot change them:
+**World-pool uniques (12: four classic, eight power-rework)** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tier 1, item level 4: none; Tier 2, item level 10: The Patient Spark; Tier 3, item level 16: + Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5: + Ruinheart Band; the eight of the power rework follow from their own level requirement, listed below), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties. Only Crown Fragments can reroll their numeric modifiers; ordinary and bench crafts cannot change them:
 
 | Unique | Base | Effects | Flavour |
 |---|---|---|---|
@@ -229,8 +229,23 @@ Luck affixes (item quantity / rarity) are personal: they raise only their wearer
 | **Echo of the Matriarch** (level 20) | Cinder Pendant | +(15–25) max focus · Ember Nova repeats once after 0.4 s (`novaEcho`) · 8% reduced max life | "Her last command still rings in the embers." |
 | **Ruinheart Band** (level 24) | Void Signet | +1 projectile · +(20–30)% void resistance · 12% increased damage taken | "Power pours from the wound, not the hand." |
 
+**Power-rework uniques (10)** (docs/power-rework/power-curve.md 10.4: build enablers, none gives a `more` above 25%, none grants penetration above 16, none is mandatory). Eight are world-pool uniques (same rules as above); **Stormcaller's Lattice** joins Varkus's boss-exclusive pool and **Hollow Crown** the Hollow Warden's (their pools grow to three; each is eligible from its own level requirement). Their behaviour flag is **data-complete but gated**: it is not granted and its text is not shown until the slice that builds the behaviour ships (the `awaits` field in `src/data/items/uniques.ts`); the stat lines below are live now.
 
-**Keystone uniques (12):** boss-exclusive rewards, separate from the four world uniques above. Each matching final boss in the named Atlas areas has a `12% × personal item rarity / 100` chance (capped at 100%) to drop one eligible item from its two-item pool, equally weighted. Item quantity and the elite rarity multiplier do not affect this extra roll. The first item requires level 46 (Tier 8 / item level 46), the second level 58 (Tier 10 / item level 58). Below the pool's eligibility there is no extra drop. Ordinary equipment, chests, the ordinary boss unique roll and gambling never select these twelve. Each twin boss in an eligible area can roll independently. The Atlas, Map Device and item tooltip disclose sources and level gates.
+| Unique | Base | Effects | Flavour |
+|---|---|---|---|
+| **Frostfire Spiral** (level 30) | Glassbone Wand | +(25–35)% fire damage · +(25–35)% cold damage · 15% reduced cast speed · 40% of fire damage converted to cold (awaits the damage pipeline) | "The flame learned the cold, and kept the grudge." |
+| **Stormcaller's Lattice** (level 46) | Stormglass Sceptre | +(40–50)% lightning damage · penetrate (12–16)% lightning resistance · 10% reduced max life · skills chain 1 additional time (awaits) | "Every strike finds the next willing thing." |
+| **Penitent's Prism** (level 44) | Prismatic Amulet | +(20–30)% elemental damage · penetrate (10–14)% elemental resistances · skills cost 15% more Focus (awaits) | "It splits every prayer into three, and charges for each." |
+| **Hollow Crown** (level 52) | Duskweave Robe | +(35–45)% void damage · −10% to all resistances · Decay stacks up to 8 times (awaits) | "Whatever wore it was emptied first, and gladly." |
+| **Weeping Hearth** (level 22) | Ember Sceptre | +(60–90)% damage over time · −20% chance to ignite · ignite lasts 6 s and burns 40% less per second (awaits) | "The fire does not die. It only takes longer to leave." |
+| **Gravewind Boots** (level 40) | Wayfarer Greaves | +(10–14)% move speed · +(15–25)% cooldown recovery · Phase Stride lasts twice as long (awaits) | "The dead walk fast when nothing holds them back." |
+| **Anchorite's Seal** (level 48) | Dusksteel Ring | +(30–40) max focus · 8% reduced max life · 30% of damage taken drains Focus first (awaits) | "Faith is a held breath. Hers was never let go." |
+| **Bellwether** (level 38) | Bone Talisman | +(8–12) to all attributes · the skill in loadout slot 1 has 2 additional augment slots (awaits) | "One bell, rung true, is a whole choir." |
+| **Needlepoint** (level 36) | Cinder Orb | +(3–4)% crit chance · +(25–35)% crit multiplier · hits that are not critical strikes deal 10% less damage · critical strikes penetrate 15% of resistances (both awaiting) | "A single, patient point, and the whole armour opens." |
+| **Twice-Struck Bell** (level 34) | Runed Tome | +(20–30) max focus · +(10–15)% cooldown recovery · lodged detonations trigger a second time at 50% (awaits) | "The second note is the one that breaks the glass." |
+
+
+**Keystone uniques (14):** boss-exclusive rewards, separate from the world uniques above. Each matching final boss in the named Atlas areas has a `12% × personal item rarity / 100` chance (capped at 100%) to drop one eligible item from its pool (two items; three for Varkus and the Hollow Warden after the power rework), equally weighted. Item quantity and the elite rarity multiplier do not affect this extra roll. The first item requires level 46 (Tier 8 / item level 46), the second level 58 (Tier 10 / item level 58). Below the pool's eligibility there is no extra drop. Ordinary equipment, chests, the ordinary boss unique roll and gambling never select these fourteen. Each twin boss in an eligible area can roll independently. The Atlas, Map Device and item tooltip disclose sources and level gates.
 
 | Boss | Atlas sources | T8+ unique | T10+ unique |
 |---|---|---|---|
@@ -256,6 +271,7 @@ They retain their advanced base properties and implicits. Crown Fragments reroll
 | **The Broken Link** (level 46) | Ironweave Girdle | +(25–40) max life · +(12–18)% cooldown recovery · 20% reduced focus regen · Rift Step removes all harmful effects | "Freedom begins with one missing link." |
 | **Iron Refrain** (level 58) | Bastion Helm | +(35–50)% lightning damage · +(8–12)% cast speed · 8% reduced max life · Arc Chain may revisit earlier targets, never the same target on consecutive hits | "Every chain returns to its master." |
 | **The Unbowed Crown** (level 46) | Bastion Helm | +(30–45) max life · +(2–4) life regen · 8% reduced move speed · taking a Physical hit restores 0.5 seconds to an active Cinder Ward, capped at its original duration | "The crowd falls silent. The champion does not." |
+| **Stormcaller's Lattice** and **Hollow Crown** | see Power-rework uniques above | extra entries of Varkus's and the Hollow Warden's pools (levels 46 and 52) | |
 | **Victor's Debt** (level 58) | Dusksteel Ring | +(25–35)% spell damage · +(10–14)% all resistances · 10% increased damage taken · hits deal 25% more damage within 80 units, 25% less beyond 200 units | "Victory is paid for at arm’s length." |
 
 Echoes use the caster's current position and aim, preserve the cast's skill values, cost no extra Focus and never repeat recursively; death cancels pending echoes. The Nova fan can combine with Echo of the Matriarch, and the Rime echo with unlimited pierce. Ward snapshots its Cold/Focus/renewal behaviour at cast time; Focus mode suppresses damage and ailments even with Stillwinter. Renewal needs an actual positive Physical hit (not evaded, blocked by invulnerability or damage over time) and never revives an expired Ward. Victor's Debt uses distance at hit time; damage over time is unaffected.
@@ -287,7 +303,7 @@ Echoes use the caster's current position and aim, preserve the cast's skill valu
 | Kindling Shard | shape | 1 | Normal → magic with 1–2 random affixes. |
 | Forge Scrap | shape | 1 | Rerolls the values of all unsealed, unfractured affixes within their tiers. Also the merchant money. |
 | Reforging Ember | shape | 2 | Rerolls all unsealed, unfractured affixes into a new **rare** (3–6 total). |
-| Essence (Ember / Rime / Storm / Vital / Swift) | shape | 2 | Adds one affix with that tag. Ember = fire, Rime = cold, Storm = lightning, Vital = life/defence/resistance, Swift = speed (cast/move/projectile). Normal → magic; magic with 2 → rare. Fails if no room. |
+| Essence (Ember / Rime / Storm / Vital / Swift / Umbral) | shape | 2 | Adds one affix with that tag. Ember = fire, Rime = cold, Storm = lightning, Vital = life/defence/resistance, Swift = speed (cast/move/projectile), Umbral = void and physical. Fire, cold, lightning, void and physical essences include the matching penetration affix ("of … Sundering") and damage affix. Umbral Essence is not in the ordinary currency table: it comes from Void Breach seals (Silver 30%, Gold always, times the Voidtouched strength) and Tier 8+ final bosses (30% × personal rarity). Normal → magic; magic with 2 → rare. Fails if no room. |
 | Tempering Catalyst | refine | 3 | **Choose an affix:** upgrade it one tier (if item level allows) and reroll its value in the new tier. |
 | Forge Solvent | remove | 1 | Removes the **lowest-tier** unsealed, unfractured affix (ties random). With 0 affixes left, the item becomes normal. |
 | Binding Seal | preserve | 0 | **Choose an affix:** it is sealed for the next operation, then the seal breaks. One seal at a time. |
@@ -402,7 +418,7 @@ from it (a discovered area of that theme accepting its tier, else any discovered
 | Rimed Ossuary | Frosted bone-tiles, cold blue light, ice crystals | 900 | Rime Essences 3× as likely; +20% monster life; +15% item rarity |
 | Iron Coliseum | Rusted iron plates, sand, torchlight | 650 | +25% monster count; armour bases +2 stability |
 
-**Tier and monster level:** tiers 1–15. Monster level = `min(90, 6·tier − 2)` (Tier 1 = 4, Tier 4 = 22, Tier 15 = 88), and it is the item level of every drop. **Monster stats scale with monster level, not tier** (Path of Exile style): life ×1.09 and damage ×1.09 per level above the reference level 10 (the level at which the sim's base monster table applies unchanged) up to monster level 16, then life ×1.11 and damage ×1.11 per level beyond it with life also gaining a flat +0.25 (of base) per level past 16; below the reference level monsters shrink gently (life ×1.09, damage ×1.065 per level), shown as "more" or "less" from "Monster level N" in the readout. **Level gap:** a monster more than 3 levels above the character it hits deals +5% damage per further level, up to +100% (nothing when the character is at or above monster level; damage over time is not scaled twice); shown in the map tooltip. Tier still drives experience (Tier 1 gives ×0.5, then ×1.28 per tier above 1: T2 ×1.28, T3 ×1.64, T4 ×2.10, T5 ×2.68) and +5% item rarity per tier (additive). Tier 1 experience is deliberately halved so a new character needs about ten Tier 1 maps to reach level 10, where Tier 2 is on-level; a fresh character is expected at level 4 after the first Tier 1 clear, 6 after three, 9 after eight.
+**Tier and monster level:** tiers 1–15. Monster level = `min(90, 6·tier − 2)` (Tier 1 = 4, Tier 4 = 22, Tier 15 = 88), and it is the item level of every drop. **Monster stats scale with monster level, not tier** (Path of Exile style): life ×1.09 and damage ×1.09 per level above the reference level 10 (the level at which the sim's base monster table applies unchanged) up to monster level 16, then life ×1.11 and damage ×1.11 per level beyond it with life also gaining a flat +0.25 (of base) per level past 16, **unchanged up to monster level 28**; from monster level 28 the curve bends (curve v3): life ×1.061 per level to monster level 40, ×1.0545 to 60 and ×1.0384 beyond, damage ×1.04, ×1.028 and ×1.019 (life ×18.1 and damage ×9.4 at monster level 40, ×52.2 and ×16.3 at 60, ×149.8 and ×27.7 at 88); below the reference level monsters shrink gently (life ×1.09, damage ×1.065 per level), shown as "more" or "less" from "Monster level N" in the readout. **Level gap:** a monster more than 3 levels above the character it hits deals +5% damage per further level, up to +100% (nothing when the character is at or above monster level; damage over time is not scaled twice); shown in the map tooltip. Tier still drives experience (Tier 1 gives ×0.5, then ×1.28 per tier above 1: T2 ×1.28, T3 ×1.64, T4 ×2.10, T5 ×2.68) and +5% item rarity per tier (additive). Tier 1 experience is deliberately halved so a new character needs about ten Tier 1 maps to reach level 10, where Tier 2 is on-level; a fresh character is expected at level 4 after the first Tier 1 clear, 6 after three, 9 after eight.
 
 **Defences scale with monster level too.** Evade chance = `rating / (rating + 30 × monster level)` (at most 75%): the same evasion rating avoids fewer hits from higher-level monsters, so roughly half of all hits can only be avoided with focused high-end gear. Monster accuracy is the `30 × monster level` term. Armour retains its hit-size formula (`armor / (armor + 10 × damage)`): higher-level hits already reduce its effectiveness, so there is no second armour penalty. The sheet's example physical hit scales from 20 at monster level 10 with the same damage curve.
 
@@ -857,13 +873,13 @@ legacy maps event-free.
 
 **Pack rarity:**
 - Magic chance: 10% × magicPackChance multiplier. The whole pack is magic and shares one mod: Swift (+30% speed), Stout (+70% life) or Fierce (+40% damage). Blue outline.
-- Rare chance: 3% × multiplier. A single rare leader gets 2 mods from Juggernaut (+200% life), Frenzied (+50% speed), Ember-touched (fire burst on death, telegraphed) and Warded (40% less damage while allies are near). Gold outline and its name floats above it. The rest of the pack is normal.
+- Rare chance: 3% × multiplier. A single rare leader gets 2 mods from Juggernaut (+200% life), Frenzied (+50% speed), Ember-touched (fire burst on death, telegraphed) and Warded (40% less damage while allies are near); from deeper tiers the pool also holds strikes (Stormcalled, Rending) and **proofs**: Fire, Cold and Lightning proof (from Tier 2, weight 0.6 each, full at Tier 8), **Void-proof** (from Tier 8, weight 0.5, full at Tier 12) and **Physical-proof** (from Tier 10, weight 0.4, full at Tier 14), each 90% resistance to one damage type. From Tier 12 a fifth of rares with a proof swap another mod for a second proof of a different type (never more than two; the mod count per tier is unchanged). Gold outline and its name floats above it. The rest of the pack is normal.
 - Hovering a magic or rare monster shows its name, rarity, life and modifier explanations at the top centre.
   The card clears over UI or empty space and when the monster dies.
 
 **Rarity strength:** every magic monster has ×1.5 life and ×1.2 damage; a rare leader has ×3 life and ×1.5
 damage. These multiply the monster's level, wave and rolled modifiers (a Stout magic monster has ×2.55 life,
-a Juggernaut rare ×9 life relative to its normal counterpart). Named lieutenants, final bosses and training
+a Juggernaut rare ×9 life relative to its normal counterpart). **Life floor:** a rare leader's base life is `max(kind life, floor) × 3` and a magic monster's `max(kind life, 0.4 × floor) × 1.5`, where the floor rises from 22 at Tier 2's start toward 150 at Tier 6 and beyond (22 at Tier 1, where it does not apply, 48 at Tier 2, 73, 99, 124 at Tier 5, 150 from Tier 6). Named lieutenants, final bosses and training
 dummies use their own tuning and do not receive these rarity multipliers.
 
 **Loot** (rolled per player, §9): a magic monster gets ×1.5 quantity and ×2 rarity; a rare gets ×4 quantity and ×3 rarity; the lieutenant and the boss roll their ordinary loot like rares, on top of their guaranteed drops. Summoned minions drop nothing. **XP:** magic ×2, rare ×6.
@@ -901,7 +917,7 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 |---|---|---|
 | Currency | 1.5% | Scrap 40 · Kindling 12 · Map Dust 6 · Solvent 2.5 · Reforge 1.5 · Threat Glyph 1.5 · each Essence 0.8 (×5) · Seal 1.2 · Reward Ink 0.6 · Catalyst 0.5 · Void Needle 0.2 · Fracture Core 0.08. Scrap drops in stacks of 1 (75%), 2 (20%) or 3 (5%). Map implicits and Essence-laden multiply essence weights |
 | Equipment | 0.9% | Uniform over the bases whose level requirement ≤ item level; item level = monster level. A unique roll picks among the uniques wearable at that item level (§5), else it becomes a rare |
-| Flask | 1% | Life 60 · Focus 40 |
+| Flask | 1% | Life 60 · Focus 40 · Quickstep 12 · Aegis 10 · Quicksilver Mind 10 |
 | Map | 0.5% | See section 7 |
 
 **Equipment rarity** (m = R/100):
@@ -949,7 +965,7 @@ atomic payment and placement, the hideout and activation checks) is unchanged an
 
 **Rook's wares (the Gear, Maps and Supplies tabs, owner brief: "just an inventory with some maps and some items to buy; random, usually crap, sometimes really cool").**
 Nothing is chosen: no tier, quality, area, search, filter or chip. Each character sees its **own board** of **4 maps and 8 items** plus a fixed **Staples**
-shelf (Life and Focus flasks 1 Scrap, Kindling 3, Map Dust 3: bought by `buyOffer` as before, so luck can never strand anyone). The board is built by the
+shelf (Life and Focus flasks 1 Scrap, Quickstep, Aegis and Quicksilver Mind flasks 3 Scrap, Kindling 3, Map Dust 3: bought by `buyOffer` as before, so luck can never strand anyone). The board is built by the
 server (`rules.waresBoard`) and sent with the `merchantWares` command; the client never rolls it. It is a pure function of the character id and the **stock epoch**
 `(rotation, character level, rerolls)`, so every look at the same epoch shows the same wares and a restart changes nothing.
 
@@ -979,7 +995,7 @@ server (`rules.waresBoard`) and sent with the `merchantWares` command; the clien
 
 **Merchant stock:**
 - Wares: 4 maps and 8 items per character, random and luck-driven (see Rook's wares), shelved on the Gear, Maps and Supplies tabs by item class
-- Staples: Life and Focus flasks (1 Scrap), Kindling (3 Scrap), Map Dust (3 Scrap)
+- Staples: Life and Focus flasks (1 Scrap), Quickstep, Aegis and Quicksilver Mind flasks (3 Scrap), Kindling (3 Scrap), Map Dust (3 Scrap)
 - Gamble per class
 
 **Selling equipment to Rook:** the Sell tab is an offer window beside the inventory. Drag unequipped equipment out of
@@ -1225,7 +1241,7 @@ crafting history, protections and stability. The database stores shared holdings
 - **Withdrawing:** drag to the backpack, a stash tab or the map device, or Ctrl-click (to the backpack; into the map device while its panel is open). The map device panel also lists the Map Stash as a picker, so a map can be loaded without opening the stash. A map already in the device goes back into the Map Stash.
 - Map currencies can be used on maps while they sit in the Map Stash.
 
-**Crafting Stash — Equipment.** One fixed, labelled slot per equipment currency: Kindling, Scrap, Reforge, the 5 Essences, Prefix Rune, Suffix Rune, Catalyst, Solvent, Seal and Fracture Core. Empty slots stay visible, ghosted.
+**Crafting Stash — Equipment.** One fixed, labelled slot per equipment currency: Kindling, Scrap, Reforge, the 6 Essences, Prefix Rune, Suffix Rune, Catalyst, Solvent, Seal and Fracture Core. Empty slots stay visible, ghosted.
 - Each slot holds up to 5,000 of its currency.
 - **Depositing:** dropping or Ctrl-clicking any currency stack files it into its slot, wherever you drop it (either Crafting Stash tab accepts every currency). What doesn't fit in a full slot stays where it was. A **"Deposit all"** button moves every currency stack in the backpack (stacks in an open trade offer stay).
 - **Withdrawing** never pushes another item out: dropped on an occupied cell, it tops up a matching stack there or lands anywhere free in that grid.

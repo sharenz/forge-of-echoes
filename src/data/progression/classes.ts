@@ -45,8 +45,8 @@ export const SORCERESS: ClassDef = {
   resistCap: 75,
 };
 
-/** Level cap of the vertical slice. */
-export const LEVEL_CAP = 60;
+/** Level cap (power rework: 60 -> 80, so the tier-15 level gap is +25% for a capped character instead of +100%). */
+export const LEVEL_CAP = 80;
 
 /** XP to the next level = floor(XP_BASE × level^XP_EXPONENT)  (L1 → 90, L10 → 5.0k, L30 → 34k). */
 export const XP_BASE = 90;

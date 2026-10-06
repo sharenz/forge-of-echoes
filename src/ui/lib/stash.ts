@@ -65,7 +65,7 @@ export interface CurrencyShelf {
 export const CURRENCY_SHELVES: Readonly<Record<'currency' | 'mapCurrency', readonly CurrencyShelf[]>> = {
   currency: [
     { title: 'Shaping', ids: ['kindling', 'scrap', 'reforge', 'prefixRune', 'suffixRune'] },
-    { title: 'Essences', ids: ['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift'] },
+    { title: 'Essences', ids: ['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift', 'umbralEssence'] },
     { title: 'Refining & binding', ids: ['catalyst', 'solvent', 'seal', 'fractureCore'] },
     { title: 'Recovery & transformation', ids: ['scarBalm', 'anneal', 'graft', 'transmute'] },
     { title: 'Encounter ingredients', ids: ['echoShard', 'crownFragment'] },
@@ -114,6 +114,7 @@ export const CURRENCY_SHORT: Readonly<Record<CurrencyId, string>> = {
   essenceStorm: 'Storm',
   essenceVital: 'Vital',
   essenceSwift: 'Swift',
+  umbralEssence: 'Umbral',
   catalyst: 'Catalyst',
   solvent: 'Solvent',
   seal: 'Seal',

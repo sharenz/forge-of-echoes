@@ -44,7 +44,7 @@ import { killPlayer } from './combat';
 import {
   BLEED_DURATION, BLEED_FRACTION, BLEED_MAX_STACKS, BLEED_MOVING_MULT, BURN_DURATION, BURN_FRACTION, DEBUFF_EVENT_REPEAT, DT,
   FREEZE_DURATION, FREEZE_IMMUNITY, PLAYER_CHILL_DURATION, PLAYER_CHILL_SLOW, PLAYER_DOT_EVENT_INTERVAL, PLAYER_SHOCK_BONUS,
-  PLAYER_SHOCK_DURATION, RESIST_CAP, ROOT_DURATION, ROOT_GRACE, WARD_DEBUFF_RATE, WITHER_DURATION, WITHER_MAX_STACKS, WITHER_RES_PER_STACK,
+  FLASK_FX, PLAYER_SHOCK_DURATION, RESIST_CAP, ROOT_DURATION, ROOT_GRACE, WARD_DEBUFF_RATE, WITHER_DURATION, WITHER_MAX_STACKS, WITHER_RES_PER_STACK,
 } from './constants';
 import { debuffMoveSlow } from './movement';
 import type { PlayerState, World } from './world';
@@ -147,11 +147,22 @@ export function shockMult(p: PlayerState): number {
   return p.debuffs.remaining[SHOCKED] > 0 ? 1 + PLAYER_SHOCK_BONUS : 1;
 }
 
-/** A player's resistance to `type` right now (withered applied, capped). */
+/** 1 while a belt flask of `flaskId` is active (utility flasks: Aegis, Quickstep, Quicksilver Mind), else 0. */
+export function flaskActiveFx(p: PlayerState, flaskId: 'quickstep' | 'aegis' | 'quicksilverMind'): 0 | 1 {
+  for (const f of p.flasks) if (f && f.active > 0 && f.runtime.flaskId === flaskId) return 1;
+  return 0;
+}
+
+/**
+ * A player's resistance to `type` right now: min(cap, uncapped - penalty). `stats.resist` is the UNCAPPED total (the rules already
+ * subtracted the map's resistance penalty from it) and the cap is `stats.maxResist` (75 by default, up to 85), so resistance above
+ * the cap is a real buffer against the map penalty and against Withered, which is subtracted from the uncapped value here.
+ */
 export function effectiveResist(p: PlayerState, type: DamageType): number {
   const base = p.stats.resist[type] ?? 0;
-  const res = type === 'physical' ? base : base - resistPenalty(p);
-  return Math.min(RESIST_CAP, Number.isFinite(res) ? res : 0);
+  const res = type === 'physical' ? base : base - resistPenalty(p) + flaskActiveFx(p, 'aegis') * FLASK_FX.aegis.resist;
+  const cap = Number.isFinite(p.stats.maxResist) ? p.stats.maxResist / 100 : RESIST_CAP;
+  return Math.min(cap, Number.isFinite(res) ? res : 0);
 }
 
 /**

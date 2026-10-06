@@ -142,5 +142,5 @@ export function itemModifiers(item: EquipmentItem): StatModifier[] {
 /** Player flags granted by the item (uniques only). */
 export function itemFlags(item: EquipmentItem): PlayerFlag[] {
   if (!item.uniqueId) return [];
-  return findUnique(item.uniqueId)?.flags.map((f) => f.flag) ?? [];
+  return findUnique(item.uniqueId)?.flags.filter((f) => !f.awaits).map((f) => f.flag) ?? [];
 }

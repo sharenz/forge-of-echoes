@@ -43,6 +43,8 @@ function clears(gear: 'fair' | 'strong', monsterLevel: number, characterLevel: n
   return results.filter((r) => r.cleared).length;
 }
 
+// Curve v3 (power-curve.md 6.1) leaves ML <= 28 untouched; ML34 and ML40 now sit at life x12.6 / x18.0 and damage x7.4 / x9.4
+// (was x16.5 / x26.5 and x11.0 / x20.5): still out of reach for fair gear and for strong gear four levels under.
 describe('monster level curve and level gap (sim bot)', () => {
   it('on-level maps are clearable: fair gear at map level 16, well-built gear rushes map level 22', () => {
     expect(clears('fair', 16, 16), 'fair gear, ML16 (Tier 3) at level 16').toBeGreaterThanOrEqual(3);

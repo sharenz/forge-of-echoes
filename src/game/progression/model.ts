@@ -2,11 +2,11 @@
 // formula of the game (src/core/modifiers). Attributes resolve first (base + class growth + allocated
 // points + gear); per-level and per-attribute rules then become ordinary labelled modifiers, so every
 // number on the character sheet and every skill number can be broken down by source.
-import type { Attribute, EquipSlot, PlayerFlag } from '../../contracts/content';
+import type { Attribute, DamageType, EquipSlot, PlayerFlag } from '../../contracts/content';
 import { ATTRIBUTES, EQUIP_SLOTS } from '../../contracts/content';
 import type { CharacterSave, StatBreakdown, StatId, StatModifier } from '../../contracts/items';
 import { resolveStatBreakdown } from '../../core/modifiers';
-import { SORCERESS } from '../../data/progression';
+import { PEN_CAP, SORCERESS, STAT_CAPS } from '../../data/progression';
 import type { ClassDef } from '../../data/progression';
 import { STAT_LABEL } from '../../data/items';
 import { itemFlags, itemModifiers } from '../items';
@@ -14,7 +14,7 @@ import { itemFlags, itemModifiers } from '../items';
 /** Stats whose value is a percentage resolved against a base of 100 (value − 100 = total % increase). */
 export const PERCENT_STATS: ReadonlySet<StatId> = new Set<StatId>([
   'spellDamage', 'fireDamage', 'coldDamage', 'lightningDamage', 'voidDamage', 'physicalDamage', 'elementalDamage',
-  'castSpeed', 'projectileSpeed', 'area', 'duration', 'cooldownRecovery', 'flaskEffect', 'itemQuantity', 'itemRarity',
+  'projectileDamage', 'areaDamage', 'damageOverTime', 'castSpeed', 'projectileSpeed', 'area', 'duration', 'cooldownRecovery', 'flaskEffect', 'itemQuantity', 'itemRarity',
 ]);
 
 export interface PlayerModel {
@@ -142,6 +142,35 @@ export function buildPlayerModel(
     },
   };
   return model;
+}
+
+/** The penetration stat of each damage type; fire, cold and lightning also take Elemental Penetration. */
+const PEN_STAT: Record<DamageType, StatId> = {
+  physical: 'physicalPen', fire: 'firePen', cold: 'coldPen', lightning: 'lightningPen', void: 'voidPen',
+};
+
+export interface Penetration {
+  /** Percentage points of monster resistance ignored, capped at PEN_CAP. */
+  value: number;
+  /** The sum of every source before the cap. */
+  uncapped: number;
+  /** The sources (own-type and, for the elements, Elemental Penetration). */
+  sources: StatModifier[];
+}
+
+/** Penetration of one damage type: Σ flat sources, capped at PEN_CAP (power-curve.md 4.1). */
+export function penetrationOf(model: PlayerModel, type: DamageType): Penetration {
+  const stats: StatId[] = [PEN_STAT[type]];
+  if (type === 'fire' || type === 'cold' || type === 'lightning') stats.push('elementalPen');
+  const sources = model.of(...stats);
+  let uncapped = 0;
+  for (const m of sources) if (m.mode === 'flat') uncapped += m.value;
+  return { value: Math.min(PEN_CAP, Math.max(0, uncapped)), uncapped, sources };
+}
+
+/** The player's resistance cap in percentage points: the class cap plus Maximum Resistances, at most the hard ceiling. */
+export function maxResistOf(model: PlayerModel): number {
+  return Math.min(STAT_CAPS.maxResistHard, model.cls.resistCap + Math.max(0, model.breakdown('maxResistance', 0).value));
 }
 
 /** Maximum Focus (a whole number). */

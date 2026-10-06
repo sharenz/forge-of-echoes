@@ -58,6 +58,20 @@ export const STAT_TEXT: Record<StatId, Templates> = {
   flaskEffect: { increased: '{v}% {inc} Flask Effect' },
   itemQuantity: { increased: '{v}% {inc} Quantity of Items found' },
   itemRarity: { increased: '{v}% {inc} Rarity of Items found' },
+
+  // Power rework: penetration values are percentage points taken off the target's resistance (before the 40 point cap).
+  firePen: { flat: 'Penetrate {v}% of enemy Fire Resistance' },
+  coldPen: { flat: 'Penetrate {v}% of enemy Cold Resistance' },
+  lightningPen: { flat: 'Penetrate {v}% of enemy Lightning Resistance' },
+  voidPen: { flat: 'Penetrate {v}% of enemy Void Resistance' },
+  physicalPen: { flat: 'Penetrate {v}% of enemy Physical Resistance' },
+  elementalPen: { flat: 'Penetrate {v}% of enemy Elemental Resistances' },
+  projectileDamage: { increased: '{v}% {inc} Projectile Damage' },
+  areaDamage: { increased: '{v}% {inc} Area Damage' },
+  damageOverTime: { increased: '{v}% {inc} Damage over Time' },
+  maxResistance: { flat: '{+v}% to maximum Resistances' },
+  extraChains: { flat: 'Skills Chain {v} additional Time{s}' },
+  flaskChargeOnKill: { flat: 'Flasks gain a Charge {v} kills sooner' },
 };
 
 /** Human stat names (character sheet rows, property labels, fallbacks). */
@@ -104,6 +118,18 @@ export const STAT_LABEL: Record<StatId, string> = {
   flaskEffect: 'Flask Effect',
   itemQuantity: 'Item Quantity',
   itemRarity: 'Item Rarity',
+  firePen: 'Fire Penetration',
+  coldPen: 'Cold Penetration',
+  lightningPen: 'Lightning Penetration',
+  voidPen: 'Void Penetration',
+  physicalPen: 'Physical Penetration',
+  elementalPen: 'Elemental Penetration',
+  projectileDamage: 'Projectile Damage',
+  areaDamage: 'Area Damage',
+  damageOverTime: 'Damage over Time',
+  maxResistance: 'Maximum Resistances',
+  extraChains: 'Additional Chains',
+  flaskChargeOnKill: 'Flask Charge on Kill',
 };
 
 /** Display labels for affix tags (tooltip chips). */
@@ -123,6 +149,7 @@ export const TAG_LABEL: Record<AffixTag, string> = {
   speed: 'Speed',
   luck: 'Luck',
   utility: 'Utility',
+  penetration: 'Penetration',
 };
 
 /** Item class labels ("Wand", "Body Armour"…). */

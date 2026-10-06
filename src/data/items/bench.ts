@@ -60,7 +60,7 @@ function recipe(affixId: string): BenchRecipeDef {
 
 /**
  * Every recipe, in bench display order (prefixes, then suffixes). One per affix family; the only affix
- * left out is "of Splintering" (a single T1 tier, which the bench never grants). Which recipes an item
+ * left out are "of Splintering" (a single T1 tier, which the bench never grants) and "of Warding" (maximum resistance: moving the cap needs real crafting). Which recipes an item
  * sees follows the affix's own class allow-list and base-property requirement.
  */
 export const BENCH_RECIPES: readonly BenchRecipeDef[] = [
@@ -73,6 +73,8 @@ export const BENCH_RECIPES: readonly BenchRecipeDef[] = [
   recipe('coldDamage'),
   recipe('lightningDamage'),
   recipe('elementalDamage'),
+  recipe('voidDamage'),
+  recipe('physicalDamage'),
   recipe('armourFlat'),
   recipe('evasionFlat'),
   recipe('armourPercent'),
@@ -104,6 +106,16 @@ export const BENCH_RECIPES: readonly BenchRecipeDef[] = [
   recipe('igniteChance'),
   recipe('chillChance'),
   recipe('shockChance'),
+  recipe('firePen'),
+  recipe('coldPen'),
+  recipe('lightningPen'),
+  recipe('voidPen'),
+  recipe('physicalPen'),
+  recipe('elementalPen'),
+  recipe('damageOverTime'),
+  recipe('projectileDamage'),
+  recipe('areaDamage'),
+  recipe('flaskChargeOnKill'),
 ];
 
 // ---------------------------------------------------------------------------------------------

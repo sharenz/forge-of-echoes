@@ -2,8 +2,15 @@
 // a map with the archetype's frozen tree through rules.openMap, then feeds the map's own wave budget, pack rarity and
 // monster scaling through the real loot rules (rollKillLoot / rollChestLoot) with common random numbers, valuing every drop
 // in Scrap by Rook's appraisal (sellQuote) and a fixed currency table. Clear time comes from a wave-queue model
-// (waves arrive on clear or on the timer, the boss wave holds) calibrated so the empty tree clears in a fixed time.
-// It is a model of the economy, not the sim: the heavy sim playthroughs (playthrough.ts) confirm survival separately.
+// (waves arrive on clear or on the timer, the boss wave holds).
+//
+// KILL SPEED (power rework P3, power-curve.md 9.2). The queue's kill speed used to be ONE constant calibrated on the empty tree
+// (units / (6 x 40 s)) and held for every archetype: anything that adds monsters or life then raised the backlog at a fixed kill
+// rate, so no tree could ever beat the empty tree on time (the "every archetype is slower than baseline" artefact). Clear speed is
+// character power, so the speed now comes from the band model (character-model.ts killRate): the same node set is evaluated for
+// a fair, a good and an endgame character at the map's monster level, and the boss fight is the band's boss time scaled by the
+// map's life modifiers. `'calibrated'` keeps the old constant for the one test that documents the artefact.
+// It is a model of the economy, not the sim: the heavy sim playthroughs (playthrough.ts, character-bands.test.ts) check survival.
 import type { AtlasAreaId } from '../../src/contracts/atlas';
 import type { CharacterSave, Item, MapItem } from '../../src/contracts/items';
 import type { CurrencyId } from '../../src/contracts/content';
@@ -20,6 +27,13 @@ import { normalizeMapTree } from '../../src/game/progression/map-tree';
 import { attachSurge, surgeBonusFor } from '../../src/game/progression/surge';
 import { fullProgress, pathTo } from './atlas-tree-helpers';
 import { bareCharacter, expectOk, map, openAt } from './fixtures';
+import { monsterLifeScale } from '../../src/data/progression';
+import { BANDS, LOOT_SECONDS, killRate, walkSeconds, type Band } from './character-model';
+
+/** Where the harness takes its kill speed from: a band of the character model, or the old constant calibrated on the empty tree. */
+export type SpeedModel = Band | 'calibrated';
+/** The band the economy numbers (value per hour) are quoted at unless a test says otherwise: a good build at its home tier. */
+export const DEFAULT_BAND: Band = 'good';
 
 /** Scrap value of one currency (a fixed, roughly market-shaped table; the same for every archetype). */
 export const CURRENCY_VALUE: Partial<Record<CurrencyId, number>> = {
@@ -49,7 +63,7 @@ export function valueOf(item: Item): number {
   }
 }
 
-export interface Cell { valuePerMap: number; seconds: number; valuePerHour: number; pressure: number; kills: number; setup: RunSetup }
+export interface Cell { valuePerMap: number; seconds: number; valuePerHour: number; pressure: number; kills: number; setup: RunSetup; secondsByBand?: Record<Band, number> }
 
 export const REFERENCE_KILL_SECONDS = 40;
 
@@ -82,7 +96,10 @@ export function standardMap(tier: number, corrupted = false): MapItem {
   return { ...m, rarity: 'rare', mods, corrupted, quality: 10 };
 }
 
-export function playMap(nodes: readonly string[], tier: number, area: AtlasAreaId, seed: number, corrupted = false, speedOverride?: number, surge = false): Cell & { units: number } {
+/** A kill speed in the harness's units: life units per second in a crowd, and the seconds the map's boss takes. */
+export interface KillSpeed { speed: number; bossSeconds: number }
+
+export function playMap(nodes: readonly string[], tier: number, area: AtlasAreaId, seed: number, corrupted = false, speedOverride?: number | SpeedModel, surge = false): Cell & { units: number } {
   const ch: CharacterSave = bareCharacter({ atlas: fullProgress([...nodes]), currencyStash: { scrap: 1000, gildedKey: 5, blackKey: 5, huntingKey: 5, riftKey: 5, reliquaryKey: 5 }, mapDevice: standardMap(tier, corrupted), rngState: seed * 7919 + tier });
   const setup = expectOk(openAt(rules, ch, area, 'wand')).setup;
   // The daily surge (brief D 7): the same freezing openMap does with `useSurge`, so a boosted cell uses the real loot rules.
@@ -93,6 +110,7 @@ export function playMap(nodes: readonly string[], tier: number, area: AtlasAreaI
   const boss = THEME_ROSTER[setup.map.baseId].boss;
   let value = 0, kills = 0;
   const lifeByWave: number[] = [];
+  const packsByWave: number[] = [];
   const looter = ch;
   const kill = (rarity: KillLootContext['rarity'], wave: number, extra: Partial<KillLootContext> = {}) => {
     const ctx: KillLootContext = { kind: 'ashling', summoned: false, rarity, isLieutenant: false, isBoss: false, wave, x: 0, y: 0, ...extra };
@@ -103,6 +121,7 @@ export function playMap(nodes: readonly string[], tier: number, area: AtlasAreaI
     const budget = Math.round((WAVES.baseMonsters + WAVES.monstersPerWave * (w - 1)) * s.countMultiplier);
     const packMembers = Math.round(budget * 0.6);
     let life = budget - packMembers; // stream: normal monsters
+    let packs = 0;
     for (let n = 0; n < budget - packMembers; n++) kill('normal', w);
     for (let left = packMembers; left > 0;) {
       const size = Math.min(left, 4 + Math.floor(rng.next() * 5));
@@ -111,24 +130,47 @@ export function playMap(nodes: readonly string[], tier: number, area: AtlasAreaI
       for (let n = 1; n < size; n++) kill('normal', w);
       life += size - 1;
       left -= size;
+      packs++;
     }
     lifeByWave.push(life * s.lifeMultiplier);
+    packsByWave.push(packs);
   }
   const bossLife = 40 * s.lifeMultiplier * (cfg.bossLifeMultiplier ?? 1);
   for (const item of rules.rollKillLoot(setup, { kind: boss, summoned: false, rarity: 'rare', isLieutenant: false, isBoss: true, wave: cfg.waves.bossWave, x: 0, y: 0 }, rng.fork(1), looter)) value += valueOf(item);
   for (const item of rules.rollChestLoot(setup, rng.fork(2), looter)) value += valueOf(item);
   const units = lifeByWave.reduce((a, b) => a + b, 0) + bossLife;
-  const speed = speedOverride ?? units / (cfg.waves.count * REFERENCE_KILL_SECONDS);
-  const seconds = clearSeconds({ count: cfg.waves.count, waveDuration: cfg.waves.waveDuration, bossWave: cfg.waves.bossWave, tellDuration: cfg.waves.tellDuration }, lifeByWave, bossLife, speed);
-  return { valuePerMap: value, seconds, valuePerHour: value / seconds * 3600, pressure: pressureOf(setup), kills, setup, units };
+  // The clear time of every band of the character model (cheap: the loot above is rolled once), and of the chosen model.
+  const waves = { count: cfg.waves.count, waveDuration: cfg.waves.waveDuration, bossWave: cfg.waves.bossWave, tellDuration: cfg.waves.tellDuration };
+  const secondsByBand = Object.fromEntries(BANDS.map((band) => {
+    // The band model's character at this map's monster level (9.2): crowd throughput from its DPS and targets, the boss from its
+    // uptime-adjusted time, both scaled by what the map's modifiers do to monster life (the level curve is in the model already).
+    const rate = killRate(setup.monsterLevel, band);
+    const modsLife = s.lifeMultiplier / monsterLifeScale(setup.monsterLevel);
+    const bossSeconds = rate.bossSeconds * modsLife * (cfg.bossLifeMultiplier ?? 1);
+    // The queue runs in seconds of work (speed 1): per wave the walk between its packs plus the time to kill its life at the band's
+    // crowd throughput, then the boss; the loot and the portal are a fixed tail (power-curve 9.3).
+    const work = lifeByWave.map((life, i) => walkSeconds(band, packsByWave[i]) + life / rate.speed);
+    return [band, clearSeconds(waves, work, bossSeconds, 1) + LOOT_SECONDS];
+  })) as Record<Band, number>;
+  const seconds = typeof speedOverride === 'string' && speedOverride !== 'calibrated'
+    ? secondsByBand[speedOverride]
+    : clearSeconds(waves, lifeByWave, bossLife, typeof speedOverride === 'number' ? speedOverride : units / (cfg.waves.count * REFERENCE_KILL_SECONDS));
+  return { valuePerMap: value, seconds, secondsByBand, valuePerHour: value / seconds * 3600, pressure: pressureOf(setup), kills, setup, units };
 }
 
 export interface Measured { valuePerHour: number; seconds: number; pressure: number; valuePerMap: number }
 
-/** Mean over seeds. Time is measured at a speed calibrated on the empty tree of the same area and tier. */
-export function measure(nodes: readonly string[], tier: number, area: AtlasAreaId, seeds: readonly number[], corrupted = false, surge = false): Measured {
-  const baseline = playMap([], tier, area, seeds[0], corrupted);
-  const speed = baseline.units / (6 * REFERENCE_KILL_SECONDS);
+/**
+ * Mean over seeds. Time is measured at the kill speed of `speedModel`: a band of the character model (default the good band),
+ * or 'calibrated', the old constant fixed on the empty tree of the same area and tier (documented artefact, kept for the test
+ * that pins why it was replaced).
+ */
+export function measure(
+  nodes: readonly string[], tier: number, area: AtlasAreaId, seeds: readonly number[], corrupted = false, surge = false, speedModel: SpeedModel = DEFAULT_BAND,
+): Measured {
+  const speed: number | SpeedModel = speedModel === 'calibrated'
+    ? playMap([], tier, area, seeds[0], corrupted).units / (6 * REFERENCE_KILL_SECONDS)
+    : speedModel;
   let value = 0, seconds = 0, pressure = 0;
   for (const seed of seeds) {
     const cell = playMap(nodes, tier, area, seed, corrupted, speed, surge);
@@ -136,6 +178,22 @@ export function measure(nodes: readonly string[], tier: number, area: AtlasAreaI
   }
   const n = seeds.length;
   return { valuePerMap: value / n, seconds: seconds / n, pressure: pressure / n, valuePerHour: value / seconds * 3600 };
+}
+
+/** The same cell for every band of the character model in one pass (the loot is rolled once per seed). */
+export function measureBands(
+  nodes: readonly string[], tier: number, area: AtlasAreaId, seeds: readonly number[], corrupted = false, surge = false,
+): Record<Band, Measured> {
+  const out = Object.fromEntries(BANDS.map((b) => [b, { valuePerMap: 0, seconds: 0, pressure: 0, valuePerHour: 0 }])) as Record<Band, Measured>;
+  let value = 0, pressure = 0;
+  for (const seed of seeds) {
+    const cell = playMap(nodes, tier, area, seed, corrupted, DEFAULT_BAND, surge);
+    value += cell.valuePerMap; pressure += cell.pressure;
+    for (const b of BANDS) out[b].seconds += cell.secondsByBand![b];
+  }
+  const n = seeds.length;
+  for (const b of BANDS) out[b] = { valuePerMap: value / n, seconds: out[b].seconds / n, pressure: pressure / n, valuePerHour: value / out[b].seconds * 3600 };
+  return out;
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -152,7 +152,7 @@ export interface EventMonsterOptions {
 /** Spawn a monster owned by `e`: kills of it are reported to the script; no pack (it hunts from the start). */
 export function eventMonster(w: World, e: EventInstance, kind: MonsterKind, x: number, y: number, o: EventMonsterOptions = {}): number {
   const d = w.mapEvent!;
-  const i = spawnMonster(w, kind, x, y, { rarity: o.rarity ?? 'normal', mods: o.mods ?? 0, wave: o.wave ?? Math.max(1, w.director.wave),
+  const i = spawnMonster(w, kind, x, y, { rarity: o.rarity ?? 'normal', mods: o.mods ?? 0, wave: o.wave ?? Math.max(1, w.director.wave), lifeFloor: false,
     ...(o.still || o.frozen || o.fixture ? { animate: false } : {}) });
   if (i < 0) return -1;
   const m = w.monsters;

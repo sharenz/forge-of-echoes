@@ -34,7 +34,7 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 23: ZoneInfo.flowSeed (conveyor-belt directions and reversal schedule of layout flow zones; a new optional field).
 // 24: Rook's wares board: merchantWares / buyWare / rerollWares; CommandResult.board (MerchantBoard); CharacterSave.wares. Rook's map:<area>:<tier>:<grade> offers are gone from buyOffer.
 // 25: the first-run guide: `guide` command (steps done, hints shown, props used, skip, replay, finish), account-level CharacterSave.guide, hideout flask refill, first-map warm-up flag; `sortBackpack`.
-export const PROTOCOL_VERSION = 25;
+export const PROTOCOL_VERSION = 26;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;

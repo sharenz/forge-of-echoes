@@ -76,6 +76,11 @@ export function digestWorld(w: World): number {
     h.float(m.y[i]);
     h.float(m.life[i]);
     h.int(m.state[i]);
+    // Exposure (power rework) enters the digest only while a monster is exposed, so worlds that never expose are unchanged.
+    if (m.exposeTime[i] > 0) {
+      h.float(m.exposeTime[i]);
+      for (let k = 0; k < 5; k++) h.float(m.expose[i * 5 + k]);
+    }
   }
   const pr = w.projectiles;
   h.int(pr.count);

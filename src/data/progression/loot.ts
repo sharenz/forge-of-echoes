@@ -38,7 +38,24 @@ export const CURRENCY_DROPS: readonly CurrencyDropDef[] = [
 export const FLASK_DROPS: readonly FlaskDropDef[] = [
   { flaskId: 'lifeFlask', weight: 60 },
   { flaskId: 'focusFlask', weight: 40 },
+  // Utility flasks (power rework): rarer than the two recovery flasks.
+  { flaskId: 'quickstep', weight: 12 },
+  { flaskId: 'aegis', weight: 10 },
+  { flaskId: 'quicksilverMind', weight: 10 },
 ];
+
+/**
+ * Umbral Essence (void / physical damage and penetration) is not in the ordinary currency table: it comes from the Void Breach event
+ * (Silver and Gold seals) and from the final boss of Tier `bossMinTier`+ maps. Each is rolled on its own rng stream, so it never moves
+ * any other drop. `bossChance` scales with personal item rarity like the other boss extras.
+ */
+export const UMBRAL_ESSENCE = {
+  bossMinTier: 8,
+  bossChance: 0.3,
+  /** Void Breach: Silver (grade 2) chance and Gold (grade 3) chance, both multiplied by the Voidtouched Atlas strength. */
+  breachSilverChance: 0.3,
+  breachGoldCount: 1,
+} as const;
 
 /** Equipment rarity weights (m = rarity / 100): normal 70 · magic 22·m · rare 1.6·m^1.3 · unique 0.2·m^1.5. */
 export const EQUIPMENT_RARITY_WEIGHTS = {

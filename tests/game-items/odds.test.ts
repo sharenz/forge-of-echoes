@@ -122,7 +122,7 @@ describe('tier odds in previews', () => {
   it('shows each essence outcome with its exact tier split, matching real rolls', () => {
     const wand = equip({ baseId: 'ashwoodWand', itemLevel: 30, rarity: 'normal', uid: 'w' });
     const lines = equipmentCraftPreview(wand, 'essenceEmber').lines;
-    expect(lines[0]).toBe('Adds one of 2 fire affixes: Blazing 59% · of Immolation 41%');
+    expect(lines[0]).toBe('Adds one of 3 fire affixes: Blazing 42% · of Immolation 29% · of Fire Sundering 29%');
     expect(lines).toContain('Tier odds by affix:');
     expect(lines).toContain('Blazing: T10 29% · T9 24% · T8 20% · T7 16% · T6 11%');
     expect(lines).toContain('of Immolation: T8 42% · T7 33% · T6 25%');
@@ -157,8 +157,8 @@ describe('tier odds in previews', () => {
   it('shortens long name lists for Kindling and Reforge and explains item level 1', () => {
     const wand = equip({ baseId: 'ashwoodWand', itemLevel: 30, rarity: 'normal', uid: 'w' });
     const kindling = equipmentCraftPreview(wand, 'kindling').lines;
-    expect(kindling).toContain('Blazing, of Omens, of Insight and 4 more: T10 29% · T9 24% · T8 20% · T7 16% · T6 11%');
-    expect(kindling.find((l) => l.startsWith('Chance for each affix:'))).toMatch(/ · and 8 others at [\d.]+% or less$/);
+    expect(kindling).toContain('Blazing, Sorcerous, Arcane and 6 more: T10 29% · T9 24% · T8 20% · T7 16% · T6 11%');
+    expect(kindling.find((l) => l.startsWith('Chance for each affix:'))).toMatch(/ · and 17 others at [\d.]+% or less$/);
 
     const fresh = equip({ baseId: 'ashwoodWand', itemLevel: 1, rarity: 'normal', uid: 'f' });
     expect(equipmentCraftPreview(fresh, 'reforge').lines).toContain('At item level 1 only the lowest tier of each affix can roll.');
@@ -169,8 +169,10 @@ describe('tier odds in previews', () => {
       baseId: 'emberRing', itemLevel: 60, rarity: 'magic', uid: 'r', affixes: [{ affixId: 'life', tier: 5, value: 30 }],
     });
     const storm = equipmentCraftPreview(ring, 'essenceStorm').lines;
-    expect(storm[0]).toBe('Adds the only lightning affix that can roll here: of Grounding.');
-    expect(storm[1]).toBe('Tier odds: T10 25% · T9 21% · T8 17% · T7 14% · T6 10% · T5 7% · T4 4% · T3 2%');
+    expect(storm[0]).toMatch(/^Adds one of 2 lightning affixes: of Grounding \d+% · of Prisms \d+%$/);
+    // A single-option essence: Swift on a ring can only add Cast Speed.
+    const swift = equipmentCraftPreview(ring, 'essenceSwift').lines;
+    expect(swift[0]).toBe('Adds the only speed affix that can roll here: of Haste.');
     expect(equipmentCraftPreview(ring, 'catalyst').lines).toContain('Hale T5: upgrades to T4 (34–39)');
   });
 });

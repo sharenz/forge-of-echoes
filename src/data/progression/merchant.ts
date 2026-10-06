@@ -28,6 +28,9 @@ export type RookMapGradeId = (typeof ROOK_MAP_GRADES)[number]['id'];
 export const MERCHANT_STOCK: readonly MerchantStockDef[] = [
   { id: 'flask-life', kind: 'flask', flaskId: 'lifeFlask', count: 1, price: [{ currencyId: 'scrap', count: 1 }] },
   { id: 'flask-focus', kind: 'flask', flaskId: 'focusFlask', count: 1, price: [{ currencyId: 'scrap', count: 1 }] },
+  { id: 'flask-quickstep', kind: 'flask', flaskId: 'quickstep', count: 1, price: [{ currencyId: 'scrap', count: 3 }] },
+  { id: 'flask-aegis', kind: 'flask', flaskId: 'aegis', count: 1, price: [{ currencyId: 'scrap', count: 3 }] },
+  { id: 'flask-quicksilver', kind: 'flask', flaskId: 'quicksilverMind', count: 1, price: [{ currencyId: 'scrap', count: 3 }] },
   { id: 'currency-kindling', kind: 'currency', currencyId: 'kindling', count: 1, price: [{ currencyId: 'scrap', count: 3 }] },
   { id: 'currency-mapDust', kind: 'currency', currencyId: 'mapDust', count: 1, price: [{ currencyId: 'scrap', count: 3 }] },
 ];

@@ -71,7 +71,7 @@ export function describeEquipment(item: EquipmentItem, opts: EquipmentDescribeOp
   });
 
   const affixes: TooltipLine[] = item.affixes.map((_, i) => affixLine(item, i));
-  if (unique) for (const f of unique.flags) affixes.push({ text: f.text, kind: 'unique' });
+  if (unique) for (const f of unique.flags) if (!f.awaits) affixes.push({ text: f.text, kind: 'unique' });
 
   const scars: TooltipLine[] = item.scars.flatMap((s) => {
     const def = getScar(s.scarId);
@@ -208,7 +208,10 @@ export function describeFlask(stack: FlaskStack, opts: FlaskDescribeOptions = {}
   const onBelt = beltIndex !== null;
   const resource = def?.resource === 'focus' ? 'Focus' : 'Life';
   const properties: { label: string; value: string }[] = [];
-  if (def) {
+  if (def?.utility) {
+    def.utility.lines.forEach((line, k) => properties.push({ label: k === 0 ? 'Effect' : '', value: line }));
+    properties.push({ label: 'Duration', value: `${formatNumber(def.duration)} seconds` });
+  } else if (def) {
     const value = opts.characterLevel !== undefined
       ? `${formatNumber(flaskRecovery(def.id, opts.characterLevel, opts.flaskEffect ?? 1))} ${resource}`
       : `${def.recoverBase} ${resource} + ${def.recoverPerLevel} per level`;

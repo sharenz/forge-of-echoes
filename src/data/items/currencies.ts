@@ -70,6 +70,8 @@ export const CURRENCIES: Record<CurrencyId, CurrencyDef> = {
   essenceStorm: essence('essenceStorm', 'Storm Essence', ['lightning'], 'lightning'),
   essenceVital: essence('essenceVital', 'Vital Essence', ['life', 'defense', 'resistance'], 'life, defence or resistance'),
   essenceSwift: essence('essenceSwift', 'Swift Essence', ['speed'], 'speed'),
+  // Void and physical damage and their penetration (power rework). Sources: Void Breach rewards and Tier 8+ final bosses (loot.ts); not a common drop.
+  umbralEssence: essence('umbralEssence', 'Umbral Essence', ['void', 'physical'], 'void or physical'),
   catalyst: currency('catalyst', {
     name: 'Tempering Catalyst',
     description: 'Upgrades a chosen affix by one tier, if the item level allows, and rerolls its value in the new tier.',

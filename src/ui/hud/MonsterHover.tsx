@@ -14,6 +14,8 @@ const MODS = [
   [ELITE_BIT.fireProof, 'Fire-proof', 'Nearly immune to fire damage'],
   [ELITE_BIT.coldProof, 'Cold-proof', 'Nearly immune to cold damage'],
   [ELITE_BIT.lightningProof, 'Lightning-proof', 'Nearly immune to lightning damage'],
+  [ELITE_BIT.voidProof, 'Void-proof', 'Nearly immune to void damage'],
+  [ELITE_BIT.physicalProof, 'Physical-proof', 'Nearly immune to physical damage'],
   [ELITE_BIT.stormcalled, 'Stormcalled', 'Calls lightning down on you — leave the warning circle or be shocked'],
   [ELITE_BIT.rending, 'Rending', 'Rakes the ground under you — leave the warning circle or bleed'],
 ] as const;

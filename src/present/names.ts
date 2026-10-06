@@ -45,6 +45,8 @@ export const MARKER_NAMES: Partial<Record<MonsterKind, string>> = {
 const MOD_WORDS: readonly (readonly [number, string])[] = [
   [ELITE_BIT.rending, 'Rending'],
   [ELITE_BIT.stormcalled, 'Stormcalled'],
+  [ELITE_BIT.physicalProof, 'Physical-proof'],
+  [ELITE_BIT.voidProof, 'Void-proof'],
   [ELITE_BIT.lightningProof, 'Lightning-proof'],
   [ELITE_BIT.coldProof, 'Cold-proof'],
   [ELITE_BIT.fireProof, 'Fire-proof'],

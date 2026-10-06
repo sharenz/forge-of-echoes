@@ -7,7 +7,7 @@ import { ELITE, STRIKE_MASK } from './archetypes';
 import { MONSTER_ANIM as ANIM, MSTATE, setAnim, stop, turnToward } from './behaviour';
 import { driveBoss } from './bosses';
 import { driveEventMonster, eventAilments } from './map-events';
-import { tickIgnite } from './combat';
+import { tickExposure, tickIgnite } from './combat';
 import {
   AGGRO_RADIUS, CHILL_SLOW, DT, EMPOWER_BONUS, HASTE_BONUS, KNOCKBACK_RATE, LARGE_BODY_RADIUS, MEMBER_AGGRO_RADIUS,
   MONSTER_HIT_FLASH_DECAY, PACK_THINK_INTERVAL, PLAYER_RADIUS, PROP_SIDE_MEMORY, PROP_SLIDE_TIME, PROP_STUCK_PROGRESS, PROP_STUCK_TIME,
@@ -86,6 +86,7 @@ export function updateMonsters(w: World): void {
     if (m.attackCd[i] > 0) m.attackCd[i] -= DT;
     if (m.chillTime[i] > 0) m.chillTime[i] -= DT;
     if (m.shockTime[i] > 0) m.shockTime[i] -= DT;
+    if (m.exposeTime[i] > 0) tickExposure(w, i, DT);
     if (m.empowerTime[i] > 0) m.empowerTime[i] -= DT;
     if (m.hasteTime[i] > 0) m.hasteTime[i] -= DT;
     if (m.groundCd[i] > 0) m.groundCd[i] -= DT;

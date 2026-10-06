@@ -42,6 +42,10 @@ export interface PlayerCombatStats {
   lifeOnKill: number;
   focusOnKill: number;
   flaskEffect: number;        // multiplier
+  /** Penetration per damage type in percentage points (0..40); resolved by the rules (power rework P1). */
+  pen: Record<DamageType, number>;
+  /** Maximum resistance cap in percentage points (default 75, hard ceiling 85). */
+  maxResist: number;
   flags: PlayerFlag[];
 }
 
@@ -258,7 +262,9 @@ export const RARITY_CODE = { normal: 0, magic: 1, rare: 2, lieutenant: 3, boss: 
 /** Elite modifier bits in WorldView.monsters.mods (magic packs share one; rare leaders have two). */
 export const ELITE_BIT = { swift: 1, stout: 2, fierce: 4, juggernaut: 8, frenzied: 16, emberTouched: 32, warded: 64,
   // Rare-only: near-immunity to one element (fireProof…) and telegraphed behavioural strikes (stormcalled, rending).
-  fireProof: 128, coldProof: 256, lightningProof: 512, stormcalled: 1024, rending: 2048 } as const;
+  fireProof: 128, coldProof: 256, lightningProof: 512, stormcalled: 1024, rending: 2048,
+  // Power rework (append-only; the u16 mask has bits 4096 and 8192 left, then it is full): proof against void / physical.
+  voidProof: 4096, physicalProof: 8192 } as const;
 
 /** Ailment bits in WorldView.monsters.ailments. */
 export const AILMENT_BIT = { burning: 1, chilled: 2, shocked: 4, shielded: 8, empowered: 16,

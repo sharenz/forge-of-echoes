@@ -84,6 +84,11 @@ export interface UniqueModDef extends ModLineDef, RangeDef {}
 export interface UniqueFlagDef {
   flag: PlayerFlag;
   text: string;
+  /**
+   * Set while the behaviour does not exist yet (the slice that builds it is named here): the flag is data-complete but gated.
+   * Gated flags are not granted to the player and their text is not shown; delete this field when the behaviour ships.
+   */
+  awaits?: string;
 }
 
 export interface UniqueDef {
@@ -122,7 +127,17 @@ export interface CurrencyDef extends CurrencyInfo {
   dropTier: CurrencyDropTier;
 }
 
+/** A utility flask's effect while active (power rework): numbers are fractions (0.3 = 30%). Mirrored by the sim's FLASK_FX. */
+export interface FlaskUtilityDef {
+  kind: 'quickstep' | 'aegis' | 'quicksilverMind';
+  /** Tooltip effect lines. */
+  lines: readonly string[];
+  fx: { moveSpeed?: number; resist?: number; focusRegen?: number; focusInstant?: number };
+}
+
 export interface FlaskDef extends FlaskInfo {
+  /** Present on utility flasks: they recover nothing and apply `fx` for `duration` seconds. */
+  utility?: FlaskUtilityDef;
   /** Total recovery = recoverBase + recoverPerLevel × character level (before flask effect). */
   recoverBase: number;
   recoverPerLevel: number;

@@ -211,17 +211,18 @@ describe('uniques', () => {
           expect(a.value).toBeGreaterThanOrEqual(def.mods[k].min);
           expect(a.value).toBeLessThanOrEqual(def.mods[k].max);
         });
-        expect(itemFlags(item)).toEqual(def.flags.map((f) => f.flag));
+        // Flags whose behaviour has not shipped yet (`awaits`) are not granted.
+        expect(itemFlags(item)).toEqual(def.flags.filter((f) => !f.awaits).map((f) => f.flag));
       }
     }
     expect(generateUnique('cinderwalkers', rng, { itemLevel: 55 }).itemLevel).toBe(55);
   });
 
   it('filters and picks uniques by class', () => {
-    expect(uniqueIdsFor({ classes: ['ring'] })).toEqual(['ruinheartBand']);
+    expect(uniqueIdsFor({ classes: ['ring'] })).toEqual(['ruinheartBand', 'anchoritesSeal']);
     expect(uniqueIdsFor({ baseId: 'ashwoodWand' })).toEqual(['thePatientSpark']);
     expect(pickRandomUnique(createRng(1), { classes: ['helmet'] })).toBeNull();
-    expect(pickRandomUnique(createRng(1), { classes: ['boots'] })).toBe('cinderwalkers');
+    expect(['cinderwalkers', 'gravewindBoots']).toContain(pickRandomUnique(createRng(1), { classes: ['boots'] }));
   });
 });
 

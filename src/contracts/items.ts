@@ -29,6 +29,9 @@ export const STAT_IDS = [
   // utility & luck
   'moveSpeed', 'pickupRadius', 'flaskEffect',
   'itemQuantity', 'itemRarity',
+  // power rework R1 (append-only): penetration, damage-type scaling, max resistance, chains, flask charge
+  'firePen', 'coldPen', 'lightningPen', 'voidPen', 'physicalPen', 'elementalPen',
+  'projectileDamage', 'areaDamage', 'damageOverTime', 'maxResistance', 'extraChains', 'flaskChargeOnKill',
 ] as const;
 export type StatId = (typeof STAT_IDS)[number];
 
@@ -60,7 +63,7 @@ export type AffixKind = 'prefix' | 'suffix';
 export type AffixTag =
   | 'fire' | 'cold' | 'lightning' | 'void' | 'physical' | 'elemental'
   | 'life' | 'focus' | 'defense' | 'resistance'
-  | 'caster' | 'critical' | 'speed' | 'luck' | 'utility';
+  | 'caster' | 'critical' | 'speed' | 'luck' | 'utility' | 'penetration';
 
 export interface RolledAffix {
   affixId: string;
