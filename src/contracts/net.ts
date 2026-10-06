@@ -46,7 +46,9 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 31: power rework SK5 flagship augments: SimEvent 'augment' (lodge, detonate, split, mark, explode, blast, return, refund); area kinds
 //     frostGround, staticField; AILMENT_BIT marked and lodged (all appended).
 // 32: power rework SK4 roster batch 3: area kinds meteorRain, blizzardStorm, eventHorizon; new SFX ids (appended).
-export const PROTOCOL_VERSION = 32;
+// 33: power rework R5 C3/PT0 (the Orrery): commands allocatePassive, refundPassive, chooseMastery; CharacterSave passives, masteries,
+//     bossMarks, passiveRefunds, passiveRespecSpent (optional).
+export const PROTOCOL_VERSION = 33;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
