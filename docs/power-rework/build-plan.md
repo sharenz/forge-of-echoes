@@ -1,6 +1,6 @@
 # E. Build plan: slices, file ownership, tests, migration
 
-Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06, R3 (SK3 and SK5) built 2026-10-06, R4's SK4 built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
+Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06, R3 (SK3 and SK5) built 2026-10-06, R4's SK4 built 2026-10-06, R5's PT1 built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
 `power-curve.md` (P), `skills.md` (SK) and `passive-tree.md` (PT) hold the designs these slices implement; `overview.md` has the pillars and the migration summary.
 
 ---
@@ -254,6 +254,21 @@ Tests: static audit, ledger audit, random-build bots (`passive-tree.md` 8), migr
 
 ### PT1: Generalise the Codex model and renderer (M)
 Owner lane **codex-ui**. Depends on nothing (can start in R3). Files: `src/ui/codex/{model,render,Rail,Codex}.ts(x)` → `TreeModel<N>` and a `createTreeView` factory; `src/art/codex/*` tones; **the Atlas Codex must be unchanged** (screenshot tests of the Atlas at both sizes, the existing atlas e2e). Exit: Atlas and a test graph render through the same code.
+
+**Status: built 2026-10-06** (UI/art only). `src/ui/codex/tree.ts` is the generic `TreeModel<N, T>` (`createTreeModel(binding)`: origin,
+nodes, `allocatable`, `place`, `plateClass`, `tone`, `glyph`, `searchText`, `pointName`, `gateReason`) with every graph question (state,
+exclusion, cheapest path, refund, dependants, search, arrow neighbours, `verdict`). `src/ui/codex/view.ts` is `createTreeView({ model,
+board, palette })` (plate cache per palette, baked static layers, `createRenderer`); `render.ts` is the generic `TreeRenderer` (all beats,
+threads, chains, previews), `Stage.tsx` the generic stage (`useTreeStage` camera/drag/wheel, `TreeStage` node buttons, labels, keyboard;
+`TreePlateArt`, `planTreeLabels`), `Rail.tsx` adds the generic `TreeRail` shell. Art: `TonePalette` (`id`, `tones`, optional seal
+`emblem`) with `CODEX_PALETTE`; `plateFrame`/`cachedPlate` take a palette (Codex by default); `TreeBoard` with `CODEX_BOARD` and a plain
+`ringBoard`. The Atlas Codex is `ATLAS_TREE` (model.ts, the old exports kept as aliases) on `ATLAS_VIEW` (atlasView.ts); Codex.tsx and
+CodexRail mount through the generic stage and rail. The test graph is `src/ui/codex/sample.ts` (13 nodes, exclusive keystones, a gated
+seal without emblem, bridges, its own red/blue/gold palette), shown in `dev/tree-view.html`. Unchanged Atlas: reduced-motion screenshots of
+the Codex tab (open/mid/full trees; open, whole, 2x, hover, select, key, search) at 1280x720 and 1024x600 are pixel-identical before and
+after within the run-to-run noise (at most 6 px); `--only tree` e2e at both sizes. Tests: `tests/codex/tree.test.ts` (sample model,
+palettes, the shared renderer drawing both views on a recording canvas). Left for PT2: the renderer's fixed accent colours (ready ring,
+preview, selection) and the origin brazier are not yet palette fields.
 
 ### PT2: The Orrery UI (L)
 Owner lane **codex-ui**. Depends on PT0, PT1. Files: `src/ui/panels/Orrery.tsx`, `src/ui/orrery/*` (mastery flyout, build rail, diff hover, points header), `src/art/orrery/*` (tones, plates, glyphs), HUD hotkey `O`, unspent badge.

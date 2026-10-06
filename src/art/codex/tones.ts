@@ -2,7 +2,9 @@
 // Fortune gold, Echoes void glow, Peril blood + hot white. Bridges wear two of them, the inner ring is brass, and the
 // six theme seals take their theme's light. Every colour is the shared palette, only re-ordered into ramps here.
 import type { MapBaseId } from '../../contracts/content';
+import type { Frame } from '../frame';
 import { C, RAMPS, hexToColor, type Color, type Ramp } from '../palette';
+import { emblem } from '../atlas/emblems';
 
 export const BRANCH_TONES = ['cartography', 'foundry', 'bounty', 'fortune', 'echoes', 'peril'] as const;
 export type BranchTone = (typeof BRANCH_TONES)[number];
@@ -38,6 +40,21 @@ export const TONES: Record<Tone, ToneDef> = {
   ironColiseum: { label: 'Iron Coliseum', face: hx('#1c1210', '#3a2418', '#6a3f24', '#94582e', '#c2683a', '#e8a070'), glyph: glyph('#ffd8b0', '#ffffff', '#3a1c10'), light: hexToColor('#d8794a'), css: '#d8794a' },
   chainworks: { label: 'Chainworks', face: [...RAMPS.metal.slice(0, 5), hexToColor('#cfc8d4')], glyph: glyph('#e6e0ea', '#ffffff', '#1e1a22'), light: hexToColor('#b8b0c0'), css: '#b8b0c0' },
 };
+
+/**
+ * A tree's colour identity: its tones by id, plus the emblem its `seal` plates wear. The plates, threads and renderer
+ * take a palette, so the Atlas Codex and any other tree (the Orrery, a test graph) share every drawing function and only
+ * swap colours. `id` namespaces the plate cache, so two palettes never share a cached plate.
+ */
+export interface TonePalette<T extends string = string> {
+  id: string;
+  tones: Readonly<Record<T, ToneDef>>;
+  /** The emblem a `seal` plate wears for its tone; without one a seal wears its glyph. */
+  emblem?(tone: T): Frame;
+}
+
+/** The Atlas Codex palette: branch, hub and origin tones; theme seals wear their map base's emblem. */
+export const CODEX_PALETTE: TonePalette<Tone> = { id: 'codex', tones: TONES, emblem: (tone: Tone) => emblem(tone as MapBaseId) };
 
 /** Frame side (odd, so a glyph centres on a pixel) and visible radius of each plate class, in Codex art px. */
 export const PLATE_CLASSES = ['small', 'notable', 'lens', 'tier', 'seal', 'keystone'] as const;

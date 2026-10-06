@@ -132,3 +132,42 @@ export function paintThread(r: Raster, x0: number, y0: number, x1: number, y1: n
     }
   });
 }
+
+/**
+ * The table a tree is drawn on: the world size in art px, the centre the camera homes to and exclusion chains bow away
+ * from, the etched board raster and the tile that fills the view around it. The Atlas Codex is CODEX_BOARD; another tree
+ * (the Orrery, a test graph) passes its own.
+ */
+export interface TreeBoard {
+  w: number;
+  h: number;
+  cx: number;
+  cy: number;
+  raster(): Raster;
+  tile(): Raster;
+}
+export const CODEX_BOARD: TreeBoard = { w: CODEX_W, h: CODEX_H, cx: CODEX_C, cy: CODEX_C, raster: boardRaster, tile: slateTile };
+
+/**
+ * A plain etched table for any tree: brass rings around the centre, no branch sectors. Test graphs use it; the Orrery
+ * can start from it until it has its own board.
+ */
+export function ringBoard(w: number, h: number, radii: readonly number[], cx = w / 2, cy = h / 2): TreeBoard {
+  return {
+    w, h, cx, cy, tile: slateTile,
+    raster(): Raster {
+      const r = new Raster(w, h);
+      const brass = hexToColor('#8a6a3e');
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const rad = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+        for (const R of radii) {
+          const d = rad - R;
+          if (d >= -0.55 && d < 0.55) r.set(x, y, rgba(12, 9, 12, 230));
+          else if (d >= 0.55 && d < 1.7) r.plot(x, y, (brass & 0xffffff00) | 96);
+          else if (d >= -1.55 && d < -0.55) r.plot(x, y, rgba(0, 0, 0, 70));
+        }
+      }
+      return r;
+    },
+  };
+}
