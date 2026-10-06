@@ -1177,6 +1177,29 @@ export class GameSession {
     void this.command({ c: 'setLoadoutSlot', slot, skillId }, { predict: (base) => this.rules.setLoadoutSlot(base, slot, skillId) });
   }
 
+  pickAugment(skillId: SkillId, augmentId: string): void {
+    void this.command({ c: 'pickAugment', skillId, augmentId }, { predict: (base) => this.rules.pickAugment(base, skillId, augmentId) });
+  }
+
+  /** Refunds charge Scrap, so they are not predicted: the server checks the price the player saw and answers. */
+  refundAugment(skillId: SkillId, augmentId: string, expectedScrap: number): void {
+    void this.command({ c: 'refundAugment', skillId, augmentId, expectedScrap }, {
+      onOk: (r) => this.toast(r.message ?? 'Refunded.', 'good'),
+    });
+  }
+
+  respec(skillId: SkillId | null, token: boolean, expectedScrap: number): void {
+    void this.command({ c: 'respec', skillId, token, expectedScrap }, {
+      onOk: (r) => this.toast(r.message ?? 'Refunded.', 'good'),
+    });
+  }
+
+  setPreset(preset: number, op: 'save' | 'load' | 'rename', name?: string): void {
+    void this.command({ c: 'setPreset', preset, op, ...(name !== undefined ? { name } : {}) }, {
+      predict: (base) => this.rules.setPreset(base, preset, op, name),
+    });
+  }
+
   // --- hideout -----------------------------------------------------------------------------------
 
   setMapTreeNode(nodeId: import('../contracts/atlas').MapTreeNodeId, allocate: boolean): void {

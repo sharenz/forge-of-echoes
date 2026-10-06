@@ -3,7 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5|qol|account|atlas|tree|scarabs|uniques|events|crafting|ingredients|economy|maps|selling|wares|debugmerchant|workslot|territory|surge]
+//                        [--only wave5|qol|account|atlas|tree|scarabs|uniques|events|crafting|ingredients|economy|maps|selling|wares|debugmerchant|workslot|territory|surge|skills]
 //                        [--events hunted,wound,...] [--smoke 30]
 //
 // The Atlas is a full-screen Cartography Table (canvas chart, Codex tab, dock beside the inventory); a map is bound to ONE area, so
@@ -103,6 +103,7 @@ const SURGE_ONLY = opt('only', 'all') === 'surge';
 const MODAL_ONLY = opt('only', 'all') === 'modal';
 /** --only guide: a FRESH account plays the first-run guide from login to the dead boss with only the tracker's help (docs/onboarding-ux.md). */
 const GUIDE_ONLY = opt('only', 'all') === 'guide';
+const SKILLS_ONLY = opt('only', 'all') === 'skills';
 /** Seconds of fighting in each new map type (longer while its family has not shown two kinds yet). */
 const SMOKE_SECONDS = Number(opt('smoke', '30'));
 const PROD = flag('prod');
@@ -5002,6 +5003,196 @@ async function guideScenario({ A, port }) {
 }
 // ==== guide scenario end ====
 
+// ---------------------------------------------------------------------------------------------------------------
+// Skills panel v2 (build-plan SK1, skills.md 10; `--only skills`, A alone, at the window size of --size): a level-22
+// character with every point unspent (as after the skill rework refund) spends them KEYBOARD ONLY (Tab into the book,
+// arrows, + ranks up, 3 puts the skill on Q, Enter on an augment plate picks it), then by mouse: before/after numbers on
+// an augment's hover card, the exclusion chain, the slot count, a refund that states its Scrap price and pays exactly
+// that, Alt comparison, presets (save, rename, load), the HUD augment pips, and the panel beside the inventory.
+// ---------------------------------------------------------------------------------------------------------------
+async function skillsScenario({ A, port }) {
+  const ch = () => A.eval(() => window.__foe.store.get().character);
+  const active = () => A.eval(() => {
+    const el = document.activeElement;
+    return { row: el?.getAttribute('data-skill-row') ?? null, aug: el?.getAttribute('data-augment') ?? null, tag: el?.tagName ?? null };
+  });
+  const shot = async (name) => {
+    await settlePanels(A);
+    await A.shot(`skills-${name}-${VW}x${VH}`);
+  };
+  const scrapOf = (c) => (c.currencyStash?.scrap ?? 0) + c.backpack.entries.reduce((s, e) => s + (e.item.kind === 'currency' && e.item.currencyId === 'scrap' ? e.item.count : 0), 0);
+
+  await step('prepare a level-22 character with every skill point unspent and some Scrap (disposable database)', async () => {
+    outage = true;
+    await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const row = db.prepare('SELECT account_id, data FROM account_storage').get();
+    const shared = JSON.parse(row.data);
+    shared.currencyStash = { ...(shared.currencyStash ?? {}), scrap: 60 };
+    db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), row.account_id);
+    const character = db.prepare('SELECT id, data FROM characters').get();
+    const saved = JSON.parse(character.data);
+    saved.level = 22;
+    saved.unspentSkillPoints = 1 + 2 * 21;
+    // the first 15 refunded points are free: use them up so the refund below has a Scrap price
+    saved.respecFreeUsed = 15;
+    db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(saved), character.id);
+    db.close();
+    await startGameServer(port);
+    await A.waitFor('the reseeded character after reconnect', () => { const s = window.__foe.store.get(); return s.connection === 'online' && s.character?.level === 22; }, undefined, 30000);
+    outage = false;
+  });
+
+  await step('K opens the panel: the book lists playable skills by element, hides the unshipped ones and says how many are coming', async () => {
+    await closePanels(A);
+    await A.page.keyboard.press('k');
+    await A.page.waitForSelector('.fe-skills .fe-sk-rail', { timeout: 5000 });
+    const facts = await A.eval(() => ({
+      rows: [...document.querySelectorAll('[data-skill-row]')].map((e) => e.getAttribute('data-skill-row')),
+      groups: [...document.querySelectorAll('.fe-sk-group__title')].map((e) => e.textContent),
+      coming: document.querySelector('.fe-sk-rail__coming')?.textContent ?? '',
+      unavailable: Object.values(window.__foe.store.rules.content.skills).filter((s) => !s.available).map((s) => s.id),
+      points: document.querySelector('[data-skill-points]')?.getAttribute('data-skill-points'),
+    }));
+    assert(facts.rows.includes('emberNova') && facts.rows.includes('rimeShards'), `playable skills listed: ${facts.rows}`);
+    assert(facts.unavailable.every((id) => !facts.rows.includes(id)), 'no unshipped skill in the book');
+    assert(facts.unavailable.length === 0 || facts.coming.includes(String(facts.unavailable.length)), `the "coming" line counts them: ${facts.coming}`);
+    assert(facts.points === '43', `43 points shown (${facts.points})`);
+    await shot('01-open');
+    return `${facts.rows.length} skills in ${facts.groups.join(', ')}`;
+  });
+
+  await step('keyboard only: Tab into the book, arrows to Ember Nova, + five times, 3 puts it on Q, Enter on an augment picks it', async () => {
+    let at = await active();
+    for (let i = 0; i < 80 && !at.row; i++) {
+      await A.page.keyboard.press('Tab');
+      at = await active();
+    }
+    assert(at.row, 'Tab never reached the skill book');
+    for (let i = 0; i < 40 && at.row !== 'emberNova'; i++) {
+      await A.page.keyboard.press('ArrowDown');
+      at = await active();
+    }
+    assert(at.row === 'emberNova', `arrows reach Ember Nova (at ${at.row})`);
+    assert(await A.page.locator('[data-skill-detail="emberNova"]').count() === 1, 'the arrows select it in the centre');
+    for (let i = 0; i < 5; i++) {
+      await A.page.keyboard.press('+');
+      await sleep(120);
+    }
+    await A.waitFor('Ember Nova rank 5', () => window.__foe.store.get().character.skillRanks.emberNova === 5, undefined, 5000);
+    await A.page.keyboard.press('3');
+    await A.waitFor('Ember Nova on Q', () => window.__foe.store.get().character.loadout[2] === 'emberNova', undefined, 5000);
+    for (let i = 0; i < 40 && at.aug !== 'echoingRing'; i++) {
+      await A.page.keyboard.press('Tab');
+      at = await active();
+    }
+    assert(at.aug === 'echoingRing', `Tab reaches the Echoing Ring plate (at ${JSON.stringify(at)})`);
+    const before = (await ch()).unspentSkillPoints;
+    await A.page.keyboard.press('Enter');
+    await A.waitFor('Echoing Ring picked', () => (window.__foe.store.get().character.augments?.emberNova ?? []).includes('echoingRing'), undefined, 5000);
+    const after = await ch();
+    assert(after.unspentSkillPoints === before - 1, `the augment cost 1 point (${before} → ${after.unspentSkillPoints})`);
+    assert(!(await A.eval(() => window.__foe.store.get().chatOpen)), 'Enter did not open the chat');
+    await shot('02-keyboard');
+    return `rank 5, Q, Echoing Ring; ${after.unspentSkillPoints} points left`;
+  });
+
+  await step('mouse: an augment hover card shows its before/after numbers; picking one fills a slot and chains the excluded one', async () => {
+    const plate = A.page.locator('[data-augment="widerRing"]');
+    await plate.scrollIntoViewIfNeeded();
+    await plate.hover();
+    await A.page.waitForSelector('.fe-tt--aug', { timeout: 3000 });
+    const tip = await A.page.locator('.fe-tt--aug').innerText();
+    assert(/If you pick it/i.test(tip) && /→/.test(tip), `the card shows before/after numbers: ${tip}`);
+    await plate.click();
+    await A.waitFor('Wider Ring picked', () => (window.__foe.store.get().character.augments?.emberNova ?? []).includes('widerRing'), undefined, 5000);
+    await A.page.mouse.move(VW - 4, 4);
+    const slots = await A.page.locator('[data-aug-slots]').getAttribute('data-aug-slots');
+    assert(slots === '2/2', `2 of 2 slots used at rank 5 (${slots})`);
+    const fan = await A.page.locator('[data-augment="emberFan"]').getAttribute('class');
+    assert(/fe-aug--excluded/.test(fan), `Ember Fan is excluded by Wider Ring (${fan})`);
+    await shot('03-augments');
+  });
+
+  await step('a refund states its Scrap price before confirming and the server charges exactly that', async () => {
+    const before = await ch();
+    const price = await A.eval(() => window.__foe.store.rules.respecPrice(window.__foe.store.get().character, { skillId: 'emberNova', augmentId: 'widerRing' }));
+    assert(price.scrap === 4, `4 Scrap for one point once the free points are used (${JSON.stringify(price)})`);
+    await A.page.locator('[data-augment="widerRing"]').click();
+    await A.page.waitForSelector('.fe-dialog', { timeout: 3000 });
+    const text = await A.page.locator('.fe-dialog').innerText();
+    assert(text.includes('4 Forge Scrap') && /Refund for 4 Scrap/i.test(text), `the dialog names the price: ${text}`);
+    await shot('04-refund');
+    await A.page.locator('.fe-dialog .fe-btn--ember, .fe-dialog .fe-btn--danger').last().click();
+    await A.waitFor('Wider Ring refunded', () => !(window.__foe.store.get().character.augments?.emberNova ?? []).includes('widerRing'), undefined, 6000);
+    await A.waitFor('the Scrap charged', (s) => {
+      const c = window.__foe.store.get().character;
+      const n = (c.currencyStash?.scrap ?? 0) + c.backpack.entries.reduce((t, e) => t + (e.item.kind === 'currency' && e.item.currencyId === 'scrap' ? e.item.count : 0), 0);
+      return n === s - 4;
+    }, scrapOf(before), 6000);
+    const after = await ch();
+    assert(after.unspentSkillPoints === before.unspentSkillPoints + 1, 'the point came back');
+    return `${scrapOf(before)} → ${scrapOf(after)} Scrap`;
+  });
+
+  await step('Alt compares a hovered skill with the selected one', async () => {
+    await A.page.locator('[data-skill-row="emberLance"]').hover();
+    await A.page.waitForSelector('.fe-tt--skill', { timeout: 3000 });
+    assert(/Hold Alt to compare with Ember Nova/.test(await A.page.locator('.fe-tt--skill').innerText()), 'the hint names the selected skill');
+    await A.page.keyboard.down('Alt');
+    await A.waitFor('the comparison', () => /Compared with Ember Nova/.test(document.querySelector('.fe-tt--skill')?.textContent ?? ''), undefined, 3000);
+    await shot('05-alt');
+    await A.page.keyboard.up('Alt');
+  });
+
+  await step('presets: save the bar, rename it, clear a slot, load it back (hideout)', async () => {
+    const bar = (await ch()).loadout;
+    await A.page.locator('.fe-presets__tab').first().click();
+    await A.page.locator('.fe-presets__ops button', { hasText: 'Save' }).click();
+    await A.waitFor('preset 1 saved', (b) => JSON.stringify(window.__foe.store.get().character.loadoutPresets?.[0]?.loadout) === JSON.stringify(b), bar, 5000);
+    await A.page.locator('.fe-presets__ops button', { hasText: 'Rename' }).click();
+    await A.page.waitForSelector('.fe-presets__rename', { timeout: 3000 });
+    await A.page.keyboard.press('ControlOrMeta+A');
+    await A.page.keyboard.type('Boss');
+    await A.page.keyboard.press('Enter');
+    await A.waitFor('preset renamed', () => window.__foe.store.get().character.loadoutPresets?.[0]?.name === 'Boss', undefined, 5000);
+    await A.page.locator('.fe-lslot').nth(2).click({ button: 'right' });
+    await A.waitFor('Q cleared', () => window.__foe.store.get().character.loadout[2] === null, undefined, 5000);
+    await A.page.locator('.fe-presets__tab').first().click();
+    await A.page.locator('.fe-presets__ops button', { hasText: 'Load' }).click();
+    await A.waitFor('Q back from the preset', () => window.__foe.store.get().character.loadout[2] === 'emberNova', undefined, 5000);
+    // the HUD slot follows the server's replicated player: wait for it
+    await A.waitFor('one augment pip on the HUD Q slot', () => document.querySelectorAll('.fe-deck__skills .fe-skill')[2]?.querySelectorAll('.fe-skill__augs i').length === 1, undefined, 5000);
+  });
+
+  await step(`the panel and the inventory fit side by side at ${VW}x${VH}; the loadout bar stays inside the panel`, async () => {
+    await A.page.keyboard.press('i');
+    await A.page.waitForSelector('[data-panel="inventory"]', { timeout: 3000 });
+    await settlePanels(A);
+    const g = await A.eval(() => {
+      const box = (s) => document.querySelector(s)?.getBoundingClientRect();
+      const sk = box('[data-panel="skills"]');
+      const inv = box('[data-panel="inventory"]');
+      const slots = [...document.querySelectorAll('.fe-lslot')].map((e) => e.getBoundingClientRect());
+      const presets = box('.fe-presets');
+      return {
+        overlap: sk.right > inv.left,
+        inView: sk.bottom <= innerHeight && inv.bottom <= innerHeight,
+        slotsIn: slots.length === 8 && slots.every((r) => r.left >= sk.left && r.right <= sk.right && r.bottom <= sk.bottom),
+        presetsIn: presets.right <= sk.right + 1,
+        hScroll: document.querySelector('.fe-sk-detail').scrollWidth > document.querySelector('.fe-sk-detail').clientWidth + 1,
+        sk: [Math.round(sk.left), Math.round(sk.right)],
+        inv: [Math.round(inv.left), Math.round(inv.right)],
+      };
+    });
+    assert(!g.overlap, `the Skills panel overlaps the inventory: ${JSON.stringify(g)}`);
+    assert(g.inView && g.slotsIn && g.presetsIn && !g.hScroll, `layout: ${JSON.stringify(g)}`);
+    await shot('06-with-inventory');
+    return `skills ${g.sk}, inventory ${g.inv}`;
+  });
+}
+
 async function main() {
   const port = await freePort();
   if (PROD) {
@@ -5062,7 +5253,8 @@ async function main() {
   if (SURGE_ONLY) await surgeScenario({ A, port });
   if (MODAL_ONLY) await modalScenario({ A, port });
   if (GUIDE_ONLY) await guideScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !WORKSLOT_ONLY && !TERRITORY_ONLY && !SURGE_ONLY && !MODAL_ONLY && !GUIDE_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY && !WARES_ONLY) {
+  if (SKILLS_ONLY) await skillsScenario({ A, port });
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !WORKSLOT_ONLY && !TERRITORY_ONLY && !SURGE_ONLY && !MODAL_ONLY && !GUIDE_ONLY && !SKILLS_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY && !WARES_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -5071,7 +5263,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !WORKSLOT_ONLY && !TERRITORY_ONLY && !SURGE_ONLY && !MODAL_ONLY && !GUIDE_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY && !WARES_ONLY) await wave5Scenario({ A, nameA, port });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !WORKSLOT_ONLY && !TERRITORY_ONLY && !SURGE_ONLY && !MODAL_ONLY && !GUIDE_ONLY && !SKILLS_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY && !WARES_ONLY) await wave5Scenario({ A, nameA, port });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

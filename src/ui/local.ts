@@ -26,7 +26,8 @@ export type TooltipSpec =
    * equipped gear; `label` is a small caption above the card.
    */
   | { kind: 'preview'; item: Item; note?: string; compare?: boolean; label?: string; price?: { text: string; poor: boolean }; appraisal?: string[] }
-  | { kind: 'skill'; skillId: SkillId }
+  /** `compareTo`: holding Alt shows this skill's numbers against that one (the Skills panel's Alt comparison). */
+  | { kind: 'skill'; skillId: SkillId; compareTo?: SkillId | null }
   | { kind: 'text'; title?: string; lines: string[]; tone?: 'info' | 'bad' | 'good' }
   /** Anything else; `owner` lets the element that opened it close it again (e.g. when it unmounts). */
   | { kind: 'custom'; render: () => ComponentChildren; owner?: string };

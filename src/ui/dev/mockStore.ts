@@ -332,6 +332,9 @@ function buildCharacter(r: GameRulesApi, specialStash: boolean, emptyDevice = fa
     allocated: { str: 12, dex: 9, int: 30 },
     unspentSkillPoints: 2,
     skillRanks,
+    // A few augments so the Skills panel and the HUD pips have something to show (ids from data/progression/augments).
+    augments: { emberLance: ['piercingFlame', 'twinStrand'], emberNova: ['widerRing', 'echoingRing'] },
+    respecFreeUsed: 12,
     loadout: ['emberLance', 'riftStep', 'emberNova', 'rimeShards', 'flameWave', 'arcChain'],
     equipment,
     backpack: bp,
@@ -1223,6 +1226,42 @@ export function createMockStore(art: ArtBundle, opts: MockOptions = {}): MockSto
     },
     setLoadoutSlot(slot, id) {
       const r = rules.setLoadoutSlot(ch, slot, id);
+      if (!r.ok) fail(r.error);
+      else {
+        setCharacter(r.value);
+        set({ hud: hud() });
+      }
+    },
+    pickAugment(id, aug) {
+      const r = rules.pickAugment(ch, id, aug);
+      if (!r.ok) fail(r.error);
+      else setCharacter(r.value);
+    },
+    refundAugment(id, aug, scrap) {
+      if (state.zone !== 'hideout') return fail('Skills and augments are refunded in a hideout.');
+      if (rules.respecPrice(ch, { skillId: id, augmentId: aug }).scrap !== scrap) return fail('The refund price changed. Look again and confirm.');
+      const r = rules.refundAugment(ch, id, aug);
+      if (!r.ok) fail(r.error);
+      else {
+        setCharacter(r.value);
+        toast(scrap > 0 ? `Refunded for ${scrap} Forge Scrap.` : 'Refunded.', 'good');
+      }
+    },
+    respec(id, token, scrap) {
+      if (state.zone !== 'hideout') return fail('Skills and augments are refunded in a hideout.');
+      const price = token ? 0 : rules.respecPrice(ch, id === null ? { all: true } : { skillId: id }).scrap;
+      if (price !== scrap) return fail('The refund price changed. Look again and confirm.');
+      const r = rules.respec(ch, id, token);
+      if (!r.ok) fail(r.error);
+      else {
+        setCharacter(r.value);
+        set({ hud: hud() });
+        toast(scrap > 0 ? `Refunded for ${scrap} Forge Scrap.` : 'Refunded.', 'good');
+      }
+    },
+    setPreset(preset, op, name) {
+      if (op === 'load' && state.zone !== 'hideout') return fail('Loadout presets are switched in a hideout.');
+      const r = rules.setPreset(ch, preset, op, name);
       if (!r.ok) fail(r.error);
       else {
         setCharacter(r.value);

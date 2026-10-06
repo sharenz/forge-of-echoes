@@ -93,7 +93,7 @@ export function GameScreen() {
   }, [vis.modal, paused, store]);
 
   return (
-    <div class={cx('fe-game', vis.left && 'fe-game--left', vis.right && 'fe-game--right')}>
+    <div class={cx('fe-game', vis.left && 'fe-game--left', vis.left === 'skills' && 'fe-game--wide', vis.right && 'fe-game--right')}>
       <GuideDriver />
       <WorldGuide />
       <TopHud />

@@ -1,7 +1,6 @@
 // Pure UI helpers: formatting, zone names, panel anchoring, keyboard mapping and focus rules, crafting click
-// rules, grid geometry, validation, item facts, party wording and the skill tree layout.
+// rules, grid geometry, validation, item facts and party wording (the Skills panel helpers: tests/ui/skills-panel.test.ts).
 import { describe, expect, it } from 'vitest';
-import type { SkillInfo } from '../../src/contracts/game';
 import type { CurrencyStack, EquipmentItem, MapItem } from '../../src/contracts/items';
 import type { PartyMemberInfo } from '../../src/contracts/net';
 import {
@@ -30,12 +29,10 @@ import {
 } from '../../src/ui/lib/keys';
 import { escapePanel, panelFixups, panelSide, topPanel, visiblePanels } from '../../src/ui/lib/panels';
 import { locationText } from '../../src/ui/lib/party';
-import { layoutSkillTree } from '../../src/ui/lib/skilltree';
 import { characterNameError, passwordError, usernameError } from '../../src/ui/lib/validate';
 import { zoneLabel } from '../../src/ui/lib/zone';
 import { PAPERDOLL, PAPERDOLL_SIZE } from '../../src/ui/lib/content';
 import { EQUIP_SLOTS } from '../../src/contracts/content';
-import { rules } from '../../src/game';
 
 describe('format', () => {
   it('clamps and divides safely', () => {
@@ -362,45 +359,5 @@ describe('party wording', () => {
     expect(locationText(member({ zone: { kind: 'map', ownerName: 'Corvin', mapName: 'Ashen Forge', tier: 3 } }), 'Ash')).toBe(
       "Ashen Forge T3, Corvin's map",
     );
-  });
-});
-
-describe('skill tree layout', () => {
-  const skills = Object.values(rules.content.skills) as SkillInfo[];
-  const tree = layoutSkillTree(skills);
-
-  it('places every skill once, branches left to right', () => {
-    expect(tree.nodes.map((n) => n.id).sort()).toEqual(skills.map((s) => s.id).sort());
-    expect(tree.branches.map((b) => b.branch)).toEqual(['basic', 'destruction', 'mobility', 'survival']);
-    expect(tree.rows).toBe(Math.max(...skills.map((s) => s.tier)));
-    for (const b of tree.branches) {
-      for (const n of tree.nodes.filter((x) => skills.find((s) => s.id === x.id)!.branch === b.branch)) {
-        expect(n.x).toBeGreaterThan(b.start);
-        expect(n.x).toBeLessThan(b.start + b.width);
-      }
-    }
-  });
-
-  it('puts prerequisites above their dependants and draws an edge for each', () => {
-    for (const s of skills) {
-      if (!s.prerequisite) continue;
-      const a = tree.nodes.find((n) => n.id === s.prerequisite!.skillId)!;
-      const b = tree.nodes.find((n) => n.id === s.id)!;
-      expect(a.y).toBeLessThan(b.y);
-      expect(tree.edges).toContainEqual({ from: s.prerequisite.skillId, to: s.id, rank: s.prerequisite.rank });
-    }
-  });
-
-  it('stacks a lone dependant straight under its prerequisite', () => {
-    const synthetic: SkillInfo[] = [
-      { ...skills[0], id: 'emberNova', branch: 'destruction', tier: 1, prerequisite: null },
-      { ...skills[0], id: 'rimeShards', branch: 'destruction', tier: 2, prerequisite: null },
-      { ...skills[0], id: 'flameWave', branch: 'destruction', tier: 2, prerequisite: null },
-      { ...skills[0], id: 'arcChain', branch: 'destruction', tier: 3, prerequisite: { skillId: 'flameWave', rank: 5 } },
-    ];
-    const t = layoutSkillTree(synthetic);
-    const arc = t.nodes.find((n) => n.id === 'arcChain')!;
-    const wave = t.nodes.find((n) => n.id === 'flameWave')!;
-    expect(arc.x).toBe(wave.x);
   });
 });
