@@ -46,10 +46,10 @@ export const CROWN_FOUNDRY: AreaLayout = defineLayout({
     { id: 'royal-road', kind: 'road', path: [[0, 0.8], [0, -0.74]], width: 130 },
     { id: 'dais-glyph', kind: 'glyph', at: [0, 0], r: 190 },
     { id: 'throne-glyph', kind: 'glyph', at: [0, -0.8], r: 110 },
-    { id: 'crack-w', kind: 'crack', path: [{ r: 0.4, a: 252 }, { r: 0.5, a: 262 }, { r: 0.6, a: 256 }] },
-    { id: 'crack-e', kind: 'crack', path: [{ r: 0.4, a: 72 }, { r: 0.5, a: 80 }, { r: 0.6, a: 74 }] },
-    { id: 'slag-sw', kind: 'pool', at: { r: 0.74, a: 240 }, r: 50 },
-    { id: 'slag-se', kind: 'pool', at: { r: 0.74, a: 120 }, r: 50 },
+    { id: 'crack-w', kind: 'crack', path: [{ r: 0.4, a: 252 }, { r: 0.5, a: 262 }, { r: 0.6, a: 256 }], hazard: { kind: 'burn' } },
+    { id: 'crack-e', kind: 'crack', path: [{ r: 0.4, a: 72 }, { r: 0.5, a: 80 }, { r: 0.6, a: 74 }], hazard: { kind: 'burn' } },
+    { id: 'slag-sw', kind: 'pool', at: { r: 0.74, a: 240 }, r: 50, hazard: { kind: 'burn' } },
+    { id: 'slag-se', kind: 'pool', at: { r: 0.74, a: 120 }, r: 50, hazard: { kind: 'burn' } },
   ],
   lanes: [
     // The outer ring road (two arcs, the statues keep the north) carries waves 1 to 4; the dais track is the late fight.

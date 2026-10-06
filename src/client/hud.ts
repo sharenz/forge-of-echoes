@@ -52,10 +52,16 @@ const EMPTY_SLOT = (key: string): HudSlot => ({
   key, skillId: null, cooldown: 0, cooldownTotal: 0, charges: 0, maxCharges: 0, focusCost: 0, usable: false,
 });
 
+/** Keycap text of a loadout slot's default key: "Space" is shortened so it fits a skill slot at every HUD size. */
+function keycap(i: number): string {
+  const key = LOADOUT_KEYS[i];
+  return key === 'Space' ? 'Spc' : key;
+}
+
 export function hudSlots(p: PlayerView | null, keyLabels?: readonly string[] | null): HudSlot[] {
   const out: HudSlot[] = [];
   for (let i = 0; i < LOADOUT_SLOTS; i++) {
-    const key = keyLabels?.[i] || LOADOUT_KEYS[i];
+    const key = keyLabels?.[i] || keycap(i);
     const s = p?.slots[i];
     if (!s || !s.skillId) {
       out.push(EMPTY_SLOT(key));
@@ -226,7 +232,7 @@ export function buildHud(input: HudInput): HudState | null {
 }
 
 /** Keyboard-layout keycap labels; the two mouse slots have no keyboard code. */
-export const LOADOUT_KEY_CODES: readonly (string | null)[] = [null, null, 'KeyQ', 'KeyE', 'KeyR', 'KeyF'];
+export const LOADOUT_KEY_CODES: readonly (string | null)[] = [null, null, 'KeyQ', 'KeyE', 'KeyR', 'KeyF', 'Space', 'KeyZ'];
 
 /**
  * Keycap labels for the loadout slots from a keyboard layout map (navigator.keyboard.getLayoutMap(): code → the
@@ -236,7 +242,7 @@ export const LOADOUT_KEY_CODES: readonly (string | null)[] = [null, null, 'KeyQ'
 export function loadoutKeyLabels(layout: { get(code: string): string | undefined }): string[] | null {
   let differs = false;
   const labels = LOADOUT_KEY_CODES.map((code, i) => {
-    const fallback = LOADOUT_KEYS[i];
+    const fallback = keycap(i);
     if (!code || code === 'Space') return fallback;
     const ch = layout.get(code);
     if (typeof ch !== 'string' || ch.trim().length !== 1) return fallback;

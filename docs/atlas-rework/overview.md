@@ -72,6 +72,22 @@ leaves the game consistent.
 | 10 | **Ring, Host, Bellwatch** (C 7.4 to 7.7) | M-L | late-tier variety | encounter budget; Host performance (24 statues) | 4 to 9 |
 | 11 | **Polish**: discovery cinematic, reveal sound polish, loadouts for the Codex, telemetry counts | S-M | feel | reduced-motion, save flags | 1, 3 |
 
+The territory brief (D, section 13) adds its own slices on top; status as of 2026-10-06:
+
+| # | Slice | Status |
+|---|---|---|
+| T0 | Bound maps + migration | shipped |
+| R1 | Drop routing | shipped |
+| U1 | Device + chart UI for bound maps | shipped |
+| P1 | Pins, Rook maps, Re-chart, Recycle | shipped |
+| S1 | Area scarabs | shipped |
+| G1 | Daily surge | shipped |
+| B1 | Beacons and sigils | shipped |
+| L0 | Layout schema, validator, runtime, viewer | shipped |
+| L1 to L3 | The 25 hand-crafted layouts | shipped |
+| E1 | Anchor-aware events | shipped |
+| F1 | Polish: Atlas/pin/surge sounds and banners, Calm follows the screen-shake setting, telemetry counts in the server status log, GAME_SPEC sync | shipped (the ambient table bed of A 5.5 and slice 11's Codex loadouts are still open) |
+
 Why this order: slice 0/1 answer the owner's loudest complaint with the least gameplay risk; slice 4 runs in parallel because
 it is pure engine; slices 2 and 5 deliver the first *felt* depth (points and the first flagship events) so the owner can play
 before all 14 keystones exist. Nothing needs the future passive tree or the Barbarian.

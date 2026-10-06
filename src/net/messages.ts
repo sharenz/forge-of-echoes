@@ -15,7 +15,7 @@ import { ATLAS_KEYS } from '../data/progression/atlas';
 import { GUIDE_HINT_IDS, GUIDE_OPS, GUIDE_PROPS, GUIDE_STEP_IDS } from '../contracts/guide';
 import { ATTRIBUTES, EQUIP_SLOTS, ITEM_CLASSES, MONSTER_KINDS, SKILL_IDS, THEMES } from '../contracts/content';
 import {
-  BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_SLOTS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
+  BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, LOADOUT_PRESETS, LOADOUT_SLOTS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
 } from '../contracts/items';
 import type { ItemLocation, SpecialStashTab } from '../contracts/items';
 import { TRADE_MAX_ITEMS } from '../contracts/net';
@@ -55,7 +55,7 @@ export const SIM_EVENT_TYPES = [
   'cast', 'nova', 'dash', 'ward', 'chain', 'hit', 'evade', 'projectileEnd', 'death', 'monsterAttack', 'debuff',
   'cleanse', 'blocked', 'pull', 'monsterSpawn', 'ailment', 'areaResolve', 'dropSpawn', 'pickup', 'mote', 'flask',
   'waveTell', 'waveStart', 'bossSpawn', 'bossPhase', 'cleared', 'chestOpen', 'portal', 'playerDeath', 'playerJoin',
-  'notEnoughFocus', 'mapEvent',
+  'notEnoughFocus', 'mapEvent', 'flank',
 ] as const satisfies readonly SimEvent['t'][];
 
 type MonsterAttack = Extract<SimEvent, { t: 'monsterAttack' }>['attack'];
@@ -310,6 +310,31 @@ function command(v: unknown): Command {
         c,
         slot: int(o.slot, 'slot', 0, LOADOUT_SLOTS - 1),
         skillId: nullable(o.skillId, (s) => oneOf(s, 'skillId', SKILL_IDS)),
+      };
+    }
+    case 'pickAugment': {
+      const o = shape(v, c, ['c', 'skillId', 'augmentId']);
+      return { c, skillId: oneOf(o.skillId, 'skillId', SKILL_IDS), augmentId: token(o.augmentId, 'augmentId') };
+    }
+    case 'refundAugment': {
+      const o = shape(v, c, ['c', 'skillId', 'augmentId', 'expectedScrap']);
+      return {
+        c, skillId: oneOf(o.skillId, 'skillId', SKILL_IDS), augmentId: token(o.augmentId, 'augmentId'),
+        expectedScrap: int(o.expectedScrap, 'expectedScrap', 0, 100000),
+      };
+    }
+    case 'setPreset': {
+      const o = shape(v, c, ['c', 'preset', 'op'], ['name']);
+      return {
+        c, preset: int(o.preset, 'preset', 0, LOADOUT_PRESETS - 1), op: oneOf(o.op, 'op', ['save', 'load', 'rename'] as const),
+        ...(o.name !== undefined ? { name: text(o.name, 'name', 24) } : {}),
+      };
+    }
+    case 'respec': {
+      const o = shape(v, c, ['c', 'skillId', 'token', 'expectedScrap']);
+      return {
+        c, skillId: nullable(o.skillId, (s) => oneOf(s, 'skillId', SKILL_IDS)), token: bool(o.token, 'token'),
+        expectedScrap: int(o.expectedScrap, 'expectedScrap', 0, 100000),
       };
     }
     case 'sellItems': {
@@ -639,6 +664,9 @@ function simEvent(e: unknown): void {
       break;
     case 'areaResolve':
       oneOf(e.kind, 'areaResolve.kind', AREA_KINDS);
+      break;
+    case 'flank':
+      int(e.playerId, 'flank.playerId', 0, 255);
       break;
     case 'mapEvent':
       oneOf(e.kind, 'mapEvent.kind', MAP_EVENT_KINDS);

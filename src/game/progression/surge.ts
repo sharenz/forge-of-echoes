@@ -262,6 +262,17 @@ export function attachSurge(setup: RunSetup, surge: NonNullable<RunSetup['surge'
   });
 }
 
+/**
+ * The activation banner for a surged run (brief D 7.6, slice F1): what it gives and what is left of the area's day, read from the
+ * opener's ledger after the spend. Said once with the opening (the server's activation toast).
+ */
+export function surgeNotice(surge: NonNullable<RunSetup['surge']>, atlasAfter: SurgeAtlas | undefined, now: number): string {
+  const area = findAtlasArea(surge.areaId);
+  const st = surgeStatus(atlasAfter, surge.areaId, now);
+  const left = surge.kept ? `Afterglow kept the charge: ${st.remaining} of ${st.max} left` : `${st.remaining} of ${st.max} charge${st.max === 1 ? '' : 's'} left`;
+  return `Surge: +${surge.quantityMore}% item quantity, +${surge.rarityMore}% item rarity. ${left} in ${area?.name ?? 'this area'} today.`;
+}
+
 /** The persisted summary of a run's surge (`restoreRunSetup`): undefined when absent or invalid. */
 export function normalizeRunSurge(raw: unknown): RunSetup['surge'] | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;

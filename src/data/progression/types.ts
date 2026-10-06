@@ -75,11 +75,74 @@ export type RankValue =
   | { base: number; steps: readonly number[] }
   | { base: number; every: number; after: number; cap?: number };
 
-/** How player modifiers apply to a skill (which runtime fields they touch). */
-export type SkillShape = 'projectile' | 'nova' | 'chain' | 'dash' | 'ward';
+/**
+ * How player modifiers apply to a skill (which runtime fields they touch) and how its tooltip reads. `area` (ground strikes,
+ * zones, bursts around the caster) and `buff` (non-damaging self buffs) are used by roster skills whose behaviour ships later.
+ */
+export type SkillShape = 'projectile' | 'nova' | 'chain' | 'dash' | 'ward' | 'area' | 'buff';
+
+/** The sim emitter a skill's behaviour starts from (docs/power-rework/skills.md 4.2). */
+export type SkillEmitter = 'projectile' | 'burst' | 'strike' | 'zone' | 'chain' | 'dash' | 'buff';
+
+/** Runtime fields an augment can change before player modifiers apply (base numbers of the skill at its rank). */
+export type AugmentStat =
+  | 'castTime' | 'cooldown' | 'range' | 'radius' | 'spread' | 'focusCost' | 'distance' | 'duration' | 'damageReductionCap' | 'charges';
+
+/** Primitives of the behaviour grammar that have no executor yet (SK5/SK6): an augment using one is listed but not pickable. */
+export type PlannedPrimitive =
+  | 'split' | 'fork' | 'lodge' | 'delay' | 'convert' | 'trail' | 'bounce' | 'return' | 'expose' | 'mark' | 'ailment' | 'onKill'
+  | 'shape' | 'rehit' | 'refund' | 'summon' | 'cap';
+
+/**
+ * One effect of an augment, in the behaviour grammar of docs/power-rework/skills.md 4.2. The rules fold the stat-like ones
+ * (`more`, `scale`, `add`, `set`, `count`, `pierce`, `chain`) into the runtime numbers; `echo`, `shape`, `invulnerable` and
+ * `flag` reach the sim executor (SkillRuntimeDef.augments / flags).
+ */
+export type AugmentEffect =
+  /** Hits deal `pct`% more (negative: less). Counts in the global `more` pool (MORE_CAP). */
+  | { k: 'more'; pct: number }
+  /** The base number changes by `pct`% (cast time −18%, range +30%). */
+  | { k: 'scale'; stat: AugmentStat; pct: number }
+  /** The base number gains `value` (cooldown +1 s, Focus +2). */
+  | { k: 'add'; stat: AugmentStat; value: number }
+  /** The base number becomes `value` (Twin Strand's 12° fan, Banked Embers' r80). */
+  | { k: 'set'; stat: AugmentStat; value: number }
+  /** More projectiles/strikes: `add` more, or `mult` times as many. */
+  | { k: 'count'; add?: number; mult?: number }
+  | { k: 'pierce'; add: number }
+  | { k: 'chain'; add: number }
+  /** Repeat the cast after `delay` s at `damage`% of the hit, no Focus. */
+  | { k: 'echo'; delay: number; damage: number }
+  /** A ring becomes a fan of `arc` radians toward the aim, or projectiles spread in a full circle. */
+  | { k: 'shape'; shape: 'fan' | 'circle'; arc?: number }
+  /** Invulnerability after a blink, seconds. */
+  | { k: 'invulnerable'; seconds: number }
+  /** Hits always inflict the skill's ailment. */
+  | { k: 'alwaysAilment' }
+  /** A skill behaviour flag the executor already knows (the same flags uniques grant: 'chillLanding', 'cold', 'restoreFocus', 'renew'). */
+  | { k: 'flag'; flag: string }
+  /** A primitive whose executor ships later; `note` says what it will do. */
+  | { k: 'planned'; primitive: PlannedPrimitive; note?: string };
+
+export interface AugmentDef {
+  /** Unique within its skill (stored in CharacterSave.augments). */
+  id: string;
+  name: string;
+  tier: 1 | 2 | 3;
+  /** Player-facing effect text (docs/power-rework/skills.md 5 and 6). */
+  text: string;
+  /** Augments of the same skill it cannot be taken with (symmetric: tests check both sides). */
+  excludes?: readonly string[];
+  effects: readonly AugmentEffect[];
+  /** A unique whose flag already grants this behaviour (no slot needed; the better value applies). */
+  grantedBy?: PlayerFlag;
+}
 
 export interface SkillDef extends SkillInfo {
   shape: SkillShape;
+  emitter: SkillEmitter;
+  /** The augment tree (data; SkillInfo.augments is its player-facing summary). */
+  augmentDefs: readonly AugmentDef[];
   /** Damage type used by the sim (non-damaging skills still carry one). */
   runtimeDamageType: DamageType;
   focusCost: number;

@@ -58,10 +58,10 @@ export const CINDER_CROSSING: AreaLayout = defineLayout({
     { id: 'causeway-ns', kind: 'road', path: [[0, -0.8], [0, 0.8]], width: 120 },
     { id: 'causeway-ew', kind: 'road', path: [[-0.8, 0], [0.8, 0]], width: 120 },
     ...QUAD.map((a) => ({ id: `glyph-${a}`, kind: 'glyph' as const, at: { r: 0.55, a }, r: 76 })),
-    { id: 'crack-ne', kind: 'crack', path: [{ r: 0.3, a: 20 }, { r: 0.4, a: 27 }, { r: 0.5, a: 19 }] },
-    { id: 'crack-sw', kind: 'crack', path: [{ r: 0.32, a: 200 }, { r: 0.44, a: 192 }, { r: 0.54, a: 203 }] },
-    { id: 'crack-nw', kind: 'crack', path: [{ r: 0.36, a: 296 }, { r: 0.48, a: 303 }, { r: 0.58, a: 296 }] },
-    { id: 'slag-se', kind: 'pool', at: { r: 0.8, a: 150 }, r: 54 },
+    { id: 'crack-ne', kind: 'crack', path: [{ r: 0.3, a: 20 }, { r: 0.4, a: 27 }, { r: 0.5, a: 19 }], hazard: { kind: 'burn' } },
+    { id: 'crack-sw', kind: 'crack', path: [{ r: 0.32, a: 200 }, { r: 0.44, a: 192 }, { r: 0.54, a: 203 }], hazard: { kind: 'burn' } },
+    { id: 'crack-nw', kind: 'crack', path: [{ r: 0.36, a: 296 }, { r: 0.48, a: 303 }, { r: 0.58, a: 296 }], hazard: { kind: 'burn' } },
+    { id: 'slag-se', kind: 'pool', at: { r: 0.8, a: 150 }, r: 54, hazard: { kind: 'burn' } },
   ],
   lanes: [
     // Early waves keep to the quadrant fields; the causeways open up from wave 3 (the funnel the player learns to read).

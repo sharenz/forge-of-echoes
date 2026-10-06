@@ -989,7 +989,7 @@ parallel and are referenced where they touch.
 | **L2** | **Ossuary + Crypt packs (8 areas)** | M-L | layouts 11 to 18 + art kit 2 | `src/data/layouts/{ossuary,crypt}/*`, `ribArch`, `iceColumn`, `sarcophagus`, `choirStall` | L0 (parallel with L1) |
 | **L3** | **Chainworks + Coliseum packs (7 areas)** | M-L | layouts 19 to 25 + art kit 3 | `src/data/layouts/{chainworks,coliseum}/*`, `crate`, `chainPost`, `hoist`, `gate`, `weaponRack`, `obelisk` | L0 (parallel) |
 | **E1** | **Anchor-aware events** (built, 10.5a) | M | Event Director asks the layout for anchors; fallbacks | `src/sim/events/*` (C owns; this is a small PR in their slice) | L0, C slice 4 |
-| **F1** | **Polish** | S-M | discovery/pin/surge sounds and banners (A 5.5 ids), reduced motion, telemetry counts, `GAME_SPEC` rewrite (section 14) | `src/audio/sfx.ts`, `src/contracts/audio.ts` (append ids), docs | all |
+| **F1** | **Polish** (built 2026-10-06; the A 5.5 ambient bed is still open) | S-M | discovery/pin/surge sounds and banners (A 5.5 ids), reduced motion, telemetry counts, `GAME_SPEC` rewrite (section 14) | `src/audio/sfx.ts`, `src/contracts/audio.ts` (append ids), docs | all |
 
 **Parallel plan for a team of build agents:** T0 -> (R1 and L0 in parallel) -> (U1, P1, S1, G1 in parallel, with disjoint file
 sets above; one agent owns `map-routing.ts`) -> B1 and E1 -> L1/L2/L3 in parallel with everything after L0 -> F1. The only

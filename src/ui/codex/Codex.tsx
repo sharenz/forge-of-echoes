@@ -451,7 +451,7 @@ export function CodexView({ onBack, areaId }: CodexProps) {
           <button class="fe-chart__btn ui-type-body" aria-label="Zoom in" disabled={zoom === ZOOMS[ZOOMS.length - 1]} onClick={() => stepZoom(1)}>+</button>
           <button class="fe-chart__btn fe-chart__btn--fit ui-type-caption" title="Show the whole wheel (F)" onClick={overview}>Whole</button>
           <button class="fe-chart__btn fe-chart__btn--fit ui-type-caption" title="Back to the origin (Home)" onClick={home}>Origin</button>
-          <button class={cx('fe-chart__btn fe-chart__btn--fit ui-type-caption', calm && 'fe-chart__btn--on')} aria-label={MOTION_LABEL[pref]} title={`${MOTION_LABEL[pref]}. Calm turns off animation; System follows your device setting.`} onClick={cycle}>{pref === 'auto' ? 'Motion: auto' : pref === 'calm' ? 'Motion: calm' : 'Motion: full'}</button>
+          <button class={cx('fe-chart__btn fe-chart__btn--fit ui-type-caption', calm && 'fe-chart__btn--on')} aria-label={MOTION_LABEL[pref]} title={`${MOTION_LABEL[pref]}. Calm turns off animation; System follows your device setting and calms when Screen shake is 0.`} onClick={cycle}>{pref === 'auto' ? 'Motion: auto' : pref === 'calm' ? 'Motion: calm' : 'Motion: full'}</button>
           <button class="fe-chart__btn fe-chart__btn--fit ui-type-caption" aria-expanded={legend} onClick={() => setLegend((v) => !v)}>Key</button>
         </div>
         {legend && (

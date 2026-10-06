@@ -13,8 +13,10 @@ describe('createCharacter', () => {
       name: 'Ilsa the Pale', classId: 'sorceress', level: 1, xp: 0, unspentAttributePoints: 0,
       allocated: { str: 0, dex: 0, int: 0 }, unspentSkillPoints: 1, mapDevice: null, createdAt: 0, updatedAt: 0,
     });
-    expect(ch.skillRanks).toEqual({ emberLance: 1, emberNova: 0, flameWave: 0, rimeShards: 0, arcChain: 0, riftStep: 0, cinderWard: 0 });
-    expect(ch.loadout).toEqual(['emberLance', null, null, null, null, null]);
+    expect(Object.entries(ch.skillRanks).filter(([, r]) => r)).toEqual([['emberLance', 1]]);
+    expect(ch.loadout).toEqual(['emberLance', null, null, null, null, null, null, null]);
+    expect(ch).toMatchObject({ augments: {}, respecTokens: 0, respecFreeUsed: 0 });
+    expect(ch.loadoutPresets?.map((p) => p.name)).toEqual(['Preset 1', 'Preset 2', 'Preset 3']);
     expect(ch.stash.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -101,7 +103,7 @@ describe('experience', () => {
     expect(rules.xpToNext(30)).toBeLessThan(35000);
   });
 
-  it('levels up with +3 attribute points and +1 skill point per level, carrying XP over', () => {
+  it('levels up with +3 attribute points and +2 skill points per level, carrying XP over', () => {
     const ch = bareCharacter({ level: 1, xp: 50 });
     const need = rules.xpToNext(1) - 50 + rules.xpToNext(2) + 7;
     const { character, levelsGained } = rules.grantXp(ch, need);
@@ -109,7 +111,8 @@ describe('experience', () => {
     expect(character.level).toBe(3);
     expect(character.xp).toBe(7);
     expect(character.unspentAttributePoints).toBe(6);
-    expect(character.unspentSkillPoints).toBe(2);
+    expect(character.unspentSkillPoints).toBe(4);
+    expect(character.unspentSkillPoints).toBe(rules.skillPointsTotal(3) - 1);
     expect(ch.level).toBe(1); // input untouched
   });
 

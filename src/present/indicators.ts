@@ -22,6 +22,9 @@ const LT: RGB = [1, 0.55, 0.2];
 const BOSS: RGB = [1, 0.25, 0.16];
 const CHEST: RGB = [1, 0.84, 0.45];
 const RETURN: RGB = [0.5, 0.8, 1];
+const FLANK: RGB = [1, 0.32, 0.22];
+/** Seconds a flank warning points at where a flanking stream group came from. */
+export const FLANK_WARN_SECONDS = 3;
 const PORTAL: RGB = [1, 0.6, 0.25];
 /** Rare leaders further than this from the camera get no marker (they are for the hunt, not a radar). */
 const RARE_RANGE = 1100;
@@ -33,6 +36,18 @@ export class Indicators {
   private readonly placed = new Float32Array(16 * 3);
   private placedCount = 0;
   private readonly nearD = new Float64Array(3);
+  /** Live flank warnings: x, y, start time (presentation clock), up to 4. */
+  private readonly flanks = new Float64Array(4 * 3).fill(-1e9);
+
+  /** Stream flankers (the sim's 'flank' event) are coming for the local player from (x, y): warn at the screen edge. */
+  flank(x: number, y: number, time: number): void {
+    const fl = this.flanks;
+    let slot = 0;
+    for (let k = 1; k < 4; k++) if (fl[k * 3 + 2] < fl[slot * 3 + 2]) slot = k;
+    fl[slot * 3] = x;
+    fl[slot * 3 + 1] = y;
+    fl[slot * 3 + 2] = time;
+  }
 
   /**
    * Draw a marker for the world point (tx, ty) — a target standing there whose body and plates reach `height`
@@ -114,6 +129,14 @@ export class Indicators {
     // nearest rare leaders within hunting range.
     const v = f.view;
     this.placedCount = 0;
+    const fl = this.flanks;
+    for (let k = 0; k < 4; k++) {
+      const age = f.time - fl[k * 3 + 2];
+      if (age < 0 || age > FLANK_WARN_SECONDS) continue;
+      // Blinks hard for the first second, then holds.
+      if (age < 1 && Math.floor(age * 8) % 2 === 1) continue;
+      this.mark(pen, f, fl[k * 3], fl[k * 3 + 1], FLANK, 'Flank!', 7);
+    }
     const events = f.world.run.events;
     for (let k = 0; k < events.length; k++) {
       const event = events[k];

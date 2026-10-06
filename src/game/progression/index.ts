@@ -97,8 +97,11 @@
 //   stats:     deriveStats(ch, setup?), deriveRunStats (deprecated alias), deriveFromModel, computeCombat, compareWithEquipped,
 //              breakdownLines / sourceLine (breakdown text)
 //   model:     buildPlayerModel(ch, extra?) → PlayerModel (all modifiers, attributes, flags)
-//   skills:    SKILL_INFO, resolveSkill(model, id, rank), estimateLines, isMultiHit, playerSkills, canRankUpSkill, rankUpSkill,
-//              setLoadoutSlot, normalizeLoadout, skillSheetFor, skillRank
+//   skills:    SKILL_INFO, resolveSkill(model, id, rank, augmentIds?), estimateLines, isMultiHit, playerSkills, canRankUpSkill,
+//              rankUpSkill, setLoadoutSlot, normalizeLoadout, skillSheetFor, skillRank, skillAugments; points (skillPointsTotal,
+//              skillPointsSpent, augmentSlots); augments (canPickAugment, pickAugment, refundAugment); respec (respecPrice, respec);
+//              presets (setPreset, normalizePresets)
+//   migrate:   migrateSkillsV3 (save version 2 → 3: ranks out of 10, 2 points per level, respec token; migrate-skills.ts)
 //   binding:   a map is bound to ONE Atlas area (createMapItem(areaId, tier, uid); baseId is the area's theme): bindLegacyMaps(ch)
 //              (the load-time migration of maps saved without an area), areaForTheme (loot/Rook: area from a rolled theme),
 //              isMapAddress / mapAddresses (sealed areas and the Pit are passages, not addresses)
@@ -144,9 +147,11 @@ export { breakdownLines, compareWithEquipped, computeCombat, deriveFromModel, de
 export { buildPlayerModel, spellPowerAt } from './model';
 export type { PlayerModel } from './model';
 export {
-  BASIC_SKILL, SKILL_INFO, canRankUpSkill, estimateLines, isMultiHit, normalizeLoadout, playerSkills, rankUpSkill, resolveSkill,
-  setLoadoutSlot, skillRank, skillSheetFor,
+  BASIC_SKILL, SKILL_INFO, augmentCost, augmentSlots, canPickAugment, canRankUpSkill, estimateLines, isMultiHit, normalizeLoadout,
+  normalizePresets, pickAugment, playerSkills, pointsInSkill, rankUpSkill, refundAugment, resolveSkill, respec, respecPrice, setLoadoutSlot,
+  setPreset, skillAugments, skillPointsSpent, skillPointsTotal, skillRank, skillSheetFor,
 } from './skills';
+export { migrateSkillsV3 } from './migrate-skills';
 export type { ResolvedSkill } from './skills';
 export {
   buildMapSummary, craftMap, createMapItem, dangerModCount, describeMap, echoWaveIndex, effectText, experienceMultiplier, hasEchoWave,

@@ -19,6 +19,7 @@ import type { GuideCommand, GuideInput } from '../contracts/guide';
 import { SNAPSHOT_VERSION, createClientWorld, createEventTimeline } from '../net';
 import type { EventTimeline, NetClientWorld } from '../net';
 import { leadAim, pickAutoTarget, type Point } from './autoattack';
+import { activationSounds, newlyDiscovered, pinBanner } from './atlas-feedback';
 import { AutoWalk, findDrop, inPickupReach } from './autowalk';
 import type { Autopilot } from './bot';
 import { CommandTracker, type CommandResult } from './commands';
@@ -422,7 +423,10 @@ export class GameSession {
   }
 
   private onCharacter(ch: CharacterSave): void {
+    // A boss revealed new ground on the Atlas: the bell ladder under the server's "Atlas revealed" banner (slice F1).
+    const revealed = newlyDiscovered(this.character.authoritative, ch);
     this.character.fromServer(ch);
+    if (revealed.length) this.deps.sound('atlasReveal');
     this.applyCharacter();
     // Move speed and cast times follow level, gear, attributes and skill ranks: refresh the prediction's numbers.
     this.updatePredictionHints();
@@ -1181,7 +1185,9 @@ export class GameSession {
 
   /** Hourglass Sand on one area, or a Grand Hourglass on all: the server decides (it holds the clock and the ledger). */
   refillSurge(target: import('../contracts/atlas').AtlasAreaId | 'all'): void {
-    void this.command(target === 'all' ? { c: 'refillSurge', all: true } : { c: 'refillSurge', areaId: target });
+    void this.command(target === 'all' ? { c: 'refillSurge', all: true } : { c: 'refillSurge', areaId: target }, {
+      onOk: (r) => { this.deps.sound('surgeRefill'); if (r.message) this.toast(r.message, 'good'); },
+    });
   }
 
   /** Beacons: the server decides (account Atlas and the backpack change in one save); its answer is toasted. */
@@ -1197,7 +1203,12 @@ export class GameSession {
   pinArea(areaId: import('../contracts/atlas').AtlasAreaId, pinned: boolean): void {
     void this.command({ c: 'pinArea', areaId, pinned }, {
       predict: (base) => this.rules.setPin(base, areaId, pinned),
-      onPredicted: () => this.deps.sound(pinned ? 'equip' : 'uiClose'),
+      onPredicted: () => {
+        this.deps.sound(pinned ? 'atlasPin' : 'atlasUnpin');
+        const ch = this.character.display;
+        const banner = ch ? pinBanner(ch, areaId, pinned) : null;
+        if (banner) this.toast(banner, 'info');
+      },
       quiet: false,
       onOk: () => undefined,
     });
@@ -1229,6 +1240,15 @@ export class GameSession {
   }
 
   activateMapDevice(opts: { lootClass?: import('../contracts/content').ItemClass; passageKey?: import('../contracts/content').CurrencyId; pit?: true; useSurge?: boolean } = {}): void {
+    // The rules are pure: preview the opening to know what it will say (a key turned in a seal, a surge charge spent).
+    const ch = this.character.display;
+    const preview = ch ? safe(() => this.rules.openMap(ch, {
+      ...(opts.lootClass ? { lootClass: opts.lootClass } : {}),
+      ...(opts.passageKey ? { passage: { kind: 'key' as const, currencyId: opts.passageKey } } : opts.pit ? { passage: { kind: 'bounty' as const } } : {}),
+      ...(opts.useSurge !== undefined ? { useSurge: opts.useSurge } : {}),
+      now: this.serverNow(),
+    }), null) : null;
+    const sounds = activationSounds(preview?.ok ? preview.value.setup : null);
     void this.command({
       c: 'activateMapDevice',
       ...(opts.lootClass ? { lootClass: opts.lootClass } : {}),
@@ -1238,6 +1258,7 @@ export class GameSession {
     }, {
       // The Atlas stays open: its area modal closes by itself when the portal appears, the node flares and the status line offers the portal.
       onOk: (r) => {
+        for (const id of sounds) this.deps.sound(id);
         if (r.message) this.toast(r.message, 'good');
       },
     });

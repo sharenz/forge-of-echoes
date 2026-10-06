@@ -20,6 +20,9 @@
 //                 knocked into a sealed pocket or a wedge could never leave it (flood fill on a 4 u grid); and every concave
 //                 corner (a standing spot touching two or more solids) can be slid out of with the real movement code
 //                 (src/sim/movement.ts resolvePlayerAt, the one the client predicts with)
+//  11 hazards    burning ground on hazard decals (slag pools, lava cracks; roadmap 4): a non-empty footprint, a readable flare cycle
+//                 (telegraph >= 1 s, every >= telegraph + active + 2 s), none on the start clearing and no always-burning one on the boss
+//                 stage (a flaring crack may cross it: it warns before every flare)
 //  10 seating     (E1, anchor-aware events) every anchor can seat its event: the event's footprint fits inside the rim
 //                 (EVENT_ANCHOR_RIM) once the anchor slides at most ANCHOR_SEAT u towards the centre, and a slid anchor still
 //                 stands clear of solids and reachable; relay anchors come as a triad (>= 3) or not at all
@@ -38,6 +41,7 @@ import {
 } from '../data/layouts/compile';
 import { overrideLayout } from '../data/layouts';
 import { FLOW_PLAYER, FLOW_RAMP, FLOW_TELEGRAPH, buildFlowField, flowOut, flowVelocity } from '../data/layouts/flow';
+import { hazardHits } from '../data/layouts/hazards';
 import { EVENT_ANCHOR_KINDS, type AreaLayout, type EventAnchorKind } from '../data/layouts/schema';
 import type { PropView } from '../contracts/sim';
 import { PLAYER_RADIUS } from './constants';
@@ -90,7 +94,7 @@ export const LAYOUT_RULES = {
 } as const;
 
 export interface LayoutIssue {
-  check: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+  check: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
   /** Authoring id the issue is about (or 'layout'). */
   id: string;
   message: string;
@@ -490,6 +494,27 @@ export function validateLayout(layout: AreaLayout, opts: { R?: number } = {}): L
       else if (!reachableAt(reach, s.x, s.y)) add(10, a.id, `${a.fits} ${a.id} seats at (${Math.round(s.x)}, ${Math.round(s.y)}), which is not reachable from the start`);
     }
   }
+  // --- 11: burning ground (roadmap 4)
+  for (const h of c.hazards) {
+    if (h.cycle) {
+      const cy = h.cycle;
+      if (!(cy.telegraph >= 1)) add(11, h.id, `hazard ${h.id}: the flare telegraph (${cy.telegraph} s) must be >= 1 s so it can be read`);
+      if (!(cy.active > 0) || !(cy.every >= cy.telegraph + cy.active + 2)) add(11, h.id, `hazard ${h.id}: a flare cycle needs active > 0 and every >= telegraph + active + 2 s`);
+    }
+    if (h.shape === 'disc' ? !(h.r > 0) : h.path.length < 2 || !(h.half > 0)) add(11, h.id, `hazard ${h.id}: an empty footprint (a pool needs r, a crack a path)`);
+    const pad = PLAYER_RADIUS;
+    const near = (x: number, y: number, r: number): boolean => {
+      for (let a = 0; a < 360; a += 15) {
+        const t = (a * Math.PI) / 180;
+        for (const f of [0, 0.5, 1]) if (hazardHits(h, x + Math.cos(t) * r * f, y + Math.sin(t) * r * f, pad)) return true;
+      }
+      return false;
+    };
+    if (near(c.start.x, c.start.y, c.start.clear)) add(11, h.id, `hazard ${h.id} reaches the start clearing: the landing must be safe ground`);
+    // A flaring crack may cross the boss arena (it warns before every flare); ground that always burns may not.
+    if (!h.cycle && near(c.bossStage.x, c.bossStage.y, Math.min(c.bossStage.r, rules.bossFreeRadius))) add(11, h.id, `always-burning hazard ${h.id} lies on the boss stage`);
+  }
+
   const relayCount = count('relay');
   if (relayCount > 0 && relayCount < RELAY_BRAZIERS) add(10, 'relay', `${relayCount} relay anchor(s): the Ember Relay needs a triad of ${RELAY_BRAZIERS} (fewer are never used)`);
 

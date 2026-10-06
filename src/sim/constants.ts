@@ -301,6 +301,18 @@ export const STREAM_GROUP_AVG = 6;
 /** Half-angle of the arc a stream group arrives on, around one bearing. */
 export const STREAM_ARC = (40 * Math.PI) / 180;
 /**
+ * Flankers (roadmap 4: standing still must not be a strategy): from wave FLANK_FROM_WAVE, every FLANK_EVERY-th stream group of a
+ * wave FLANKS: instead of a random bearing it arrives from behind the player, the side opposite the hunters already on her (their
+ * centroid within PRESSURE_RADIUS) +- FLANK_JITTER, or failing that from one of her sides; with no hunters near her it is an
+ * ordinary group. It is announced the moment it spawns by a 'flank' event (an edge-of-screen warning pointing at it and a panned
+ * horn) and starts STREAM_MARGIN past the view edge like every stream member, so it is seen before it arrives. Groups smaller
+ * than FLANK_MIN_GROUP never flank.
+ */
+export const FLANK_FROM_WAVE = 3;
+export const FLANK_EVERY = 3;
+export const FLANK_MIN_GROUP = 4;
+export const FLANK_JITTER = 0.45;
+/**
  * Pressure floor: while fewer than PRESSURE_BASE + PRESSURE_PER_WAVE·wave hunting monsters are
  * within PRESSURE_RADIUS of some living player, the next stream group is pulled forward and sent to
  * the least-pressed player (at most one per STREAM_MIN_GAP). A player who out-kills the stream meets
@@ -355,3 +367,12 @@ export const PORTAL_LATCH_RADIUS = PORTAL_ENTER_RADIUS + 10;
 export const RETURN_PORTAL_CLEARANCE = 140;
 /** …and at least this far from any drop lying around (picking one up must not brush the portal). */
 export const RETURN_PORTAL_DROP_CLEARANCE = 60;
+/**
+ * Where the return portal is sure to be seen, relative to the player who killed the boss (world units = virtual pixels).
+ * Sized for the smallest supported screen, 1024x600 at pixel scale 2 (a 512x300 view centred on the player): the open
+ * inventory docks on the right and covers everything past about +37, the command deck and the globes cover the bottom
+ * 56 (plus the globes' corners), the top bars a little of the top. 1280x720 (640x360, free to +77 and +116) contains it.
+ */
+export const RETURN_PORTAL_VIEW = { left: -200, right: 20, top: -110, bottom: 70 } as const;
+/** Clearance (0..1) a candidate gives up per world unit it lies outside RETURN_PORTAL_VIEW. */
+export const RETURN_PORTAL_VIEW_WEIGHT = 1 / 60;

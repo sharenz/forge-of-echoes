@@ -419,12 +419,12 @@ Server rules: all numbers resolve in `game/progression/skills.ts resolveSkill` a
 | Skill points | `1 + 2 (L − 1)`; L80 = 159. Spend: learn 1, each rank 1, augment T1/T2 1, T3 2 |
 | Typical spending | main skill: 10 + 7 (5 augments: 1+1+1+2+2) = 17; second 17; third 14; four utilities 5 each = 20; remaining on experiments: **a level-40 build costs about 70 of its 79 points** (so a build exists and one respec is possible) |
 | Respec | refund leaf-first (augments before ranks; highest rank last); cost **4 Scrap per point (T3 augment 8)**; free for characters below level 20; session cap 120 Scrap; first 15 refunded points per character free |
-| Free one-time full respec | at migration, once, covers skills + augments + attributes + passives (no Scrap) |
+| Free one-time full respec | ~~at migration~~ not granted for the skill migration (it refunds every point, owner decision 2026-10-06); the `respecTokens` mechanism (skills + augments + attributes, no Scrap) stays for later grants |
 | Attribute respec (NEW) | 2 Scrap per point, 30 free, session cap 100 |
 | Loadout presets | 3 per character, free to change in the hideout; mid-map changes are not allowed |
-| What is refunded on migration | `newRank = ceil(oldRank / 2)`; points returned = `oldRank − newRank` per skill; unspent = `1 + 2(L−1) − Σ newRank` (never less than before) |
+| What is refunded on migration | **Owner decision 2026-10-06 (supersedes the rank mapping below): everything.** Every skill goes back to unlearned except Ember Lance (innate rank 1, on `LMB`); unspent = `1 + 2(L−1)`; no augments; the loadout is reset; no respec token is needed. The superseded rule was `newRank = ceil(oldRank / 2)`, unspent `1 + 2(L−1) − Σ newRank` |
 
-Worked migration: a level-17 character with old ranks Lance 6, Nova 4, Rime 3, Arc 2, Rift Step 1 (16 points spent) gets new ranks 3, 2, 2, 1, 1 = 9 spent out of `1 + 2 × 16 = 33`: **24 unspent points** plus a free full respec.
+Worked migration (superseded by the full refund above; kept for the record): a level-17 character with old ranks Lance 6, Nova 4, Rime 3, Arc 2, Rift Step 1 (16 points spent) gets new ranks 3, 2, 2, 1, 1 = 9 spent out of `1 + 2 × 16 = 33`: **24 unspent points** plus a free full respec.
 Effectiveness at the migrated rank: Lance old rank 6 `1 + 1.3 × 5/19 = 1.34` → new rank 3 `1 + 1.3 × 2/9 = 1.29` (−4%); old rank 12 1.75 → new 6 1.72 (−2%); old 20 2.30 → new 10 2.30 (0%). The worst case is −5% at old rank 4, and 24 free points
 (a rank-10 main skill and three augments) more than pay for it. Migration never loses power overall.
 

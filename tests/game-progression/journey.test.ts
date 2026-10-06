@@ -69,7 +69,7 @@ describe('journey through the core loop', () => {
     const cfg = rules.buildRunConfig(setup, hooks);
     expect(cfg.mode).toBe('map');
     const joinOwner = rules.playerRuntime(ch, setup);
-    expect(joinOwner.loadout).toEqual(['emberLance', 'emberNova', null, null, null, null]);
+    expect(joinOwner.loadout).toEqual(['emberLance', 'emberNova', null, null, null, null, null, null]);
 
     // Simulate the loot side of a run: kills across the waves, the boss, the chest.
     const loot = createRng(setup.seed).fork(0x10070);

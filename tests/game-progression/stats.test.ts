@@ -249,9 +249,9 @@ describe('the Skills section', () => {
     const nova = byName.get('Ember Nova (rank 3)')!;
     const novaSheet = rules.skillSheet(ch, 'emberNova');
     const rt = novaSheet.runtime;
-    const perCast = rt.damage * (1 + rt.critChance * (rt.critMultiplier - 1)) * 12;
+    const perCast = rt.damage * (1 + rt.critChance * (rt.critMultiplier - 1)) * 13;
     expect(nova.value).toBe(`${novaSheet.dps!.toFixed(1)} DPS · ${Math.round(perCast)} per cast`);
-    expect(nova.breakdown).toContain(`${Math.round(perCast)} damage per cast if all 12 flames hit`);
+    expect(nova.breakdown).toContain(`${Math.round(perCast)} damage per cast if all 13 flames hit`);
     expect(nova.breakdown.some((l) => l.startsWith('Against a single target:') && l.endsWith('(one hit per cast reaches it)'))).toBe(true);
 
     // Rime Shards costs more Focus than regeneration returns: the headline is the sustained number.

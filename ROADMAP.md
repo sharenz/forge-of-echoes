@@ -2,7 +2,7 @@
 
 Maintained at the owner's request. Ask "what's next" and it is read from here; ideas and decisions
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
-Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped).
+Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "art keeps its promises" built).
 
 ## Next up, in order (reprioritised 2026-10-01 after the first outside player review)
 
@@ -10,17 +10,30 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped).
    gentle first map). Watch real new players (the first reviewer needed 2 minutes to find the drag), then fix what they still trip on.
    Done 2026-10-06: Rook's prices under every tile with empty states (F-17), the short map tooltip with the long form after 600 ms or
    Alt plus "Surge n/3 today" and a Re-chart hint (F-28), the hideout camera keeps the anvil clear at 1024x600, the area modal scroll fade.
-   Still open: the return portal can land behind the inventory at 1024x600 (`returnPortalSpot` in `src/sim/props.ts`), e2e for
-   keyboard-only, reduced motion, parties and veterans.
+   The return portal now opens where 1024x600 shows it, left of the open inventory and above the command deck (`RETURN_PORTAL_VIEW`
+   in `src/sim/constants.ts`, scored in `returnPortalSpot`). Still open: e2e for keyboard-only, reduced motion, parties and veterans.
 2. **Power rework, release R1 "Power": Done, deployed 2026-10-06.** Next releases of the same design (`docs/power-rework/build-plan.md`):
-   R2 "Skills I" (C2 contracts and protocol 27, SK0 skill executor and save migration, SK1 Skills panel v2, SK2 ten new skills), then
+   R2 "Skills I": **C2 and SK0 built 2026-10-06** (32 skill ids, 8 loadout slots with `Space`/`Z`, ranks 1 to 10 with 2 points per level
+   and unlocks by level, the augment system with 17 live augments on the seven shipped skills, respec for Scrap, three loadout presets, the
+   data-driven skill executor in `src/sim/skills/` with bit-identical determinism goldens, protocol 28, save version 3: the owner's full
+   skill-point refund). Still to do in R2: SK1 Skills panel v2 (augment picking UI, presets, respec dialog), SK2 ten new skills. Then
    R3/R4 (remaining skills and augments), R5 "Orrery" passive tree, R6 balance pass.
-3. **Finish wave 3: polish (F1).** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today" and the Re-chart tooltip entry
-   are done (2026-10-06). Left over from B1: the other section 9 re-roles (Milestone/Signpost pin slots, Charter Ink, Chart Keeper x4,
+3. **Finish wave 3: leftovers.** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today", the Re-chart tooltip entry and
+   F1 polish are done (2026-10-06; F1: eleven Atlas/pin/surge sounds, pin and surge banners, Calm also follows Screen shake 0 and
+   stills the table's CSS motion, Atlas counts in the server status log). Still open from F1: the ambient table bed of brief A 5.5
+   (a drone with music ducking while the table is open). Left over from B1: the other section 9 re-roles (Milestone/Signpost pin slots, Charter Ink, Chart Keeper x4,
    Far Horizon, Master Surveyor, Wagered Charts, theme seals' routing weight) and sigil crafting.
 4. **Make the art keep its promises.** Lava cracks, ice lakes, hazard stripes and sand rings look like mechanics but are cosmetic. Add the
    mechanics (flow zones are built: candidates are frost currents in Frozen Passage and Winter Throne, a slag channel, a lava rill, a
    rotating sand ring, a tram road), plus flanker monsters so standing still is not a strategy and the level gap in the monster hover.
+   Done 2026-10-06 (GAME_SPEC 7 "Flow zones" and "Burning ground", 8 "Flankers", the monster hover): frost currents (Winter Throne's lake
+   drifts round the dais, Frozen Passage's outer bridges run opposite ways; `look: 'frost'`), Pit of Echoes' two raked sand corridors
+   counter-rotate (`look: 'sand'`), every Ashen Forge slag pool burns and every lava crack flares on an 8 s cycle with a 1.5 s telegraph
+   (`hazard` on the decal, validator check 11, the bot steps off it), stream flankers from wave 3 (every third group comes from behind
+   the player, opposite the hunters already on her, with a "Flank!" edge marker and a panned horn; a first pincer version that split
+   groups made the bot's Tier 5 clears easier, 13/16 vs 7/16 seeds, and was dropped; starting at wave 2 cost the fairly geared Coliseum Tier 5 bot a seed, so they start at wave 3), and "Level 34 · 6 above you · deals 15% more damage" on the hover.
+   Still open: the Chainworks hazard stripes (a press or crusher line along them is the natural mechanic), a tram road, a flanker
+   *brain* (monsters that circle to the back on their own) if flank groups prove too gentle, and frost pools that chill.
 5. **P2 character depth: more Sorceress skills and a deeper skill tree, then the passive tree** (about 250 nodes). Designed together
    with the balance work in 2 so the new power has a curve to live in.
 
@@ -58,8 +71,9 @@ guarantees no player trap. Protocol 22.
 the inventory, the Territory lens, Rook sells Faint sigils, T3+ bosses drop them, Survey Stake / Lamp Oil re-roles and the Lightkeeper
 notable; protocol 27). **E1 anchor-aware events: Done 2026-10-06** (events in the 25 hand-crafted areas stand on the layout's declared anchors on their own
 seeded stream, with the old site picking as fallback; layout validator check 10; a few anchors moved inward after a bot sweep). Watch Host in
-Heart of the Forge and Hollow Ossuary (96 to 90 clears of 100 in the sweep). **Wave 3 still to build:** F1 polish (discovery,
-pin and surge sounds and banners, reduced motion, telemetry).
+Heart of the Forge and Hollow Ossuary (96 to 90 clears of 100 in the sweep). **F1 polish: Done 2026-10-06** (discovery, pin and
+surge sounds and banners, Calm/reduced motion across the table, territory telemetry counts in the server status log, GAME_SPEC and
+overview synced). **Wave 3 still to build:** the ambient table bed (A 5.5) and B1's remaining tree re-roles and sigil crafting.
 **Watch in playtest:** deaths with layouts live (a balance probe needed its damage lowered from 1.8x to 1.5x), maps per run (about 7.5),
 surge income (about +10% for a rotating player; Hourglass Sand slightly above 3%, lever `HOURGLASS_SAND.bossChance` 5% to 4%).
 

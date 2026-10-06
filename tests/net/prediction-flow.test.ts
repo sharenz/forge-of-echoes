@@ -72,4 +72,25 @@ describe('prediction on a conveyor belt', () => {
     expect(compared).toBeGreaterThan(30);
     expect(maxErr).toBeLessThan(1e-3);
   });
+
+  it('frost currents (Winter Throne lake, Frozen Passage bridges) and turning sand rings (Pit of Echoes) predict exactly too', () => {
+    const cases = [
+      { areaId: 'winterThrone' as const, x: 290, y: 0 },
+      { areaId: 'frozenPassage' as const, x: -430, y: 0 },
+      { areaId: 'pitOfEchoes' as const, x: 0, y: -356 },
+    ];
+    for (const c of cases) {
+      const r = areaRadius(c.areaId);
+      const l = layoutFor(c.areaId)!;
+      const ps = compileLayout(l, r).props.filter((p) => p.radius > 0).map((p, k) => makeProp({ id: k + 1, kind: p.kind, x: p.x, y: p.y, radius: p.radius }));
+      const h = new NetHarness({ latencyMs: 45, moveSpeed: 110, arenaRadius: r, props: ps, startX: c.x, startY: c.y, flow: { areaId: c.areaId, seed: 99 } });
+      h.run(4000, (seq) => (seq * SIM_DT < 2 ? { moveX: 0, moveY: 0 } : { moveX: Math.sin(seq * 0.03), moveY: Math.cos(seq * 0.02) }));
+      // Standing still for the first 2 s she was carried.
+      expect(Math.hypot(h.player.x - c.x, h.player.y - c.y), c.areaId).toBeGreaterThan(20);
+      const { compared, maxErr } = compare(h, 10);
+      expect(compared, c.areaId).toBeGreaterThan(100);
+      expect(maxErr, c.areaId).toBeLessThan(1e-3);
+      expect(h.client.stats().snaps, c.areaId).toBe(0);
+    }
+  });
 });

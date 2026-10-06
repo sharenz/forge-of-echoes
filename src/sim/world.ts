@@ -240,6 +240,8 @@ export interface StreamState {
   /** Seconds since the last group arrived (the pressure floor waits STREAM_MIN_GAP between pulls). */
   sinceLast: number;
   weights: { kind: MonsterKind; weight: number }[];
+  /** Groups sent this wave (every FLANK_EVERY-th from FLANK_FROM_WAVE flanks: see waves.ts spawnStreamGroup). */
+  groups: number;
 }
 
 export interface Director {

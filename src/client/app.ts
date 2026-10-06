@@ -103,6 +103,8 @@ const UI_SOUNDS: Record<Parameters<UiActions['uiSound']>[0], SfxId> = {
   equip: 'equip',
   find: 'dropRare',
   jackpot: 'dropUnique',
+  atlasOpen: 'atlasOpen', atlasHover: 'atlasHover', atlasSelect: 'atlasSelect', atlasRoute: 'atlasRoute', atlasReveal: 'atlasReveal',
+  atlasSeal: 'atlasSeal', atlasZoom: 'atlasZoom', atlasPin: 'atlasPin', atlasUnpin: 'atlasUnpin', surgeSpend: 'surgeSpend', surgeRefill: 'surgeRefill',
 };
 
 export interface ClientElements {
@@ -757,7 +759,8 @@ export class ClientApp {
       return true;
     }
     if (click.kind === 'panel') {
-      this.audio.play('uiOpen');
+      // The Map Device plays its own `atlasOpen` as the table mounts.
+      if (click.panel !== 'mapDevice') this.audio.play('uiOpen');
       this.box.update((s) => openPanel(s, click.panel));
       return true;
     }
@@ -996,7 +999,7 @@ export class ClientApp {
     const click = propClick(session.world.view.props, propId, zone.kind);
     if (click.kind === 'portal') session.usePortal(click.propId);
     else if (click.kind === 'panel') {
-      this.audio.play('uiOpen');
+      if (click.panel !== 'mapDevice') this.audio.play('uiOpen');
       this.box.update((s) => openPanel(s, click.panel));
     }
   }

@@ -18,7 +18,7 @@
 // number in the debuff's colour, no sparks and no hurt beat.
 import type { SfxId } from '../contracts/audio';
 import { THEME_ROSTER } from '../contracts/bestiary';
-import { MONSTER_KINDS, type DamageType, type MonsterKind } from '../contracts/content';
+import { MONSTER_KINDS, type DamageType, type MonsterKind, type SkillId } from '../contracts/content';
 import type { RGB } from '../contracts/render';
 import { RARITY_CODE, type DropTone, type ProjectileKind, type SimEvent } from '../contracts/sim';
 import { layoutFor } from '../data/layouts';
@@ -95,10 +95,11 @@ const PUBLIC_RING: RGB = [0.75, 0.7, 0.6];
 const POOF: RGB = [0.62, 0.58, 0.54];
 const POOF_END: RGB = [0.22, 0.2, 0.2];
 
-const SKILL_COLOR = {
+/** Muzzle colour per skill; a roster skill without an entry (before its presenter slice) flashes like fire. */
+const SKILL_COLOR: Partial<Record<SkillId, RGB>> = {
   emberLance: C.flame, emberNova: C.flame, flameWave: C.flame, rimeShards: C.frost, arcChain: C.storm, riftStep: C.voidGlow,
   cinderWard: C.hot,
-} as const;
+};
 
 const PROJECTILE_END: Record<ProjectileKind, readonly [RGB, RGB, number]> = {
   emberLance: [C.hot, C.ember, 6],

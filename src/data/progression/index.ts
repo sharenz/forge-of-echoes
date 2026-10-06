@@ -8,7 +8,10 @@ import type { MapBaseDef, MapModDef, SkillDef } from './types';
 
 export * from './types';
 export { SORCERESS, LEVEL_CAP, XP_BASE, XP_EXPONENT } from './classes';
-export { DAMAGE_ROLL, EXTRA_PROJECTILE_FAN, MAX_SKILL_RANK, SKILLS } from './skills';
+export {
+  AUGMENT_RULES, DAMAGE_ROLL, EXTRA_PROJECTILE_FAN, MAX_SKILL_RANK, RESPEC, SKILL_POINTS, SKILLS, augmentAvailable, augmentInfo,
+} from './skills';
+export { AUGMENTS } from './augments';
 export * from './combat';
 export * from './maps';
 export * from './loot';

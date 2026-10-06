@@ -5,6 +5,7 @@
 import { createRng, hashString } from '../../core/rng';
 import type { PropCover, PropKind } from '../../contracts/sim';
 import { compileFlowZones, type CompiledFlow } from './flow';
+import { compileHazards, type CompiledHazard } from './hazards';
 import {
   LANDMARK_KINDS, LAYOUT_PROP_RADIUS, bearingOf, resolvePt,
   type AreaLayout, type BossArrival, type DecalKind, type EventAnchorKind, type LandmarkKind, type LaneFavour, type LayoutCluster, type Pt,
@@ -54,6 +55,8 @@ export interface CompiledLayout {
   anchors: CompiledAnchor[];
   /** Flow zones (seed-free geometry; `buildFlowField` adds the run's directions and reversal schedule). */
   flows: CompiledFlow[];
+  /** Burning ground on hazard decals (roadmap 4): slag pools and flaring lava cracks; damage in src/sim/layout-hazards.ts. */
+  hazards: CompiledHazard[];
   rareSpots: { x: number; y: number; r: number; weight: number }[];
   light: { ambient: number; pools: { x: number; y: number; r: number; colour: string; flicker: number }[] } | null;
   scatter: AreaLayout['scatter'];
@@ -279,6 +282,7 @@ export function compileLayout(layout: AreaLayout, R: number): CompiledLayout {
   const out: CompiledLayout = {
     areaId: layout.areaId, version: layout.version, R, start, props, landmarks, decals, lanes, zones, bossStage, anchors,
     flows: compileFlowZones(layout.flows, R),
+    hazards: compileHazards(layout.decals, decals),
     rareSpots: (layout.rareSpots ?? []).map((s) => ({ ...resolvePt(s.at, R), r: s.r, weight: s.weight })),
     light, scatter: layout.scatter, signature: 0,
   };

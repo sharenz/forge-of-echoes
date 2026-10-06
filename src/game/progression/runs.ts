@@ -29,7 +29,7 @@ import { spendCurrency } from './merchant';
 import { mapEventRules } from './map-event-rules';
 import { normalizeMapEvent, rollMapEvent } from './map-events';
 import { findScarab, isWaveScarab, scarabEffects, validScarabs } from '../../data/scarabs';
-import { attachSurge, normalizeRunSurge, spendSurge } from './surge';
+import { attachSurge, normalizeRunSurge, spendSurge, surgeNotice } from './surge';
 import { attachTerritory, normalizeRunTerritory, spendTerritoryUses, territoryEventChance, territoryFor, tideSurge } from './territory';
 import { mapEventOdds } from './map-events';
 import { findSigil } from '../../data/progression/territory';
@@ -197,6 +197,8 @@ export function openMap(character: CharacterSave, opts: OpenMapOptions = {}): Re
     atlas = used.atlas;
     for (const e of used.emptied) notices.push(`${findSigil(e.sigilId)?.name ?? 'A sigil'} in the ${findAtlasArea(e.areaId)?.name ?? ''} beacon burned out: the slot is empty.`);
   }
+  // The surge banner (brief D slice F1): said with the opening, with what is left of the area's day.
+  if (surge && typeof opts.now === 'number') notices.unshift(surgeNotice(surge, atlas, opts.now));
   return ok({ character: { ...next, ...(atlas ? { atlas } : {}), mapDevice: null, ...(ch.mapScarabs ? { mapScarabs: [null, null, null, null] } : {}), rngState: rng.state() }, setup, ...(notices.length ? { notices } : {}) });
 }
 

@@ -1,6 +1,7 @@
 # A. Power rework: overview
 
-Status: release R1 "Power" (C1, P0 to P3) built and deployed 2026-10-06; R2 to R6 are design briefs. Five documents:
+Status: release R1 "Power" (C1, P0 to P3) built and deployed 2026-10-06; R2 slices C2 and SK0 built 2026-10-06 (skill migration changed by the
+owner to a full refund, `build-plan.md` SK0); the rest of R2 to R6 are design briefs. Five documents:
 
 | File | What it holds |
 |---|---|
@@ -151,11 +152,11 @@ against 14 acceptance criteria: boss and rare TTK per band, rush times, no domin
 | Item | What happens | Loss |
 |---|---|---|
 | Level, XP, items, currencies, stash, Atlas | unchanged (cap 80 only raises the ceiling) | none |
-| **Skill ranks** | `newRank = ceil(oldRank / 2)`; refunded points back as unspent | effectiveness at the migrated rank −0% to −5% (e.g. old rank 6 e 1.34 → new rank 3 e 1.29), more than repaid by the refund |
-| **Skill points** | recomputed as `1 + 2(L−1) − Σ new ranks`; the old 1-per-level is retroactively doubled | **gain** (level 17 with 16 points spent: 24 unspent) |
+| **Skill ranks** | **full refund** (owner decision 2026-10-06): every skill unlearned except Ember Lance rank 1 | the build is re-spent from scratch |
+| **Skill points** | all back as unspent: `1 + 2(L−1)`; the old 1-per-level is retroactively doubled | **gain** (level 17: 33 unspent) |
 | **Loadout** | 6 → 8 slots, existing assignments keep positions, new slots empty | none |
 | **Uniques with skill flags** | same flag ids; their behaviours now work as free (slotless) augment effects | none |
-| **Attributes** | allocated points stay; a **one-time free full respec** (skills, augments, attributes, passives) is granted; afterwards an Scrap service (2 per point, first 30 free) | none |
+| **Attributes** | allocated points stay; the skill migration grants no respec token (every skill point is already refunded, owner decision 2026-10-06); an attribute respec Scrap service (2 per point, first 30 free) is still planned | none |
 | **Passive points** | `L − 1` up to level 50 (e.g. level 17: 16 points available on first opening the Orrery) + Boss Marks credited from the account's first-kill set | **gain** |
 | **Respec policy (ongoing)** | skills/augments 4 Scrap per point (T3 augment 8), free below level 20, session cap 120; passives small 5 / notable 15 / mastery 10 / keystone 40, first 10 free, session cap 250 | a real but bearable Scrap sink; B-atlas rule "a cost, not a wall" |
 | **Open expeditions** | frozen `RunSetup` keeps its numbers; the character joins with the new rules resolved at join | none |

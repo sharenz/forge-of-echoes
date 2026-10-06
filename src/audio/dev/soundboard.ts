@@ -53,6 +53,10 @@ const GROUPS: { key: SfxGroup[]; title: string; accent: string; ids: SfxId[] }[]
       'hostThaw', 'prismShatter', 'hostWake', 'anvilStrike', 'anvilCharged', 'anvilForge', 'bellToll', 'cantorFall', 'dirge',
       'voidTide', 'voidSurge', 'heartCrack'],
   },
+  {
+    key: ['ui', 'flow'], title: 'Atlas and surge', accent: 'var(--gold)',
+    ids: ['atlasOpen', 'atlasHover', 'atlasSelect', 'atlasRoute', 'atlasReveal', 'atlasSeal', 'atlasZoom', 'atlasPin', 'atlasUnpin', 'surgeSpend', 'surgeRefill'],
+  },
 ];
 
 const LABELS: Record<SfxId, string> = {
@@ -83,6 +87,8 @@ const LABELS: Record<SfxId, string> = {
   ringRise: 'Ring rises', ringChain: 'Chain wall', ringSlam: 'Champion slam', hostThaw: 'Statue thaws', prismShatter: 'Prism shatters',
   hostWake: 'Host wakes', anvilStrike: 'Anvil strike', anvilCharged: 'Anvil charged', anvilForge: 'Boon forged', bellToll: 'Bell toll',
   cantorFall: 'Cantor falls', dirge: 'Dirge', voidTide: 'Void tide', voidSurge: 'Void surge', heartCrack: 'Heart cracks',
+  atlasOpen: 'Chart unrolled', atlasHover: 'Plate tick', atlasSelect: 'Stone chime', atlasRoute: 'Ember road', atlasReveal: 'Area revealed',
+  atlasSeal: 'Seal opens', atlasZoom: 'Paper slide', atlasPin: 'Pin set', atlasUnpin: 'Pin pulled', surgeSpend: 'Surge spent', surgeRefill: 'Surge refilled',
 };
 
 const TRACK_LABELS: Record<MusicId, { name: string; note: string }> = {
