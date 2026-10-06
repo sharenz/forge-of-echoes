@@ -1,4 +1,5 @@
-// Skills (GAME_SPEC §4): rank curves, the tree, the loadout and the skill sheet.
+// Skills (GAME_SPEC §4, docs/power-rework/skills.md): rank curves (1 to 10), unlocks by level, the loadout and the skill sheet.
+// Augments, respec and presets: augments.test.ts; the save migration: migrate-skills.test.ts.
 import { describe, expect, it } from 'vitest';
 import type { CharacterSave } from '../../src/contracts/items';
 import type { SkillId } from '../../src/contracts/content';
@@ -19,46 +20,47 @@ const at = (id: SkillId, rank: number, ch = bareCharacter()) => rules.skillSheet
 const L1 = SORCERESS.spellPower.base * 1.06;
 
 describe('rank curves', () => {
-  it('Ember Lance: effectiveness 1.0 to 2.3, pierce +1 at ranks 6/12/18', () => {
+  it('Ember Lance: effectiveness 1.0 to 2.3, no rank pierce (it moved to Piercing Flame)', () => {
     expect(at('emberLance', 1).damage).toBeCloseTo(L1 * 1.0, 10);
-    expect(at('emberLance', 20).damage).toBeCloseTo(L1 * 2.3, 10);
-    expect([1, 5, 6, 11, 12, 17, 18, 20].map((r) => at('emberLance', r).pierce)).toEqual([0, 0, 1, 1, 2, 2, 3, 3]);
+    expect(at('emberLance', 10).damage).toBeCloseTo(L1 * 2.3, 10);
+    expect([1, 5, 10].map((r) => at('emberLance', r).pierce)).toEqual([0, 0, 0]);
     expect(at('emberLance', 1)).toMatchObject({ focusCost: 0, castTime: 0.42, cooldown: 0, projectileSpeed: 420, range: 320, critChance: 0.06, ailmentChance: 0.1 });
   });
 
-  it('Ember Nova: 12 to 24 flames (+1 per rank after 4), pierce 1 + 1 per 5 ranks', () => {
-    expect([1, 4, 5, 10, 16, 17, 20].map((r) => at('emberNova', r).projectiles)).toEqual([12, 12, 13, 18, 24, 24, 24]);
-    expect([1, 4, 5, 10, 15, 20].map((r) => at('emberNova', r).pierce)).toEqual([1, 1, 2, 3, 4, 5]);
+  it('Ember Nova: 12 to 20 flames (+1 per rank from rank 3), pierce 1 (+1 at ranks 5 and 10)', () => {
+    expect([1, 2, 3, 5, 9, 10].map((r) => at('emberNova', r).projectiles)).toEqual([12, 12, 13, 15, 19, 20]);
+    expect([1, 4, 5, 9, 10].map((r) => at('emberNova', r).pierce)).toEqual([1, 1, 2, 2, 3]);
+    expect(at('emberNova', 10).damage).toBeCloseTo(L1 * 1.8, 10);
     expect(at('emberNova', 1)).toMatchObject({ focusCost: 12, castTime: 0.55, cooldown: 3, range: 170, critChance: 0.05, ailmentChance: 0.15 });
   });
 
   it('Flame Wave: 5 to 9 waves, wide and slow', () => {
     expect(at('flameWave', 1).projectiles).toBe(5);
-    expect(at('flameWave', 20).projectiles).toBe(9);
+    expect(at('flameWave', 10).projectiles).toBe(9);
     expect(at('flameWave', 1)).toMatchObject({ spread: 0.9, projectileSpeed: 180, range: 170, radius: 14, ailmentChance: 0.25, cooldown: 4 });
   });
 
-  it('Rime Shards: 3 to 7 shards, pierce 2, chill 30%', () => {
-    expect([1, 4, 5, 9, 13, 17, 20].map((r) => at('rimeShards', r).projectiles)).toEqual([3, 3, 4, 5, 6, 7, 7]);
+  it('Rime Shards: 3 to 7 shards (+1 at ranks 3, 5, 7, 9), pierce 2, chill 30%', () => {
+    expect([1, 2, 3, 5, 7, 9, 10].map((r) => at('rimeShards', r).projectiles)).toEqual([3, 3, 4, 5, 6, 7, 7]);
     expect(at('rimeShards', 1)).toMatchObject({ damageType: 'cold', pierce: 2, spread: 0.35, projectileSpeed: 360, range: 260, ailmentChance: 0.3, critChance: 0.08 });
   });
 
   it('Arc Chain: 3 to 8 chains, jump range 90', () => {
     expect(at('arcChain', 1).chains).toBe(3);
-    expect(at('arcChain', 20).chains).toBe(8);
+    expect(at('arcChain', 10).chains).toBe(8);
     expect(at('arcChain', 1)).toMatchObject({ damageType: 'lightning', radius: 90, range: 240, cooldown: 1, ailmentChance: 0.25, critChance: 0.1 });
   });
 
-  it('Rift Step: 90 to 120 distance, 2 charges (+1 at 10 and 20), no damage', () => {
+  it('Rift Step: 90 to 120 distance, 2 charges (+1 at 5 and 10), no damage', () => {
     expect(at('riftStep', 1)).toMatchObject({ distance: 90, charges: 2, damage: 0, castTime: 0, cooldown: 3.5, critChance: 0, focusCost: 8 });
-    expect(at('riftStep', 10).charges).toBe(3);
-    expect(at('riftStep', 20)).toMatchObject({ distance: 120, charges: 4 });
+    expect(at('riftStep', 5).charges).toBe(3);
+    expect(at('riftStep', 10)).toMatchObject({ distance: 120, charges: 4 });
     expect(rules.skillSheet(bareCharacter(), 'riftStep', 1).dps).toBeNull();
   });
 
   it('Cinder Ward: 35% to 55% reduction for 4 to 7 s, cooldown 14 to 9 s, embers at 0.25 effectiveness', () => {
     expect(at('cinderWard', 1)).toMatchObject({ damageReduction: 0.35, duration: 4, cooldown: 14, radius: 40 });
-    const r20 = at('cinderWard', 20);
+    const r20 = at('cinderWard', 10);
     expect(r20.damageReduction).toBeCloseTo(0.55, 10);
     expect(r20.duration).toBeCloseTo(7, 10);
     expect(r20.cooldown).toBeCloseTo(9, 10);
@@ -66,25 +68,33 @@ describe('rank curves', () => {
   });
 });
 
-describe('the skill tree', () => {
+describe('learning and ranking', () => {
   it('needs a skill point', () => {
     const ch = bareCharacter();
-    expect(rules.canRankUpSkill(ch, 'emberNova')).toEqual({ ok: false, reason: 'No skill points left. You gain one every level.' });
+    expect(rules.canRankUpSkill(ch, 'emberNova')).toEqual({ ok: false, reason: 'No skill points left. You gain two every level.' });
   });
 
-  it('enforces prerequisites', () => {
-    const ch = withRanks({ emberNova: 2 }, { unspentSkillPoints: 3 });
-    const check = rules.canRankUpSkill(ch, 'flameWave');
-    expect(check.ok).toBe(false);
-    expect(check.reason).toBe('Requires Ember Nova rank 3 (currently 2).');
-    const nova3 = expectOk(rules.rankUpSkill(ch, 'emberNova'));
-    expect(rules.canRankUpSkill(nova3, 'flameWave').ok).toBe(true);
-    expect(rules.canRankUpSkill(nova3, 'arcChain').reason).toMatch(/Rime Shards rank 5/);
+  it('unlocks skills by character level, with no prerequisite chains', () => {
+    const ch = bareCharacter({ unspentSkillPoints: 3, level: 5 });
+    expect(rules.canRankUpSkill(ch, 'rimeShards').ok).toBe(true);
+    expect(rules.canRankUpSkill(ch, 'arcChain')).toEqual({ ok: false, reason: 'Arc Chain unlocks at level 6.' });
+    expect(rules.canRankUpSkill(ch, 'flameWave')).toEqual({ ok: false, reason: 'Flame Wave unlocks at level 12.' });
+    expect(rules.canRankUpSkill({ ...ch, level: 12 }, 'flameWave').ok).toBe(true);
+    // A skill learned before its unlock level (an old character) keeps ranking.
+    expect(rules.canRankUpSkill(withRanks({ flameWave: 2 }, { unspentSkillPoints: 1, level: 5 }), 'flameWave').ok).toBe(true);
+    for (const info of Object.values(rules.content.skills)) expect(info.prerequisite).toBeNull();
+  });
+
+  it('refuses roster skills whose behaviour has not shipped', () => {
+    const ch = bareCharacter({ unspentSkillPoints: 5, level: 80 });
+    expect(rules.content.skills.glacialNova.available).toBe(false);
+    expect(rules.canRankUpSkill(ch, 'glacialNova')).toEqual({ ok: false, reason: 'Glacial Nova arrives in a later update.' });
+    expect(expectErr(rules.rankUpSkill(ch, 'eventHorizon'))).toMatch(/later update/);
   });
 
   it('stops at the maximum rank', () => {
-    const ch = withRanks({ emberLance: 20 }, { unspentSkillPoints: 5 });
-    expect(rules.canRankUpSkill(ch, 'emberLance').reason).toMatch(/maximum rank \(20\)/);
+    const ch = withRanks({ emberLance: 10 }, { unspentSkillPoints: 5 });
+    expect(rules.canRankUpSkill(ch, 'emberLance').reason).toMatch(/maximum rank \(10\)/);
     expect(expectErr(rules.rankUpSkill(ch, 'emberLance'))).toMatch(/maximum rank/);
   });
 
@@ -93,7 +103,7 @@ describe('the skill tree', () => {
     const a = expectOk(rules.rankUpSkill(ch, 'emberNova'));
     expect(a.skillRanks.emberNova).toBe(1);
     expect(a.unspentSkillPoints).toBe(1);
-    expect(a.loadout).toEqual(['emberLance', 'emberNova', null, null, null, null]);
+    expect(a.loadout).toEqual(['emberLance', 'emberNova', null, null, null, null, null, null]);
     const b = expectOk(rules.rankUpSkill(a, 'emberNova'));
     expect(b.loadout).toEqual(a.loadout);
     expect(b.skillRanks.emberNova).toBe(2);
@@ -101,11 +111,11 @@ describe('the skill tree', () => {
 });
 
 describe('loadout', () => {
-  const ch = withRanks({ emberNova: 3, rimeShards: 1, riftStep: 1 }, { loadout: ['emberLance', 'emberNova', 'riftStep', null, null, null] });
+  const ch = withRanks({ emberNova: 3, rimeShards: 1, riftStep: 1 }, { loadout: ['emberLance', 'emberNova', 'riftStep', null, null, null, null, null] });
 
-  it('allows every learned skill in all six slots, including either mouse button', () => {
+  it('allows every learned skill in all eight slots, including either mouse button, Space and Z', () => {
     for (const skill of ['emberLance', 'emberNova', 'rimeShards', 'riftStep'] as const) {
-      for (let slot = 0; slot < 6; slot++) {
+      for (let slot = 0; slot < 8; slot++) {
         const moved = expectOk(rules.setLoadoutSlot(ch, slot, skill));
         expect(moved.loadout[slot]).toBe(skill);
         expect(moved.loadout.filter((s) => s === skill)).toHaveLength(1);
@@ -113,7 +123,7 @@ describe('loadout', () => {
         expect(normalizeCharacter(moved)?.loadout).toEqual(moved.loadout);
       }
     }
-    expect(expectOk(rules.setLoadoutSlot(ch, 0, 'emberNova')).loadout).toEqual(['emberNova', 'emberLance', 'riftStep', null, null, null]);
+    expect(expectOk(rules.setLoadoutSlot(ch, 0, 'emberNova')).loadout).toEqual(['emberNova', 'emberLance', 'riftStep', null, null, null, null, null]);
     expect(expectOk(rules.setLoadoutSlot(ch, 0, null)).loadout[0]).toBeNull();
   });
 
@@ -123,14 +133,14 @@ describe('loadout', () => {
 
   it('moves a skill instead of duplicating it, swapping with the displaced one', () => {
     const moved = expectOk(rules.setLoadoutSlot(ch, 2, 'emberNova'));
-    expect(moved.loadout).toEqual(['emberLance', 'riftStep', 'emberNova', null, null, null]);
-    const placed = expectOk(rules.setLoadoutSlot(ch, 5, 'rimeShards'));
-    expect(placed.loadout).toEqual(['emberLance', 'emberNova', 'riftStep', null, null, 'rimeShards']);
+    expect(moved.loadout).toEqual(['emberLance', 'riftStep', 'emberNova', null, null, null, null, null]);
+    const placed = expectOk(rules.setLoadoutSlot(ch, 7, 'rimeShards'));
+    expect(placed.loadout).toEqual(['emberLance', 'emberNova', 'riftStep', null, null, null, null, 'rimeShards']);
   });
 
   it('clears slots and rejects slots that do not exist', () => {
     expect(expectOk(rules.setLoadoutSlot(ch, 1, null)).loadout[1]).toBeNull();
-    expect(expectErr(rules.setLoadoutSlot(ch, 6, 'emberNova'))).toMatch(/does not exist/);
+    expect(expectErr(rules.setLoadoutSlot(ch, 8, 'emberNova'))).toMatch(/does not exist/);
     expect(expectErr(rules.setLoadoutSlot(ch, -1, null))).toMatch(/does not exist/);
   });
 
@@ -153,13 +163,15 @@ describe('skill sheet', () => {
     expect(sheet.lines).toContain('15% chance to Ignite');
   });
 
-  it('lists what the next rank changes', () => {
+  it('lists what the next rank changes, including augment slots and tiers', () => {
     const next = rules.skillSheet(bareCharacter(), 'emberNova', 4).nextRankLines;
-    expect(next).toContain('Projectiles 12 to 13');
+    expect(next).toContain('Projectiles 14 to 15');
     expect(next).toContain('Pierce 1 to 2');
+    expect(next).toContain('Unlocks tier 2 augments');
+    expect(rules.skillSheet(bareCharacter(), 'emberNova', 1).nextRankLines).toContain('Augment slots 0 to 1');
     // The damage line shows once the rounded range changes: at level 1 a rank adds well under one point.
     expect(rules.skillSheet(bareCharacter({ level: 20 }), 'emberNova', 4).nextRankLines.some((l) => l.startsWith('Damage '))).toBe(true);
-    expect(rules.skillSheet(bareCharacter(), 'emberNova', 20).nextRankLines).toEqual([]);
+    expect(rules.skillSheet(bareCharacter(), 'emberNova', 10).nextRankLines).toEqual([]);
   });
 
   it('shows rank 1 numbers for an unlearned skill', () => {
@@ -234,7 +246,7 @@ describe('skill sheet', () => {
     const ch = withRanks({ emberNova: 4 });
     expect(rules.skillSheet(ch, 'emberNova', Number.NaN).rank).toBe(4);
     expect(rules.skillSheet(ch, 'emberNova', Number.POSITIVE_INFINITY).rank).toBe(4);
-    expect(rules.skillSheet(ch, 'emberNova', 99).rank).toBe(20);
+    expect(rules.skillSheet(ch, 'emberNova', 99).rank).toBe(10);
   });
 
   it('matches the runtime the sim receives', () => {

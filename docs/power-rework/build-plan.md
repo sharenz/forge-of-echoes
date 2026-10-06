@@ -1,6 +1,6 @@
 # E. Build plan: slices, file ownership, tests, migration
 
-Status: design brief (no code written). Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
+Status: R1 built and deployed 2026-10-06; R2 slices C2 and SK0 built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
 `power-curve.md` (P), `skills.md` (SK) and `passive-tree.md` (PT) hold the designs these slices implement; `overview.md` has the pillars and the migration summary.
 
 ---
@@ -67,6 +67,15 @@ Exit: the three band tables of `power-curve.md` 5.2 reproduced within ±15% by t
 `SkillId` list grows to 32 (append-only), `LOADOUT_SLOTS` 6 → 8, `LOADOUT_KEYS` + `Space`, `Z`; `CharacterSave` gains `augments`, `loadoutPresets`, `respecTokens`, `respecFreeUsed`; `PlayerFlag` + new flags; `PROJECTILE_KINDS` and `SimEvent` appended for new skills;
 net commands (`pickAugment`, `refundAugment`, `setPreset`, `respec`); **`PROTOCOL_VERSION` 26 → 27**. Frozen-contract change recorded in `ARCHITECTURE`/ROADMAP.
 
+**Status: built 2026-10-06.** 32 `SKILL_IDS` (appended); `LOADOUT_SLOTS` 8 with `Space`, `Z` (`LOADOUT_PRESETS` 3, `LoadoutPreset`);
+`CharacterSave.skillRanks` became `Partial` and gained the optional `augments`, `loadoutPresets`, `respecTokens`, `respecFreeUsed` and
+`legacySkillRanks` (the rollback copy and the migrated marker); `SkillRuntimeDef.augments?: AugmentRuntime[]` (`echo`, `fan`, `invulnerable`,
+`AUGMENT_PRIMITIVES`); `SkillInfo` gained `element`, `unlockLevel`, `available`, `augments: AugmentInfo[]`; `SkillSheet.augmentLines`;
+`GameRulesApi` gained `skillPointsTotal`, `canPickAugment`, `pickAugment`, `respecPrice` (`RespecPrice`), `refundAugment`, `respec`, `setPreset`;
+commands `pickAugment`, `refundAugment` and `respec` (both with `expectedScrap`), `setPreset` (`save`/`load`/`rename`). **Protocol 27 → 28**
+(B1 had already taken 27). No `PlayerFlag`, `PROJECTILE_KINDS` or `SimEvent` was needed yet: the seven shipped skills and their live augments
+reuse the existing flags, kinds and events; SK2 appends what the new skills need.
+
 ### SK0: Skill schema, executor, migration (L)
 Owner lane **skills-core** (sole owner of `sim/skills*`, `data/progression/skills*`, `game/progression/skills.ts`, `game/progression/character.ts`, `game/progression/save.ts`, `src/server/{commands,game,characters}.ts` for skill commands). Depends on C2, P1.
 - `src/data/progression/skills.ts` becomes `skills/` (`index.ts`, `fire.ts`, `cold.ts`, `lightning.ts`, `void.ts`, `utility.ts`) and `augments/` (same split) with the schema of `skills.md` 4.2: `SkillDef` gets `unlockLevel`, `emitter`, `augments: AugmentDef[]`; `MAX_SKILL_RANK` 10.
@@ -75,6 +84,29 @@ Owner lane **skills-core** (sole owner of `sim/skills*`, `data/progression/skill
 - `src/game/progression/save.ts` + `migrate-skills.ts`: `SAVE_VERSION` bump; `newRank = ceil(oldRank / 2)`; unspent recomputed; loadout padded to 8; `respecTokens = 1`; unique flags mapped to item-granted augment effects.
 - Server: commands for augments/respec/presets; atomic Scrap payment for refunds.
 Exit: all old skills behave as before at the migrated ranks (bot clear times within 5%); migration property test (`newUnspent ≥ oldUnspent`, no skill unlearned); 8 slots in the sim and the net layer.
+
+**Status: built 2026-10-06** (one lane, after C2). Done: `data/progression/skills/` (index + fire, cold, lightning, void (with physical),
+utility) holds all 32 skills (`unlockLevel`, `element`, `emitter`, `available`; the 25 unshipped ones carry their first-pass numbers and
+cannot be learned) and `data/progression/augments/` the full augment tables of the seven shipped skills (44 augments; 17 are live, the rest
+are `planned` on a primitive that ships in SK5); `MAX_SKILL_RANK` 10, 2 skill points per level, unlock by level, no prerequisites;
+`game/progression/skills.ts` resolves augments (set/add/scale on base numbers, `more` into the more pool, count, pierce, chain, shape, echo,
+invulnerable, flags) and has the slot/tier/exclusion rules, points, respec pricing (free below 20, first 15 points free, 4 Scrap per point),
+`refundAugment`/`respec` (Scrap paid in the same character value), presets and tooltips; `src/sim/skills/` replaces `sim/skills.ts`:
+`executor.ts` (emitter dispatch, the echo primitive), `emitters.ts` (projectile fan, burst, chain, dash), `projectile-mods.ts`, `buffs.ts`,
+`ground.ts`, `behaviours/<element>.ts` (the seven skills as data). The determinism goldens are **bit-identical** (no re-pin): for the same
+runtime defs the executor spawns, damages and emits in exactly the old order, so the old skills' bot clear times are unchanged (0%, not just
+within 5%). Server commands for augments, refunds, respec and presets (refunds and respec in a hideout; preset loads in a hideout); the HUD and
+the old Skills panel show 8 slots (`Space` shows as `Spc`, `Z`), the panel lists only playable skills.
+
+**Migration (owner decision 2026-10-06, overrides the `ceil(oldRank / 2)` mapping of section 5 and skills.md 9):** save version 3 refunds
+every skill point: every skill goes back to unlearned except Ember Lance (innate rank 1, free, on `LMB`), unspent = `1 + 2 (L − 1)`, no
+augments, loadout reset, `respecTokens` 0 (nothing to compensate), old ranks kept in `legacySkillRanks`. Property test: unspent equals the new
+total (so never less than before), only the basic attack learned, no augments; unique flags stay valid.
+
+Deferred from SK0: the respec session cap (120 Scrap per session needs server session state), attribute respec for Scrap, the Bellwether
+(`slotOneAugments`) extra slots and Hardened Ember's raised ward cap (both need the sim/combat ward cap and the items lane's `awaits` gate),
+Overheat's ignite effect and Rift Echo's free third blink (planned primitives), the Focus-sustain and power-budget table tests for new skills
+(SK2), and the augment UI (SK1).
 
 ### SK1: Skills panel v2 and HUD (M)
 Owner lane **ui-skills**. Depends on C2; can start against mocked data before SK0 ends.
@@ -219,17 +251,17 @@ Always-on: unit, data, rules, sim primitive and determinism tests (add about 400
 | Change | Mechanism | Affects |
 |---|---|---|
 | Level cap 60 → 80 | constant only; XP formula unchanged | nobody above 60 exists |
-| Skill ranks 20 → 10 | `newRank = ceil(oldRank / 2)`; refund `oldRank − newRank` points; recompute `unspentSkillPoints = 1 + 2 (L−1) − Σ newRank − Σ augment costs` | every character, once, in `loadCharacter` migration (`SAVE_VERSION` bump), idempotent |
+| Skill ranks 20 → 10 | **Owner decision 2026-10-06: full refund** (replaces `newRank = ceil(oldRank / 2)`): every skill unlearned except Ember Lance rank 1, `unspentSkillPoints = 1 + 2 (L−1)`, loadout reset, old ranks in `legacySkillRanks` | every character, once, in the save migration 2 → 3 (`migrate-skills.ts`), idempotent |
 | Skill points 1 → 2 per level | included in the recompute (retroactive grant) | everyone gains points |
 | Loadout 6 → 8 | pad `null`; existing assignments keep positions; old `Space` slot is already RMB | all |
 | Unique flags (`lancePierceAll`...) | same flag ids; the executor maps them to the augment effects they imply (no augment slot used) | owners of the 16 flag uniques |
-| Free one-time respec | `respecTokens: 1`, spent by the first "Respec all" (skills, augments, attributes, passives) | all |
+| Free one-time respec | dropped for the skill migration (owner decision 2026-10-06: every skill point is refunded anyway, `respecTokens` 0); the field and the token respec (skills, augments, attributes) exist for later grants, e.g. the passive tree migration | all |
 | Attribute respec (new) | Scrap service | all |
 | Passive points | derived from level and `bossMarks` (pure function); a level-17 character has 16 on first open | all |
 | Boss Marks | `bossMarks` set on the `bossDefeated` outcome of a final boss. A character's earlier kills are not recorded per character, so at migration **each existing character is credited the distinct final bosses in the account's Atlas first-kill set** (`atlas.bossesSeen`, the Atlas point source) once; new characters start at 0 | existing characters |
 | Affixes | only new ones are added; no existing tier changes → no equipment migration; `AFFIX_VERSION` stays 2 | equipment |
 | Monster curve | data; open expeditions keep their frozen `RunSetup` (the multiplier numbers are resolved at activation), so an in-flight map is unaffected | runs |
-| Protocol | 25 → 26 (R1), 26 → 27 (SK), 27 → 28 (PT); each bump refreshes clients with old rules, the existing practice | clients |
+| Protocol | 25 → 26 (R1), 27 → 28 (SK; B1 took 27), then one more for PT; each bump refreshes clients with old rules, the existing practice | clients |
 | Client prediction | `net/prediction.ts` predicts projectile motion of the primary emitter only; augment children are server-authoritative events (a short pop-in at worst) | feel |
 
 Rollback: each release's migration is additive (no field is deleted; old `skillRanks` are kept in `legacySkillRanks` for one release so a revert can restore them), plus the production DB backup the deploy pipeline already takes before activation.

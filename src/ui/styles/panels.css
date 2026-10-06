@@ -774,16 +774,17 @@
   font-size: var(--font-ui-caption);
   color: var(--ash);
 }
+/* Eight slots (LMB RMB Q E R F Space Z) fit the narrowest panel (12 cells of 32 px at 1024x600). */
 .fe-loadout__slots {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   justify-content: center;
   padding-bottom: 10px;
 }
 .fe-lslot {
   position: relative;
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   display: grid;
   place-items: center;

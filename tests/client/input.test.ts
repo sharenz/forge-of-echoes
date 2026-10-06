@@ -36,12 +36,13 @@ describe('held mask', () => {
     expect(heldMaskFrom(2, codes())).toBe(0b10);
     expect(heldMaskFrom(0, codes('KeyQ', 'KeyF'))).toBe(0b100100);
     expect(heldMaskFrom(3, codes('KeyQ', 'KeyE', 'KeyR', 'KeyF'))).toBe(0b111111);
+    expect(heldMaskFrom(0, codes('Space', 'KeyZ'))).toBe(0b11000000);
     expect(heldMaskFrom(0, codes('KeyW', 'Digit1'))).toBe(0);
   });
 
   it('knows which keys belong to the game (the UI keeps I C K P, Enter, Esc)', () => {
-    for (const c of ['KeyW', 'ArrowLeft', 'KeyQ', 'KeyF', 'Digit3', 'KeyT']) expect(isGameCode(c)).toBe(true);
-    for (const c of ['KeyI', 'KeyC', 'KeyK', 'KeyP', 'Enter', 'Escape', 'Digit5', 'Space']) expect(isGameCode(c)).toBe(false);
+    for (const c of ['KeyW', 'ArrowLeft', 'KeyQ', 'KeyF', 'Space', 'KeyZ', 'Digit3', 'KeyT']) expect(isGameCode(c)).toBe(true);
+    for (const c of ['KeyI', 'KeyC', 'KeyK', 'KeyP', 'Enter', 'Escape', 'Digit5']) expect(isGameCode(c)).toBe(false);
   });
 });
 

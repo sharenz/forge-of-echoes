@@ -13,7 +13,10 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped).
    The return portal now opens where 1024x600 shows it, left of the open inventory and above the command deck (`RETURN_PORTAL_VIEW`
    in `src/sim/constants.ts`, scored in `returnPortalSpot`). Still open: e2e for keyboard-only, reduced motion, parties and veterans.
 2. **Power rework, release R1 "Power": Done, deployed 2026-10-06.** Next releases of the same design (`docs/power-rework/build-plan.md`):
-   R2 "Skills I" (C2 contracts and protocol 27, SK0 skill executor and save migration, SK1 Skills panel v2, SK2 ten new skills), then
+   R2 "Skills I": **C2 and SK0 built 2026-10-06** (32 skill ids, 8 loadout slots with `Space`/`Z`, ranks 1 to 10 with 2 points per level
+   and unlocks by level, the augment system with 17 live augments on the seven shipped skills, respec for Scrap, three loadout presets, the
+   data-driven skill executor in `src/sim/skills/` with bit-identical determinism goldens, protocol 28, save version 3: the owner's full
+   skill-point refund). Still to do in R2: SK1 Skills panel v2 (augment picking UI, presets, respec dialog), SK2 ten new skills. Then
    R3/R4 (remaining skills and augments), R5 "Orrery" passive tree, R6 balance pass.
 3. **Finish wave 3: leftovers.** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today", the Re-chart tooltip entry and
    F1 polish are done (2026-10-06; F1: eleven Atlas/pin/surge sounds, pin and surge banners, Calm also follows Screen shake 0 and

@@ -497,7 +497,7 @@ describe('HUD', () => {
     expect(hud.zone).toBe('hideout');
     expect(hud.zoneIsOwn).toBe(true);
     expect(hud.life).toBe(80);
-    expect(hud.slots.map((s) => s.key)).toEqual(['LMB', 'RMB', 'Q', 'E', 'R', 'F']);
+    expect(hud.slots.map((s) => s.key)).toEqual(['LMB', 'RMB', 'Q', 'E', 'R', 'F', 'Spc', 'Z']);
     expect(hud.slots[1].skillId).toBe('emberNova');
     expect(hud.flasks[0]).toMatchObject({ key: '1', flaskId: 'lifeFlask', count: 3, active: 0.5 });
     expect(hud.flasks[1]).toBeNull();

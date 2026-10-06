@@ -73,7 +73,28 @@ export interface SkillRuntimeDef {
   distance: number;           // dash distance
   damageReduction: number;    // 0..1 (cinder ward)
   flags: string[];            // skill-specific behaviour flags, e.g. 'pierceAll', 'echo'
+  /**
+   * Behaviour primitives of the picked augments (and of item-granted ones that carry numbers), resolved by the rules
+   * (docs/power-rework/skills.md 4.2). Stat-like augments (count, pierce, damage, radius, cooldown) are already folded into the
+   * numbers above; only behaviour the executor must apply is listed. Absent = none (older callers and fixtures).
+   */
+  augments?: readonly AugmentRuntime[];
 }
+
+/**
+ * One behaviour primitive applied by the sim's skill executor (src/sim/skills). Append new primitives at the end; every one the
+ * rules can emit must be handled by the executor (tests/sim/skill-executor.test.ts checks the list).
+ */
+export type AugmentRuntime =
+  /** Repeat the cast `delay` seconds later from wherever the caster is, each hit at `damage` × the original, at no Focus. Echoes never echo. */
+  | { p: 'echo'; delay: number; damage: number }
+  /** A ring (burst emitter) concentrates into a fan of `arc` radians centred on the aim. */
+  | { p: 'fan'; arc: number }
+  /** A blink grants `seconds` of invulnerability instead of the default 0.2. */
+  | { p: 'invulnerable'; seconds: number };
+
+/** Every AugmentRuntime primitive tag (the executor's coverage test reads this). */
+export const AUGMENT_PRIMITIVES = ['echo', 'fan', 'invulnerable'] as const satisfies readonly AugmentRuntime['p'][];
 
 export interface FlaskRuntime {
   flaskId: FlaskId;
@@ -116,7 +137,7 @@ export interface PlayerRuntime {
   stats: PlayerCombatStats;
   /** One entry per skill the character can use (basic attack + every ranked skill). */
   skills: SkillRuntimeDef[];
-  /** LOADOUT_SLOTS freely assignable entries: LMB, RMB, Q, E, R, F. */
+  /** LOADOUT_SLOTS freely assignable entries: LMB, RMB, Q, E, R, F, Space, Z. */
   loadout: (SkillId | null)[];
   /** BELT_SLOTS entries. */
   flasks: (FlaskRuntime | null)[];

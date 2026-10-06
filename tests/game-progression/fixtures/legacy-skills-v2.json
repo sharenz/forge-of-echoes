@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "characters": [
+    {
+      "id": "ch-legacy17",
+      "name": "Legacy Ilsa",
+      "classId": "sorceress",
+      "level": 17,
+      "xp": 1200,
+      "unspentAttributePoints": 2,
+      "allocated": { "str": 10, "dex": 8, "int": 28 },
+      "unspentSkillPoints": 1,
+      "skillRanks": { "emberLance": 6, "emberNova": 4, "flameWave": 1, "rimeShards": 3, "arcChain": 2, "riftStep": 1, "cinderWard": 0 },
+      "loadout": ["emberLance", "emberNova", "rimeShards", "arcChain", "riftStep", "flameWave"],
+      "equipment": {
+        "amulet": {
+          "kind": "equipment", "uid": "i1", "baseId": "cinderPendant", "itemLevel": 30, "rarity": "unique", "uniqueId": "echoOfTheMatriarch",
+          "implicitValues": [], "affixes": [], "scars": [], "stability": 0, "maxStability": 0, "history": []
+        }
+      },
+      "backpack": { "w": 12, "h": 5, "entries": [] },
+      "stash": [{ "name": "Main", "grid": { "w": 12, "h": 8, "entries": [] } }],
+      "currencyStash": { "scrap": 40 },
+      "mapStash": [],
+      "belt": [null, null, null, null],
+      "mapDevice": null,
+      "rngState": 99,
+      "nextUid": 2,
+      "stats": {
+        "mapsCompleted": 30, "mapsFailed": 1, "highestTierCompleted": 4, "kills": 4000, "deaths": 2, "raresFound": 9, "uniquesFound": 1,
+        "itemsCrafted": 12, "playSeconds": 36000
+      },
+      "createdAt": 1750000000000,
+      "updatedAt": 1759000000000
+    }
+  ],
+  "lastCharacterId": "ch-legacy17",
+  "settings": null
+}

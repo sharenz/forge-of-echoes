@@ -48,10 +48,40 @@ export interface SkillInfo {
   branch: 'basic' | 'destruction' | 'survival' | 'mobility';
   /** Row in the skill tree (1 = top). */
   tier: number;
+  /** Always null since the skill rework (skills unlock by character level); kept for older UI code. */
   prerequisite: { skillId: SkillId; rank: number } | null;
   maxRank: number;
   tags: string[];
   damageType: DamageType | null;
+  /** Element group of the skill book (docs/power-rework/skills.md 10). */
+  element: SkillElement;
+  /** Character level that unlocks learning it (rank 1 costs one point). */
+  unlockLevel: number;
+  /** False while the skill's behaviour has not shipped: it is listed in the data but cannot be learned. */
+  available: boolean;
+  /** The skill's augment tree (tiers T1 to T3). */
+  augments: AugmentInfo[];
+}
+
+export type SkillElement = 'fire' | 'cold' | 'lightning' | 'void' | 'physical' | 'utility';
+
+/** One augment of a skill (docs/power-rework/skills.md 4). */
+export interface AugmentInfo {
+  /** Unique within its skill. */
+  id: string;
+  name: string;
+  /** 1, 2 or 3: needs skill rank AUGMENT_RULES.tierRank[tier]. */
+  tier: 1 | 2 | 3;
+  /** Skill points it costs (T3: 2). */
+  cost: number;
+  /** Skill rank needed to pick it. */
+  rankRequired: number;
+  /** Player-facing effect text. */
+  text: string;
+  /** Augments of the same skill it cannot be taken with. */
+  excludes: string[];
+  /** False while its behaviour has not shipped: shown, not pickable. */
+  available: boolean;
 }
 
 export interface MapBaseInfo {
@@ -101,6 +131,13 @@ export interface SheetSection {
   lines: SheetLine[];
 }
 
+/** What a refund costs: refunded points, how many of them are free, and the Scrap price of the rest. */
+export interface RespecPrice {
+  points: number;
+  freePoints: number;
+  scrap: number;
+}
+
 export interface SkillSheet {
   skillId: SkillId;
   rank: number;
@@ -109,6 +146,8 @@ export interface SkillSheet {
   lines: string[];
   /** Lines describing what the next rank adds (empty at max rank). */
   nextRankLines: string[];
+  /** Picked augments and item-granted augment effects ("Echoing Ring: …"); also included at the end of `lines`. */
+  augmentLines: string[];
   dps: number | null;  // average damage per second for a single target estimate
 }
 
@@ -357,6 +396,18 @@ export interface GameRulesApi {
   /** Slot 0 accepts only the basic attack; skills need rank >= 1; a skill may occupy only one slot. */
   setLoadoutSlot(ch: CharacterSave, slot: number, skillId: SkillId | null): Result<CharacterSave>;
   skillSheet(ch: CharacterSave, skillId: SkillId, rank?: number): SkillSheet;
+  /** Skill points a character of `level` has earned in total: 1 + 2 (level − 1). */
+  skillPointsTotal(level: number): number;
+  canPickAugment(ch: CharacterSave, skillId: SkillId, augmentId: string): { ok: boolean; reason?: string };
+  pickAugment(ch: CharacterSave, skillId: SkillId, augmentId: string): Result<CharacterSave>;
+  /** Scrap a refund costs right now (0 when free): one augment, one skill's ranks and augments, or everything (`skillId` null). */
+  respecPrice(ch: CharacterSave, target: { skillId: SkillId; augmentId?: string } | { all: true }): RespecPrice;
+  /** Refund one augment; Scrap is paid from the character in the same value (atomic). */
+  refundAugment(ch: CharacterSave, skillId: SkillId, augmentId: string): Result<CharacterSave>;
+  /** Refund one skill (`skillId`) or everything (null). `token` spends a free respec token (full respec only, includes attributes). */
+  respec(ch: CharacterSave, skillId: SkillId | null, token: boolean): Result<CharacterSave>;
+  /** Loadout presets: save the loadout into a preset, load one, or rename one. */
+  setPreset(ch: CharacterSave, preset: number, op: 'save' | 'load' | 'rename', name?: string): Result<CharacterSave>;
 
   // --- items & inventory ---
   describeItem(item: Item, ch?: CharacterSave): ItemDescription;
