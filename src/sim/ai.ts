@@ -15,6 +15,7 @@ import {
   SEPARATION_MAX_STEP, SEPARATION_RELAX, SLEEP_RADIUS, WARDED_ALLY_RADIUS,
   ELITE_STRIKE_DAMAGE, ELITE_STRIKE_PERIOD, ELITE_STRIKE_RANGE, ELITE_STRIKE_WINDUP,
 } from './constants';
+import { chillSlowOf } from './passives-state';
 import { resolveProps } from './grid';
 import { DAMAGE_INDEX, TAU } from './math';
 import { spawnArea } from './areas';
@@ -394,7 +395,8 @@ function integrate(w: World, i: number, hunting = false): void {
     }
   }
   let f = 1;
-  if (m.chillTime[i] > 0) f *= 1 - CHILL_SLOW;
+  // A passive player's stronger chill (Frostbound, Absolute Zero) holds while it runs (CHILL_SLOW without one).
+  if (m.chillTime[i] > 0) f *= 1 - chillSlowOf(w, i, CHILL_SLOW);
   if (m.empowerTime[i] > 0) f *= 1 + EMPOWER_BONUS;
   if (m.hasteTime[i] > 0) f *= 1 + HASTE_BONUS;
   if (w.mapEvent && w.mapEvent.monsterSpeed !== 1) f *= w.mapEvent.monsterSpeed;

@@ -30,7 +30,10 @@ export type PassiveRuleId =
   // defence and recovery
   | 'damageTakenTyped' | 'burnOnYouDuration' | 'chilledDealLess' | 'regenPercent' | 'lifePerStr' | 'flaskChargePerKills' | 'flaskGuard'
   | 'focusFlaskLife' | 'flaskDuration' | 'noLifeFlasks' | 'armourBigHits' | 'armourFormula' | 'armourVsElements' | 'evadeChance'
-  | 'evadeCap' | 'wardEffect' | 'damageFromFocus';
+  | 'evadeCap' | 'wardEffect' | 'damageFromFocus'
+  // PT4 (appended): Grounding Rod's "from hits" and Unending Vigil's doubled regeneration below half life, split out of
+  // damageTakenTyped / regenPercent so the sim can tell them apart.
+  | 'damageTakenHits' | 'regenLowLife';
 
 export interface PassiveRule {
   id: PassiveRuleId;
@@ -42,7 +45,7 @@ export interface PassiveRule {
 }
 
 export interface PassiveRuleInfo {
-  /** Whether the game reads this rule yet (false: shown and stored, not applied: a later slice wires it). */
+  /** Whether the game reads this rule (PT4: every rule is live; false would mean shown and stored, not applied). */
   live: boolean;
   /** Which side of the ledger its value counts on (harness: the unmodelled share of a node). */
   side: 'offence' | 'defence' | 'utility';

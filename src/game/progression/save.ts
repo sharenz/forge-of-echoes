@@ -37,7 +37,7 @@ import {
 import { historyCount } from '../items/crafting-history';
 import { sanitizeName, xpToNext } from './character';
 import { clampTier, rarityForDangerCount, sortMapMods } from './maps';
-import { augmentCost, augmentSlots, normalizeLoadout, normalizePresets, skillRank } from './skills';
+import { augmentCost, augmentSlots, normalizeLoadout, normalizePresets, passiveAugmentSlots, skillRank } from './skills';
 import { LEGACY_MAX_SKILL_RANK, migrateSkillsV3 } from './migrate-skills';
 import { normalizeAtlas } from './atlas';
 import { normalizeGuide } from './guide';
@@ -453,7 +453,9 @@ function normalizeBelt(raw: unknown): (BeltSlot | null)[] {
  * Picked augments: known, available, within the tier gate and the slots of the skill's rank, no excluded pair (the first picked
  * wins), in tree order. Returns the augments and the points of the dropped ones (refunded by the caller).
  */
-function normalizeAugments(raw: unknown, skillRanks: Partial<Record<SkillId, number>>): { augments: Partial<Record<SkillId, string[]>>; refund: number } {
+function normalizeAugments(
+  raw: unknown, skillRanks: Partial<Record<SkillId, number>>, bonusSlots: (id: SkillId) => number = () => 0,
+): { augments: Partial<Record<SkillId, string[]>>; refund: number } {
   const r = isObj(raw) ? raw : {};
   const augments: Partial<Record<SkillId, string[]>> = {};
   let refund = 0;
@@ -466,7 +468,7 @@ function normalizeAugments(raw: unknown, skillRanks: Partial<Record<SkillId, num
     for (const aug of def.augmentDefs) {
       if (!list.includes(aug.id)) continue;
       const clash = kept.some((k) => (aug.excludes ?? []).includes(k) || (def.augmentDefs.find((a) => a.id === k)?.excludes ?? []).includes(aug.id));
-      if (!augmentAvailable(aug) || rank < AUGMENT_RULES.tierRank[aug.tier] || clash || kept.length >= augmentSlots(rank)) refund += augmentCost(aug);
+      if (!augmentAvailable(aug) || rank < AUGMENT_RULES.tierRank[aug.tier] || clash || kept.length >= augmentSlots(rank) + bonusSlots(id)) refund += augmentCost(aug);
       else kept.push(aug.id);
     }
     if (kept.length) augments[id] = kept;
@@ -516,9 +518,17 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     if (!playable) rankRefund += rank;
   }
   skillRanks.emberLance = Math.max(1, skillRanks.emberLance);
-  const { augments, refund: augmentRefund } = normalizeAugments(raw.augments, skillRanks);
   const rawLoadout = (Array.isArray(raw.loadout) ? raw.loadout : ['emberLance'])
     .map((s) => ((SKILL_IDS as readonly unknown[]).includes(s) ? (s as SkillId) : null));
+  // The Orrery: Boss Marks (a save from before them is seeded from the account's Atlas when it is part of the data; the server
+  // seeds character rows when it merges the shared storage in), then the allocation within the points earned. Before the augments:
+  // Primary Practice adds a slot to the first loadout skill.
+  const bossMarks = Array.isArray(raw.bossMarks) ? normalizeBossMarks(raw.bossMarks)
+    : isObj(raw.atlas) ? normalizeBossMarks(raw.atlas.bossesSeen) : undefined;
+  const passives = normalizePassives(raw.passives, passivePointsEarned(level, bossMarks?.length ?? 0));
+  const masteries = normalizeMasteries(raw.masteries, passives);
+  const passiveView = { passives, masteries, skillRanks, loadout: normalizeLoadout({ skillRanks, loadout: rawLoadout }) };
+  const { augments, refund: augmentRefund } = normalizeAugments(raw.augments, skillRanks, passives.length ? (sid) => passiveAugmentSlots(passiveView, sid) : undefined);
   const allocatedRaw = isObj(raw.allocated) ? raw.allocated : {};
 
   const prefix = typeof raw.uidNamespace === 'string' && /^[a-z0-9-]{1,36}:$/.test(raw.uidNamespace) ? raw.uidNamespace : '';
@@ -626,12 +636,6 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
   }
 
   const guide = normalizeGuide(raw.guide);
-  // The Orrery: Boss Marks (a save from before them is seeded from the account's Atlas when it is part of the data; the server
-  // seeds character rows when it merges the shared storage in), then the allocation within the points earned.
-  const bossMarks = Array.isArray(raw.bossMarks) ? normalizeBossMarks(raw.bossMarks)
-    : isObj(raw.atlas) ? normalizeBossMarks(raw.atlas.bossesSeen) : undefined;
-  const passives = normalizePassives(raw.passives, passivePointsEarned(level, bossMarks?.length ?? 0));
-  const masteries = normalizeMasteries(raw.masteries, passives);
   const passiveRefunds = intIn(raw.passiveRefunds, 0, 1e6, 0);
   const passiveRespecSpent = intIn(raw.passiveRespecSpent, 0, 1e6, 0);
   const character: CharacterSave = {

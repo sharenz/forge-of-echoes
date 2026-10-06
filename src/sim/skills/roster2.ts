@@ -126,7 +126,7 @@ function tickZone(w: World, p: PlayerState, a: SkillArea): void {
       m.hexWeaken[i] = m.hexTime[i] > 0 ? Math.max(m.hexWeaken[i], z.weaken) : z.weaken;
       m.hexTime[i] = linger;
     }
-    if (z.exposure > 0) for (const t of HEX_TYPES) exposeMonster(w, i, t, z.exposure);
+    if (z.exposure > 0) for (const t of HEX_TYPES) exposeMonster(w, i, t, z.exposure, p.id);
   }
   // Every interval: the tick's damage (or Decay stack) and Withered.
   a.timer -= DT;
@@ -137,7 +137,9 @@ function tickZone(w: World, p: PlayerState, a: SkillArea): void {
     if (!isHittable(w, i)) continue;
     if (z.withered > 0) {
       const live = m.witherTime[i] > 0 ? m.witherStacks[i] : 0;
-      m.witherStacks[i] = Math.min(WITHER.maxStacks, live + z.withered);
+      // Withering Gaze (the Orrery): one more stack fits (the exposure cap still bounds the points: combat.ts monsterResist).
+      const extra = p.stats.passives ? p.stats.passives.witherStacks : 0;
+      m.witherStacks[i] = extra > 0 ? Math.max(live, Math.min(WITHER.maxStacks + extra, live + z.withered)) : Math.min(WITHER.maxStacks, live + z.withered);
       m.witherTime[i] = Math.max(m.witherTime[i], z.linger);
     }
     if (!(def.damage > 0)) continue;
@@ -180,7 +182,7 @@ function erupt(w: World, p: PlayerState, a: SkillArea): void {
     const m = w.monsters;
     for (const id of group) {
       const i = m.slotOf(id);
-      if (i >= 0) exposeMonster(w, i, DT_FIRE, SKILL_TIMING.brandExposure);
+      if (i >= 0) exposeMonster(w, i, DT_FIRE, SKILL_TIMING.brandExposure, p.id);
     }
   }
   const g = augmentOf(def, 'ground');

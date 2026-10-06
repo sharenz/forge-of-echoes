@@ -87,7 +87,7 @@ function onHit(w: World, slot: number, j: number, hit: MonsterHitInfo): boolean 
   const alive = !hit.killed && m.alive[j] === 1 && m.id[j] === hit.id;
   if (alive) {
     const expose = prim(def, 'expose');
-    if (expose) applyExposure(w, j, expose);
+    if (expose) applyExposure(w, j, expose, r.owner);
     const conv = prim(def, 'convert');
     if (conv) convertedHit(w, j, r.owner, dealt, def, conv);
     const ignite = prim(def, 'ignite');

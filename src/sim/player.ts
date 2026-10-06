@@ -21,6 +21,7 @@ import { clamp, dirFromVector, finiteOr } from './math';
 import { CAST_SLOW, combineSlow, playerFlowDrift, playerSlow, readMove, resolvePlayerAt, slowedSpeed } from './movement';
 import { releaseSkill, tickFireTrail, tickPendingNovas, tickPendingStrikes, tickRoster2, tickRoster3, tickSelfBuffs, tickWard } from './skills';
 import { surgeCastRate } from './skills/roster3-state';
+import { passiveFlask, tickPassivePlayer } from './passives';
 import { MFLAG, MSTATE } from './stores';
 import { castCost, noteCast } from './skills/primitives/state';
 import type { FlaskState, PlayerState, SkillChargeState, World } from './world';
@@ -193,8 +194,12 @@ function useFlask(w: World, p: PlayerState, slot: number): void {
   if (p.noFlasks) return;
   const f = p.flasks[slot];
   if (!f || f.count <= 0 || f.active > 0) return;
-  f.count--;
   const rt = f.runtime;
+  // Unending Vigil (the Orrery): Life flasks are refused quietly, like a vow.
+  const pr = p.stats.passives;
+  if (pr && pr.noLifeFlasks && rt.flaskId === 'lifeFlask') return;
+  f.count--;
+  if (pr) passiveFlask(w, p, pr, rt.flaskId);
   const amount = Math.max(0, rt.amount);
   if (rt.duration > 0) {
     f.active = rt.duration;
@@ -351,6 +356,8 @@ export function updatePlayer(w: World, p: PlayerState): void {
   const s = p.stats;
   if (s.lifeRegen > 0) p.life = Math.min(s.maxLife, p.life + s.lifeRegen * DT);
   if (s.focusRegen > 0) p.focus = Math.min(s.maxFocus, p.focus + s.focusRegen * (1 + flaskActiveFx(p, 'quicksilverMind') * FLASK_FX.quicksilverMind.focusRegen) * DT);
+  // The Orrery: Unending Vigil's low-life regeneration, Last Ember's free ward (nothing without passives).
+  if (s.passives) tickPassivePlayer(w, p, DT);
   tickWard(w, p);
   tickSelfBuffs(p);
   updateCasting(w, p);

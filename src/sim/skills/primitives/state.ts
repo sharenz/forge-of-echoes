@@ -155,10 +155,12 @@ export function augmentStatusBits(w: World, i: number): number {
   return bits;
 }
 
-/** The ward's damage reduction cap of player `p` (Hardened Ember raises it), else `fallback`. */
+/** The ward's damage reduction cap of player `p` (Hardened Ember raises it, the Orrery's Barrier Study too), else `fallback`. */
 export function wardCapOf(p: PlayerState, fallback: number): number {
   const s = PLAYERS.get(p);
-  return s && s.wardCap > 0 ? s.wardCap : fallback;
+  const cap = s && s.wardCap > 0 ? s.wardCap : fallback;
+  const pr = p.stats.passives;
+  return pr && pr.wardCap !== 1 ? Math.min(1, cap * pr.wardCap) : cap;
 }
 
 /** Focus a cast of `def` costs at world time `now` (Rift Echo's free third use, Charged Reprieve's discount). */

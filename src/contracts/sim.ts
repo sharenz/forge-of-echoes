@@ -47,6 +47,125 @@ export interface PlayerCombatStats {
   /** Maximum resistance cap in percentage points (default 75, hard ceiling 85). */
   maxResist: number;
   flags: PlayerFlag[];
+  /**
+   * The Orrery's structural rules the sim applies (PT4, docs/power-rework/passive-tree.md), resolved by the rules under the tree's
+   * caps. Absent on a character without passives: every passive hook in the sim is skipped (the determinism goldens are untouched).
+   */
+  passives?: PassiveRuntime;
+}
+
+/**
+ * The live passive rules of one player (src/game/progression/passive-rules.ts builds it; src/sim/passives.ts reads it). Neutral
+ * values: 0 for additions and chances, 1 for multipliers, -1 for "no type". Per-type arrays are in DAMAGE_TYPES order.
+ */
+export interface PassiveRuntime {
+  // --- ailments and exposure you inflict -------------------------------------------------------------------------------------
+  /** Ignites you cause last this fraction longer (Slow Burn 0.5). */
+  igniteDuration: number;
+  /** Ignites you cause deal this many times the damage (Cinder Attunement, Pyre Doctrine). */
+  igniteMore: number;
+  /** Shock effect of your shocks as a fraction (default SHOCK_BONUS 0.2; points and Stormbound's 50% applied). */
+  shockEffect: number;
+  /** Seconds added to your shocks (Overload). */
+  shockDuration: number;
+  /** Movement slow of your chills as a fraction (default CHILL_SLOW 0.3; Frostbound, Static Ice, Absolute Zero applied). */
+  chillSlow: number;
+  /** Enemies chilled by you deal this fraction less damage (Permafrost). */
+  chilledWeaken: number;
+  /** Percentage points added to exposures you apply, per damage type (still capped at EXPOSURE.max). */
+  exposurePoints: readonly number[];
+  /** Seconds added to exposures you apply. */
+  exposureDuration: number;
+  /** Seconds added to Decay you apply; its damage multiplier; stacks added to its cap. */
+  decayDuration: number;
+  decayMore: number;
+  decayStacks: number;
+  /** Withered stacks added to its cap (the 25-point exposure cap still bounds it). */
+  witherStacks: number;
+  // --- conditional hit damage ------------------------------------------------------------------------------------------------
+  /** Per type: `more` damage (fraction) while at least 3 Burning enemies are within 120 of you (Pyroclasm). */
+  moreNearBurning: readonly number[];
+  /** Per type: damage factor − 1 against Burning / Chilled enemies (an `increased` line already turned into a factor). */
+  vsBurning: readonly number[];
+  vsChilled: readonly number[];
+  /** `more` damage against chilled enemies, `less` against the others (Absolute Zero), fractions. */
+  moreVsChilled: number;
+  lessVsUnchilled: number;
+  /** Non-critical hits deal this fraction less (Gambler's Edge). */
+  nonCritLess: number;
+  /** The highest factor the conditional `more` lines may reach together (the tree's ×2.0 and the global MORE_CAP left over). */
+  moreRoom: number;
+  /** Knockback multiplier of your hits (Concussion). */
+  knockback: number;
+  /** Your penetration cap in percentage points (PEN_CAP, Razor Doctrine +15). */
+  penCap: number;
+  /** Pull strength multiplier of your pulls (Gravity's Grip). */
+  pullMore: number;
+  // --- conversion (power-curve.md 3.2: converted damage resists on its own type) ----------------------------------------------
+  /** Per source type: the type a share of the hit converts to (-1 = none) and that share. */
+  convertTo: readonly number[];
+  convertShare: readonly number[];
+  /** Every hit becomes this type (Pyre Doctrine: fire), -1 = none. */
+  convertAll: number;
+  // --- triggers ----------------------------------------------------------------------------------------------------------------
+  /** Ignited enemies that die ignite this many enemies within 100 (Wildfire). */
+  igniteSpread: number;
+  /** Fire kills: chance and damage of a burst in `fireBurstRadius` (Cinder Attunement c). */
+  fireBurstChance: number;
+  fireBurstDamage: number;
+  fireBurstRadius: number;
+  /** Killing a chilled enemy: chance and damage of a cold nova in `shatterRadius` (Shatterpoint). */
+  shatterChance: number;
+  shatterDamage: number;
+  shatterRadius: number;
+  /** Enemies killed while Decayed explode for this share of their maximum life as void (Last Whisper). */
+  decayedExplode: number;
+  /** Below this share of life, Cinder Ward is cast for free (`lowLifeWardDef`), once per `lowLifeWardCooldown` s (Last Ember). */
+  lowLifeWard: number;
+  lowLifeWardCooldown: number;
+  lowLifeWardDef: SkillRuntimeDef | null;
+  /** Every `pulseKills` kills restore `pulseLife` × maximum life (Pulse of Life); 0 = none. */
+  pulseKills: number;
+  pulseLife: number;
+  /** Focus restored by a fire kill (Ember Reservoir) / by killing a shocked enemy (Surge of Static). */
+  focusOnFireKill: number;
+  focusOnShockedKill: number;
+  /** Share of void damage dealt restored as Focus, at most `focusLeechMax` per second (Soul Tithe). */
+  focusLeech: number;
+  focusLeechMax: number;
+  /** Every damaging skill echoes after `echoDelay` s at `echoAll` × the hit (Echo Cascade; 0 = none); echoes deal × `echoMore`. */
+  echoAll: number;
+  echoDelay: number;
+  echoMore: number;
+  // --- defence and recovery ----------------------------------------------------------------------------------------------------
+  /** Per type: damage taken multiplier from hits / from damage over time (Scorch Ward, Grounding Rod). */
+  takenHit: readonly number[];
+  takenDot: readonly number[];
+  /** The lowest the passive damage-taken factors may bring damage taken (the tree's ×0.75 floor left over). */
+  takenFloor: number;
+  /** Burning on you lasts this many times as long (Scorch Ward 0.6). */
+  burnOnYou: number;
+  /** Extra regeneration (share of maximum life per second) while below half life (Unending Vigil). */
+  regenLowLife: number;
+  /** A Life flask also gives `flaskGuard` less damage taken for `flaskGuardTime` s (Bloodied Resolve). */
+  flaskGuard: number;
+  flaskGuardTime: number;
+  /** A Focus flask also restores this share of maximum life (Rejuvenating Surge). */
+  focusFlaskLife: number;
+  /** Life flasks cannot be used (Unending Vigil). */
+  noLifeFlasks: boolean;
+  /** Armour is `armourBigHits` more effective against hits above 20% of your life (Brace). */
+  armourBigHits: number;
+  /** The armour formula's damage factor (10; Heavy Plate 8). */
+  armourPerDamage: number;
+  /** Armour applies to elemental hits at this effectiveness (Eternal Bastion 0.5). */
+  armourVsElements: number;
+  /** The evade chance cap (EVASION_CAP; Phantom Weave +10 points). */
+  evadeCap: number;
+  /** The ward's damage reduction cap multiplier (Barrier Study ×1.1: 60% → 66%). */
+  wardCap: number;
+  /** Share of damage taken drawn from Focus first (Iron Mind). */
+  damageFromFocus: number;
 }
 
 /** Fully resolved skill numbers (player modifiers already applied by the rules). */

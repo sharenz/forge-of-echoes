@@ -2,7 +2,7 @@
 // formula of the game (src/core/modifiers). Attributes resolve first (base + class growth + allocated
 // points + gear); per-level and per-attribute rules then become ordinary labelled modifiers, so every
 // number on the character sheet and every skill number can be broken down by source.
-import type { Attribute, DamageType, EquipSlot, PlayerFlag } from '../../contracts/content';
+import type { Attribute, DamageType, EquipSlot, PlayerFlag, SkillId } from '../../contracts/content';
 import { ATTRIBUTES, EQUIP_SLOTS } from '../../contracts/content';
 import type { CharacterSave, StatBreakdown, StatId, StatModifier } from '../../contracts/items';
 import { resolveStatBreakdown } from '../../core/modifiers';
@@ -10,7 +10,9 @@ import { PEN_CAP, SORCERESS, STAT_CAPS } from '../../data/progression';
 import type { ClassDef } from '../../data/progression';
 import { STAT_LABEL } from '../../data/items';
 import { itemFlags, itemModifiers } from '../items';
+import { ORRERY_CAPS } from '../../data/progression/passives';
 import { passiveModifiers } from './passives';
+import { passiveTotalsOf, type PassiveTotals } from './passive-rules';
 
 /** Stats whose value is a percentage resolved against a base of 100 (value − 100 = total % increase). */
 export const PERCENT_STATS: ReadonlySet<StatId> = new Set<StatId>([
@@ -28,6 +30,12 @@ export interface PlayerModel {
   /** Every non-attribute modifier: level rules, attribute rules, gear, and any extra (map) modifiers. */
   mods: StatModifier[];
   flags: PlayerFlag[];
+  /** The Orrery's live structural rules (PT4); null without passives (then nothing below changes). */
+  passives: PassiveTotals | null;
+  /** The skill in the first loadout slot (Primary Practice's slot, the other skills' price); null when empty. */
+  primarySkill: SkillId | null;
+  /** Cinder Ward's rank (at least 1) and augments: Last Ember casts it. */
+  wardSkill: { rank: number; augments: readonly string[] };
   /** Resolve a stat against a base (defaults: class base, 100 for percent stats, 1 for damage taken). */
   breakdown(stat: StatId, base?: number): StatBreakdown;
   /** Σ of one mode for a stat (e.g. total % increased). */
@@ -111,6 +119,15 @@ export function buildPlayerModel(
   }
   mods.push(...all.filter((m) => !isAttr(m)));
 
+  // Hardy (the Orrery): 1% increased maximum Life per N Strength, within what the tree's life cap leaves.
+  const passives = passiveTotalsOf(ch);
+  const per = passives?.min('lifePerStr') ?? 0;
+  if (passives && per > 0) {
+    const room = Math.max(0, ORRERY_CAPS.maxLife - passiveModifiers(ch).filter((m) => m.stat === 'maxLife' && m.mode === 'increased').reduce((t, m) => t + m.value, 0));
+    const value = Math.min(room, Math.floor(attributes.str / per));
+    if (value > 0) mods.push({ stat: 'maxLife', mode: 'increased', value, source: passives.of('lifePerStr')[0]?.source ?? 'Orrery' });
+  }
+
   const flags: PlayerFlag[] = [];
   for (const item of items) for (const f of itemFlags(item)) if (!flags.includes(f)) flags.push(f);
 
@@ -123,6 +140,9 @@ export function buildPlayerModel(
     attributeBreakdowns,
     mods,
     flags,
+    passives,
+    primarySkill: ch.loadout?.[0] ?? null,
+    wardSkill: { rank: Math.max(1, Math.floor(ch.skillRanks?.cinderWard ?? 0)), augments: ch.augments?.cinderWard ?? [] },
     breakdown(stat, base) {
       const b = base ?? baseStat(cls, stat);
       const key = `${stat}:${b}`;
@@ -159,14 +179,19 @@ export interface Penetration {
   sources: StatModifier[];
 }
 
-/** Penetration of one damage type: Σ flat sources, capped at PEN_CAP (power-curve.md 4.1). */
+/** The penetration cap of a player in percentage points: PEN_CAP, plus Razor Doctrine's +15 (passive-tree.md 3.4). */
+export function penCapOf(model: PlayerModel): number {
+  return PEN_CAP + Math.max(0, model.passives?.sum('penCap') ?? 0);
+}
+
+/** Penetration of one damage type: Σ flat sources, capped at the player's penetration cap (PEN_CAP; power-curve.md 4.1). */
 export function penetrationOf(model: PlayerModel, type: DamageType): Penetration {
   const stats: StatId[] = [PEN_STAT[type]];
   if (type === 'fire' || type === 'cold' || type === 'lightning') stats.push('elementalPen');
   const sources = model.of(...stats);
   let uncapped = 0;
   for (const m of sources) if (m.mode === 'flat') uncapped += m.value;
-  return { value: Math.min(PEN_CAP, Math.max(0, uncapped)), uncapped, sources };
+  return { value: Math.min(penCapOf(model), Math.max(0, uncapped)), uncapped, sources };
 }
 
 /** The player's resistance cap in percentage points: the class cap plus Maximum Resistances, at most the hard ceiling. */

@@ -18,6 +18,7 @@ import {
 import { createMapItem } from './maps';
 import { normalizePresets } from './skills';
 import { normalizeBossMarks, seedBossMarks } from './passives';
+import { passiveTotalsOf } from './passive-rules';
 import { BOSS_MARK_KINDS } from '../../data/progression/passives';
 import { fail, ok } from './util';
 
@@ -210,6 +211,8 @@ export function createCharacter(name: string, seed: number): CharacterSave {
 
 /** Belt slot runtime for the sim: charges, resource, total recovery (flask effect applied), duration. */
 export function flaskRuntimes(ch: CharacterSave, flaskEffect: number): (FlaskRuntime | null)[] {
+  // Rejuvenating Surge (the Orrery): flasks last longer (the same recovery over a longer time).
+  const longer = 1 + (passiveTotalsOf(ch)?.sum('flaskDuration') ?? 0) / 100;
   return beltSlots(ch).map((slot) => {
     if (!slot) return null;
     const def = getFlask(slot.flaskId);
@@ -218,7 +221,7 @@ export function flaskRuntimes(ch: CharacterSave, flaskEffect: number): (FlaskRun
       count: Math.max(0, Math.floor(slot.count)),
       resource: def.resource,
       amount: flaskRecovery(slot.flaskId, ch.level, flaskEffect),
-      duration: def.duration,
+      duration: def.duration * longer,
     };
   });
 }

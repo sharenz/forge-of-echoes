@@ -15,7 +15,7 @@ import type { CharacterSave } from '../../contracts/items';
 import { LOADOUT_KEYS, LOADOUT_PRESETS, LOADOUT_SLOTS } from '../../contracts/items';
 import { RESPEC } from '../../data/progression';
 import { currencyOnHand } from '../../game/progression/merchant';
-import { normalizePresets } from '../../game/progression/skills';
+import { normalizePresets, passiveAugmentSlots } from '../../game/progression/skills';
 import { Keycap, PixelIcon, cx } from '../components/common';
 import { safe } from '../items/hooks';
 import { useLocal, type Local } from '../local';
@@ -362,7 +362,7 @@ export function SkillsPanel() {
   // --- the selected skill ---------------------------------------------------------------------------------------------
   const r = rank(sel);
   const picked = ch.augments?.[sel] ?? [];
-  const graph = augmentGraph(info, r, picked, points);
+  const graph = augmentGraph(info, r, picked, points, safe(() => passiveAugmentSlots(ch, sel), 0));
   const sheet = safe(() => store.rules.skillSheet(ch, sel), null);
   const nextSheet = r > 0 && r < info.maxRank ? safe(() => store.rules.skillSheet(ch, sel, r + 1), null) : null;
   const rankDeltas = sheet && nextSheet ? sheetDeltas(sheet, nextSheet) : [];

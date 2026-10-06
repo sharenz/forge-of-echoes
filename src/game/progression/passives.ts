@@ -366,18 +366,23 @@ export function resolvePassives(ids: readonly string[] = [], masteries: Partial<
   return { nodes, mods, rules, caps };
 }
 
-const MODS_CACHE = new WeakMap<readonly string[], { masteries: CharacterSave['masteries']; mods: StatModifier[] }>();
+const RESOLVED_CACHE = new WeakMap<readonly string[], { masteries: CharacterSave['masteries']; resolved: ResolvedPassives }>();
 const EMPTY: StatModifier[] = [];
+
+/** The resolved allocation of a character (memoised per allocation array); null when nothing is allocated. */
+export function resolvedPassivesOf(ch: Pick<CharacterSave, 'passives' | 'masteries'>): ResolvedPassives | null {
+  const ids = ch.passives;
+  if (!ids || ids.length === 0) return null;
+  const hit = RESOLVED_CACHE.get(ids);
+  if (hit && hit.masteries === ch.masteries) return hit.resolved;
+  const resolved = resolvePassives(ids, ch.masteries ?? {});
+  RESOLVED_CACHE.set(ids, { masteries: ch.masteries, resolved });
+  return resolved;
+}
 
 /** The Orrery's stat lines for the player model (memoised per allocation array; [] when nothing is allocated). */
 export function passiveModifiers(ch: Pick<CharacterSave, 'passives' | 'masteries'>): StatModifier[] {
-  const ids = ch.passives;
-  if (!ids || ids.length === 0) return EMPTY;
-  const hit = MODS_CACHE.get(ids);
-  if (hit && hit.masteries === ch.masteries) return hit.mods;
-  const mods = resolvePassives(ids, ch.masteries ?? {}).mods;
-  MODS_CACHE.set(ids, { masteries: ch.masteries, mods });
-  return mods;
+  return resolvedPassivesOf(ch)?.mods ?? EMPTY;
 }
 
 /** Sort ids into canonical order (allocation lists are stored this way). */

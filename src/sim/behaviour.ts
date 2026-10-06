@@ -7,6 +7,7 @@ import { coverBlocked, insideCover } from './cover';
 import { ATTACKER_IMMUNITY, DT, EMPOWER_BONUS, PLAYER_RADIUS, PROJECTILE_SCALING } from './constants';
 import { TAU } from './math';
 import { projSpec, spawnProjectile } from './projectiles';
+import { chillWeakenOf } from './passives-state';
 import { MSTATE } from './stores';
 import type { PlayerState, World } from './world';
 
@@ -36,8 +37,9 @@ export function faceTarget(w: World, i: number, t: PlayerState | null): void {
 export function empowerMult(w: World, i: number): number {
   const m = w.monsters;
   const f = m.empowerTime[i] > 0 ? 1 + EMPOWER_BONUS : 1;
-  // Inside an Entropy Hex (power rework SK3) it deals less damage.
-  return m.hexTime[i] > 0 ? f * (1 - m.hexWeaken[i]) : f;
+  // Inside an Entropy Hex (power rework SK3) it deals less damage; chilled by a player with Permafrost too (×1 without it).
+  const g = m.hexTime[i] > 0 ? f * (1 - m.hexWeaken[i]) : f;
+  return m.chillTime[i] > 0 ? g * chillWeakenOf(w, i) : g;
 }
 
 /**

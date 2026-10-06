@@ -32,6 +32,8 @@ import { spendCurrency } from './merchant';
 import { clamp, fail, oneDecimal, ok, percent, rankValue, resolveModes, seconds } from './util';
 import { roster2Dot, roster2HitCounts, roster2Lines, roster2Runtimes } from './skills-roster2';
 import { roster3HitCounts, roster3Lines } from './skills-roster3';
+import { passiveTotalsOf } from './passive-rules';
+import { ORRERY_CAPS } from '../../data/progression/passives';
 
 // ---------------------------------------------------------------------------------------------
 // Content info
@@ -182,14 +184,28 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const shapeEffect = effects.find((e): e is Extract<AugmentEffect, { k: 'shape' }> => e.k === 'shape');
   if (shapeEffect?.shape === 'circle' && !flags.includes('circle')) flags.push('circle');
 
-  const type = skillId === 'cinderWard' && flags.includes('cold') ? 'cold' : def.runtimeDamageType;
+  const ownType = skillId === 'cinderWard' && flags.includes('cold') ? 'cold' : def.runtimeDamageType;
+  // The Orrery (PT4): Pyre Doctrine makes every skill fire; it keeps the modifiers of the type it came from (power-curve.md 3.2).
+  const pas = model.passives;
+  const allTo = pas?.of('convertAll')[0]?.to ?? (pas?.has('convertAll') ? 'fire' : null);
+  const type: DamageType = allTo ?? ownType;
 
   // Damage. A converted skill (SK5: Frostfire Core, Inverted Heat, Void Convert) takes both types' modifiers (power-curve.md 3.2).
+  // Under Pyre Doctrine an augment's conversion to another type is dropped ("you cannot deal other damage types").
   const effectiveness = rv(def.effectiveness);
-  const convert = effects.find((e): e is Extract<AugmentEffect, { k: 'convert' }> => e.k === 'convert');
-  const damageMods = model.of(...(convert ? damageStatsFor(convert.to, def.tags, [type]) : damageStatsFor(type, def.tags)));
+  const augConvert = effects.find((e): e is Extract<AugmentEffect, { k: 'convert' }> => e.k === 'convert');
+  const convert = augConvert && (!allTo || augConvert.to === allTo) ? augConvert : undefined;
+  // Frostfire Gate, Rift Spark: a share of the skill's type converts (the sim splits every such hit); it joins an augment's
+  // conversion to the same type (Frostfire Gate then Frostfire Spiral: 15% + 40% = 55%), never one to another type.
+  const pasConvert = !allTo && pas ? pas.of('convert').find((r) => r.type === type && r.to && (!convert || convert.to === r.to)) : undefined;
+  const pasShare = pasConvert ? pas!.sum('convert', type) / 100 : 0;
+  const convertTo: DamageType | null = convert ? convert.to : pasConvert?.to ?? null;
+  const fromTypes: DamageType[] = allTo && ownType !== allTo ? [ownType] : [];
+  const damageMods = model.of(...(convertTo ? damageStatsFor(convertTo, def.tags, [type, ...fromTypes]) : damageStatsFor(type, def.tags, fromTypes)));
   const increased = damageMods.filter((m) => m.mode === 'increased').reduce((s, m) => s + m.value, 0);
   let moreRaw = damageMods.filter((m) => m.mode === 'more').reduce((p, m) => p * (1 + m.value / 100), 1);
+  // Primary Practice: the skills other than the first loadout skill deal less.
+  if (pas && pas.has('otherSkillsLess') && skillId !== model.primarySkill) moreRaw *= pas.less('otherSkillsLess');
   let augmentMore = 1;
   for (const e of effects) {
     if (e.k !== 'more') continue;
@@ -209,11 +225,15 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const baseCast = augmented(effects, 'castTime', def.castTime);
   const castTime = baseCast > 0 ? baseCast / castSpeed : 0;
   const baseCooldown = augmented(effects, 'cooldown', rv(def.cooldown));
-  const cooldown = baseCooldown > 0 ? baseCooldown / cdr : 0;
+  // Wanderer's Stride: Phase Stride and Rift Step recover faster.
+  const blink = pas && (skillId === 'phaseStride' || skillId === 'riftStep') ? 1 + pas.sum('blinkRecovery') / 100 : 1;
+  const cooldown = baseCooldown > 0 ? baseCooldown / cdr / blink : 0;
 
   // Crit & ailments (non-damaging skills never crit)
   const critChance = damage > 0 ? clamp(resolveStat(def.critChance, model.of('critChance')) / 100, 0, 1) : 0;
-  const critMultiplier = clamp(model.breakdown('critMultiplier').value / 100, 1, STAT_CAPS.critMultiplier / 100);
+  // Storm Attunement (c): more crit multiplier for skills of a type.
+  const critTyped = pas ? pas.of('critMultiplierTyped').filter((r) => r.type === type).reduce((t, r) => t + r.value, 0) : 0;
+  const critMultiplier = clamp((model.breakdown('critMultiplier').value + critTyped) / 100, 1, STAT_CAPS.critMultiplier / 100);
   const ailmentStat = AILMENT_STAT[type];
   const alwaysAilment = (skillId === 'emberLance' && flags.includes('alwaysIgnite'))
     || (skillId === 'cinderWard' && flags.includes('cold')) || effects.some((e) => e.k === 'alwaysAilment');
@@ -228,7 +248,9 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const extraPierce = projectileSkill ? clamp(Math.round(model.breakdown('pierce', 0).value), 0, STAT_CAPS.pierce) : 0;
   const extraChains = def.shape === 'chain' ? Math.max(0, Math.round(model.breakdown('extraChains', 0).value)) : 0;
   const projSpeedMult = Math.max(0.1, model.breakdown('projectileSpeed').value / 100);
-  const areaRadiusMult = Math.sqrt(clamp(model.breakdown('area').value / 100, 0.1, 1 + STAT_CAPS.area / 100));
+  // Tempest Reach: more area for skills of a type.
+  const areaTyped = pas ? pas.of('areaTyped').filter((r) => r.type === type).reduce((t, r) => t + r.value, 0) : 0;
+  const areaRadiusMult = Math.sqrt(clamp((model.breakdown('area').value + areaTyped) / 100, 0.1, 1 + STAT_CAPS.area / 100));
   const durationMult = Math.max(0.1, model.breakdown('duration').value / 100);
 
   if (damage > 0 && def.shape !== 'ward' && model.flags.includes('closeQuarters'))
@@ -257,11 +279,15 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const fanArc = shapeEffect?.shape === 'fan' ? (shapeEffect.arc ?? UNIQUE_FAN_ARC) : null;
   if (fanArc !== null) runtimeAugments.push({ p: 'fan', arc: fanArc });
   const echoEffect = effects.find((e): e is Extract<AugmentEffect, { k: 'echo' }> => e.k === 'echo');
-  const echo = Math.max(flags.includes('echo') ? 1 : 0, echoEffect ? echoEffect.damage / 100 : 0);
+  // Echo Cascade echoes every damaging skill but a buff or a blink; Reservoir of Echoes makes every echo stronger (the sim: executor.ts).
+  const cascade = pas && damage > 0 && def.shape !== 'buff' && def.shape !== 'dash' ? pas.max('echoAll') / 100 : 0;
+  const echo = Math.max(flags.includes('echo') ? 1 : 0, echoEffect ? echoEffect.damage / 100 : 0, cascade) * (pas && damage > 0 ? pas.product('echoDamage') : 1);
   if (echoEffect) runtimeAugments.push({ p: 'echo', delay: echoEffect.delay, damage: echo });
   for (const e of effects) if (e.k === 'invulnerable') runtimeAugments.push({ p: 'invulnerable', seconds: e.seconds });
   const runtimeRadius = def.areaScales === 'radius' ? radius * areaRadiusMult : radius;
-  const runtimeDuration = baseDuration * (baseDuration > 0 ? durationMult : 1);
+  // Winter's Patience: cold zones and orbs (cold Duration skills that are not buffs) last longer.
+  const zoneMore = pas && def.tags.includes('Duration') && def.shape !== 'buff' ? 1 + pas.of('zoneDuration').filter((r) => r.type === type).reduce((t, r) => t + r.value, 0) / 100 : 1;
+  const runtimeDuration = baseDuration * (baseDuration > 0 ? durationMult : 1) * zoneMore;
   runtimeAugments.push(...primitiveRuntimes(def, effects, damage, effectiveness, runtimeRadius, runtimeDuration));
   // Roster batch 2 (SK3): zones, barrier, aegis, echo buff; `power` is the damage per point of effectiveness.
   runtimeAugments.push(...roster2Runtimes(def, effects, rank, Math.max(0, basePower * Math.max(0, 1 + increased / 100) * moreMultiplier)));
@@ -275,7 +301,8 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   for (const e of effects) {
     if (e.k === 'rt') runtimeAugments.push(e.rt);
     else if (e.k === 'convert') {
-      runtimeAugments.push({ p: 'convert', to: e.to, share: e.pct / 100, ailment: e.ailment, ...(e.decay !== undefined ? { decay: e.decay } : {}) });
+      if (e !== convert) continue;
+      runtimeAugments.push({ p: 'convert', to: e.to, share: Math.min(1, e.pct / 100 + pasShare), ailment: e.ailment, ...(e.decay !== undefined ? { decay: e.decay } : {}) });
     } else if (e.k === 'blast') {
       const t = e.damageType ?? type;
       runtimeAugments.push({ p: 'blast', at: e.at, delay: e.delay, damage: damageFor(t, e.effectiveness), radius: e.radius, damageType: t, ailment: e.ailment });
@@ -293,10 +320,13 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
       : flags.includes('circle') ? Math.PI * 2 * (projectiles - 1) / projectiles
         : fanSpread(def, augmented(effects, 'spread', def.spread), projectiles);
 
+  if (pas) passiveRuntimes(pas, runtimeAugments);
+
   const runtime: SkillRuntimeDef = {
     id: def.id,
     rank,
-    focusCost: Math.max(0, augmented(effects, 'focusCost', def.focusCost)),
+    // Stormbound, Razor Doctrine, Echo Cascade: skills cost more Focus.
+    focusCost: Math.max(0, augmented(effects, 'focusCost', def.focusCost)) * (pas ? pas.product('focusCost') : 1),
     castTime,
     cooldown,
     charges: Math.max(1, Math.floor(augmented(effects, 'charges', rv(def.charges)))),
@@ -308,13 +338,15 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
     projectiles,
     pierce: rings ? 0 : projectileSkill ? rv(def.pierce) + augPierce + extraPierce : rv(def.pierce) + augPierce,
     projectileSpeed: projectileSkill ? augmented(effects, 'projectileSpeed', def.projectileSpeed) * projSpeedMult : def.projectileSpeed,
-    range: def.areaScales === 'range' ? range * areaRadiusMult : range,
+    // Wanderer's Stride: less projectile range.
+    range: (def.areaScales === 'range' ? range * areaRadiusMult : range) * (pas && projectileSkill ? pas.less('rangeLess') : 1),
     spread,
     radius: runtimeRadius,
     duration: runtimeDuration,
     chains: def.shape === 'chain' ? Math.min(STAT_CAPS.chains, baseChains + extraChains) : baseChains,
     distance: augmented(effects, 'distance', rv(def.distance)),
-    damageReduction: Math.min(augmented(effects, 'damageReductionCap', def.damageReductionCap ?? 1), rv(def.damageReduction)),
+    // Barrier Study: wards are stronger (the sim raises the ward's cap with it).
+    damageReduction: Math.min(augmented(effects, 'damageReductionCap', def.damageReductionCap ?? 1), rv(def.damageReduction) * (pas ? 1 + pas.sum('wardEffect') / 100 : 1)),
     flags,
     ...(runtimeAugments.length ? { augments: runtimeAugments } : {}),
   };
@@ -374,6 +406,24 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
     def, runtime, effectiveness, basePower, added, increased, moreMultiplier, moreCapped: moreRaw > MORE_CAP, penetration, interval, dps, hits, perCast, focusRegen,
     focusSustain, sustainedDps, flagTexts, augments, echo, singleTargetHits,
   };
+}
+
+/**
+ * The Orrery's changes to a skill's behaviour primitives (PT4): Gravity's Grip's stronger pulls, Barrier Study's stronger barrier,
+ * Winter's Patience's longer cold ground. In place on the runtime list.
+ */
+function passiveRuntimes(pas: NonNullable<PlayerModel['passives']>, list: AugmentRuntime[]): void {
+  const pull = 1 + pas.sum('pullEffect') / 100;
+  const ward = 1 + pas.sum('wardEffect') / 100;
+  for (let k = 0; k < list.length; k++) {
+    const a = list[k];
+    if (a.p === 'zone' && a.pull > 0 && pull !== 1) list[k] = { ...a, pull: a.pull * pull };
+    else if (a.p === 'barrier' && ward !== 1) list[k] = { ...a, share: a.share * ward };
+    else if (a.p === 'trail') {
+      const longer = pas.of('zoneDuration').filter((r) => r.type === a.damageType).reduce((t, r) => t + r.value, 0);
+      if (longer > 0) list[k] = { ...a, duration: a.duration * (1 + longer / 100) };
+    }
+  }
 }
 
 /** Sum of the picked augments' `tune` effects on one behaviour number. */
@@ -519,6 +569,42 @@ export function augmentSlots(rank: number): number {
   return clamp(Math.floor(Math.max(0, rank) / AUGMENT_RULES.ranksPerSlot), 0, AUGMENT_RULES.maxSlots);
 }
 
+/**
+ * Augment slots added to a skill by the Orrery (Primary Practice: +1 to the skill in the first loadout slot, at most
+ * ORRERY_CAPS.augmentSlots). 0 for every other skill and for a character without the node.
+ */
+export function passiveAugmentSlots(ch: Pick<CharacterSave, 'passives' | 'masteries' | 'loadout' | 'skillRanks'>, id: SkillId): number {
+  const t = passiveTotalsOf(ch);
+  if (!t || !t.has('augmentSlot')) return 0;
+  if (normalizeLoadout(ch)[0] !== id) return 0;
+  return Math.max(0, Math.min(ORRERY_CAPS.augmentSlots, Math.floor(t.sum('augmentSlot') + 1e-9)));
+}
+
+/** Augment slots of a skill for a character: its rank's slots plus the Orrery's. */
+export function augmentSlotsFor(ch: Pick<CharacterSave, 'passives' | 'masteries' | 'loadout' | 'skillRanks'>, id: SkillId): number {
+  return augmentSlots(skillRank(ch, id)) + passiveAugmentSlots(ch, id);
+}
+
+/**
+ * Drop (and refund) augments beyond a skill's slots: after a change that takes a slot away (refunding Primary Practice, moving
+ * another skill into the first loadout slot). The last picked, in tree order, go first. Unchanged when nothing is over.
+ */
+export function trimAugments(ch: CharacterSave): CharacterSave {
+  let next: CharacterSave | null = null;
+  for (const id of SKILL_IDS) {
+    const picked = skillAugments(ch, id);
+    if (!picked.length) continue;
+    const slots = augmentSlotsFor(ch, id);
+    if (picked.length <= slots) continue;
+    const def = getSkill(id);
+    const kept = picked.slice(0, slots);
+    const refund = picked.slice(slots).reduce((t, a) => t + augmentCost(def.augmentDefs.find((d) => d.id === a) ?? { tier: 1 }), 0);
+    const base: CharacterSave = next ?? ch;
+    next = { ...base, augments: { ...(base.augments ?? {}), [id]: kept }, unspentSkillPoints: base.unspentSkillPoints + refund };
+  }
+  return next ?? ch;
+}
+
 /** Points held in one skill: its ranks (Ember Lance's innate first rank is free) and its augments. */
 export function pointsInSkill(ch: Pick<CharacterSave, 'skillRanks' | 'augments'>, id: SkillId): number {
   const def = findSkill(id);
@@ -612,9 +698,13 @@ export function canPickAugment(ch: CharacterSave, skillId: SkillId, augmentId: s
       return { ok: false, reason: `${aug.name} cannot be combined with ${other.name}.` };
     }
   }
-  const slots = augmentSlots(rank);
+  const bonus = passiveAugmentSlots(ch, skillId);
+  const slots = augmentSlots(rank) + bonus;
   if (picked.length >= slots) {
-    return { ok: false, reason: `${def.name} has ${slots} augment slot${slots === 1 ? '' : 's'} at rank ${rank}: one more every 2 ranks.` };
+    return {
+      ok: false,
+      reason: `${def.name} has ${slots} augment slot${slots === 1 ? '' : 's'} at rank ${rank}: one more every 2 ranks${bonus ? ` (${bonus} from the Orrery)` : ''}.`,
+    };
   }
   const cost = augmentCost(aug);
   if ((ch.unspentSkillPoints ?? 0) < cost) return { ok: false, reason: `${aug.name} costs ${cost} skill point${cost === 1 ? '' : 's'}.` };

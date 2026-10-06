@@ -53,3 +53,19 @@ export const STAT_CAPS = {
   /** The `damageTaken` product from passives and ward never goes below this (reserved for the passive tree). */
   damageTakenFloor: 0.6,
 } as const;
+
+/**
+ * The base strengths the Orrery's ailment and ward rules build on (PT4). Mirrors of the sim's own constants (src/sim/constants.ts:
+ * SHOCK_BONUS, CHILL_SLOW, WARD_REDUCTION_CAP, EVASION_CAP; tests/sim/passive-rules.test.ts keeps them equal), because the rules
+ * may not import the sim.
+ */
+export const AILMENT_BASE = {
+  /** Shocked monsters take this much more damage (fraction). */
+  shockEffect: 0.2,
+  /** Chilled monsters move this much slower (fraction). */
+  chillSlow: 0.3,
+  /** Cinder Ward's damage reduction cap (fraction). */
+  wardCap: 0.6,
+  /** The evade chance cap (fraction). */
+  evadeCap: 0.75,
+} as const;
