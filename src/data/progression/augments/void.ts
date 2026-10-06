@@ -29,4 +29,59 @@ export const VOID_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'planned', primitive: 'summon', note: 'landing buff' }],
     },
   ],
+  umbralBolt: [
+    {
+      id: 'witheringTouch', name: 'Withering Touch', tier: 1, text: 'Decay is 50% stronger',
+      effects: [{ k: 'tune', key: 'decayPct', add: 50 }],
+    },
+    {
+      id: 'hollowShell', name: 'Hollow Shell', tier: 1, text: 'Pierces every enemy; hits after the first deal 25% less damage',
+      excludes: ['soulbindLodge', 'gravitySeed'], effects: [{ k: 'planned', primitive: 'rehit', note: 'pierce falloff' }],
+    },
+    {
+      id: 'gravitySeed', name: 'Gravity Seed', tier: 2,
+      text: 'Stops at its range or the first wall and collapses: pulls enemies within 60 units in, then bursts for 100%',
+      excludes: ['hollowShell'], effects: [{ k: 'planned', primitive: 'pull' }],
+    },
+    {
+      id: 'entropicSplit', name: 'Entropic Split', tier: 2, text: 'On hit splits into 2 bolts at ±25°, each dealing 60% damage',
+      excludes: ['soulbindLodge'], effects: [{ k: 'planned', primitive: 'split' }],
+    },
+    {
+      id: 'voidExposure', name: 'Void Exposure', tier: 3, text: 'Hits expose Void −20 pp and every element −8 pp for 4 seconds; 15% less damage',
+      effects: [{ k: 'planned', primitive: 'expose' }],
+    },
+    {
+      id: 'soulbindLodge', name: 'Soulbind Lodge', tier: 3,
+      text: 'The bolt lodges for 2 seconds and detonates on the timer or the death of its host for 300% in a radius of 70',
+      excludes: ['hollowShell', 'entropicSplit'], effects: [{ k: 'planned', primitive: 'lodge' }],
+    },
+  ],
+  kineticLance: [
+    {
+      id: 'ricochet', name: 'Ricochet', tier: 1, text: 'Rebounds off walls up to twice; 20% less damage',
+      effects: [{ k: 'tune', key: 'bounces', add: 2 }, { k: 'more', pct: -20 }],
+    },
+    {
+      id: 'heavyImpact', name: 'Heavy Impact', tier: 1, text: 'Knockback ×3; an enemy pushed into a prop or wall takes 40% of the hit',
+      effects: [{ k: 'planned', primitive: 'knockback' }],
+    },
+    {
+      id: 'shatterRounds', name: 'Shatter Rounds', tier: 2,
+      text: 'Kills explode for 12% of the dead enemy’s maximum life as physical damage in a radius of 40 (at most 3 deep)',
+      effects: [{ k: 'planned', primitive: 'onKill' }],
+    },
+    {
+      id: 'armourPiercing', name: 'Armour Piercing', tier: 2, text: 'Ignores the hit reduction of armoured enemies; +10 physical penetration',
+      effects: [{ k: 'planned', primitive: 'cap', note: 'armour piercing' }],
+    },
+    {
+      id: 'voidConvert', name: 'Void Convert', tier: 3, text: '50% of Physical damage is converted to Void; hits apply Decay',
+      effects: [{ k: 'planned', primitive: 'convert' }],
+    },
+    {
+      id: 'pinning', name: 'Pinning', tier: 3, text: 'Hits slow by 25% for 2 seconds and make the target take 10% more damage',
+      effects: [{ k: 'planned', primitive: 'mark' }],
+    },
+  ],
 };

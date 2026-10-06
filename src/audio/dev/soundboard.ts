@@ -56,6 +56,10 @@ const GROUPS: { key: SfxGroup[]; title: string; accent: string; ids: SfxId[] }[]
   {
     key: ['ui', 'flow'], title: 'Atlas and surge', accent: 'var(--gold)',
     ids: ['atlasOpen', 'atlasHover', 'atlasSelect', 'atlasRoute', 'atlasReveal', 'atlasSeal', 'atlasZoom', 'atlasPin', 'atlasUnpin', 'surgeSpend', 'surgeRefill'],
+  },  {
+    key: ['skill', 'combat'], title: 'Roster batch 1 (SK2)', accent: 'var(--mana)',
+    ids: ['castSpark', 'castMortar', 'castUmbral', 'castKinetic', 'castOrb', 'castStormCall', 'phaseStride', 'arcaneReprieve',
+      'glacialNovaBurst', 'mortarBlast', 'stormCallStrike', 'frostSpike'],
   },
 ];
 
@@ -89,6 +93,9 @@ const LABELS: Record<SfxId, string> = {
   cantorFall: 'Cantor falls', dirge: 'Dirge', voidTide: 'Void tide', voidSurge: 'Void surge', heartCrack: 'Heart cracks',
   atlasOpen: 'Chart unrolled', atlasHover: 'Plate tick', atlasSelect: 'Stone chime', atlasRoute: 'Ember road', atlasReveal: 'Area revealed',
   atlasSeal: 'Seal opens', atlasZoom: 'Paper slide', atlasPin: 'Pin set', atlasUnpin: 'Pin pulled', surgeSpend: 'Surge spent', surgeRefill: 'Surge refilled',
+  castSpark: 'Spark', castMortar: 'Mortar launch', castUmbral: 'Umbral Bolt', castKinetic: 'Kinetic Lance', castOrb: 'Frost Orb',
+  castStormCall: 'Storm Call', phaseStride: 'Phase Stride', arcaneReprieve: 'Arcane Reprieve', glacialNovaBurst: 'Glacial Nova',
+  mortarBlast: 'Mortar blast', stormCallStrike: 'Storm bolt', frostSpike: 'Glacial Spike',
 };
 
 const TRACK_LABELS: Record<MusicId, { name: string; note: string }> = {

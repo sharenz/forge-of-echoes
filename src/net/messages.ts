@@ -55,7 +55,7 @@ export const SIM_EVENT_TYPES = [
   'cast', 'nova', 'dash', 'ward', 'chain', 'hit', 'evade', 'projectileEnd', 'death', 'monsterAttack', 'debuff',
   'cleanse', 'blocked', 'pull', 'monsterSpawn', 'ailment', 'areaResolve', 'dropSpawn', 'pickup', 'mote', 'flask',
   'waveTell', 'waveStart', 'bossSpawn', 'bossPhase', 'cleared', 'chestOpen', 'portal', 'playerDeath', 'playerJoin',
-  'notEnoughFocus', 'mapEvent', 'flank',
+  'notEnoughFocus', 'mapEvent', 'flank', 'buff',
 ] as const satisfies readonly SimEvent['t'][];
 
 type MonsterAttack = Extract<SimEvent, { t: 'monsterAttack' }>['attack'];
@@ -648,6 +648,7 @@ function simEvent(e: unknown): void {
   switch (oneOf(e.t, 'event', SIM_EVENT_TYPES)) {
     case 'cast':
     case 'nova':
+    case 'buff':
       oneOf(e.skill, `${e.t}.skill`, SKILL_IDS);
       break;
     case 'hit':

@@ -91,10 +91,26 @@ export type AugmentRuntime =
   /** A ring (burst emitter) concentrates into a fan of `arc` radians centred on the aim. */
   | { p: 'fan'; arc: number }
   /** A blink grants `seconds` of invulnerability instead of the default 0.2. */
-  | { p: 'invulnerable'; seconds: number };
+  | { p: 'invulnerable'; seconds: number }
+  // Roster batch 1 (SK2): base behaviour numbers of the new skills (and the augments that tune them), resolved by the rules.
+  /** Burning ground where the skill lands (Cinder Mortar): `damage` per `interval` s to monsters within `radius`, for `duration` s. */
+  | { p: 'ground'; damage: number; interval: number; duration: number; radius: number }
+  /** Hits apply Decay (Umbral Bolt): one stack deals `share` × the hit as void over DECAY.duration s (data/progression/combat). */
+  | { p: 'decay'; share: number }
+  /** Projectiles rebound off tall cover and the arena edge up to `count` times (Spark, Kinetic Lance's Ricochet). */
+  | { p: 'bounce'; count: number }
+  /**
+   * A movement buff for the skill's duration (Phase Stride): `speed` more movement speed (a fraction), `evasion` added evade chance;
+   * no crowd slow and allies pass through.
+   */
+  | { p: 'stride'; speed: number; evasion: number }
+  /** Restores `focus` × maximum Focus and `life` × maximum life evenly over the skill's duration (Arcane Reprieve). */
+  | { p: 'restore'; focus: number; life: number };
 
 /** Every AugmentRuntime primitive tag (the executor's coverage test reads this). */
-export const AUGMENT_PRIMITIVES = ['echo', 'fan', 'invulnerable'] as const satisfies readonly AugmentRuntime['p'][];
+export const AUGMENT_PRIMITIVES = [
+  'echo', 'fan', 'invulnerable', 'ground', 'decay', 'bounce', 'stride', 'restore',
+] as const satisfies readonly AugmentRuntime['p'][];
 
 export interface FlaskRuntime {
   flaskId: FlaskId;
@@ -292,12 +308,17 @@ export const AILMENT_BIT = { burning: 1, chilled: 2, shocked: 4, shielded: 8, em
   /** Map events: takes +40% damage (a whiffed Stalker) / a translucent event monster (Stalker, echoes). */
   exposed: 32, spectral: 64,
   /** Map events, wave 2: a frozen statue (Stasis Host: invulnerable and inert) / a fixture (a destructible prop the presenter draws itself). */
-  frozen: 128, fixture: 256 } as const;
+  frozen: 128, fixture: 256,
+  /** Power rework (SK2): Decay stacks (Umbral Bolt's void damage over time). */
+  decayed: 512 } as const;
 
 export const PROJECTILE_KINDS = [
   'emberLance', 'novaFlame', 'flameWave', 'rimeShard', // player
   'cinderSpit', 'heraldOrb', 'matriarchOrb',            // monster
   ...NEW_PROJECTILE_KINDS,                              // Ossuary / Coliseum rosters (appended: stable indices)
+  // Roster batch 1 (power rework SK2), player: wall-bouncing sparks, the mortar's lobbed shell (ProjectileStoreView.life > 0),
+  // the heavy void bolt, the physical bolt, and Frost Orb's slow orb (it touches nothing; it fires rimeShard shards).
+  'spark', 'cinderShell', 'umbralBolt', 'kineticLance', 'frostOrb',
 ] as const;
 export type ProjectileKind = (typeof PROJECTILE_KINDS)[number];
 
@@ -315,6 +336,9 @@ export const AREA_KINDS = [
   'echoMark',         // map events: a harmless shimmer where an echo, guardian or escort is about to appear
   'faultWedge',       // map events: a 90-degree wedge of the Fault field (heading = wedge centre); hurts everything inside
   'voidTide',         // map events: the Void Breach's tide, a ring band (radius = outer radius, heading field = inner radius); hurts everything inside
+  // Roster batch 1 (power rework SK2): the player's own telegraphs, harmless to players (the skill code deals the damage when they resolve)
+  'stormCall',        // Storm Call: a strike's 0.7 s telegraph at its landing point; the bolt falls when it resolves
+  'frostSpike',       // Glacial Spikes: one spike of the row, erupting when it resolves (spikes resolve in sequence away from her)
 ] as const;
 export type AreaKind = (typeof AREA_KINDS)[number];
 
@@ -529,6 +553,8 @@ export type SimEvent =
   | { t: 'nova'; playerId: number; skill: SkillId; x: number; y: number; radius: number }
   | { t: 'dash'; playerId: number; fromX: number; fromY: number; toX: number; toY: number }
   | { t: 'ward'; playerId: number; x: number; y: number; duration: number }
+  /** A timed self-buff began (Phase Stride, Arcane Reprieve): the presenter keeps its aura up for `duration` seconds. */
+  | { t: 'buff'; playerId: number; skill: SkillId; x: number; y: number; duration: number }
   | { t: 'chain'; playerId: number; points: number[] /* x0,y0,x1,y1,… */; damageType: DamageType }
   | { t: 'hit'; playerId: number; x: number; y: number; amount: number; damageType: DamageType; crit: boolean; target: 'monster' | 'player'; killed: boolean; kind?: MonsterKind }
   | { t: 'evade'; playerId: number; x: number; y: number; target: 'monster' | 'player' }

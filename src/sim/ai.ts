@@ -7,7 +7,7 @@ import { ELITE, STRIKE_MASK } from './archetypes';
 import { MONSTER_ANIM as ANIM, MSTATE, setAnim, stop, turnToward } from './behaviour';
 import { driveBoss } from './bosses';
 import { driveEventMonster, eventAilments } from './map-events';
-import { tickExposure, tickIgnite } from './combat';
+import { tickDecay, tickExposure, tickIgnite } from './combat';
 import {
   AGGRO_RADIUS, CHILL_SLOW, DT, EMPOWER_BONUS, HASTE_BONUS, KNOCKBACK_RATE, LARGE_BODY_RADIUS, MEMBER_AGGRO_RADIUS,
   MONSTER_HIT_FLASH_DECAY, PACK_THINK_INTERVAL, PLAYER_RADIUS, PROP_SIDE_MEMORY, PROP_SLIDE_TIME, PROP_STUCK_PROGRESS, PROP_STUCK_TIME,
@@ -92,6 +92,7 @@ export function updateMonsters(w: World): void {
     if (m.groundCd[i] > 0) m.groundCd[i] -= DT;
     // Burning (a phase-immune boss lets the burn run out harmlessly; see tickIgnite).
     if (m.igniteTime[i] > 0 && tickIgnite(w, i, DT)) continue;
+    if (m.decayTime[i] > 0 && tickDecay(w, i, DT)) continue;
 
     let bits = 0;
     if (m.igniteTime[i] > 0) bits |= AILMENT_BIT.burning;
@@ -101,6 +102,7 @@ export function updateMonsters(w: World): void {
     if (m.empowerTime[i] > 0) bits |= AILMENT_BIT.empowered;
     if (m.flags[i] & MFLAG.frozen) bits |= AILMENT_BIT.frozen;
     if (m.flags[i] & MFLAG.fixture) bits |= AILMENT_BIT.fixture;
+    if (m.decayTime[i] > 0) bits |= AILMENT_BIT.decayed;
     if (w.mapEvent && (w.mapEvent.members.size > 0 || w.mapEvent.exposed.size > 0)) bits |= eventAilments(w, m.id[i]);
     m.ailments[i] = bits;
 

@@ -1,7 +1,7 @@
 // Damage resolution for both sides, ailments and kill credit.
 import type { PlayerDebuff } from '../contracts/bestiary';
 import { DAMAGE_TYPES, type DamageType, type MonsterKind } from '../contracts/content';
-import { DOT_RESIST_FACTOR, EXPOSURE, PEN_CAP } from '../data/progression/combat';
+import { DECAY, DOT_RESIST_FACTOR, EXPOSURE, PEN_CAP } from '../data/progression/combat';
 import { MONSTER_ANIM, type MonsterRarity, type RootSource, type SimEvent } from '../contracts/sim';
 import { ELITE, KIND_BY_INDEX, KIND_INDEX } from './archetypes';
 import { removeOwnedAreas, spawnArea } from './areas';
@@ -272,6 +272,62 @@ export function tickIgnite(w: World, i: number, dt: number): boolean {
   return killed;
 }
 
+/**
+ * One Decay stack on a monster (skills.md 4.3, Umbral Bolt): `share` of the average hit `hit` as void damage over DECAY.duration
+ * seconds, after DOT_RESIST_FACTOR of its void resistance (the source's penetration and exposure count, like the hit). Stacks run
+ * together up to DECAY.maxStacks: the monster takes the strongest stack's rate times the stacks; each application refreshes the
+ * timer. No RNG: the tooltip's number is the damage.
+ */
+export function applyDecay(w: World, i: number, hit: number, share: number, source: number): void {
+  if (!isHittable(w, i) || !(hit > 0) || !(share > 0)) return;
+  const m = w.monsters;
+  const player = source > 0 ? w.playerById[source] : undefined;
+  const r = monsterResist(w, i, DT_VOID, player?.stats.pen?.void ?? 0);
+  const dps = (hit * share * (1 - DOT_RESIST_FACTOR * r)) / DECAY.duration;
+  if (m.decayTime[i] <= 0) {
+    m.decayStacks[i] = 0;
+    m.decayDps[i] = 0;
+    m.decayAccum[i] = 0;
+    m.decayEventTimer[i] = IGNITE_EVENT_INTERVAL;
+  }
+  m.decayStacks[i] = Math.min(DECAY.maxStacks, m.decayStacks[i] + 1);
+  if (dps >= m.decayDps[i]) {
+    m.decayDps[i] = dps;
+    m.decaySrc[i] = source;
+  }
+  m.decayTime[i] = DECAY.duration;
+}
+
+/** Decay damage over time for one tick (like tickIgnite: hit numbers every IGNITE_EVENT_INTERVAL). Returns true on a kill. */
+export function tickDecay(w: World, i: number, dt: number): boolean {
+  const m = w.monsters;
+  if (m.decayTime[i] <= 0) return false;
+  const step = Math.min(dt, m.decayTime[i]);
+  const dmg = m.flags[i] & MFLAG.immune ? 0 : m.decayDps[i] * m.decayStacks[i] * step * takenMult(w, i);
+  m.decayTime[i] -= dt;
+  const source = m.decaySrc[i];
+  if (m.decayTime[i] <= 0) {
+    m.decayTime[i] = 0;
+    m.decayDps[i] = 0;
+    m.decayStacks[i] = 0;
+  }
+  m.decayAccum[i] += dmg;
+  m.decayEventTimer[i] -= dt;
+  const dummy = m.kind[i] === DUMMY;
+  m.life[i] -= dmg;
+  const killed = !dummy && m.life[i] <= 0;
+  if (killed || m.decayEventTimer[i] <= 0 || m.decayTime[i] <= 0) {
+    if (killed) w.events.push(monsterHitEvent(w, i, m.decayAccum[i], DT_VOID, false, true, source));
+    else if (m.decayAccum[i] >= 0.5 && w.events.lowOpen) w.events.low(monsterHitEvent(w, i, m.decayAccum[i], DT_VOID, false, false, source));
+    m.decayAccum[i] = 0;
+    m.decayEventTimer[i] = IGNITE_EVENT_INTERVAL;
+  }
+  if (m.decayTime[i] <= 0) m.decaySrc[i] = 0;
+  if (dummy && m.life[i] < m.maxLife[i] * 0.02) m.life[i] = m.maxLife[i];
+  if (killed) killMonster(w, i, DT_VOID, true, source);
+  return killed;
+}
+
 export function wakePack(w: World, i: number): void {
   const pk = w.monsters.pack[i];
   if (pk >= 0) w.packs[pk].aggro = true;
@@ -410,7 +466,9 @@ export function hitPlayer(
   if (!damaging && !debuff) return -1;
   const s = p.stats;
   const rng = w.combatRng;
-  if ((kind === 'melee' || kind === 'projectile') && s.evasion > 0 && rng.next() < Math.min(EVASION_CAP, s.evasion)) {
+  // Phase Stride's Slipstream adds evade chance while the stride lasts (still capped).
+  const evasion = p.stride.time > 0 ? s.evasion + p.stride.evasion : s.evasion;
+  if ((kind === 'melee' || kind === 'projectile') && evasion > 0 && rng.next() < Math.min(EVASION_CAP, evasion)) {
     w.events.push({ t: 'evade', playerId: p.id, x: p.x, y: p.y, target: 'player' });
     return -1;
   }
@@ -459,6 +517,9 @@ export function killPlayer(w: World, p: PlayerState): void {
   p.vy = 0;
   p.ward.time = 0;
   p.pendingNovas.length = 0;
+  p.pendingStrikes.length = 0;
+  p.stride.time = 0;
+  p.restore.time = 0;
   p.portalDwell = 0;
   p.portalDwellId = 0;
   for (const f of p.flasks) if (f) f.active = 0;

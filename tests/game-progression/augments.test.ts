@@ -43,11 +43,16 @@ describe('augment data', () => {
     for (const id of SKILL_IDS) expect(SKILLS[id].maxRank).toBe(MAX_SKILL_RANK);
   });
 
-  it('gives every playable flagship skill a 6 or 7 augment tree with unique ids and symmetric exclusions', () => {
+  it('gives every playable flagship skill a 6 or 7 augment tree (the others 3) with unique ids and symmetric exclusions', () => {
+    // skills.md 5 (13 flagships) and 6 (the other 19: one augment per tier).
+    const THREE: readonly SkillId[] = ['glacialNova', 'spark', 'phaseStride', 'arcaneReprieve', 'glacialSpikes'];
     for (const id of SKILL_IDS.filter((s) => SKILLS[s].available)) {
       const tree = SKILLS[id].augmentDefs;
-      expect(tree.length, id).toBeGreaterThanOrEqual(6);
-      expect(tree.length, id).toBeLessThanOrEqual(7);
+      if (THREE.includes(id)) expect(tree.map((a) => a.tier), id).toEqual([1, 2, 3]);
+      else {
+        expect(tree.length, id).toBeGreaterThanOrEqual(6);
+        expect(tree.length, id).toBeLessThanOrEqual(7);
+      }
       expect(new Set(tree.map((a) => a.id)).size).toBe(tree.length);
       for (const tier of [1, 2, 3] as const) expect(tree.some((a) => a.tier === tier), `${id} T${tier}`).toBe(true);
       for (const a of tree) {
@@ -73,7 +78,7 @@ describe('augment data', () => {
     }
   });
 
-  it('has 17 augments live in this slice; the rest wait for their primitives', () => {
+  it('has 34 augments live (17 of SK0, 17 of the SK2 roster); the rest wait for their primitives', () => {
     const live = SKILL_IDS.flatMap((id) => SKILLS[id].augmentDefs.filter(augmentAvailable).map((a) => `${id}.${a.id}`));
     expect(live).toEqual([
       'emberLance.piercingFlame', 'emberLance.twinStrand', 'emberLance.rapidSpark',
@@ -83,6 +88,17 @@ describe('augment data', () => {
       'arcChain.longReach',
       'riftStep.longerStride', 'riftStep.chillingLanding',
       'cinderWard.bankedEmbers', 'cinderWard.frozenHearth', 'cinderWard.vigil', 'cinderWard.resoluteFlame',
+      // SK2 roster batch 1
+      'phaseStride.longStride', 'phaseStride.slipstream', 'phaseStride.cleansingStride',
+      'glacialNova.wideChill',
+      'spark.moreSparks', 'spark.ricochetStorm', 'spark.charged',
+      'cinderMortar.napalm',
+      'arcaneReprieve.deepWell', 'arcaneReprieve.secondWind',
+      'umbralBolt.witheringTouch',
+      'kineticLance.ricochet',
+      'frostOrb.twinOrbs',
+      'stormCall.wideSkies', 'stormCall.stormCell', 'stormCall.tetheredStrikes',
+      'glacialSpikes.twinLines',
     ]);
   });
 });
@@ -301,8 +317,8 @@ describe('saving augments', () => {
   });
 
   it('refunds ranks a hand-edited save put on a roster skill that has not shipped', () => {
-    const back = normalizeCharacter({ ...withSkills({}, { unspentSkillPoints: 1 }), skillRanks: { emberLance: 1, glacialNova: 4 } })!;
-    expect(back.skillRanks.glacialNova).toBe(0);
+    const back = normalizeCharacter({ ...withSkills({}, { unspentSkillPoints: 1 }), skillRanks: { emberLance: 1, gravityWell: 4 } })!;
+    expect(back.skillRanks.gravityWell).toBe(0);
     expect(back.unspentSkillPoints).toBe(5);
   });
 });

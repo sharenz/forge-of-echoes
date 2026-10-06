@@ -24,11 +24,11 @@
 import { PLAYER_DEBUFFS, type PlayerDebuff } from '../contracts/bestiary';
 import { PROJECTILE_KINDS, type ProjectileKind, type RootSource } from '../contracts/sim';
 import { spawnArea } from './areas';
-import { damageMonster, hitPlayer, isHittable } from './combat';
+import { applyDecay, damageMonster, hitPlayer, isHittable } from './combat';
 import { CHAIN_PULL_DISTANCE, DT, PLAYER_RADIUS, SPIT_SPLASH_RADIUS, TAR_POOL_DURATION, TAR_POOL_RADIUS } from './constants';
 import { ROOT_SOURCES } from './debuffs';
 import { projectileEffect } from './effects';
-import { coverHit } from './cover';
+import { coverHit, coverNormal, coverNormalOut } from './cover';
 import { sweepCircle } from './math';
 import { pullPlayer } from './player';
 import { monsterDefs } from './rosters';
@@ -50,6 +50,10 @@ export const PROJECTILE_RIDERS: Readonly<Partial<Record<ProjectileKind, { debuff
 /** Kinds that fly over tall cover too (player nova rings); every other straight shot is stopped by it. */
 const PASSES_COVER: Uint8Array = new Uint8Array(PROJECTILE_KINDS.length);
 PASSES_COVER[PROJ.novaFlame] = 1;
+// Frost Orb floats over the scenery and touches nothing (its shards do the hitting).
+PASSES_COVER[PROJ.frostOrb] = 1;
+const NO_CONTACT: Uint8Array = new Uint8Array(PROJECTILE_KINDS.length);
+NO_CONTACT[PROJ.frostOrb] = 1;
 
 const RIDER_CODE: Uint8Array = new Uint8Array(PROJECTILE_KINDS.length);
 const RIDER_SOURCE: Uint8Array = new Uint8Array(PROJECTILE_KINDS.length);
@@ -81,6 +85,11 @@ export interface ProjectileSpec {
   pierce: number;
   /** Player id credited with this projectile's kills (0 for monster projectiles). */
   owner: number;
+  /** Roster batch 1 (player shots; all reset after a projSpec spawn): rebounds, rehit interval, knockback multiplier, Decay share. */
+  bounce?: number;
+  rehit?: number;
+  knock?: number;
+  decay?: number;
 }
 
 /** Reusable spec object for callers in hot paths. */
@@ -115,8 +124,17 @@ export function spawnProjectile(w: World, s: ProjectileSpec, flight = 0): number
   pr.ailmentChance[i] = s.ailmentChance;
   pr.convTo[i] = s.convTo ?? 0;
   pr.convShare[i] = s.convShare ?? 0;
-  // The shared projSpec never carries a conversion over to the next spawn.
-  if (s === projSpec) { s.convTo = 0; s.convShare = 0; }
+  pr.bounce[i] = s.bounce ?? 0;
+  pr.rehit[i] = s.rehit ?? 0;
+  pr.knock[i] = s.knock ?? 1;
+  pr.decay[i] = s.decay ?? 0;
+  pr.timer[i] = 0;
+  pr.groundDamage[i] = 0;
+  pr.groundTime[i] = 0;
+  pr.groundRadius[i] = 0;
+  pr.groundTick[i] = 0;
+  // The shared projSpec never carries a conversion (or a roster rider) over to the next spawn.
+  if (s === projSpec) { s.convTo = 0; s.convShare = 0; s.bounce = 0; s.rehit = 0; s.knock = 1; s.decay = 0; }
   pr.pierce[i] = s.pierce;
   pr.range[i] = s.range;
   pr.src[i] = NO_SOURCE;
@@ -235,6 +253,10 @@ export function updateProjectiles(w: World): void {
   for (let i = 0; i < pr.hwm; i++) {
     if (!pr.alive[i]) continue;
     pr.age[i] += DT;
+    if (pr.effect[i] > 0 && !pr.hostile[i]) {
+      projectileEffect(pr.effect[i])?.onTick?.(w, i);
+      if (!pr.alive[i]) continue;
+    }
     const ax = pr.x[i];
     const ay = pr.y[i];
     const vx = pr.vx[i];
@@ -287,16 +309,22 @@ export function updateProjectiles(w: World): void {
       // Tall cover along this tick's segment: bodies beyond it cannot be reached, and it ends the shot.
       const wallT = PASSES_COVER[pr.kind[i]] ? -1 : coverHit(w.propGrid, ax, ay, bx, by, rad * 0.5);
       const pad = rad + w.grid.maxRadius;
-      const n = w.grid.query(
+      const n = NO_CONTACT[pr.kind[i]] ? 0 : w.grid.query(
         (ax < bx ? ax : bx) - pad, (ay < by ? ay : by) - pad, (ax > bx ? ax : bx) + pad, (ay > by ? ay : by) + pad, cand,
       );
+      const rehit = pr.rehit[i];
       // Gather every contact along this tick's segment, then resolve them in travel order.
       let hits = 0;
       for (let k = 0; k < n; k++) {
         const j = cand[k];
         if (!isHittable(w, j)) continue;
         const t = sweepCircle(ax, ay, bx, by, m.x[j], m.y[j], rad + m.radius[j]);
-        if (t < 0 || pr.hasHit(i, m.id[j])) continue;
+        if (t < 0) continue;
+        if (rehit > 0) {
+          // Spark: the same monster again only once `rehit` seconds have passed since its last hit.
+          const last = pr.lastHitAge(i, m.id[j]);
+          if (last >= 0 && pr.age[i] - last < rehit) continue;
+        } else if (pr.hasHit(i, m.id[j])) continue;
         // insertion sort by t (hit lists per tick are tiny)
         let h = hits++;
         while (h > 0 && hitT[h - 1] > t) {
@@ -319,8 +347,9 @@ export function updateProjectiles(w: World): void {
           break;
         }
         pr.recordHit(i, m.id[j]);
-        damageMonster(w, j, pr.damage[i], pr.dtype[i], pr.critChance[i], pr.critMult[i], pr.ailmentChance[i], vx, vy, 1, true, pr.owner[i],
+        damageMonster(w, j, pr.damage[i], pr.dtype[i], pr.critChance[i], pr.critMult[i], pr.ailmentChance[i], vx, vy, pr.knock[i], true, pr.owner[i],
           pr.convShare[i] > 0 ? pr.convTo[i] : -1, pr.convShare[i]);
+        if (pr.decay[i] > 0) applyDecay(w, j, pr.damage[i], pr.decay[i], pr.owner[i]);
         const pierce = pr.pierce[i];
         if (pierce === 0) {
           endT = hitT[k];
@@ -331,8 +360,14 @@ export function updateProjectiles(w: World): void {
       }
       if (!ended && wallT >= 0) {
         endT = wallT;
-        ended = true;
-        coverImpact(w, ax + (bx - ax) * endT, ay + (by - ay) * endT);
+        const cx = ax + (bx - ax) * endT;
+        const cy = ay + (by - ay) * endT;
+        coverImpact(w, cx, cy);
+        // A bouncing shot rebounds off the wall instead of ending there.
+        if (pr.bounce[i] > 0 && coverNormal(w.propGrid, cx, cy, rad * 0.5)) {
+          reflect(pr, i, coverNormalOut.x, coverNormalOut.y);
+          pr.bounce[i]--;
+        } else ended = true;
       }
     }
 
@@ -342,12 +377,32 @@ export function updateProjectiles(w: World): void {
     pr.x[i] = nx;
     pr.y[i] = ny;
     pr.range[i] -= Math.sqrt(vx * vx + vy * vy) * DT * endT;
+    if (!ended && pr.bounce[i] > 0 && flight <= 0) {
+      // A bouncing shot rebounds off the arena's edge too.
+      const ar = w.arenaRadius;
+      const d2 = nx * nx + ny * ny;
+      if (d2 > ar * ar) {
+        const d = Math.sqrt(d2);
+        pr.x[i] = (nx / d) * ar;
+        pr.y[i] = (ny / d) * ar;
+        reflect(pr, i, -nx / d, -ny / d);
+        pr.bounce[i]--;
+      }
+    }
     if (ended) endProjectile(w, i);
     else if ((flight <= 0 && pr.range[i] <= 0) || nx * nx + ny * ny > outR2) {
       if (pr.effect[i] > 0) projectileEffect(pr.effect[i])?.onExpire?.(w, i);
       if (pr.alive[i]) endProjectile(w, i);
     }
   }
+}
+
+/** Mirror a projectile's velocity off a surface with unit normal (nx, ny) (only when it moves into the surface). */
+function reflect(pr: World['projectiles'], i: number, nx: number, ny: number): void {
+  const vn = pr.vx[i] * nx + pr.vy[i] * ny;
+  if (vn >= 0) return;
+  pr.vx[i] -= 2 * vn * nx;
+  pr.vy[i] -= 2 * vn * ny;
 }
 
 /** A straight shot hit tall cover at (x, y): the presenter's dust and sparks. Cosmetic, droppable under load. */

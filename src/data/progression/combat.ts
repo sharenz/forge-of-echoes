@@ -15,6 +15,13 @@ export const EXPOSURE = { max: 25, floor: -25, duration: 4, bossFactor: 0.5 } as
 /** Damage over time (ignite and friends) sees this share of the monster's resistance (1 = the full hit resistance). */
 export const DOT_RESIST_FACTOR = 0.5;
 
+/**
+ * Decay (skills.md 4.3, Umbral Bolt): void damage over time on a monster. Each stack deals its share of the hit over `duration`
+ * seconds; up to `maxStacks` stacks run at once (the strongest stack's damage, times the stacks); every application refreshes the
+ * timer. Like ignite it sees DOT_RESIST_FACTOR of the void resistance.
+ */
+export const DECAY = { duration: 4, maxStacks: 5 } as const;
+
 /** Ceiling of the multiplicative pool (passives + augments + uniques); gear stays additive. */
 export const MORE_CAP = 3.5;
 

@@ -1,5 +1,6 @@
 // Fire skill behaviours (data for the executor). Projectile speeds, ranges and radii are the fallbacks for a runtime def that
 // leaves them at 0; the rules always fill speed and range.
+import { SKILL_TIMING } from '../../../data/progression/skill-timing';
 import type { SkillBehaviour } from '../types';
 
 export const FIRE_BEHAVIOURS = {
@@ -19,4 +20,5 @@ export const FIRE_BEHAVIOURS = {
     emitter: 'buff', buff: 'ward', duration: 5,
     restoreFocus: { skill: 'restoreFocus', player: 'wardFocus' }, renew: { skill: 'renew', player: 'wardRenew' },
   },
+  cinderMortar: { emitter: 'lob', kind: 'cinderShell', flight: SKILL_TIMING.mortarFlight, range: 320, radius: 36 },
 } satisfies Record<string, SkillBehaviour>;

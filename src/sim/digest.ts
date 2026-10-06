@@ -81,6 +81,12 @@ export function digestWorld(w: World): number {
       h.float(m.exposeTime[i]);
       for (let k = 0; k < 5; k++) h.float(m.expose[i * 5 + k]);
     }
+    // Decay (power rework SK2) likewise only while a monster decays.
+    if (m.decayTime[i] > 0) {
+      h.float(m.decayTime[i]);
+      h.int(m.decayStacks[i]);
+      h.float(m.decayDps[i]);
+    }
   }
   const pr = w.projectiles;
   h.int(pr.count);

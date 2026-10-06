@@ -80,4 +80,6 @@ export const REQUIRED_SPRITES: readonly string[] = [
   'drop/equipment', 'drop/currency', 'drop/map', 'drop/flask',
   // Ossuary / Coliseum rosters, new projectiles, debuff overlays and area visuals (contracts/bestiary.ts)
   ...NEW_REQUIRED_SPRITES,
+  // power rework SK2 roster batch 1: the new player projectiles
+  'proj/spark', 'proj/cinderShell', 'proj/umbralBolt', 'proj/kineticLance', 'proj/frostOrb',
 ];

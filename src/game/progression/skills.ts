@@ -22,10 +22,10 @@ import { SKILL_IDS } from '../../contracts/content';
 import type { AugmentRuntime, SkillRuntimeDef } from '../../contracts/sim';
 import { resolveStat } from '../../core/modifiers';
 import {
-  AUGMENT_RULES, DAMAGE_ROLL, EXTRA_PROJECTILE_FAN, MAX_SKILL_RANK, MORE_CAP, PEN_CAP, RESPEC, SKILLS, SKILL_POINTS, STAT_CAPS,
-  augmentAvailable, findSkill, getSkill,
+  AUGMENT_RULES, DAMAGE_ROLL, DECAY, EXTRA_PROJECTILE_FAN, MAX_SKILL_RANK, MORE_CAP, PEN_CAP, RESPEC, SKILLS, SKILL_POINTS, SKILL_TIMING,
+  STAT_CAPS, augmentAvailable, findSkill, getSkill,
 } from '../../data/progression';
-import type { AugmentDef, AugmentEffect, AugmentStat, SkillDef } from '../../data/progression';
+import type { AugmentDef, AugmentEffect, AugmentStat, SkillDef, TuneKey } from '../../data/progression';
 import { buildPlayerModel, focusRegenBreakdown, penetrationOf, spellPowerAt } from './model';
 import type { PlayerModel } from './model';
 import { spendCurrency } from './merchant';
@@ -128,6 +128,11 @@ export interface ResolvedSkill {
   augments: AugmentDef[];
   /** Echo damage as a share of the hit (0 = no echo). */
   echo: number;
+  /**
+   * Hits of one cast that can land on a single enemy (the DPS estimate's count): 1 for most skills, every shard of a Frost Orb, the
+   * expected share of Storm Call's scattered strikes on an enemy at the cursor.
+   */
+  singleTargetHits: number;
 }
 
 function clampRank(def: SkillDef, rank: number): number {
@@ -227,7 +232,7 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const augChains = effects.reduce((s, e) => s + (e.k === 'chain' ? e.add : 0), 0);
   const baseChains = Math.max(0, Math.floor(rv(def.chains)) + augChains);
   const range = augmented(effects, 'range', def.range);
-  const radius = augmented(effects, 'radius', def.radius);
+  const radius = augmented(effects, 'radius', rv(def.radius));
   const baseDuration = augmented(effects, 'duration', rv(def.duration));
 
   // Behaviour primitives for the executor: an augment fan, the echo (the better of item-granted and picked), invulnerability.
@@ -238,6 +243,9 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const echo = Math.max(flags.includes('echo') ? 1 : 0, echoEffect ? echoEffect.damage / 100 : 0);
   if (echoEffect) runtimeAugments.push({ p: 'echo', delay: echoEffect.delay, damage: echo });
   for (const e of effects) if (e.k === 'invulnerable') runtimeAugments.push({ p: 'invulnerable', seconds: e.seconds });
+  const runtimeRadius = def.areaScales === 'radius' ? radius * areaRadiusMult : radius;
+  const runtimeDuration = baseDuration * (baseDuration > 0 ? durationMult : 1);
+  runtimeAugments.push(...primitiveRuntimes(def, effects, damage, effectiveness, runtimeRadius, runtimeDuration));
 
   const spread = fanArc !== null ? fanArc
     : flags.includes('fan') ? UNIQUE_FAN_ARC
@@ -261,8 +269,8 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
     projectileSpeed: projectileSkill ? def.projectileSpeed * projSpeedMult : def.projectileSpeed,
     range: def.areaScales === 'range' ? range * areaRadiusMult : range,
     spread,
-    radius: def.areaScales === 'radius' ? radius * areaRadiusMult : radius,
-    duration: baseDuration * (baseDuration > 0 ? durationMult : 1),
+    radius: runtimeRadius,
+    duration: runtimeDuration,
     chains: def.shape === 'chain' ? Math.min(STAT_CAPS.chains, baseChains + extraChains) : baseChains,
     distance: augmented(effects, 'distance', rv(def.distance)),
     damageReduction: Math.min(augmented(effects, 'damageReductionCap', def.damageReductionCap ?? 1), rv(def.damageReduction)),
@@ -281,6 +289,7 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   let dps: number | null = null;
   let perCast: number | null = null;
   let hits = 0;
+  const { once: rosterOnce, single: singleTargetHits } = hitCounts(def, runtime);
   if (damage > 0) {
     const critFactor = 1 + critChance * (critMultiplier - 1);
     const hit = damage * critFactor;
@@ -290,17 +299,92 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
       const uptime = interval > 0 ? Math.min(1, runtime.duration / interval) : 1;
       dps = (hit * uptime) / pulse;
     } else {
-      const once = def.shape === 'chain' ? runtime.chains + 1 : Math.max(1, runtime.projectiles);
+      const once = rosterOnce;
       hits = once * (echo > 0 ? 2 : 1);
       perCast = hit * once * (1 + echo);
-      dps = interval > 0 ? (hit * (1 + echo)) / interval : null;
+      dps = interval > 0 ? (hit * singleTargetHits * (1 + echo)) / interval : null;
+      // Damage over time a cast leaves behind: burning ground (non-stacking: one tick per interval on an enemy standing in it,
+      // while the ground lasts) and Decay (one stack per hit, up to DECAY.maxStacks running at once).
+      const ground = runtime.augments?.find((a) => a.p === 'ground');
+      if (ground && ground.interval > 0) {
+        perCast += ground.damage * Math.floor(ground.duration / ground.interval + 1e-9);
+        if (dps !== null) dps += (ground.damage / ground.interval) * Math.min(1, ground.duration / interval);
+      }
+      const decay = runtime.augments?.find((a) => a.p === 'decay');
+      if (decay) {
+        perCast += damage * decay.share * once;
+        if (dps !== null) dps += (Math.min(DECAY.maxStacks, DECAY.duration / interval) * damage * decay.share) / DECAY.duration;
+      }
     }
   }
   const sustainedDps = dps === null ? null : dps * focusSustain;
   return {
     def, runtime, effectiveness, basePower, added, increased, moreMultiplier, moreCapped: moreRaw > MORE_CAP, penetration, interval, dps, hits, perCast, focusRegen,
-    focusSustain, sustainedDps, flagTexts, augments, echo,
+    focusSustain, sustainedDps, flagTexts, augments, echo, singleTargetHits,
   };
+}
+
+/** Sum of the picked augments' `tune` effects on one behaviour number. */
+function tuned(effects: readonly AugmentEffect[], key: TuneKey): number {
+  return effects.reduce((s, e) => s + (e.k === 'tune' && e.key === key ? e.add : 0), 0);
+}
+
+/**
+ * The skill's own behaviour primitives (SkillDef.primitives, raised by `tune` augments) as executor primitives: burning ground,
+ * Decay, bounces, a stride buff, a restore.
+ */
+function primitiveRuntimes(
+  def: SkillDef, effects: readonly AugmentEffect[], damage: number, effectiveness: number, radius: number, duration: number,
+): AugmentRuntime[] {
+  const prim = def.primitives ?? {};
+  const out: AugmentRuntime[] = [];
+  if (prim.ground && effectiveness > 0 && damage > 0) {
+    const eff = prim.ground.effectiveness + tuned(effects, 'groundEffectiveness');
+    out.push({
+      p: 'ground', damage: (damage * eff) / effectiveness, interval: prim.ground.interval, duration,
+      radius: radius * (1 + tuned(effects, 'groundRadiusPct') / 100),
+    });
+  }
+  if (prim.decay && damage > 0) out.push({ p: 'decay', share: prim.decay.share * (1 + tuned(effects, 'decayPct') / 100) });
+  const bounces = Math.max(0, Math.floor((prim.bounces ?? 0) + tuned(effects, 'bounces')));
+  if (bounces > 0) out.push({ p: 'bounce', count: bounces });
+  if (prim.stride) out.push({ p: 'stride', speed: prim.stride.speed, evasion: prim.stride.evasion + tuned(effects, 'strideEvasion') });
+  if (prim.restore) {
+    out.push({ p: 'restore', focus: prim.restore.focus + tuned(effects, 'restoreFocus'), life: prim.restore.life + tuned(effects, 'restoreLife') });
+  }
+  return out;
+}
+
+/** Storm Call's estimate: how far a strike's centre may land from an enemy at the cursor and still reach it (a body's radius). */
+const STRIKE_BODY = 12;
+
+/**
+ * Hits of one cast if every one lands (`once`), and how many of them one enemy takes (`single`, the DPS estimate): one per
+ * projectile / strike / spike, per chain link; Frost Orb's shards all seek one lone enemy; Storm Call's strikes are scattered
+ * uniformly over its circle, so an enemy at the cursor expects `strikes × ((strike radius + body) / circle)²` of them; Glacial
+ * Spikes and the other area skills hit an enemy once per cast (per line).
+ */
+export function hitCounts(def: SkillDef, rt: SkillRuntimeDef): { once: number; single: number } {
+  switch (def.id) {
+    case 'frostOrb': {
+      const shards = Math.max(1, Math.floor(rt.duration / SKILL_TIMING.orbShardInterval + 1e-9));
+      return { once: Math.max(1, rt.projectiles) * shards, single: shards };
+    }
+    case 'stormCall': {
+      const strikes = Math.max(1, Math.floor(rt.projectiles));
+      if (rt.flags.includes('tethered')) return { once: strikes, single: 1 };
+      const share = rt.range > 0 ? Math.min(1, ((rt.radius + STRIKE_BODY) / rt.range) ** 2) : 1;
+      return { once: strikes, single: strikes * share };
+    }
+    case 'glacialSpikes': {
+      const lines = rt.flags.includes('twinLines') ? 2 : 1;
+      return { once: Math.max(1, Math.floor(rt.projectiles)) * lines, single: 1 };
+    }
+    default:
+      if (def.shape === 'chain') return { once: rt.chains + 1, single: 1 };
+      if (def.shape === 'area' || def.shape === 'buff') return { once: 1, single: 1 };
+      return { once: Math.max(1, rt.projectiles), single: 1 };
+  }
 }
 
 /**
@@ -667,13 +751,15 @@ export function skillLines(r: ResolvedSkill): string[] {
   const noun = def.projectileNoun ?? 'projectile';
   const pierceAll = !!def.pierceAll || rt.flags.includes('pierceAll');
   const fan = rt.augments?.find((a) => a.p === 'fan');
-  switch (def.shape) {
+  const roster = rosterLines(r);
+  if (roster) lines.push(...roster);
+  else switch (def.shape) {
     case 'projectile':
       lines.push(`Deals ${damageRange(rt.damage)} ${type} damage`);
       lines.push(rt.flags.includes('circle') ? `Fires ${plural(rt.projectiles, noun)} in a full circle` : rt.projectiles > 1
         ? `Fires ${plural(rt.projectiles, noun)} in a ${degrees(rt.spread)} fan`
         : `Fires ${plural(1, noun)} toward the cursor`);
-      if (def.radius > 0) lines.push(`Each ${noun} is ${Math.round(rt.radius * 2)} units wide`);
+      if (def.radius !== 0) lines.push(`Each ${noun} is ${Math.round(rt.radius * 2)} units wide`);
       break;
     case 'nova':
       lines.push(`Deals ${damageRange(rt.damage)} ${type} damage`);
@@ -707,7 +793,7 @@ export function skillLines(r: ResolvedSkill): string[] {
   }
   const pierce = def.shape === 'projectile' || def.shape === 'nova' ? pierceText(rt.pierce, pierceAll) : null;
   if (pierce) lines.push(pierce);
-  if ((def.shape === 'projectile' || def.shape === 'nova') && rt.projectileSpeed > 0 && def.shape !== 'nova') {
+  if ((def.shape === 'projectile' || def.shape === 'nova') && rt.projectileSpeed > 0 && def.shape !== 'nova' && def.id !== 'frostOrb') {
     lines.push(`Range ${Math.round(rt.range)} · projectile speed ${Math.round(rt.projectileSpeed)}`);
   }
   if (rt.damage > 0) lines.push(critText(rt));
@@ -727,6 +813,81 @@ export function skillLines(r: ResolvedSkill): string[] {
   lines.push(...r.flagTexts);
   lines.push(...augmentLines(r));
   return lines;
+}
+
+/**
+ * Behaviour lines of the roster skills that the generic shapes cannot say (power rework SK2). Every number is the runtime def's or
+ * a SKILL_TIMING / DECAY constant the sim reads too, so the text is what the sim does. null for the other skills.
+ */
+function rosterLines(r: ResolvedSkill): string[] | null {
+  const { def, runtime: rt } = r;
+  const type = DAMAGE_NAME[rt.damageType];
+  const dmg = `${damageRange(rt.damage)} ${type} damage`;
+  const aug = <P extends AugmentRuntime['p']>(p: P) => rt.augments?.find((a): a is Extract<AugmentRuntime, { p: P }> => a.p === p);
+  const bounce = aug('bounce');
+  const bounceLine = bounce ? [`Rebounds off walls up to ${plural(bounce.count, 'time')}`] : [];
+  switch (def.id) {
+    case 'phaseStride': {
+      const s = aug('stride');
+      const lines = [`For ${seconds(rt.duration)}: ${percent(s?.speed ?? 0)} more movement speed, no slow from crowding, and you pass through allies`];
+      if (s && s.evasion > 0) lines.push(`+${percent(s.evasion)} chance to evade hits while it lasts`);
+      if (rt.flags.includes('cleanse')) lines.push('Casting it removes chill and root');
+      return lines;
+    }
+    case 'arcaneReprieve': {
+      const s = aug('restore');
+      const lines = [`Restores ${percent(s?.focus ?? 0)} of your maximum Focus over ${seconds(rt.duration)}`];
+      if (s && s.life > 0) lines.push(`Restores ${percent(s.life)} of your maximum life over ${seconds(rt.duration)}`);
+      lines.push('Removes chill and Withered');
+      return lines;
+    }
+    case 'glacialNova':
+      return [`Deals ${dmg} to every enemy within ${Math.round(rt.radius)} units of you`, 'An instant burst: passes cover and shields'];
+    case 'spark':
+      return [
+        `Deals ${dmg}`,
+        `Releases ${plural(rt.projectiles, 'spark')} in a ${degrees(rt.spread)} fan; each hits an enemy at most every ${seconds(SKILL_TIMING.sparkRehit)}`,
+        ...bounceLine,
+      ];
+    case 'cinderMortar': {
+      const g = aug('ground');
+      const lines = [
+        `Lobs a shell at the cursor (up to ${Math.round(rt.range)} units away) that lands after ${seconds(SKILL_TIMING.mortarFlight)}, flying over cover and shields`,
+        `Deals ${dmg} in a radius of ${Math.round(rt.radius)}`,
+      ];
+      if (g) lines.push(`Leaves burning ground (radius ${Math.round(g.radius)}) for ${seconds(g.duration)}: ${damageRange(g.damage)} Fire damage every ${seconds(g.interval)}`);
+      return lines;
+    }
+    case 'umbralBolt': {
+      const d = aug('decay');
+      const lines = [`Deals ${dmg}`, 'Fires a slow, heavy bolt toward the cursor'];
+      if (d) lines.push(`Decay: ${percent(d.share)} of the hit as Void damage over ${seconds(DECAY.duration)}, stacking up to ${DECAY.maxStacks} times`);
+      return lines;
+    }
+    case 'kineticLance':
+      return [`Deals ${dmg}`, `Fires a fast bolt toward the cursor that knocks enemies back ${SKILL_TIMING.kineticKnockback}× as far`, ...bounceLine];
+    case 'frostOrb': {
+      const shards = Math.max(1, Math.floor(rt.duration / SKILL_TIMING.orbShardInterval + 1e-9));
+      return [
+        `${rt.projectiles > 1 ? `${plural(rt.projectiles, 'orb')} drift` : 'An orb drifts'} toward the cursor at ${Math.round(rt.projectileSpeed)} units per second for ${seconds(rt.duration)}`,
+        `Every ${seconds(SKILL_TIMING.orbShardInterval)} each orb fires a shard at the nearest enemy within ${Math.round(rt.radius)} units (${shards} shards): ${dmg} each`,
+      ];
+    }
+    case 'stormCall':
+      return [
+        rt.flags.includes('tethered')
+          ? `${plural(rt.projectiles, 'strike')} land evenly along a line from you to the cursor after ${seconds(SKILL_TIMING.stormTelegraph)}`
+          : `${plural(rt.projectiles, 'strike')} land within ${Math.round(rt.range)} units of the cursor after ${seconds(SKILL_TIMING.stormTelegraph)}`,
+        `Each strike deals ${dmg} in a radius of ${Math.round(rt.radius)}: ground damage, it ignores cover and shields`,
+      ];
+    case 'glacialSpikes':
+      return [
+        `${plural(rt.projectiles, 'spike')} erupt one after another along ${Math.round(rt.range)} units toward the cursor${rt.flags.includes('twinLines') ? ', in two lines' : ''}`,
+        `Each spike deals ${dmg} in a radius of ${Math.round(rt.radius)}; an enemy is struck once per line`,
+      ];
+    default:
+      return null;
+  }
 }
 
 function plainPercent(v: number): string {
@@ -766,6 +927,8 @@ const METRICS: readonly Metric[] = [
   { label: 'Projectiles', get: (rt) => rt.projectiles, fmt: String, applies: (d) => d.shape === 'projectile' || d.shape === 'nova' },
   { label: 'Pierce', get: (rt) => rt.pierce, fmt: String, applies: (d) => (d.shape === 'projectile' || d.shape === 'nova') && !d.pierceAll },
   { label: 'Chains', get: (rt) => rt.chains, fmt: String, applies: (d) => d.shape === 'chain' },
+  { label: 'Strikes', get: (rt) => rt.projectiles, fmt: String, applies: (d) => d.shape === 'area' && d.projectiles !== 0 },
+  { label: 'Radius', get: (rt) => rt.radius, fmt: (v) => String(Math.round(v)), applies: (d) => d.shape === 'area' && d.radius !== 0 },
   { label: 'Charges', get: (rt) => rt.charges, fmt: String, applies: (d) => d.charges !== 1 },
   { label: 'Blink distance', get: (rt) => rt.distance, fmt: (v) => String(Math.round(v)), applies: (d) => d.shape === 'dash' },
   { label: 'Duration', get: (rt) => rt.duration, fmt: seconds, applies: (d) => d.shape === 'ward' || d.shape === 'buff' || d.shape === 'area' },

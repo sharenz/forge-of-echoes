@@ -39,6 +39,7 @@ export function isImmediateEvent(e: SimEvent, local: number): boolean {
     case 'nova':
     case 'dash':
     case 'ward':
+    case 'buff':
     case 'flask':
     case 'notEnoughFocus':
     case 'playerDeath':

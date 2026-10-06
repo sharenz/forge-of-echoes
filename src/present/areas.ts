@@ -25,6 +25,7 @@ import type { RGB } from '../contracts/render';
 import type { AreaView } from '../contracts/sim';
 import { FAULT_WEDGE_HALF_ANGLE, areaAngle, voidTideInner } from '../sim/area-geometry';
 import { BestiaryAreaPainter, type AreaAppear } from './bestiary-areas';
+import { drawRosterArea } from './skills/roster';
 import { C } from './colors';
 import { CHARGE_MAX_RADIUS, LIGHT_CAPS, type FrameCtx } from './context';
 import { Proximity } from './heat';
@@ -157,7 +158,8 @@ export class AreaPainter {
           this.voidTide(pen, f, ar);
           break;
         default:
-          this.bestiary?.draw(pen, f, ar);
+          // The player's own Storm Call / Glacial Spike telegraphs (power rework SK2), else the bestiary's kinds.
+          if (!drawRosterArea(pen, f, ar)) this.bestiary?.draw(pen, f, ar);
       }
     }
   }
@@ -450,8 +452,9 @@ export class AreaPainter {
       f.lights.area++;
       pen.light(a.x, a.y - 4, a.radius * 2.2, C.ember, 0.5 * k, 0.6);
     }
-    if (Math.random() < f.fxDt * 5 * k) {
-      const b = pen.burst(a.x + (Math.random() - 0.5) * a.radius, a.y + (Math.random() - 0.5) * a.radius * 0.6, 1, C.hot, C.ember);
+    // A wide patch (Cinder Mortar's burning ground, r 36 to 80) burns proportionally more than a footstep (r 14).
+    if (Math.random() < f.fxDt * 5 * k * Math.min(6, Math.max(1, (a.radius / 14) ** 2))) {
+      const b = pen.burst(a.x + (Math.random() - 0.5) * a.radius * 1.4, a.y + (Math.random() - 0.5) * a.radius * 0.9, 1, C.hot, C.ember);
       pen.speed(0, 5);
       pen.life(0.3, 0.6);
       pen.size(0.8, 1.3);

@@ -31,7 +31,14 @@ export function emitProjectiles(w: World, p: PlayerState, def: SkillRuntimeDef, 
   s.critMult = def.critMultiplier;
   s.ailmentChance = def.ailmentChance;
   s.pierce = projectilePierce(p, def, b);
+  const bounce = augmentOf(def, 'bounce');
+  const decay = augmentOf(def, 'decay');
   for (let k = 0; k < count; k++) {
+    // Roster riders (spawnProjectile resets them on projSpec after every spawn, so they are set per bolt).
+    s.bounce = bounce ? bounce.count : 0;
+    s.rehit = b.rehit ?? 0;
+    s.knock = b.knock ?? 1;
+    s.decay = decay ? decay.share : 0;
     const a = count === 1 ? angle : angle - spread / 2 + (spread * k) / (count - 1);
     s.angle = a;
     // A muzzle inside a tall prop (she stands against it) fires from her centre: the shot meets the prop, it does not skip it.

@@ -39,6 +39,7 @@ import type { PlayerPainter } from './players';
 import type { PostState } from './post';
 import type { PropPainter } from './props';
 import type { SpriteTable } from './sprites';
+import { RosterFx } from './skills/roster';
 
 const DT_INDEX: Record<DamageType, number> = { physical: 0, fire: 1, cold: 2, lightning: 3, void: 4 };
 const KIND_INDEX = Object.fromEntries(MONSTER_KINDS.map((k, i) => [k, i])) as Record<MonsterKind, number>;
@@ -99,6 +100,8 @@ const POOF_END: RGB = [0.22, 0.2, 0.2];
 const SKILL_COLOR: Partial<Record<SkillId, RGB>> = {
   emberLance: C.flame, emberNova: C.flame, flameWave: C.flame, rimeShards: C.frost, arcChain: C.storm, riftStep: C.voidGlow,
   cinderWard: C.hot,
+  phaseStride: C.voidGlow, glacialNova: C.frost, spark: C.storm, cinderMortar: C.flame, arcaneReprieve: C.mana, umbralBolt: C.voidGlow,
+  kineticLance: C.gold, frostOrb: C.frost, stormCall: C.storm, glacialSpikes: C.frost,
 };
 
 const PROJECTILE_END: Record<ProjectileKind, readonly [RGB, RGB, number]> = {
@@ -115,6 +118,12 @@ const PROJECTILE_END: Record<ProjectileKind, readonly [RGB, RGB, number]> = {
   chainHook: [C.hot, C.ember, 6],
   tarGlob: [TAR, TAR_END, 10],
   boneShard: [BONE_CHIP, BONE_END, 5],
+  // power rework SK2 (their own impacts live in skills/roster.ts; these are the fallbacks)
+  spark: [C.lightning, C.storm, 5],
+  cinderShell: [C.hot, C.lavaDark, 14],
+  umbralBolt: [C.voidHi, C.void, 8],
+  kineticLance: [C.gold, C.iron, 6],
+  frostOrb: [C.ice, C.mana, 8],
 };
 
 export interface EventKit {
@@ -133,6 +142,8 @@ export interface EventKit {
 }
 
 export class EventFx {
+  /** The power rework's roster batch 1 (SK2): muzzles, Glacial Nova, buff auras, impacts, strikes and spikes. */
+  readonly roster: RosterFx;
   /** Per-frame budgets. */
   private bursts = 0;
   private pulses = 0;
@@ -162,6 +173,7 @@ export class EventFx {
   private burstNext = 0;
 
   constructor(private readonly k: EventKit) {
+    this.roster = new RosterFx({ pen: k.pen, fx: k.fx, pos: k.players.pos });
     const t = k.table;
     this.frames.impact = t.get('fx/impact').frames;
     this.frames.levelUp = t.get('fx/levelUp').frames;
@@ -232,6 +244,7 @@ export class EventFx {
     this.lastHurtFlash = -1;
     this.bursts3.fill(-1e9);
     this.k.tethers?.clear();
+    this.roster.reset();
   }
 
   /** Request screen shake for this frame (applied once in endFrame). */
@@ -256,7 +269,9 @@ export class EventFx {
         // Muzzle flashes: allies' a step quieter, and a party casting shoulder to shoulder shares one cell's
         // budget, so three wands firing together never fuse into a white ball over the casters.
         const pk = (e.playerId === local ? 1 : ALLY_FX) * (this.heat.touch(x, y, f.time) >= 2 ? 0 : 1);
-        if (e.skill === 'flameWave') {
+        if (this.roster.cast(e.skill, x, y, ang, pk)) {
+          // power rework SK2 roster batch 1 (skills/roster.ts)
+        } else if (e.skill === 'flameWave') {
           const b = pen.burst(x, y, 16, C.hot, C.ember);
           pen.speed(40, 110);
           pen.life(0.15, 0.35);
@@ -294,6 +309,11 @@ export class EventFx {
         return;
       }
       case 'nova': {
+        if (e.skill === 'glacialNova') {
+          this.roster.nova(e, e.playerId === local);
+          if (e.playerId === local) this.shake(0.1);
+          return;
+        }
         const y = e.y - 6;
         fx.rings.spawn(e.x, y, 6, e.radius, 0.38, C.flame, 1, 0.7, 0.6);
         fx.rings.spawn(e.x, y, 4, e.radius * 0.45, 0.22, C.hot, 1, 0.6);
@@ -337,6 +357,9 @@ export class EventFx {
         fx.rings.spawn(e.toX, e.toY - 2, 4, 18, 0.3, C.voidGlow, 1, 0.7 * k);
         return;
       }
+      case 'buff':
+        this.roster.buff(e);
+        return;
       case 'ward': {
         fx.rings.spawn(e.x, e.y - 8, 8, 44, 0.45, C.hot, 2, 0.9, 1);
         const b = pen.burst(e.x, e.y - 10, 20, C.hot, C.ember);
@@ -362,6 +385,7 @@ export class EventFx {
         return;
       case 'projectileEnd': {
         if (this.bursts++ > 30) return;
+        if (this.roster.projectileEnd(e)) return;
         const pe = PROJECTILE_END[e.kind];
         const c0 = pe[0];
         const c1 = pe[1];
@@ -946,6 +970,10 @@ export class EventFx {
     const { pen, fx, post } = this.k;
     const dist = f.local ? Math.hypot(f.local.x - e.x, f.local.y - e.y) : 999;
     const near = clamp01(1 - dist / 420);
+    if (this.roster.areaResolve(e, this.frames.iceSpike, this.lifeOf.iceSpike)) {
+      if (e.kind === 'stormCall') this.shake(0.06 * near);
+      return;
+    }
     switch (e.kind) {
       case 'slamWarning': {
         const boss = e.radius >= 56;

@@ -1,6 +1,6 @@
 # E. Build plan: slices, file ownership, tests, migration
 
-Status: R1 built and deployed 2026-10-06; R2 slices C2, SK0 and SK1 built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
+Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
 `power-curve.md` (P), `skills.md` (SK) and `passive-tree.md` (PT) hold the designs these slices implement; `overview.md` has the pillars and the migration summary.
 
 ---
@@ -138,6 +138,24 @@ Owner lane **skills-fire-cold-light** (data + sim behaviour + presenter) per ele
 Skills: Phase Stride, Glacial Nova, Spark, Cinder Mortar, Arcane Reprieve, Umbral Bolt (+ Decay in `sim/debuffs`), Kinetic Lance, Frost Orb, Storm Call, Glacial Spikes (unlock levels 5 to 18).
 Files per element (so parallel agents do not collide): `src/data/progression/skills/<element>.ts`, `src/sim/skills/behaviours/<element>.ts`, `src/present/skills/<element>.ts`, `src/art/skills/<element>.ts` (sprites/decals), `src/audio` cue tables `skills-<element>.ts`.
 Exit: each skill's isolated sim test, its tooltip numbers equal the sim's, a presenter smoke test, power-budget table test.
+
+**Status: built 2026-10-06** (one lane). All ten are `available` with behaviour through the executor (`src/sim/skills/behaviours/*`,
+`roster.ts`, `buffs.ts`): Phase Stride and Arcane Reprieve are `buff` emitters (`stride`, `restore` primitives); Glacial Nova a `blast`
+(instant, past cover and shields); Spark, Umbral Bolt and Kinetic Lance projectiles with new per-projectile riders (`bounce` off tall cover
+and the arena edge, `rehit` interval, knockback multiplier, `decay` share); Cinder Mortar a `lob` (0.9 s, over everything) whose landing
+bursts and leaves `fireTrail` burning ground (`ground` primitive); Frost Orb an `orb` that touches nothing and fires `rimeShard`s every
+0.25 s; Storm Call and Glacial Spikes queue telegraphed ground strikes (`PlayerState.pendingStrikes`, friendly `stormCall` / `frostSpike`
+areas). **Decay** lives on monsters (`MonsterStore.decay*`, `applyDecay` / `tickDecay` in `sim/combat.ts` next to ignite; DECAY in
+`data/progression/combat.ts`: 4 s, 5 stacks, half the void resistance), shown as `AILMENT_BIT.decayed`. New `AugmentRuntime` primitives
+`ground`, `decay`, `bounce`, `stride`, `restore` (the rules resolve them from `SkillDef.primitives` and `tune` augment effects); behaviour
+timings shared by sim and tooltips in `data/progression/skill-timing.ts`. Contract appends: `PROJECTILE_KINDS` spark, cinderShell,
+umbralBolt, kineticLance, frostOrb; `AREA_KINDS` stormCall, frostSpike; `SimEvent` `buff`; `AILMENT_BIT.decayed` (512) — the wire changes,
+so **protocol 28 → 29** (left to the integrator). Live augments (17): Long Stride, Slipstream, Cleansing Stride; Wide Chill; More Sparks,
+Ricochet Storm, Charged; Napalm; Deep Well, Second Wind; Withering Touch; Ricochet (Kinetic); Twin Orbs; Wide Skies, Storm Cell, Tethered
+Strikes; Twin Lines. The other 27 of these trees stay `planned` on their primitive (split, lodge, delay, expose, convert, trail, onKill,
+mark, knockback, pull, shape, refund). First-pass numbers tuned into the budget bands (skills.md 2, `tests/game-progression/skill-budget.test.ts`):
+Glacial Nova cooldown 4 → 3 s and effectiveness 1.3–2.8 → 1.5–3.3 (radius 90 → 120 by rank), Frost Orb 16 → 18 Focus, Glacial Spikes
+cooldown 2.5 → 2 s. Determinism goldens unchanged (bit-identical: the new riders default to the old behaviour).
 
 ### SK3: Roster batch 2 (L)  (R3)
 Gravity Well, Rime Bulwark, Immolation Sigil, Static Aegis, Voltaic Pulse, **Entropy Hex** (exposure applier), Concussive Blast, Static Lash, Echo Sigil, Wither Field (levels 20 to 40). Same lanes as SK2. New sim systems: pull, barrier, Withered-on-monsters.

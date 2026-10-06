@@ -632,9 +632,13 @@ describe('snapshot codec: bestiary rosters and player debuffs', () => {
     // The new ids were appended: the old wire indices did not move.
     expect(MONSTER_KINDS.indexOf('trainingDummy')).toBe(7);
     expect(MONSTER_KINDS.slice(8)).toEqual([...NEW_MONSTER_KINDS]);
-    expect(PROJECTILE_KINDS.slice(7)).toEqual([...NEW_PROJECTILE_KINDS]);
+    expect(PROJECTILE_KINDS.slice(7, 7 + NEW_PROJECTILE_KINDS.length)).toEqual([...NEW_PROJECTILE_KINDS]);
+    // Roster batch 1 (power rework SK2), appended after the rosters.
+    expect(PROJECTILE_KINDS.slice(7 + NEW_PROJECTILE_KINDS.length)).toEqual(['spark', 'cinderShell', 'umbralBolt', 'kineticLance', 'frostOrb']);
     expect(AREA_KINDS.slice(7, 7 + NEW_AREA_KINDS.length)).toEqual([...NEW_AREA_KINDS]);
-    expect(AREA_KINDS.slice(7 + NEW_AREA_KINDS.length)).toEqual(['stormStrike', 'rendStrike', 'echoMark', 'faultWedge', 'voidTide']);
+    expect(AREA_KINDS.slice(7 + NEW_AREA_KINDS.length)).toEqual([
+      'stormStrike', 'rendStrike', 'echoMark', 'faultWedge', 'voidTide', 'stormCall', 'frostSpike',
+    ]);
   });
 
   it('round-trips every monster kind, rarity and facing, and every projectile kind with each flag', () => {

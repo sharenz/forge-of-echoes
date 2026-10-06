@@ -49,8 +49,12 @@ describe('rules assembly', () => {
     expect(s.arcChain).toMatchObject({ tier: 3, prerequisite: null, unlockLevel: 6, damageType: 'lightning' });
     expect(s.riftStep).toMatchObject({ branch: 'mobility', damageType: null, element: 'void' });
     expect(s.cinderWard).toMatchObject({ branch: 'survival', unlockLevel: 2 });
-    expect(Object.values(s).filter((i) => i.available).map((i) => i.id)).toEqual(
-      ['emberLance', 'emberNova', 'flameWave', 'rimeShards', 'arcChain', 'riftStep', 'cinderWard']);
+    expect(Object.values(s).filter((i) => i.available).map((i) => i.id)).toEqual([
+      'emberLance', 'emberNova', 'flameWave', 'rimeShards', 'arcChain', 'riftStep', 'cinderWard',
+      // SK2 roster batch 1 (levels 5 to 18)
+      'phaseStride', 'glacialNova', 'spark', 'cinderMortar', 'arcaneReprieve', 'umbralBolt', 'kineticLance', 'frostOrb', 'stormCall',
+      'glacialSpikes',
+    ]);
   });
 
   it('describes map bases with their implemented implicits', () => {

@@ -18,7 +18,10 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "
    data-driven skill executor in `src/sim/skills/` with bit-identical determinism goldens, protocol 28, save version 3: the owner's full
    skill-point refund). **SK1 Skills panel v2 built 2026-10-06** (skill book rail by element, augment graph with before/after numbers,
    refund dialogs with the Scrap price, presets, Alt comparison, keyboard flow, HUD augment pips, Character panel points and respec entry;
-   `e2e --only skills` at 1280x720 and 1024x600). Still to do in R2: SK2 ten new skills. Then
+   `e2e --only skills` at 1280x720 and 1024x600). **SK2 built 2026-10-06:** ten new skills playable (Phase Stride 5, Glacial Nova 7,
+   Spark 8, Cinder Mortar 9, Arcane Reprieve 10, Umbral Bolt 11 with Decay on monsters, Kinetic Lance 13, Frost Orb 14, Storm Call 16,
+   Glacial Spikes 18), 17 more live augments (34 in all), each with sim behaviour, visuals, sounds and tooltips that read the sim's
+   numbers; needs protocol 29 (new projectile and area kinds, the `buff` event, the decayed ailment bit). R2 is complete with it. Then
    R3/R4 (remaining skills and augments), R5 "Orrery" passive tree, R6 balance pass.
 3. **Finish wave 3: leftovers.** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today", the Re-chart tooltip entry and
    F1 polish are done (2026-10-06; F1: eleven Atlas/pin/surge sounds, pin and surge banners, Calm also follows Screen shake 0 and

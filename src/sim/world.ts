@@ -55,6 +55,33 @@ export interface PendingNova {
   def: SkillRuntimeDef;
 }
 
+/**
+ * A ground strike waiting for its telegraph (Storm Call's bolts, Glacial Spikes' spikes): at `at` it deals `def`'s hit to every
+ * monster within `radius` of (x, y). Strikes sharing a `group` (one spike row) hit each monster at most once between them.
+ */
+export interface PendingStrike {
+  at: number;
+  x: number;
+  y: number;
+  radius: number;
+  def: SkillRuntimeDef;
+  group: number[] | null;
+}
+
+/** Phase Stride: seconds left, extra movement speed (fraction) and evade chance while it lasts. */
+export interface StrideState {
+  time: number;
+  speed: number;
+  evasion: number;
+}
+
+/** Arcane Reprieve: seconds left and the Focus / life restored per second meanwhile. */
+export interface RestoreState {
+  time: number;
+  focusRate: number;
+  lifeRate: number;
+}
+
 export interface PlayerState {
   /** Server-assigned id (1..255), unique within the instance. */
   readonly id: number;
@@ -104,6 +131,11 @@ export interface PlayerState {
   pushY: number;
   /** Ember Nova echoes waiting to fire (Echo of the Matriarch / 'echo'). */
   pendingNovas: PendingNova[];
+  /** Ground strikes waiting for their telegraph (Storm Call, Glacial Spikes). */
+  pendingStrikes: PendingStrike[];
+  /** Timed self-buffs of the roster skills (Phase Stride, Arcane Reprieve). */
+  stride: StrideState;
+  restore: RestoreState;
   /**
    * Id of a portal that must not take the player until they step out of it (they just went
    * through, it opened under them, or they arrived on it), 0 = none.

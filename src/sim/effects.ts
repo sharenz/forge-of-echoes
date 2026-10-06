@@ -18,6 +18,8 @@ export interface ProjectileEffect {
   onLand?(w: World, slot: number, x: number, y: number): void;
   /** A flat projectile ran out of range (or left the arena) without hitting anyone. */
   onExpire?(w: World, slot: number): void;
+  /** Every tick before it moves (player skill projectiles: Frost Orb fires its shards from here). */
+  onTick?(w: World, slot: number): void;
 }
 
 export interface AreaEffect {

@@ -19,7 +19,7 @@ import {
 } from './debuffs';
 import { clamp, dirFromVector, finiteOr } from './math';
 import { CAST_SLOW, combineSlow, playerFlowDrift, playerSlow, readMove, resolvePlayerAt, slowedSpeed } from './movement';
-import { releaseSkill, tickFireTrail, tickPendingNovas, tickWard } from './skills';
+import { releaseSkill, tickFireTrail, tickPendingNovas, tickPendingStrikes, tickSelfBuffs, tickWard } from './skills';
 import { MFLAG, MSTATE } from './stores';
 import type { FlaskState, PlayerState, SkillChargeState, World } from './world';
 
@@ -104,6 +104,9 @@ export function createPlayer(join: SimPlayerJoin, x: number, y: number): PlayerS
     trailTimer: 0,
     pushX: 0, pushY: 0,
     pendingNovas: [],
+    pendingStrikes: [],
+    stride: { time: 0, speed: 0, evasion: 0 },
+    restore: { time: 0, focusRate: 0, lifeRate: 0 },
     portalLatch: 0,
     portalDwellId: 0,
     portalDwell: 0,
@@ -333,8 +336,10 @@ export function updatePlayer(w: World, p: PlayerState): void {
   if (s.lifeRegen > 0) p.life = Math.min(s.maxLife, p.life + s.lifeRegen * DT);
   if (s.focusRegen > 0) p.focus = Math.min(s.maxFocus, p.focus + s.focusRegen * (1 + flaskActiveFx(p, 'quicksilverMind') * FLASK_FX.quicksilverMind.focusRegen) * DT);
   tickWard(w, p);
+  tickSelfBuffs(p);
   updateCasting(w, p);
   tickPendingNovas(w, p);
+  tickPendingStrikes(w, p);
 
   // Movement (the shared movePlayer rules): slowed while a timed active skill is cast (never by
   // the basic attack), by debuffs (chilled; frozen and rooted hold her still), by tar underfoot, and
@@ -357,10 +362,12 @@ export function updatePlayer(w: World, p: PlayerState): void {
     const ml = dir.len;
     const castSlow = p.cast && p.cast.def.id !== 'emberLance' ? CAST_SLOW : 0;
     const base = combineSlow(playerSlow(castSlow, moveSlowOf(p), areaSlowAt(w.areas, p.x, p.y)), p.eventSlow);
-    const crowd = ml > 0.05 && base < 1 ? crowdFactor(w, p, mx / ml, my / ml) : 1;
+    // Phase Stride: no slow from crowding while it lasts.
+    const crowd = ml > 0.05 && base < 1 && p.stride.time <= 0 ? crowdFactor(w, p, mx / ml, my / ml) : 1;
     // Uncrowded, the slow is exactly what a predicting client passes (see movement.ts playerSlow).
     const slow = crowd === 1 ? base : 1 - (1 - base) * crowd;
-    const speed = slowedSpeed(s.moveSpeed * (1 + flaskActiveFx(p, 'quickstep') * FLASK_FX.quickstep.moveSpeed), slow);
+    const stride = p.stride.time > 0 ? p.stride.speed : 0;
+    const speed = slowedSpeed(s.moveSpeed * (1 + flaskActiveFx(p, 'quickstep') * FLASK_FX.quickstep.moveSpeed + stride), slow);
     p.vx = mx * speed;
     p.vy = my * speed;
     // A conveyor belt underfoot adds its drift to her own velocity (movement.ts movePlayerDrifted: same expression, so client
@@ -534,6 +541,8 @@ export function applyPlayerPushes(w: World): void {
     const pa = living[a];
     for (let b = a + 1; b < living.length; b++) {
       const pb = living[b];
+      // Phase Stride: she passes through allies (and they through her) while it lasts.
+      if (pa.stride.time > 0 || pb.stride.time > 0) continue;
       let dx = pb.x - pa.x;
       let dy = pb.y - pa.y;
       let d = Math.hypot(dx, dy);

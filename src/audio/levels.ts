@@ -112,6 +112,10 @@ export const SFX_TRIM_DB: Partial<Record<SfxId, number>> = {
   // the Atlas and the daily surge (slice F1): calibrated offline in headless Chromium (uiOpen/uiHover re-measured identical)
   atlasOpen: -9.6, atlasHover: 8.3, atlasSelect: -0.9, atlasRoute: -4.4, atlasReveal: -3.9, atlasSeal: -1.4, atlasZoom: -5.5,
   atlasPin: 1.8, atlasUnpin: 3.9, surgeSpend: -3.4, surgeRefill: 0.3,
+  // power rework SK2 roster batch 1 (sfx-skills.ts): borrowed from the calibrated recipe each one varies (castArc, castNova,
+  // hitVoid, evade, castFrost, dash, flaskFocus, wardenNova, eruption, hitLightning, glacialSpikes); re-run the calibration
+  castSpark: 2.3, castMortar: -12.4, castUmbral: -6.1, castKinetic: -7.6, castOrb: -3.6, castStormCall: -2, phaseStride: -7.4,
+  arcaneReprieve: -0.6, glacialNovaBurst: -13.2, mortarBlast: -15.7, stormCallStrike: 2.4, frostSpike: -7.7,
 };
 
 /**

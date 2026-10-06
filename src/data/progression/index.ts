@@ -48,3 +48,4 @@ export function getSkill(id: SkillId): SkillDef {
   if (!s) throw new Error(`Unknown skill "${id}"`);
   return s;
 }
+export * from './skill-timing';

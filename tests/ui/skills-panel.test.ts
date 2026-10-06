@@ -59,12 +59,14 @@ describe('skill book', () => {
   });
 
   it('shows a new skill as soon as its data turns available (no hard-coded list)', () => {
-    const flipped = skills.map((s) => (s.id === 'phaseStride' ? { ...s, available: true } : s));
+    // Gravity Well (roster batch 2) has not shipped yet; Phase Stride did with SK2.
+    const flipped = skills.map((s) => (s.id === 'gravityWell' ? { ...s, available: true } : s));
     const ch = character(10);
     const before = skillBook(skills, ch);
     const after = skillBook(flipped, ch);
-    expect(before.order).not.toContain('phaseStride');
-    expect(after.order).toContain('phaseStride');
+    expect(before.order).toContain('phaseStride');
+    expect(before.order).not.toContain('gravityWell');
+    expect(after.order).toContain('gravityWell');
     expect(after.coming).toBe(before.coming - 1);
   });
 

@@ -1,9 +1,9 @@
 // Utility skills (docs/power-rework/skills.md 3). Values are rank 1 → rank 10.
 import type { SkillDef } from '../types';
-import { plannedSkill } from './define';
+import { plannedSkill, skill } from './define';
 
 export const UTILITY_SKILLS = {
-  phaseStride: plannedSkill('phaseStride', {
+  phaseStride: skill('phaseStride', {
     name: 'Phase Stride',
     description: 'You move faster, ignore crowding and pass through allies for a few seconds.',
     branch: 'mobility',
@@ -22,8 +22,9 @@ export const UTILITY_SKILLS = {
     critChance: 0,
     ailmentChance: 0,
     duration: { lerp: [3, 4] },
+    primitives: { stride: { speed: 0.35, evasion: 0 } },
   }),
-  arcaneReprieve: plannedSkill('arcaneReprieve', {
+  arcaneReprieve: skill('arcaneReprieve', {
     name: 'Arcane Reprieve',
     description: 'Restores Focus over a few seconds and shakes off chill and Withered.',
     branch: 'survival',
@@ -42,6 +43,7 @@ export const UTILITY_SKILLS = {
     critChance: 0,
     ailmentChance: 0,
     duration: 3,
+    primitives: { restore: { focus: 0.3, life: 0 } },
   }),
   echoSigil: plannedSkill('echoSigil', {
     name: 'Echo Sigil',

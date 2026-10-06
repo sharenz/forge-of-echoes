@@ -30,6 +30,89 @@ export interface ProjectileBehaviour {
   circle?: FlagRef;
   /** Repeats after a delay (item-granted; picked echoes arrive as an `echo` augment). */
   echo?: FlagRef;
+  /** Seconds after which one projectile may hit the same monster again (Spark); absent = never. */
+  rehit?: number;
+  /** Knockback multiplier of its hits (Kinetic Lance); absent = 1. */
+  knock?: number;
+}
+
+/** An instant burst of damage around the caster that passes cover and shields (Glacial Nova). */
+export interface BlastBehaviour {
+  emitter: 'blast';
+  /** Radius when the runtime def's radius is 0. */
+  radius: number;
+  /** Knockback of its hits (outward). */
+  knock: number;
+}
+
+/**
+ * A shell lobbed at the cursor (Cinder Mortar): it flies `flight` seconds over everything, bursts in the def's radius where it
+ * lands, then leaves the def's `ground` primitive (burning ground).
+ */
+export interface LobBehaviour {
+  emitter: 'lob';
+  kind: ProjectileKind;
+  flight: number;
+  /** Farthest landing point when the runtime def's range is 0. */
+  range: number;
+  /** Blast radius when the runtime def's radius is 0. */
+  radius: number;
+}
+
+/** Slow orbs that touch nothing and fire shards at the nearest enemy while they live (Frost Orb). */
+export interface OrbBehaviour {
+  emitter: 'orb';
+  kind: ProjectileKind;
+  speed: number;
+  /** Seconds it lives when the runtime def's duration is 0. */
+  duration: number;
+  /** How far it looks for a target when the runtime def's radius is 0. */
+  seek: number;
+  /** Fan between several orbs (radians, total). */
+  spread: number;
+  shard: { kind: ProjectileKind; interval: number; speed: number; range: number; radius: number };
+}
+
+/** Telegraphed strikes around the cursor, or along a line with `tethered` (Storm Call): ground damage, past cover and shields. */
+export interface StrikesBehaviour {
+  emitter: 'strikes';
+  /** Telegraph seconds before each strike falls. */
+  telegraph: number;
+  /** Scatter radius around the cursor when the runtime def's range is 0. */
+  scatter: number;
+  radius: number;
+  /** The cursor is clamped to this distance from the caster. */
+  reach: number;
+  tethered?: FlagRef;
+}
+
+/** A row of spikes erupting one after another along a line toward the cursor (Glacial Spikes); `twin` doubles the row. */
+export interface SpikesBehaviour {
+  emitter: 'spikes';
+  length: number;
+  radius: number;
+  /** The first spike erupts after `lead`, each next one `step` later. */
+  lead: number;
+  step: number;
+  twin?: FlagRef;
+  /** Angle of each twin line from the aim (radians). */
+  twinAngle: number;
+}
+
+/** A movement buff (Phase Stride): the def's `stride` primitive for its duration. */
+export interface StrideBehaviour {
+  emitter: 'buff';
+  buff: 'stride';
+  duration: number;
+  /** Casting it removes chill and root (Cleansing Stride). */
+  cleanse?: FlagRef;
+}
+
+/** Focus (and life) restored over the def's duration, removing chill and Withered (Arcane Reprieve). */
+export interface RestoreBehaviour {
+  emitter: 'buff';
+  buff: 'restore';
+  duration: number;
 }
 
 /** A ring bursting outward from the caster (Ember Nova); a `fan` concentrates it toward the aim. */
@@ -69,4 +152,6 @@ export interface WardBehaviour {
   renew?: FlagRef;
 }
 
-export type SkillBehaviour = ProjectileBehaviour | BurstBehaviour | ChainBehaviour | DashBehaviour | WardBehaviour;
+export type SkillBehaviour =
+  | ProjectileBehaviour | BurstBehaviour | ChainBehaviour | DashBehaviour | WardBehaviour
+  | BlastBehaviour | LobBehaviour | OrbBehaviour | StrikesBehaviour | SpikesBehaviour | StrideBehaviour | RestoreBehaviour;

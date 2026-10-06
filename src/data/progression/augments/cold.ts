@@ -1,4 +1,4 @@
-// Cold skill augments (docs/power-rework/skills.md 5.5). Tiers T1 (rank 2), T2 (rank 5), T3 (rank 8, 2 points).
+// Cold skill augments (docs/power-rework/skills.md 5.5, 5.6 and 6). Tiers T1 (rank 2), T2 (rank 5), T3 (rank 8, 2 points).
 import type { SkillId } from '../../../contracts/content';
 import type { AugmentDef } from '../types';
 
@@ -29,6 +29,61 @@ export const COLD_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
     {
       id: 'glacialEcho', name: 'Glacial Echo', tier: 3, text: 'Repeats after 0.4 seconds at 60% damage, at no Focus cost', grantedBy: 'rimeEcho',
       effects: [{ k: 'echo', delay: 0.4, damage: 60 }],
+    },
+  ],
+  glacialNova: [
+    {
+      id: 'wideChill', name: 'Wide Chill', tier: 1, text: '40% larger radius, 10% less damage',
+      effects: [{ k: 'scale', stat: 'radius', pct: 40 }, { k: 'more', pct: -10 }],
+    },
+    {
+      id: 'freezingCore', name: 'Freezing Core', tier: 2, text: 'Enemies within 40 units of you take 60% more damage from it',
+      effects: [{ k: 'planned', primitive: 'shape', note: 'inner core' }],
+    },
+    {
+      id: 'shatter', name: 'Shatter', tier: 3, text: 'Chilled enemies it kills explode for 10% of their life as cold in a radius of 40',
+      effects: [{ k: 'planned', primitive: 'onKill' }],
+    },
+  ],
+  frostOrb: [
+    {
+      id: 'heavyChill', name: 'Heavy Chill', tier: 1, text: 'Shards always chill, and their chill slows by 40% instead of 30%',
+      effects: [{ k: 'planned', primitive: 'ailment', note: 'chill effect' }],
+    },
+    {
+      id: 'orbit', name: 'Orbit', tier: 1, text: 'The orb circles you at 60 units for 5 seconds', excludes: ['frozenHeart'],
+      effects: [{ k: 'planned', primitive: 'summon', note: 'orbit' }],
+    },
+    {
+      id: 'twinOrbs', name: 'Twin Orbs', tier: 2, text: 'Two orbs, each shard dealing 35% less damage',
+      effects: [{ k: 'count', add: 1 }, { k: 'more', pct: -35 }],
+    },
+    {
+      id: 'shatter', name: 'Shatter', tier: 2, text: 'When it expires the orb bursts for 4× effectiveness as cold in a radius of 70',
+      excludes: ['frozenHeart'], effects: [{ k: 'planned', primitive: 'onKill', note: 'on expiry' }],
+    },
+    {
+      id: 'frozenHeart', name: 'Frozen Heart', tier: 3, text: 'Hovers at the cursor for 7 seconds and fires twice as fast, 20% less damage',
+      excludes: ['orbit', 'shatter'], effects: [{ k: 'planned', primitive: 'shape', note: 'stationary' }],
+    },
+    {
+      id: 'staticFrost', name: 'Static Frost', tier: 3,
+      text: '40% of Cold damage is converted to Lightning; shards chain once and shock instead of chilling',
+      effects: [{ k: 'planned', primitive: 'convert' }],
+    },
+  ],
+  glacialSpikes: [
+    {
+      id: 'twinLines', name: 'Twin Lines', tier: 1, text: 'Two lines 15° either side of the cursor, each spike dealing 30% less damage',
+      effects: [{ k: 'flag', flag: 'twinLines' }, { k: 'more', pct: -30 }],
+    },
+    {
+      id: 'frostComb', name: 'Frost Comb', tier: 2, text: 'Spikes leave chilling ground for 3 seconds',
+      effects: [{ k: 'planned', primitive: 'trail' }],
+    },
+    {
+      id: 'shatteringRows', name: 'Shattering Rows', tier: 3, text: 'The last spike of a row explodes for 2× effectiveness in a radius of 40',
+      effects: [{ k: 'planned', primitive: 'delay', note: 'end burst' }],
     },
   ],
 };

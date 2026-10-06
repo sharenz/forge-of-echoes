@@ -54,6 +54,12 @@ const LOOKS: Record<(typeof PROJECTILE_KINDS)[number], ProjLook> = {
   chainHook: { light: [1, 0.42, 0.16], lightRadius: 26, intensity: 0.32, streak: null, streakTime: 0, trail: 'fx/spark', trailC0: C.hot, trailC1: C.ember, trailRate: 10 },
   tarGlob: { light: [1, 0.6, 0.25], lightRadius: 18, intensity: 0.14, streak: null, streakTime: 0, trail: 'fx/spark', trailC0: [0.2, 0.15, 0.1], trailC1: [0.05, 0.04, 0.03], trailRate: 10 },
   boneShard: { light: [0.8, 0.88, 1], lightRadius: 22, intensity: 0.22, streak: C.bone, streakTime: 0.035, trail: 'fx/ash', trailC0: C.bone, trailC1: C.ash, trailRate: 8 },
+  // power rework SK2 roster batch 1 (the party's own: no hostile treatment)
+  spark: { light: C.lightning, lightRadius: 30, intensity: 0.4, streak: C.storm, streakTime: 0.06, trail: 'fx/spark', trailC0: C.lightning, trailC1: C.storm, trailRate: 14 },
+  cinderShell: { light: C.flame, lightRadius: 30, intensity: 0.45, streak: null, streakTime: 0, trail: 'fx/smoke', trailC0: [0.35, 0.24, 0.2], trailC1: C.smokeEnd, trailRate: 16 },
+  umbralBolt: { light: C.voidGlow, lightRadius: 44, intensity: 0.55, streak: C.void, streakTime: 0.07, trail: 'fx/mote', trailC0: C.voidHi, trailC1: C.void, trailRate: 24 },
+  kineticLance: { light: [1, 0.88, 0.6], lightRadius: 24, intensity: 0.3, streak: [0.95, 0.88, 0.7], streakTime: 0.05, trail: null, trailC0: C.white, trailC1: C.white, trailRate: 0 },
+  frostOrb: { light: C.frost, lightRadius: 52, intensity: 0.55, streak: null, streakTime: 0, trail: 'fx/frost', trailC0: C.ice, trailC1: C.mana, trailRate: 18 },
 };
 
 /** Landing marker per lob kind: fill, rim and progress colours, the splash and what it leaves behind. */
@@ -73,6 +79,12 @@ const LOB_TAR: LobLook = {
   fill: [0.02, 0.015, 0.01], fillAlpha: 3.2, rim: [1, 0.62, 0.24], prog: [1, 0.45, 0.16], splash: TAR_SPLASH_RADIUS, pool: TAR_POOL_RADIUS, apex: 42,
 };
 
+/**
+ * Cinder Mortar's shell (power rework SK2): the party's own lob, marked in friendly ember gold so it never reads as incoming
+ * artillery. The view does not carry the rank's blast radius (36 to 48 before area): the marker shows a typical 40.
+ */
+const LOB_SHELL: LobLook = { fill: [1, 0.62, 0.22], fillAlpha: 0.7, rim: [1, 0.78, 0.4], prog: [1, 0.66, 0.28], splash: 40, pool: 0, apex: 48 };
+
 /** Radius of the zone a lob's landing marker must cover: the pool it leaves, else its splash. */
 export function lobMarkerRadius(kind: (typeof PROJECTILE_KINDS)[number]): number {
   if (!isLobKind(kind)) return 0;
@@ -82,7 +94,8 @@ export function lobMarkerRadius(kind: (typeof PROJECTILE_KINDS)[number]): number
 
 const LOOK_BY_INDEX: ProjLook[] = PROJECTILE_KINDS.map((k) => LOOKS[k]);
 const IDS = PROJECTILE_KINDS.map((k) => `proj/${k}`);
-const LOB: readonly (LobLook | null)[] = PROJECTILE_KINDS.map((k) => (isLobKind(k) ? (k === 'tarGlob' ? LOB_TAR : LOB_FIRE) : null));
+const LOB: readonly (LobLook | null)[] = PROJECTILE_KINDS.map((k) =>
+  k === 'cinderShell' ? LOB_SHELL : isLobKind(k) ? (k === 'tarGlob' ? LOB_TAR : LOB_FIRE) : null);
 const FLAME_WAVE = PROJECTILE_KINDS.indexOf('flameWave');
 const CHAIN_HOOK = PROJECTILE_KINDS.indexOf('chainHook');
 const BONE_SHARD = PROJECTILE_KINDS.indexOf('boneShard');
@@ -233,11 +246,12 @@ export class ProjectilePainter {
         const o = pen.sprite('fx');
         o.rotation = Math.atan2(vy - dh, vx);
         o.sortY = y;
-        o.outline = OUTLINE_HOSTILE;
+        if (hostile) o.outline = OUTLINE_HOSTILE;
         const lm = this.metas[k];
         r.sprite(IDS[k], lm.frames > 1 ? Math.floor(time * (lm.fps || 8) + i) % lm.frames : 0, x, y - hgt, o);
-        if (lights.hostile < LIGHT_CAPS.hostile) {
-          lights.hostile++;
+        if (hostile ? lights.hostile < LIGHT_CAPS.hostile : lights.projectile < LIGHT_CAPS.projectile) {
+          if (hostile) lights.hostile++;
+          else lights.projectile++;
           pen.light(x, y - hgt, look.lightRadius, look.light, look.intensity, 0.3);
         }
         if (look.trail && Math.random() < fxDt * look.trailRate) {

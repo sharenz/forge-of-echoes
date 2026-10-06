@@ -61,6 +61,7 @@ export function eventClass(e: SimEvent, viewer: number, vx: number, vy: number):
     case 'cast':
     case 'nova':
     case 'ward':
+    case 'buff':
       if (e.playerId === viewer) return 0;
       return inAoi(e.x, e.y, vx, vy) ? 1 : -1;
     case 'dash':

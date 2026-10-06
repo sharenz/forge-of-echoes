@@ -122,7 +122,7 @@ export const FIRE_SKILLS = {
       { playerFlag: 'wardRenew', skillFlag: 'renew', text: 'Physical hits restore 0.5 seconds, capped at original duration (The Unbowed Crown)' },
     ],
   }),
-  cinderMortar: plannedSkill('cinderMortar', {
+  cinderMortar: skill('cinderMortar', {
     name: 'Cinder Mortar',
     description: 'Lobs a shell that flies over cover and shields, bursts and leaves burning ground.',
     branch: 'destruction',
@@ -140,8 +140,12 @@ export const FIRE_SKILLS = {
     effectiveness: { lerp: [1.7, 3.6] },
     critChance: 5,
     ailmentChance: 25,
-    radius: 36,
+    // The shell lands at the cursor, at most `range` away, after a 0.9 s flight; blast radius 36 → 48.
+    range: 320,
+    radius: { lerp: [36, 48] },
+    // Burning ground left where it lands: 0.35 effectiveness per 0.5 s for the duration, over the blast radius.
     duration: 3,
+    primitives: { ground: { effectiveness: 0.35, interval: 0.5 } },
     areaScales: 'radius',
   }),
   immolationSigil: plannedSkill('immolationSigil', {

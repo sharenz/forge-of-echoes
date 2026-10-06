@@ -14,6 +14,8 @@ import {
   WITHER_MAX_STACKS, WITHER_RES_PER_STACK,
 } from '../../src/sim/constants';
 import { monsterDef } from '../../src/sim/rosters';
+import type { SkillId } from '../../src/contracts/content';
+import { DECAY, SKILLS, SKILL_TIMING, type RankValue } from '../../src/data/progression';
 
 const SPEC = readFileSync(new URL('../../GAME_SPEC.md', import.meta.url), 'utf8');
 
@@ -116,5 +118,32 @@ describe('GAME_SPEC matches the implemented numbers', () => {
         expect(s14, kind).toContain(cells);
       }
     }
+  });
+
+  it('§4 roster batch 1 rows (SK2): unlock, cost / cast / cooldown and effectiveness come from the skill data', () => {
+    const s4 = section(4);
+    const num = (v: number) => String(v);
+    const range = (v: RankValue, unit = '') => {
+      if (typeof v === 'number') return `${unit ? v.toFixed(1) : num(v)}${unit}`;
+      if ('lerp' in v) return `${num(v.lerp[0])} → ${num(v.lerp[1])}${unit}`;
+      throw new Error('unexpected rank curve');
+    };
+    const ids: readonly SkillId[] = [
+      'phaseStride', 'glacialNova', 'spark', 'cinderMortar', 'arcaneReprieve', 'umbralBolt', 'kineticLance', 'frostOrb', 'stormCall',
+      'glacialSpikes',
+    ];
+    for (const id of ids) {
+      const d = SKILLS[id];
+      const cast = d.castTime > 0 ? `${d.castTime} s` : 'instant';
+      const cd = d.cooldown === 0 ? '–' : range(d.cooldown, ' s');
+      expect(s4, id).toContain(`| **${d.name}** | ${d.unlockLevel} | ${d.focusCost} / ${cast} / ${cd} |`);
+      if (d.effectiveness !== 0) expect(s4, id).toContain(`Effectiveness ${range(d.effectiveness)}`);
+    }
+    expect(s4).toContain(`40% of the hit as void damage over ${DECAY.duration} s at half the target's void resistance; up to ${DECAY.maxStacks} stacks`);
+    expect(s4).toContain(`after a ${SKILL_TIMING.stormTelegraph} s telegraph`);
+    expect(s4).toContain(`flies ${SKILL_TIMING.mortarFlight} s over cover`);
+    expect(s4).toContain(`every ${SKILL_TIMING.orbShardInterval} s it fires an ice shard (speed ${SKILL_TIMING.orbShardSpeed}, reach ${SKILL_TIMING.orbShardRange})`);
+    expect(s4).toContain(`at most every ${SKILL_TIMING.sparkRehit} s`);
+    expect(s4).toContain(`(the first after ${SKILL_TIMING.spikeLead} s, then every ${SKILL_TIMING.spikeStep} s)`);
   });
 });
