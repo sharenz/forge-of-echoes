@@ -31,7 +31,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 |---|---|
 | `WASD` / arrows | Move |
 | Mouse | Aim |
-| `LMB` `RMB` `Q` `E` `R` `F` | Six loadout slots, any learned skill in any slot (held = cast as soon as usable) |
+| `LMB` `RMB` `Q` `E` `R` `F` `Space` `Z` | Eight loadout slots, any learned skill in any slot (held = cast as soon as usable) |
 | `1`–`4` | Flasks |
 | `I` / `C` / `K` / `P` / `M` | Inventory / character / skills / party / Atlas (own hideout); buttons beside the command deck show the keys |
 | `H` / `F1` / `?` | Help (controls, how a run works, glossary, tutorial reset or skip) |
@@ -80,7 +80,7 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Dex bonus | +1% increased evasion per 5 dex |
 | Str bonus | +1% increased max life per 10 str |
 | Crit | 150% base crit multiplier; each skill has a base crit chance |
-| XP to next level | `floor(90·L^1.75)` (L1 → 90, L10 → 5.0k, L30 → 34k). Level cap 80 (the tier ceiling's monster level is 88, so a capped character meets a +25% level gap at Tier 15 instead of +100%). +3 attribute points and +1 skill point per level |
+| XP to next level | `floor(90·L^1.75)` (L1 → 90, L10 → 5.0k, L30 → 34k). Level cap 80 (the tier ceiling's monster level is 88, so a capped character meets a +25% level gap at Tier 15 instead of +100%). +3 attribute points and +2 skill points per level (`1 + 2·(L−1)` skill points in total) |
 | Flasks | Recover over 3 s, never instantly. Life Flask `40 + 8·L` life, Focus Flask `30 + 4·L` focus, both × flask effect. 5 charges per belt slot; pickups refill a matching belt slot first. **Utility flasks** recover nothing: Quickstep +30% move speed and breaks Roots (4 s), Aegis +15 to all resistances (6 s, still capped by the maximum), Quicksilver Mind 15% max Focus at once and +25% Focus regeneration (5 s). **Kill charge:** each assigned belt slot gains one charge per 40 kills of the run (belt affix "of Reserves" shortens it, never below 10) |
 
 **Starting kit:**
@@ -92,24 +92,51 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 
 ## 4. Skills (rules own the numbers; the sim owns the behaviour)
 
-A rank costs 1 skill point, and each level grants 1 point. Max rank is 20. Numbers below are rank 1 → rank 20 (linear unless noted). Effectiveness multiplies spell power. A new character starts with Ember Lance at rank 1 and one banked point; a skill must be ranked to go on the bar.
+Design: `docs/power-rework/skills.md` (32 skills, augments, points economy). A rank costs 1 skill point, and each level grants 2 points
+(`1 + 2·(L−1)` in total). Max rank is 10. Numbers below are rank 1 → rank 10 (linear unless noted). Effectiveness multiplies spell power.
+Skills **unlock by character level** (learning one costs a point and gives rank 1); there are no prerequisite chains, and a skill learned
+before its unlock level stays learned. A new character starts with Ember Lance at rank 1 (innate, free) and one banked point; a skill must
+be ranked to go on the bar. The roster has 32 skill ids; the seven below are playable, the other 25 are in the data with their unlock level
+(Phase Stride 5, Glacial Nova 7, Spark 8, Cinder Mortar 9 ... Event Horizon 62) and cannot be learned until their behaviour ships.
 
-**Loadout:** six slots labelled `LMB`, `RMB`, `Q`, `E`, `R`, `F`. Any learned skill, including Ember Lance,
-can occupy any slot; each skill appears at most once. Drag a learned skill from the tree or either slot row
+**Loadout:** eight slots labelled `LMB`, `RMB`, `Q`, `E`, `R`, `F`, `Space`, `Z` (the HUD keycap shows `Spc`). Any learned skill,
+including Ember Lance, can occupy any slot; each skill appears at most once. Drag a learned skill from the tree or either slot row
 onto a slot, or click a skill and then a slot in the skills panel. Moving an assigned skill swaps occupied slots.
-Right-click a slot in the skills panel to clear it. Existing slot assignments keep their positions; the old
-`Space` slot is now `RMB`. Auto-attack follows Ember Lance wherever assigned, and is idle while it is unassigned.
-Ember Lance remains the basic attack for cast priority and movement regardless of its slot.
+Right-click a slot in the skills panel to clear it. Saves from six slots pad the two new slots with empty ones. Auto-attack follows
+Ember Lance wherever assigned, and is idle while it is unassigned. Ember Lance remains the basic attack for cast priority and movement
+regardless of its slot. **Presets:** three named loadouts per character; saving and renaming work anywhere, loading one only in a hideout.
 
-| Skill | Tree | Cost / cast / cooldown | Behaviour & numbers |
+| Skill | Unlock | Cost / cast / cooldown | Behaviour & numbers |
 |---|---|---|---|
-| **Ember Lance** | basic (row 0) | 0 / 0.42 s / – | Fast fire bolt toward the cursor. Effectiveness 1.0 → 2.3, speed 420, range 320, pierce 0 (+1 at ranks 6/12/18), crit 6%, ignite 10%. Leaves an ember trail. |
-| **Ember Nova** | destruction row 1 | 12 / 0.55 s / 3.0 s | Ring of 12 → 24 flame projectiles (+1 per rank beyond the first 4 ranks, capped at 24 from rank 16) bursting outward. Effectiveness 1.0 → 1.8 (so each flame of a rank-1 Nova hits as hard as a Lance bolt), speed 260, range 170, pierce 1 (+1 per 5 ranks: 5 at rank 20), crit 5%, ignite 15%. |
-| **Flame Wave** | destruction row 2 (Nova 3) | 16 / 0.5 s / 4.0 s | Fan of 5 → 9 slow, wide flame waves (spread 0.9 rad) that pierce everything. Effectiveness 1.1 → 2.4, speed 180, range 170, radius 14, crit 5%, ignite 25%. |
-| **Rime Shards** | destruction row 2 (Nova 3) | 8 / 0.34 s / – | Fan of 3 → 7 ice shards (+1 at ranks 5, 9, 13, 17), spread 0.35 rad. Effectiveness 0.55 → 1.2, speed 360, range 260, pierce 2, chill 30%, crit 8%. |
-| **Arc Chain** | destruction row 3 (Rime 5) | 14 / 0.38 s / 1.0 s | Lightning strikes the enemy nearest the cursor (within 240) and chains 3 → 8 times (jump range 90). Effectiveness 0.9 → 2.0, shock 25%, crit 10%. |
-| **Rift Step** | mobility row 1 | 8 / instant / 3.5 s per charge | Blink toward the cursor, distance 90 → 120. 2 charges (+1 at ranks 10 and 20). 0.2 s invulnerable. Afterimages. |
-| **Cinder Ward** | survival row 1 | 20 / 0.3 s / 14 → 9 s | For 4 → 7 s: 35% → 55% less damage taken (capped at 60%), and embers burn adjacent monsters (radius 40) for 0.25× effectiveness per 0.5 s, crit 5%. |
+| **Ember Lance** | 1 (innate) | 0 / 0.42 s / – | Fast fire bolt toward the cursor. Effectiveness 1.0 → 2.3, speed 420, range 320, pierce 0 (pierce comes from the Piercing Flame augment), crit 6%, ignite 10%. Leaves an ember trail. |
+| **Ember Nova** | 1 | 12 / 0.55 s / 3.0 s | Ring of 12 → 20 flame projectiles (+1 per rank from rank 3) bursting outward. Effectiveness 1.0 → 1.8 (so each flame of a rank-1 Nova hits as hard as a Lance bolt), speed 260, range 170, pierce 1 (+1 at ranks 5 and 10), crit 5%, ignite 15%. |
+| **Flame Wave** | 12 | 16 / 0.5 s / 4.0 s | Fan of 5 → 9 slow, wide flame waves (spread 0.9 rad) that pierce everything. Effectiveness 1.1 → 2.4, speed 180, range 170, radius 14, crit 5%, ignite 25%. |
+| **Rime Shards** | 3 | 8 / 0.34 s / – | Fan of 3 → 7 ice shards (+1 at ranks 3, 5, 7, 9), spread 0.35 rad. Effectiveness 0.55 → 1.2, speed 360, range 260, pierce 2, chill 30%, crit 8%. |
+| **Arc Chain** | 6 | 14 / 0.38 s / 1.0 s | Lightning strikes the enemy nearest the cursor (within 240) and chains 3 → 8 times (jump range 90). Effectiveness 0.9 → 2.0, shock 25%, crit 10%. |
+| **Rift Step** | 1 | 8 / instant / 3.5 s per charge | Blink toward the cursor, distance 90 → 120. 2 charges (+1 at ranks 5 and 10). 0.2 s invulnerable. Afterimages. |
+| **Cinder Ward** | 2 | 20 / 0.3 s / 14 → 9 s | For 4 → 7 s: 35% → 55% less damage taken (capped at 60%), and embers burn adjacent monsters (radius 40) for 0.25× effectiveness per 0.5 s, crit 5%. |
+
+**Augments** (`skills.md` 4): each skill has a small tree of augments in three tiers. Tier 1 needs skill rank 2, tier 2 rank 5, tier 3
+rank 8; T1 and T2 cost 1 skill point, T3 costs 2. A skill has `floor(rank / 2)` augment slots (at most 5). Some augments exclude each other
+(both directions). Augment damage lines ("8% less damage", "60% more damage") join the global `more` pool. A unique that grants an augment's
+behaviour (Echo of the Matriarch, The Second Verse, The Last Rite, Winterstride, Stillwinter, Vigil of Ash, The Unbowed Crown) needs no slot,
+and when the same effect is also picked the better value applies (no stacking). Playable now (17): Ember Lance Piercing Flame (pierce 2),
+Twin Strand (2 bolts 12° apart, 25% less each), Rapid Spark (18% shorter cast, 8% less); Ember Nova Wider Ring (+30% range, +4 flames, 8%
+less), Echoing Ring (repeats after 0.4 s at 70%), Ember Fan (120° cone, 60% more, +30% range); Flame Wave Wide Front (+2 waves, 40% wider,
+20% less), Ring of Waves (double waves in a full circle, 30% less); Rime Shards Hoarfrost Spread (+2 shards, 50% wider, 15% less), Glacial
+Echo (repeats at 60%); Arc Chain Long Reach (+50% jump, +2 chains, 10% less); Rift Step Longer Stride (+30% distance, 0.3 s invulnerable,
++2 Focus), Chilling Landing; Cinder Ward Banked Embers (r80), Frozen Hearth (cold, always chills), Vigil (Focus, no damage), Resolute Flame.
+The other augments of the tables are listed and wait for their primitive (lodge, split, fork, convert, expose, trail, ...).
+
+**Respec** (a hideout service): refunding an augment or a whole skill (Ember Lance keeps rank 1) costs 4 Scrap per point (a T3 augment, 2
+points, costs 8); it is free below level 20, and the first 15 refunded points of a character are free. Scrap is taken from the backpack,
+stash and Crafting Stash in the same save as the refund. A free respec token, when a character has one, resets every skill, augment and
+attribute point at once.
+
+**The skill rework migration** (save version 3, owner decision 2026-10-06): every existing character gets all its skill points back: every
+skill returns to unlearned except Ember Lance (rank 1, innate, on `LMB`), the unspent points become the full `1 + 2·(L−1)`, augments and the
+rest of the loadout start empty, and the old ranks are kept in `legacySkillRanks` for one release. Items, unique flags, attributes and
+everything else are untouched.
 
 Skill damage per hit = `(spellPower + addedSpellDamage) × effectiveness × (1 + Σincreased%) × Πmore`. Increased sources are spellDamage, the element's damage and elementalDamage (fire, cold, lightning). Each hit rolls ×0.8–1.2 (midpoint 1), then crit, then the target's resistance.
 
@@ -536,7 +563,8 @@ so every character of an account shares it and alt-hopping gains nothing; it res
   The command is `refillSurge` (protocol 22); the server holds the clock and the ledger.
 - **Tree (as data):** Lantern-Bearer is now **Second Wind** (+1 charge on every area), Lamp Oil +1 charge on dead-end and sealed areas (and +3 sigil uses, see Beacons), Cartographer's Pen **Afterglow** (10% a spent charge is not consumed, rolled from the map seed; the bonus still applies), Trailmark +50% Hourglass Sand chance.
 - **Tide sigils** (Beacons below) are the only beacon effect on the surge: Faint multiplies the bonus by 1.25, Bright and Blazing give every covered area +1 daily charge, Blazing also rolls its own 25% chance (beside Afterglow's, independently) that the spent charge is kept.
-- **Indicators:** three brass pips under every chart node, in the area modal (header and Hold row), the pin chips and the Re-chart popover (`SurgePips.tsx`), hollow and dim when spent.
+- **Indicators:** three brass pips under every chart node, in the area modal (header and Hold row), the pin chips, the Re-chart popover and the Map Stash's area rows (`SurgePips.tsx`), hollow and dim when spent; a map's tooltip says today's charges of its area.
+- **Banner (slice F1):** a surged opening says it with the portal: "Surge: +30% item quantity, +15% item rarity. 2 of 3 charges left in Furnace Yard today." (or "Afterglow kept the charge"), first among the activation notices, with the `surgeSpend` swell; an Hourglass refill plays `surgeRefill` with the server's message.
 - **Measured** (`tests/game-progression/surge-economy.test.ts`, `BALANCE=1`): a boosted run is worth +8 to +14% (mean +10%) more than a normal one in the bot's Scrap valuation, because only ordinary kill drops are boosted; a player who rotates the chart boosts nearly all of about 20 daily runs (about +10% income), a focus farmer
   three of them (about +1.5%). Sand-adjusted value is about 3 to 4% of a run for a player who spends every Sand. The levers if income needs trimming are `SURGE_BONUS` (+25% / +12%) and `SURGE_CHARGES` (2).
 
@@ -652,6 +680,21 @@ earned discovery. Applying progress and deleting its pending receipt are one tra
 | 6 | The Last Kiln, Echo Bastion | 13 |
 | 7 | Heart of the Forge, Eternal Arena | 15 |
 | 3, rare destination | Sealed Reliquary | 7 |
+
+**Atlas feedback (slice F1, brief A 5.4 and 5.5, brief D 7.6).** The table speaks with its own procedural sounds (`src/audio/sfx.ts`,
+ids appended to `SFX_IDS`): `atlasOpen` (a slate scrape and a low bell when the Map Device opens; it replaces the generic panel sound),
+`atlasHover` (a soft tick on a known plate), `atlasSelect` (a stone chime a fifth apart), `atlasZoom` (a paper slide), `atlasPin` /
+`atlasUnpin`, and during the discovery cinematic `atlasRoute` (the ember crackling down the road) and `atlasReveal` (a rising three-note
+bell ladder whose last note lands on the forged plate). A key passage that opens turns `atlasSeal`. **Banners** are the game's toasts:
+the server's "Atlas revealed: ..." after a boss (now with `atlasReveal` the moment the account's chart grows), a pin ("Pinned Ember Road:
+its maps drop x3 as often (1 of 3 pins).", unpinning is silent besides its tick) and the surge line of the activation message.
+**Motion:** the Atlas "Motion" switch (system / calm / full, per viewer, shared by the chart, the Codex, the guide and the command deck)
+is the game's reduced-motion setting. On "system" it calms when the OS asks for reduced motion **or the game's Screen shake slider is at
+0**; calm stops parallax, embers, plume sway, pulses, the burst on activation, the table's and modal's entrances and the slots' pulsing
+invitations (the discovery cinematic becomes a 0.2 s cross-fade that still rings `atlasReveal` once). An explicit "full" is honoured.
+**Telemetry:** the server counts Atlas use in memory (`src/server/territory-counts.ts`: areas revealed, pins set and removed, surge charges
+spent or kept by Afterglow, Hourglass Sand and Grand Hourglass used, sigils slotted and taken out) and adds the non-zero counts since
+the last line as `atlas` to its periodic `status` log, then resets them. No identities, nothing stored, nothing sent anywhere else.
 
 The 25-area graph has reciprocal ordinary routes; each Tier 10+ main destination remains reachable after
 any one other non-start area is removed. The map scrolls in both directions and centres the inspected area.
@@ -1320,7 +1363,7 @@ Design and evidence: `docs/onboarding-ux.md`. Everything the guide says lives in
 
 - **State is account-level.** `CharacterSave.guide?: GuideState` (`src/contracts/guide.ts`) rides in the shared account storage like `atlas`: `{ v: 1, mode: 'active' | 'skipped' | 'done', skippedBy?, done: GuideStepId[], hints: GuideHintId[], used?: GuideProp[], t?, startedAt?, finishedAt?, replays?, warmed? }`. It is optional and normalised on load (`normalizeGuide`: unknown ids dropped, de-duplicated, bad types ignored); no `SAVE_VERSION` bump. A character whose account has none gets it decided **once** when it first loads (`decideGuide`, persisted at once): **veteran** (any character at level 5 or higher, any `stats.mapsCompleted`, `atlas.clears > 0` or a completed area) = `skipped` by `veteran` with every hint marked seen; everyone else `active`. Creating a second character on an active account that already holds a veteran flips it to skipped. Protocol 25: the `guide` command `{ op: 'done' | 'hint' | 'used', id } | { op: 'skip' | 'replay' | 'finish' }` (validated against the id whitelists, idempotent, rate-limited with the other commands, answered with the usual `character` push; the client applies the same pure rule at once). `foe show <account>` prints the funnel.
 - **The tracker.** Eleven steps in three chapters, derived (never a stored cursor) from observable state; evidence of a later step completes the earlier ones of the walk (`device`, `area`, `map`, `open`, `enter`, `fight`, `boss`, `chest`, `home`), then `points` and `equip` complete independently, then the closing *What next* card (`finish`). A fall keeps the tracker on `fight` ("You fell and nothing is lost. Click the portal to try again (N left)"), a spent map asks for another, and a friend's open portal shows one "Follow {name}" line. Parties: every player has their own state; joining a map completes steps 1 to 5 by evidence; nothing posts to chat or blocks.
-- **World guidance.** A ring and chevron (DOM overlay driven by `UiStore.world`, the client's per-frame prop projection) mark the target; an edge arrow with the name points at one off screen; unused hideout objects carry name plates (and the reward chest and return portal on a cleared map). The hideout camera leans 52 units north (`PresentInput.cameraBias`) so the Map Device is fully visible at 1280x720 and 1024x600. The return portal is placed north of the player rather than under the command deck. The portal card on a cleared map reads "Return portal open", not 0/8.
+- **World guidance.** A ring and chevron (DOM overlay driven by `UiStore.world`, the client's per-frame prop projection) mark the target; an edge arrow with the name points at one off screen; unused hideout objects carry name plates (and the reward chest and return portal on a cleared map). The hideout camera leans 52 units north (`PresentInput.cameraBias`) so the Map Device is fully visible at 1280x720 and 1024x600. The return portal opens where the smallest screen shows it: within 110 to 190 units of the player who killed the boss, clear of the boss's fall, the chest and the loot, and inside a view box sized for 1024x600 (`RETURN_PORTAL_VIEW`: left of the open inventory, which docks right and hides everything past about +37 units, and above the command deck); a spot outside the box pays for every unit it lies out, so only walls or the arena edge push it out. The portal card on a cleared map reads "Return portal open", not 0/8.
 - **Controls cheat-sheet** on a map entry while `fight` is unlearned (cast, move, flasks, Rift Step, panels); chips dim when used (`UiStore.signals`), it fades 3 s after cast and move, or after 40 s.
 - **Warm-up (first map of an account).** On the first `activateMapDevice` of an active guide whose account has no completed map, `RunSetup.warmup` is set and `guide.warmed` recorded: the director (`sim/waves.ts`) holds the opening until a living player moves or casts, or `GUIDE_WARMUP_SECONDS` (15) pass; nothing else about the run changes (not kept across a server restart).
 - **Flasks refill for free** on entering a hideout (login included, silently; coming home from a map says "Your flasks are refilled.").

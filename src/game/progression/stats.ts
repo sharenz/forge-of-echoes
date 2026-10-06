@@ -18,7 +18,8 @@ import { treeContextOf } from './atlas-rules';
 import { attributeRuleText, buildPlayerModel, focusRegenBreakdown, maxFocusOf, maxResistOf, penetrationOf, PERCENT_STATS, spellPowerAt } from './model';
 import type { PlayerModel } from './model';
 import {
-  BASIC_SKILL, amount, damageRange, damageStatsFor, damageTypeName, estimateLines, isMultiHit, normalizeLoadout, resolveSkill, skillRank,
+  BASIC_SKILL, amount, damageRange, damageStatsFor, damageTypeName, estimateLines, isMultiHit, normalizeLoadout, resolveSkill, skillAugments,
+  skillRank,
 } from './skills';
 import type { ResolvedSkill } from './skills';
 import { clean, oneDecimal, percent, plainNumber, signedPercent } from './util';
@@ -333,7 +334,7 @@ function skillSection(ch: CharacterSave, model: PlayerModel): SheetSection {
     if (!id) continue;
     const rank = skillRank(ch, id);
     if (rank < 1) continue;
-    const r = resolveSkill(model, id, rank);
+    const r = resolveSkill(model, id, rank, skillAugments(ch, id));
     const rt = r.runtime;
     if (r.dps !== null) {
       const type = damageTypeName(rt.damageType);
@@ -559,7 +560,7 @@ function skillMetrics(ch: CharacterSave): CompareMetric[] {
     const r = (s: Snapshot): ResolvedSkill => {
       let hit = cache.get(s);
       if (!hit) {
-        hit = resolveSkill(s.model, id, rank);
+        hit = resolveSkill(s.model, id, rank, skillAugments(ch, id));
         cache.set(s, hit);
       }
       return hit;

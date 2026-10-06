@@ -26,7 +26,8 @@ export function SkillsPanel() {
   const keyLabels = useUi((s) => s.hud?.slots.map((slot) => slot.key) ?? LOADOUT_KEYS, shallowEqual);
   const [pick, setPick] = useState<Pick>(null);
   const skills = store.rules.content.skills;
-  const layout = useMemo(() => layoutSkillTree(Object.values(skills)), [skills]);
+  // Roster skills whose behaviour has not shipped yet stay out of the tree (SkillInfo.available); SK1 replaces this panel.
+  const layout = useMemo(() => layoutSkillTree(Object.values(skills).filter((s) => s.available)), [skills]);
   if (!ch) return null;
   const points = ch.unspentSkillPoints;
   const rank = (id: SkillId): number => ch.skillRanks[id] ?? 0;
@@ -239,7 +240,7 @@ export function SkillsPanel() {
                 onPointerEnter={(e) => id && local.showTooltip({ kind: 'skill', skillId: id }, e.currentTarget, 'above')}
                 onPointerLeave={() => local.hideTooltip()}
               >
-                {id ? <PixelIcon id={`icon/skill/${id}`} width={36} height={36} /> : <span class="fe-lslot__empty" />}
+                {id ? <PixelIcon id={`icon/skill/${id}`} width={34} height={34} /> : <span class="fe-lslot__empty" />}
                 <span class="fe-lslot__key">
                   <Keycap>{keyLabels[i]}</Keycap>
                 </span>

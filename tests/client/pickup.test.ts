@@ -204,14 +204,14 @@ describe('server clock', () => {
 
 describe('keycap labels', () => {
   it('follow the keyboard layout (AZERTY) and stay default on QWERTY', () => {
-    const azerty = new Map([['KeyQ', 'a'], ['KeyE', 'e'], ['KeyR', 'r'], ['KeyF', 'f']]);
-    expect(loadoutKeyLabels(azerty)).toEqual(['LMB', 'RMB', 'A', 'E', 'R', 'F']);
-    const qwerty = new Map([['KeyQ', 'q'], ['KeyE', 'e'], ['KeyR', 'r'], ['KeyF', 'f']]);
+    const azerty = new Map([['KeyQ', 'a'], ['KeyE', 'e'], ['KeyR', 'r'], ['KeyF', 'f'], ['Space', ' '], ['KeyZ', 'w']]);
+    expect(loadoutKeyLabels(azerty)).toEqual(['LMB', 'RMB', 'A', 'E', 'R', 'F', 'Spc', 'W']);
+    const qwerty = new Map([['KeyQ', 'q'], ['KeyE', 'e'], ['KeyR', 'r'], ['KeyF', 'f'], ['KeyZ', 'z']]);
     expect(loadoutKeyLabels(qwerty)).toBeNull();
     const r = rig();
     enter(r);
     r.session.keyLabels = loadoutKeyLabels(azerty);
-    expect(r.session.hud(0, 60)?.slots.map((s) => s.key)).toEqual(['LMB', 'RMB', 'A', 'E', 'R', 'F']);
+    expect(r.session.hud(0, 60)?.slots.map((s) => s.key)).toEqual(['LMB', 'RMB', 'A', 'E', 'R', 'F', 'Spc', 'W']);
   });
 });
 

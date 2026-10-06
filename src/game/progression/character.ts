@@ -16,6 +16,7 @@ import {
   beltSlots, buildEquipment, createGrid, createStashTab, currencyStack, flaskRecovery, mintUid, placeItem,
 } from '../items';
 import { createMapItem } from './maps';
+import { normalizePresets } from './skills';
 import { fail, ok } from './util';
 
 // ---------------------------------------------------------------------------------------------
@@ -28,7 +29,7 @@ export function xpToNext(level: number): number {
   return Math.floor(XP_BASE * l ** XP_EXPONENT);
 }
 
-/** Grant experience: levels up (to the cap of 60), +3 attribute points and +1 skill point per level. */
+/** Grant experience: levels up (to the cap), +3 attribute points and +2 skill points per level. */
 export function grantXp(ch: CharacterSave, amount: number): { character: CharacterSave; levelsGained: number } {
   if (!Number.isFinite(amount) || amount <= 0 || ch.level >= LEVEL_CAP) {
     return { character: ch.level >= LEVEL_CAP && ch.xp !== 0 ? { ...ch, xp: 0 } : ch, levelsGained: 0 };
@@ -152,6 +153,10 @@ export function createCharacter(name: string, seed: number): CharacterSave {
       unspentSkillPoints: STARTING_KIT.skills.unspentPoints,
       skillRanks,
       loadout,
+      augments: {},
+      loadoutPresets: normalizePresets([]),
+      respecTokens: 0,
+      respecFreeUsed: 0,
       equipment: {},
       backpack: createGrid(BACKPACK_SIZE.w, BACKPACK_SIZE.h),
       stash: DEFAULT_STASH_TABS.map((t) => createStashTab(t)),

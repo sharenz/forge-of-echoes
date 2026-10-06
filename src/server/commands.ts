@@ -302,6 +302,7 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       const used = r.refillSurge(ch, cmd.areaId ? { kind: 'area', areaId: cmd.areaId } : { kind: 'all' }, game.now());
       if (!used.ok) return fail(used.error);
       if (!game.store.commit(s.record, used.value.character)) return fail('The hourglass could not be used. Nothing was spent; try again.');
+      game.territoryCounts.add(cmd.areaId ? 'sandUsed' : 'grandUsed');
       s.pushCharacter('now');
       return { ok: true, message: used.value.message };
     }
@@ -313,6 +314,7 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       const slotted = r.slotSigil(ch, cmd.areaId, cmd.slot, cmd.uid);
       if (!slotted.ok) return fail(slotted.error);
       if (!game.store.commit(s.record, slotted.value.character)) return fail('The sigil could not be slotted. Nothing changed; try again.');
+      game.territoryCounts.add('sigilSlotted');
       s.pushCharacter('now');
       return { ok: true, message: slotted.value.message };
     }
@@ -321,12 +323,16 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       const taken = r.unslotSigil(ch, cmd.areaId, cmd.slot);
       if (!taken.ok) return fail(taken.error);
       if (!game.store.commit(s.record, taken.value.character)) return fail('The sigil could not be taken out. Nothing changed; try again.');
+      game.territoryCounts.add('sigilUnslotted');
       s.pushCharacter('now');
       return { ok: true, message: taken.value.message };
     }
-    case 'pinArea':
+    case 'pinArea': {
       // Pins are an account setting: free, instant and allowed anywhere (the chart is read in the hideout, the result is what counts).
-      return applyResult(game, s, r.setPin(ch, cmd.areaId, cmd.pinned), false);
+      const res = applyResult(game, s, r.setPin(ch, cmd.areaId, cmd.pinned), false);
+      if (res.ok) game.territoryCounts.add(cmd.pinned ? 'pinned' : 'unpinned');
+      return res;
+    }
     case 'addStashTab':
       if (!inHideout(s)) return fail(NEED_HIDEOUT_STASH);
       return applyResult(game, s, r.addStashTab(ch), false);
@@ -355,6 +361,28 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       return applyResult(game, s, rules.rankUpSkill(ch, cmd.skillId), true);
     case 'setLoadoutSlot':
       return applyResult(game, s, rules.setLoadoutSlot(ch, cmd.slot, cmd.skillId), true);
+    case 'pickAugment':
+      return applyResult(game, s, rules.pickAugment(ch, cmd.skillId, cmd.augmentId), true);
+    case 'refundAugment':
+    case 'respec': {
+      // Refunds are a hideout service paid in Scrap (skills.md 9): the price is checked against what the client showed, and the
+      // Scrap, the points and the skill change are one character value written in one commit, so nothing can be half-refunded.
+      if (!inHideout(s)) return fail('Skills and augments are refunded in a hideout.');
+      const price = cmd.c === 'refundAugment'
+        ? rules.respecPrice(ch, { skillId: cmd.skillId, augmentId: cmd.augmentId })
+        : cmd.token ? { scrap: 0 } : rules.respecPrice(ch, cmd.skillId === null ? { all: true } : { skillId: cmd.skillId });
+      if (price.scrap !== cmd.expectedScrap) return fail(`The refund costs ${price.scrap} Forge Scrap now. Look again and confirm.`);
+      const done = cmd.c === 'refundAugment' ? rules.refundAugment(ch, cmd.skillId, cmd.augmentId) : rules.respec(ch, cmd.skillId, cmd.token);
+      if (!done.ok) return fail(done.error);
+      if (!game.store.commit(s.record, done.value)) return fail('The refund could not be saved. Nothing was refunded or paid; try again.');
+      s.pushCharacter('now');
+      s.instance?.updateRuntime(s);
+      return { ok: true, message: price.scrap > 0 ? `Refunded for ${price.scrap} Forge Scrap.` : 'Refunded.' };
+    }
+    case 'setPreset':
+      // Presets switch the whole bar: only between maps (skills.md 9), saving and renaming anywhere.
+      if (cmd.op === 'load' && !inHideout(s)) return fail('Loadout presets are switched in a hideout.');
+      return applyResult(game, s, rules.setPreset(ch, cmd.preset, cmd.op, cmd.name), cmd.op === 'load');
 
     // --- hideout ---------------------------------------------------------------------------
     case 'setMapTreeNode': {

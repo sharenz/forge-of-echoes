@@ -252,9 +252,6 @@
   .fe-table__tab { padding: 3px 10px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .fe-device.fe-device--table, .fe-chart__tip, .fe-amodal, .fe-amodal__scrim { animation: none; }
-}
 
 /* ---- keys in hand: chips with a dashed thread to their door (drawn on the canvas) ---------------------------- */
 .fe-chart__keys { position: absolute; left: 10px; top: 10px; z-index: 4; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
@@ -569,3 +566,12 @@
 .fe-beacon__reaching { display: flex; flex-direction: column; gap: 4px; }
 .fe-beacon__list { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; color: var(--bone); }
 .fe-beacon__list b { color: var(--parchment); }
+
+/* Last in the file so it wins over every animation above. Reduced motion (the OS) and Calm (the game's Motion setting, src/ui/atlas/motion.ts): no entrances, no pulsing invitations. */
+@media (prefers-reduced-motion: reduce) {
+  .fe-device.fe-device--table, .fe-chart__tip, .fe-amodal, .fe-amodal__scrim, .fe-passage__pit--offer, .fe-amodal .fe-device-slot.fe-slot--accepts { animation: none; }
+  .fe-amodal .fe-device-slot { transition: none; }
+}
+.fe-device.fe-device--calm, .fe-device--calm .fe-chart__tip, .fe-device--calm .fe-amodal, .fe-device--calm .fe-amodal__scrim,
+.fe-device--calm .fe-passage__pit--offer, .fe-device--calm .fe-amodal .fe-device-slot.fe-slot--accepts { animation: none; }
+.fe-device--calm .fe-amodal .fe-device-slot { transition: none; }

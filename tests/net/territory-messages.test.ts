@@ -24,5 +24,6 @@ it('accepts a beacon area, a slot index 0 or 1 and (to slot) one item uid, and n
 });
 
 it('bumped the protocol for the sigil ids and the beacon commands', () => {
-  expect(PROTOCOL_VERSION).toBe(27);
+  // 28: the skill rework (R2) bumped it again on top of the sigils.
+  expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(27);
 });

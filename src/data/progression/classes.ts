@@ -12,7 +12,8 @@ export const SORCERESS: ClassDef = {
     int: { base: 30, perLevel: 1.2 },
   },
   attributePointsPerLevel: 3,
-  skillPointsPerLevel: 1,
+  // 2 per level since the skill rework (docs/power-rework/skills.md 9: 1 + 2 (L − 1) in total).
+  skillPointsPerLevel: 2,
   baseStats: {
     maxLife: 70,
     maxFocus: 40,

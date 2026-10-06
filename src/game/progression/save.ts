@@ -28,8 +28,8 @@ import {
 import type { BaseDef } from '../../data/items';
 import { LEGACY_AFFIX_TIERS } from '../../data/items/affixes-v1';
 import {
-  DEFAULT_SETTINGS, DEFAULT_STASH_TABS, LEVEL_CAP, MAX_DANGER_MODS, MAX_MAP_QUALITY, MAX_REWARD_MODS, MAX_SKILL_RANK,
-  SAVE_VERSION, WARES, getMapMod,
+  AUGMENT_RULES, DEFAULT_SETTINGS, DEFAULT_STASH_TABS, LEVEL_CAP, MAX_DANGER_MODS, MAX_MAP_QUALITY, MAX_REWARD_MODS, MAX_SKILL_RANK,
+  SAVE_VERSION, WARES, augmentAvailable, getMapMod, getSkill,
 } from '../../data/progression';
 import {
   autoPlace, canPlace, clampItemLevel, createGrid, createStashTab, isReservedUid, placeItem, rollRareName, sortAffixes, uniqueModId,
@@ -37,7 +37,8 @@ import {
 import { historyCount } from '../items/crafting-history';
 import { sanitizeName, xpToNext } from './character';
 import { clampTier, rarityForDangerCount, sortMapMods } from './maps';
-import { normalizeLoadout } from './skills';
+import { augmentCost, augmentSlots, normalizeLoadout, normalizePresets, skillRank } from './skills';
+import { LEGACY_MAX_SKILL_RANK, migrateSkillsV3 } from './migrate-skills';
 import { normalizeAtlas } from './atlas';
 import { normalizeGuide } from './guide';
 import { findAtlasArea } from '../../data/progression/atlas';
@@ -85,6 +86,8 @@ const MIGRATIONS: Record<number, (raw: Json) => Json> = {
   // 1 -> 2: maps become area-bound (brief D). The rewrite itself is the item normaliser plus bindLegacyMaps, which need
   // the account's Atlas; a map without a valid `areaId` is simply recognised as legacy wherever it is read.
   1: (raw) => raw,
+  // 2 -> 3: the skill rework (ranks 1 to 10, 2 points per level, augments, 8 slots, a free respec): migrate-skills.ts.
+  2: (raw) => ({ ...raw, characters: arr(raw.characters).map(migrateSkillsV3) }),
 };
 
 function migrate(raw: Json): Json {
@@ -444,6 +447,41 @@ function normalizeBelt(raw: unknown): (BeltSlot | null)[] {
   return out;
 }
 
+/**
+ * Picked augments: known, available, within the tier gate and the slots of the skill's rank, no excluded pair (the first picked
+ * wins), in tree order. Returns the augments and the points of the dropped ones (refunded by the caller).
+ */
+function normalizeAugments(raw: unknown, skillRanks: Partial<Record<SkillId, number>>): { augments: Partial<Record<SkillId, string[]>>; refund: number } {
+  const r = isObj(raw) ? raw : {};
+  const augments: Partial<Record<SkillId, string[]>> = {};
+  let refund = 0;
+  for (const id of SKILL_IDS) {
+    const list = arr(r[id]).filter((a): a is string => typeof a === 'string');
+    if (!list.length) continue;
+    const def = getSkill(id);
+    const rank = skillRank({ skillRanks }, id);
+    const kept: string[] = [];
+    for (const aug of def.augmentDefs) {
+      if (!list.includes(aug.id)) continue;
+      const clash = kept.some((k) => (aug.excludes ?? []).includes(k) || (def.augmentDefs.find((a) => a.id === k)?.excludes ?? []).includes(aug.id));
+      if (!augmentAvailable(aug) || rank < AUGMENT_RULES.tierRank[aug.tier] || clash || kept.length >= augmentSlots(rank)) refund += augmentCost(aug);
+      else kept.push(aug.id);
+    }
+    if (kept.length) augments[id] = kept;
+  }
+  return { augments, refund };
+}
+
+function normalizeLegacyRanks(raw: unknown): { legacySkillRanks?: Partial<Record<SkillId, number>> } {
+  if (!isObj(raw)) return {};
+  const out: Partial<Record<SkillId, number>> = {};
+  for (const id of SKILL_IDS) {
+    const n = intIn(raw[id], 0, LEGACY_MAX_SKILL_RANK, 0);
+    if (n > 0) out[id] = n;
+  }
+  return { legacySkillRanks: out };
+}
+
 /** Normalise one character; null when the value is not a character at all. */
 export function normalizeCharacter(raw: unknown): CharacterSave | null {
   return normalizeCharacterReport(raw)?.character ?? null;
@@ -467,8 +505,16 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
 
   const skillRanks = {} as Record<SkillId, number>;
   const rawRanks = isObj(raw.skillRanks) ? raw.skillRanks : {};
-  for (const s of SKILL_IDS) skillRanks[s] = intIn(rawRanks[s], 0, MAX_SKILL_RANK, 0);
+  // A roster skill whose behaviour has not shipped cannot hold ranks (only a hand-edited save has them): its points come back.
+  let rankRefund = 0;
+  for (const s of SKILL_IDS) {
+    const rank = intIn(rawRanks[s], 0, MAX_SKILL_RANK, 0);
+    const playable = getSkill(s).available;
+    skillRanks[s] = playable ? rank : 0;
+    if (!playable) rankRefund += rank;
+  }
   skillRanks.emberLance = Math.max(1, skillRanks.emberLance);
+  const { augments, refund: augmentRefund } = normalizeAugments(raw.augments, skillRanks);
   const rawLoadout = (Array.isArray(raw.loadout) ? raw.loadout : ['emberLance'])
     .map((s) => ((SKILL_IDS as readonly unknown[]).includes(s) ? (s as SkillId) : null));
   const allocatedRaw = isObj(raw.allocated) ? raw.allocated : {};
@@ -590,9 +636,14 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
       dex: intIn(allocatedRaw.dex, 0, 1e6, 0),
       int: intIn(allocatedRaw.int, 0, 1e6, 0),
     },
-    unspentSkillPoints: intIn(raw.unspentSkillPoints, 0, 1e6, 0),
+    unspentSkillPoints: intIn(raw.unspentSkillPoints, 0, 1e6, 0) + augmentRefund + rankRefund,
     skillRanks,
     loadout: normalizeLoadout({ skillRanks, loadout: rawLoadout }),
+    augments,
+    loadoutPresets: normalizePresets(raw.loadoutPresets),
+    respecTokens: intIn(raw.respecTokens, 0, 99, 0),
+    respecFreeUsed: intIn(raw.respecFreeUsed, 0, 1e6, 0),
+    ...normalizeLegacyRanks(raw.legacySkillRanks),
     equipment,
     backpack: bp,
     stash,

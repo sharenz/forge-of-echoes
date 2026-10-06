@@ -36,7 +36,10 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 25: the first-run guide: `guide` command (steps done, hints shown, props used, skip, replay, finish), account-level CharacterSave.guide, hideout flask refill, first-map warm-up flag; `sortBackpack`.
 // 26: power rework R1: new stats, flask, currency and unique ids.
 // 27: beacons and sigils: 36 sigil currency ids (appended), slotSigil / unslotSigil, atlas.beacons on the account Atlas, RunSetup.territory.
-export const PROTOCOL_VERSION = 27;
+// 28: power rework R2 "Skills I": 32 skill ids (appended), 8 loadout slots (Space, Z), skill ranks 1 to 10 with 2 points per level,
+//     augments (pickAugment / refundAugment), loadout presets (setPreset), respec; CharacterSave.augments / loadoutPresets / respecTokens /
+//     respecFreeUsed / legacySkillRanks; SkillRuntimeDef.augments.
+export const PROTOCOL_VERSION = 28;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -126,6 +129,21 @@ export type Command =
   | { c: 'allocateAttribute'; attr: Attribute }
   | { c: 'rankUpSkill'; skillId: SkillId }
   | { c: 'setLoadoutSlot'; slot: number; skillId: SkillId | null }
+  /** Spend points on one augment of a learned skill (tier gate by rank, a free augment slot, no excluded augment picked). */
+  | { c: 'pickAugment'; skillId: SkillId; augmentId: string }
+  /** Refund one picked augment for Scrap (free below level 20 and for the first free points; skills.md 9). */
+  | { c: 'refundAugment'; skillId: SkillId; augmentId: string; expectedScrap: number }
+  /**
+   * Loadout presets (LOADOUT_PRESETS): `save` stores the current loadout in `preset`, `load` makes it the loadout (hideout only),
+   * `rename` sets its name.
+   */
+  | { c: 'setPreset'; preset: number; op: 'save' | 'load' | 'rename'; name?: string }
+  /**
+   * Respec. `skillId` refunds that skill's augments and ranks (Ember Lance keeps rank 1) for Scrap; null is a full respec of every
+   * skill and augment: with `token` it spends a free respec token and also refunds attributes, without it it costs Scrap.
+   * `expectedScrap` must equal the server's price (the client shows it before confirming).
+   */
+  | { c: 'respec'; skillId: SkillId | null; token: boolean; expectedScrap: number }
   // hideout
   | { c: 'setMapTreeNode'; nodeId: import('./atlas').MapTreeNodeId; allocate: boolean }
   /** Pin or unpin an Atlas area (brief D 5.1): free, instant, account-wide. */

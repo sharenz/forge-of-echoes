@@ -48,7 +48,8 @@ export function inPlayerDanger(areas: readonly AreaView[], x: number, y: number)
   return false;
 }
 
-const SKILL_GLOW: Record<SkillId, RGB> = {
+/** Cast glow per skill; a skill without an entry (roster skills before their presenter slice) glows like fire. */
+const SKILL_GLOW: Partial<Record<SkillId, RGB>> = {
   emberLance: C.flame,
   emberNova: C.flame,
   flameWave: C.flame,

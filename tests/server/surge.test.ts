@@ -174,3 +174,17 @@ it('Hourglass Sand refills one area and the Grand Hourglass all of them, answere
   const reread = server.game.store.peek(p.characterId)!;
   expect(reread.ch.atlas!.surge!.spent).toEqual({});
 });
+
+it('says the surge banner with the opening and counts the Atlas use for the status line (slice F1)', async () => {
+  await boot();
+  const p = ready('Banner Bea');
+  server.game.territoryCounts.drain();
+  const res = p.command({ c: 'activateMapDevice', useSurge: true });
+  expect(res.ok).toBe(true);
+  expect(res.message).toContain('Surge: +30% item quantity, +15% item rarity. 2 of 3 charges left in Cinder Crossing today.');
+  expect(p.command({ c: 'pinArea', areaId: 'emberRoad', pinned: true }).ok).toBe(true);
+  expect(p.command({ c: 'pinArea', areaId: 'emberRoad', pinned: false }).ok).toBe(true);
+  expect(server.game.territoryCounts.drain()).toEqual({ pinned: 1, unpinned: 1, surgeSpent: 1 });
+  // drained: the next status line starts from zero
+  expect(server.game.territoryCounts.drain()).toBeUndefined();
+});

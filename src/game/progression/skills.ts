@@ -1,28 +1,34 @@
-// Skill rules (GAME_SPEC §4): rank curves, the skill tree (prerequisites, points), the loadout, and
-// resolution into SkillRuntimeDef with every player modifier applied — the sim and the skill tooltip
-// read the same numbers, so they can never drift.
+// Skill rules (GAME_SPEC §4, docs/power-rework/skills.md): rank curves, unlocks by level, skill points, augments (tiers, slots,
+// exclusions), respec, loadout and presets, and resolution into SkillRuntimeDef with every player modifier and picked augment
+// applied — the sim and the skill tooltip read the same numbers, so they can never drift.
 //
-//   damage per hit = (spell power + added spell damage) × effectiveness × (1 + Σincreased%) × Πmore
-//     increased/more sources: Spell Damage, the element's damage and (fire/cold/lightning) Elemental Damage
+//   damage per hit = (spell power + added spell damage) × effectiveness × (1 + Σincreased%) × min(MORE_CAP, Πmore)
+//     increased/more sources: Spell Damage, the element's damage and (fire/cold/lightning) Elemental Damage;
+//     an augment's "x% more / less" joins the more pool
 //   cast time = base / cast speed          cooldown = base / cooldown recovery
 //   crit chance = (skill base + flat) × (1 + increased%)      crit multiplier = 150% + flat
 //   ailment chance = skill base + flat Ignite / Chill / Shock chance (by damage type)
 //   projectiles / pierce + gear, projectile speed × %, area × sqrt(1 + area%) on radius, duration × %
 //   fan (spread) = the skill's own, or 0.12 rad per extra bolt (at most 0.6) for a single-bolt skill
+//   augments change the skill's base numbers first (set, then add, then scale), then player modifiers apply
 //
 // Estimates (tooltips, character sheet, Alt-compare): single-target DPS (SkillSheet.dps), damage per
 // cast if every projectile / strike lands, and the DPS your Focus regeneration sustains on its own.
-import type { CharacterSave, StatId } from '../../contracts/items';
-import { LOADOUT_SLOTS } from '../../contracts/items';
-import type { SkillInfo, SkillSheet, Result } from '../../contracts/game';
+import type { CharacterSave, LoadoutPreset, StatId } from '../../contracts/items';
+import { LOADOUT_PRESETS, LOADOUT_SLOTS } from '../../contracts/items';
+import type { RespecPrice, SkillInfo, SkillSheet, Result } from '../../contracts/game';
 import type { DamageType, SkillId } from '../../contracts/content';
 import { SKILL_IDS } from '../../contracts/content';
-import type { SkillRuntimeDef } from '../../contracts/sim';
+import type { AugmentRuntime, SkillRuntimeDef } from '../../contracts/sim';
 import { resolveStat } from '../../core/modifiers';
-import { DAMAGE_ROLL, EXTRA_PROJECTILE_FAN, MAX_SKILL_RANK, MORE_CAP, PEN_CAP, SKILLS, STAT_CAPS, findSkill, getSkill } from '../../data/progression';
-import type { SkillDef } from '../../data/progression';
+import {
+  AUGMENT_RULES, DAMAGE_ROLL, EXTRA_PROJECTILE_FAN, MAX_SKILL_RANK, MORE_CAP, PEN_CAP, RESPEC, SKILLS, SKILL_POINTS, STAT_CAPS,
+  augmentAvailable, findSkill, getSkill,
+} from '../../data/progression';
+import type { AugmentDef, AugmentEffect, AugmentStat, SkillDef } from '../../data/progression';
 import { buildPlayerModel, focusRegenBreakdown, penetrationOf, spellPowerAt } from './model';
 import type { PlayerModel } from './model';
+import { spendCurrency } from './merchant';
 import { clamp, fail, oneDecimal, ok, percent, rankValue, resolveModes, seconds } from './util';
 
 // ---------------------------------------------------------------------------------------------
@@ -42,6 +48,10 @@ export const SKILL_INFO: Record<SkillId, SkillInfo> = Object.fromEntries(
       maxRank: s.maxRank,
       tags: [...s.tags],
       damageType: s.damageType,
+      element: s.element,
+      unlockLevel: s.unlockLevel,
+      available: s.available,
+      augments: s.augments.map((a) => ({ ...a, excludes: [...a.excludes] })),
     };
     return [id, info];
   }),
@@ -58,6 +68,8 @@ const ELEMENTAL: readonly DamageType[] = ['fire', 'cold', 'lightning'];
 const AILMENT_STAT: Partial<Record<DamageType, StatId>> = { fire: 'igniteChance', cold: 'chillChance', lightning: 'shockChance' };
 const AILMENT_NAME: Partial<Record<DamageType, string>> = { fire: 'Ignite', cold: 'Chill', lightning: 'Shock' };
 const DAMAGE_NAME: Record<DamageType, string> = { physical: 'Physical', fire: 'Fire', cold: 'Cold', lightning: 'Lightning', void: 'Void' };
+/** The Sunken Sun's fan (a unique-granted shape) and the default echo delay. */
+const UNIQUE_FAN_ARC = Math.PI * 5 / 6;
 
 /**
  * Stats whose increased/more modifiers apply to hits of a damage type. `tags` are the skill's tags: Projectile, Area and
@@ -93,13 +105,13 @@ export interface ResolvedSkill {
   /** Seconds between casts when cast back to back (cast time, or cooldown per charge if longer). */
   interval: number;
   /**
-   * Average single-target damage per second (crits and a Nova echo included, ailments excluded) when
+   * Average single-target damage per second (crits and echoes included, ailments excluded) when
    * cast back to back; null if non-damaging. This is SkillSheet.dps.
    */
   dps: number | null;
   /**
    * Distinct hits one cast can land: one per projectile (bolts, flames, waves), per strike of a chain,
-   * per ember pulse of a ward (on each adjacent enemy), doubled by a Nova echo. 0 if non-damaging.
+   * per ember pulse of a ward (on each adjacent enemy), plus an echo's. 0 if non-damaging.
    */
   hits: number;
   /** Average damage of one cast if every hit lands (crits included); null if non-damaging. */
@@ -112,6 +124,10 @@ export interface ResolvedSkill {
   sustainedDps: number | null;
   /** Unique-granted behaviour lines. */
   flagTexts: string[];
+  /** The picked augments that took effect (available ones, in tree order). */
+  augments: AugmentDef[];
+  /** Echo damage as a share of the hit (0 = no echo). */
+  echo: number;
 }
 
 function clampRank(def: SkillDef, rank: number): number {
@@ -123,37 +139,72 @@ export function isMultiHit(r: ResolvedSkill): boolean {
   return r.hits > 1 && r.def.shape !== 'ward';
 }
 
-/** Resolve a skill at a rank against a player model. */
-export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: number): ResolvedSkill {
+/** A base number with the augments' set, add and scale effects applied (in that order). */
+function augmented(effects: readonly AugmentEffect[], stat: AugmentStat, base: number): number {
+  let v = base;
+  for (const e of effects) if (e.k === 'set' && e.stat === stat) v = e.value;
+  for (const e of effects) if (e.k === 'add' && e.stat === stat) v += e.value;
+  for (const e of effects) if (e.k === 'scale' && e.stat === stat) v *= 1 + e.pct / 100;
+  return v;
+}
+
+/** The skill's augment defs among `ids` (unknown and not-yet-available ones are ignored), in tree order. */
+export function pickedAugments(def: SkillDef, ids: readonly string[] | undefined): AugmentDef[] {
+  if (!ids?.length) return [];
+  return def.augmentDefs.filter((a) => ids.includes(a.id) && augmentAvailable(a));
+}
+
+/** Resolve a skill at a rank against a player model, with the picked augments (ids of the skill's augment tree). */
+export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: number, augmentIds: readonly string[] = []): ResolvedSkill {
   const def = getSkill(skillId);
   const rank = clampRank(def, rankIn);
   const rv = (v: SkillDef['projectiles']) => rankValue(v, rank, def.maxRank);
-  const type = skillId === 'cinderWard' && model.flags.includes('coldWard') ? 'cold' : def.runtimeDamageType;
+  const augments = pickedAugments(def, augmentIds);
+  const effects = augments.flatMap((a) => a.effects);
+
+  // Behaviour flags: item-granted (unique) ones with their text, plus the ones picked augments add.
+  const flags: string[] = [];
+  const flagTexts: string[] = [];
+  for (const f of def.flagsFrom ?? []) {
+    if (model.flags.includes(f.playerFlag)) {
+      flags.push(f.skillFlag);
+      flagTexts.push(f.text);
+    }
+  }
+  for (const e of effects) if (e.k === 'flag' && !flags.includes(e.flag)) flags.push(e.flag);
+  const shapeEffect = effects.find((e): e is Extract<AugmentEffect, { k: 'shape' }> => e.k === 'shape');
+  if (shapeEffect?.shape === 'circle' && !flags.includes('circle')) flags.push('circle');
+
+  const type = skillId === 'cinderWard' && flags.includes('cold') ? 'cold' : def.runtimeDamageType;
 
   // Damage
   const effectiveness = rv(def.effectiveness);
   const damageMods = model.of(...damageStatsFor(type, def.tags));
   const increased = damageMods.filter((m) => m.mode === 'increased').reduce((s, m) => s + m.value, 0);
-  const moreRaw = damageMods.filter((m) => m.mode === 'more').reduce((p, m) => p * (1 + m.value / 100), 1);
+  let moreRaw = damageMods.filter((m) => m.mode === 'more').reduce((p, m) => p * (1 + m.value / 100), 1);
+  for (const e of effects) if (e.k === 'more') moreRaw *= 1 + e.pct / 100;
   const moreMultiplier = Math.min(MORE_CAP, moreRaw);
   const penetration = penetrationOf(model, type).value;
   const added = model.breakdown('addedSpellDamage', 0).value;
   const basePower = spellPowerAt(model.cls, model.level) + added;
-  const wardFocus = skillId === 'cinderWard' && model.flags.includes('wardFocus');
+  const wardFocus = skillId === 'cinderWard' && flags.includes('restoreFocus');
   const damage = effectiveness > 0 && !wardFocus ? Math.max(0, basePower * effectiveness * Math.max(0, 1 + increased / 100) * moreMultiplier) : 0;
 
   // Speed & timing
   const castSpeed = clamp(model.breakdown('castSpeed').value / 100, 0.1, 1 + STAT_CAPS.castSpeed / 100);
   const cdr = clamp(model.breakdown('cooldownRecovery').value / 100, 0.1, 1 + STAT_CAPS.cooldownRecovery / 100);
-  const castTime = def.castTime > 0 ? def.castTime / castSpeed : 0;
-  const cooldown = rv(def.cooldown) > 0 ? rv(def.cooldown) / cdr : 0;
+  const baseCast = augmented(effects, 'castTime', def.castTime);
+  const castTime = baseCast > 0 ? baseCast / castSpeed : 0;
+  const baseCooldown = augmented(effects, 'cooldown', rv(def.cooldown));
+  const cooldown = baseCooldown > 0 ? baseCooldown / cdr : 0;
 
   // Crit & ailments (non-damaging skills never crit)
   const critChance = damage > 0 ? clamp(resolveStat(def.critChance, model.of('critChance')) / 100, 0, 1) : 0;
   const critMultiplier = clamp(model.breakdown('critMultiplier').value / 100, 1, STAT_CAPS.critMultiplier / 100);
   const ailmentStat = AILMENT_STAT[type];
-  const ailmentChance = damage > 0 && ((skillId === 'emberLance' && model.flags.includes('lanceIgnites'))
-    || (skillId === 'cinderWard' && model.flags.includes('coldWard'))) ? 1 : damage > 0 && ailmentStat
+  const alwaysAilment = (skillId === 'emberLance' && flags.includes('alwaysIgnite'))
+    || (skillId === 'cinderWard' && flags.includes('cold')) || effects.some((e) => e.k === 'alwaysAilment');
+  const ailmentChance = damage > 0 && alwaysAilment ? 1 : damage > 0 && ailmentStat
     ? clamp(resolveModes(def.ailmentChance, model.of(ailmentStat)) / 100, 0, 1)
     : 0;
 
@@ -166,42 +217,57 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const areaRadiusMult = Math.sqrt(clamp(model.breakdown('area').value / 100, 0.1, 1 + STAT_CAPS.area / 100));
   const durationMult = Math.max(0.1, model.breakdown('duration').value / 100);
 
-  const flags: string[] = [];
-  const flagTexts: string[] = [];
-  for (const f of def.flagsFrom ?? []) {
-    if (model.flags.includes(f.playerFlag)) {
-      flags.push(f.skillFlag);
-      flagTexts.push(f.text);
-    }
-  }
   if (damage > 0 && def.shape !== 'ward' && model.flags.includes('closeQuarters'))
     flagTexts.push('Hits deal 25% more damage within 80 units of you, and 25% less beyond 200 units (Victor’s Debt); estimates assume the middle distance');
 
-  const baseProjectiles = rv(def.projectiles);
+  let baseProjectiles = rv(def.projectiles);
+  for (const e of effects) if (e.k === 'count') baseProjectiles = (baseProjectiles + (e.add ?? 0)) * (e.mult ?? 1);
   const projectiles = projectileSkill ? Math.max(1, baseProjectiles + extraProjectiles) : baseProjectiles;
+  const augPierce = effects.reduce((s, e) => s + (e.k === 'pierce' ? e.add : 0), 0);
+  const augChains = effects.reduce((s, e) => s + (e.k === 'chain' ? e.add : 0), 0);
+  const baseChains = Math.max(0, Math.floor(rv(def.chains)) + augChains);
+  const range = augmented(effects, 'range', def.range);
+  const radius = augmented(effects, 'radius', def.radius);
+  const baseDuration = augmented(effects, 'duration', rv(def.duration));
+
+  // Behaviour primitives for the executor: an augment fan, the echo (the better of item-granted and picked), invulnerability.
+  const runtimeAugments: AugmentRuntime[] = [];
+  const fanArc = shapeEffect?.shape === 'fan' ? (shapeEffect.arc ?? UNIQUE_FAN_ARC) : null;
+  if (fanArc !== null) runtimeAugments.push({ p: 'fan', arc: fanArc });
+  const echoEffect = effects.find((e): e is Extract<AugmentEffect, { k: 'echo' }> => e.k === 'echo');
+  const echo = Math.max(flags.includes('echo') ? 1 : 0, echoEffect ? echoEffect.damage / 100 : 0);
+  if (echoEffect) runtimeAugments.push({ p: 'echo', delay: echoEffect.delay, damage: echo });
+  for (const e of effects) if (e.k === 'invulnerable') runtimeAugments.push({ p: 'invulnerable', seconds: e.seconds });
+
+  const spread = fanArc !== null ? fanArc
+    : flags.includes('fan') ? UNIQUE_FAN_ARC
+      : flags.includes('circle') ? Math.PI * 2 * (projectiles - 1) / projectiles
+        : fanSpread(def, augmented(effects, 'spread', def.spread), projectiles);
+
   const runtime: SkillRuntimeDef = {
     id: def.id,
     rank,
-    focusCost: def.focusCost,
+    focusCost: Math.max(0, augmented(effects, 'focusCost', def.focusCost)),
     castTime,
     cooldown,
-    charges: Math.max(1, Math.floor(rv(def.charges))),
+    charges: Math.max(1, Math.floor(augmented(effects, 'charges', rv(def.charges)))),
     damage,
     damageType: type,
     critChance,
     critMultiplier,
     ailmentChance,
     projectiles,
-    pierce: projectileSkill ? rv(def.pierce) + extraPierce : rv(def.pierce),
+    pierce: projectileSkill ? rv(def.pierce) + augPierce + extraPierce : rv(def.pierce) + augPierce,
     projectileSpeed: projectileSkill ? def.projectileSpeed * projSpeedMult : def.projectileSpeed,
-    range: def.areaScales === 'range' ? def.range * areaRadiusMult : def.range,
-    spread: flags.includes('fan') ? Math.PI * 5 / 6 : flags.includes('circle') ? Math.PI * 2 * (projectiles - 1) / projectiles : fanSpread(def, projectiles),
-    radius: def.areaScales === 'radius' ? def.radius * areaRadiusMult : def.radius,
-    duration: rv(def.duration) * (rv(def.duration) > 0 ? durationMult : 1),
-    chains: def.shape === 'chain' ? Math.min(STAT_CAPS.chains, Math.max(0, Math.floor(rv(def.chains)) + extraChains)) : Math.max(0, Math.floor(rv(def.chains))),
-    distance: rv(def.distance),
-    damageReduction: Math.min(def.damageReductionCap ?? 1, rv(def.damageReduction)),
+    range: def.areaScales === 'range' ? range * areaRadiusMult : range,
+    spread,
+    radius: def.areaScales === 'radius' ? radius * areaRadiusMult : radius,
+    duration: baseDuration * (baseDuration > 0 ? durationMult : 1),
+    chains: def.shape === 'chain' ? Math.min(STAT_CAPS.chains, baseChains + extraChains) : baseChains,
+    distance: augmented(effects, 'distance', rv(def.distance)),
+    damageReduction: Math.min(augmented(effects, 'damageReductionCap', def.damageReductionCap ?? 1), rv(def.damageReduction)),
     flags,
+    ...(runtimeAugments.length ? { augments: runtimeAugments } : {}),
   };
 
   // Estimates. A ward's cycle is its cooldown (it pulses on each adjacent enemy while it lasts);
@@ -210,9 +276,8 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const interval = def.shape === 'ward'
     ? Math.max(runtime.cooldown, runtime.castTime)
     : Math.max(runtime.castTime, runtime.cooldown / runtime.charges);
-  const echo = flags.includes('echo') ? 2 : 1;
   const focusRegen = Math.max(0, focusRegenBreakdown(model).value);
-  const focusSustain = def.focusCost > 0 && interval > 0 ? Math.min(1, (focusRegen * interval) / def.focusCost) : 1;
+  const focusSustain = runtime.focusCost > 0 && interval > 0 ? Math.min(1, (focusRegen * interval) / runtime.focusCost) : 1;
   let dps: number | null = null;
   let perCast: number | null = null;
   let hits = 0;
@@ -225,25 +290,26 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
       const uptime = interval > 0 ? Math.min(1, runtime.duration / interval) : 1;
       dps = (hit * uptime) / pulse;
     } else {
-      hits = (def.shape === 'chain' ? runtime.chains + 1 : Math.max(1, runtime.projectiles)) * echo;
-      perCast = hit * hits;
-      dps = interval > 0 ? (hit * echo) / interval : null;
+      const once = def.shape === 'chain' ? runtime.chains + 1 : Math.max(1, runtime.projectiles);
+      hits = once * (echo > 0 ? 2 : 1);
+      perCast = hit * once * (1 + echo);
+      dps = interval > 0 ? (hit * (1 + echo)) / interval : null;
     }
   }
   const sustainedDps = dps === null ? null : dps * focusSustain;
   return {
     def, runtime, effectiveness, basePower, added, increased, moreMultiplier, moreCapped: moreRaw > MORE_CAP, penetration, interval, dps, hits, perCast, focusRegen,
-    focusSustain, sustainedDps, flagTexts,
+    focusSustain, sustainedDps, flagTexts, augments, echo,
   };
 }
 
 /**
- * Fan angle of a projectile skill: its own spread, or — for a single-bolt skill that gained extra
+ * Fan angle of a projectile skill: its own spread (after augments), or — for a single-bolt skill that gained extra
  * projectiles — the extra-projectile fan. Rings (Nova) have no fan.
  */
-function fanSpread(def: SkillDef, projectiles: number): number {
-  if (def.shape !== 'projectile') return def.spread;
-  if (def.spread > 0) return def.spread;
+function fanSpread(def: SkillDef, spread: number, projectiles: number): number {
+  if (def.shape !== 'projectile') return spread;
+  if (spread > 0) return spread;
   return projectiles > 1 ? Math.min(EXTRA_PROJECTILE_FAN.max, EXTRA_PROJECTILE_FAN.perProjectile * (projectiles - 1)) : 0;
 }
 
@@ -253,17 +319,23 @@ export function skillRank(ch: Pick<CharacterSave, 'skillRanks'>, id: SkillId): n
   return id === BASIC_SKILL ? Math.max(1, r) : r;
 }
 
-/** Runtime defs of the basic attack and every ranked skill. */
+/** The augment ids picked on a skill (empty when none). */
+export function skillAugments(ch: Pick<CharacterSave, 'augments'>, id: SkillId): string[] {
+  const list = ch.augments?.[id];
+  return Array.isArray(list) ? list : [];
+}
+
+/** Runtime defs of the basic attack and every ranked skill, with their augments. */
 export function playerSkills(ch: CharacterSave, model: PlayerModel): SkillRuntimeDef[] {
   const out: SkillRuntimeDef[] = [];
   for (const id of SKILL_IDS) {
     const rank = skillRank(ch, id);
-    if (rank >= 1) out.push(resolveSkill(model, id, rank).runtime);
+    if (rank >= 1) out.push(resolveSkill(model, id, rank, skillAugments(ch, id)).runtime);
   }
   return out;
 }
 
-/** Exactly LOADOUT_SLOTS entries: any learned skill in any slot, without duplicates. */
+/** Exactly LOADOUT_SLOTS entries: any learned skill in any slot, without duplicates. Shorter (older) loadouts pad with null. */
 export function normalizeLoadout(ch: Pick<CharacterSave, 'loadout' | 'skillRanks'>): (SkillId | null)[] {
   const out: (SkillId | null)[] = [];
   const used = new Set<SkillId>();
@@ -278,22 +350,51 @@ export function normalizeLoadout(ch: Pick<CharacterSave, 'loadout' | 'skillRanks
 }
 
 // ---------------------------------------------------------------------------------------------
-// The tree & loadout
+// Points
+// ---------------------------------------------------------------------------------------------
+
+/** Skill points a character of `level` has earned: 1 + 2 (level − 1). */
+export function skillPointsTotal(level: number): number {
+  const l = Math.max(1, Math.floor(Number.isFinite(level) ? level : 1));
+  return SKILL_POINTS.atLevelOne + SKILL_POINTS.perLevel * (l - 1);
+}
+
+/** Points an augment costs (T3: 2). */
+export function augmentCost(a: Pick<AugmentDef, 'tier'>): number {
+  return AUGMENT_RULES.tierCost[a.tier];
+}
+
+/** Augment slots a skill has at a rank: floor(rank / 2), at most 5. */
+export function augmentSlots(rank: number): number {
+  return clamp(Math.floor(Math.max(0, rank) / AUGMENT_RULES.ranksPerSlot), 0, AUGMENT_RULES.maxSlots);
+}
+
+/** Points held in one skill: its ranks (Ember Lance's innate first rank is free) and its augments. */
+export function pointsInSkill(ch: Pick<CharacterSave, 'skillRanks' | 'augments'>, id: SkillId): number {
+  const def = findSkill(id);
+  if (!def) return 0;
+  const ranks = Math.max(0, skillRank(ch, id) - (id === BASIC_SKILL ? 1 : 0));
+  const ids = skillAugments(ch, id);
+  return ranks + def.augmentDefs.filter((a) => ids.includes(a.id)).reduce((s, a) => s + augmentCost(a), 0);
+}
+
+/** Every skill point a character has spent (ranks beyond Ember Lance's innate one, and augments). */
+export function skillPointsSpent(ch: Pick<CharacterSave, 'skillRanks' | 'augments'>): number {
+  return SKILL_IDS.reduce((s, id) => s + pointsInSkill(ch, id), 0);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ranks & loadout
 // ---------------------------------------------------------------------------------------------
 
 export function canRankUpSkill(ch: CharacterSave, skillId: SkillId): { ok: boolean; reason?: string } {
   const def = findSkill(skillId);
   if (!def) return { ok: false, reason: 'Unknown skill.' };
   const rank = skillRank(ch, skillId);
+  if (!def.available && rank < 1) return { ok: false, reason: `${def.name} arrives in a later update.` };
   if (rank >= def.maxRank) return { ok: false, reason: `${def.name} is at its maximum rank (${def.maxRank}).` };
-  if (def.prerequisite) {
-    const pre = getSkill(def.prerequisite.skillId);
-    const have = skillRank(ch, pre.id);
-    if (have < def.prerequisite.rank) {
-      return { ok: false, reason: `Requires ${pre.name} rank ${def.prerequisite.rank} (currently ${have}).` };
-    }
-  }
-  if ((ch.unspentSkillPoints ?? 0) < 1) return { ok: false, reason: 'No skill points left. You gain one every level.' };
+  if (rank < 1 && (ch.level ?? 1) < def.unlockLevel) return { ok: false, reason: `${def.name} unlocks at level ${def.unlockLevel}.` };
+  if ((ch.unspentSkillPoints ?? 0) < 1) return { ok: false, reason: 'No skill points left. You gain two every level.' };
   return { ok: true };
 }
 
@@ -341,6 +442,184 @@ export function setLoadoutSlot(ch: CharacterSave, slot: number, skillId: SkillId
 }
 
 // ---------------------------------------------------------------------------------------------
+// Augments
+// ---------------------------------------------------------------------------------------------
+
+export function canPickAugment(ch: CharacterSave, skillId: SkillId, augmentId: string): { ok: boolean; reason?: string } {
+  const def = findSkill(skillId);
+  if (!def) return { ok: false, reason: 'Unknown skill.' };
+  const aug = def.augmentDefs.find((a) => a.id === augmentId);
+  if (!aug) return { ok: false, reason: `${def.name} has no such augment.` };
+  if (!augmentAvailable(aug)) return { ok: false, reason: `${aug.name} arrives in a later update.` };
+  const rank = skillRank(ch, skillId);
+  const picked = skillAugments(ch, skillId);
+  if (picked.includes(aug.id)) return { ok: false, reason: `${aug.name} is already chosen.` };
+  const need = AUGMENT_RULES.tierRank[aug.tier];
+  if (rank < need) return { ok: false, reason: `${aug.name} needs ${def.name} rank ${need} (currently ${rank}).` };
+  for (const id of picked) {
+    const other = def.augmentDefs.find((a) => a.id === id);
+    if (other && ((aug.excludes ?? []).includes(id) || (other.excludes ?? []).includes(aug.id))) {
+      return { ok: false, reason: `${aug.name} cannot be combined with ${other.name}.` };
+    }
+  }
+  const slots = augmentSlots(rank);
+  if (picked.length >= slots) {
+    return { ok: false, reason: `${def.name} has ${slots} augment slot${slots === 1 ? '' : 's'} at rank ${rank}: one more every 2 ranks.` };
+  }
+  const cost = augmentCost(aug);
+  if ((ch.unspentSkillPoints ?? 0) < cost) return { ok: false, reason: `${aug.name} costs ${cost} skill point${cost === 1 ? '' : 's'}.` };
+  return { ok: true };
+}
+
+export function pickAugment(ch: CharacterSave, skillId: SkillId, augmentId: string): Result<CharacterSave> {
+  const check = canPickAugment(ch, skillId, augmentId);
+  if (!check.ok) return fail(check.reason ?? 'That augment cannot be chosen.');
+  const def = getSkill(skillId);
+  const aug = def.augmentDefs.find((a) => a.id === augmentId)!;
+  const ids = [...skillAugments(ch, skillId), aug.id];
+  const ordered = def.augmentDefs.filter((a) => ids.includes(a.id)).map((a) => a.id);
+  return ok({
+    ...ch,
+    augments: { ...(ch.augments ?? {}), [skillId]: ordered },
+    unspentSkillPoints: ch.unspentSkillPoints - augmentCost(aug),
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Respec (skills.md 9)
+// ---------------------------------------------------------------------------------------------
+
+function priceFor(ch: CharacterSave, points: number): RespecPrice {
+  if (points <= 0) return { points: 0, freePoints: 0, scrap: 0 };
+  if ((ch.level ?? 1) < RESPEC.freeBelowLevel) return { points, freePoints: points, scrap: 0 };
+  const freeLeft = Math.max(0, RESPEC.freePoints - Math.max(0, Math.floor(ch.respecFreeUsed ?? 0)));
+  const freePoints = Math.min(points, freeLeft);
+  return { points, freePoints, scrap: (points - freePoints) * RESPEC.scrapPerPoint };
+}
+
+/** What refunding one augment, one skill or everything costs right now. */
+export function respecPrice(ch: CharacterSave, target: { skillId: SkillId; augmentId?: string } | { all: true }): RespecPrice {
+  if ('all' in target) return priceFor(ch, skillPointsSpent(ch));
+  const def = findSkill(target.skillId);
+  if (!def) return priceFor(ch, 0);
+  if (target.augmentId !== undefined) {
+    const aug = def.augmentDefs.find((a) => a.id === target.augmentId);
+    return priceFor(ch, aug && skillAugments(ch, def.id).includes(aug.id) ? augmentCost(aug) : 0);
+  }
+  return priceFor(ch, pointsInSkill(ch, def.id));
+}
+
+/** Charge a refund: Scrap from the backpack, stash and Crafting Stash (one character value, so it is atomic), free points counted. */
+function charge(ch: CharacterSave, price: RespecPrice): Result<CharacterSave> {
+  const paid = price.scrap > 0 ? spendCurrency(ch, 'scrap', price.scrap) : ch;
+  if (!paid) return fail(`The refund costs ${price.scrap} Forge Scrap.`);
+  const usedFree = (ch.level ?? 1) < RESPEC.freeBelowLevel ? 0 : price.freePoints;
+  return ok(usedFree > 0 ? { ...paid, respecFreeUsed: Math.max(0, Math.floor(ch.respecFreeUsed ?? 0)) + usedFree } : paid);
+}
+
+/** Refund one picked augment (augments are leaves: refunding one never strands another). */
+export function refundAugment(ch: CharacterSave, skillId: SkillId, augmentId: string): Result<CharacterSave> {
+  const def = findSkill(skillId);
+  if (!def) return fail('Unknown skill.');
+  const aug = def.augmentDefs.find((a) => a.id === augmentId);
+  const picked = skillAugments(ch, skillId);
+  if (!aug || !picked.includes(aug.id)) return fail('That augment is not chosen.');
+  const charged = charge(ch, respecPrice(ch, { skillId, augmentId }));
+  if (!charged.ok) return charged;
+  const rest = picked.filter((id) => id !== aug.id);
+  const augments = { ...(charged.value.augments ?? {}) };
+  if (rest.length) augments[skillId] = rest;
+  else delete augments[skillId];
+  return ok({ ...charged.value, augments, unspentSkillPoints: charged.value.unspentSkillPoints + augmentCost(aug) });
+}
+
+/** One skill (augments first, then its ranks; Ember Lance keeps its innate rank) back to unlearned. */
+function resetSkill(ch: CharacterSave, id: SkillId): CharacterSave {
+  const points = pointsInSkill(ch, id);
+  const augments = { ...(ch.augments ?? {}) };
+  delete augments[id];
+  const skillRanks = { ...ch.skillRanks, [id]: id === BASIC_SKILL ? 1 : 0 };
+  return { ...ch, augments, skillRanks, unspentSkillPoints: ch.unspentSkillPoints + points };
+}
+
+/**
+ * Respec one skill (`skillId`, for Scrap) or everything (null). A full respec with `token` spends a free respec token and also
+ * refunds every attribute point; without one it costs Scrap per point. Unlearned skills leave the loadout.
+ */
+export function respec(ch: CharacterSave, skillId: SkillId | null, token: boolean): Result<CharacterSave> {
+  if (skillId !== null && token) return fail('A free respec resets every skill at once.');
+  if (skillId !== null && !findSkill(skillId)) return fail('Unknown skill.');
+  const ids: readonly SkillId[] = skillId === null ? SKILL_IDS : [skillId];
+  const points = ids.reduce((s, id) => s + pointsInSkill(ch, id), 0);
+  const attributes = token ? Object.values(ch.allocated ?? {}).reduce((s: number, n: number) => s + Math.max(0, n), 0) : 0;
+  if (points <= 0 && attributes <= 0) return fail('There is nothing to refund.');
+  let next: CharacterSave;
+  if (token) {
+    const tokens = Math.max(0, Math.floor(ch.respecTokens ?? 0));
+    if (tokens < 1) return fail('You have no free respec left.');
+    next = {
+      ...ch,
+      respecTokens: tokens - 1,
+      allocated: { str: 0, dex: 0, int: 0 },
+      unspentAttributePoints: ch.unspentAttributePoints + attributes,
+    };
+  } else {
+    const charged = charge(ch, priceFor(ch, points));
+    if (!charged.ok) return charged;
+    next = charged.value;
+  }
+  for (const id of ids) next = resetSkill(next, id);
+  return ok({ ...next, loadout: normalizeLoadout(next) });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Loadout presets
+// ---------------------------------------------------------------------------------------------
+
+const PRESET_NAME_MAX = 24;
+
+/** LOADOUT_PRESETS presets, padded and cleaned (a missing one is empty, named "Preset N"). */
+export function normalizePresets(raw: unknown): LoadoutPreset[] {
+  const src = Array.isArray(raw) ? raw : [];
+  const out: LoadoutPreset[] = [];
+  for (let i = 0; i < LOADOUT_PRESETS; i++) {
+    const p = src[i] as { name?: unknown; loadout?: unknown } | undefined;
+    const name = typeof p?.name === 'string' ? p.name.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, PRESET_NAME_MAX) : '';
+    const list: unknown[] = Array.isArray(p?.loadout) ? p.loadout : [];
+    const loadout: (SkillId | null)[] = [];
+    for (let k = 0; k < LOADOUT_SLOTS; k++) {
+      const id = list[k];
+      const def = typeof id === 'string' ? findSkill(id) : undefined;
+      loadout.push(def && !loadout.includes(def.id) ? def.id : null);
+    }
+    out.push({ name: name || `Preset ${i + 1}`, loadout });
+  }
+  return out;
+}
+
+export function setPreset(ch: CharacterSave, preset: number, op: 'save' | 'load' | 'rename', name?: string): Result<CharacterSave> {
+  if (!Number.isInteger(preset) || preset < 0 || preset >= LOADOUT_PRESETS) return fail('That preset does not exist.');
+  const presets = normalizePresets(ch.loadoutPresets);
+  const p = presets[preset];
+  switch (op) {
+    case 'save':
+      presets[preset] = { ...p, loadout: normalizeLoadout(ch) };
+      return ok({ ...ch, loadoutPresets: presets });
+    case 'load': {
+      const loadout = normalizeLoadout({ ...ch, loadout: p.loadout });
+      return ok({ ...ch, loadout });
+    }
+    case 'rename': {
+      const clean = normalizePresets([{ name, loadout: p.loadout }])[0].name;
+      presets[preset] = { ...p, name: typeof name === 'string' && name.trim() ? clean : `Preset ${preset + 1}` };
+      return ok({ ...ch, loadoutPresets: presets });
+    }
+    default:
+      return fail('Unknown preset action.');
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Skill sheet (tooltip)
 // ---------------------------------------------------------------------------------------------
 
@@ -375,6 +654,11 @@ function critText(rt: SkillRuntimeDef): string {
   return `${percent(rt.critChance, 1)} critical strike chance (${percent(rt.critMultiplier)} multiplier)`;
 }
 
+/** "Echoing Ring: Repeats after 0.4 seconds…" for each picked augment that took effect. */
+export function augmentLines(r: ResolvedSkill): string[] {
+  return r.augments.map((a) => `${a.name}: ${a.text}`);
+}
+
 /** Tooltip lines for a resolved skill. */
 export function skillLines(r: ResolvedSkill): string[] {
   const { def, runtime: rt } = r;
@@ -382,6 +666,7 @@ export function skillLines(r: ResolvedSkill): string[] {
   const type = DAMAGE_NAME[rt.damageType];
   const noun = def.projectileNoun ?? 'projectile';
   const pierceAll = !!def.pierceAll || rt.flags.includes('pierceAll');
+  const fan = rt.augments?.find((a) => a.p === 'fan');
   switch (def.shape) {
     case 'projectile':
       lines.push(`Deals ${damageRange(rt.damage)} ${type} damage`);
@@ -392,23 +677,32 @@ export function skillLines(r: ResolvedSkill): string[] {
       break;
     case 'nova':
       lines.push(`Deals ${damageRange(rt.damage)} ${type} damage`);
-      lines.push(rt.flags.includes('fan')
-        ? `Fires ${plural(rt.projectiles, noun)} in a 150° fan reaching ${Math.round(rt.range)} units`
+      lines.push(fan || rt.flags.includes('fan')
+        ? `Fires ${plural(rt.projectiles, noun)} in a ${degrees(fan ? fan.arc : UNIQUE_FAN_ARC)} fan reaching ${Math.round(rt.range)} units`
         : `Bursts ${plural(rt.projectiles, noun)} outward in a ring reaching ${Math.round(rt.range)} units`);
       break;
     case 'chain':
       lines.push(`Deals ${damageRange(rt.damage)} ${type} damage`);
       lines.push(`Strikes the enemy nearest the cursor within ${Math.round(rt.range)} units, then chains ${plural(rt.chains, 'time')} (jump range ${Math.round(rt.radius)})`);
       break;
-    case 'dash':
+    case 'dash': {
+      const invuln = rt.augments?.find((a) => a.p === 'invulnerable');
       lines.push(`Blinks up to ${Math.round(rt.distance)} units toward the cursor`);
-      lines.push('Invulnerable for 0.2 seconds');
+      lines.push(`Invulnerable for ${seconds(invuln ? invuln.seconds : 0.2)}`);
       break;
+    }
     case 'ward':
-      lines.push(`You take ${percent(rt.damageReduction)} less damage for ${seconds(rt.duration)}${def.damageReductionCap ? ` (at most ${percent(def.damageReductionCap)})` : ''}`);
+      lines.push(`You take ${percent(rt.damageReduction)} less damage for ${seconds(rt.duration)}${def.damageReductionCap ? ` (at most ${percent(Math.min(1, def.damageReductionCap + r.augments.flatMap((a) => a.effects).reduce((s, e) => s + (e.k === 'add' && e.stat === 'damageReductionCap' ? e.value : 0), 0)))})` : ''}`);
       if (rt.damage > 0) {
         lines.push(`Embers deal ${damageRange(rt.damage)} ${type} damage to enemies within ${Math.round(rt.radius)} units every ${seconds(def.pulseInterval ?? 0.5)}`);
       }
+      break;
+    case 'area':
+      if (rt.damage > 0) lines.push(`Deals ${damageRange(rt.damage)} ${type} damage${rt.radius > 0 ? ` in a radius of ${Math.round(rt.radius)}` : ''}`);
+      if (rt.duration > 0) lines.push(`Lasts ${seconds(rt.duration)}`);
+      break;
+    case 'buff':
+      if (rt.duration > 0) lines.push(`Lasts ${seconds(rt.duration)}`);
       break;
   }
   const pierce = def.shape === 'projectile' || def.shape === 'nova' ? pierceText(rt.pierce, pierceAll) : null;
@@ -431,6 +725,7 @@ export function skillLines(r: ResolvedSkill): string[] {
   }
   lines.push(...estimateLines(r));
   lines.push(...r.flagTexts);
+  lines.push(...augmentLines(r));
   return lines;
 }
 
@@ -473,24 +768,28 @@ const METRICS: readonly Metric[] = [
   { label: 'Chains', get: (rt) => rt.chains, fmt: String, applies: (d) => d.shape === 'chain' },
   { label: 'Charges', get: (rt) => rt.charges, fmt: String, applies: (d) => d.charges !== 1 },
   { label: 'Blink distance', get: (rt) => rt.distance, fmt: (v) => String(Math.round(v)), applies: (d) => d.shape === 'dash' },
-  { label: 'Duration', get: (rt) => rt.duration, fmt: seconds, applies: (d) => d.shape === 'ward' },
+  { label: 'Duration', get: (rt) => rt.duration, fmt: seconds, applies: (d) => d.shape === 'ward' || d.shape === 'buff' || d.shape === 'area' },
   { label: 'Damage reduction', get: (rt) => rt.damageReduction, fmt: (v) => percent(v), applies: (d) => d.shape === 'ward' },
   { label: 'Cooldown', get: (rt) => rt.cooldown, fmt: seconds, applies: (d) => d.cooldown !== 0 },
 ];
 
-/** What the next rank changes: "Damage 5.2–7.8 to 5.6–8.4", "Projectiles 12 to 13". */
-export function nextRankLines(model: PlayerModel, skillId: SkillId, rank: number): string[] {
+/** What the next rank changes: "Damage 5.2–7.8 to 5.6–8.4", "Projectiles 12 to 13", plus a new augment slot or tier. */
+export function nextRankLines(model: PlayerModel, skillId: SkillId, rank: number, augmentIds: readonly string[] = []): string[] {
   const def = getSkill(skillId);
   if (rank >= def.maxRank) return [];
   if (rank <= 0) return [`Spend a skill point to learn ${def.name} at rank 1.`];
-  const now = resolveSkill(model, skillId, rank).runtime;
-  const next = resolveSkill(model, skillId, rank + 1).runtime;
+  const now = resolveSkill(model, skillId, rank, augmentIds).runtime;
+  const next = resolveSkill(model, skillId, rank + 1, augmentIds).runtime;
   const out: string[] = [];
   for (const m of METRICS) {
     if (!m.applies(def)) continue;
     const a = m.fmt(m.get(now));
     const b = m.fmt(m.get(next));
     if (a !== b) out.push(`${m.label} ${a} to ${b}`);
+  }
+  if (def.augmentDefs.length && augmentSlots(rank + 1) > augmentSlots(rank)) out.push(`Augment slots ${augmentSlots(rank)} to ${augmentSlots(rank + 1)}`);
+  for (const tier of [1, 2, 3] as const) {
+    if (AUGMENT_RULES.tierRank[tier] === rank + 1 && def.augmentDefs.some((a) => a.tier === tier)) out.push(`Unlocks tier ${tier} augments`);
   }
   return out.length ? out : ['Small improvements to its numbers.'];
 }
@@ -501,13 +800,15 @@ export function skillSheetFor(ch: CharacterSave, skillId: SkillId, rank?: number
   const current = skillRank(ch, skillId);
   const requested = rank !== undefined && Number.isFinite(rank) ? Math.floor(rank) : current;
   const shown = clamp(requested, 0, def.maxRank);
-  const resolved = resolveSkill(model, skillId, Math.max(1, shown));
+  const ids = skillAugments(ch, skillId);
+  const resolved = resolveSkill(model, skillId, Math.max(1, shown), ids);
   return {
     skillId,
     rank: shown,
     runtime: resolved.runtime,
     lines: skillLines(resolved),
-    nextRankLines: nextRankLines(model, skillId, shown),
+    nextRankLines: nextRankLines(model, skillId, shown, ids),
+    augmentLines: augmentLines(resolved),
     dps: resolved.dps,
   };
 }

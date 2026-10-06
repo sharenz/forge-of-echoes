@@ -109,6 +109,9 @@ export const SFX_TRIM_DB: Partial<Record<SfxId, number>> = {
   eventHum: -1.6, wheelBreak: -6.3, shieldBreak: -6.6, pactStone: -11.1, pactSeal: -7.9, pactWave: -7.9, bloomGrow: -6, bloomHarvest: -5.6, bloomBite: -5.2, bloomWither: -2.2,
   ringRise: -10.6, ringChain: -3, ringSlam: -3.2, hostThaw: -3.1, prismShatter: -10.5, hostWake: -9.5, anvilStrike: -6.2, anvilCharged: -6.3, anvilForge: -10.2,
   bellToll: -9.7, cantorFall: -4.3, dirge: -7.1, voidTide: -7.7, voidSurge: -6.5, heartCrack: -10,
+  // the Atlas and the daily surge (slice F1): calibrated offline in headless Chromium (uiOpen/uiHover re-measured identical)
+  atlasOpen: -9.6, atlasHover: 8.3, atlasSelect: -0.9, atlasRoute: -4.4, atlasReveal: -3.9, atlasSeal: -1.4, atlasZoom: -5.5,
+  atlasPin: 1.8, atlasUnpin: 3.9, surgeSpend: -3.4, surgeRefill: 0.3,
 };
 
 /**
