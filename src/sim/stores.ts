@@ -199,6 +199,24 @@ export class MonsterStore implements MonsterStoreView {
   readonly decayAccum: Float32Array;
   readonly decayEventTimer: Float32Array;
   readonly decaySrc: Uint8Array;
+  /**
+   * Roster batch 2 (power rework SK3), written by the player's skill zones (sim/skills/zones.ts) and read by the monster update and
+   * the damage pipeline. Gravity Well's pull: a velocity (units/s) that applies only on the tick stamped in `pullTick`. A zone slow
+   * (fraction) and its seconds left; a damage-taken bonus (Crushing, fraction) and its seconds left; Entropy Hex's weakening (the
+   * monster deals that fraction less damage) and its seconds left; Withered stacks (Wither Field, each WITHER.points resistance
+   * points lost, an exposure source) and their seconds left.
+   */
+  readonly pullVX: Float32Array;
+  readonly pullVY: Float32Array;
+  readonly pullTick: Int32Array;
+  readonly zoneSlow: Float32Array;
+  readonly zoneSlowTime: Float32Array;
+  readonly vulnBonus: Float32Array;
+  readonly vulnTime: Float32Array;
+  readonly hexWeaken: Float32Array;
+  readonly hexTime: Float32Array;
+  readonly witherStacks: Uint8Array;
+  readonly witherTime: Float32Array;
 
   private readonly pool: SlotPool;
   private readonly zeroed: (Float32Array | Float64Array | Uint8Array | Uint16Array | Int8Array | Int32Array)[];
@@ -239,6 +257,9 @@ export class MonsterStore implements MonsterStoreView {
     this.exposeTime = f();
     this.decayStacks = u8(); this.decayDps = f(); this.decayTime = f(); this.decayAccum = f(); this.decayEventTimer = f();
     this.decaySrc = u8();
+    this.pullVX = f(); this.pullVY = f(); this.pullTick = new Int32Array(capacity);
+    this.zoneSlow = f(); this.zoneSlowTime = f(); this.vulnBonus = f(); this.vulnTime = f();
+    this.hexWeaken = f(); this.hexTime = f(); this.witherStacks = u8(); this.witherTime = f();
     this.zeroed = [
       this.kind, this.rarity, this.x, this.y, this.prevX, this.prevY, this.radius, this.facing, this.anim, this.animTime,
       this.life, this.maxLife, this.hitFlash, this.ailments, this.vx, this.vy, this.target, this.igniteSrc,
@@ -250,6 +271,8 @@ export class MonsterStore implements MonsterStoreView {
       this.timerA, this.timerB, this.timerC, this.timerD, this.knockback, this.mods, this.flags, this.wave,
       this.dtype, this.hitReduction, this.aim, this.exposeTime,
       this.decayStacks, this.decayDps, this.decayTime, this.decayAccum, this.decayEventTimer, this.decaySrc,
+      this.pullVX, this.pullVY, this.pullTick, this.zoneSlow, this.zoneSlowTime, this.vulnBonus, this.vulnTime,
+      this.hexWeaken, this.hexTime, this.witherStacks, this.witherTime,
     ];
   }
 

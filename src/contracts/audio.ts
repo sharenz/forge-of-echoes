@@ -46,6 +46,11 @@ export const SFX_IDS = [
   // self-buffs (Phase Stride, Arcane Reprieve), Glacial Nova's burst, the mortar's landing, a Storm Call bolt, a Glacial Spike
   'castSpark', 'castMortar', 'castUmbral', 'castKinetic', 'castOrb', 'castStormCall', 'phaseStride', 'arcaneReprieve',
   'glacialNovaBurst', 'mortarBlast', 'stormCallStrike', 'frostSpike',
+  // power rework SK3 roster batch 2: casts (Gravity Well, Entropy Hex, Wither Field, Immolation Sigil, Static Lash, Concussive
+  // Blast), the three self-buffs (Rime Bulwark, Static Aegis, Echo Sigil), Voltaic Pulse's ring, the sigil's pillar, Singularity's
+  // collapse, the barrier breaking
+  'castGravityWell', 'wellCollapse', 'castHex', 'castWither', 'castSigil', 'sigilPillar', 'barrierUp', 'barrierBreak', 'aegisUp',
+  'voltaicPulse', 'concussiveBlast', 'castLash', 'echoSigil',
 ] as const;
 export type SfxId = (typeof SFX_IDS)[number];
 

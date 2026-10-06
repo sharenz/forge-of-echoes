@@ -14,4 +14,9 @@ export const VOID_BEHAVIOURS = {
     emitter: 'projectile', kind: 'kineticLance', speed: 520, range: 360, radius: { fallback: 4 }, spread: 'extra', pierce: 'def',
     knock: SKILL_TIMING.kineticKnockback,
   },
+  // Roster batch 2 (SK3): zones at the cursor (their `zone` primitive says what they do) and the physical cone.
+  gravityWell: { emitter: 'zone', area: 'gravityWell', reach: SKILL_TIMING.zoneReach, radius: 70, duration: 3 },
+  entropyHex: { emitter: 'zone', area: 'entropyHex', reach: SKILL_TIMING.zoneReach, radius: 80, duration: 6 },
+  witherField: { emitter: 'zone', area: 'witherField', reach: SKILL_TIMING.zoneReach, radius: 80, duration: 6 },
+  concussiveBlast: { emitter: 'cone', knock: SKILL_TIMING.coneKnockback },
 } satisfies Record<string, SkillBehaviour>;

@@ -82,6 +82,62 @@ export interface RestoreState {
   lifeRate: number;
 }
 
+/**
+ * A ground effect of a roster batch 2 skill (power rework SK3), ticked by sim/skills/roster2.ts: a zone (Gravity Well, Entropy Hex,
+ * Wither Field) acting on monsters inside for `duration`; a pillar (Immolation Sigil) erupting when `age` reaches `duration`; a
+ * pulse (Voltaic Pulse) whose ring grows at `speed` to `radius`, hitting each monster once (`group` holds their ids).
+ */
+export interface SkillArea {
+  kind: 'zone' | 'pillar' | 'pulse';
+  x: number;
+  y: number;
+  radius: number;
+  age: number;
+  duration: number;
+  /** Seconds to the zone's next tick. */
+  timer: number;
+  speed: number;
+  def: SkillRuntimeDef;
+  group: number[];
+}
+
+/** Rime Bulwark: the barrier left (absorbs damage after armour and resistances), its size, seconds left and its augments. */
+export interface BarrierState {
+  amount: number;
+  max: number;
+  time: number;
+  chillRadius: number;
+  regen: number;
+  retort: number;
+  retortRadius: number;
+}
+
+/** Static Aegis: seconds left, damage reduction, the retaliation hit and its cadence, the lightning resistance it adds. */
+export interface AegisState {
+  time: number;
+  reduction: number;
+  radius: number;
+  damage: number;
+  critChance: number;
+  critMultiplier: number;
+  ailmentChance: number;
+  gap: number;
+  /** Seconds until retaliation can strike again. */
+  cooldown: number;
+  resist: number;
+  pulse: number;
+  pulseTimer: number;
+}
+
+/** Echo Sigil: casts left to echo, seconds left, the echo's delay, damage share and Focus refund share. */
+export interface EchoSigilState {
+  casts: number;
+  time: number;
+  delay: number;
+  damage: number;
+  refund: number;
+}
+
 export interface PlayerState {
   /** Server-assigned id (1..255), unique within the instance. */
   readonly id: number;
@@ -136,6 +192,11 @@ export interface PlayerState {
   /** Timed self-buffs of the roster skills (Phase Stride, Arcane Reprieve). */
   stride: StrideState;
   restore: RestoreState;
+  /** Roster batch 2 (SK3): zones, pillars and pulses on the ground; the barrier, aegis and echo buffs. */
+  skillAreas: SkillArea[];
+  barrier: BarrierState;
+  aegis: AegisState;
+  echoSigil: EchoSigilState;
   /**
    * Id of a portal that must not take the player until they step out of it (they just went
    * through, it opened under them, or they arrived on it), 0 = none.

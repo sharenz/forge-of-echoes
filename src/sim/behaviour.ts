@@ -34,7 +34,10 @@ export function faceTarget(w: World, i: number, t: PlayerState | null): void {
 
 /** Damage multiplier from the herald's aura. */
 export function empowerMult(w: World, i: number): number {
-  return w.monsters.empowerTime[i] > 0 ? 1 + EMPOWER_BONUS : 1;
+  const m = w.monsters;
+  const f = m.empowerTime[i] > 0 ? 1 + EMPOWER_BONUS : 1;
+  // Inside an Entropy Hex (power rework SK3) it deals less damage.
+  return m.hexTime[i] > 0 ? f * (1 - m.hexWeaken[i]) : f;
 }
 
 /**

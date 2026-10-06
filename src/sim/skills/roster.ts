@@ -20,7 +20,7 @@ import { COLD_BEHAVIOURS } from './behaviours/cold';
 import type { BlastBehaviour, LobBehaviour, OrbBehaviour, SpikesBehaviour, StrikesBehaviour } from './types';
 
 /** Every hittable monster within `radius` of (x, y) takes one hit (pushed outward by `knock`). Ignores cover and shields. */
-function blastAt(
+export function blastAt(
   w: World, x: number, y: number, radius: number, damage: number, dtype: number, critChance: number, critMult: number,
   ailmentChance: number, owner: number, knock: number, group: number[] | null = null,
 ): void {

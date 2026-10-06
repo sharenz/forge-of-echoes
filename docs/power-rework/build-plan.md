@@ -1,6 +1,6 @@
 # E. Build plan: slices, file ownership, tests, migration
 
-Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
+Status: R1 built and deployed 2026-10-06; R2 (C2, SK0, SK1 and SK2) built 2026-10-06, SK3 of R3 built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
 `power-curve.md` (P), `skills.md` (SK) and `passive-tree.md` (PT) hold the designs these slices implement; `overview.md` has the pillars and the migration summary.
 
 ---
@@ -159,6 +159,30 @@ cooldown 2.5 → 2 s. Determinism goldens unchanged (bit-identical: the new ride
 
 ### SK3: Roster batch 2 (L)  (R3)
 Gravity Well, Rime Bulwark, Immolation Sigil, Static Aegis, Voltaic Pulse, **Entropy Hex** (exposure applier), Concussive Blast, Static Lash, Echo Sigil, Wither Field (levels 20 to 40). Same lanes as SK2. New sim systems: pull, barrier, Withered-on-monsters.
+
+**Status: built 2026-10-06** (one lane, beside SK5). All ten are `available` with behaviour through the executor: new emitters in
+`src/sim/skills/roster2.ts` (`zone` for Gravity Well, Entropy Hex and Wither Field; `pillar` for Immolation Sigil; `pulse` for Voltaic
+Pulse's expanding ring; `cone` for Concussive Blast; `lash` for Static Lash) whose ground lives in `PlayerState.skillAreas`, and buffs in
+`src/sim/skills/defence.ts` (`barrier`, `aegis`, `echoSigil`). New sim systems: **pull** (`MonsterStore.pullVX/VY/pullTick`, applied in
+`ai.ts integrate` on the tick the zone wrote it; bosses and heavy half), a zone **slow** and Crushing's **damage taken** (short-lingering
+columns read by `integrate` and `takenMult`), the **Hex** weakening (`hexWeaken`, read by `behaviour.ts empowerMult`, the one multiplier
+of monster outgoing damage), **Withered on monsters** (`witherStacks/witherTime`, `WITHER` in `data/progression/combat.ts`: 8 points per
+stack, 3 stacks, 1 s linger; one exposure source in `monsterResist`, the strongest source per type applies), the **barrier** (absorbed in
+`hitPlayer` after every reduction; breaking it ends it with a zero-length `buff` event and Brittle Retort's nova) and the aegis'
+retaliation and Grounded resistance (`hitPlayer` → `onStruck`, `aegisResist`). Echo Sigil spends a charge on any damaging cast but the
+basic attack, buffs and blinks, and the echo queue (`pendingNovas`) now replays every world emitter (Twice Struck uses it too). Rules in
+`game/progression/skills-roster2.ts` (`zone`, `barrier`, `aegis`, `echoSigil` primitives from `SkillDef.primitives` and `tune` keys,
+hit counts, Wither Field's Decay estimate including its own Withered, tooltip lines); timings in `SKILL_TIMING`. Live augments: 25 of 31
+(Gravity Well 3, Rime Bulwark 3, Immolation Sigil 3, Static Aegis 3, Voltaic Pulse 2, Entropy Hex 4 of its 6 flagship augments, Concussive
+Blast 1, Static Lash 3, Echo Sigil 3, Wither Field 3); planned: Overload (`ailment`: per-monster shock strength), Wither Spread (`onKill`),
+Shared Pain (`mark`), Crushing Force (`knockback`), Shatter (`onKill`). Presenter `src/present/skills/roster2.ts` (zones and the sigil's
+telegraph in the player's palette, the pillar, rings, the cone, barrier/aegis/echo auras, Withered and Hexed tints), 13 SFX
+(`audio/sfx-skills2.ts`, borrowed trims). No new sprite sheets: the batch draws with shapes and the existing fx sprites (the skill icons
+already existed). Contract appends: `AugmentRuntime` `zone`, `barrier`, `aegis`, `echoSigil`; `AREA_KINDS` gravityWell, entropyHex,
+witherField, immolationSigil; `AILMENT_BIT` withered 1024, hexed 2048; 13 SFX ids — the wire changes, so **protocol 29 → 30** (left to the
+integrator). Determinism goldens unchanged. First-pass numbers kept; deviations: Gravity Well's radius grows 70 → 90 by rank (its
+effectiveness stays 0.3), Echo Sigil's charges wait at most 12 s (an end for the aura). Deferred: HUD barrier pip (SK1 left it for
+this), Overload and the other planned augments above.
 
 ### SK4: Roster batch 3 (M)  (R4)
 Meteor Rain, Storm Step, Tempest Surge, Blizzard, Event Horizon (levels 44 to 62).

@@ -148,7 +148,7 @@ export const FIRE_SKILLS = {
     primitives: { ground: { effectiveness: 0.35, interval: 0.5 } },
     areaScales: 'radius',
   }),
-  immolationSigil: plannedSkill('immolationSigil', {
+  immolationSigil: skill('immolationSigil', {
     name: 'Immolation Sigil',
     description: 'Brands the ground at the cursor; after a moment a pillar of fire erupts from it.',
     branch: 'destruction',
@@ -166,8 +166,12 @@ export const FIRE_SKILLS = {
     effectiveness: { lerp: [3.0, 6.5] },
     critChance: 8,
     ailmentChance: 40,
+    projectiles: 1,
     radius: 50,
     areaScales: 'radius',
+    // Lingering Pillar gives the pillar a duration: it then burns 0.5 effectiveness every 0.5 s in its radius.
+    primitives: { ground: { effectiveness: 0.5, interval: 0.5 } },
+    projectileNoun: 'pillar',
   }),
   meteorRain: plannedSkill('meteorRain', {
     name: 'Meteor Rain',

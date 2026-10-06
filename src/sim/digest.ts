@@ -87,6 +87,12 @@ export function digestWorld(w: World): number {
       h.int(m.decayStacks[i]);
       h.float(m.decayDps[i]);
     }
+    // Roster batch 2 (power rework SK3): Withered and the Hex, only while they run.
+    if (m.witherTime[i] > 0) {
+      h.float(m.witherTime[i]);
+      h.int(m.witherStacks[i]);
+    }
+    if (m.hexTime[i] > 0) h.float(m.hexWeaken[i]);
   }
   const pr = w.projectiles;
   h.int(pr.count);

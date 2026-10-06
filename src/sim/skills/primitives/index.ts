@@ -22,4 +22,4 @@ export { shellLanded, afterShellAt } from './mortar';
 export { novaAugmented, novaBlast, orbEnded, orbFaded, orbNeedsRider, orbRate, orbRider, orbShardDef } from './shape';
 export { augPlayer, castCost, markTakenMult, noteCast, prim, schedule, wardCapOf } from './state';
 export { lodgesOf } from './lodge';
-export { ON_KILL_CAP } from './onkill';
+export { ON_KILL_CAP, explodeVictim } from './onkill';

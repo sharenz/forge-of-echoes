@@ -30,6 +30,7 @@ import { buildPlayerModel, focusRegenBreakdown, penetrationOf, spellPowerAt } fr
 import type { PlayerModel } from './model';
 import { spendCurrency } from './merchant';
 import { clamp, fail, oneDecimal, ok, percent, rankValue, resolveModes, seconds } from './util';
+import { roster2Dot, roster2HitCounts, roster2Lines, roster2Runtimes } from './skills-roster2';
 
 // ---------------------------------------------------------------------------------------------
 // Content info
@@ -261,6 +262,8 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   const runtimeRadius = def.areaScales === 'radius' ? radius * areaRadiusMult : radius;
   const runtimeDuration = baseDuration * (baseDuration > 0 ? durationMult : 1);
   runtimeAugments.push(...primitiveRuntimes(def, effects, damage, effectiveness, runtimeRadius, runtimeDuration));
+  // Roster batch 2 (SK3): zones, barrier, aegis, echo buff; `power` is the damage per point of effectiveness.
+  runtimeAugments.push(...roster2Runtimes(def, effects, rank, Math.max(0, basePower * Math.max(0, 1 + increased / 100) * moreMultiplier)));
   // Flagship primitives (SK5): passed through, or resolved from an effectiveness with the skill's own modifiers.
   const damageFor = (t: DamageType, eff: number): number => {
     const mods = model.of(...damageStatsFor(t, def.tags));
@@ -358,6 +361,11 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
         perCast += damage * decay.share * once;
         if (dps !== null) dps += (Math.min(DECAY.maxStacks, DECAY.duration / interval) * damage * decay.share) / DECAY.duration;
       }
+      const dot = roster2Dot(def, runtime, interval);
+      if (dot) {
+        perCast += dot.perCast;
+        if (dps !== null) dps += dot.dps;
+      }
     }
   }
   const sustainedDps = dps === null ? null : dps * focusSustain;
@@ -415,6 +423,8 @@ const STRIKE_BODY = 12;
  * Spikes and the other area skills hit an enemy once per cast (per line).
  */
 export function hitCounts(def: SkillDef, rt: SkillRuntimeDef): { once: number; single: number } {
+  const batch2 = roster2HitCounts(def, rt);
+  if (batch2) return batch2;
   switch (def.id) {
     case 'frostOrb': {
       const shards = orbShards(rt);
@@ -944,7 +954,7 @@ function rosterLines(r: ResolvedSkill): string[] | null {
         `Each spike deals ${dmg} in a radius of ${Math.round(rt.radius)}; an enemy is struck once per line`,
       ];
     default:
-      return null;
+      return roster2Lines(r);
   }
 }
 

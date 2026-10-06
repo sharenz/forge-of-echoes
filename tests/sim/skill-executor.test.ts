@@ -32,16 +32,16 @@ describe('skill executor', () => {
 
   it('handles every augment primitive of the contract', () => {
     expect([...AUGMENT_PRIMITIVES].sort()).toEqual([
-      'blast', 'bounce', 'cheapCasts', 'convert', 'core', 'decay', 'echo', 'expose', 'falloff', 'fan', 'fork', 'freeCast', 'fuse', 'ground',
-      'hover', 'ignite', 'invulnerable', 'lodge', 'mark', 'onKill', 'ramp', 'refund', 'rehit', 'restore', 'return', 'rings', 'scatter',
-      'skip', 'spiral', 'split', 'stride', 'trail', 'wardCap', 'weave',
+      'aegis', 'barrier', 'blast', 'bounce', 'cheapCasts', 'convert', 'core', 'decay', 'echo', 'echoSigil', 'expose', 'falloff', 'fan',
+      'fork', 'freeCast', 'fuse', 'ground', 'hover', 'ignite', 'invulnerable', 'lodge', 'mark', 'onKill', 'ramp', 'refund', 'rehit',
+      'restore', 'return', 'rings', 'scatter', 'skip', 'spiral', 'split', 'stride', 'trail', 'wardCap', 'weave', 'zone',
     ]);
   });
 
   it('ignores a skill without a behaviour (no cast event, nothing spawned)', () => {
     const a = armed('emberNova', []);
     a.world.events.drain();
-    releaseSkill(a.world, a.player, makeSkill('gravityWell'), 100, 0);
+    releaseSkill(a.world, a.player, makeSkill('meteorRain'), 100, 0);
     expect(a.world.events.drain()).toEqual([]);
     expect(a.world.projectiles.count).toBe(0);
   });

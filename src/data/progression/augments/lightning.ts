@@ -74,4 +74,47 @@ export const LIGHTNING_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'rt', rt: { p: 'fork', branches: 1, links: 1, share: 0.6, jump: 90 } }, { k: 'more', pct: -20 }],
     },
   ],
+  // Roster batch 2 (SK3), skills.md 6
+  staticAegis: [
+    {
+      id: 'thornedStorm', name: 'Thorned Storm', tier: 1, text: 'Retaliation deals 60% more damage',
+      effects: [{ k: 'more', pct: 60 }],
+    },
+    {
+      id: 'grounded', name: 'Grounded', tier: 2, text: '+15% lightning resistance while it lasts',
+      effects: [{ k: 'tune', key: 'aegisResist', add: 0.15 }],
+    },
+    {
+      id: 'conductionField', name: 'Conduction Field', tier: 3, text: 'Enemies within its radius also take its shock hit every 0.5 seconds',
+      effects: [{ k: 'tune', key: 'aegisPulse', add: 0.5 }],
+    },
+  ],
+  voltaicPulse: [
+    {
+      id: 'widePulse', name: 'Wide Pulse', tier: 1, text: 'Radius +40%',
+      effects: [{ k: 'scale', stat: 'radius', pct: 40 }],
+    },
+    {
+      id: 'twiceStruck', name: 'Twice Struck', tier: 2, text: 'A second ring follows after 0.3 seconds at 60% damage',
+      effects: [{ k: 'echo', delay: 0.3, damage: 60 }],
+    },
+    {
+      id: 'overload', name: 'Overload', tier: 3, text: 'Its shocks last 2 seconds longer and are 10 points stronger',
+      effects: [{ k: 'planned', primitive: 'ailment', note: 'shock duration and strength' }],
+    },
+  ],
+  staticLash: [
+    {
+      id: 'arcLash', name: 'Arc Lash', tier: 1, text: 'Also lashes the second-nearest enemy for 60%',
+      effects: [{ k: 'flag', flag: 'arcLash' }],
+    },
+    {
+      id: 'rapidLash', name: 'Rapid Lash', tier: 2, text: 'Cast time 20% shorter; 10% less damage',
+      effects: [{ k: 'scale', stat: 'castTime', pct: -20 }, { k: 'more', pct: -10 }],
+    },
+    {
+      id: 'tetheredChain', name: 'Tethered Chain', tier: 3, text: 'Chains to 1 more enemy for 50%',
+      effects: [{ k: 'chain', add: 1 }],
+    },
+  ],
 };

@@ -413,6 +413,7 @@ function everyEvent(): SimEvent[] {
     { t: 'dash', playerId: 1, fromX: 0, fromY: 0, toX: 80, toY: 0 },
     { t: 'ward', playerId: 1, x: 0, y: 0, duration: 4 },
     { t: 'buff', playerId: 1, skill: 'phaseStride', x: 0, y: 0, duration: 3 },
+    { t: 'augment', playerId: 1, fx: 'detonate', x: 0, y: 0, radius: 46, damageType: 'fire' },
     { t: 'chain', playerId: 1, points: [0, 0, 10, 10], damageType: 'lightning' },
     { t: 'hit', playerId: 1, x: 0, y: 0, amount: 12, damageType: 'physical', crit: false, target: 'player', killed: false, kind: 'pitHound' },
     { t: 'evade', playerId: 1, x: 0, y: 0, target: 'player' },

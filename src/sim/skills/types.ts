@@ -1,7 +1,7 @@
 // What the skill executor needs to know about one skill: which emitter it runs and that emitter's settings. The numbers come
 // pre-resolved in SkillRuntimeDef (rules: game/progression/skills.ts); a behaviour only fills in the shape of the effect and the
 // fallbacks for fields a runtime def leaves at 0 (sim fixtures and hand-built defs). Behaviours live per element in ./behaviours.
-import type { ProjectileKind } from '../../contracts/sim';
+import type { AreaKind, ProjectileKind } from '../../contracts/sim';
 
 /** A behaviour flag: present when the runtime def lists `skill` (augment or unique, resolved by the rules) or the player has `player`. */
 export interface FlagRef {
@@ -152,6 +152,72 @@ export interface WardBehaviour {
   renew?: FlagRef;
 }
 
+// --- Roster batch 2 (power rework SK3) ---------------------------------------------------------------------------------------
+
+/** A ground zone at the cursor acting on monsters inside (Gravity Well, Entropy Hex, Wither Field): the def's `zone` primitive. */
+export interface ZoneBehaviour {
+  emitter: 'zone';
+  /** The harmless area the clients draw. */
+  area: AreaKind;
+  /** The cursor is clamped to this distance from the caster. */
+  reach: number;
+  /** Fallbacks when the runtime def leaves them at 0. */
+  radius: number;
+  duration: number;
+}
+
+/** Sigils at the cursor that erupt into a pillar after a telegraph (Immolation Sigil); several sit `offset` apart across the aim. */
+export interface PillarBehaviour {
+  emitter: 'pillar';
+  telegraph: number;
+  reach: number;
+  radius: number;
+  offset: number;
+}
+
+/** A ring expanding from the caster at `speed`, hitting each monster once (Voltaic Pulse); passes cover and shields. */
+export interface PulseBehaviour {
+  emitter: 'pulse';
+  speed: number;
+  radius: number;
+}
+
+/** An instant cone toward the aim (Concussive Blast): the def's range and spread; hits knock back `knock` times as far. */
+export interface ConeBehaviour {
+  emitter: 'cone';
+  knock: number;
+}
+
+/** A beam to the nearest enemy in sight (Static Lash); `arc` adds the second-nearest at `second`, chains jump `jump` at `chainShare`. */
+export interface LashBehaviour {
+  emitter: 'lash';
+  arc: FlagRef;
+  second: number;
+  jump: number;
+  chainShare: number;
+}
+
+export interface BarrierBehaviour {
+  emitter: 'buff';
+  buff: 'barrier';
+  duration: number;
+}
+
+export interface AegisBehaviour {
+  emitter: 'buff';
+  buff: 'aegis';
+  duration: number;
+  radius: number;
+}
+
+export interface EchoSigilBehaviour {
+  emitter: 'buff';
+  buff: 'echoSigil';
+  duration: number;
+}
+
 export type SkillBehaviour =
   | ProjectileBehaviour | BurstBehaviour | ChainBehaviour | DashBehaviour | WardBehaviour
-  | BlastBehaviour | LobBehaviour | OrbBehaviour | StrikesBehaviour | SpikesBehaviour | StrideBehaviour | RestoreBehaviour;
+  | BlastBehaviour | LobBehaviour | OrbBehaviour | StrikesBehaviour | SpikesBehaviour | StrideBehaviour | RestoreBehaviour
+  | ZoneBehaviour | PillarBehaviour | PulseBehaviour | ConeBehaviour | LashBehaviour | BarrierBehaviour | AegisBehaviour
+  | EchoSigilBehaviour;

@@ -31,4 +31,19 @@ export const UTILITY_AUGMENTS: Partial<Record<SkillId, AugmentDef[]>> = {
       effects: [{ k: 'rt', rt: { p: 'cheapCasts', casts: 3, pct: 0.25 } }],
     },
   ],
+  // Roster batch 2 (SK3), skills.md 6
+  echoSigil: [
+    {
+      id: 'tripleEcho', name: 'Triple Echo', tier: 1, text: '4 casts echo instead of 3; echoes deal 10% less (63% of the hit)',
+      effects: [{ k: 'tune', key: 'echoCasts', add: 1 }, { k: 'tune', key: 'echoDamage', add: -0.07 }],
+    },
+    {
+      id: 'quickEcho', name: 'Quick Echo', tier: 2, text: 'Echoes follow after 0.25 seconds instead of 0.4',
+      effects: [{ k: 'tune', key: 'echoDelay', add: -0.15 }],
+    },
+    {
+      id: 'costless', name: 'Costless', tier: 3, text: 'Each echoed skill refunds 25% of its Focus cost',
+      effects: [{ k: 'tune', key: 'echoRefund', add: 0.25 }],
+    },
+  ],
 };

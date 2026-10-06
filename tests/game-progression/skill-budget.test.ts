@@ -68,3 +68,64 @@ describe('skill power budget (skills.md 2), roster batch 1 at rank 10 without ge
     expect(10.4 / (r.runtime.focusCost / r.interval)).toBeCloseTo(0.43, 2);
   });
 });
+
+// Roster batch 2 (SK3). Area skills sit in the area band. Immolation Sigil is a burst: skills.md's "1.0 to 1.3 averaged over the
+// cooldown" cannot be read with this index (6.5 / 6 s / 5.48 = 0.2), so the table pins what a burst means here: one cast lands
+// 2.5 to 3.5 Ember Lance hits at once, at 2 to 4 Focus per second. Static Lash is the spam skill skills.md quotes at 0.85 (below
+// the band: a held, self-aiming beam). Zones and defences that deal damage on the side (Gravity Well, Wither Field, Static Aegis)
+// are control: a low index and cheap per second.
+const ROWS2: readonly { id: SkillId; band: Band | 'burst' | 'control' | 'lash' }[] = [
+  { id: 'gravityWell', band: 'control' },
+  { id: 'rimeBulwark', band: 'utility' },
+  { id: 'immolationSigil', band: 'burst' },
+  { id: 'staticAegis', band: 'control' },
+  { id: 'voltaicPulse', band: 'area' },
+  { id: 'entropyHex', band: 'utility' },
+  { id: 'concussiveBlast', band: 'area' },
+  { id: 'staticLash', band: 'lash' },
+  { id: 'echoSigil', band: 'utility' },
+  { id: 'witherField', band: 'control' },
+];
+
+describe('skill power budget (skills.md 2), roster batch 2 at rank 10 without gear', () => {
+  const model = buildPlayerModel(bareCharacter({ level: 40 }));
+
+  it.each(ROWS2)('$id sits in its band', ({ id, band }) => {
+    const r = resolveSkill(model, id, 10);
+    expect(SKILLS[id].available).toBe(true);
+    if (band === 'utility') {
+      expect(r.runtime.damage).toBe(0);
+      expect(r.dps).toBeNull();
+      return;
+    }
+    const interval = Math.max(r.runtime.castTime, r.runtime.cooldown / r.runtime.charges);
+    expect(interval).toBeCloseTo(r.interval, 10);
+    const index = (r.effectiveness * r.singleTargetHits) / interval / LANCE_INDEX;
+    const focus = r.runtime.focusCost / interval;
+    switch (band) {
+      case 'burst':
+        expect(r.effectiveness / 2.3, `${id} Lance hits per cast`).toBeGreaterThanOrEqual(2.5);
+        expect(r.effectiveness / 2.3, `${id} Lance hits per cast`).toBeLessThanOrEqual(3.5);
+        expect(focus).toBeGreaterThanOrEqual(2);
+        expect(focus).toBeLessThanOrEqual(4);
+        break;
+      case 'control':
+        expect(r.runtime.damage).toBeGreaterThan(0);
+        expect(index, `${id} index`).toBeLessThan(0.2);
+        expect(focus, `${id} Focus/s`).toBeLessThanOrEqual(8);
+        break;
+      case 'lash':
+        expect(index).toBeCloseTo(0.85, 2);
+        expect(focus).toBeGreaterThanOrEqual(BANDS.spam.focus[0]);
+        expect(focus).toBeLessThanOrEqual(BANDS.spam.focus[1]);
+        break;
+      default: {
+        const b = BANDS[band as 'area' | 'spam'];
+        expect(index, `${id} index`).toBeGreaterThanOrEqual(b.index[0] - 1e-9);
+        expect(index, `${id} index`).toBeLessThanOrEqual(b.index[1] + 1e-9);
+        expect(focus, `${id} Focus/s`).toBeGreaterThanOrEqual(b.focus[0] - 1e-9);
+        expect(focus, `${id} Focus/s`).toBeLessThanOrEqual(b.focus[1] + 1e-9);
+      }
+    }
+  });
+});

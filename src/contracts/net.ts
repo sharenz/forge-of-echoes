@@ -41,7 +41,9 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 //     respecFreeUsed / legacySkillRanks; SkillRuntimeDef.augments.
 // 29: power rework SK2 roster batch 1: projectile kinds spark, cinderShell, umbralBolt, kineticLance, frostOrb; area kinds stormCall,
 //     frostSpike; SimEvent 'buff'; AILMENT_BIT.decayed; flank event (art keeps its promises); new SFX ids (all appended).
-export const PROTOCOL_VERSION = 29;
+// 30: power rework SK3 roster batch 2: area kinds gravityWell, entropyHex, witherField, immolationSigil; AILMENT_BIT withered and
+//     hexed on monsters; new SFX ids (all appended).
+export const PROTOCOL_VERSION = 30;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
