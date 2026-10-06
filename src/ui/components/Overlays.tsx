@@ -105,7 +105,7 @@ export function TooltipHost() {
         />
       );
   } else if (spec.kind === 'skill') {
-    if (ch) content = <SkillTooltip ch={ch} skillId={spec.skillId} />;
+    if (ch) content = <SkillTooltip ch={ch} skillId={spec.skillId} compareTo={spec.compareTo ?? null} alt={alt} />;
   } else if (spec.kind === 'text') {
     content = (
       <div class={cx('fe-tt fe-tt--plain', spec.tone && `fe-tt--${spec.tone}`)}>

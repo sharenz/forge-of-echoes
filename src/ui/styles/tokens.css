@@ -89,6 +89,8 @@
   --panel-top: 12px;
   --panel-w: calc(var(--cell) * 12 + 42px);
   --panel-max-h: calc(100vh - var(--panel-top) - var(--deck-clear));
+  /* The Skills panel (book rail + selected skill): wider, but the inventory still fits beside it. */
+  --skills-w: max(var(--panel-w), min(740px, calc(100vw - var(--panel-w) - 36px)));
 }
 
 /* Short viewports (laptops with browser chrome). */

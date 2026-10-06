@@ -120,6 +120,11 @@ function SkillSlot({ index }: { index: number }) {
     const id = s.hud?.slots[index]?.skillId;
     return !!id && !!s.hud?.debuffs?.length && counterplay(s.hud.debuffs).skills.includes(id);
   });
+  // Augment pips: one gold diamond per augment picked on the slotted skill (skills.md 10.5).
+  const augs = useUi((s) => {
+    const id = s.hud?.slots[index]?.skillId;
+    return id ? (s.character?.augments?.[id]?.length ?? 0) : 0;
+  });
   if (!slot) return null;
   const frac = slot.cooldownTotal > 0 ? fraction(slot.cooldown, slot.cooldownTotal) : 0;
   const cooling = slot.cooldown > 0.05 && (slot.maxCharges <= 1 || slot.charges === 0);
@@ -165,6 +170,13 @@ function SkillSlot({ index }: { index: number }) {
       )}
       {slot.cooldown > 0.05 && <div class="fe-skill__cd" style={{ '--cd': frac.toFixed(3) } as unknown as JSX.CSSProperties} />}
       {cooling && <span class="fe-skill__cdtext">{formatCooldown(slot.cooldown)}</span>}
+      {augs > 0 && (
+        <span class="fe-augpips fe-skill__augs" aria-hidden="true">
+          {Array.from({ length: augs }, (_, k) => (
+            <i key={k} />
+          ))}
+        </span>
+      )}
       {slot.maxCharges > 1 && <span class={cx('fe-skill__charges', slot.charges === 0 && 'fe-skill__charges--out')}>{slot.charges}</span>}
       <span class="fe-skill__key">{slot.key}</span>
       {auto && <span class="fe-skill__auto">Auto</span>}

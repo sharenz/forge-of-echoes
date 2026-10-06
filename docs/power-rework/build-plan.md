@@ -1,6 +1,6 @@
 # E. Build plan: slices, file ownership, tests, migration
 
-Status: R1 built and deployed 2026-10-06; R2 slices C2 and SK0 built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
+Status: R1 built and deployed 2026-10-06; R2 slices C2, SK0 and SK1 built 2026-10-06 (see their status notes); the rest are design. Sizes: **S** = a few days, **M** = 1 to 2 weeks, **L** = 3+ weeks of focused work for one agent. Each slice is deployable on its own and leaves the game consistent.
 `power-curve.md` (P), `skills.md` (SK) and `passive-tree.md` (PT) hold the designs these slices implement; `overview.md` has the pillars and the migration summary.
 
 ---
@@ -113,6 +113,25 @@ Owner lane **ui-skills**. Depends on C2; can start against mocked data before SK
 Files: `src/ui/panels/{Skills,SkillTooltip}.tsx`, `src/ui/lib/{skilltree,loadout}.ts`, `src/ui/hud/*` (8 slots, augment pips), `src/client` input for `Space` and `Z`, `src/ui/panels/Character.tsx` (points, respec entry), CSS using only `--font-ui-*` tokens.
 Features: skill book rail, augment graph with before/after deltas, loadout bar with 8 slots and 3 presets, drag/click assignment (existing helpers), refund confirmation with Scrap price, locked skills with level, Alt comparison.
 Tests: component tests, keyboard-only flow, 1024×600 and 1280×720 browser scenarios (the guide's existing e2e style).
+
+**Status: built 2026-10-06.** `src/ui/panels/Skills.tsx` replaces the old branch tree: the panel is wider (`--skills-w`, at most 740 px and
+always leaving the inventory's width free; the HUD's free area follows it) with the skill book rail (`lib/skilltree.ts skillBook`: grouped by
+`SkillInfo.element`, sorted by unlock level, search, learned/learnable/locked with "Level n", unavailable skills hidden behind one "n more
+skills arrive in later updates" line, so SK2 skills appear when their data flips `available`), the selected skill (rank pips with the tier
+ranks marked, Learn/Rank up, "If you rank up" deltas from `sheetDeltas`, description, current numbers) and the augment graph
+(`augmentGraph`: tiers at ranks 2/5/8, slots `floor(rank/2)` max 5 with "next slot at rank r", T3 cost 2, exclusion chains and "Not with X",
+"Coming later" for planned augments, a hover card with before/after numbers via `skillSheet` on a preview character; its states are tested
+against `rules.canPickAugment` for every shipped skill). Refunds (a picked plate, "Refund skill", the Character panel's "Refund all skills")
+open a dialog with `refundSummary` wording and send the shown price as `expectedScrap`; the free respec token has its own button. Loadout bar:
+8 slots with augment pips, drag/click/Ctrl-click/right-click/Delete, 3 preset tabs (Load in a hideout, Save, Rename). Alt over a skill
+compares it with the selected one (`SkillTooltip compareTo`); the tooltip lists active augments separately. Keyboard: Tab into the book,
+arrows, `+`, `1`–`8`, Enter/Space on plates and slots (stopped before the game's Space/Enter). HUD: augment pips on the skill bar.
+`Space`/`Z` input already shipped with SK0. Small contract addition (UI only, no protocol change): `UiActions.pickAugment`,
+`refundAugment`, `respec`, `setPreset`, wired in `client/session.ts`, `client/app.ts` and the dev mock store. Tests:
+`tests/ui/skills-panel.test.ts`; `node scripts/e2e.mjs --only skills --size 1280x720|1024x600` (keyboard-only spend/slot/augment, hover
+deltas, exclusion, a 4-Scrap refund charged exactly, Alt, presets, HUD pips, panel beside the inventory). Deferred: live augment state pips
+(lodged count, barrier) wait for those primitives (SK5); the item-name attribution of unique-granted augments is whatever
+`SkillSheet.augmentLines` says.
 
 ### SK2: Roster batch 1 (L)  (R2)
 Owner lane **skills-fire-cold-light** (data + sim behaviour + presenter) per element file. Depends on SK0.
