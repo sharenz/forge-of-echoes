@@ -1565,6 +1565,15 @@
   overflow-y: auto;
   font-size: var(--font-ui-secondary);
 }
+.fe-summary__items--fade {
+  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent);
+  padding-bottom: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: #6b5132 rgba(0, 0, 0, 0.35);
+}
+.fe-summary__coach { color: var(--frost); }
+.fe-summary__next { flex-wrap: wrap; justify-content: center; gap: 8px; }
 .fe-summary__item {
   white-space: nowrap;
   overflow: hidden;
@@ -1574,7 +1583,4 @@
 /* Rook's sell selection stays visible alongside the backpack. */
 .fe-rook .fe-panel__body { overflow: hidden; padding-bottom: 12px; mask-image: none; -webkit-mask-image: none; }
 .fe-rook .fe-merchant__scroll { min-height: 0; overflow-y: auto; }
-.fe-rook__tabs { display: flex; gap: 8px; flex-shrink: 0; }
-.fe-rook__tabs button { flex: 1; padding: 8px 12px; color: var(--ash); border: 1px solid var(--bronze); background: #120e10; font-size: var(--font-ui-body); cursor: pointer; }
-.fe-rook__tabs button[aria-selected="true"] { color: var(--parchment); border-color: var(--gold); background: #342319; }
 /* Rook's Sell window, stock rows and filters: styles/merchant.css */

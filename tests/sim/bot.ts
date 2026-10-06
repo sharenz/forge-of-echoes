@@ -3,19 +3,47 @@
 // casts its loadout sensibly, drinks flasks, then opens the chest, collects its own (instanced)
 // loot and takes the return portal. Several bots can play the same instance as a party.
 // Shared by the sim tests and dev/sim.html.
-import { MONSTER_KINDS } from '../../src/contracts/content';
-import { AILMENT_BIT, RARITY_CODE, type AreaView, type PlayerIntent, type WorldView } from '../../src/contracts/sim';
+import { MONSTER_KINDS, type SkillId } from '../../src/contracts/content';
+import { AILMENT_BIT, RARITY_CODE, type AreaView, type PlayerIntent, type PlayerView, type WorldView } from '../../src/contracts/sim';
 import {
   CHARGE_LINE_HALF_WIDTH, CHOIR_RING_HALF_WIDTH, FAULT_WEDGE_HALF_ANGLE, areaAngle, areaContains, areaVariant, choirGapAngles, inChoirGap, voidTideInner,
 } from '../../src/sim/area-geometry';
 import { coverOf } from '../../src/data/propCover';
 import { Nav } from './nav';
 
+/** What a per-archetype cast script sees when it decides whether one loadout slot is held this tick. */
+export interface CastContext {
+  p: PlayerView;
+  /** Distance to the nearest monster (Infinity when none). */
+  nd: number;
+  /** Distance to the nearest boss or lieutenant (Infinity when none). */
+  bd: number;
+  /** Monsters within 60 / 120 units of the player. */
+  crowd60: number;
+  crowd120: number;
+  /** A clear line to the aimed monster (no tall cover). */
+  aimClear: boolean;
+  /** Standing in a telegraph or a field. */
+  inDanger: boolean;
+  /** Strength of the steering threat field (0 calm, above 0.5 pressing). */
+  threat: number;
+  rooted: boolean;
+}
+
+/** Decide whether a slot's skill is held (cast) this tick. */
+export type CastRule = (c: CastContext) => boolean;
+
 export interface BotOptions {
   /** Walk to (non-blocked) drops when safe and after the clear. Default true. */
   collectDrops?: boolean;
   /** Take the return portal once everything is collected. Default true. */
   usePortal?: boolean;
+  /**
+   * Per-archetype cast script (power rework harness): a rule per skill replaces the default one for that skill, `basic`
+   * replaces the rule of slot 0 (the free basic attack). Skills without a rule keep the defaults, so an empty script is
+   * the stock bot. Rift Step keeps its default aim unless the script does not mention it.
+   */
+  cast?: { basic?: CastRule; skills?: Partial<Record<SkillId, CastRule>> };
 }
 
 export interface Bot {
@@ -476,10 +504,16 @@ export function createBot(opts: BotOptions = {}): Bot {
 
       // Skills.
       const rooted = p.debuffs.some((d) => d.id === 'rooted');
-      out.held[0] = nd < 330; // the basic attack is free: keep it going (a wall just eats it) so the first clear line gets a bolt
+      const castCtx: CastContext = { p, nd, bd, crowd60, crowd120, aimClear, inDanger, threat, rooted };
+      out.held[0] = opts.cast?.basic ? opts.cast.basic(castCtx) : nd < 330; // the basic attack is free: keep it going (a wall just eats it) so the first clear line gets a bolt
       for (let s = 1; s < p.slots.length; s++) {
         const slot = p.slots[s];
         if (!slot.skillId || !slot.usable) continue;
+        const rule = opts.cast?.skills?.[slot.skillId];
+        if (rule) {
+          out.held[s] = rule(castCtx);
+          continue;
+        }
         switch (slot.skillId) {
           case 'emberNova':
             out.held[s] = crowd120 >= 3 || bd < 140;

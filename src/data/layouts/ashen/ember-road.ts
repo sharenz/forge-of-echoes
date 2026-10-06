@@ -99,7 +99,7 @@ export const EMBER_ROAD: AreaLayout = defineLayout({
     { id: 'orchard-1', fits: 'orchard', at: [-0.28, -0.55] },
     { id: 'ring-1', fits: 'ring', at: [0.28, -0.55] },
     { id: 'host-1', fits: 'host', at: [-0.62, 0.52] },
-    { id: 'bell-1', fits: 'bell', at: [0.62, 0.52] },
+    { id: 'bell-1', fits: 'bell', at: [0.51, 0.43] }, // pulled in so the Bellwatch's rings fit inside the arena (E1 check 10)
   ],
   rareSpots: [
     { at: [-0.5, 0], r: 100, weight: 2 },

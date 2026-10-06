@@ -23,16 +23,19 @@
 // Items in an open trade offer are LOCKED: a command aimed at one is refused with ITEM_IN_TRADE, and every
 // item rule runs through game.serverRules (withItemLocks), which also refuses side effects on locked items —
 // "Deposit all" files every other currency stack and leaves the locked ones in the backpack.
-import type { MerchantOffer, Result } from '../contracts/game';
+import type { MerchantBoard, MerchantOffer, Result } from '../contracts/game';
 import type { CharacterSave, CurrencyStack, ItemLocation } from '../contracts/items';
 import type { Command } from '../contracts/net';
+import { ROOK_MAP_OFFER_PREFIX } from '../data/progression';
 import { rules } from '../game';
+import { applyGuideOp } from '../game/progression/guide';
+import { sortBackpack } from '../game/items/sort';
 import type { Game } from './game';
 import type { PlayerSession } from './session';
 import { ITEM_IN_TRADE } from './trade';
 
 export type CommandResult =
-  | { ok: true; message?: string; offers?: MerchantOffer[] }
+  | { ok: true; message?: string; offers?: MerchantOffer[]; board?: MerchantBoard }
   | { ok: false; error: string };
 
 /** Longest chat line (the wire allows a little more; the server trims and enforces this). */
@@ -302,6 +305,25 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       s.pushCharacter('now');
       return { ok: true, message: used.value.message };
     }
+    case 'slotSigil': {
+      // Beacons (brief D 6): the sigil leaves the backpack and the account's beacon changes in one save. Hideout only, inventory first.
+      if (!inHideout(s)) return fail('Sigils are slotted on the Atlas table in a hideout.');
+      if (!rules.findItem(ch, cmd.uid)) return fail(missingItem(cmd.uid));
+      if (lockedIn(game, s, cmd.uid)) return fail(ITEM_IN_TRADE);
+      const slotted = r.slotSigil(ch, cmd.areaId, cmd.slot, cmd.uid);
+      if (!slotted.ok) return fail(slotted.error);
+      if (!game.store.commit(s.record, slotted.value.character)) return fail('The sigil could not be slotted. Nothing changed; try again.');
+      s.pushCharacter('now');
+      return { ok: true, message: slotted.value.message };
+    }
+    case 'unslotSigil': {
+      if (!inHideout(s)) return fail('Sigils are taken out on the Atlas table in a hideout.');
+      const taken = r.unslotSigil(ch, cmd.areaId, cmd.slot);
+      if (!taken.ok) return fail(taken.error);
+      if (!game.store.commit(s.record, taken.value.character)) return fail('The sigil could not be taken out. Nothing changed; try again.');
+      s.pushCharacter('now');
+      return { ok: true, message: taken.value.message };
+    }
     case 'pinArea':
       // Pins are an account setting: free, instant and allowed anywhere (the chart is read in the hideout, the result is what counts).
       return applyResult(game, s, r.setPin(ch, cmd.areaId, cmd.pinned), false);
@@ -314,6 +336,17 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
     case 'clearNewFlags':
       commit(game, s, rules.clearNewFlags(ch), false);
       return OK;
+    case 'sortBackpack':
+      return applyResult(game, s, sortBackpack(ch), false);
+    case 'guide': {
+      // The first-run guide is account state and purely informational: idempotent, never refused for being early or late.
+      if (!ch.guide) return OK;
+      const next = applyGuideOp(ch.guide, cmd, game.now());
+      if (!next) return OK;
+      commit(game, s, { ...ch, guide: next }, false);
+      if (cmd.op === 'skip' || cmd.op === 'finish' || cmd.op === 'replay') game.log.info('guide', { character: s.name, op: cmd.op });
+      return OK;
+    }
 
     // --- character -------------------------------------------------------------------------
     case 'allocateAttribute':
@@ -346,8 +379,43 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
     case 'merchantOffers':
       if (!inHideout(s)) return fail('Rook only trades in a hideout.');
       return { ok: true, offers: r.merchantOffers(ch) };
+    case 'merchantWares': {
+      if (!inHideout(s)) return fail('Rook only trades in a hideout.');
+      // The board is a pure function of the character, the clock and the saved stock epoch; the first look at a new epoch saves its state.
+      const { character, board } = r.waresBoard(ch, game.now());
+      if (character !== ch) {
+        game.setCharacter(s, character);
+        game.flushSave(s);
+      }
+      return { ok: true, board };
+    }
+    case 'buyWare': {
+      if (!inHideout(s)) return fail('Rook only trades in a hideout.');
+      const now = game.now();
+      const bought = r.buyWare(ch, cmd.wareId, now, cmd.at);
+      if (!bought.ok) return fail(bought.error);
+      const where = placeError(s, ch, bought.value.character);
+      if (where) return fail(where);
+      // Scrap, the item and the sold slot are one character value: written at once, so a restart can never replay or lose half of a sale.
+      commit(game, s, bought.value.character, true);
+      game.flushSave(s);
+      return { ok: true, message: `Bought ${rules.describeItem(bought.value.item, bought.value.character).title}.`, board: r.waresBoard(bought.value.character, now).board };
+    }
+    case 'rerollWares': {
+      if (!inHideout(s)) return fail('Rook only trades in a hideout.');
+      const now = game.now();
+      const asked = r.rerollWares(ch, now, { epoch: cmd.epoch, cost: cmd.cost });
+      if (!asked.ok) return fail(asked.error);
+      const where = placeError(s, ch, asked.value.character);
+      if (where) return fail(where);
+      commit(game, s, asked.value.character, false);
+      game.flushSave(s);
+      return { ok: true, message: 'Rook rummages for new wares.', board: r.waresBoard(asked.value.character, now).board };
+    }
     case 'buyOffer': {
       if (!inHideout(s)) return fail('Rook only trades in a hideout.');
+      // Maps come from the wares board only (buyWare); the old map:<area>:<tier>:<grade> picker rows are gone.
+      if (cmd.offerId.startsWith(ROOK_MAP_OFFER_PREFIX)) return fail('Rook sells maps on his wares board now. Open the Wares tab.');
       const bought = r.buyOffer(ch, cmd.offerId, cmd.at);
       if (!bought.ok) return fail(bought.error);
       const where = placeError(s, ch, bought.value.character);

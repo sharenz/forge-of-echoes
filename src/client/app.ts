@@ -31,6 +31,7 @@ import type { Renderer } from '../contracts/render';
 import { SIM_DT } from '../contracts/sim';
 import type { SimEvent } from '../contracts/sim';
 import type { UiActions, UiState, UiStore } from '../contracts/ui';
+import type { GuideSignal } from '../contracts/guide';
 import { generateArt } from '../art';
 import { createAudio, setMusicTheme } from '../audio';
 import { rules as sharedRules, withItemLocks } from '../game';
@@ -56,7 +57,8 @@ import {
 } from './state';
 import { createStateBox, type StateBox } from './store';
 import { findDrop } from './autowalk';
-import { pickClickableProp, resolveWorldClick, type HoverSnapshot } from './world-pick';
+import { buildAnchors, hideoutCameraBias } from './guide-world';
+import { pickClickableProp, propClick, resolveWorldClick, type HoverSnapshot } from './world-pick';
 
 /** Input ticks per frame at most (a long frame never floods the server's input queue). */
 const MAX_TICKS_PER_FRAME = 6;
@@ -99,6 +101,8 @@ const UI_SOUNDS: Record<Parameters<UiActions['uiSound']>[0], SfxId> = {
   close: 'uiClose',
   error: 'uiError',
   equip: 'equip',
+  find: 'dropRare',
+  jackpot: 'dropUnique',
 };
 
 export interface ClientElements {
@@ -174,6 +178,10 @@ export class ClientApp {
   private holding = false;
   private holdSince = 0;
   private zoneEntries = 0;
+  /** First-run guide: listeners of the world signals, and the input kinds already reported in this zone (bit set). */
+  private readonly guideListeners = new Set<(s: GuideSignal) => void>();
+  private guideUsed = 0;
+  private readonly anchorBuf: import('../contracts/guide').WorldAnchor[] = [];
   private zoneResumes = 0;
   private eventsDiscarded = 0;
   private eventsCapped = 0;
@@ -225,6 +233,22 @@ export class ClientApp {
       art: {
         icon: (id, size) => (this.art ? this.art.icon(id, size) : ''),
         portrait: (size) => (this.art ? this.art.portrait(size) : ''),
+      },
+      world: {
+        anchors: () => {
+          const r = this.renderer;
+          const p = this.presenter;
+          const view = this.session?.zone ? this.session.world.view : null;
+          return r && p && view ? buildAnchors(view.props, (x, y) => r.worldToScreen(x, y, p.camera), this.anchorBuf) : [];
+        },
+        viewport: () => ({ width: this.el.canvas.clientWidth || window.innerWidth, height: this.el.canvas.clientHeight || window.innerHeight }),
+        walkTo: (propId) => this.walkToProp(propId),
+      },
+      signals: {
+        subscribe: (fn) => {
+          this.guideListeners.add(fn);
+          return () => { this.guideListeners.delete(fn); };
+        },
       },
     };
     this.input = new DomInput(el.canvas, {
@@ -683,6 +707,8 @@ export class ClientApp {
       return;
     }
     this.zoneEntries++;
+    this.guideUsed = 0;
+    if (zone.kind === 'map') this.emitGuide({ kind: 'mapEntered' });
     this.holding = false;
     if (this.presenter && this.session) this.presenter.reset(this.session.world.view, zone.localPlayerId);
     this.bot?.reset();
@@ -771,7 +797,9 @@ export class ClientApp {
     let n = 0;
     const opts = { blocked: s.paused, autoAttack: s.settings.autoAttack, bot: this.bot, alpha: this.alpha };
     while (this.acc >= SIM_DT && n < MAX_TICKS_PER_FRAME) {
-      session.inputTick(this.input.state.sample(), this.cursorWorld, opts);
+      const sample = this.input.state.sample();
+      if (this.guideListeners.size > 0 && !opts.blocked) this.noteInput(sample);
+      session.inputTick(sample, this.cursorWorld, opts);
       this.acc -= SIM_DT;
       n++;
     }
@@ -836,6 +864,7 @@ export class ClientApp {
       if (!this.holding) {
         // 3. The cosmetic events due at the render tick (the local player's own at once), within the frame budget.
         session.drainEvents(this.events);
+        if (this.guideListeners.size > 0) this.scanGuideEvents(this.events, zone.localPlayerId);
         if (this.events.length > MAX_FRAME_EVENTS) {
           const before = this.events.length;
           capEvents(this.events, MAX_FRAME_EVENTS, zone.localPlayerId);
@@ -863,6 +892,9 @@ export class ClientApp {
           cursorWorld: this.cursorWorld,
           hoverPropId: hover,
           hoverDropId: hoverDrop >= 0 ? hoverDrop : session.walk.dropId,
+          // The hideout leans north: its Map Device (the first thing a new player must find) is always fully on screen; in a short
+          // window it also leans west so the anvil is not hidden behind the Life globe.
+          ...(zone.kind === 'hideout' ? { cameraBias: hideoutCameraBias(this.el.canvas.clientHeight || window.innerHeight) } : {}),
           settings: { screenShake: s.settings.screenShake },
           paused: s.paused,
         });
@@ -912,6 +944,63 @@ export class ClientApp {
     session.inputTick(IDLE_SAMPLE, this.cursorWorld, { blocked: true, autoAttack: false, bot: null, alpha: this.alpha });
   }
 
+  // --- the first-run guide's window on the world ------------------------------------------------------------------
+
+  private emitGuide(signal: GuideSignal): void {
+    for (const fn of [...this.guideListeners]) fn(signal);
+  }
+
+  /** Report the first move, cast, skill and flask of this zone (the cheat-sheet chips dim, the hints learn). */
+  private noteInput(sample: { moveX: number; moveY: number; held: number; flask: number }): void {
+    const report = (bit: number, signal: GuideSignal): void => {
+      if (this.guideUsed & bit) return;
+      this.guideUsed |= bit;
+      this.emitGuide(signal);
+    };
+    if (sample.moveX !== 0 || sample.moveY !== 0) report(1, { kind: 'used', action: 'move' });
+    if (sample.held & 1) report(2, { kind: 'used', action: 'cast' });
+    if (sample.held & ~1) report(4, { kind: 'used', action: 'skill' });
+    if (sample.flask >= 0) report(8, { kind: 'used', action: 'flask' });
+  }
+
+  /** The cosmetic events the guide cares about: drops that landed for you, a failed cast for lack of Focus, boss phases, your dash. */
+  private scanGuideEvents(events: readonly SimEvent[], localId: number): void {
+    for (const e of events) {
+      switch (e.t) {
+        case 'dropSpawn':
+          if (e.owner === localId || e.owner === 0) this.emitGuide({ kind: 'drop', tone: e.tone });
+          break;
+        case 'notEnoughFocus':
+          if (e.playerId === localId) this.emitGuide({ kind: 'noFocus' });
+          break;
+        case 'bossPhase':
+          this.emitGuide({ kind: 'bossPhase', phase: e.phase });
+          break;
+        case 'dash':
+          if (e.playerId === localId && !(this.guideUsed & 16)) {
+            this.guideUsed |= 16;
+            this.emitGuide({ kind: 'used', action: 'dash' });
+          }
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  /** The keyboard path of a world click: use the portal or open the object's panel, exactly like clicking it. */
+  private walkToProp(propId: number): void {
+    const session = this.session;
+    const zone = session?.zone;
+    if (!session || !zone) return;
+    const click = propClick(session.world.view.props, propId, zone.kind);
+    if (click.kind === 'portal') session.usePortal(click.propId);
+    else if (click.kind === 'panel') {
+      this.audio.play('uiOpen');
+      this.box.update((s) => openPanel(s, click.panel));
+    }
+  }
+
   private setCursor(kind: string): void {
     if (kind === this.cursorStyle) return;
     this.cursorStyle = kind;
@@ -957,6 +1046,7 @@ export class ClientApp {
       addStashTab: () => inGame((g) => g.addStashTab(), undefined),
       renameStashTab: (tab, name) => inGame((g) => g.renameStashTab(tab, name), undefined),
       clearNewFlags: () => inGame((g) => g.clearNewFlags(), undefined),
+      sortBackpack: () => inGame((g) => g.sortBackpack(), undefined),
       dropItem: (uid) => inGame((g) => g.dropItem(uid), undefined),
 
       setBenchItem: (uid) => this.box.update((s) => (s.benchItemUid === uid ? s : { ...s, benchItemUid: uid })),
@@ -978,9 +1068,14 @@ export class ClientApp {
       setMapTreeNode: (nodeId, allocate) => inGame((g) => g.setMapTreeNode(nodeId, allocate), undefined),
       pinArea: (areaId, pinned) => inGame((g) => g.pinArea(areaId, pinned), undefined),
       refillSurge: (target) => inGame((g) => g.refillSurge(target), undefined),
+      slotSigil: (areaId, slot, uid) => inGame((g) => g.slotSigil(areaId, slot, uid), undefined),
+      unslotSigil: (areaId, slot) => inGame((g) => g.unslotSigil(areaId, slot), undefined),
       activateMapDevice: (opts) => inGame((g) => g.activateMapDevice(opts), undefined),
       merchantOffers: () => inGame((g) => g.merchantOffers(), []),
       buyOffer: (id, at) => inGame((g) => g.buyOffer(id, at), undefined),
+      merchantWares: () => inGame((g) => g.merchantWares(), Promise.resolve(null)),
+      buyWare: (id, at) => inGame((g) => g.buyWare(id, at), Promise.resolve(null)),
+      rerollWares: (epoch, cost) => inGame((g) => g.rerollWares(epoch, cost), Promise.resolve(null)),
       sellItems: (uids, scrap) => inGame(g => g.sellItems(uids, scrap), Promise.resolve(false)),
       buyDebugOffer: (id, options, at) => inGame(g => g.buyDebugOffer(id, options, at), undefined),
 
@@ -994,6 +1089,8 @@ export class ClientApp {
       setChatOpen: (open) => this.box.update((s) => (s.chatOpen === open ? s : { ...s, chatOpen: open })),
       sendChat: (text, channel) => inGame((g) => g.sendChat(text, channel), undefined),
 
+      guide: (input) => inGame((g) => g.guide(input), undefined),
+      toast: (text, tone) => inGame((g) => g.toast(text, tone), undefined),
       leaveMap: () => inGame((g) => g.leaveMap(), undefined),
       respawn: () => inGame((g) => g.respawn(), undefined),
       dismissRunSummary: () => this.box.update((s) => (s.runSummary ? withoutRunSummary(s) : s)),

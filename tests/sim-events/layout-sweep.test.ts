@@ -31,6 +31,8 @@ if (process.env.LAYOUT_SWEEP_NAV === '0') setNavEnabled(false);
 if (process.env.LAYOUT_SWEEP_COVER === '0') setCoverEnabled(false);
 /** LAYOUT_SWEEP_FLOW=0 plays with every flow zone (conveyor belt) stripped from the layouts, for before/after comparisons. */
 if (process.env.LAYOUT_SWEEP_FLOW === '0') for (const l of registeredLayouts()) if (l.flows) overrideLayout({ ...l, flows: undefined });
+/** LAYOUT_SWEEP_ANCHORS=0 strips every event anchor (E1 off: each event takes its radial site), for before/after comparisons. */
+if (process.env.LAYOUT_SWEEP_ANCHORS === '0') for (const l of registeredLayouts()) overrideLayout({ ...l, anchors: [] });
 const areas = (process.env.LAYOUT_SWEEP_AREAS?.split(',').filter(Boolean) ?? registeredLayouts().map((l) => l.areaId)) as AtlasAreaId[];
 
 describe.skipIf(!ON)('layout bot sweep (BALANCE=1)', () => {
@@ -44,6 +46,8 @@ describe.skipIf(!ON)('layout bot sweep (BALANCE=1)', () => {
         results: runs.map((r) => r.result[0]).join(''),
         minutes: runs.map((r) => Math.round(r.minutes * 10) / 10),
         events: runs.map((r) => (r.event ? r.event.grade : '-')).join(''),
+        // E1: 'a' = placed on a layout anchor, 'r' = the radial fallback, '-' = never revealed.
+        anchored: runs.map((r) => (!r.anchors ? '-' : r.anchors.length > 0 ? 'a' : 'r')).join(''),
         errors: runs.reduce((a, r) => a + r.errors, 0),
         ...(runs.some((r) => r.stuckAt) ? { stuck: runs.map((r, i) => (r.stuckAt ? `seed ${i + 1}: ${r.stuckAt}` : '')).filter(Boolean) } : {}),
       };

@@ -43,13 +43,16 @@ const TICKS = 3000;
 // bot no longer flip-flops on drops near the rim.
 // Re-pinned 2026-10-01 for cover (props have a cover height: tall props stop straight shots, src/sim/cover.ts; shooters hold fire behind
 // walls) and the bot that sees it (tests/sim/bot.ts aims at what it can see). Tick 1000 is unchanged: no shot meets a wall before it.
-const GOLDEN_4242 = [3614022833, 1187237647, 2269660000];
+// Re-pinned 2026-10-06 for the power rework (monster curve, rare/magic life floor, penetration and exposure in the damage pipeline).
+const GOLDEN_4242 = [2334532443, 3845941355, 2202071788];
 /** The whole tier-5 map at seed 9001 (the bot clears it and takes the return portal): its final digest and length. */
 // Re-pinned 2026-09-30 after removing the wave-3 lieutenant and fixing bot pursuit around pillars.
 // The complete intent recording still replays to identical intermediate and final digests below.
 // Re-pinned 2026-10-01 with GOLDEN_4242 (spawn placement clear of solids, rim/drop decision).
 // Re-pinned 2026-10-01 for cover (see GOLDEN_4242): previously 1734587646 in 16189 ticks. The map still clears.
-const GOLDEN_9001 = { digest: 993620320, ticks: 16617 };
+// Re-pinned 2026-10-06 for the power rework (see GOLDEN_4242): previously 993620320 in 16617 ticks. The map still clears; tier-5 rares
+// carry the depth life floor, so the clear takes longer.
+const GOLDEN_9001 = { digest: 2920781135, ticks: 18932 };
 const strong = { stats: strongStats(), skills: strongSkills(), loadout: STRONG_LOADOUT };
 
 function soloRun(seed: number, extra: Partial<ConfigOptions> = {}): SimRun {

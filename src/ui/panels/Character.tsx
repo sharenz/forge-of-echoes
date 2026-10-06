@@ -1,5 +1,7 @@
 // Character sheet (docked left): portrait, level and experience, attributes with allocation, and every
 // derived stat section from the rules with expandable breakdowns.
+import { attributeRuleText } from '../../game/progression/model';
+import { SORCERESS } from '../../data/progression';
 import { useState } from 'preact/hooks';
 import { ATTRIBUTES } from '../../contracts/content';
 import { Bar, PixelIcon, cx, usePortrait } from '../components/common';
@@ -90,6 +92,9 @@ export function CharacterPanel() {
         })}
         <div class={cx('fe-char__points', points > 0 && 'fe-char__points--has')}>
           {points > 0 ? `${points} attribute point${points === 1 ? '' : 's'} to spend` : 'No attribute points to spend'}
+        </div>
+        <div class="fe-char__wants ui-type-caption" data-class-wants>
+          {SORCERESS.name}: {SORCERESS.perAttribute.map(attributeRuleText).join(' · ')}.
         </div>
       </div>
 

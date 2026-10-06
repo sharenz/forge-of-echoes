@@ -6,6 +6,8 @@ import type { RunSummaryInfo } from '../../contracts/net';
 import { Button, Frame, Keycap, PanelHead, Slider, Switch, cx } from '../components/common';
 import { TONE_LABEL, rosterFor } from '../lib/content';
 import { formatDuration, formatInt } from '../lib/format';
+import { gt } from '../../data/guide/strings';
+import { gearToEquipOf } from '../guide/snapshot';
 import { useLocal } from '../local';
 import { useStore, useUi } from '../store';
 
@@ -59,6 +61,9 @@ export function MenuModal() {
             <Row label="Auto-attack" hint="T toggles it in game">
               <Switch label="Auto-attack" checked={settings.autoAttack} onChange={(v) => set({ autoAttack: v })} />
             </Row>
+            <Row label="Show tips" hint="First-time coach cards">
+              <Switch label="Show tips" checked={settings.hints !== false} onChange={(v) => set({ hints: v })} />
+            </Row>
             <Row label="Show frame rate">
               <Switch label="Show frame rate" checked={settings.showFps} onChange={(v) => set({ showFps: v })} />
             </Row>
@@ -73,7 +78,7 @@ export function MenuModal() {
                 store.actions.openPanel('help');
               }}
             >
-              Controls
+              Help and controls
             </Button>
             {zone === 'map' && (
               <Button
@@ -116,88 +121,9 @@ export function MenuModal() {
   );
 }
 
-const HELP: { title: string; rows: [string[], string][] }[] = [
-  {
-    title: 'Combat',
-    rows: [
-      [['W', 'A', 'S', 'D'], 'Move'],
-      [['LMB', 'RMB', 'Q', 'E', 'R', 'F'], 'Assigned skills (hold to cast when ready)'],
-      [['1', '2', '3', '4'], 'Drink a flask'],
-      [['T'], 'Toggle auto-attack for Ember Lance in its assigned slot'],
-    ],
-  },
-  {
-    title: 'Interface',
-    rows: [
-      [['I'], 'Inventory'],
-      [['C'], 'Character'],
-      [['K'], 'Skills'],
-      [['Esc'], 'Close the top panel, or open the menu'],
-      [['Alt'], 'Hold: affix tiers, ranges and comparison; point at a debuff for its counter'],
-    ],
-  },
-  {
-    title: 'Party and chat',
-    rows: [
-      [['P'], 'Party: invite, visit hideouts, trade'],
-      [['Enter'], 'Open chat, send a message'],
-      [['/trade'], 'In chat: /trade name asks a player to trade'],
-      [['Esc'], 'Close chat'],
-    ],
-  },
-  {
-    title: 'Items and crafting',
-    rows: [
-      [['Ctrl', 'Click'], 'Move between inventory, stash, gear, map device, bench and trade'],
-      [['Ctrl', 'Shift', 'Click'], 'In the stash: put gear or a map on the crafting bench'],
-      [['Ctrl', 'Shift', 'Click'], 'On a Crafting Stash slot: take exactly one'],
-      [['Ctrl', 'F'], 'Search the stash while it is open'],
-      [['RMB'], 'Arm a currency, also a Crafting Stash slot (hideout only)'],
-      [['LMB'], 'Apply the armed currency to an item'],
-      [['Drag'], 'Move an item; drop it on the world to put it on the floor'],
-    ],
-  },
-];
-
-export function HelpModal() {
-  const store = useStore();
-  const close = (): void => {
-    store.actions.uiSound('close');
-    store.actions.closePanel('help');
-  };
-  return (
-    <div class="fe-backdrop fe-solid" onPointerDown={(e) => e.target === e.currentTarget && close()}>
-      <Frame class="fe-modal fe-help" role="dialog" aria-modal="true" aria-label="Controls">
-        <PanelHead title="Controls" onClose={close} />
-        <div class="fe-help__grid">
-          {HELP.map((g) => (
-            <section key={g.title} class="fe-help__group">
-              <div class="fe-section-title">{g.title}</div>
-              {g.rows.map(([keys, what], i) => (
-                <div class="fe-help__row" key={i}>
-                  <span class="fe-help__keys">
-                    {keys.map((k) => (
-                      <Keycap key={k}>{k}</Keycap>
-                    ))}
-                  </span>
-                  <span class="fe-help__what">{what}</span>
-                </div>
-              ))}
-            </section>
-          ))}
-        </div>
-        <p class="fe-help__foot fe-muted">
-          Click the map device, stash, anvil or Rook in a hideout to use them, and a portal to enter it. There is no pause online: your
-          party keeps playing.
-        </p>
-      </Frame>
-    </div>
-  );
-}
-
 const RESULT_TEXT: Record<RunSummaryInfo['result'], { title: string; line: string }> = {
   cleared: { title: 'Map cleared', line: 'Your spoils are safe in your inventory.' },
-  failed: { title: 'Map lost', line: 'The portals are spent. Everything you picked up is still yours.' },
+  failed: { title: gt('summary.lostTitle'), line: gt('summary.lostLine') },
   abandoned: { title: 'Map left', line: 'You walked away. Everything you picked up is still yours.' },
 };
 
@@ -213,13 +139,26 @@ export function RunSummaryModal() {
   const summary = useUi((s) => s.runSummary);
   // state.run stays set while the summary shows: it names the map's boss.
   const baseId = useUi((s) => s.run?.map.baseId ?? null);
+  // The portals the map still has: a fall costs one entry, so "Map lost" is only true when none are left.
+  const portals = useUi((s) => s.hud?.portal?.remaining ?? null);
+  const unspent = useUi((s) => (s.character?.unspentAttributePoints ?? 0) + (s.character?.unspentSkillPoints ?? 0));
+  const gear = useUi((s) => (s.runSummary ? gearToEquipOf(s.character, store.rules) : 0));
   if (!summary) return null;
-  const base = RESULT_TEXT[summary.result];
+  const fell = summary.result === 'failed' && portals !== null && portals > 0;
+  const base = fell
+    ? { title: gt('summary.fellTitle'), line: gt('summary.fellLine', { portals, portalWord: portals === 1 ? 'portal' : 'portals' }) }
+    : RESULT_TEXT[summary.result];
   const boss = BOSS_FALLS[rosterFor(baseId).boss];
   const t = summary.result === 'cleared' && boss ? { ...base, line: `${boss} ${base.line}` } : base;
+  const cleared = summary.result === 'cleared';
+  const act = (panel: 'character' | 'inventory' | 'mapDevice'): void => {
+    store.actions.uiSound('open');
+    store.actions.dismissRunSummary();
+    store.actions.openPanel(panel);
+  };
   return (
     <div class="fe-backdrop fe-solid" onPointerDown={(e) => e.target === e.currentTarget && store.actions.dismissRunSummary()}>
-      <Frame class={cx('fe-modal fe-summary', `fe-summary--${summary.result}`)} role="dialog" aria-modal="true" aria-label={t.title}>
+      <Frame class={cx('fe-modal fe-summary', `fe-summary--${fell ? 'abandoned' : summary.result}`)} role="dialog" aria-modal="true" aria-label={t.title}>
         <div class="fe-summary__banner">
           <div class="fe-summary__sigil" />
           <div class="fe-summary__title">{t.title}</div>
@@ -228,6 +167,7 @@ export function RunSummaryModal() {
           </div>
         </div>
         <p class="fe-summary__line">{t.line}</p>
+        {summary.result === 'failed' && summary.kills === 0 && <p class="fe-summary__line fe-summary__coach ui-type-secondary">{gt('summary.zeroKills')}</p>}
         <div class="fe-summary__stats">
           <div class="fe-stat">
             <span class="fe-stat__v">{formatDuration(summary.seconds)}</span>
@@ -251,7 +191,7 @@ export function RunSummaryModal() {
           {summary.itemsFound.length === 0 ? (
             <div class="fe-muted">Nothing worth carrying this time.</div>
           ) : (
-            <ul class="fe-summary__items">
+            <ul class="fe-summary__items fe-summary__items--fade" tabIndex={0} aria-label={`Found (${summary.itemsFound.length}). ${gt('summary.scroll')}`}>
               {summary.itemsFound.map((it, i) => (
                 <li key={i} class={cx('fe-summary__item', `fe-tone-${it.tone}`)} title={TONE_LABEL[it.tone]}>
                   {it.label}
@@ -260,7 +200,10 @@ export function RunSummaryModal() {
             </ul>
           )}
         </div>
-        <div class="fe-dialog__actions">
+        <div class="fe-dialog__actions fe-summary__next">
+          {unspent > 0 && <Button data-summary-points onClick={() => act('character')}>{gt('summary.next.points')}</Button>}
+          {gear > 0 && <Button data-summary-equip onClick={() => act('inventory')}>{gt('summary.next.equip')}</Button>}
+          {cleared && <Button data-summary-atlas onClick={() => act('mapDevice')}>{gt('summary.next.atlas')}</Button>}
           <Button variant="ember" size="large" autoFocus onClick={() => store.actions.dismissRunSummary()}>
             Continue
           </Button>

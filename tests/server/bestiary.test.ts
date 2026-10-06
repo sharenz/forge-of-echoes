@@ -16,7 +16,7 @@ import { DAMAGE_INDEX } from '../../src/sim/math';
 import { worldOf } from '../../src/sim/run';
 import { MFLAG } from '../../src/sim/stores';
 import { createBot } from '../sim/bot';
-import { LocalPlayer, createClock, createLocalCharacter, openMap, startTestServer, tick, walkIntoProp } from './helpers';
+import { LocalPlayer, buyRookMap, createClock, createLocalCharacter, openMap, startTestServer, tick, walkIntoProp } from './helpers';
 import type { Clock } from './helpers';
 
 type Server = Awaited<ReturnType<typeof startTestServer>>;
@@ -50,7 +50,7 @@ function enterThemedMap(p: LocalPlayer, clock: Clock, theme: 'rimedOssuary' | 'i
   const areaId = theme === 'rimedOssuary' ? 'boneApproach' : 'championsApproach';
   const ch = p.session.record.ch;
   p.server.game.setCharacter(p.session, { ...ch, atlas: { ...ch.atlas!, discovered: [...ch.atlas!.discovered, areaId], completed: [...ch.atlas!.completed, areaId] } });
-  expect(p.command({ c: 'buyOffer', offerId: `map:${areaId}:1:plain` }).ok).toBe(true);
+  expect(buyRookMap(p, areaId).ok).toBe(true);
   const map = p.session.record.ch.backpack.entries.map((e) => e.item).find((i): i is MapItem => i.kind === 'map' && i.baseId === theme);
   if (!map) throw new Error(`no ${theme} map`);
   expect(map.areaId).toBe(areaId);

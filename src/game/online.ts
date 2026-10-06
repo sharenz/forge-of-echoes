@@ -178,6 +178,8 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
     buyDebugOffer: (ch, offerId, options, at) => guard(ch, [], c => base.buyDebugOffer(c, offerId, options, at), outcomeCharacter, withOutcomeCharacter),
     openMap: (ch, opts) => guard(ch, [ch.mapDevice?.uid], (c) => base.openMap(c, opts), outcomeCharacter, withOutcomeCharacter),
     refillSurge: (ch, target, now) => guard(ch, [], (c) => base.refillSurge(c, target, now), outcomeCharacter, withOutcomeCharacter),
+    slotSigil: (ch, areaId, slot, uid) => guard(ch, [uid], (c) => base.slotSigil(c, areaId, slot, uid), outcomeCharacter, withOutcomeCharacter),
+    unslotSigil: (ch, areaId, slot) => guard(ch, [], (c) => base.unslotSigil(c, areaId, slot), outcomeCharacter, withOutcomeCharacter),
     craftingTargetError: (ch, currencyUid, targetUid) => {
       const locked = locksOf(ch);
       if (locked && (isLocked(locked, currencyUid) || isLocked(locked, targetUid))) return LOCKED_ITEM_ERROR;
@@ -197,6 +199,15 @@ export function withItemLocks(base: GameRulesApi, lockedOf: LockedUids): GameRul
         return base.benchRecipes(ch, targetUid).map((r) => ({ ...r, available: false, reason: LOCKED_ITEM_ERROR }));
       }
       return base.benchRecipes(maskLocked(ch, locked).character, targetUid);
+    },
+    buyWare: (ch, wareId, now, at) => guard(ch, [], (c) => base.buyWare(c, wareId, now, at), outcomeCharacter, withOutcomeCharacter),
+    rerollWares: (ch, now, expect) => guard(ch, [], (c) => base.rerollWares(c, now, expect), outcomeCharacter, withOutcomeCharacter),
+    waresBoard: (ch, now) => {
+      const locked = locksOf(ch);
+      if (!locked) return base.waresBoard(ch, now);
+      // Affordability is judged without the stacks in the trade offer; the saved state is the unmasked character's.
+      const { board } = base.waresBoard(maskLocked(ch, locked).character, now);
+      return { character: base.waresBoard(ch, now).character, board };
     },
     merchantOffers: (ch) => {
       const locked = locksOf(ch);

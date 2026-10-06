@@ -82,7 +82,7 @@ function stats(): PlayerCombatStats {
   return {
     maxLife: 4000, lifeRegen: 400, maxFocus: 300, focusRegen: 60, armor: 400, evasion: 0.4,
     resist: { physical: 0, fire: 0.6, cold: 0.6, lightning: 0.6, void: 0.4 }, damageTaken: 1, moveSpeed: 125,
-    pickupRadius: 50, lifeOnKill: 0, focusOnKill: 0, flaskEffect: 1, flags: [],
+    pickupRadius: 50, lifeOnKill: 0, focusOnKill: 0, flaskEffect: 1, pen: { physical: 0, fire: 0, cold: 0, lightning: 0, void: 0 }, maxResist: 75, flags: [],
   };
 }
 

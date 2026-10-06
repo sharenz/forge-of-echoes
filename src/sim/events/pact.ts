@@ -12,7 +12,7 @@ import {
 } from '../../data/progression/events/pact-altar';
 import { DT } from '../constants';
 import type { World } from '../world';
-import { beat, canOnset, finish, markOnset, mods, pay, pickSite, ringPoints, stoneZones, makeStone, tickStones, type Stone } from './kit';
+import { anchorSite, beat, canOnset, finish, markOnset, mods, pay, pickSite, ringPoints, stoneZones, makeStone, tickStones, type Stone } from './kit';
 import type { EventInstance, EventScript } from './types';
 
 interface PactState {
@@ -64,7 +64,9 @@ function lastPactWave(w: World): number {
 
 function reveal(w: World, e: EventInstance): boolean {
   if (!canOnset(w)) return false;
-  const altar = pickSite(w, e.plan.angle, { minPlayer: PACT_CLEARANCE, rim: PACT_RIM, from: 0.1, to: 0.7 });
+  const rule = { minPlayer: PACT_CLEARANCE, rim: PACT_RIM };
+  const at = anchorSite(w, e, 'altar', rule) ?? pickSite(w, e.plan.angle, { ...rule, from: 0.1, to: 0.7 });
+  const altar = { x: at.x, y: at.y };
   e.s = { altar, stones: [], offers: [], round: 0, open: false, openWave: 0, queue: [], firstBold: false, resolved: 0, kept: 0, deaths: 0, uncleared: 0, checked: 0,
     dead: new Set(), hint: 0, done: false } satisfies PactState;
   openRound(w, e, 1);

@@ -2,7 +2,7 @@
 // through MonsterScaling, per-wave growth, elite modifiers and the party size.
 import type { MonsterKind } from '../contracts/content';
 import { MONSTER_ANIM, RARITY_CODE, type MonsterRarity } from '../contracts/sim';
-import { KIND_INDEX, RARITY_STRENGTH, RARITY_XP, eliteDamageMult, eliteLifeMult, eliteResist, eliteSpeedMult } from './archetypes';
+import { KIND_INDEX, RARITY_STRENGTH, RARITY_XP, eliteDamageMult, eliteLifeMult, eliteResist, lifeWithFloor, eliteSpeedMult } from './archetypes';
 import { PARTY_LIFE_PER_PLAYER, SPAWN_ANIM_TIME, WAVE_DAMAGE_GROWTH, WAVE_LIFE_GROWTH } from './constants';
 import { DAMAGE_INDEX, GOLDEN_ANGLE, TAU } from './math';
 import { nearestLiving } from './player';
@@ -30,6 +30,8 @@ export interface SpawnOptions {
   boss?: boolean;
   /** Play the 0.5 s spawn animation (invulnerable) and emit 'monsterSpawn'. Default true. */
   animate?: boolean;
+  /** Apply the rare/magic depth life floor (power rework D3). Default true; map events turn it off, their elites are tuned per event. */
+  lifeFloor?: boolean;
 }
 
 /** Spare room kept between a spawned body and a solid prop. */
@@ -112,7 +114,9 @@ export function spawnMonster(w: World, kind: MonsterKind, x0: number, y0: number
   if (near) m.target[i] = near.id;
   m.anim[i] = animate ? MONSTER_ANIM.spawn : MONSTER_ANIM.idle;
   m.spawnTime[i] = animate ? SPAWN_ANIM_TIME : 0;
-  m.maxLife[i] = Math.max(1, a.life * lifeMult);
+  // Rare and magic monsters have a depth-scaled life floor (power rework D3); bosses, lieutenants, dummies and event monsters keep their own.
+  const floored = opts.boss || opts.lieutenant || isDummy || opts.lifeFloor === false ? a.life : lifeWithFloor(a.life, rarity, s.level);
+  m.maxLife[i] = Math.max(1, floored * lifeMult);
   m.life[i] = m.maxLife[i];
   m.speed[i] = a.speed * Math.max(0, s.speedMultiplier) * eliteSpeedMult(mods);
   m.damage[i] = a.damage * dmgMult;

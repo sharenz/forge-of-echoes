@@ -16,6 +16,9 @@ export const PANEL_KEYS: Readonly<Record<string, Panel>> = {
   c: 'character',
   k: 'skills',
   p: 'party',
+  /** The Map Device's Atlas (own hideout only: elsewhere its panel says so). */
+  m: 'mapDevice',
+  h: 'help',
 };
 
 export interface KeyInput {
@@ -32,6 +35,8 @@ export function keyCommand(e: KeyInput, typing: boolean): KeyCommand {
   if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f') return { kind: 'search' };
   if (typing || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return null;
   if (e.key === 'Enter') return { kind: 'chat' };
+  // Help also answers F1 and ? (Shift+/).
+  if (e.key === 'F1' || e.key === '?') return { kind: 'toggle', panel: 'help' };
   const panel = PANEL_KEYS[e.key.toLowerCase()];
   return panel ? { kind: 'toggle', panel } : null;
 }

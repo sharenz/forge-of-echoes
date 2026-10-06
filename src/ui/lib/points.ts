@@ -1,5 +1,5 @@
 // Unspent points shown on the HUD: attribute points (Character, C), skill points (Skills, K) and Atlas tree points
-// (the Cartography Table in your hideout). Pure, covered by tests/ui/points.test.ts.
+// (the Map Device in your hideout). Pure, covered by tests/ui/points.test.ts.
 import type { Panel } from '../../contracts/ui';
 import { PANEL_KEYS } from './keys';
 
@@ -21,7 +21,7 @@ export interface PointsInput {
   skill: number;
   /** Free Atlas tree points (earned minus spent). */
   atlas: number;
-  /** The Cartography Table can only be opened from a hideout. */
+  /** The Map Device can only be opened from a hideout. */
   inHideout: boolean;
 }
 
@@ -40,7 +40,7 @@ const PANEL_OF: Record<PointKind, Panel> = { attribute: 'character', skill: 'ski
 
 export function pointLabel(kind: PointKind, count: number): string {
   const key = panelHotkey(PANEL_OF[kind]);
-  const where = kind === 'atlas' ? ' at the Cartography Table' : key ? ` (${key})` : '';
+  const where = kind === 'atlas' ? ' in the Atlas (Map Device)' : key ? ` (${key})` : '';
   return `${count} ${NOUN[kind][count === 1 ? 0 : 1]} to spend${where}`;
 }
 

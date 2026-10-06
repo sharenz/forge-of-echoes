@@ -4,11 +4,12 @@
 // only through `hud`, updated ~15 Hz. Item/crafting/skill descriptions come from the SHARED rules (store.rules),
 // evaluated locally for display; every state change is a command sent to the authoritative server.
 import type { CurrencyId, MonsterKind, SkillId } from './content';
-import type { DerivedStats, GameRulesApi, MerchantOffer, RunSetup } from './game';
+import type { DerivedStats, GameRulesApi, MerchantBoard, MerchantOffer, RunSetup } from './game';
 import type { CharacterSave, ItemLocation, ItemTone, Settings, SpecialStashTab } from './items';
 import type { AccountInfo, CharacterSummary, ChatChannel, PartyInfo, PartyInvite, PortalInfo, RunSummaryInfo, TradeInfo, TradeRequestInfo } from './net';
 import type { RunPhase } from './sim';
 import type { PlayerDebuff } from './bestiary';
+import type { GuideInput, GuideSignals, UiWorld } from './guide';
 
 export type Screen =
   | 'loading'       // booting / generating art
@@ -67,6 +68,8 @@ export interface HudRun {
   /** Portals left on this map (owner's device). */
   portalsRemaining: number;
   portalsTotal: number;
+  /** The reward chest after the boss: closed, opened, or absent (not spawned yet). */
+  chest?: 'closed' | 'open';
 }
 
 /** Another player in the same instance (party frames + names). */
@@ -201,6 +204,8 @@ export interface UiActions {
   addStashTab(): void;
   renameStashTab(tab: number, name: string): void;
   clearNewFlags(): void;
+  /** Sort the backpack (currency, flasks, maps, gear by slot). */
+  sortBackpack(): void;
   /** Drop an item on the floor at your feet (public: anyone nearby can pick it up). */
   dropItem(uid: string): void;
 
@@ -232,12 +237,22 @@ export interface UiActions {
   pinArea(areaId: import('./atlas').AtlasAreaId, pinned: boolean): void;
   /** Use Hourglass Sand on an area, or a Grand Hourglass on every area (`'all'`): refills the daily surge (server clock, hideout only). */
   refillSurge(target: import('./atlas').AtlasAreaId | 'all'): void;
+  /** Slot one sigil from the backpack stack `uid` into a beacon slot (hideout; the area must be cleared). Swaps a filled slot. */
+  slotSigil(areaId: import('./atlas').AtlasAreaId, slot: number, uid: string): void;
+  /** Take a sigil out of a beacon slot (an unused one returns to the backpack, a used one is consumed). */
+  unslotSigil(areaId: import('./atlas').AtlasAreaId, slot: number): void;
   /** The map decides the area. `passageKey` (a loaded key) or `pit` (Bounty map bound to the Pit's entrance) redirect it. */
   activateMapDevice(opts?: { lootClass?: import('./content').ItemClass; passageKey?: import('./content').CurrencyId; pit?: true; useSurge?: boolean }): void;
   /** Offers computed locally from the shared rules (display); buying goes to the server. */
   merchantOffers(): MerchantOffer[];
   /** `at`: the backpack cell the purchase was dragged onto (first-fit when omitted or occupied). */
   buyOffer(offerId: string, at?: { x: number; y: number }): void;
+  /** Rook's wares board for this character, built by the server (null when it could not be read). */
+  merchantWares(): Promise<MerchantBoard | null>;
+  /** Buy a ware by id (`at`: the backpack cell it was dropped on). Resolves with the fresh board, or null when refused (stale epoch, sold, no Scrap, no room). */
+  buyWare(wareId: string, at?: { x: number; y: number }): Promise<MerchantBoard | null>;
+  /** "Ask for new wares" at the price the player saw. Resolves with the fresh board, or null when refused. */
+  rerollWares(epoch: string, cost: number): Promise<MerchantBoard | null>;
   sellItems(uids: string[], expectedScrap: number): Promise<boolean>;
   buyDebugOffer(offerId: string, options: import('./game').DebugMerchantOptions, at?: { x: number; y: number }): void;
 
@@ -257,11 +272,17 @@ export interface UiActions {
   respawn(): void;
   dismissRunSummary(): void;
 
+  /** The first-run guide: record a step, hint or prop (idempotent; applied at once, confirmed by the server), skip, replay or finish the tutorial. */
+  guide(input: GuideInput): void;
+
   // misc
   setPaused(paused: boolean): void;
   updateSettings(patch: Partial<Settings>): void;
   dismissToast(id: number): void;
-  uiSound(id: 'click' | 'hover' | 'open' | 'close' | 'error' | 'equip'): void;
+  /** Show a toast (the guide names the key to press for new points). */
+  toast(text: string, tone?: Toast['tone']): void;
+  /** `find` / `jackpot`: the soft chimes of Rook's lucky-find reveal. */
+  uiSound(id: 'click' | 'hover' | 'open' | 'close' | 'error' | 'equip' | 'find' | 'jackpot'): void;
 }
 
 export interface UiStore {
@@ -270,6 +291,10 @@ export interface UiStore {
   actions: UiActions;
   rules: GameRulesApi;
   art: { icon(iconId: string, size?: number): string; portrait(size?: number): string };
+  /** Screen positions of the props of the current zone (the guide's markers). Absent in the UI sandbox. */
+  world?: UiWorld;
+  /** One-shot facts from the world for the guide's hints and cheat-sheet. Absent in the UI sandbox. */
+  signals?: GuideSignals;
 }
 
 export type MountUi = (root: HTMLElement, store: UiStore) => () => void;

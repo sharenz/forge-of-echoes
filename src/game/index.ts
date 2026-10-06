@@ -65,8 +65,10 @@
 import { setMapTreeNode } from './progression/map-tree';
 import { setPin } from './progression/atlas';
 import { refillSurge } from './progression/surge';
+import { slotSigil, unslotSigil } from './progression/territory';
 import { recycleMaps, recycleQuote } from './items/bench';
 import { rookMapAreas, rookMapOffers } from './progression/merchant';
+import { buyWare, rerollWares, waresBoard } from './progression/wares';
 import { buyDebugOffer } from './progression/debug-merchant';
 import type { ContentInfo, GameRulesApi } from '../contracts/game';
 import {
@@ -153,6 +155,8 @@ export const rules: GameRulesApi = {
   mapSummary,
   openMap,
   refillSurge,
+  slotSigil,
+  unslotSigil,
   buildRunConfig,
   playerRuntime,
   lootLuck,
@@ -167,6 +171,9 @@ export const rules: GameRulesApi = {
   merchantOffers,
   rookMapAreas,
   rookMapOffers,
+  waresBoard,
+  buyWare,
+  rerollWares,
   sellItems,
   sellQuote,
   buyOffer,

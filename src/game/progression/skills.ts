@@ -19,9 +19,9 @@ import type { DamageType, SkillId } from '../../contracts/content';
 import { SKILL_IDS } from '../../contracts/content';
 import type { SkillRuntimeDef } from '../../contracts/sim';
 import { resolveStat } from '../../core/modifiers';
-import { DAMAGE_ROLL, EXTRA_PROJECTILE_FAN, MAX_SKILL_RANK, SKILLS, findSkill, getSkill } from '../../data/progression';
+import { DAMAGE_ROLL, EXTRA_PROJECTILE_FAN, MAX_SKILL_RANK, MORE_CAP, PEN_CAP, SKILLS, STAT_CAPS, findSkill, getSkill } from '../../data/progression';
 import type { SkillDef } from '../../data/progression';
-import { buildPlayerModel, focusRegenBreakdown, spellPowerAt } from './model';
+import { buildPlayerModel, focusRegenBreakdown, penetrationOf, spellPowerAt } from './model';
 import type { PlayerModel } from './model';
 import { clamp, fail, oneDecimal, ok, percent, rankValue, resolveModes, seconds } from './util';
 
@@ -59,10 +59,21 @@ const AILMENT_STAT: Partial<Record<DamageType, StatId>> = { fire: 'igniteChance'
 const AILMENT_NAME: Partial<Record<DamageType, string>> = { fire: 'Ignite', cold: 'Chill', lightning: 'Shock' };
 const DAMAGE_NAME: Record<DamageType, string> = { physical: 'Physical', fire: 'Fire', cold: 'Cold', lightning: 'Lightning', void: 'Void' };
 
-/** Stats whose increased/more modifiers apply to hits of a damage type. */
-export function damageStatsFor(type: DamageType): StatId[] {
+/**
+ * Stats whose increased/more modifiers apply to hits of a damage type. `tags` are the skill's tags: Projectile, Area and
+ * Duration (damage over time) skills also take Projectile / Area / Damage over Time increases (power-curve.md 3.3).
+ * `convertedFrom` lists the types a share of this damage was converted from; their modifiers apply too.
+ */
+export function damageStatsFor(type: DamageType, tags: readonly string[] = [], convertedFrom: readonly DamageType[] = []): StatId[] {
   const stats: StatId[] = ['spellDamage', `${type}Damage` as StatId];
   if (ELEMENTAL.includes(type)) stats.push('elementalDamage');
+  // Converted damage keeps the modifiers of the type it came from (power-curve.md 3.2): the source types' own pools join this one.
+  for (const from of convertedFrom) {
+    for (const stat of damageStatsFor(from)) if (!stats.includes(stat)) stats.push(stat);
+  }
+  if (tags.includes('Projectile')) stats.push('projectileDamage');
+  if (tags.includes('Area')) stats.push('areaDamage');
+  if (tags.includes('Duration')) stats.push('damageOverTime');
   return stats;
 }
 
@@ -75,6 +86,10 @@ export interface ResolvedSkill {
   added: number;
   increased: number;
   moreMultiplier: number;
+  /** Whether the multiplicative pool hit MORE_CAP. */
+  moreCapped: boolean;
+  /** Penetration of the skill's damage type in percentage points (already capped at PEN_CAP). */
+  penetration: number;
   /** Seconds between casts when cast back to back (cast time, or cooldown per charge if longer). */
   interval: number;
   /**
@@ -117,23 +132,25 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
 
   // Damage
   const effectiveness = rv(def.effectiveness);
-  const damageMods = model.of(...damageStatsFor(type));
+  const damageMods = model.of(...damageStatsFor(type, def.tags));
   const increased = damageMods.filter((m) => m.mode === 'increased').reduce((s, m) => s + m.value, 0);
-  const moreMultiplier = damageMods.filter((m) => m.mode === 'more').reduce((p, m) => p * (1 + m.value / 100), 1);
+  const moreRaw = damageMods.filter((m) => m.mode === 'more').reduce((p, m) => p * (1 + m.value / 100), 1);
+  const moreMultiplier = Math.min(MORE_CAP, moreRaw);
+  const penetration = penetrationOf(model, type).value;
   const added = model.breakdown('addedSpellDamage', 0).value;
   const basePower = spellPowerAt(model.cls, model.level) + added;
   const wardFocus = skillId === 'cinderWard' && model.flags.includes('wardFocus');
   const damage = effectiveness > 0 && !wardFocus ? Math.max(0, basePower * effectiveness * Math.max(0, 1 + increased / 100) * moreMultiplier) : 0;
 
   // Speed & timing
-  const castSpeed = Math.max(0.1, model.breakdown('castSpeed').value / 100);
-  const cdr = Math.max(0.1, model.breakdown('cooldownRecovery').value / 100);
+  const castSpeed = clamp(model.breakdown('castSpeed').value / 100, 0.1, 1 + STAT_CAPS.castSpeed / 100);
+  const cdr = clamp(model.breakdown('cooldownRecovery').value / 100, 0.1, 1 + STAT_CAPS.cooldownRecovery / 100);
   const castTime = def.castTime > 0 ? def.castTime / castSpeed : 0;
   const cooldown = rv(def.cooldown) > 0 ? rv(def.cooldown) / cdr : 0;
 
   // Crit & ailments (non-damaging skills never crit)
   const critChance = damage > 0 ? clamp(resolveStat(def.critChance, model.of('critChance')) / 100, 0, 1) : 0;
-  const critMultiplier = Math.max(1, model.breakdown('critMultiplier').value / 100);
+  const critMultiplier = clamp(model.breakdown('critMultiplier').value / 100, 1, STAT_CAPS.critMultiplier / 100);
   const ailmentStat = AILMENT_STAT[type];
   const ailmentChance = damage > 0 && ((skillId === 'emberLance' && model.flags.includes('lanceIgnites'))
     || (skillId === 'cinderWard' && model.flags.includes('coldWard'))) ? 1 : damage > 0 && ailmentStat
@@ -142,10 +159,11 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
 
   // Shape
   const projectileSkill = def.shape === 'projectile' || def.shape === 'nova';
-  const extraProjectiles = projectileSkill ? Math.max(0, Math.round(model.breakdown('extraProjectiles', 0).value)) : 0;
-  const extraPierce = projectileSkill ? Math.max(0, Math.round(model.breakdown('pierce', 0).value)) : 0;
+  const extraProjectiles = projectileSkill ? clamp(Math.round(model.breakdown('extraProjectiles', 0).value), 0, STAT_CAPS.extraProjectiles) : 0;
+  const extraPierce = projectileSkill ? clamp(Math.round(model.breakdown('pierce', 0).value), 0, STAT_CAPS.pierce) : 0;
+  const extraChains = def.shape === 'chain' ? Math.max(0, Math.round(model.breakdown('extraChains', 0).value)) : 0;
   const projSpeedMult = Math.max(0.1, model.breakdown('projectileSpeed').value / 100);
-  const areaRadiusMult = Math.sqrt(Math.max(0.1, model.breakdown('area').value / 100));
+  const areaRadiusMult = Math.sqrt(clamp(model.breakdown('area').value / 100, 0.1, 1 + STAT_CAPS.area / 100));
   const durationMult = Math.max(0.1, model.breakdown('duration').value / 100);
 
   const flags: string[] = [];
@@ -180,7 +198,7 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
     spread: flags.includes('fan') ? Math.PI * 5 / 6 : flags.includes('circle') ? Math.PI * 2 * (projectiles - 1) / projectiles : fanSpread(def, projectiles),
     radius: def.areaScales === 'radius' ? def.radius * areaRadiusMult : def.radius,
     duration: rv(def.duration) * (rv(def.duration) > 0 ? durationMult : 1),
-    chains: Math.max(0, Math.floor(rv(def.chains))),
+    chains: def.shape === 'chain' ? Math.min(STAT_CAPS.chains, Math.max(0, Math.floor(rv(def.chains)) + extraChains)) : Math.max(0, Math.floor(rv(def.chains))),
     distance: rv(def.distance),
     damageReduction: Math.min(def.damageReductionCap ?? 1, rv(def.damageReduction)),
     flags,
@@ -214,7 +232,7 @@ export function resolveSkill(model: PlayerModel, skillId: SkillId, rankIn: numbe
   }
   const sustainedDps = dps === null ? null : dps * focusSustain;
   return {
-    def, runtime, effectiveness, basePower, added, increased, moreMultiplier, interval, dps, hits, perCast, focusRegen,
+    def, runtime, effectiveness, basePower, added, increased, moreMultiplier, moreCapped: moreRaw > MORE_CAP, penetration, interval, dps, hits, perCast, focusRegen,
     focusSustain, sustainedDps, flagTexts,
   };
 }
@@ -408,9 +426,16 @@ export function skillLines(r: ResolvedSkill): string[] {
       : `Cooldown ${seconds(rt.cooldown)}`);
   }
   lines.push(rt.focusCost > 0 ? `Costs ${rt.focusCost} Focus` : 'No Focus cost');
+  if (rt.damage > 0 && r.penetration > 0) {
+    lines.push(`Penetrates ${plainPercent(r.penetration)}% ${type} resistance (${plainPercent(r.penetration)} of ${PEN_CAP} maximum)`);
+  }
   lines.push(...estimateLines(r));
   lines.push(...r.flagTexts);
   return lines;
+}
+
+function plainPercent(v: number): string {
+  return String(Math.round(v * 10) / 10);
 }
 
 /** Whole numbers from 10 up, one decimal below. */

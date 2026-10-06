@@ -487,7 +487,8 @@ export class PropPainter {
         if (name) {
           this.hoverName = name;
           this.hoverX = x;
-          this.hoverY = y - meta.anchorY * scaleY - 8;
+          // Never clipped by the top of the screen (a tall prop at the edge keeps its name inside the view).
+          this.hoverY = Math.max(f.view.cy - f.view.halfH + 16, y - meta.anchorY * scaleY - 8);
         }
       }
     }

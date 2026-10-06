@@ -75,6 +75,11 @@ const DEFENCE_FLAT = ladder([[6, 12], [13, 19], [20, 29], [30, 41], [42, 55], [5
 const DEFENCE_PCT = ladder([[10, 16], [17, 19], [20, 24], [25, 30], [31, 36], [37, 44], [45, 51], [52, 59], [60, 68]]);
 const ATTRIBUTE = ladder([[3, 6], [7, 8], [9, 10], [11, 13], [14, 16], [17, 20], [21, 24], [25, 28], [29, 32], [33, 37]]);
 const AILMENT = ladder([[3, 5], [6, 6], [7, 7], [8, 9], [10, 11], [12, 13], [14, 15], [16, 17]]);
+/** Penetration: seven tiers (T1 14–15 at ilvl 78); T4 (8–9, ilvl 40) is what the bench grants. */
+const PEN_ELEMENT = ladder([[2, 3], [4, 5], [6, 7], [8, 9], [10, 11], [12, 13], [14, 15]]);
+const PEN_CLASSES: ItemClass[] = [...WEAPON, 'focus', 'amulet'];
+/** Projectile / area damage: eight tiers, 8–12 up to 36–41. */
+const SCOPE_DAMAGE = ladder([[8, 12], [13, 16], [17, 20], [21, 25], [26, 29], [30, 32], [33, 35], [36, 41]]);
 const ATTR_CLASSES: ItemClass[] = [...ARMOUR, 'belt', ...JEWEL];
 const RES_CLASSES: ItemClass[] = [...ARMOUR, 'belt', ...JEWEL];
 
@@ -117,6 +122,14 @@ export const AFFIXES: readonly AffixDef[] = [
     name: 'Prismatic', kind: 'prefix', stat: 'elementalDamage', mode: 'increased',
     tags: ['elemental', 'fire', 'cold', 'lightning'], classes: JEWEL,
     tiers: ladder([[6, 9], [10, 11], [12, 13], [14, 16], [17, 19], [20, 22], [23, 26], [27, 30]]),
+  }),
+  affix('voidDamage', {
+    name: 'Entropic', kind: 'prefix', stat: 'voidDamage', mode: 'increased', tags: ['void'],
+    classes: CASTER_GEAR, tiers: ELEMENT_DAMAGE,
+  }),
+  affix('physicalDamage', {
+    name: 'Concussive', kind: 'prefix', stat: 'physicalDamage', mode: 'increased', tags: ['physical'],
+    classes: [...WEAPON, 'focus', 'amulet'], tiers: ELEMENT_DAMAGE,
   }),
   affix('armourFlat', {
     name: 'Plated', kind: 'prefix', stat: 'armor', mode: 'flat', tags: ['defense'],
@@ -179,7 +192,7 @@ export const AFFIXES: readonly AffixDef[] = [
     classes: RES_CLASSES, tiers: ELEMENT_RES,
   }),
   affix('voidResistance', {
-    name: 'of the Veil', kind: 'suffix', stat: 'voidRes', mode: 'flat', tags: ['void', 'resistance'],
+    name: 'of the Veil', kind: 'suffix', stat: 'voidRes', mode: 'flat', tags: ['resistance', 'void'],
     classes: RES_CLASSES,
     tiers: ladder([[5, 8], [9, 9], [10, 11], [12, 13], [14, 16], [17, 18], [19, 21], [22, 24]]),
   }),
@@ -256,6 +269,56 @@ export const AFFIXES: readonly AffixDef[] = [
   affix('shockChance', {
     name: 'of Static', kind: 'suffix', stat: 'shockChance', mode: 'flat', tags: ['lightning'],
     classes: [...WEAPON, 'gloves'], tiers: AILMENT,
+  }),
+  // Power rework (docs/power-rework/power-curve.md 10.1): penetration answers resistant walls, so it competes with cast speed and
+  // crit for the three suffix slots. Each element has its own exclusive group; the bench grants it at T4 (8–9) from ilvl 40.
+  affix('firePen', {
+    name: 'of Fire Sundering', kind: 'suffix', stat: 'firePen', mode: 'flat', tags: ['fire', 'penetration'],
+    classes: PEN_CLASSES, group: 'pen:fire', tiers: PEN_ELEMENT,
+  }),
+  affix('coldPen', {
+    name: 'of Frost Sundering', kind: 'suffix', stat: 'coldPen', mode: 'flat', tags: ['cold', 'penetration'],
+    classes: PEN_CLASSES, group: 'pen:cold', tiers: PEN_ELEMENT,
+  }),
+  affix('lightningPen', {
+    name: 'of Storm Sundering', kind: 'suffix', stat: 'lightningPen', mode: 'flat', tags: ['lightning', 'penetration'],
+    classes: PEN_CLASSES, group: 'pen:lightning', tiers: PEN_ELEMENT,
+  }),
+  affix('voidPen', {
+    name: 'of Void Sundering', kind: 'suffix', stat: 'voidPen', mode: 'flat', tags: ['void', 'penetration'],
+    classes: PEN_CLASSES, group: 'pen:void', tiers: PEN_ELEMENT,
+  }),
+  affix('physicalPen', {
+    name: 'of Bone Sundering', kind: 'suffix', stat: 'physicalPen', mode: 'flat', tags: ['physical', 'penetration'],
+    classes: PEN_CLASSES, group: 'pen:physical', tiers: PEN_ELEMENT,
+  }),
+  affix('elementalPen', {
+    name: 'of Prisms', kind: 'suffix', stat: 'elementalPen', mode: 'flat',
+    tags: ['elemental', 'fire', 'cold', 'lightning', 'penetration'], classes: ['focus', ...JEWEL], group: 'pen:elemental',
+    tiers: ladder([[1, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8]]),
+  }),
+  affix('damageOverTime', {
+    name: 'of Lingering', kind: 'suffix', stat: 'damageOverTime', mode: 'increased', tags: ['caster'],
+    classes: [...WEAPON, 'focus', 'gloves'],
+    tiers: ladder([[10, 14], [15, 18], [19, 23], [24, 29], [30, 36], [37, 44], [45, 53], [54, 63]]),
+  }),
+  affix('projectileDamage', {
+    name: 'of Volleys', kind: 'suffix', stat: 'projectileDamage', mode: 'increased', tags: ['caster'],
+    classes: ['wand', 'gloves'], tiers: SCOPE_DAMAGE,
+  }),
+  affix('areaDamage', {
+    name: 'of Eruptions', kind: 'suffix', stat: 'areaDamage', mode: 'increased', tags: ['caster'],
+    classes: ['focus', 'amulet', 'gloves'], tiers: SCOPE_DAMAGE,
+  }),
+  // A narrow ladder by design: the cap moves 1 to 3 points (never past 85, with the 75 base). Neighbouring tiers share a value.
+  affix('maxResistance', {
+    name: 'of Warding', kind: 'suffix', stat: 'maxResistance', mode: 'flat', tags: ['resistance'],
+    classes: JEWEL, tiers: ladder([[1, 1], [1, 1], [1, 1], [2, 2], [2, 2], [3, 3], [3, 3]]),
+  }),
+  // The value is how many kills sooner a belt flask gains its charge (base 40): T1 15 = one per 25 kills.
+  affix('flaskChargeOnKill', {
+    name: 'of Reserves', kind: 'suffix', stat: 'flaskChargeOnKill', mode: 'flat', tags: ['utility'],
+    classes: ['belt'], tiers: ladder([[1, 1], [2, 2], [4, 4], [6, 6], [8, 8], [11, 11], [15, 15]]),
   }),
   // The one exception to the 7–10 tier rule: a single, very rare T1 that needs ilvl 70 (GAME_SPEC §5).
   affix('splintering', {

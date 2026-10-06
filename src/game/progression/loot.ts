@@ -20,7 +20,9 @@ import { atlasCurrencyWeight, atlasStat, resolveAtlasRules, treeContextOf, type 
 import type { MapRouting, RunSetup } from '../../contracts/game';
 import type { AtlasAreaId } from '../../contracts/atlas';
 import { AREA_SCARAB_SHARE, SCARABS, SCARAB_DROP_CHANCE } from '../../data/scarabs';
-import { GRAND_HOURGLASS, HOURGLASS_SAND } from '../../data/progression/territory';
+import { GENERIC_SIGIL_KINDS, GRAND_HOURGLASS, HOURGLASS_SAND, SIGIL_DROPS, sigilIdOf, themeSigilKind } from '../../data/progression/territory';
+import { territoryClassWeights, territoryCurrencyWeight, territoryModifiers } from './territory';
+import type { SigilStrength } from '../../contracts/content';
 import { hashString } from '../../core/rng';
 import type { CharacterSave, CurrencyStack, EquipmentItem, FlaskStack, Item, MapItem, Rarity } from '../../contracts/items';
 import type { CurrencyId, ItemClass, MapBaseId } from '../../contracts/content';
@@ -31,7 +33,7 @@ import type { Rng } from '../../contracts/rng';
 import {
   BOSS_LOOT, CATEGORY_CHANCE, CATEGORY_ORDER, CHEST_LOOT, CHEST_MAP_QUALITY, CURRENCY_DROPS, DROPPED_MAP_QUALITY,
   ECHO_WAVE_QUANTITY_MORE, ELITE_LOOT_MULTIPLIER, EQUIPMENT_RARITY_WEIGHTS, FLASK_DROPS, LIEUTENANT_LOOT, MAP_BASES,
-  MAP_RARITY_WEIGHTS, MAX_MAP_QUALITY, MAX_MAP_TIER, MIN_MAP_TIER, MONSTER_LOOT_MULTIPLIERS,
+  MAP_RARITY_WEIGHTS, MAX_MAP_QUALITY, MAX_MAP_TIER, MIN_MAP_TIER, MONSTER_LOOT_MULTIPLIERS, UMBRAL_ESSENCE,
 } from '../../data/progression';
 import type { CurrencyDropDef, LootCategory, RarityWeightDef } from '../../data/progression';
 import { ARMOUR_CLASSES, findCurrency, findFlask, getBase } from '../../data/items';
@@ -124,6 +126,8 @@ interface LootContext {
   surgeQuantity: number;
   /** Tree: multiplier on every Hourglass Sand chance (Trailmark). */
   sandMore: number;
+  /** Item class weights of equipment drops: the area's, plus the run's theme sigils (brief D 6.3). */
+  classWeights?: Partial<Record<ItemClass, number>>;
   echoWave: number;
   place: string;
   area?: AtlasAreaDef;
@@ -161,19 +165,28 @@ export function pickScarab(rng: Rng, monsterLevel: number) {
   return rng.weighted(pool, s => s.weight);
 }
 
+/** The sigil a boss drops (brief D 6.4): a generic kind (uniform) or the boss theme's sigil; strength by the map tier band. */
+export function rollSigil(rng: Rng, tier: number, baseId: MapBaseId) {
+  const kind = rng.chance(SIGIL_DROPS.genericShare) ? GENERIC_SIGIL_KINDS[rng.int(0, GENERIC_SIGIL_KINDS.length - 1)] : themeSigilKind(baseId);
+  const band = SIGIL_DROPS.strength.find((b) => tier >= b.minTier) ?? SIGIL_DROPS.strength[SIGIL_DROPS.strength.length - 1];
+  const strength = (rng.weighted([1, 2, 3] as const, (s) => band.weights[s - 1]) ?? 1) as SigilStrength;
+  return sigilIdOf(kind, strength);
+}
+
 /** One Hourglass roll on an independent stream (it never moves the ordinary loot stream): `salt` names the source. */
 function hourglassRoll(rng: Rng, salt: number, chance: number): boolean {
   return chance > 0 && rng.fork(salt).chance(Math.min(1, chance));
 }
 
-const ESSENCES: ReadonlySet<CurrencyId> = new Set<CurrencyId>(['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift']);
+const ESSENCES: ReadonlySet<CurrencyId> = new Set<CurrencyId>(['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift', 'umbralEssence']);
 
 /** Currency weights after map implicit and reward-mod multipliers (essences). */
 export function currencyWeightsFor(map: MapItem, nodes: readonly MapTreeNodeId[] = [], tree: TreeContext = {}): CurrencyDropDef[] {
   const m = mapDropMultipliers(map, nodes, tree);
   const atlas = resolveAtlasRules(nodes, { tier: clampTier(map.tier), baseId: map.baseId, corrupted: map.corrupted, ...tree });
   return CURRENCY_DROPS.map((d) => {
-    let weight = d.weight * atlasCurrencyWeight(atlas, d.currencyId);
+    // Theme sigils (brief D 6.3) favour their theme's signature currency on that theme's maps.
+    let weight = d.weight * atlasCurrencyWeight(atlas, d.currencyId) * territoryCurrencyWeight(tree.territory, d.currencyId, map.baseId);
     if (ESSENCES.has(d.currencyId)) weight *= m.essence;
     if (d.currencyId === 'essenceEmber') weight *= m.emberEssence;
     if (d.currencyId === 'essenceRime') weight *= m.rimeEssence;
@@ -210,7 +223,10 @@ function lootContext(setup: RunSetup): LootContext {
     chestUpgrade: Math.max(0, atlasStat(atlas, 'chestUpgradeChance', 0) / 100),
     chestQuality: Math.max(0, atlasStat(atlas, 'chestQuality', 0)),
     droppedMapQuality: Math.max(0, atlasStat(atlas, 'droppedMapQuality', 0)),
-    ingredientMore: Math.max(0, atlasStat(atlas, 'bossIngredientChance', 1)),
+    // Ingredient sigils (brief D 6.3) multiply on the same resolver path as Ingredient Hunter.
+    ingredientMore: Math.max(0, atlasStat(atlas, 'bossIngredientChance', 1)
+      * territoryModifiers(setup.territory, { ...(setup.atlasAreaId ? { areaId: setup.atlasAreaId } : {}), baseId: map.baseId })
+        .filter((m) => m.stat === 'bossIngredientChance').reduce((p, m) => p * (1 + m.value / 100), 1)),
     bossUniqueMore: Math.max(0, atlasStat(atlas, 'bossUnique', 1)),
     normalQuantity: Math.max(0, atlasStat(atlas, 'normalQuantity', 1)),
     rareQuantity: Math.max(0, atlasStat(atlas, 'rareQuantity', 1)),
@@ -219,6 +235,7 @@ function lootContext(setup: RunSetup): LootContext {
     echoWave: echoWaveIndex(map),
     place: `${area?.name ?? mapBaseName(map.baseId)} (Tier ${tier})`,
     area,
+    ...(area?.classWeights ? { classWeights: territoryClassWeights(setup.territory, area, map.baseId) } : {}),
     lootClass: setup.lootClass,
     crownEncounter,
     ...(setup.routing ? { routing: setup.routing } : {}),
@@ -238,7 +255,7 @@ function makeEquipment(ctx: LootContext, rng: Rng, rarity: Rarity, origin: strin
     if (id) return generateUnique(id, rng, { itemLevel: ctx.monsterLevel, origin, isNew: true });
     rarity = 'rare';
   }
-  const baseId = pickRandomBase(rng, { itemLevel: ctx.monsterLevel, classWeights: ctx.area?.classWeights,
+  const baseId = pickRandomBase(rng, { itemLevel: ctx.monsterLevel, classWeights: ctx.classWeights,
     ...(itemClass ? { classes: [itemClass] } : {}) }) ?? 'ashwoodWand';
   // Blank Slate: every non-unique drop is Normal (its Item Rarity effect is gone with the magic and rare rolls).
   if (ctx.atlas.equipmentNormalOnly) rarity = 'normal';
@@ -437,6 +454,16 @@ export function rollKillLoot(setup: RunSetup, kill: KillLootContext, rng: Rng, l
         out.push(currencyStack('grandHourglass', 1, randomUid(rng), true));
       }
     }
+    // Sigils (brief D 6.4): final bosses from Tier 3, own stream; personal rarity (without the surge) scales the chance, sealed bosses twice.
+    if (kill.rival === undefined && ctx.tier >= SIGIL_DROPS.bossMinTier) {
+      const sigilRng = rng.fork(0x5349474c);
+      const sealed = ctx.area?.sealed ? SIGIL_DROPS.sealedBossMultiplier : 1;
+      if (sigilRng.chance(Math.min(1, SIGIL_DROPS.bossChance * sealed * mapM))) out.push(currencyStack(rollSigil(sigilRng, ctx.tier, ctx.map.baseId), 1, randomUid(sigilRng), true));
+    }
+    // Umbral Essence: Tier 8+ final bosses (own stream; no void-themed boss exists yet, so every final boss from the tier qualifies).
+    if (kill.rival === undefined && ctx.tier >= UMBRAL_ESSENCE.bossMinTier && rng.fork(0x554d4252).chance(Math.min(1, UMBRAL_ESSENCE.bossChance * mapM))) {
+      out.push(currencyStack('umbralEssence', 1, randomUid(rng.fork(0x554d4253)), true));
+    }
     for (const drop of ctx.area?.ingredientDrops ?? []) {
       if (ctx.tier >= drop.minTier && rng.chance(Math.min(1, drop.chance * ctx.ingredientMore))) out.push(currencyStack(drop.currencyId, 1, randomUid(rng), true));
     }
@@ -628,6 +655,10 @@ export function rollEventReward(setup: RunSetup, ctx: EventRewardContext, rng: R
       if (grade < 1) { if (rng.chance(Math.min(1, 0.25 * strength))) cur('voidSplinter'); break; }
       cur('voidSplinter');
       cur('scrap', rng.int(3, 5));
+      // Umbral Essence: Silver rolls for one, Gold always pays one (own stream, the other rolls are unchanged).
+      if (grade >= 3 || (grade >= 2 && rng.fork(0x554d4252).chance(Math.min(1, UMBRAL_ESSENCE.breachSilverChance * strength)))) {
+        out.push(currencyStack('umbralEssence', UMBRAL_ESSENCE.breachGoldCount, randomUid(rng.fork(0x554d4253)), true));
+      }
       if (grade >= 2) {
         if (rng.chance(Math.min(1, (0.4 + ctx.ingredientBonus) * strength))) cur('twinInk');
         out.push(makeCurrency(lc, rng));

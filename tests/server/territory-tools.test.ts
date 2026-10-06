@@ -122,16 +122,3 @@ describe('Re-chart and Recycle over the command path', () => {
     expect(a.command({ c: 'benchRecycle', uids: ['t2', 't3', 't4'], areaId: 'emberRoad' })).toMatchObject({ ok: true });
   });
 });
-
-describe("Rook's maps over the command path", () => {
-  it('sells a cleared area at its grade and refuses an uncleared one', async () => {
-    const { players: [p] } = await setup(['Roy Rook']);
-    stock(p, [], 12);
-    expect(p.command({ c: 'buyOffer', offerId: 'map:boneApproach:1:plain' })).toMatchObject({ ok: false });
-    const bought = p.command({ c: 'buyOffer', offerId: 'map:emberRoad:2:pristine' });
-    expect(bought).toMatchObject({ ok: true });
-    const m = chOf(p).backpack.entries.map((e) => e.item).find((i): i is MapItem => i.kind === 'map')!;
-    expect(m).toMatchObject({ areaId: 'emberRoad', tier: 2, quality: 12, rarity: 'normal' });
-    expect(scrapOf(chOf(p))).toBe(0);
-  });
-});

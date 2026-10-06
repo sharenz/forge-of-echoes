@@ -2,7 +2,43 @@
 
 Maintained at the owner's request. Ask "what's next" and it is read from here; ideas and decisions
 from discussions are added or moved between items. Nothing here is built unless it says **Done**.
-Last reprioritised: 2026-09-30.
+Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped).
+
+## Next up, in order (reprioritised 2026-10-01 after the first outside player review)
+
+1. **Onboarding follow-through and first-10-minutes verification.** The guide shipped (tracker, markers, cheat-sheet, Help, hints,
+   gentle first map). Watch real new players (the first reviewer needed 2 minutes to find the drag), then fix what they still trip on.
+   Done 2026-10-06: Rook's prices under every tile with empty states (F-17), the short map tooltip with the long form after 600 ms or
+   Alt plus "Surge n/3 today" and a Re-chart hint (F-28), the hideout camera keeps the anvil clear at 1024x600, the area modal scroll fade.
+   Still open: the return portal can land behind the inventory at 1024x600 (`returnPortalSpot` in `src/sim/props.ts`), e2e for
+   keyboard-only, reduced motion, parties and veterans.
+2. **Power rework, release R1 "Power": Done, deployed 2026-10-06.** Next releases of the same design (`docs/power-rework/build-plan.md`):
+   R2 "Skills I" (C2 contracts and protocol 27, SK0 skill executor and save migration, SK1 Skills panel v2, SK2 ten new skills), then
+   R3/R4 (remaining skills and augments), R5 "Orrery" passive tree, R6 balance pass.
+3. **Finish wave 3: polish (F1).** E1 anchor-aware events, B1 beacons and sigils, "Surge n/3 today" and the Re-chart tooltip entry
+   are done (2026-10-06). Left over from B1: the other section 9 re-roles (Milestone/Signpost pin slots, Charter Ink, Chart Keeper x4,
+   Far Horizon, Master Surveyor, Wagered Charts, theme seals' routing weight) and sigil crafting.
+4. **Make the art keep its promises.** Lava cracks, ice lakes, hazard stripes and sand rings look like mechanics but are cosmetic. Add the
+   mechanics (flow zones are built: candidates are frost currents in Frozen Passage and Winter Throne, a slag channel, a lava rill, a
+   rotating sand ring, a tram road), plus flanker monsters so standing still is not a strategy and the level gap in the monster hover.
+5. **P2 character depth: more Sorceress skills and a deeper skill tree, then the passive tree** (about 250 nodes). Designed together
+   with the balance work in 2 so the new power has a curve to live in.
+
+Also pending: gated tree nodes (Voidtouched Atlas, Warded Hunts, Stragglers' Cull, Lantern-Bearer's siblings, Wagered Charts), Twin Omens'
+Backlash, dead drawer code and the Ctrl+Shift stash-to-bench shortcut, footsteps, Echo Exchange, leagues, more map bases, Barbarian.
+
+**Shipped 2026-10-06 (power rework R1 "Power", `docs/power-rework/`):** level cap 80 and the T6 to T15 monster curve, damage pipeline v2
+(player penetration capped and floored at 0, exposure down to -25%, DoT resist factor, `more` cap, overcap resistance as a buffer), void-
+and physical-proof rares from T8/T10 and double proofs from T12, the rare/magic life floor for map packs (event elites keep their own
+tuning), ten new affixes with bench penetration recipes, ten uniques (flags without behaviour yet are gated), Umbral Essence, utility
+flasks (Quickstep, Aegis, Quicksilver Mind) with kill charges, and the character harness (band model, rules path, sim bands) with the
+Atlas harness on band speed. Protocol 26.
+
+**Shipped 2026-10-01 (commits `9321c7d`, `64819c3`):** conveyor flow zones (random directions, telegraphed reversals), projectile cover
+(tall blocks, low passes, lobs fly over), animated Life/Focus globes and unspent-point badges, the Atlas area modal (click an area, map slot
+in the centre with scarab sockets around it, Open area), Rook as a plain vendor grid with a luck-driven board (6-hour rotation and
+level-up refresh, paid reroll), the onboarding guide and first-run UX fixes, the delivery rule (commit, push and deploy when finished).
+Protocol 25.
 
 ## Top of the list: Atlas, Codex and map events rework (owner verdict 2026-09-30; waves 1 and 2 shipped)
 
@@ -18,9 +54,12 @@ deterministic legacy-map migration (T0), chart-driven drop routing (R1), the Sto
 Re-chart, Recycle and Rook's Maps tab (U1, P1), five area-bias scarab families and the daily surge with Hourglass Sand (S1, G1), the
 layout engine plus hand-crafted layouts for all 25 areas (L0 to L3), and monster wall navigation. Check 8 of the layout validator
 guarantees no player trap. Protocol 22.
-**Wave 3 still to build:** B1 beacons and sigils (the Territory lens is a hidden stub; Lamp Oil's sigil half, Tide sigils and the tree
-re-roles go with it), E1 anchor-aware events (the Event Director asks the layout for anchors via `layoutAnchors`), F1 polish (discovery,
-pin and surge sounds and banners, reduced motion, telemetry), map tooltip "Surge n/3 today", an Re-chart entry on the item tooltip.
+**B1 beacons and sigils: Done 2026-10-06** (25 beacons, 36 sigils in 12 kinds x 3 strengths, beacon slots in the area modal by drag from
+the inventory, the Territory lens, Rook sells Faint sigils, T3+ bosses drop them, Survey Stake / Lamp Oil re-roles and the Lightkeeper
+notable; protocol 27). **E1 anchor-aware events: Done 2026-10-06** (events in the 25 hand-crafted areas stand on the layout's declared anchors on their own
+seeded stream, with the old site picking as fallback; layout validator check 10; a few anchors moved inward after a bot sweep). Watch Host in
+Heart of the Forge and Hollow Ossuary (96 to 90 clears of 100 in the sweep). **Wave 3 still to build:** F1 polish (discovery,
+pin and surge sounds and banners, reduced motion, telemetry).
 **Watch in playtest:** deaths with layouts live (a balance probe needed its damage lowered from 1.8x to 1.5x), maps per run (about 7.5),
 surge income (about +10% for a rotating player; Hourglass Sand slightly above 3%, lever `HOURGLASS_SAND.bossChance` 5% to 4%).
 
@@ -39,8 +78,10 @@ Twin Omens' Backlash pack on a failed encounter and Sworn to the Veil's "withhol
 now says only what exists).
 
 **Open balance items (from the wave 1 bot harness and the owner's play):**
-- Player penetration is missing: elemental-proof and high-resistance monsters have no counterplay yet.
-- Offence versus gear power curve: damage growth from gear and levels against monster scaling needs a pass.
+- Done 2026-10-06 (R1): player penetration and the offence/gear power curve.
+- Endgame map pacing: an endgame build clears in 3.8 to 4.1 minutes at every depth (sim bot, no loot) against the design's 3 to 3.5;
+  the floor is the six 60 s waves and the paced stream, not damage. Decide in R6 whether maps should shorten for strong builds
+  (`tests/sim/character-bands.test.ts` holds the endgame band to +40% of the model until then).
 - Flanker monsters: waves are frontal; add flankers so standing still is not a strategy.
 - Level gap in the monster hover: show the monster/player level gap and its damage/hit-chance effect.
 - Speed-clear tree tuning: every archetype currently clears slower than an empty tree, so no build "speeds up" a map. Retune

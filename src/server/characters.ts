@@ -7,6 +7,7 @@ import type { CharacterSummary } from '../contracts/net';
 import type { CharacterSave } from '../contracts/items';
 import { rules, validateCharacterName } from '../game';
 import { bindLegacyMaps } from '../game/progression';
+import { decideGuide, recheckGuide, type GuideEvidence } from '../game/progression/guide';
 import type { GameDatabase, CharacterRow } from './db';
 import type { Logger } from './log';
 import { mergeLegacyStorage, namespaceItems, parseAccountStorage, sameStorage, storageOf, withoutStorage, type AccountStorage } from './account-storage';
@@ -130,7 +131,39 @@ export class CharacterStore {
     // them once; set() persists the result (and the shared storage, if a last-resort binding charted an area).
     const bound = bindLegacyMaps(ch);
     if (bound !== ch) this.set(rec, bound);
+    // The first-run guide is account-wide: an account without one (brand new, or from before the guide) gets it decided
+    // exactly once, here, from everything the account has done (veterans are skipped for good).
+    if (!rec.ch.guide) {
+      this.set(rec, { ...rec.ch, guide: decideGuide(this.guideEvidence(row.accountId, rec.ch), this.opts.now()) });
+      this.flush(rec); // the decision is made once and kept: written now, so the stored account never lacks it
+    }
     return rec;
+  }
+
+  /** What the veteran rule needs: every character of the account (live ones may be ahead of their row) and the Atlas. */
+  private guideEvidence(accountId: string, ch: CharacterSave): GuideEvidence {
+    const characters = this.db.listCharacters(accountId).map((r) => {
+      const live = this.cache.get(r.id)?.ch;
+      const save = live ?? (() => { const row = this.db.characterById(r.id); return row ? this.parseRow(row) : null; })();
+      return save ? { level: save.level, stats: save.stats } : { level: r.level, stats: { mapsCompleted: 0 } as CharacterSave['stats'] };
+    });
+    return { characters, atlas: ch.atlas };
+  }
+
+  /**
+   * A new character joined the account: an active guide flips to skipped when the account already has a veteran (a returning
+   * player's second character never repeats the tutorial). Written at once; online characters get the new projection.
+   */
+  private recheckAccountGuide(accountId: string): void {
+    const account = this.account(accountId);
+    const guide = account.storage.guide;
+    if (!guide) return;
+    const next = recheckGuide(guide, this.guideEvidence(accountId, { atlas: account.storage.atlas } as CharacterSave), this.opts.now());
+    if (next === guide) return;
+    account.storage = { ...account.storage, guide: next };
+    this.db.saveAccountStorage({ accountId, data: JSON.stringify(account.storage), saveVersion: this.saveVersion, updated: this.opts.now() });
+    account.dirty = false;
+    this.publishStorage(accountId, account.storage);
   }
 
   /** Drop a reference; the last one flushes and evicts the record. */
@@ -301,6 +334,8 @@ export class CharacterStore {
         updated: now,
       });
       if (result === 'ok') {
+        try { this.recheckAccountGuide(accountId); }
+        catch (err) { this.log.error('guide recheck failed', { account: accountId, err }); }
         this.evictAccount(accountId);
         return { ok: true, character: { id: ch.id, name: ch.name, level: ch.level, classId: ch.classId } };
       }

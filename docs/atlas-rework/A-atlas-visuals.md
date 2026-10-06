@@ -1,5 +1,7 @@
 # A. Atlas map: visual identity and UX brief
 
+> **Note:** the bottom dock and the inspector rail described below were replaced by the area modal (click an area, load its map and scarabs, Open area); see `D-territory.md`, "Area modal as built". The chart, its look and the Codex tab are as described here.
+
 Status: design draft for owner review. Nothing here is built. Facts about the current code are cited with paths;
 everything else is a proposal.
 

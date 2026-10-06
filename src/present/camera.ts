@@ -66,9 +66,9 @@ export class CameraRig {
 
   /**
    * Advance the rig. (px, py) is the followed player's rendered position, (ax, ay) the aim point. `shakeScale` is
-   * the user's screen-shake setting (0..1).
+   * the user's screen-shake setting (0..1). (biasX, biasY) shifts the framing in world units (see PresentInput.cameraBias).
    */
-  update(dt: number, px: number, py: number, ax: number, ay: number, shakeScale: number, paused: boolean): Camera {
+  update(dt: number, px: number, py: number, ax: number, ay: number, shakeScale: number, paused: boolean, biasX = 0, biasY = 0): Camera {
     this.t += dt;
     // Look-ahead towards the aim, capped.
     let lx = (ax - px) * LOOK_AHEAD;
@@ -78,8 +78,9 @@ export class CameraRig {
       lx *= LOOK_AHEAD_MAX / ll;
       ly *= LOOK_AHEAD_MAX / ll;
     }
-    const tx = px + lx;
-    const ty = py + ly - 6; // frame the body, not the feet
+    // `bias` frames something other than the player (the hideout keeps its Map Device in view); it eases in like the lean.
+    const tx = px + lx + biasX;
+    const ty = py + ly - 6 + biasY; // frame the body, not the feet
     if (this.hold > 0) this.hold = Math.max(0, this.hold - dt);
     else {
       const far = Math.hypot(tx - this.fx, ty - this.fy);

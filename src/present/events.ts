@@ -814,10 +814,10 @@ export class EventFx {
     fx.rings.spawn(x, y - 2, 6, 44, 0.6, C.gold, 1, 0.8, local ? 0.6 : 0.35);
     fx.pulses.spawn(x, y - 12, 100, 1, C.gold, local ? 0.5 : 0.3);
     this.fountain(x, y - 4, local ? 18 : 10, C.hot, C.gold, 60, 120, false);
-    if (local) {
-      fx.texts.spawn(`Level ${level}`, x, y - 46, C.rare, 1.8, 2, 12, true);
-      post.flash(FLASH_LEVEL, 0.1, 0.45, this.k.impactDelay('levelUp'));
-    } else fx.texts.spawn('Level up', x, y - 46, C.rare, 1.4, 1, 10, true);
+    // The local player's "Level N" is said once, by the HUD burst (src/ui/hud/Feedback.tsx): no second pixel text next to it.
+    if (local) post.flash(FLASH_LEVEL, 0.1, 0.45, this.k.impactDelay('levelUp'));
+    else fx.texts.spawn('Level up', x, y - 46, C.rare, 1.4, 1, 10, true);
+    void level;
   }
 
   // --------------------------------------------------------------------------------------------------------

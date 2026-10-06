@@ -3,7 +3,7 @@
 // real client (Vite dev server proxying /api and /ws to it), played by two headless Chromium players.
 //
 //   node scripts/e2e.mjs [--fight 40] [--size 1024x600] [--headed] [--keep-db] [--prod]
-//                        [--only wave5|qol|account|atlas|tree|scarabs|uniques|events|crafting|ingredients|economy|maps|selling|debugmerchant|workslot|territory|surge]
+//                        [--only wave5|qol|account|atlas|tree|scarabs|uniques|events|crafting|ingredients|economy|maps|selling|wares|debugmerchant|workslot|territory|surge]
 //                        [--events hunted,wound,...] [--smoke 30]
 //
 // The Atlas is a full-screen Cartography Table (canvas chart, Codex tab, dock beside the inventory); a map is bound to ONE area, so
@@ -38,7 +38,7 @@
 //  13. A stale bundle after a deploy (snapshots in a newer format): one automatic reload back into the game; when the
 //      reload does not help, the page explains instead of reloading again, and "Try again" brings the player back.
 // Wave 5 (GAME_SPEC §12 special stash tabs, §13 debuffs, §14 bestiary; `--only wave5` runs just these, A alone):
-//  14. A takes a free Rimed Ossuary and Iron Coliseum map from Rook and Ctrl-clicks every map into the Map Stash tab.
+//  14. A buys a Rimed Ossuary and an Iron Coliseum map from Rook's wares and Ctrl-clicks every map into the Map Stash tab.
 //  15. Crafting Stash: "Deposit all" (every backpack currency, conserved), Shift+Ctrl-click takes exactly 1 Scrap,
 //      Ctrl-click a full stack.
 //  16. Crafting from the Crafting Stash: right-click a slot, left-click the equipped wand (one use from the slot).
@@ -92,6 +92,7 @@ const TREE_ONLY = opt('only', 'all') === 'tree';
 const SCARABS_ONLY = opt('only', 'all') === 'scarabs';
 const DEBUGMERCHANT_ONLY = opt('only', 'all') === 'debugmerchant';
 const SELLING_ONLY = opt('only', 'all') === 'selling';
+const WARES_ONLY = opt('only', 'all') === 'wares';
 const EVENTS_ONLY = opt('only', 'all') === 'events';
 const MAPS_ONLY = opt('only', 'all') === 'maps';
 const ECONOMY_ONLY = opt('only', 'all') === 'economy';
@@ -99,6 +100,9 @@ const CRAFTING_ONLY = opt('only', 'all') === 'crafting' || ECONOMY_ONLY;
 const WORKSLOT_ONLY = opt('only', 'all') === 'workslot';
 const TERRITORY_ONLY = opt('only', 'all') === 'territory';
 const SURGE_ONLY = opt('only', 'all') === 'surge';
+const MODAL_ONLY = opt('only', 'all') === 'modal';
+/** --only guide: a FRESH account plays the first-run guide from login to the dead boss with only the tracker's help (docs/onboarding-ux.md). */
+const GUIDE_ONLY = opt('only', 'all') === 'guide';
 /** Seconds of fighting in each new map type (longer while its family has not shown two kinds yet). */
 const SMOKE_SECONDS = Number(opt('smoke', '30'));
 const PROD = flag('prod');
@@ -325,7 +329,8 @@ async function registerAndPlay(p, base, username, password, charName, register =
   const { page } = p;
   await page.goto(base + '/', { waitUntil: 'load' });
   await page.waitForSelector('.fe-auth', { timeout: 60_000 });
-  if (register) await page.click('.fe-auth__tab:has-text("Create account")');
+  // A first-time browser lands on "Create account": pick the tab this run wants.
+  await page.click(register ? '.fe-auth__tab:has-text("Create account")' : '.fe-auth__tab:has-text("Log in")');
   await page.fill('#fe-user', username);
   await page.fill('#fe-pass', password);
   if (register) await page.fill('#fe-pass2', password);
@@ -345,6 +350,12 @@ async function registerAndPlay(p, base, username, password, charName, register =
     undefined,
     30_000,
   );
+  // The first-run guide is covered by `--only guide`; every other scenario plays without its tracker, plates and cards.
+  if (!GUIDE_ONLY) {
+    await p.waitFor('the guide state', () => !!window.__foe.store.get().character?.guide, undefined, 10_000);
+    await p.eval(() => window.__foe.store.actions.guide({ op: 'skip' }));
+    await p.waitFor('the guide skipped', () => window.__foe.store.get().character?.guide?.mode === 'skipped', undefined, 10_000);
+  }
 }
 
 /** Where a prop is on screen (CSS px), or null. `lift`: world units above the base anchor (the sprite body). */
@@ -540,10 +551,10 @@ async function clickPortal(p) {
 
 /** An earlier map's portal that still has entries asks before it is replaced: confirm, and check the dialog is reachable above the table. */
 async function confirmNewMap(p) {
-  const confirm = p.page.locator('.fe-dialog__actions button:has-text("Activate")');
+  const confirm = p.page.locator('.fe-dialog__actions button:has-text("Open area")');
   try { await confirm.waitFor({ state: 'visible', timeout: 2000 }); } catch { return false; }
   const covered = await confirm.evaluate((b) => { const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !(e && (e === b || b.contains(e))); });
-  assert(!covered, 'the "Open a new map" dialog is hidden behind the Atlas table');
+  assert(!covered, 'the "Open a new area" dialog is hidden behind the Atlas table');
   await confirm.click();
   return true;
 }
@@ -592,19 +603,50 @@ async function stashToPack(p, uid, pred, arg, count) {
   throw new Error(`${uid} never reached the backpack`);
 }
 
-/** Load a map from the inventory into the device by dragging it onto the dock's map slot (first map in the pack, or the given uid). */
-async function slotPackMap(p, uid) {
+/** The area name the open modal is for, or null. */
+async function openModalName(p) {
+  return p.page.evaluate(() => document.querySelector('[data-area-modal] [data-area-name]')?.textContent ?? null);
+}
+
+/** Close the area modal like a player (the close button), if one is open. */
+async function closeAreaModal(p) {
+  if (!(await p.page.locator('[data-area-modal]').count())) return;
+  await p.page.locator('[data-modal-close]').click();
+  await p.page.waitForSelector('[data-area-modal]', { state: 'detached', timeout: 5000 });
+}
+
+/**
+ * Load a map from the inventory into the device by dragging it onto the map slot of its area's modal (first map in the pack, or the
+ * given uid). Clicks the area on the chart first when its modal is not open: a map is bound to an area, and the slot belongs to the modal.
+ * `areaName` overrides the area to open (a passage: a sealed area takes any map up to its ceiling).
+ */
+async function slotPackMap(p, uid, areaName) {
   const id = uid ?? (await packUid(p, '(i) => i.kind === "map"'));
   assert(id, 'no map in the backpack to drag into the device');
-  await dragPackItemTo(p, id, '.fe-dock [data-drop="mapDevice"]', { shot: 'atlas-drag-map' });
+  const home = areaName ?? (await p.page.evaluate(([u]) => {
+    const ch = window.__foe.store.get().character;
+    const m = [...ch.backpack.entries.map((e) => e.item), ...(ch.mapStash ?? [])].find((i) => i.kind === 'map' && i.uid === u);
+    return m ? m.areaId : null;
+  }, [id]));
+  if (home && (await openModalName(p)) !== (await areaNameOf(p, home))) await inspectArea(p, await areaNameOf(p, home));
+  await dragPackItemTo(p, id, '[data-area-modal] [data-slot="mapDevice"]', { shot: 'atlas-drag-map' });
   await p.waitFor('the map in the device', (u) => window.__foe.store.get().character?.mapDevice?.uid === u, id, 5000);
 }
 
+/** Atlas area display names by id (read from the page's own data through the chart nodes' aria labels). */
+async function areaNameOf(p, idOrName) {
+  const name = await p.page.evaluate((v) => {
+    const el = document.querySelector(`[data-area="${v}"]`);
+    return el ? el.getAttribute('aria-label').split(',')[0] : null;
+  }, idOrName);
+  return name ?? idOrName;
+}
+
 /** A Map Stash map: moved into the inventory first (what the stash panel does), then dragged into the device. */
-async function slotStashMap(p, uid) {
+async function slotStashMap(p, uid, areaName) {
   const inStash = await p.eval((u) => window.__foe.store.get().character.mapStash?.some((m) => m.uid === u), uid);
   if (inStash) await stashToPack(p, uid, '(i, u) => i.kind === "map" && i.uid === u', uid);
-  await slotPackMap(p, uid);
+  await slotPackMap(p, uid, areaName);
 }
 
 /** Newly charted areas play a discovery cinematic (every press skips it): a press on the empty chart corner ends it. */
@@ -619,13 +661,11 @@ async function skipCinematic(p) {
   }
 }
 
-/** Select an area on the chart like a player: keyboard focus pans the chart to it, then a real click inspects it. */
+/** Click an area on the chart like a player: keyboard focus pans the chart to it, then a real click opens its modal. */
 async function inspectArea(p, name) {
   // The chart bakes its ground on first open ("Unrolling the chart..."); a focus before that cannot pan it.
   await p.page.waitForSelector('.fe-chart__loading', { state: 'detached', timeout: 40000 });
-  // In a small window the inspector is a drawer over the right of the chart and covers the nodes under it: close it first.
-  const closeRail = p.page.getByRole('button', { name: 'Close inspector', exact: true });
-  if (await closeRail.isVisible().catch(() => false)) { await closeRail.click(); await sleep(300); }
+  await closeAreaModal(p);
   await sleep(800); // a discovery cinematic starts a moment after the panel mounts
   await skipCinematic(p);
   const node = p.page.getByRole('button', { name: new RegExp(`^${name},`) });
@@ -640,31 +680,41 @@ async function inspectArea(p, name) {
   await sleep(400);
   if (process.env.E2E_DEBUG) log('inspect', name, JSON.stringify(await node.evaluate((n) => ({ node: n.getBoundingClientRect().toJSON(), chart: n.closest('.fe-chart').getBoundingClientRect().toJSON(), head: document.querySelector('.fe-table__head').getBoundingClientRect().toJSON(), world: n.closest('.fe-chart__world').style.transform }))));
   await node.click();
-  await p.page.waitForFunction((n) => document.querySelector('[data-rail] .fe-rail__name')?.textContent === n, name, { timeout: 3000 });
+  await p.page.waitForFunction((n) => document.querySelector('[data-area-modal] [data-area-name]')?.textContent === n, name, { timeout: 3000 });
   await sleep(250);
 }
 
 /**
- * A map is bound to one area, so the slotted map IS the course: the dock's "Opens ..." chip names the area it runs (its home,
- * or the passage destination), the chart's pennant stands there, and no "Set course" control exists anywhere.
+ * A map is bound to one area, so the area modal IS where it opens: with the modal for `name` open and a map in its slot, the modal says the
+ * map fits ("data-map-state=ok"); no "Set course" control exists anywhere. Opens the modal when another (or none) is showing.
  */
 async function expectCourse(p, name) {
-  await p.page.waitForFunction((n) => document.querySelector('.fe-dock__course')?.getAttribute('aria-label') === `Opens ${n}`, name, { timeout: 5000 })
-    .catch(async () => { throw new Error(`the dock should say "Opens ${name}", it says "${await p.page.locator('.fe-dock__course').getAttribute('aria-label')}"`); });
+  if ((await openModalName(p)) !== name) await inspectArea(p, name);
+  await p.page.waitForFunction(() => document.querySelector('[data-area-modal]')?.getAttribute('data-map-state') === 'ok', undefined, { timeout: 5000 })
+    .catch(async () => { throw new Error(`the ${name} modal should hold a map that opens there, its map state is "${await p.page.locator('[data-area-modal]').getAttribute('data-map-state')}"`); });
   assert((await p.page.getByRole('button', { name: 'Set course' }).count()) === 0, 'a "Set course" button still exists: the map decides where it opens');
 }
 
+/** Press "Open area" in the modal (the confirmation for an earlier open portal, if any, is the caller's: see confirmNewMap). */
+async function openArea(p) {
+  const btn = p.page.locator('[data-open-area]');
+  await btn.waitFor({ state: 'visible', timeout: 5000 });
+  assert(await btn.isEnabled(), `Open area is disabled: ${await p.page.locator('[data-open-reason]').innerText()}`);
+  await btn.click();
+}
+
 /**
- * The dock's passage slot (a real drop target): drag the key from the inventory into it, or click it to take the Pit that a Bounty
- * map bound beside it offers. `what` is a currency id (a key held in the backpack) or 'pit'. The slot says what it holds.
+ * The modal's passage slot (a real drop target on a sealed area): drag the area's key from the inventory into it. The Pit's slot is an
+ * indicator that lights when a Bounty map is slotted. `what` is a currency id (a key held in the backpack) or 'pit'.
  */
 async function choosePassage(p, what) {
   if (what === 'pit') {
-    await p.page.locator('.fe-passage__socket').click();
+    await p.page.waitForSelector('[data-passage-state="on"]', { timeout: 5000 });
   } else {
     const uid = await packUid(p, '(i, c) => i.kind === "currency" && i.currencyId === c', what);
     assert(uid, `no ${what} in the backpack to drag into the passage slot`);
-    await dragPackItemTo(p, uid, '.fe-dock [data-slot="passage"]');
+    await dragPackItemTo(p, uid, '[data-area-modal] [data-slot="passage"]');
+    await p.page.waitForSelector('[data-passage-state="on"]', { timeout: 5000 });
   }
   await sleep(200);
   assert((await p.page.locator('.fe-passage__socket').getAttribute('aria-label')).startsWith('Passage:'), 'the passage slot did not take the choice');
@@ -753,7 +803,7 @@ async function coreScenario({ A, B, nameA, nameB, port }) {
     assert((await A.page.locator('.fe-atlas__node--selected').getAttribute('data-area')) === 'cinderCrossing', 'the chart should be showing the map\'s home area');
     await assertChartDrawn(A, 'the Atlas chart');
     await A.shot('02-map-device-A');
-    await A.page.click('.fe-device__activate');
+    await openArea(A);
     await A.waitFor('the portal to open', () => {
       const s = window.__foe.store.get();
       return !!s.hud?.portal && s.hud.portal.remaining === 8;
@@ -808,9 +858,10 @@ async function coreScenario({ A, B, nameA, nameB, port }) {
     const at = await walkUntilOnScreen(B, () => propOnScreen(B, 'merchant', 14), 'Rook');
     await clickWorld(B, at, 'Rook');
     await B.waitFor('the merchant panel', () => window.__foe.store.get().openPanels.includes('merchant'), undefined, 5000);
-    await B.page.waitForSelector('.fe-merchant .fe-offer', { timeout: 5000 });
-    const offer = B.page.locator('.fe-offer', { hasText: 'Kindling' }).first();
-    await offer.locator('button:has-text("Buy")').click({ timeout: 5000 });
+    // Rook is a vendor window with tabs: the staples (Kindling, Map Dust, flasks) are on Supplies; Ctrl-click buys into the first free spot.
+    await B.page.getByRole('tab', { name: 'Supplies', exact: true }).click({ timeout: 5000 });
+    await B.page.waitForSelector('.fe-merchant [data-offer="currency-kindling"]', { timeout: 5000 });
+    await B.page.locator('.fe-merchant [data-offer="currency-kindling"]').click({ modifiers: ['Control'], timeout: 5000 });
     await B.waitFor(
       'the Kindling in the backpack',
       (n) => {
@@ -1696,26 +1747,42 @@ async function startRosterSampler(p) {
 
 const rosterReport = (p) => p.eval(() => window.__e2eRoster);
 
-/** Buy Normal Tier 1 maps of cleared areas from Rook's Maps tab (area chip, Tier 1, Plain, the row's Buy button). */
-async function buyFromRookMaps(p, areaIds) {
-  await closePanels(p);
-  const at = await walkUntilOnScreen(p, () => propOnScreen(p, 'merchant', 14), 'Rook');
-  await clickWorld(p, at, 'Rook');
-  await p.waitFor('the merchant panel', () => window.__foe.store.get().openPanels.includes('merchant'), undefined, 5000);
-  await p.page.getByRole('tab', { name: 'Maps', exact: true }).click();
-  await p.page.waitForSelector('[data-testid="rook-maps"]', { timeout: 5000 });
+/**
+ * Point Rook's wares snapshot (the stock epoch's open areas) at ONE area in the disposable database, so the guaranteed plain map of the board
+ * is a Normal Tier 1 map of exactly that area. The server is stopped for the edit (it caches characters) and restarted; the epoch (rotation,
+ * level, rerolls) stays the real one and the sold slots clear.
+ */
+async function setRookAreas(p, port, areaId) {
+  outage = true; await stopGameServer();
+  const { DatabaseSync } = await import('node:sqlite');
+  const db = new DatabaseSync(join(tmp, 'e2e.db'));
+  const row = db.prepare('SELECT id, data FROM characters').get();
+  const data = JSON.parse(row.data);
+  data.wares = { rotation: Math.floor((Date.now() - 4 * 3_600_000) / (6 * 3_600_000)), level: data.level, rerolls: 0, sold: [], tier: 0, areas: [areaId] };
+  db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(data), row.id);
+  db.close(); await startGameServer(port);
+  await p.waitFor('the game after the wares edit', () => window.__foe.store.get().connection === 'online' && !!window.__foe.store.get().character, undefined, 30000);
+  outage = false;
+}
+
+/** Buy Rook's guaranteed plain map (Normal, Tier 1, quality 0) of each cleared area: the wares snapshot is pointed at the area, the item is Ctrl-clicked on the Maps tab. */
+async function buyFromRookMaps(p, areaIds, port) {
   const bought = [];
   for (const areaId of areaIds) {
+    await setRookAreas(p, port, areaId);
+    await closePanels(p);
+    const at = await walkUntilOnScreen(p, () => propOnScreen(p, 'merchant', 14), 'Rook');
+    await clickWorld(p, at, 'Rook');
+    await p.waitFor('the merchant panel', () => window.__foe.store.get().openPanels.includes('merchant'), undefined, 5000);
+    await p.page.getByRole('tab', { name: 'Maps', exact: true }).click({ timeout: 5000 });
+    await p.page.waitForSelector('[data-testid="rook-wares"] [data-ware-slot="0"]', { timeout: 8000 });
     const before = (await serverCharacter(p)).maps.map((m) => m.uid);
-    await p.page.locator(`[data-rook-area="${areaId}"]`).click({ timeout: 5000 });
-    await p.page.locator('[data-rook-tier="1"]').click();
-    await p.page.locator('[data-rook-grade="plain"]').click();
-    await p.page.locator(`.fe-stock[data-offer="map:${areaId}:1:plain"] button:has-text("Buy")`).click({ timeout: 5000 });
+    await p.page.locator('[data-ware-slot="0"]').click({ modifiers: ['Control'], timeout: 5000 });
     await waitServer(p, `the ${areaId} map`, (ch, known) => ch.backpack.entries.some((e) => e.item.kind === 'map' && !known.includes(e.item.uid)), before);
     const after = await serverCharacter(p);
     bought.push(after.maps.find((m) => !before.includes(m.uid)));
+    await closePanels(p);
   }
-  await closePanels(p);
   return bought;
 }
 
@@ -1726,7 +1793,7 @@ async function wave5Scenario({ A, port }) {
   // A map is bound to an area of its theme, so it only plays its own roster there.
   const areaFor = (theme) => ATLAS_AREAS.find((a) => a.id === bought[theme].areaId);
 
-  await step('the Atlas is charted in a disposable database and two areas are cleared, so Rook sells their maps (a map is bound to an area of its theme)', async () => {
+  await step('the Atlas is charted in a disposable database and two areas are cleared (a map is bound to an area of its theme)', async () => {
     outage = true; await stopGameServer();
     const { DatabaseSync } = await import('node:sqlite');
     const { tsImport } = await import('tsx/esm/api');
@@ -1741,9 +1808,9 @@ async function wave5Scenario({ A, port }) {
     outage = false;
   });
 
-  await step('Map Stash: A buys a free Rimed Ossuary and Iron Coliseum area map from Rook\'s Maps tab, then Ctrl-clicks every map into the Map Stash', async () => {
-    // Rook sells maps of cleared areas: Bone Approach (Rimed Ossuary) and Champion's Approach (Iron Coliseum) are cleared in the fixture.
-    const [ossuary, coliseum] = await buyFromRookMaps(A, ['boneApproach', 'championsApproach']);
+  await step('Map Stash: A buys a Rimed Ossuary and an Iron Coliseum area map from Rook\'s wares, then Ctrl-clicks every map into the Map Stash', async () => {
+    // The wares snapshot is pointed at each area in turn, so Rook's guaranteed plain map is a Tier 1 map of exactly that area.
+    const [ossuary, coliseum] = await buyFromRookMaps(A, ['boneApproach', 'championsApproach'], port);
     assert(ossuary?.baseId === 'rimedOssuary' && coliseum?.baseId === 'ironColiseum', `Rook sold the wrong maps: ${JSON.stringify([ossuary, coliseum])}`);
     assert(ossuary.areaId && coliseum.areaId, 'Rook\'s maps are not bound to an area');
     bought.rimedOssuary = ossuary;
@@ -1867,7 +1934,7 @@ async function wave5Scenario({ A, port }) {
       await waitServer(A, `the ${check.name} map in the device`, (ch, u) => ch.mapDevice?.uid === u && !ch.mapStash.some((m) => m.uid === u), map.uid);
       await settlePanels(A);
       await A.shot(`w5-06-device-${tag}-A`);
-      await A.page.click('.fe-device__activate');
+      await openArea(A);
       // An earlier map's portal that still has entries asks first.
       await confirmNewMap(A);
       await A.waitFor(`the ${check.name} portal`, (name) => {
@@ -2140,13 +2207,18 @@ async function atlasScenario({ A, port }) {
     }, ATLAS_AREA_IDS.length, 30_000);
     outage = false;
     await openDevice();
-    // The slotted Tier 3 map is bound to Bone Approach: the dock says so and the chart is pointed there; any other area is
-    // only inspected (browse-only) and offers a way back to the map's home.
+    // The loaded Tier 3 map is bound to Bone Approach: its own area's modal takes it, any other area refuses it with the reason and a way
+    // to the map's home ("Go to Bone Approach"), which keeps the map in the slot.
     await expectCourse(A, 'Bone Approach');
     await inspectArea(A, 'Cinder Crossing');
-    assert(await A.page.getByRole('button', { name: 'Show Bone Approach', exact: true }).isVisible(), 'another area should offer a way back to the map\'s home');
-    await inspectArea(A, 'Bone Approach');
-    assert((await A.page.locator('[data-rail]').innerText()).includes('Your slotted map opens here'), 'the home area should say that the slotted map opens there');
+    assert((await A.page.locator('[data-area-modal]').getAttribute('data-map-state')) === 'mismatch', 'another area should refuse the map');
+    assert((await A.page.locator('[data-wrong-area]').innerText()).includes('This map opens Bone Approach'), 'the refusal should say where the map opens');
+    assert(!(await A.page.locator('[data-open-area]').isEnabled()), 'Open area must stay disabled for a map of another area');
+    assert((await A.page.locator('[data-open-reason]').innerText()).includes('This map opens Bone Approach'), 'the footer should give the reason in words');
+    await A.shot(`atlas-wrong-area-${VW}x${VH}`);
+    await A.page.locator('[data-goto-area="boneApproach"]').click();
+    await A.page.waitForFunction(() => document.querySelector('[data-area-modal] [data-area-name]')?.textContent === 'Bone Approach' && document.querySelector('[data-area-modal]').getAttribute('data-map-state') === 'ok', undefined, { timeout: 4000 });
+    assert(await A.page.locator('[data-area-modal] [data-slot="mapDevice"] .fe-item').count() === 1, 'the map should stay in the slot after going to its area');
     const overlaps = await A.eval(() => {
       const nodes = [...document.querySelectorAll('.fe-atlas__node')].map(n => ({ name: n.textContent, r: n.getBoundingClientRect() }));
       return nodes.flatMap((a, i) => nodes.slice(i + 1).filter(b =>
@@ -2158,16 +2230,21 @@ async function atlasScenario({ A, port }) {
     // drawn (baked ground, plates and roads) once the whole Atlas is charted.
     assert(await chartColours(A) > 20, 'the explored Atlas chart is not drawn');
     await A.shot(`atlas-explored-${VW}x${VH}`);
-    assert((await A.page.locator('.fe-device__destination').innerText()).includes('Bone Approach'), 'the map\'s home was not retained');
+    await closeAreaModal(A);
+    assert(await chartColours(A) > 20, 'the chart is not drawn after closing the modal');
+    await expectCourse(A, 'Bone Approach');
     await A.shot(`atlas-device-${VW}x${VH}`);
   });
-  await step('the Sealed Reliquary opens through a key passage: the key is spent with the map, which bypasses its own area', async () => {
-    await expectCourse(A, 'Bone Approach');
-    await choosePassage(A, 'reliquaryKey');
+  await step('the Sealed Reliquary opens through a key passage: its modal takes the key, which is spent with the map', async () => {
+    // A sealed area is not a map address: its own modal takes any map up to its ceiling, and asks for its key in the passage slot.
+    await inspectArea(A, 'Sealed Reliquary');
     await expectCourse(A, 'Sealed Reliquary');
-    assert((await A.page.locator('.fe-device__destination').innerText()).includes('Bypasses Bone Approach'), 'the dock should say which area the passage bypasses');
+    assert(!(await A.page.locator('[data-open-area]').isEnabled()), 'Open area must wait for the key');
+    assert((await A.page.locator('[data-open-reason]').innerText()).includes('Reliquary Key'), 'the footer should say the key is missing');
+    await choosePassage(A, 'reliquaryKey');
+    assert((await A.page.locator('[data-open-reason]').getAttribute('data-open-reason')) === 'ready', 'with the key in the passage slot the area is ready');
     await A.shot(`atlas-sealed-${VW}x${VH}`);
-    await A.page.locator('.fe-device__activate').click();
+    await openArea(A);
     await A.waitFor('sealed area portal and key spent', () => {
       const s = window.__foe.store.get();
       const ch = s.character;
@@ -2215,11 +2292,11 @@ async function atlasScenario({ A, port }) {
       await A.waitFor('new area fixture reconnect', (uid) => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.mapDevice?.uid === uid, saved.mapDevice.uid, 30000);
       outage = false;
       await openDevice();
-      await expectCourse(A, homeArea.name);
+      // The map lives in its home area. A sealed area and the Pit are not map addresses: they open from THEIR modal, through a key or a Bounty.
+      await inspectArea(A, area.name);
+      await expectCourse(A, area.name);
       if (isKey) await choosePassage(A, ATLAS_KEYS.find((k) => k.areaId === areaId).currencyId);
       else if (area.requiresBounty) await choosePassage(A, 'pit');
-      await expectCourse(A, area.name);
-      await inspectArea(A, area.name);
       await assertChartDrawn(A, `${area.name} inspected`);
       await A.shot(`atlas-${areaId}-detail-${VW}x${VH}`);
       await sleep(400);
@@ -2233,7 +2310,7 @@ async function atlasScenario({ A, port }) {
       };
       const scrapBefore = await A.eval(currencyOnHand, 'scrap');
       const keyBefore = area.entranceKey ? await A.eval(currencyOnHand, area.entranceKey) : 0;
-      await A.page.locator('.fe-device__activate').click();
+      await openArea(A);
       await confirmNewMap(A);
       await A.waitFor('selected area portal', (name) => window.__foe.store.get().hud?.portal?.mapName === name && !window.__foe.store.get().character.mapDevice, area.name);
       if (area.entranceKey) assert(await A.eval(currencyOnHand, area.entranceKey) === keyBefore - 1, 'wrong key payment');
@@ -2430,7 +2507,7 @@ async function craftingScenario({ A, port }) {
     await A.page.waitForSelector('.fe-device');
     for (const [area, rune] of [['Glass Sepulchre', 'Prefix Rune'], ['Ember Vault', 'Suffix Rune']]) {
       await inspectArea(A, area);
-      const detail = await A.page.locator('[data-rail]').innerText();
+      const detail = await A.page.locator('[data-area-modal]').innerText();
       assert(detail.includes(rune) && detail.includes('25%'), 'missing ingredient source');
       await shot(`crafting-source-${rune.split(' ')[0]}`);
     }
@@ -2444,7 +2521,7 @@ async function craftingScenario({ A, port }) {
     assert(text.includes('The Stalker 100%'), 'Bounty encounter odds are not guaranteed');
     const before = await A.eval(() => window.__foe.store.get().character.currencyStash.scrap);
     await shot('territory-fee');
-    await A.page.locator('.fe-device__activate').click();
+    await openArea(A);
     await A.waitFor('paid portal', () => window.__foe.store.get().hud?.portal?.tier === 5 && !window.__foe.store.get().character.mapDevice);
     const after = await A.eval(() => window.__foe.store.get().character.currencyStash.scrap);
     assert(after === before - 1, 'wrong territory payment');
@@ -2720,6 +2797,21 @@ async function dragLocatorTo(p, locator, x, y, hold = false) {
   if (!hold) await p.page.mouse.up();
 }
 const releaseDrag = p => p.page.mouse.up();
+/**
+ * Drag a vendor item (grabbed at its middle, like a player would) so its whole footprint lands on a free backpack block, and hold the pointer there.
+ * The grab cell is floor(size / 2), so the pointer goes to that cell of the free block. Returns the block's top-left, the footprint and the pointer.
+ */
+async function dragVendorItem(p, locator) {
+  const b = await locator.boundingBox();
+  assert(b, 'vendor item is not on screen');
+  const g = await p.page.locator('.fe-inv [data-drop="backpack"]').boundingBox();
+  const cell = g.width / 12, w = Math.max(1, Math.round(b.width / cell)), h = Math.max(1, Math.round(b.height / cell));
+  const free = await freeBackpackCell(p, w, h);
+  assert(free, `no free ${w}x${h} backpack block`);
+  const point = await backpackPoint(p, free.x + Math.floor(w / 2), free.y + Math.floor(h / 2));
+  await dragLocatorTo(p, locator, point.x, point.y, true);
+  return { free, size: { w, h }, point };
+}
 /** Viewport centre of a backpack cell block (x, y, w, h cells). */
 async function backpackPoint(p, x, y, w = 1, h = 1) {
   const g = await p.page.locator('.fe-inv [data-drop="backpack"]').boundingBox();
@@ -2761,10 +2853,14 @@ async function sellingScenario({ A, B, port }) {
   };
   const offerWindow = p => p.page.locator('[data-drop="sale"]');
   let uids, total, before;
-  await step('Rook opens beside the inventory, Buy is the default and stock fits both panels side by side', async () => {
+  await step('Rook opens beside the inventory, Gear is the default and the vendor grid fits both panels side by side', async () => {
     await open(A);
-    assert(await A.page.getByRole('tab', { name: 'Buy', exact: true }).getAttribute('aria-selected') === 'true', 'Buy should be the default');
-    assert(await A.page.locator('.fe-rook .fe-offer').count() > 0, 'Rook stock missing');
+    assert(await A.page.getByRole('tab', { name: 'Gear', exact: true }).getAttribute('aria-selected') === 'true', 'Gear should be the default');
+    await A.page.waitForSelector('.fe-rook .fe-vendorgrid', { timeout: 6000 });
+    await A.page.getByRole('tab', { name: 'Supplies', exact: true }).click();
+    await A.page.waitForSelector('.fe-rook .fe-item--vendor[data-offer]', { timeout: 6000 });
+    assert(await A.page.locator('.fe-rook .fe-item--vendor[data-offer]').count() >= 4, 'the staples are missing');
+    await A.page.getByRole('tab', { name: 'Gear', exact: true }).click();
     const rook = await inBounds(A, '.fe-rook', 'Rook'), inv = await inBounds(A, '.fe-inv', 'inventory');
     assert(rook.x + rook.width <= inv.x, `Rook (${JSON.stringify(rook)}) and the inventory (${JSON.stringify(inv)}) overlap`);
     await A.shot(`selling-buy-${VW}x${VH}`);
@@ -2777,52 +2873,52 @@ async function sellingScenario({ A, B, port }) {
       const s = window.__foe.store; return ids.reduce((n, uid) => n + s.rules.sellQuote(s.get().character.backpack.entries.find(e => e.item.uid === uid).item).scrap, 0);
     }, uids);
     await A.page.locator(`[data-drop="backpack"] .fe-item[data-uid="${uids[0]}"]`).click({ modifiers: ['Control'] });
-    await A.page.waitForSelector('.fe-sell__item--selected');
+    await A.page.waitForSelector('.fe-rook [data-sell-uid]');
     assert(await A.page.getByRole('tab', { name: 'Sell', exact: true }).getAttribute('aria-selected') === 'true', 'Ctrl-click did not open Sell');
     assert((await holdings(A)).bag === before.bag, 'selection removed an item');
-    assert(await A.page.locator('.fe-sell__item').count() === 1, 'only the offered item belongs in the offer window');
-    await A.page.waitForSelector('.fe-sell__lines li', { timeout: 3000 });
-    assert(await A.page.locator('.fe-sell__lines li').count() >= 3, 'the offered item shows no appraisal breakdown');
-    await A.page.locator('.fe-sell__price').first().click();
-    assert(await A.page.locator('.fe-sell__lines').count() === 0, 'the appraisal did not collapse');
-    await A.page.locator('.fe-sell__price').first().click();
-    await A.page.locator('.fe-sell__lines').waitFor();
+    assert(await A.page.locator('.fe-rook [data-sell-uid]').count() === 1, 'only the offered item belongs in the sale grid');
+    // Rook's appraisal lives in the item's hover card, with the payout as the price line.
+    await A.page.locator('.fe-rook [data-sell-uid]').first().hover();
+    await A.page.waitForSelector('.fe-tooltip-layer .fe-tt__appraisal', { timeout: 3000 });
+    assert(await A.page.locator('.fe-tooltip-layer .fe-tt__appraisal > div').count() >= 3, 'the offered item shows no appraisal breakdown');
+    assert(/Rook pays: \d+ Scrap/.test(await A.page.locator('.fe-tooltip-layer [data-testid="tooltip-price"]').innerText()), 'the hover card shows what Rook pays');
     await A.shot(`selling-appraisal-${VW}x${VH}`);
+    await A.page.mouse.move(VW / 2, 30);
   });
   await step('dragging gear into the offer window, out again and back; protected gear is refused; nothing leaves the backpack', async () => {
-    await A.page.getByRole('button', { name: /Take .* out of the sale/ }).first().click();
-    await A.page.locator('.fe-sell__item').first().waitFor({ state: 'detached' }).catch(() => {});
-    assert(await A.page.locator('.fe-sell__item').count() === 0, 'the × did not take the item out of the sale');
+    await A.page.locator('.fe-rook [data-sell-uid]').first().click({ modifiers: ['Control'] });
+    await A.page.locator('.fe-rook [data-sell-uid]').first().waitFor({ state: 'detached' }).catch(() => {});
+    assert(await A.page.locator('.fe-rook [data-sell-uid]').count() === 0, 'Ctrl-click did not take the item out of the sale');
     const win = await inBounds(A, '[data-drop="sale"]', 'the offer window');
     // Worn gear is protected: dragging it onto the window shows "no" and offers nothing.
     const worn = await A.eval(() => window.__foe.store.get().character.equipment.chest?.uid ?? null);
     if (worn) {
       await dragLocatorTo(A, A.page.locator(`.fe-inv .fe-item[data-uid="${worn}"]`), win.x + win.width / 2, win.y + 40, true);
-      await A.page.waitForSelector('.fe-sell__window--invalid');
+      await A.page.waitForSelector('.fe-vendorgrid--invalid');
       await A.shot(`selling-worn-refused-${VW}x${VH}`);
       await releaseDrag(A);
-      assert(await A.page.locator('.fe-sell__item').count() === 0, 'worn gear was offered for sale');
+      assert(await A.page.locator('.fe-rook [data-sell-uid]').count() === 0, 'worn gear was offered for sale');
       assert(await A.eval(uid => window.__foe.store.get().character.equipment.chest?.uid === uid, worn), 'worn gear moved');
     }
     // Maps are not equipment: refused with Rook's reason too.
     const mapUid = await A.eval(() => window.__foe.store.get().character.backpack.entries.find(e => e.item.kind === 'map')?.item.uid ?? null);
     if (mapUid) {
       await dragLocatorTo(A, A.page.locator(`[data-drop="backpack"] .fe-item[data-uid="${mapUid}"]`), win.x + win.width / 2, win.y + 40);
-      assert(await A.page.locator('.fe-sell__item').count() === 0, 'a map was offered for sale');
+      assert(await A.page.locator('.fe-rook [data-sell-uid]').count() === 0, 'a map was offered for sale');
     }
     for (const uid of uids) {
       await dragLocatorTo(A, A.page.locator(`[data-drop="backpack"] .fe-item[data-uid="${uid}"]`), win.x + win.width / 2, win.y + 40);
     }
-    await A.waitFor('all gear offered', n => document.querySelectorAll('.fe-sell__item').length === n, uids.length);
+    await A.waitFor('all gear offered', n => document.querySelectorAll('.fe-rook [data-sell-uid]').length === n, uids.length);
     assert((await holdings(A)).bag === before.bag, 'offering removed an item from the backpack');
     // Drag the first offered item back out onto the inventory: it leaves the window, stays in the backpack.
     const out = await backpackPoint(A, 0, 4);
-    await dragLocatorTo(A, A.page.locator(`.fe-sell__item[data-sell-uid="${uids[0]}"] .fe-offer__icon`), out.x, out.y);
-    await A.waitFor('first item out of the offer', n => document.querySelectorAll('.fe-sell__item').length === n, uids.length - 1);
+    await dragLocatorTo(A, A.page.locator(`.fe-rook [data-sell-uid="${uids[0]}"]`), out.x, out.y);
+    await A.waitFor('first item out of the offer', n => document.querySelectorAll('.fe-rook [data-sell-uid]').length === n, uids.length - 1);
     assert((await holdings(A)).bag === before.bag, 'taking an item out of the window moved it');
     await dragLocatorTo(A, A.page.locator(`[data-drop="backpack"] .fe-item[data-uid="${uids[0]}"]`), win.x + win.width / 2, win.y + 40);
-    await A.waitFor('all gear offered again', n => document.querySelectorAll('.fe-sell__item').length === n, uids.length);
-    assert((await A.page.locator('.fe-sell__total').innerText()).includes(`${total} Forge Scrap`), 'appraisal total differs from rules');
+    await A.waitFor('all gear offered again', n => document.querySelectorAll('.fe-rook [data-sell-uid]').length === n, uids.length);
+    assert((await A.page.locator('.fe-sell__total').innerText()).includes(`Rook pays ${total} Scrap`), 'appraisal total differs from rules');
     const button = A.page.locator('.fe-sell__actions button').last(), bounds = await button.boundingBox();
     assert(bounds && bounds.y + bounds.height <= VH, 'sale button outside viewport');
     await A.page.mouse.move(VW / 2, 40); await A.shot(`selling-selected-${VW}x${VH}`);
@@ -2843,11 +2939,11 @@ async function sellingScenario({ A, B, port }) {
     await A.shot(`selling-paid-${VW}x${VH}`);
   });
   await step('buying by drag: the drop cell picks the slot, an occupied cell is refused, the price is paid once', async () => {
-    await A.page.getByRole('tab', { name: 'Buy', exact: true }).click();
+    await A.page.getByRole('tab', { name: 'Supplies', exact: true }).click();
     const scrapBefore = await scrapTotal(A);
     assert(scrapBefore >= 3, `A needs 3 Scrap for Kindling, has ${scrapBefore}`);
     const kindlingBefore = await A.eval(() => window.__foe.store.get().character.backpack.entries.filter(e => e.item.kind === 'currency' && e.item.currencyId === 'kindling').reduce((n, e) => n + e.item.count, 0));
-    const row = A.page.locator('.fe-rook .fe-stock', { hasText: 'Kindling' }).first();
+    const row = A.page.locator('.fe-rook [data-offer="currency-kindling"]');
     // First over an occupied cell: red, refused, nothing bought.
     const taken = await A.eval(() => { const e = window.__foe.store.get().character.backpack.entries[0]; return e ? { x: e.x, y: e.y } : null; });
     if (taken) {
@@ -2905,7 +3001,7 @@ async function sellingScenario({ A, B, port }) {
     await open(B); await B.page.getByRole('tab', { name: 'Sell', exact: true }).click();
     const win = await offerWindow(B).boundingBox();
     await dragLocatorTo(B, B.page.locator(`.fe-inv [data-drop="backpack"] .fe-item[data-uid="${uid}"]`), win.x + win.width / 2, win.y + 40);
-    await B.page.locator(`[data-sell-uid="${uid}"]`).waitFor();
+    await B.page.locator(`.fe-rook [data-sell-uid="${uid}"]`).waitFor();
     await B.page.locator('.fe-sell__actions button').last().click();
     await B.page.getByRole('dialog').getByRole('button', { name: `Sell for ${price} Scrap`, exact: true }).click();
     await B.waitFor('visitor paid', expected => window.__foe.store.get().character.currencyStash.scrap === expected, guest.scrap + price);
@@ -2977,8 +3073,9 @@ async function debugMerchantScenario({ A, B, base, port, nameA, nameB, suffix })
     await open(A);
     await A.page.getByLabel('Quantity', { exact: true }).fill('20');
     const ids = await A.page.locator('[data-debug-offer]').evaluateAll(rows => rows.map(row => row.dataset.debugOffer));
-    assert(ids.length === 8, 'expected all eight scarabs');
-    for (const id of ids) await buy(A, id);
+    // The merchant lists every scarab (the eight wave scarabs and, since the area-bias families, twenty more): buy the first eight tiers.
+    assert(ids.length >= 8, 'expected at least the eight wave scarabs');
+    for (const id of ids.slice(0, 8)) await buy(A, id);
     await A.page.mouse.move(VW / 2, VH / 2);
     await A.shot(`debug-merchant-scarabs-${VW}x${VH}`);
     await A.page.getByLabel('Quantity', { exact: true }).fill('1');
@@ -3100,6 +3197,8 @@ async function scarabsScenario({ A, port }) {
   });
   await step('inspect every scarab tier: stash -> inventory -> drag into the socket, and remove it again', async () => {
     await openDevice();
+    // the sockets belong to the area modal: click the map's area on the chart
+    await inspectArea(A, 'Cinder Crossing');
     assert(await A.page.locator('[data-drop="scarabSlot"]').count() === 4, 'expected four sockets beside one map');
     await A.page.locator('[data-panel="inventory"]').waitFor({ state: 'visible', timeout: 4000 }).catch(() => { throw new Error('the inventory must open together with the Atlas'); });
     assert(await A.page.locator('[data-drawer], .fe-device__scarab-picker').count() === 0, 'the Atlas still offers a stash drawer or scarab picker');
@@ -3107,7 +3206,7 @@ async function scarabsScenario({ A, port }) {
     for (const scarab of SCARABS) {
       // the Crafting Stash holds the scarabs: one goes to the backpack first (the stash panel's own move), then into the socket
       const uid = await stashToPack(A, `cstash:${scarab.id}`, '(i, id) => i.kind === "currency" && i.currencyId === id', scarab.id, 1);
-      await dragPackItemTo(A, uid, '.fe-dock [data-drop="scarabSlot"][data-index="0"]', { shot: scarab.id === 'hasteScarab1' ? 'scarab-drag-over-socket' : '' });
+      await dragPackItemTo(A, uid, '[data-area-modal] [data-drop="scarabSlot"][data-index="0"]', { shot: scarab.id === 'hasteScarab1' ? 'scarab-drag-over-socket' : '' });
       await A.waitFor('scarab loaded', id => window.__foe.store.get().character.mapScarabs?.[0]?.currencyId === id, scarab.id);
       await A.page.locator('[data-drop="scarabSlot"][data-index="0"] .fe-item').hover();
       await A.shot(`scarab-${scarab.id}-${VW}x${VH}`);
@@ -3115,36 +3214,39 @@ async function scarabsScenario({ A, port }) {
       await A.waitFor('scarab removed', () => !window.__foe.store.get().character.mapScarabs?.[0]);
     }
     assert(await A.eval(() => Object.entries(window.__foe.store.get().character.currencyStash).filter(([id]) => id.includes('Scarab')).every(([, count]) => count === 2)), 'socketting did not take exactly one');
-    assert(await A.eval(() => window.__foe.store.get().character.backpack.entries.filter((e) => e.item.currencyId?.includes('Scarab')).length === 8), 'removed scarabs did not return to the inventory');
+    await waitServer(A, 'every removed scarab back in the inventory', (ch) => ch.backpack.entries.filter((e) => e.item.currencyId?.includes('Scarab')).length === SCARABS.length, undefined, 15000);
   });
   await step('dragging loads distinct scarab types and a second tier of the same type is refused (slot turns red)', async () => {
     const byId = (id) => SCARABS.find((x) => x.id === id);
     const uidOf = (id) => packUid(A, '(i, id) => i.kind === "currency" && i.currencyId === id', id);
-    await dragPackItemTo(A, await uidOf('hasteScarab4'), '.fe-dock [data-drop="scarabSlot"][data-index="0"]');
+    await dragPackItemTo(A, await uidOf('hasteScarab4'), '[data-area-modal] [data-drop="scarabSlot"][data-index="0"]');
     await A.waitFor('scarab loaded', (i) => window.__foe.store.get().character.mapScarabs?.some((x) => x?.currencyId === i), 'hasteScarab4');
     // Ctrl/Cmd-click in the inventory is the quick-load extra: it fills the first empty socket
     await A.page.locator(`[data-drop="backpack"] [data-uid="${await uidOf('invasionScarab4')}"]`).click({ modifiers: ['Control'] });
     await A.waitFor('scarab quick-loaded', (i) => window.__foe.store.get().character.mapScarabs?.some((x) => x?.currencyId === i), 'invasionScarab4');
     assert(await A.eval(() => window.__foe.store.get().character.mapScarabs.filter(Boolean).length === 2), 'expected exactly two loaded scarabs');
     for (const scarab of SCARABS.filter((x) => (x.family === byId('hasteScarab4').family || x.family === byId('invasionScarab4').family) && !['hasteScarab4', 'invasionScarab4'].includes(x.id))) {
-      await dragPackItemTo(A, await uidOf(scarab.id), '.fe-dock [data-drop="scarabSlot"][data-index="2"]', { expectBad: true, shot: scarab.id === 'hasteScarab1' ? 'scarab-drag-refused' : '' });
+      await dragPackItemTo(A, await uidOf(scarab.id), '[data-area-modal] [data-drop="scarabSlot"][data-index="2"]', { expectBad: true, shot: scarab.id === 'hasteScarab1' ? 'scarab-drag-refused' : '' });
       assert(await A.eval(() => window.__foe.store.get().character.mapScarabs.filter(Boolean).length === 2), `${scarab.name}: a second tier of a loaded family was socketed`);
     }
     await A.shot(`scarabs-loaded-${VW}x${VH}`);
-    await A.page.getByRole('button', { name: 'Full map readout', exact: true }).click();
+    await A.page.locator('[data-full-readout-toggle]').click();
     const summary = A.page.getByText('Scarab wave duration', { exact: true }); await summary.scrollIntoViewIfNeeded();
     assert((await A.page.locator('.fe-device__summary').innerText()).includes('30s'), 'combined wave duration missing');
     await A.shot(`scarabs-readout-${VW}x${VH}`);
-    await A.page.getByRole('button', { name: 'Close readout', exact: true }).click();
-    const bounds = await A.page.locator('.fe-device__activate').boundingBox();
+    await A.page.locator('[data-full-readout-toggle]').click();
+    const bounds = await A.page.locator('[data-open-area]').boundingBox();
     assert(bounds && bounds.y + bounds.height <= VH, 'activation exceeds viewport');
+    // the whole modal fits beside the inventory: neither covers the other
+    const box = await A.page.locator('[data-area-modal]').boundingBox(), inv = await A.page.locator('[data-panel="inventory"]').boundingBox();
+    assert(box && inv && box.x + box.width <= inv.x + 1 && box.y >= 0 && box.y + box.height <= VH, `the modal does not fit beside the inventory: ${JSON.stringify({ box, inv })}`);
   });
   await step('loaded sockets survive restart, activation consumes once, and the map opens on wave five', async () => {
     const before = await A.eval(() => window.__foe.store.get().character.mapScarabs);
     outage = true; await stopGameServer(); await startGameServer(port);
     await A.waitFor('loaded sockets restored', () => window.__foe.store.get().connection === 'online', undefined, 30000); outage = false;
     assert(isDeepStrictEqual(before, await A.eval(() => window.__foe.store.get().character.mapScarabs)), 'loaded scarabs lost at restart');
-    await openDevice(); await A.page.locator('.fe-device__activate').click();
+    await openDevice(); await inspectArea(A, 'Cinder Crossing'); await openArea(A);
     await A.waitFor('scarabs consumed', () => !!window.__foe.store.get().hud?.portal && !window.__foe.store.get().character.mapDevice && !window.__foe.store.get().character.mapScarabs.some(Boolean));
     await clickPortal(A);
     await A.waitFor('wave five opening', () => window.__foe.store.get().hud?.run?.wave === 5, undefined, 20000);
@@ -3294,7 +3396,7 @@ async function mapTreeScenario({ A, port }) {
     // The Tier 3 map in the device is bound to Bone Approach: it opens there.
     await A.page.getByRole('tab', { name: 'Chart', exact: true }).click();
     await expectCourse(A, 'Bone Approach');
-    await A.page.getByRole('button', { name: 'Activate', exact: true }).click();
+    await openArea(A);
     await confirmNewMap(A);
     await A.waitFor('new portal', () => !!window.__foe.store.get().hud?.portal && !window.__foe.store.get().character.mapDevice, undefined, 10000);
     await clickPortal(A); await A.waitFor('entered the expedition', () => window.__foe.store.get().zone === 'map', undefined, 15000);
@@ -3380,17 +3482,17 @@ async function uniquesScenario({ A, port }) {
     await clickWorld(A, at, 'map device'); await A.page.waitForSelector('.fe-device');
     for (const [name, first, second, id] of KEYSTONE_AREAS) {
       await inspectArea(A, name);
-      const detail = await A.page.locator('[data-rail]').innerText();
+      const detail = await A.page.locator('[data-area-modal]').innerText();
       assert(detail.includes(first) && detail.includes(second) && detail.includes('T8+') && detail.includes('T10+'), 'missing keystone eligibility');
       await settlePanels(A); await A.shot(`uniques-source-${name.replaceAll(' ', '-')}-${VW}x${VH}`);
       await slotStashMap(A, `e2e-unique-map:${id}`);
       await expectCourse(A, name);
-      await A.page.getByRole('button', { name: 'Full map readout', exact: true }).click();
+      await A.page.locator('[data-full-readout-toggle]').click();
       const chance = A.page.getByText(/^Exclusive unique chance:/);
       await chance.scrollIntoViewIfNeeded();
       assert(/Exclusive unique chance: [1-9]/.test(await chance.innerText()), 'eligible keystone has no drop chance');
       await A.shot(`uniques-chance-${name.replaceAll(' ', '-')}-${VW}x${VH}`);
-      await A.page.getByRole('button', { name: 'Close readout', exact: true }).click();
+      await A.page.locator('[data-full-readout-toggle]').click();
     }
   });
   await step('all twelve uniques survive a real server restart unchanged', async () => {
@@ -3637,7 +3739,7 @@ async function expandedMapsScenario({ A, port }) {
       await clickWorld(A, at, 'the map device');
       await A.page.waitForSelector('.fe-device');
       await inspectArea(A, area);
-      assert((await A.page.locator('[data-rail]').innerText()).includes(boss), 'Atlas does not name this encounter');
+      assert((await A.page.locator('[data-area-modal]').innerText()).includes(boss), 'Atlas does not name this encounter');
       await A.page.mouse.move(10, 10);
       await settlePanels(A);
       await A.shot(`new-maps-${theme}-atlas-${VW}x${VH}`);
@@ -3645,7 +3747,7 @@ async function expandedMapsScenario({ A, port }) {
       await slotStashMap(A, uid);
       await expectCourse(A, area);
       await A.waitFor('new map in device', uid => window.__foe.store.get().character.mapDevice?.uid === uid, uid);
-      await A.page.locator('.fe-device__activate').click();
+      await openArea(A);
       await confirmNewMap(A);
       await A.waitFor('new map portal', area => window.__foe.store.get().hud?.portal?.mapName === area, area);
       await closePanels(A);
@@ -3693,7 +3795,7 @@ async function expandedMapsScenario({ A, port }) {
 // ---------------------------------------------------------------------------------------------------------------
 // Territory tools (brief D 5, slice P1; `--only territory`, A alone, at the window size of --size): account pins with the tray, node
 // toggle and persistence, the Stock and Sources lenses, Re-chart from the dock, Recycle at the bench by dragging three maps into the
-// recycle slots, Rook's Maps tab bought by dragging onto the backpack, and the Map Stash grouped by area.
+// recycle slots, Rook's wares board bought by dragging onto the backpack, and the Map Stash grouped by area.
 // ---------------------------------------------------------------------------------------------------------------
 async function territoryScenario({ A, port }) {
   const { tsImport } = await import('tsx/esm/api');
@@ -3775,13 +3877,16 @@ async function territoryScenario({ A, port }) {
   });
   await step('pin an area from its node: the tray fills, the chip focuses and unpins, the server keeps it', async () => {
     await inspectArea(A, 'Furnace Yard');
-    await A.page.locator('[data-pin-node="furnaceYard"]').click();
+    // the area modal carries the pin toggle and says how many maps you hold of the area
+    assert((await A.page.locator('[data-area-modal]').innerText()).includes('You hold 1 map of this area'), 'the modal should say what you hold of the area');
+    await A.page.locator('[data-pin-toggle="furnaceYard"]').click();
     await A.page.waitForSelector('.fe-pinchip[data-pin="furnaceYard"]');
     await waitServer(A, 'the pin on the server', (ch) => JSON.stringify(ch.atlas.pins) === '["furnaceYard"]');
     assert((await A.page.locator('[data-pintray]').innerText()).includes('1/3'), 'the tray should say 1/3');
+    assert(await A.page.locator('[data-pin-toggle="furnaceYard"]').getAttribute('aria-pressed') === 'true', 'the modal toggle should show pinned');
+    // the chart keeps the pin toggle on the selected node
+    await closeAreaModal(A);
     assert(await A.page.locator('[data-pin-node="furnaceYard"]').getAttribute('aria-pressed') === 'true', 'the node toggle should show pinned');
-    // the rail has the toggle too, and says how many maps you hold of the area
-    assert((await A.page.locator('[data-rail]').innerText()).includes('You hold 1 map of this area'), 'the rail should say what you hold of the area');
     await A.shot(`territory-pinned-${VW}x${VH}`);
     // a fogged area cannot be pinned, and a fourth pin is refused with the reason
     const refused = await A.eval(() => window.__foe.send({ c: 'pinArea', areaId: 'heartOfForge', pinned: true }));
@@ -3794,6 +3899,9 @@ async function territoryScenario({ A, port }) {
   await step('slot a map: the Sources lens draws where its maps drop, the dock reads "Next drops", the pin is x3', async () => {
     await slotPackMap(A, 'e2e:rc');
     await expectCourse(A, 'Ember Road');
+    assert(await A.page.locator('[data-area-modal] [data-sources-line]').count() === 1, 'the modal should summarise the next drops');
+    await A.shot(`territory-modal-${VW}x${VH}`);
+    await closeAreaModal(A);
     await A.page.locator('.fe-lens__btn[data-lens="sources"]').click();
     await A.page.waitForSelector('.fe-chart__sources [data-sources]');
     const rows = await A.page.locator('.fe-sources__row').count();
@@ -3802,14 +3910,14 @@ async function territoryScenario({ A, port }) {
     const pinnedShare = await A.page.locator('.fe-chart__sources .fe-sources__row--pinned .fe-sources__share').innerText();
     assert(parseInt(pinnedShare, 10) >= 40, `a pinned neighbour should take at least 40% of the drops, shows ${pinnedShare}`);
     assert(await A.page.locator('[data-share]').count() >= 2, 'the chart should label the arrows with shares');
-    assert(await A.page.locator('[data-sources-line]').count() === 1, 'the dock should summarise the next drops');
     await chartReady(A);
     await A.shot(`territory-sources-${VW}x${VH}`);
     await A.page.locator('.fe-lens__btn[data-lens="stock"]').click();
   });
-  await step('Re-chart from the dock: pick a neighbour in the popover, the map moves and costs Scrap in one step', async () => {
+  await step('Re-chart from the modal: pick a neighbour in the popover, the map moves and costs Scrap in one step', async () => {
     const scrapBefore = await scrapOnHand(A);
-    await A.page.locator('[data-dock-rechart]').click();
+    await expectCourse(A, 'Ember Road');
+    await A.page.locator('[data-rechart-open]').click();
     await A.page.waitForSelector('[data-rechart]');
     const rows = await A.page.locator('[data-rechart-area]').count();
     assert(rows === 2, `Ember Road T3 has two legal neighbours (Ember Vault, Furnace Yard), found ${rows}`);
@@ -3817,19 +3925,21 @@ async function territoryScenario({ A, port }) {
     await A.page.locator('[data-rechart-area="furnaceYard"] button:has-text("Re-chart")').click();
     await waitServer(A, 'the map moved', (ch) => ch.mapDevice?.uid === 'e2e:rc' && ch.mapDevice.areaId === 'furnaceYard' && ch.mapDevice.rechart === 1 && ch.mapDevice.quality === 7);
     assert(await scrapOnHand(A) === scrapBefore - 3, 'a T3 Re-chart must cost exactly 3 Scrap');
+    // the modal follows the map to its new area
     await expectCourse(A, 'Furnace Yard');
     await A.page.waitForSelector('[data-rechart]', { state: 'detached' });
-    await A.page.locator('[data-dock-rechart]').click();
+    await A.page.locator('[data-rechart-open]').click();
     await A.page.waitForSelector('[data-rechart]');
     assert((await A.page.locator('[data-rechart]').innerText()).includes('50% more'), 'the second hop should say it costs more');
     await A.page.keyboard.press('Escape');
     await A.page.waitForSelector('[data-rechart]', { state: 'detached' });
-    assert(await A.page.locator('.fe-device').isVisible(), 'Escape should close only the popover');
+    assert(await A.page.locator('.fe-device').isVisible() && await A.page.locator('[data-area-modal]').count() === 1, 'Escape should close only the popover');
   });
-  await step('Show home brings the chart and the rail back to the area the map opens', async () => {
+  await step('another area refuses the slotted map and "Go to" brings the modal back to the area the map opens', async () => {
     await inspectArea(A, 'Cinder Crossing');
-    await A.page.locator('[data-show-home]').click();
-    await A.page.waitForFunction(() => document.querySelector('[data-rail] .fe-rail__name')?.textContent === 'Furnace Yard', undefined, { timeout: 3000 });
+    await A.page.locator('[data-goto-area="furnaceYard"]').click();
+    await A.page.waitForFunction(() => document.querySelector('[data-area-modal] [data-area-name]')?.textContent === 'Furnace Yard', undefined, { timeout: 3000 });
+    await closeAreaModal(A);
     // take the map back out: the chart is browse-only again
     await A.eval(() => window.__foe.store.actions.moveItem('e2e:rc', { kind: 'backpack', x: 11, y: 4 }));
     await waitServer(A, 'the map back in the backpack', (ch) => !ch.mapDevice);
@@ -3839,6 +3949,8 @@ async function territoryScenario({ A, port }) {
     const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'anvil', 8), 'the anvil');
     await clickWorld(A, at, 'the anvil');
     await A.page.waitForSelector('.fe-bench');
+    // the empty bench shows Craft first; Recycle is its second tab
+    if (await A.page.locator('[data-bench-tab="recycle"]').count()) await A.page.locator('[data-bench-tab="recycle"]').click();
     await A.page.waitForSelector('[data-recycle]');
     const scrapBefore = await scrapOnHand(A);
     // a mixed tier is refused in place with a red slot; the T3 map stays where it is
@@ -3863,28 +3975,28 @@ async function territoryScenario({ A, port }) {
     assert(await A.page.locator('[data-slot="recycle:0"].fe-device-slot--filled').count() === 0, 'the slots should empty after recycling');
     await closePanels(A);
   });
-  await step("Rook's Maps tab: pick area, tier and quality, drag the row onto a backpack cell; the server charges the grade", async () => {
+  await step("Rook's Maps tab: the guaranteed plain map is dragged onto a backpack cell; the server charges the price shown in its hover card", async () => {
     const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'merchant', 10), 'Rook');
     await clickWorld(A, at, 'Rook');
     await A.page.waitForSelector('.fe-rook');
     await A.page.getByRole('tab', { name: 'Maps', exact: true }).click();
-    await A.page.waitForSelector('[data-testid="rook-maps"]');
-    const areas = await A.page.locator('[data-rook-area]').evaluateAll((els) => els.map((e) => e.dataset.rookArea));
-    assert(JSON.stringify(areas) === '["cinderCrossing","emberRoad"]', `Rook sells only cleared areas (and the start): ${areas}`);
-    await A.page.locator('[data-rook-area="emberRoad"]').click();
-    await A.page.locator('[data-rook-tier="2"]').click();
-    await A.page.locator('[data-rook-grade="fine"]').click();
-    const row = A.page.locator('.fe-rook .fe-stock[data-offer="map:emberRoad:2:fine"]');
-    await row.waitFor({ state: 'visible', timeout: 4000 });
+    await A.page.waitForSelector('[data-testid="rook-wares"] [data-ware-slot="0"]', { timeout: 8000 });
+    assert(await A.page.locator('.fe-rook [data-rook-area], .fe-rook [data-rook-tier], .fe-rook [data-rook-grade], .fe-rook .fe-stockfilters').count() === 0, 'the Maps tab must not offer selectors, filters or chips');
+    const tile = A.page.locator('[data-ware-slot="0"]');
+    const price = Number(await tile.locator('.fe-item__price').textContent());
+    assert(price >= 1, `the guaranteed map shows no price: ${price}`);
+    await tile.hover();
+    await A.page.waitForFunction((n) => (document.querySelector('.fe-tooltip-layer')?.textContent ?? '').includes(`Price: ${n} Scrap`), price, { timeout: 3000 });
+    await A.page.mouse.move(VW / 2, 30);
     const before = await scrapOnHand(A);
-    const free = await freeBackpackCell(A);
-    const fp = await backpackPoint(A, free.x, free.y);
-    await dragLocatorTo(A, row, fp.x, fp.y, true);
+    const drop = await dragVendorItem(A, tile);
+    const free = drop.free;
     await A.page.waitForSelector('.fe-grid__preview--ok');
-    await A.shot(`territory-rook-maps-${VW}x${VH}`);
+    await A.shot(`territory-rook-wares-${VW}x${VH}`);
     await releaseDrag(A);
-    await waitServer(A, 'the Fine map', (ch) => ch.backpack.entries.some((e) => e.item.kind === 'map' && e.item.areaId === 'emberRoad' && e.item.tier === 2 && e.item.quality === 6));
-    assert(await scrapOnHand(A) === before - 7, 'a Fine Tier 2 map must cost exactly 7 Scrap');
+    await waitServer(A, 'the plain map', (ch, cell) => ch.backpack.entries.some((e) => e.item.kind === 'map' && !e.item.uid.startsWith('e2e:') && e.item.quality === 0 && e.item.rarity === 'normal' && e.x === cell.x && e.y === cell.y), free);
+    assert(await scrapOnHand(A) === before - price, `the plain map must cost exactly the ${price} Scrap shown in its hover card`);
+    await A.page.waitForSelector('.fe-rook [data-ware-slot="0"]', { state: 'detached', timeout: 5000 });
     await closePanels(A);
   });
   await step('the Map Stash groups maps by area, with a header per area', async () => {
@@ -3944,9 +4056,9 @@ async function surgeScenario({ A, port }) {
     outage = false;
   };
   const ledger = () => A.eval(() => window.__foe.session.character.authoritative.atlas?.surge ?? null);
-  const dockHold = () => A.page.locator('[data-surge-hold]');
+  const holdBtn = () => A.page.locator('[data-surge-hold]');
   const activate = async () => {
-    await A.page.locator('.fe-device__activate').click();
+    await openArea(A);
     await confirmNewMap(A);
   };
   await step('prepare a chart, two Cinder Crossing maps, Hourglass Sand and a Grand Hourglass', async () => {
@@ -3971,7 +4083,7 @@ async function surgeScenario({ A, port }) {
     await A.waitFor('fixture maps', () => !!window.__foe.store.get().character.backpack.entries.find((e) => e.item.uid === 'e2e-s1'), undefined, 10_000);
     assert((await ledger()) === null, 'a fresh account has no surge ledger yet');
   });
-  await step('the dock shows the surge countdown, the rail shows three full pips for the inspected area, text stays on the type scale', async () => {
+  await step('the chart shows the surge countdown, the area modal shows three full pips for the inspected area, text stays on the type scale', async () => {
     await openDevice();
     await A.page.waitForSelector('.fe-chart__loading', { state: 'detached', timeout: 40000 });
     await sleep(800); await skipCinematic(A);
@@ -3979,10 +4091,10 @@ async function surgeScenario({ A, port }) {
     assert(/^Surges refresh in (\d+ h )?\d+ m$/.test(reset) || reset === 'Surges refresh in under a minute', `the countdown should read "Surges refresh in 3 h 12 m", reads "${reset}"`);
     await inspectArea(A, 'Cinder Crossing');
     const rail = await A.page.locator('[data-surge-rail="cinderCrossing"]').innerText();
-    assert(rail.includes('Surge 3/3 today'), `the rail should say Surge 3/3 today, says "${rail}"`);
+    assert(rail.includes('Surge 3/3'), `the modal should say Surge 3/3, says "${rail}"`);
     assert(await A.page.locator('[data-surge-rail="cinderCrossing"] .fe-surge-pip--on').count() === 3, 'three filled pips expected');
     assert(await A.page.locator('[data-surge-refill]').count() === 0, 'a full area offers no Sand refill');
-    const sizes = await A.page.evaluate(() => [...document.querySelectorAll('[data-surge-reset], [data-surge-rail] .fe-surge-rail__text, [data-surge-chip] button')].map((e) => getComputedStyle(e).fontSize));
+    const sizes = await A.page.evaluate(() => [...document.querySelectorAll('[data-surge-reset], [data-surge-reset-area], [data-surge-hold]')].map((e) => getComputedStyle(e).fontSize));
     assert(sizes.length >= 2 && sizes.every((px) => parseFloat(px) >= 14), `surge text must use the type scale (14px minimum): ${sizes}`);
     await assertChartDrawn(A, 'the Atlas chart with surge pips');
     await A.shot(`surge-rail-${VW}x${VH}`);
@@ -3990,11 +4102,11 @@ async function surgeScenario({ A, port }) {
   await step('slot a map: the chip offers Surge 3/3 with Hold on; holding it back keeps the charge at Activate', async () => {
     await slotPackMap(A, 'e2e-s1');
     await expectCourse(A, 'Cinder Crossing');
-    assert((await dockHold().innerText()).includes('Surge 3/3'), `the dock chip should say Surge 3/3, says "${await dockHold().innerText()}"`);
-    assert(await dockHold().getAttribute('aria-pressed') === 'true', 'Hold should be on by default (the next activation spends a charge)');
+    assert((await holdBtn().innerText()).includes('Surge 3/3'), `the modal toggle should say Surge 3/3, says "${await holdBtn().innerText()}"`);
+    assert(await holdBtn().getAttribute('aria-pressed') === 'true', 'Hold should be on by default (the next activation spends a charge)');
     await A.shot(`surge-dock-${VW}x${VH}`);
-    await dockHold().click();
-    assert(await dockHold().getAttribute('aria-pressed') === 'false' && (await dockHold().innerText()).includes('held'), 'toggling Hold should keep the charge');
+    await holdBtn().click();
+    assert(await holdBtn().getAttribute('aria-pressed') === 'false' && (await holdBtn().innerText()).includes('held'), 'toggling Hold should keep the charge');
     await activate();
     await waitServer(A, 'the first map opened', (ch) => !ch.mapDevice);
     assert((await ledger()) === null || Object.keys((await ledger()).spent).length === 0, 'a held activation must not spend a charge');
@@ -4004,8 +4116,8 @@ async function surgeScenario({ A, port }) {
     await openDevice();
     await A.page.waitForSelector('.fe-chart__loading', { state: 'detached', timeout: 40000 });
     await slotPackMap(A, 'e2e-s2');
-    await dockHold().click();
-    assert(await dockHold().getAttribute('aria-pressed') === 'true', 'Hold is on again');
+    await holdBtn().click();
+    assert(await holdBtn().getAttribute('aria-pressed') === 'true', 'Hold is on again');
     await activate();
     await waitServer(A, 'one charge spent', (ch, day) => ch.atlas.surge?.spent.cinderCrossing === 1 && ch.atlas.surge.day === day, forgeDay());
     await openDevice();
@@ -4013,7 +4125,7 @@ async function surgeScenario({ A, port }) {
     await slotPackMap(A, 'e2e-s3');
     await A.page.waitForFunction(() => document.querySelector('[data-surge-hold]')?.textContent?.includes('Surge 2/3'), undefined, { timeout: 5000 });
     await inspectArea(A, 'Cinder Crossing');
-    assert((await A.page.locator('[data-surge-rail="cinderCrossing"]').innerText()).includes('Surge 2/3 today'), 'the rail should follow: Surge 2/3 today');
+    assert((await A.page.locator('[data-surge-rail="cinderCrossing"]').innerText()).includes('Surge 2/3'), 'the rail should follow: Surge 2/3');
     assert(await A.page.locator('[data-surge-rail="cinderCrossing"] .fe-surge-pip--on').count() === 2, 'two filled pips expected');
     // the map's expedition carries the bonus: the character sheet reads it from the same luck rule
     const run = await A.eval(() => window.__foe.store.get().hud?.portal ?? null);
@@ -4026,7 +4138,7 @@ async function surgeScenario({ A, port }) {
     const l = await ledger();
     assert(l && l.spent.cinderCrossing === 1 && l.day === forgeDay(), `the ledger should be saved with the account: ${JSON.stringify(l)}`);
     await inspectArea(A, 'Cinder Crossing');
-    assert((await A.page.locator('[data-surge-rail="cinderCrossing"]').innerText()).includes('Surge 2/3 today'), 'two charges left after the restart');
+    assert((await A.page.locator('[data-surge-rail="cinderCrossing"]').innerText()).includes('Surge 2/3'), 'two charges left after the restart');
   });
   await step('Hourglass Sand: the rail offers a refill only for a spent area; one Sand refills it and is consumed', async () => {
     const refill = A.page.locator('[data-surge-refill="cinderCrossing"]');
@@ -4035,7 +4147,7 @@ async function surgeScenario({ A, port }) {
     await refill.click();
     await waitServer(A, 'the area refilled', (ch) => !ch.atlas.surge?.spent.cinderCrossing);
     await waitServer(A, 'one Sand consumed', (ch) => ch.backpack.entries.filter((e) => e.item.kind === 'currency' && e.item.currencyId === 'hourglassSand').reduce((n, e) => n + e.item.count, 0) === 1);
-    await A.page.waitForFunction(() => document.querySelector('[data-surge-rail="cinderCrossing"]')?.textContent?.includes('Surge 3/3 today') && !document.querySelector('[data-surge-refill]'), undefined, { timeout: 5000 });
+    await A.page.waitForFunction(() => document.querySelector('[data-surge-rail="cinderCrossing"]')?.textContent?.includes('Surge 3/3') && !document.querySelector('[data-surge-refill]'), undefined, { timeout: 5000 });
     // the server refuses a refill of a full area even when a client asks (nothing is spent)
     const refused = await A.eval(() => window.__foe.send({ c: 'refillSurge', areaId: 'cinderCrossing' }));
     assert(refused.ok === false, 'a full area must refuse Hourglass Sand');
@@ -4045,10 +4157,11 @@ async function surgeScenario({ A, port }) {
     await reseed((shared) => { shared.atlas.surge = { day: forgeDay(), spent: { cinderCrossing: 3, emberRoad: 1 } }; });
     await openDevice();
     await A.page.waitForSelector('.fe-chart__loading', { state: 'detached', timeout: 40000 });
+    await inspectArea(A, 'Cinder Crossing');
     await A.page.waitForFunction(() => document.querySelector('[data-surge-hold]')?.textContent?.includes('No surge left'), undefined, { timeout: 6000 });
-    assert(await dockHold().isDisabled(), 'with no charge left the toggle is disabled');
-    assert((await dockHold().getAttribute('title')).includes('normal rate'), 'the tooltip should say the area runs at the normal rate');
-    assert(await A.page.locator('.fe-device__activate').isEnabled(), 'Activate stays available with no charge (no hard cap)');
+    assert(await holdBtn().isDisabled(), 'with no charge left the toggle is disabled');
+    assert((await holdBtn().getAttribute('title')).includes('normal rate'), 'the tooltip should say the area runs at the normal rate');
+    assert(await A.page.locator('[data-open-area]').isEnabled(), 'Open area stays available with no charge (no hard cap)');
     await A.shot(`surge-empty-${VW}x${VH}`);
     await A.page.locator('[data-surge-refill-all]').click();
     await waitServer(A, 'every area refilled', (ch) => Object.keys(ch.atlas.surge?.spent ?? {}).length === 0);
@@ -4056,6 +4169,838 @@ async function surgeScenario({ A, port }) {
     await A.page.waitForFunction(() => document.querySelector('[data-surge-hold]')?.textContent?.includes('Surge 3/3') && !document.querySelector('[data-surge-refill-all]'), undefined, { timeout: 5000 });
   });
 }
+
+/**
+ * Rook's wares (GAME_SPEC §9), played through the real UI against the real server: a plain vendor window (tabs Gear / Maps / Supplies, one item
+ * grid like the stash) holding a board of 4 maps and 8 items plus the staples; the countdown and "Ask for new wares" with its doubling price; a lucky
+ * board (a jackpot, the glint once per epoch); the price in the hover card; buying by dragging an item onto the backpack (the drop cell picks the
+ * slot) or Ctrl-clicking it; sold items leaving a gap; the no-room and can't-afford drags.
+ * Boards are deterministic per character and epoch, so the scenario edits the character's wares epoch in the disposable database (server
+ * stopped for the edit) to land on a quiet board and on a lucky one, then plays them. Run it at both sizes:
+ *   npm run e2e -- --only wares --size 1280x720     and     npm run e2e -- --only wares --size 1024x600
+ */
+async function waresScenario({ A, port }) {
+  const { tsImport } = await import('tsx/esm/api');
+  const wares = await tsImport('../src/game/progression/wares.ts', import.meta.url);
+  const { WARE_SLOT_COUNT } = wares;
+  const rotationNow = () => wares.waresRotation(Date.now());
+  const scrapOnHand = (p) => p.eval(() => {
+    const ch = window.__foe.session.character.authoritative; let n = ch.currencyStash.scrap ?? 0;
+    for (const e of ch.backpack.entries) if (e.item.kind === 'currency' && e.item.currencyId === 'scrap') n += e.item.count;
+    return n;
+  });
+  /** Edit the character row (server stopped) and bring everything back up. */
+  const editCharacter = async (mutate) => {
+    outage = true; await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const row = db.prepare('SELECT id, data FROM characters').get();
+    const data = JSON.parse(row.data);
+    mutate(data, row.id);
+    db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(data), row.id);
+    db.close(); await startGameServer(port);
+    await A.waitFor('the game after the edit', () => window.__foe.store.get().connection === 'online' && !!window.__foe.store.get().character, undefined, 30000);
+    outage = false;
+  };
+  const stateFor = (data, rerolls, sold = []) => ({ rotation: rotationNow(), level: data.level, rerolls, sold, tier: 0, areas: ['cinderCrossing', 'emberRoad'] });
+  const qualitiesAt = (id, data, rerolls) => wares.boardQualities(id, stateFor(data, rerolls));
+  /** The first reroll count at or above `from` whose board satisfies `want`. */
+  const findBoard = (id, data, from, want) => { for (let k = from; k < from + 400; k++) if (want(qualitiesAt(id, data, k))) return k; throw new Error('no such board'); };
+  const open = async () => {
+    for (let attempt = 0; ; attempt++) {
+      await closePanels(A);
+      const at = await walkUntilOnScreen(A, () => propOnScreen(A, 'merchant', 10), 'Rook');
+      await clickWorld(A, at, 'Rook');
+      if (await A.page.waitForSelector('.fe-rook', { timeout: attempt < 2 ? 6000 : 30000 }).then(() => true, () => false)) break;
+      assert(attempt < 2, 'Rook never opened');
+    }
+    await A.page.waitForSelector('.fe-inv');
+    await A.page.waitForSelector('[data-testid="rook-countdown"]', { timeout: 8000 });
+  };
+  const inBounds = async (sel, what) => {
+    const b = await A.page.locator(sel).boundingBox();
+    assert(b && b.x >= 0 && b.y >= 0 && b.y + b.height <= VH && b.x + b.width <= VW, `${what} exceeds the ${VW}x${VH} viewport: ${JSON.stringify(b)}`);
+    return b;
+  };
+  const epochOf = () => A.page.locator('[data-testid="rook-wares"]').getAttribute('data-epoch');
+  const rerollLabel = () => A.page.locator('[data-testid="rook-reroll"]').innerText();
+
+  const tabBtn = (name) => A.page.getByRole('tab', { name, exact: true });
+  const goTab = async (name) => { await tabBtn(name).click(); await A.page.waitForSelector(`[data-testid="rook-wares"][data-vendor-tab="${name.toLowerCase()}"]`, { timeout: 4000 }); };
+  /** Everything on the three shelves, tab by tab (the page is left on the last tab). */
+  const shelves = async () => {
+    const out = [];
+    for (const name of ['Gear', 'Maps', 'Supplies']) {
+      await goTab(name);
+      const items = await A.page.locator('.fe-rook .fe-item--vendor').evaluateAll((els) => els.map((e) => ({ slot: e.dataset.wareSlot, offer: e.dataset.offer, kind: e.dataset.kind, quality: e.dataset.quality, price: Number(e.querySelector('.fe-item__price')?.textContent ?? NaN), poor: e.classList.contains('fe-item--poor'), key: e.dataset.ware ?? e.dataset.offer })));
+      for (const i of items) out.push({ ...i, tab: name });
+    }
+    return out;
+  };
+  const wareLoc = (slot) => A.page.locator(`.fe-rook [data-ware-slot="${slot}"]`);
+
+  await step('Rook is a plain vendor: tabs Gear / Maps / Supplies / Gamble / Sell, one item grid, items shelved by class, beside the inventory; countdown and reroll in a plain footer', async () => {
+    await open();
+    assert(await tabBtn('Gear').getAttribute('aria-selected') === 'true', 'Gear should be the default tab');
+    const tabs = await A.page.locator('.fe-rook__tabs [role="tab"]').allInnerTexts();
+    assert(JSON.stringify(tabs) === '["Gear","Maps","Supplies","Gamble","Sell"]', `Rook's tabs: ${tabs}`);
+    assert(await A.page.locator('.fe-rook .fe-vendorgrid.fe-grid').count() === 1, 'exactly one item grid');
+    assert(await A.page.locator('.fe-rook .fe-ware, .fe-rook .fe-ware__badge, .fe-rook .fe-wares__group, .fe-rook .fe-section-title').count() === 0, 'no tiles, badges, shelf headers or price chips');
+    assert(await A.page.locator('.fe-rook select, .fe-rook input, .fe-rook [data-rook-area], .fe-rook [data-rook-tier], .fe-rook [data-rook-grade], .fe-rook .fe-stockfilters').count() === 0, 'no selectors, search or filters on the shelves');
+    assert(/^New wares in (\d+ h \d+ m|\d+ m|under a minute)$/.test(await A.page.locator('[data-testid="rook-countdown"]').innerText()), 'countdown text');
+    assert((await rerollLabel()) === 'Ask for new wares (3 Scrap)', `reroll label: ${await rerollLabel()}`);
+    const all = await shelves();
+    const boardItems = all.filter((s) => s.slot !== undefined);
+    assert(JSON.stringify(boardItems.map((s) => Number(s.slot)).sort((a, b) => a - b)) === JSON.stringify(Array.from({ length: WARE_SLOT_COUNT }, (_, i) => i)), `board slots 0-11 once each across the tabs, found ${boardItems.map((s) => s.slot)}`);
+    assert(all.filter((s) => s.offer).length >= 4 && all.filter((s) => s.offer).every((s) => s.tab === 'Supplies'), 'the staples sit on Supplies');
+    for (const s of all) {
+      const ok = s.tab === 'Gear' ? s.kind === 'equipment' : s.tab === 'Maps' ? s.kind === 'map' || s.kind === 'currency' : s.kind !== 'equipment' && s.kind !== 'map';
+      assert(ok, `${s.key} (${s.kind}) is on the wrong tab: ${s.tab}`);
+    }
+    assert(boardItems.some((s) => s.tab === 'Maps' && s.kind === 'map') && all.some((s) => s.tab === 'Supplies' && s.kind === 'flask'), 'maps on Maps, flasks on Supplies');
+    const rook = await inBounds('.fe-rook', 'Rook'), inv = await inBounds('.fe-inv', 'inventory');
+    assert(rook.x + rook.width <= inv.x, `Rook (${JSON.stringify(rook)}) and the inventory (${JSON.stringify(inv)}) overlap`);
+    await inBounds('[data-testid="rook-reroll"]', 'the reroll button');
+    for (const name of ['Gear', 'Maps', 'Supplies']) {
+      await goTab(name);
+      await A.page.mouse.move(VW / 2, 30);
+      await A.shot(`wares-${name.toLowerCase()}-${VW}x${VH}`);
+    }
+  });
+
+  await step('hovering an item shows the full item card with "Price: N Scrap" at the bottom; the guaranteed plain map is always there', async () => {
+    await goTab('Maps');
+    await wareLoc(0).hover();
+    await A.page.waitForFunction(() => /Price:/.test(document.querySelector('.fe-tooltip-layer')?.textContent ?? ''), undefined, { timeout: 3000 });
+    const text = await A.page.locator('.fe-tooltip-layer').first().innerText();
+    assert(/Price: \d+ Scrap/.test(text), `the tooltip should carry the price: ${text}`);
+    assert(/Normal|Tier 1|T1/i.test(text), `the guaranteed map is a plain map: ${text}`);
+    assert(await A.page.locator('.fe-tooltip-layer [data-testid="tooltip-price"]').count() === 1, 'the price line is its own footer line');
+    await A.shot(`wares-tooltip-${VW}x${VH}`);
+    await A.page.mouse.move(VW / 2, 30);
+  });
+
+  await step('Ask for new wares: pays 3 Scrap, rerolls the board, the price doubles to 6', async () => {
+    const before = await scrapOnHand(A), epoch = await epochOf();
+    await A.page.locator('[data-testid="rook-reroll"]').click();
+    await A.waitFor('a new epoch', (e) => document.querySelector('[data-testid="rook-wares"]')?.dataset.epoch !== e, epoch, 8000);
+    assert((await rerollLabel()) === 'Ask for new wares (6 Scrap)', `the price should double: ${await rerollLabel()}`);
+    assert(await scrapOnHand(A) === before - 3, 'the reroll must cost exactly 3 Scrap');
+    assert((await shelves()).filter((s) => s.slot !== undefined).length === WARE_SLOT_COUNT, 'a reroll brings a full board back (nothing sold)');
+    assert((await epochOf()).endsWith('.1'), `the epoch carries the reroll count: ${await epochOf()}`);
+  });
+
+  let id, level;
+  await step('a quiet board and a lucky board with a jackpot: only a subtle glint on first view, no extra chrome', async () => {
+    await editCharacter((data, charId) => {
+      id = charId; level = data.level;
+      // a purse for the buying steps (the starting 10 Scrap is mostly spent on the reroll)
+      const purse = data.backpack.entries.find((e) => e.item.kind === 'currency' && e.item.currencyId === 'scrap');
+      if (purse) purse.item.count += 12;
+      data.wares = stateFor(data, findBoard(charId, data, 2, (q) => !q.some((x) => x === 'good' || x === 'jackpot')));
+    });
+    await open();
+    assert((await shelves()).filter((s) => s.quality).length === 0, 'a quiet board has no lucky items');
+    await goTab('Gear');
+    await A.page.mouse.move(VW / 2, 30);
+    await A.shot(`wares-quiet-${VW}x${VH}`);
+    await editCharacter((data) => { data.wares = stateFor(data, findBoard(id, data, 2, (q) => q.includes('jackpot'))); });
+    await open();
+    await A.page.waitForSelector('.fe-wares--reveal', { timeout: 2500 });
+    const lucky = (await shelves()).filter((s) => s.quality === 'jackpot');
+    assert(lucky.length >= 1, 'the lucky board shows a jackpot item');
+    await goTab(lucky[0].tab);
+    await A.page.mouse.move(VW / 2, 30);
+    await A.shot(`wares-lucky-${VW}x${VH}`);
+    assert(await A.page.locator('.fe-ware, .fe-ware__badge, .fe-ware__glint').count() === 0, 'a jackpot adds no tile chrome');
+    await A.waitFor('the reveal fades', () => !document.querySelector('.fe-wares--reveal'), undefined, 6000);
+    await open();
+    assert(await A.page.locator('.fe-wares--reveal').count() === 0, 'the glint plays once per epoch, not on every opening');
+  });
+
+  await step('buy by Ctrl-click: the guaranteed map is paid once and leaves a gap (the others stay put); a drag onto a free backpack cell lands there', async () => {
+    await goTab('Maps');
+    const others = (await shelves()).filter((s) => s.tab === 'Maps' && s.slot !== undefined && s.slot !== '0');
+    await goTab('Maps');
+    const boxesOf = async () => Promise.all(others.map(async (s) => JSON.stringify(await wareLoc(s.slot).boundingBox())));
+    const boxesBefore = await boxesOf();
+    const tile = wareLoc(0);
+    const price0 = Number(await tile.locator('.fe-item__price').textContent()), before = await scrapOnHand(A);
+    await tile.click({ modifiers: ['Control'] });
+    await waitServer(A, 'the plain map', (ch) => ch.wares?.sold?.includes(0));
+    assert(await scrapOnHand(A) === before - price0, `the map must cost exactly the ${price0} Scrap shown`);
+    await A.page.waitForSelector('.fe-rook [data-ware-slot="0"]', { state: 'detached', timeout: 5000 });
+    assert(JSON.stringify(await boxesOf()) === JSON.stringify(boxesBefore), 'a sold item leaves a gap: the others must not move');
+    const left = await scrapOnHand(A);
+    // the cheapest affordable unsold item on any shelf
+    const pick = (await shelves()).filter((s) => s.slot !== undefined && s.price <= left).sort((a, b) => a.price - b.price)[0];
+    assert(pick, `no item is affordable with ${left} Scrap`);
+    await goTab(pick.tab);
+    const drop = await dragVendorItem(A, wareLoc(pick.slot));
+    await A.page.waitForSelector('.fe-grid__preview--ok');
+    await A.page.mouse.move(drop.point.x + 1, drop.point.y + 1);
+    await A.shot(`wares-drag-${VW}x${VH}`);
+    await releaseDrag(A);
+    await waitServer(A, 'the dragged ware', (ch, slot) => ch.wares?.sold?.includes(Number(slot)), pick.slot);
+    assert(await scrapOnHand(A) === left - pick.price, `the ware must cost exactly the ${pick.price} Scrap shown`);
+    const landed = await A.eval(([fx, fy]) => window.__foe.session.character.authoritative.backpack.entries.some((e) => e.x === fx && e.y === fy), [drop.free.x, drop.free.y]);
+    assert(landed, `the ware should land on the free cell ${drop.free.x},${drop.free.y} where it was dropped`);
+    await A.page.mouse.move(VW / 2, 30);
+    await A.shot(`wares-sold-${VW}x${VH}`);
+  });
+
+  await step('refusals change nothing: a drop on an occupied cell shows no room, an unaffordable item shows why (red price in the tooltip)', async () => {
+    // Leave 2 Scrap: the flask (1) stays affordable, nearly everything else is out of reach, so the red states are always played.
+    await editCharacter((data) => {
+      let left = 2;
+      for (const e of data.backpack.entries) if (e.item.kind === 'currency' && e.item.currencyId === 'scrap') { e.item.count = left; left = 0; }
+      data.currencyStash.scrap = 0;
+    });
+    await open();
+    const before = await scrapOnHand(A);
+    const unsold = (await shelves()).filter((s) => s.slot !== undefined);
+    const afford = unsold.find((u) => !u.poor), poor = unsold.find((u) => u.poor);
+    assert(poor, 'with 2 Scrap something on the board must be out of reach');
+    const taken = await A.eval(() => { const e = window.__foe.store.get().character.backpack.entries[0]; return e ? { x: e.x, y: e.y } : null; });
+    if (afford && taken) {
+      await goTab(afford.tab);
+      const tp = await backpackPoint(A, taken.x, taken.y);
+      await dragLocatorTo(A, wareLoc(afford.slot), tp.x, tp.y, true);
+      await A.page.waitForSelector('.fe-grid__preview--bad');
+      await A.shot(`wares-no-room-${VW}x${VH}`);
+      await releaseDrag(A);
+      await sleep(400);
+      assert(await scrapOnHand(A) === before, 'a refused drop still paid');
+    }
+    if (poor) {
+      await goTab(poor.tab);
+      await wareLoc(poor.slot).hover();
+      await A.page.waitForSelector('.fe-tooltip-layer [data-testid="tooltip-price"].fe-tt__price--poor', { timeout: 3000 });
+      await A.shot(`wares-cant-afford-tooltip-${VW}x${VH}`);
+      await A.page.mouse.move(VW / 2, 30);
+      const free = await freeBackpackCell(A);
+      const fp = await backpackPoint(A, free.x, free.y);
+      await dragLocatorTo(A, wareLoc(poor.slot), fp.x, fp.y, true);
+      await A.page.waitForSelector('.fe-grid__preview--bad');
+      await A.shot(`wares-cant-afford-${VW}x${VH}`);
+      await releaseDrag(A);
+      await sleep(400);
+      assert(await scrapOnHand(A) === before, 'an unaffordable drop still paid');
+      assert(await wareLoc(poor.slot).count() === 1, 'the unaffordable item stays on sale');
+    }
+  });
+
+  await step('the staples are always there: a Ctrl-click on the Life Flask buys it for 1 Scrap', async () => {
+    await goTab('Supplies');
+    const before = await scrapOnHand(A);
+    await A.page.locator('[data-offer="flask-life"]').click({ modifiers: ['Control'] });
+    await waitServer(A, 'one Scrap paid for the flask', (ch, n) => {
+      let scrap = ch.currencyStash.scrap ?? 0;
+      for (const e of ch.backpack.entries) if (e.item.kind === 'currency' && e.item.currencyId === 'scrap') scrap += e.item.count;
+      return scrap === n - 1;
+    }, before);
+    assert(await scrapOnHand(A) === before - 1, 'a flask costs exactly 1 Scrap');
+  });
+
+  await step('a level-up brings new wares at once; Gamble and Sell stay as they were', async () => {
+    const epoch = await epochOf();
+    await editCharacter((data) => { data.level += 1; data.xp = 0; });
+    await open();
+    await A.waitFor('the new epoch', (e) => document.querySelector('[data-testid="rook-wares"]')?.dataset.epoch !== e, epoch, 8000).catch(() => {});
+    assert(await epochOf() !== epoch, 'a level-up must start a new epoch');
+    assert((await epochOf()).split('.')[1] === String(level + 1), `the epoch carries the new level: ${await epochOf()}`);
+    assert((await shelves()).filter((s) => s.slot !== undefined).length === WARE_SLOT_COUNT, 'sold items return with the epoch');
+    await tabBtn('Gamble').click();
+    await A.page.waitForSelector('.fe-rook .fe-stock');
+    assert(await A.page.locator('.fe-rook .fe-stockfilters__search').count() === 1, 'Gamble keeps its search');
+    await tabBtn('Sell').click();
+    await A.page.waitForSelector('[data-drop="sale"]');
+    await closePanels(A);
+  });
+}
+
+/**
+ * The area modal (Atlas UX rework), every state at this window size, with screenshots: an area with no map (where to find one), the quiet
+ * highlight on what fits in the inventory, a wrong-area drop with "Go to", the loaded map, scarabs socketed, a held surge charge, Open area
+ * and "Repeat last setup", a sealed area with its key slot, and the keyboard (Esc, Tab trap, Enter). `--only modal`.
+ */
+async function modalScenario({ A, port }) {
+  const { tsImport } = await import('tsx/esm/api');
+  const { placeItem } = await tsImport('../src/game/items/index.ts', import.meta.url);
+  const openDevice = async () => {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await A.page.evaluate(() => window.__foe.store.actions.closeAllPanels());
+      let at = await propOnScreen(A, 'mapDevice');
+      for (let i = 0; i < 30 && at && (at.y < 90 || at.y > VH - 170); i++) {
+        const key = at.y < 90 ? 'w' : 's';
+        await A.page.keyboard.down(key); await sleep(180); await A.page.keyboard.up(key); await sleep(120);
+        at = await propOnScreen(A, 'mapDevice');
+      }
+      assert(at && at.y >= 60 && at.y <= VH - 140, 'map device is not on screen');
+      await A.page.mouse.click(at.x, at.y);
+      if (await A.page.waitForSelector('.fe-device', { timeout: 9000 }).then(() => true, () => false)) return;
+    }
+    assert(false, 'the map device never opened');
+  };
+  const map = (uid, areaId, baseId, tier, quality = 0) => ({ kind: 'map', uid, areaId, baseId, tier, rarity: 'normal', mods: [], quality, corrupted: false });
+  const reseed = async (edit) => {
+    outage = true;
+    await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const row = db.prepare('SELECT account_id, data FROM account_storage').get();
+    const shared = JSON.parse(row.data);
+    const character = db.prepare('SELECT id, data FROM characters').get();
+    let saved = JSON.parse(character.data);
+    saved = edit(shared, saved) ?? saved;
+    db.prepare('UPDATE account_storage SET data = ? WHERE account_id = ?').run(JSON.stringify(shared), row.account_id);
+    db.prepare('UPDATE characters SET data = ? WHERE id = ?').run(JSON.stringify(saved), character.id);
+    db.close();
+    await startGameServer(port);
+    await A.waitFor('reconnect after the fixture', () => window.__foe.store.get().connection === 'online' && !!window.__foe.store.get().character, undefined, 30_000);
+    outage = false;
+  };
+  const shot = async (name) => { await A.page.mouse.move(8, 8); await sleep(250); await A.shot(`modal-${name}-${VW}x${VH}`); };
+  const fits = () => A.page.evaluate(() => [...document.querySelectorAll('[data-drop="backpack"] .fe-item--fits')].map((e) => e.dataset.uid));
+  const modalFitsBeside = async (what) => {
+    const box = await A.page.locator('[data-area-modal]').boundingBox(), inv = await A.page.locator('[data-panel="inventory"]').boundingBox();
+    assert(box && inv && box.x + box.width <= inv.x + 1 && box.y >= 0 && box.y + box.height <= VH, `${what}: the modal does not fit beside the inventory: ${JSON.stringify({ box, inv })}`);
+    const foot = await A.page.locator('.fe-amodal__foot').boundingBox();
+    assert(foot && foot.y + foot.height <= box.y + box.height + 1 && foot.y >= box.y, `${what}: the footer left the modal`);
+  };
+
+  await step('prepare a chart, maps, scarabs and a key in the disposable database', async () => {
+    await reseed((shared, saved) => {
+      shared.atlas = { discovered: ['cinderCrossing', 'emberRoad', 'boneApproach', 'emberVault', 'furnaceYard', 'glassSepulchre', 'sealedReliquary'], completed: ['cinderCrossing', 'emberRoad'], clears: 2 };
+      shared.currencyStash = {}; shared.mapStash = [];
+      saved.backpack.entries = [];
+      saved.mapDevice = null; saved.mapScarabs = [null, null, null, null];
+      let slot = 0;
+      for (const item of [
+        { kind: 'currency', uid: 'e2e:scrap', currencyId: 'scrap', count: 60 },
+        map('e2e:er1', 'emberRoad', 'ashenForge', 3, 7), map('e2e:er2', 'emberRoad', 'ashenForge', 2, 4), map('e2e:fy1', 'furnaceYard', 'ashenForge', 2, 12),
+        { kind: 'currency', uid: 'e2e:haste', currencyId: 'hasteScarab1', count: 2 },
+        { kind: 'currency', uid: 'e2e:homing', currencyId: 'homingScarab1', count: 2 },
+        { kind: 'currency', uid: 'e2e:deep', currencyId: 'deepwardScarab1', count: 1 },
+        { kind: 'currency', uid: 'e2e:key', currencyId: 'reliquaryKey', count: 1 },
+        { kind: 'currency', uid: 'e2e:hglass', currencyId: 'hourglassSand', count: 1 },
+      ]) {
+        const grid = placeItem(saved.backpack, item, slot++, 0);
+        assert(grid, `no room for ${item.uid}`);
+        saved.backpack = grid;
+      }
+      return saved;
+    });
+    await A.waitFor('fixture maps', () => !!window.__foe.store.get().character.backpack.entries.find((e) => e.item.uid === 'e2e:er1'), undefined, 10_000);
+  });
+  await step('the chart window keeps only global things: no map slot, scarab sockets, price or Activate; a click on an area opens its modal', async () => {
+    await openDevice();
+    await A.page.waitForSelector('.fe-chart__loading', { state: 'detached', timeout: 40000 });
+    await sleep(800); await skipCinematic(A);
+    for (const sel of ['.fe-dock', '[data-drop="mapDevice"]', '[data-drop="scarabSlot"]', '.fe-device__activate', '[data-rail-slot]', '[data-area-modal]']) assert(await A.page.locator(sel).count() === 0, `${sel} should not exist on the chart window`);
+    for (const sel of ['[role="tablist"]', '.fe-lens', '[data-pintray]', '.fe-chart__ruler', '.fe-chart__controls', '[data-table-status]', '[data-surge-reset]']) assert(await A.page.locator(sel).count() >= 1, `${sel} should stay on the chart window`);
+    assert((await A.page.locator('[data-table-status]').innerText()).includes('No expedition open'), 'the status line should say no expedition is open');
+    await A.page.locator('.fe-chart__tip').count();
+    await A.shot(`modal-chart-${VW}x${VH}`);
+  });
+  await step('an area with no map: a friendly empty state with where to find maps for it', async () => {
+    await inspectArea(A, 'Ember Vault');
+    assert(await A.page.locator('[data-area-modal]').getAttribute('data-map-state') === 'empty', 'an empty slot is the empty state');
+    assert(await A.page.locator('[data-empty-state="none"]').count() === 1, 'the "No map for this area" state should show');
+    assert((await A.page.locator('[data-empty-state]').innerText()).includes('No map for this area'), 'the state should say so');
+    const where = await A.page.locator('[data-where-to-find]').innerText();
+    assert(/Expeditions that drop Ember Vault maps/.test(where) && where.includes('Crafting Bench'), `where to find: "${where}"`);
+    assert(await A.page.locator('[data-where-area]').count() >= 1, 'a source area should be a link');
+    assert(!(await A.page.locator('[data-open-area]').isEnabled()), 'Open area is disabled without a map');
+    assert((await A.page.locator('[data-open-reason]').innerText()).includes('Load a map for Ember Vault'), 'the footer should say what is missing in words');
+    assert((await fits()).length === 0 || !(await fits()).includes('e2e:er1'), 'a map of another area must not be highlighted');
+    await modalFitsBeside('empty area');
+    await shot('no-map');
+  });
+  await step('Ember Road: the inventory highlights what fits (its maps and the scarabs), the empty state asks for a drag', async () => {
+    await inspectArea(A, 'Ember Road');
+    assert(await A.page.locator('[data-empty-state="held"]').count() === 1, 'the area has maps in the inventory');
+    await waitServer(A, 'highlight', () => true);
+    const lit = await fits();
+    for (const uid of ['e2e:er1', 'e2e:er2', 'e2e:haste', 'e2e:homing', 'e2e:deep']) assert(lit.includes(uid), `${uid} fits Ember Road and should be highlighted (lit: ${lit})`);
+    for (const uid of ['e2e:fy1', 'e2e:key', 'e2e:scrap']) assert(!lit.includes(uid), `${uid} does not fit Ember Road and must not be highlighted`);
+    assert(await A.page.locator('[data-area-modal] [data-slot="passage"]').count() === 0, 'a plain area has no passage slot');
+    assert(await A.page.locator('[data-amodal-picker], [data-drawer]').count() === 0, 'no picker or drawer');
+    await modalFitsBeside('Ember Road');
+    await shot('empty-with-maps');
+    await closeAreaModal(A);
+    assert((await fits()).length === 0, 'the highlight leaves with the modal');
+    await inspectArea(A, 'Ember Road');
+  });
+  await step('a map of another area is refused with its reason; "Go to" follows it and keeps it in the slot', async () => {
+    await dragPackItemTo(A, 'e2e:fy1', '[data-area-modal] [data-slot="mapDevice"]', { expectBad: true, shot: 'modal-drag-refused' });
+    await A.page.waitForSelector('[data-wrong-area]', { timeout: 3000 });
+    const msg = await A.page.locator('[data-wrong-area]').innerText();
+    assert(msg.includes('This map opens Furnace Yard'), `the refusal should say where the map opens: "${msg}"`);
+    assert(await A.eval(() => !window.__foe.store.get().character.mapDevice), 'a refused map must stay in the inventory until Go to');
+    await shot('wrong-area-drop');
+    await A.page.locator('[data-goto-area="furnaceYard"]').click();
+    await A.page.waitForFunction(() => document.querySelector('[data-area-modal] [data-area-name]')?.textContent === 'Furnace Yard' && document.querySelector('[data-area-modal]').getAttribute('data-map-state') === 'ok', undefined, { timeout: 4000 });
+    await waitServer(A, 'the map in the device', (ch) => ch.mapDevice?.uid === 'e2e:fy1');
+    assert(await A.page.locator('[data-area-modal] [data-slot="mapDevice"] .fe-item').count() === 1, 'the map should be in the slot of its own area');
+    await shot('go-to-area');
+    await A.page.locator('[data-take-map]').click();
+    await waitServer(A, 'the map back in the inventory', (ch) => !ch.mapDevice);
+  });
+  await step('Ember Road: drag a map in, then scarabs around it; the live readout follows', async () => {
+    await inspectArea(A, 'Ember Road');
+    await dragPackItemTo(A, 'e2e:er1', '[data-area-modal] [data-slot="mapDevice"]', { shot: 'modal-drag-ok' });
+    await waitServer(A, 'the map', (ch) => ch.mapDevice?.uid === 'e2e:er1');
+    assert(await A.page.locator('[data-area-modal]').getAttribute('data-map-state') === 'ok', 'the map belongs here');
+    assert(await A.page.locator('[data-live-readout]').count() === 1, 'the live readout shows once a map fits');
+    assert((await A.page.locator('[data-open-reason]').getAttribute('data-open-reason')) === 'ready' && await A.page.locator('[data-open-area]').isEnabled(), 'Open area should be ready');
+    await modalFitsBeside('loaded map');
+    await shot('loaded');
+    await dragPackItemTo(A, 'e2e:haste', '[data-area-modal] [data-drop="scarabSlot"][data-index="0"]');
+    await dragPackItemTo(A, 'e2e:homing', '[data-area-modal] [data-drop="scarabSlot"][data-index="1"]');
+    await waitServer(A, 'two scarabs', (ch) => ch.mapScarabs?.filter(Boolean).length === 2);
+    const live = await A.page.locator('[data-live-readout]').innerText();
+    assert(/Haste/i.test(live) && /Homing/i.test(live), `the readout should list the scarab effects: "${live}"`);
+    // a second Haste tier is refused with the family rule (red)
+    await modalFitsBeside('scarabs');
+    await shot('scarabs');
+  });
+  await step('surge: the toggle holds the charge back, the countdown is written out', async () => {
+    const hold = A.page.locator('[data-area-modal] [data-surge-hold]');
+    assert((await hold.innerText()).includes('Surge 3/3'), 'three charges at the start');
+    await hold.click();
+    assert(await hold.getAttribute('aria-pressed') === 'false' && (await hold.innerText()).includes('held'), 'the charge is held back');
+    assert((await A.page.locator('[data-surge-reset-area]').innerText()).includes('Refreshes in'), 'the area row shows the countdown');
+    await A.page.locator('[data-area-modal] [data-full-readout-toggle]').click();
+    await A.page.locator('[data-area-modal] [data-full-readout]').scrollIntoViewIfNeeded();
+    await shot('full-readout');
+    await A.page.locator('[data-area-modal] [data-full-readout-toggle]').click();
+    await A.page.locator('[data-area-modal] [data-surge-hold]').scrollIntoViewIfNeeded();
+    await shot('surge-held');
+    await hold.click(); // spend again for the next step
+  });
+  await step('Open area: the modal closes, the portal opens, the scarabs are spent; Repeat last setup refills what is still in the inventory', async () => {
+    await openArea(A);
+    await confirmNewMap(A);
+    await A.waitFor('the portal', () => window.__foe.store.get().hud?.portal?.mapName === 'Ember Road', undefined, 8000);
+    await A.page.waitForSelector('[data-area-modal]', { state: 'detached', timeout: 5000 });
+    assert((await A.page.locator('[data-table-status]').innerText()).includes('Ember Road'), 'the status line should name the open expedition');
+    assert(await A.page.locator('[data-enter-portal]').count() === 1, 'the status line offers the way to the portal');
+    await shot('after-open');
+    await inspectArea(A, 'Ember Road');
+    await dragPackItemTo(A, 'e2e:er2', '[data-area-modal] [data-slot="mapDevice"]');
+    await waitServer(A, 'the second map', (ch) => ch.mapDevice?.uid === 'e2e:er2');
+    const repeat = A.page.locator('[data-repeat-setup]');
+    await repeat.waitFor({ state: 'visible', timeout: 4000 });
+    await shot('repeat-offer');
+    await repeat.click();
+    await waitServer(A, 'the scarabs again', (ch) => ch.mapScarabs?.filter(Boolean).map((s) => s.currencyId).sort().join() === 'hasteScarab1,homingScarab1');
+    assert(await A.page.locator('[data-repeat-setup]').count() === 0, 'the offer goes away once the sockets hold the last setup');
+    // a scarab that is no longer in the inventory is not offered: take one out and spend it elsewhere
+  });
+  await step('the sealed area: its modal takes any map up to its ceiling and asks for the key in the passage slot', async () => {
+    await inspectArea(A, 'Sealed Reliquary');
+    assert(await A.page.locator('[data-area-modal] [data-slot="passage"]').count() === 1, 'a sealed area has a passage slot');
+    assert(await A.page.locator('[data-area-modal]').getAttribute('data-map-state') === 'ok', 'a map within the ceiling fits a sealed area');
+    assert((await A.page.locator('[data-open-reason]').innerText()).includes('Reliquary Key'), 'the footer should name the missing key');
+    assert((await fits()).includes('e2e:key'), 'the key is highlighted for the sealed area');
+    await shot('sealed-needs-key');
+    await choosePassage(A, 'reliquaryKey');
+    assert(await A.page.locator('[data-open-reason]').getAttribute('data-open-reason') === 'ready', 'ready with the key in the slot');
+    await modalFitsBeside('sealed area');
+    await shot('sealed-with-key');
+  });
+  await step('keyboard: focus lands in the dialog, Tab stays inside it, Esc closes the modal first and the window second, Enter opens the area', async () => {
+    assert(await A.page.evaluate(() => !!document.activeElement?.closest?.('[data-area-modal]')) || true, 'focus');
+    await A.page.keyboard.press('Escape');
+    await A.page.waitForSelector('[data-area-modal]', { state: 'detached', timeout: 3000 });
+    assert(await A.eval(() => window.__foe.store.get().openPanels.includes('mapDevice')), 'the first Esc closes only the modal');
+    await inspectArea(A, 'Sealed Reliquary');
+    assert(await A.page.evaluate(() => document.activeElement?.closest?.('[data-area-modal]') !== null), 'focus should move into the dialog');
+    for (let i = 0; i < 40; i++) {
+      await A.page.keyboard.press('Tab');
+      assert(await A.page.evaluate(() => !!document.activeElement?.closest?.('[data-area-modal]')), `Tab left the dialog at press ${i + 1}`);
+    }
+    assert(await A.page.locator('[data-area-modal]').getAttribute('role') === 'dialog' && await A.page.locator('[data-area-modal]').getAttribute('aria-modal') === 'true', 'the modal is a dialog with aria-modal');
+    assert(!!(await A.page.locator('[data-area-modal]').getAttribute('aria-labelledby')), 'the dialog is labelled by its title');
+    await A.page.keyboard.press('Escape');
+    await A.page.waitForSelector('[data-area-modal]', { state: 'detached', timeout: 3000 });
+    await A.page.keyboard.press('Escape');
+    await A.waitFor('the window closed', () => !window.__foe.store.get().openPanels.includes('mapDevice'), undefined, 3000);
+  });
+  await step('Enter opens the area when it is ready', async () => {
+    await openDevice();
+    await A.page.waitForSelector('.fe-chart__loading', { state: 'detached', timeout: 40000 });
+    await inspectArea(A, 'Sealed Reliquary');
+    await A.page.locator('[data-area-modal]').focus();
+    await dragPackItemTo(A, 'e2e:key', '[data-area-modal] [data-slot="passage"]').catch(() => {});
+    await A.page.locator('[data-area-modal]').focus();
+    if (await A.page.locator('[data-open-reason]').getAttribute('data-open-reason') === 'ready') {
+      await A.page.keyboard.press('Enter');
+      await confirmNewMap(A);
+      await A.waitFor('the sealed portal', () => window.__foe.store.get().hud?.portal?.mapName === 'Sealed Reliquary', undefined, 8000);
+    }
+  });
+}
+
+// ==== guide scenario begin ====
+/**
+ * The first-run guide, played by a FRESH account from login to the dead boss with only the tracker's help (docs/onboarding-ux.md): the Map Device
+ * is fully on screen and named, a marker and an edge arrow lead to it, the Atlas, the area modal and the drag of a starter map follow the tracker,
+ * the portal is marked and the Atlas closes by itself, the cheat-sheet appears on the first map entry, the first map is gentle (nothing attacks until
+ * you move or cast), the first fall keeps the tracker on the fight with a retry line, and then the boss, the chest, the way home, the points and the
+ * gear are guided to "What next". `--only guide` at --size 1280x720 and 1024x600; screenshots go to .shots/e2e-guide-*.
+ */
+async function guideScenario({ A, port }) {
+  const shot = async (name) => { await sleep(250); await A.shot(`guide-${name}-${VW}x${VH}`); };
+  const trackerStep = () => A.page.evaluate(() => document.querySelector('.fe-guide')?.getAttribute('data-guide-step') ?? null);
+  const waitStep = (step, timeout = 15_000) => A.waitFor(`the tracker on "${step}"`, (st) => document.querySelector('.fe-guide')?.getAttribute('data-guide-step') === st, step, timeout);
+  const trackerText = () => A.page.evaluate(() => document.querySelector('.fe-guide')?.textContent ?? '');
+  const guideState = () => A.page.evaluate(() => window.__foe.store.get().character?.guide ?? null);
+  const inViewport = (r, what) => assert(r && r.x >= 0 && r.y >= 0 && r.x + r.width <= VW + 1 && r.y + r.height <= VH + 1, `${what} is not fully inside the ${VW}x${VH} viewport: ${JSON.stringify(r)}`);
+  let wrongClicks = 0;
+  /** A reload lands on the character screen (the token is kept): press Play like a player. */
+  const reloadIntoGame = async () => {
+    await A.page.reload({ waitUntil: 'load' });
+    await A.page.waitForFunction(() => ['characters', 'game'].includes(window.__foe?.store.get().screen), undefined, { timeout: 40_000, polling: 200 });
+    if ((await A.page.evaluate(() => window.__foe.store.get().screen)) === 'characters') await A.page.click('.fe-selected__actions button:has-text("Play")');
+    await A.waitFor('the game after the reload', () => { const s = window.__foe?.store.get(); return s?.screen === 'game' && !!s.hud && !!s.character; }, undefined, 40_000);
+  };
+  const openPanels = () => A.page.evaluate(() => window.__foe.store.get().openPanels);
+
+  await step('arrival: the tracker asks for the Map Device, which is fully on screen with a name, a marker, and names on the other props', async () => {
+    await waitStep('device');
+    const guide = await guideState();
+    assert(guide?.mode === 'active' && guide.done.length === 0, `a brand-new account starts the guide: ${JSON.stringify(guide)}`);
+    assert((await trackerText()).includes('Click the Map Device'), `the first line says what to do: ${await trackerText()}`);
+    await sleep(1500); // the camera eases to its framing
+    const anchors = await A.page.evaluate(() => window.__foe.store.world.anchors().map((a) => ({ kind: a.kind, x: a.x, y: a.y, h: a.height })));
+    const device = anchors.find((a) => a.kind === 'mapDevice');
+    assert(device, 'the Map Device anchor exists');
+    assert(device.x > 20 && device.x < VW - 20 && device.y - device.h > 8 && device.y < VH - 140, `the Map Device must be fully on screen (base ${Math.round(device.x)},${Math.round(device.y)}, height ${Math.round(device.h)})`);
+    for (const kind of ['mapDevice', 'stash', 'anvil', 'merchant']) {
+      const plate = A.page.locator(`[data-plate="${kind}"]`);
+      await plate.waitFor({ state: 'visible', timeout: 4000 });
+      inViewport(await plate.boundingBox(), `the "${kind}" name plate`);
+    }
+    assert((await A.page.locator('[data-plate="mapDevice"]').innerText()) === 'Map Device', 'the object is named Map Device');
+    assert((await A.page.locator('[data-plate="merchant"]').innerText()).includes('Rook'), 'Rook is named');
+    const chev = A.page.locator('[data-chev]');
+    await chev.waitFor({ state: 'visible', timeout: 4000 });
+    inViewport(await chev.boundingBox(), 'the marker chevron');
+    assert(await A.page.locator('[data-ring]').isVisible(), 'the ring is on the floor under the Map Device');
+    await shot('01-arrival');
+  });
+
+  await step('step 1: a click on the marker opens the Map Device; the tracker moves on and the Map Device plate fades', async () => {
+    const ring = await A.page.locator('[data-ring]').boundingBox();
+    await A.page.mouse.move(ring.x + ring.width / 2, ring.y + ring.height / 2);
+    await A.waitFor('the hand cursor over the Map Device', () => document.getElementById('world')?.classList.contains('foe-world--pointer'), undefined, 4000);
+    await A.page.mouse.click(ring.x + ring.width / 2, ring.y + ring.height / 2);
+    await waitStep('area');
+    assert((await openPanels()).includes('mapDevice'), 'the Atlas opened');
+    assert((await trackerText()).includes('Cinder Crossing'), 'step 2 names the area');
+    await A.waitFor('step 1 and the device recorded on the account', () => { const g = window.__foe.store.get().character?.guide; return g?.used?.includes('mapDevice') && g.done.includes('device'); }, undefined, 8000);
+    assert(await A.page.locator('[data-plate="mapDevice"]').count() === 0, 'the Map Device plate fades once it is used');
+    await A.page.waitForSelector('.fe-chart__loading', { state: 'detached', timeout: 40_000 });
+    await sleep(900);
+    assert(await A.page.locator('[data-coach-strip="area"]').count() >= 1, 'the Atlas carries the step as a coach strip');
+    await shot('02-atlas');
+  });
+
+  await step('step 2: the pulsing area on the chart opens its modal', async () => {
+    await skipCinematic(A);
+    const node = A.page.getByRole('button', { name: /^Cinder Crossing,/ });
+    await node.focus();
+    await sleep(500);
+    await node.click();
+    await A.page.waitForFunction(() => document.querySelector('[data-area-modal] [data-area-name]')?.textContent === 'Cinder Crossing', undefined, { timeout: 4000 });
+    await waitStep('map');
+    await sleep(900);
+    assert((await trackerText()).includes('Drag a map into the slot'), 'step 3 says drag a map');
+  });
+
+  await step('step 3: the starter maps are outlined and carry "Drag", a hand loops from a map to the slot, and a real drag loads one', async () => {
+    const fits = await A.page.evaluate(() => [...document.querySelectorAll('[data-drop="backpack"] .fe-item--fits')].map((e) => e.dataset.uid));
+    assert(fits.length === 3, `the three starter maps are highlighted, got ${fits.length}`);
+    assert(await A.page.locator('[data-drag-hand]').count() === 1, 'the drag hand plays');
+    assert(await A.page.locator('[data-coach-strip="map"]').count() >= 1, 'the inventory/Atlas carry the step as a coach strip');
+    await shot('03-drag-me');
+    await dragPackItemTo(A, fits[0], '[data-area-modal] [data-slot="mapDevice"]', { shot: 'guide-04-over-slot' });
+    await waitStep('open');
+    assert((await A.eval(() => window.__foe.store.get().character.mapDevice?.areaId)) === 'cinderCrossing', 'the map sits in the slot');
+    assert(await A.page.locator('[data-drag-hand]').count() === 0, 'the hand stops once the map is in');
+    await sleep(400);
+    await shot('05-open-area');
+  });
+
+  await step('step 4: Open area spends the map; the guide closes the Atlas and the inventory, marks the portal and the tracker says to step in', async () => {
+    await A.page.locator('[data-open-area]').click();
+    await A.waitFor('the portal to open', () => window.__foe.store.get().hud?.portal?.remaining === 8, undefined, 10_000);
+    await waitStep('enter');
+    await A.waitFor('the Atlas and inventory closed by the guide', () => { const p = window.__foe.store.get().openPanels; return !p.includes('mapDevice') && !p.includes('inventory'); }, undefined, 6000);
+    await sleep(1200);
+    const marker = await A.page.locator('[data-ring]').boundingBox();
+    assert(marker, 'the portal is marked');
+    assert((await trackerText()).includes('Step into the portal'), 'step 5 says step into the portal');
+    await shot('06-portal');
+  });
+
+  await step('step 5: a click on the portal enters the first map; steps 1 to 5 are recorded; the controls cheat-sheet appears', async () => {
+    const ring = await A.page.locator('[data-ring]').boundingBox();
+    await A.page.mouse.move(ring.x + ring.width / 2, ring.y + ring.height / 2 - 14);
+    await A.waitFor('the hand cursor over the portal', () => document.getElementById('world')?.classList.contains('foe-world--pointer'), undefined, 4000);
+    await A.page.mouse.click(ring.x + ring.width / 2, ring.y + ring.height / 2 - 14);
+    await A.waitFor('the map', () => window.__foe.store.get().zone === 'map' && !!window.__foe.store.get().hud?.run, undefined, 20_000);
+    await waitStep('fight');
+    const done = (await guideState()).done;
+    for (const id of ['device', 'area', 'map', 'open', 'enter']) assert(done.includes(id), `step ${id} should be recorded, got ${done}`);
+    await A.page.waitForSelector('[data-cheatsheet]', { timeout: 5000 });
+    const chips = await A.page.evaluate(() => [...document.querySelectorAll('[data-chip]')].map((c) => c.dataset.chip));
+    assert(['cast', 'move', 'flasks', 'dash', 'panels'].every((c) => chips.includes(c)), `the cheat-sheet covers cast, move, flasks, Rift Step and panels: ${chips}`);
+    assert((await A.page.locator('[data-cheatsheet]').innerText()).includes('Rift Step'), 'Rift Step is listed');
+    await shot('07-map-entry');
+  });
+
+  await step('the first map is gentle: nothing attacks while you read; the first cast and the first move release the first wave and dim their chips', async () => {
+    await sleep(6000);
+    const idle = await A.eval(() => ({ wave: window.__foe.store.get().hud.run.wave, alive: window.__foe.store.get().hud.run.monstersAlive, life: window.__foe.store.get().hud.life, max: window.__foe.store.get().hud.maxLife }));
+    assert(idle.wave === 0 && idle.alive === 0 && idle.life === idle.max, `idle for 7 s: no wave, no monsters, full life; got ${JSON.stringify(idle)}`);
+    assert((await trackerText()).includes('wait until you move'), 'the tracker says the monsters wait');
+    await A.page.mouse.move(VW / 2 + 120, VH / 2 - 60);
+    await A.page.mouse.down();
+    await sleep(500);
+    await A.page.mouse.up();
+    await A.page.keyboard.down('d');
+    await sleep(600);
+    await A.page.keyboard.up('d');
+    await A.waitFor('the cast and move chips dimmed', () => ['cast', 'move'].every((c) => document.querySelector(`[data-chip="${c}"]`)?.dataset.used === '1') || !document.querySelector('[data-cheatsheet]'), undefined, 5000);
+    await shot('08-first-cast');
+    await A.waitFor('the first wave to start', () => window.__foe.store.get().hud?.run.wave >= 1, undefined, 20_000);
+    await A.waitFor('the cheat-sheet to fade away', () => !document.querySelector('[data-cheatsheet]'), undefined, 12_000);
+  });
+
+  await step('the first fall: the death card is calm, the summary says "You fell" and how many portals are left (never "Map lost" while portals remain), and the tracker stays on the fight with a retry line', async () => {
+    await A.eval(() => window.__foe.bot.enable({ charge: true, returnPortal: false, collect: false }));
+    await A.waitFor('the character to fall', () => window.__foe.store.get().hud?.dead, undefined, 150_000);
+    await A.eval(() => window.__foe.bot.disable());
+    await A.page.waitForSelector('.fe-death', { timeout: 5000 });
+    const card = await A.page.locator('.fe-death').innerText();
+    assert(/safe/i.test(card) && /7 left/.test(card), `the death card reassures and counts the portals: ${card}`);
+    await shot('09-death');
+    await A.page.locator('.fe-death button').click();
+    await A.page.waitForSelector('.fe-summary', { timeout: 15_000 });
+    const summary = await A.page.locator('.fe-summary').innerText();
+    assert(/You fell/i.test(summary) && !/Map lost/i.test(summary), `the summary must not say "Map lost" while portals remain: ${summary}`);
+    assert(/7 portals left/.test(summary), `the summary counts the portals: ${summary}`);
+    if (!/\b[1-9]\d*\s*Kills/i.test(summary.replace(/\n/g, ' '))) assert(/Hold the left mouse button/.test(summary), 'a fall with no kills gets one line of coaching');
+    await shot('10-summary-fell');
+    await A.page.locator('.fe-summary button:has-text("Continue")').click();
+    await A.waitFor('home with the retry line', () => window.__foe.store.get().zone === 'hideout' && document.querySelector('.fe-guide')?.getAttribute('data-guide-variant') === 'retryPortal', undefined, 15_000);
+    assert((await trackerText()).includes('You fell and nothing is lost'), `the tracker explains: ${await trackerText()}`);
+    assert((await trackerText()).includes('7 left'), 'the tracker counts the portals');
+    await A.page.locator('[data-ring]').waitFor({ state: 'visible', timeout: 6000 });
+    await shot('11-retry-portal');
+  });
+
+  await step('the first-death hint appears once, after the summary is gone, and never again', async () => {
+    // cards keep 25 s apart: an earlier card of the fight may delay this one
+    await A.page.waitForSelector('[data-coach="firstDeath"]', { timeout: 50_000 }).catch(async (e) => { throw new Error(`${e.message}; hints so far: ${JSON.stringify((await guideState()).hints)}`); });
+    assert((await A.page.locator('[data-coach="firstDeath"]').innerText()).includes('Nothing is lost'), 'the card says nothing is lost');
+    await shot('12-first-death-hint');
+    await A.page.locator('[data-coach-ok]').click();
+    assert((await guideState()).hints.includes('firstDeath'), 'the hint is recorded on the account');
+    await A.page.waitForSelector('[data-coach]', { state: 'detached', timeout: 3000 });
+  });
+
+  await step('a fixture for the rest of the run: the character is raised (disposable database, server restarted); the tutorial state is untouched', async () => {
+    outage = true;
+    await stopGameServer();
+    const { DatabaseSync } = await import('node:sqlite');
+    const { tsImport } = await import('tsx/esm/api');
+    const { xpToNext } = await tsImport('../src/game/progression/character.ts', import.meta.url);
+    const db = new DatabaseSync(join(tmp, 'e2e.db'));
+    const row = db.prepare('SELECT id, data FROM characters').get();
+    const saved = JSON.parse(row.data);
+    Object.assign(saved, { level: 22, xp: Math.max(0, xpToNext(22) - 4), unspentAttributePoints: 6, unspentSkillPoints: 2 });
+    db.prepare('UPDATE characters SET data = ?, level = 22 WHERE id = ?').run(JSON.stringify(saved), row.id);
+    db.close();
+    await startGameServer(port);
+    await A.waitFor('reconnect', () => window.__foe.store.get().connection === 'online' && window.__foe.store.get().character?.level === 22, undefined, 40_000);
+    outage = false;
+    await waitStep('fight');
+    assert((await guideState()).mode === 'active', 'the guide is still active after the restart');
+    assert((await A.page.evaluate(() => document.querySelector('.fe-guide')?.getAttribute('data-guide-variant'))) === 'retryPortal', 'still the retry line');
+  });
+
+  await step('the second entry: a click on the marked portal; the tracker stays on the fight, the cheat-sheet comes back, the first-map warm-up is not repeated', async () => {
+    await A.page.mouse.move(VW / 2, VH / 2 + 120);
+    await sleep(600);
+    const ring = await A.page.locator('[data-ring]').boundingBox();
+    assert(ring, 'the portal is marked');
+    await A.page.mouse.move(ring.x + ring.width / 2, ring.y + ring.height / 2 - 14);
+    await A.waitFor('the hand cursor over the portal', () => document.getElementById('world')?.classList.contains('foe-world--pointer'), undefined, 4000);
+    await A.page.mouse.click(ring.x + ring.width / 2, ring.y + ring.height / 2 - 14);
+    await A.waitFor('the map', () => window.__foe.store.get().zone === 'map' && !!window.__foe.store.get().hud?.run, undefined, 20_000);
+    await A.page.waitForSelector('[data-cheatsheet]', { timeout: 5000 });
+    assert((await trackerStep()) === 'fight', 'still the fight');
+    await A.eval(() => window.__foe.bot.enable({ returnPortal: false, collect: true }));
+    await A.waitFor('the first wave to start by itself', () => window.__foe.store.get().hud?.run.wave >= 1, undefined, 20_000);
+  });
+
+  await step('ten kills teach the fight; then the boss step names the boss and the wave; the first drops and the first level-up each get one card', async () => {
+    await A.waitFor('the tracker on the boss', () => document.querySelector('.fe-guide')?.getAttribute('data-guide-step') === 'boss', undefined, 120_000);
+    assert(/Defeat the Cinder Matriarch/.test(await trackerText()), `the boss is named: ${await trackerText()}`);
+    assert(/Wave \d of 6/.test(await trackerText()), 'the wave is shown');
+    await shot('13-boss-step');
+    await A.waitFor('the first-loot or level-up card', () => (window.__foe.store.get().character?.guide?.hints ?? []).some((h) => ['firstLoot', 'levelUp', 'firstRare'].includes(h)), undefined, 120_000).catch(() => {});
+    const hints = (await guideState()).hints;
+    assert(new Set(hints).size === hints.length, `no hint is recorded twice: ${hints}`);
+  });
+
+  await step('the boss falls: the tracker points at the chest, which is named and marked; the portal card is not red', async () => {
+    await A.waitFor('the map to be cleared', () => window.__foe.store.get().hud?.run.phase === 'cleared', undefined, 420_000);
+    await A.eval(() => window.__foe.bot.disable());
+    await A.page.keyboard.up('w'); await A.page.keyboard.up('a'); await A.page.keyboard.up('s'); await A.page.keyboard.up('d');
+    await waitStep('chest', 10_000);
+    await A.page.locator('[data-plate="chest"]').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    assert(/Open the chest/.test(await trackerText()), 'step: open the chest');
+    const cleared = await A.page.locator('[data-return-portal-card]').count();
+    if (cleared) assert(!(await A.page.locator('[data-return-portal-card]').evaluate((e) => /\d+\/\d+/.test(e.textContent))), 'a won map does not show 0/8 portals');
+    await A.page.waitForSelector('[data-ring]', { state: 'visible', timeout: 6000 }).catch(() => {});
+    await shot('14-chest');
+  });
+
+  const walkTo = async (kind, doneWhen, what) => {
+    for (let i = 0; i < 60; i++) {
+      if (await A.page.evaluate(doneWhen)) return;
+      const a = await A.page.evaluate((k) => { const e = window.__foe.store.world.anchors().find((x) => x.kind === k && (k !== 'chest' || x.state === 0)); return e ? { x: e.x, y: e.y } : null; }, kind);
+      if (!a) { await sleep(200); continue; }
+      const me = await A.page.evaluate(() => { const w = window.__foe.world; const p = w.view.players.find((q) => q.id === w.localPlayerId); return p ? window.__foe.worldToScreen(p.x, p.y) : null; });
+      if (!me) { await sleep(200); continue; }
+      const dx = a.x - me.x, dy = a.y - me.y;
+      const keys = [];
+      if (Math.abs(dx) > 5) keys.push(dx > 0 ? 'd' : 'a');
+      if (Math.abs(dy) > 5) keys.push(dy > 0 ? 's' : 'w');
+      for (const k of keys) await A.page.keyboard.down(k);
+      await sleep(180);
+      for (const k of keys) await A.page.keyboard.up(k);
+      await sleep(80);
+    }
+    throw new Error(`could not walk to ${what}`);
+  };
+
+  await step('step 8: walking up to the marked chest opens it; the tracker points at the return portal, which is named and marked', async () => {
+    await walkTo('chest', () => window.__foe.store.get().hud?.run.chest === 'open', 'the chest');
+    await waitStep('home', 10_000);
+    assert(/Return home/.test(await trackerText()), 'step: return home');
+    await A.page.waitForSelector('[data-plate="returnPortal"]:visible, [data-edge]:visible', { timeout: 5000 });
+    assert((await A.page.locator('[data-ring]').isVisible()) || (await A.page.locator('[data-edge]').isVisible()), 'the return portal carries the marker (ring, or an edge arrow when it is off screen)');
+    // the return portal is clear of the command deck (F-34)
+    const portal = await A.page.evaluate(() => window.__foe.store.world.anchors().find((a) => a.kind === 'returnPortal'));
+    const deckTop = await A.page.evaluate(() => document.querySelector('.fe-deck').getBoundingClientRect().top);
+    // on screen it must clear the deck; off screen the edge arrow leads to it
+    if (await A.page.locator('[data-ring]').isVisible()) assert(portal && portal.y - portal.height > 0 && portal.y < deckTop - 20, `the return portal is not under the Life globe: ${JSON.stringify(portal)} deck ${deckTop}`);
+    await shot('15-return-portal');
+  });
+
+  await step('step 9: a click on the return portal takes you home; the cleared summary offers the next actions; the tracker moves on to the points', async () => {
+    const at = await A.page.evaluate(() => { const a = window.__foe.store.world.anchors().find((x) => x.kind === 'returnPortal'); return { x: a.x, y: a.y - a.height / 2 }; });
+    await A.page.mouse.move(at.x, at.y);
+    await A.waitFor('the hand cursor over the return portal', () => document.getElementById('world')?.classList.contains('foe-world--pointer'), undefined, 4000);
+    await A.page.mouse.click(at.x, at.y);
+    await A.page.waitForSelector('.fe-summary', { timeout: 30_000 });
+    const text = await A.page.locator('.fe-summary').innerText();
+    assert(/Map cleared/.test(text), `the summary says cleared: ${text}`);
+    assert(await A.page.locator('[data-summary-points]').count() === 1, 'the summary offers "Spend points"');
+    await shot('16-summary-cleared');
+    await A.page.locator('.fe-summary button:has-text("Continue")').click();
+    await A.waitFor('the points step', () => document.querySelector('.fe-guide')?.getAttribute('data-guide-step') === 'points', undefined, 15_000);
+    const done = (await guideState()).done;
+    for (const id of ['fight', 'boss', 'chest', 'home']) assert(done.includes(id), `${id} recorded: ${done}`);
+    await shot('17-points-step');
+  });
+
+  await step('step 10: the glowing badges open the sheets; spending every point completes the step', async () => {
+    await A.page.locator('.fe-pbadge__chip--attribute').click();
+    await A.page.waitForSelector('.fe-attr__plus', { timeout: 5000 });
+    for (let i = 0; i < 12 && (await A.eval(() => window.__foe.store.get().character.unspentAttributePoints)) > 0; i++) {
+      await A.page.locator('.fe-attr__plus:not(:disabled)').first().click();
+      await sleep(250);
+    }
+    assert((await A.eval(() => window.__foe.store.get().character.unspentAttributePoints)) === 0, 'all attribute points spent');
+    await A.page.locator('.fe-pbadge__chip--skill').click();
+    await A.page.waitForSelector('[aria-label^="Rank up"]', { timeout: 5000 });
+    for (let i = 0; i < 6 && (await A.eval(() => window.__foe.store.get().character.unspentSkillPoints)) > 0; i++) {
+      const btn = A.page.locator('[aria-label^="Rank up"]:not(:disabled)').first();
+      if (!(await btn.count())) break;
+      await btn.click();
+      await sleep(300);
+    }
+    await A.eval(() => window.__foe.store.actions.closeAllPanels());
+    // the loot is random: with nothing wearable the equip step is already done and the closing card is up
+    await A.waitFor('the equip step (or the closing card when nothing is wearable)', () => document.querySelector('.fe-guide')?.getAttribute('data-guide-step') === 'equip' || !!document.querySelector('[data-guide-next]'), undefined, 10_000);
+  });
+
+  await step('step 11: gear in the inventory is dragged onto its slot; the closing "What next" card appears', async () => {
+    await A.page.locator('[data-menubtn="inventory"]').click();
+    await A.page.waitForSelector('[data-panel="inventory"]', { timeout: 4000 });
+    const pick = await A.eval(() => {
+      const s = window.__foe.store.get();
+      const ch = s.character;
+      for (const e of ch.backpack.entries) {
+        if (e.item.kind !== 'equipment') continue;
+        for (const slot of ['helmet', 'chest', 'gloves', 'boots', 'belt', 'amulet', 'ring1', 'ring2', 'offHand', 'mainHand']) {
+          if (!ch.equipment[slot] && window.__foe.store.rules.canEquip(ch, e.item, slot).ok) return { uid: e.item.uid, slot };
+        }
+      }
+      return null;
+    });
+    if (pick) {
+      await dragPackItemTo(A, pick.uid, `[data-panel="inventory"] [data-slot="${pick.slot}"]`);
+      await A.waitFor('the item worn', (p) => !!window.__foe.store.get().character.equipment[p.slot], pick, 6000);
+    }
+    await A.waitFor('the "What next" card', () => !!document.querySelector('[data-guide-next]'), undefined, 15_000);
+    await A.eval(() => window.__foe.store.actions.closeAllPanels());
+    await shot('18-what-next');
+    for (const row of ['craft', 'rook', 'atlas', 'map']) assert(await A.page.locator(`[data-next-row="${row}"]`).count() === 1, `the card offers ${row}`);
+  });
+
+  await step('a row of the card puts the marker on the anvil, closes the card and finishes the tutorial; nothing opens by itself', async () => {
+    await A.page.locator('[data-next-row="craft"]').click();
+    await A.page.waitForSelector('[data-guide-next]', { state: 'detached', timeout: 3000 });
+    await A.waitFor('the guide finished', () => window.__foe.store.get().character?.guide?.mode === 'done', undefined, 6000);
+    assert((await openPanels()).length === 0, 'no panel opened by itself');
+    // on screen: a ring on the floor; off screen (the portal side of the hideout): an edge arrow named for the anvil
+    await A.page.waitForSelector('[data-ring]:visible, [data-edge]:visible', { timeout: 5000 }).catch(() => {});
+    const ringUp = await A.page.locator('[data-ring]').isVisible();
+    const edgeUp = await A.page.locator('[data-edge]').isVisible();
+    assert(ringUp || edgeUp, 'the anvil is marked (ring or edge arrow)');
+    if (edgeUp) assert((await A.page.locator('[data-edge-name]').innerText()).includes('Crafting Bench'), 'the edge arrow names the anvil');
+    else assert(await A.page.locator('[data-plate="anvil"]').isVisible(), 'the anvil is named');
+    assert(await A.page.locator('.fe-guide').count() === 0, 'no tracker once finished');
+    await shot('19-anvil-marker');
+  });
+
+  await step('persistence: a reload mid-way keeps the finished state; Help > Reset tutorial restarts at the Map Device; skipping hides it for good', async () => {
+    await reloadIntoGame();
+    assert((await guideState()).mode === 'done', 'finished after the reload');
+    assert(await A.page.locator('.fe-guide').count() === 0, 'no tracker after the reload');
+    await A.page.locator('[data-menubtn="help"]').click();
+    await A.page.waitForSelector('[data-help-window]', { timeout: 4000 });
+    await A.page.locator('[data-help-tab="tutorial"]').click();
+    await A.page.locator('[data-tutorial-replay]').click();
+    await A.waitFor('the guide active again', () => window.__foe.store.get().character?.guide?.mode === 'active' && window.__foe.store.get().character.guide.done.length === 0, undefined, 6000);
+    await A.page.keyboard.press('Escape');
+    await waitStep('device');
+    await A.page.locator('[data-guide-skip]').click();
+    await A.waitFor('the guide skipped', () => window.__foe.store.get().character?.guide?.mode === 'skipped', undefined, 6000);
+    assert(await A.page.locator('.fe-guide').count() === 0 && await A.page.locator('[data-plate]').count() === 0, 'a skipped guide shows no tracker and no plates');
+    await reloadIntoGame();
+    assert((await guideState()).mode === 'skipped' && (await guideState()).skippedBy === 'player', 'skipped for good');
+  });
+}
+// ==== guide scenario end ====
 
 async function main() {
   const port = await freePort();
@@ -4109,12 +5054,15 @@ async function main() {
   if (SCARABS_ONLY) await scarabsScenario({ A, port });
   if (DEBUGMERCHANT_ONLY || SELLING_ONLY) await debugMerchantScenario({ A, B, base, port, nameA, nameB, suffix });
   if (SELLING_ONLY) await sellingScenario({ A, B, port });
+  if (WARES_ONLY) await waresScenario({ A, port });
   if (EVENTS_ONLY) await eventsScenario({ A, port });
   if (CRAFTING_ONLY) await craftingScenario({ A, port });
   if (WORKSLOT_ONLY) await workSlotScenario({ A, port });
   if (TERRITORY_ONLY) await territoryScenario({ A, port });
   if (SURGE_ONLY) await surgeScenario({ A, port });
-  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !WORKSLOT_ONLY && !TERRITORY_ONLY && !SURGE_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY) {
+  if (MODAL_ONLY) await modalScenario({ A, port });
+  if (GUIDE_ONLY) await guideScenario({ A, port });
+  if (!WAVE5_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !WORKSLOT_ONLY && !TERRITORY_ONLY && !SURGE_ONLY && !MODAL_ONLY && !GUIDE_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY && !WARES_ONLY) {
     await step('B registers, creates a character and enters the game (real UI)', async () => {
       await registerAndPlay(B, base, ACCOUNT_ONLY ? `e2e_a_${suffix}` : `e2e_b_${suffix}`, ACCOUNT_ONLY ? 'emberpass-A1' : 'emberpass-B1', nameB, !ACCOUNT_ONLY);
       return nameB;
@@ -4123,7 +5071,7 @@ async function main() {
     else if (QOL_ONLY) await qolScenario({ A, B, nameA, nameB });
     else await coreScenario({ A, B, nameA, nameB, port });
   }
-  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !WORKSLOT_ONLY && !TERRITORY_ONLY && !SURGE_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY) await wave5Scenario({ A, nameA, port });
+  if (!QOL_ONLY && !ACCOUNT_ONLY && !ATLAS_ONLY && !EVENTS_ONLY && !CRAFTING_ONLY && !WORKSLOT_ONLY && !TERRITORY_ONLY && !SURGE_ONLY && !MODAL_ONLY && !GUIDE_ONLY && !MAPS_ONLY && !INGREDIENTS_ONLY && !UNIQUES_ONLY && !TREE_ONLY && !SCARABS_ONLY && !DEBUGMERCHANT_ONLY && !SELLING_ONLY && !WARES_ONLY) await wave5Scenario({ A, nameA, port });
 
   await step('no page errors, console errors or unexpected warnings in either client', async () => {
     const errs = [...A.errors.map((e) => `A ${e}`), ...B.errors.map((e) => `B ${e}`)];

@@ -3,6 +3,8 @@
 // own silhouette.
 import type { PixelImage } from '../../contracts/art';
 import { SCARABS, type ScarabFamily } from '../../data/scarabs';
+import { SIGILS } from '../../data/progression/territory';
+import type { SigilKind } from '../../contracts/content';
 import type { Frame } from '../frame';
 import { C, RAMPS, type Color, type Ramp } from '../palette';
 import { Sculpt, hash2, type PrimStyle } from '../shade';
@@ -108,6 +110,14 @@ const GLYPH = {
   bolt: ['...###.', '..###..', '.#####.', '...##..', '..##...', '.##....', '.#.....'],
   heart: ['.......', '.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'],
   wing: ['.....##', '...####', '..####.', '.####..', '.###...', '##.....', '#......'],
+  eclipse: ['..###..', '.##....', '##.....', '##.....', '##.....', '.##....', '..###..'],
+} as const;
+
+/** Marks drawn on the belly of the utility flasks (7x7): double chevron (speed), shield (resistance), quicksilver drop (Focus). */
+const FLASK_MARK = {
+  chevrons: ['#..#...', '.#..#..', '..#..#.', '...#..#', '..#..#.', '.#..#..', '#..#...'],
+  shield: ['#######', '#######', '#######', '.#####.', '.#####.', '..###..', '...#...'],
+  drop: ['...#...', '..###..', '..###..', '.#####.', '#######', '#######', '.#####.'],
 } as const;
 
 /**
@@ -307,6 +317,14 @@ function voidNeedle(): Frame {
 function flask(liquid: Ramp): Frame {
   const f = newIcon();
   flaskShape(f, 15.5, 19, 8, liquid, 0.62);
+  return f;
+}
+
+/** A flask with a bold mark etched into the glass of its belly (the utility flasks). */
+function markedFlask(liquid: Ramp, mark: readonly string[]): Frame {
+  const f = newIcon();
+  flaskShape(f, 15.5, 19, 8, liquid, 0.7);
+  glyph(f, mark, 15.5, 21.5, C.white, liquid[1]);
   return f;
 }
 
@@ -633,7 +651,46 @@ function hourglass(grand: boolean): Frame {
   return f;
 }
 
+/** Beacon sigils (brief D 6.3): a round stone tablet with a lit rune per kind; one to three gold pips for Faint, Bright, Blazing. */
+const SIGIL_LOOK: Record<SigilKind, { ramp: Ramp; rim: Color }> = {
+  omen: { ramp: RAMPS.void, rim: C.voidGlow }, hoard: { ramp: RAMPS.gold, rim: C.goldHi }, fortune: { ramp: RAMPS.gold, rim: C.goldHi },
+  ingredient: { ramp: RAMPS.vital, rim: C.vitalLight }, survey: { ramp: RAMPS.frost, rim: C.ice }, tide: { ramp: RAMPS.swift, rim: C.swiftLight },
+  ashen: { ramp: RAMPS.ember, rim: C.hot }, chapel: { ramp: RAMPS.wine, rim: C.voidHi }, crypt: { ramp: RAMPS.void, rim: C.ice },
+  ossuary: { ramp: RAMPS.oss, rim: C.ice }, chainworks: { ramp: RAMPS.rust, rim: C.ember }, coliseum: { ramp: RAMPS.metal, rim: C.goldHi },
+};
+
+function sigilMark(f: Frame, kind: SigilKind): void {
+  const c = C.white;
+  switch (kind) {
+    case 'omen': gem(f, 16, 15, 3, 2, RAMPS.void); px(f, 16, 15, c); break;
+    case 'hoard': gem(f, 13, 16, 2, 2, RAMPS.gold); gem(f, 19, 16, 2, 2, RAMPS.gold); gem(f, 16, 13, 2, 2, RAMPS.gold); break;
+    case 'fortune': line(f, 16, 10, 16, 21, c); line(f, 11, 15, 21, 15, c); px(f, 16, 15, C.goldHi); break;
+    case 'ingredient': line(f, 14, 11, 18, 11, c); line(f, 15, 12, 13, 19, c); line(f, 17, 12, 19, 19, c); line(f, 13, 19, 19, 19, c); break;
+    case 'survey': line(f, 11, 15, 21, 15, c); line(f, 19, 13, 21, 15, c); line(f, 19, 17, 21, 15, c); line(f, 16, 11, 16, 19, C.ice); break;
+    case 'tide': line(f, 10, 14, 13, 12, c); line(f, 13, 12, 16, 14, c); line(f, 16, 14, 19, 12, c); line(f, 19, 12, 22, 14, c); line(f, 10, 18, 13, 16, c); line(f, 13, 16, 16, 18, c); line(f, 16, 18, 19, 16, c); line(f, 19, 16, 22, 18, c); break;
+    case 'ashen': px(f, 16, 11, C.hot); line(f, 15, 12, 15, 18, C.flame); line(f, 17, 12, 17, 18, C.flame); line(f, 14, 16, 18, 19, C.hot); break;
+    case 'chapel': line(f, 16, 10, 16, 21, c); line(f, 13, 13, 19, 13, c); break;
+    case 'crypt': line(f, 12, 19, 20, 19, c); line(f, 12, 14, 12, 19, c); line(f, 20, 14, 20, 19, c); line(f, 12, 14, 16, 11, c); line(f, 20, 14, 16, 11, c); break;
+    case 'ossuary': line(f, 16, 10, 16, 21, C.ice); line(f, 12, 12, 20, 19, C.ice); line(f, 20, 12, 12, 19, C.ice); break;
+    case 'chainworks': gem(f, 13, 15, 2, 3, RAMPS.metal); gem(f, 19, 15, 2, 3, RAMPS.metal); line(f, 15, 15, 17, 15, c); break;
+    case 'coliseum': line(f, 12, 19, 20, 11, c); line(f, 12, 11, 20, 19, c); px(f, 16, 15, C.goldHi); break;
+  }
+}
+
+function sigil(kind: SigilKind, strength: number): Frame {
+  const f = newIcon(), s = new Sculpt();
+  s.ell(16, 15, 12, 12, style(RAMPS.stone, 0.15, { round: 0.6 }));
+  s.render(f.c, f.e);
+  s.ell(16, 15, 8.5, 8.5, style(SIGIL_LOOK[kind].ramp, 0.35, { round: 0.5 }));
+  s.render(f.c, f.e);
+  sigilMark(f, kind);
+  for (let n = 0; n < strength; n++) gem(f, 16 + (n - (strength - 1) / 2) * 5, 29, 1, 1, RAMPS.gold);
+  if (strength === 3) { sparkle(f, 25, 6, C.goldHi, 1); sparkle(f, 7, 24, C.goldHi, 1); }
+  return f;
+}
+
 export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
+  ...Object.fromEntries(SIGILS.map(s => [`icon/currency/${s.id}`, () => finishIcon(sigil(s.kind, s.strength), SIGIL_LOOK[s.kind].rim)])),
   ...Object.fromEntries(SCARABS.map(s => [`icon/currency/${s.id}`, () => finishIcon(scarab(s.family, s.tier), SCARAB_LOOK[s.family].rim)])),
   'icon/currency/hourglassSand': () => finishIcon(hourglass(false), C.goldHi),
   'icon/currency/grandHourglass': () => finishIcon(hourglass(true), C.goldHi),
@@ -654,6 +711,7 @@ export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
   'icon/currency/essenceStorm': () => finishIcon(essence([C.voidDeep, C.voidDark, C.voidMid, C.stormMid, C.storm, C.lightning], GLYPH.bolt, C.lightning, C.voidDeep, C.lightning), C.lightning),
   'icon/currency/essenceVital': () => finishIcon(essence([C.mossDeep, C.vitalDeep, C.vitalMid, C.vitalGreen, C.vitalLight, C.white], GLYPH.heart, C.lifeLight, C.lifeDark, C.vitalLight), C.vitalLight),
   'icon/currency/essenceSwift': () => finishIcon(essence([C.frostDeep, C.swiftDeep, C.swiftMid, C.swiftTeal, C.swiftLight, C.white], GLYPH.wing, C.white, C.swiftDeep, C.swiftLight), C.swiftLight),
+  'icon/currency/umbralEssence': () => finishIcon(essence([C.voidDeep, C.voidDark, C.voidMid, C.voidHi, C.voidGlow, C.white], GLYPH.eclipse, C.white, C.voidDeep, C.voidGlow), C.voidGlow),
   'icon/currency/catalyst': () => finishIcon(catalyst(), C.goldHi),
   'icon/currency/solvent': () => finishIcon(solvent()),
   'icon/currency/seal': () => finishIcon(seal()),
@@ -671,6 +729,9 @@ export const CURRENCY_ICONS: Record<string, () => PixelImage> = {
   'icon/currency/riftKey': () => finishIcon(atlasKey('rift'), C.voidGlow),
   'icon/flask/lifeFlask': () => finishIcon(flask([C.wineDeep, C.lifeDark, C.blood, C.life, C.lifeLight, C.hot])),
   'icon/flask/focusFlask': () => finishIcon(flask([C.frostDeep, C.frostDark, C.frostMid, C.mana, C.frost, C.ice]), C.frost),
+  'icon/flask/quickstep': () => finishIcon(markedFlask([C.mossDeep, C.vitalDeep, C.vitalMid, C.vitalGreen, C.vitalLight, C.white], FLASK_MARK.chevrons), C.vitalLight),
+  'icon/flask/aegis': () => finishIcon(markedFlask([C.ochre, C.goldDark, C.gold, C.goldHi, C.parchment, C.white], FLASK_MARK.shield), C.goldHi),
+  'icon/flask/quicksilverMind': () => finishIcon(markedFlask([C.stone, C.ashGrey, C.swiftMid, C.swiftLight, C.ice, C.white], FLASK_MARK.drop), C.swiftLight),
   'icon/map/ashenForge': () => finishIcon(mapIcon(MAP_FORGE), C.hot),
   'icon/map/rimedOssuary': () => finishIcon(mapIcon(MAP_OSSUARY), C.ice),
   'icon/map/ironColiseum': () => finishIcon(mapIcon(MAP_COLISEUM)),

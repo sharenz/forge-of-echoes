@@ -53,6 +53,17 @@ export const ICON_FOOTPRINT: Readonly<Record<string, readonly [number, number]>>
   'icon/base/forgemasterGloves': [2, 2],
   'icon/base/wayfarerGreaves': [2, 2],
   'icon/base/ironweaveGirdle': [2, 1],
+  // Power-rework uniques: footprints match their bases.
+  'icon/unique/frostfireSpiral': [1, 3],
+  'icon/unique/stormcallersLattice': [2, 3],
+  'icon/unique/penitentsPrism': [1, 1],
+  'icon/unique/hollowCrown': [2, 3],
+  'icon/unique/weepingHearth': [2, 3],
+  'icon/unique/gravewindBoots': [2, 2],
+  'icon/unique/anchoritesSeal': [1, 1],
+  'icon/unique/bellwether': [1, 1],
+  'icon/unique/needlepoint': [2, 2],
+  'icon/unique/twiceStruckBell': [2, 2],
   'icon/unique/thePatientSpark': [1, 3],
   'icon/unique/cinderwalkers': [2, 2],
   'icon/unique/everburn': [1, 3],
@@ -995,8 +1006,163 @@ const KEYSTONE_ICONS: Record<string, () => PixelImage> = {
   }), C.hot, 0.55),
 };
 
+
+// ---------------------------------------------------------------------------
+// Power-rework uniques: each keeps its base silhouette and adds one emblem that tells the build at a glance.
+// ---------------------------------------------------------------------------
+
+function frostfireSpiral(): Frame {
+  const f = glassboneWand();
+  // twin helix of flame and frost winding up the shaft
+  for (let i = 0; i < 64; i++) {
+    const t = 0.18 + (i / 63) * 0.7;
+    const [x, y] = wandAt(t);
+    const w = Math.sin(t * 52) * 3;
+    onBody(f, x + w, y, Math.cos(t * 52) > 0 ? C.flame : C.hot);
+    onBody(f, x - w, y, Math.cos(t * 52) > 0 ? C.ice : C.frost);
+  }
+  const [tx, ty] = wandAt(1.09);
+  flame(f, Math.round(tx + 7), Math.round(ty + 4), 9, 2);
+  sparkle(f, Math.round(tx - 6), Math.round(ty - 8), C.white, 1);
+  return f;
+}
+
+function stormcallersLattice(): Frame {
+  const f = emberSceptre(true);
+  // a lattice of lightning cages the head and a bolt forks away from it
+  for (let k = -2; k <= 2; k++) {
+    lineOn(f, 42 + k * 4 - 6, 14, 42 + k * 4 + 6, 34, C.lightning);
+    lineOn(f, 42 + k * 4 + 6, 14, 42 + k * 4 - 6, 34, C.storm);
+  }
+  const bolt: Pt[] = [[52, 12], [57, 17], [53, 18], [59, 25], [55, 25], [60, 33]];
+  for (let i = 1; i < bolt.length; i++) line(f, bolt[i - 1][0], bolt[i - 1][1], bolt[i][0], bolt[i][1], C.lightning);
+  px(f, 52, 11, C.white);
+  sparkle(f, 28, 10, C.lightning, 2);
+  return f;
+}
+
+function penitentsPrism(): Frame {
+  const f = prismaticAmulet();
+  // light split into three rays, one broken beam below the stone
+  line(f, 16, 27, 8, 31, C.flame);
+  line(f, 16, 27, 16, 31, C.ice);
+  line(f, 16, 27, 24, 31, C.lightning);
+  sparkle(f, 16, 12, C.white, 2);
+  return f;
+}
+
+function hollowCrown(): Frame {
+  const f = duskweaveRobe();
+  // a crown of void spikes over the collar, hollow in the middle
+  for (let k = -3; k <= 3; k++) {
+    const x = 32 + k * 5;
+    const h = k % 2 === 0 ? 9 : 5;
+    line(f, x, 14, x, 14 - h, k % 2 === 0 ? C.voidGlow : C.voidLight);
+    px(f, x, 13 - h, C.voidHi);
+  }
+  line(f, 17, 14, 47, 14, C.voidMid);
+  line(f, 19, 15, 45, 15, C.voidDark);
+  // hollow eyes of void on the chest
+  for (const x of [26, 38]) { px(f, x, 38, C.voidDeep); px(f, x + 1, 38, C.voidGlow); px(f, x, 39, C.voidGlow); }
+  return f;
+}
+
+function weepingHearth(): Frame {
+  const f = emberSceptre();
+  // tears of fire drip from the head and pool on the haft
+  for (const [x, y, h] of [[34, 36, 9], [42, 38, 14], [50, 36, 7]] as const) {
+    for (let i = 0; i < h; i++) px(f, x, y + i, i < h - 2 ? C.flame : C.hot);
+    px(f, x, y + h, C.hot);
+    px(f, x, y + h + 1, C.ember);
+  }
+  flame(f, 28, 56, 7, 1);
+  sparkle(f, 54, 8, C.hot, 1);
+  return f;
+}
+
+function gravewindBoots(): Frame {
+  const f = wayfarerGreaves();
+  // grave-pale wind streaks trailing behind the heel
+  for (const [y, len] of [[20, 20], [30, 26], [40, 18], [50, 24]] as const) {
+    line(f, 2, y, 2 + len, y, C.bone);
+    line(f, 4, y + 1, 4 + len * 0.6, y + 1, C.ashGrey);
+    px(f, 2 + len + 1, y - 1, C.white);
+  }
+  sparkle(f, 54, 10, C.bone, 1);
+  return f;
+}
+
+function anchoritesSeal(): Frame {
+  const f = dusksteelRing();
+  // an anchor cut into the setting, a Focus-blue chain link beneath it
+  line(f, 16, 8, 16, 15, C.ice);
+  line(f, 13, 10, 19, 10, C.ice);
+  line(f, 12, 13, 14, 15, C.frost);
+  line(f, 20, 13, 18, 15, C.frost);
+  line(f, 13, 15, 19, 15, C.frost);
+  px(f, 16, 7, C.white);
+  px(f, 16, 5, C.mana);
+  return f;
+}
+
+function bellwether(): Frame {
+  const f = boneTalisman();
+  // a small gold bell hung from the cord
+  const s = new Sculpt();
+  s.poly([[13, 22], [19, 22], [21, 28], [11, 28]], style(RAMPS.gold, 0.3, { round: 0.6 }), 1);
+  s.render(f.c, f.e);
+  line(f, 11, 29, 21, 29, C.goldHi);
+  px(f, 16, 30, C.ochre);
+  px(f, 16, 21, C.goldHi);
+  px(f, 14, 24, C.white);
+  sparkle(f, 26, 8, C.goldHi, 1);
+  return f;
+}
+
+function needlepoint(): Frame {
+  const f = cinderOrb();
+  // one bright needle through the orb: the whole armour opens at its point
+  line(f, 6, 58, 52, 8, C.bone);
+  line(f, 7, 59, 53, 9, C.ashGrey);
+  line(f, 52, 8, 58, 3, C.white);
+  px(f, 59, 2, C.white);
+  sparkle(f, 59, 2, C.white, 2);
+  line(f, 6, 58, 3, 61, C.goldHi);
+  return f;
+}
+
+function twiceStruckBell(): Frame {
+  const f = runedTome();
+  // a bell with two ripples: the second note
+  const s = new Sculpt();
+  s.poly([[26, 20], [38, 20], [42, 36], [22, 36]], style(RAMPS.gold, 0.3, { round: 0.6 }), 1);
+  s.render(f.c, f.e);
+  line(f, 22, 37, 42, 37, C.goldHi);
+  line(f, 32, 16, 32, 20, C.ochre);
+  px(f, 32, 39, C.ochre);
+  px(f, 29, 26, C.white);
+  for (const r of [10, 15]) {
+    for (let a = -0.9; a <= 0.9; a += 0.12) px(f, 32 + Math.sin(a) * r * 1.6, 30 - Math.cos(a) * r * 0.2 + (r - 10) * 0.6, r === 10 ? C.goldHi : C.ochre);
+  }
+  sparkle(f, 52, 10, C.goldHi, 1);
+  return f;
+}
+
+const UNIQUE_ICONS: Record<string, () => PixelImage> = {
+  'icon/unique/frostfireSpiral': () => finishIcon(frostfireSpiral(), C.ice, 0.5),
+  'icon/unique/stormcallersLattice': () => finishIcon(stormcallersLattice(), C.lightning, 0.5),
+  'icon/unique/penitentsPrism': () => finishIcon(penitentsPrism(), C.white, 0.5),
+  'icon/unique/hollowCrown': () => finishIcon(hollowCrown(), C.voidGlow, 0.5),
+  'icon/unique/weepingHearth': () => finishIcon(weepingHearth(), C.hot, 0.5),
+  'icon/unique/gravewindBoots': () => finishIcon(gravewindBoots(), C.bone, 0.5),
+  'icon/unique/anchoritesSeal': () => finishIcon(anchoritesSeal(), C.ice, 0.5),
+  'icon/unique/bellwether': () => finishIcon(bellwether(), C.goldHi, 0.5),
+  'icon/unique/needlepoint': () => finishIcon(needlepoint(), C.white, 0.5),
+  'icon/unique/twiceStruckBell': () => finishIcon(twiceStruckBell(), C.goldHi, 0.5),
+};
 export const EQUIPMENT_ICONS: Record<string, () => PixelImage> = {
   ...KEYSTONE_ICONS,
+  ...UNIQUE_ICONS,
   'icon/base/ashwoodWand': () => finishIcon(ashwoodWand()),
   'icon/base/glassboneWand': () => finishIcon(glassboneWand(), C.ice),
   'icon/base/ironrootWand': () => finishIcon(ironrootWand()),

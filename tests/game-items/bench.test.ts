@@ -47,7 +47,7 @@ function recipe(ch: CharacterSave, id: string, uid = T): BenchRecipe {
 }
 
 const RICH: Partial<Record<CurrencyId, number>> = {
-  scrap: 40, essenceEmber: 5, essenceRime: 5, essenceStorm: 5, essenceVital: 5, essenceSwift: 5,
+  scrap: 40, essenceEmber: 5, essenceRime: 5, essenceStorm: 5, essenceVital: 5, essenceSwift: 5, umbralEssence: 5,
 };
 
 // A crafted T4 life line on a high item-level ring (for interplay tests).
@@ -72,8 +72,8 @@ describe('recipe data', () => {
       if (def!.kind === 'suffix') seenSuffix = true;
       else expect(seenSuffix, `${r.id} is a prefix after a suffix`).toBe(false);
     }
-    // One recipe per affix family; only "of Splintering" (a lone T1) is left out.
-    expect(AFFIXES.filter((a) => !affixIds.has(a.id)).map((a) => a.name)).toEqual(['of Splintering']);
+    // One recipe per affix family; only "of Splintering" (a lone T1) and "of Warding" (maximum resistance needs real crafting) are left out.
+    expect(AFFIXES.filter((a) => !affixIds.has(a.id)).map((a) => a.name)).toEqual(['of Warding', 'of Splintering']);
   });
 
   it('prices climb with the tier and an essence always matches the affix tags', () => {
@@ -548,11 +548,12 @@ describe('crafted affixes and the currencies', () => {
 
   it('counts toward the room an Essence needs', () => {
     // A Magic ring whose one prefix is the crafted Hale: the prefix is taken, so of the Ember Essence's ring
-    // affixes (Blazing, Prismatic — prefixes — and of the Kiln) only the suffix of the Kiln can be added.
+    // affixes (Blazing, Prismatic — prefixes — of the Kiln and of Prisms) only the two suffixes can be added.
     const ch = bench(item({ baseId: 'emberRing', itemLevel: 60, rarity: 'magic', affixes: [{ ...CRAFTED_LIFE }] }), { essenceEmber: 1 });
-    expect(craftPreview(ch, 'essenceEmber', T)[0]).toBe('Adds the only fire affix that can roll here: of the Kiln.');
+    expect(craftPreview(ch, 'essenceEmber', T)[0]).toMatch(/^Adds one of 2 fire affixes: of the Kiln \d+% · of Prisms \d+%$/);
     const out = target(expectOk(applyEquipmentCurrency(ch, 'essenceEmber', T)).character);
-    expect(out.affixes.map((a) => [a.affixId, a.crafted === true])).toEqual([['life', true], ['fireResistance', false]]);
+    expect(out.affixes.map((a) => a.crafted === true)).toEqual([true, false]);
+    expect(['fireResistance', 'elementalPen']).toContain(out.affixes[1].affixId);
     expect(out.rarity).toBe('magic');
   });
 });

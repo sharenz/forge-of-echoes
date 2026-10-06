@@ -92,6 +92,8 @@ export function makeStats(o: Partial<PlayerCombatStats> = {}): PlayerCombatStats
     lifeOnKill: 0,
     focusOnKill: 0,
     flaskEffect: 1,
+    pen: { physical: 0, fire: 0, cold: 0, lightning: 0, void: 0 },
+    maxResist: 75,
     flags: [],
     ...o,
   };
@@ -143,8 +145,8 @@ export function fairSkills(): SkillRuntimeDef[] {
   ];
 }
 
-/** Monster scaling of a tier-5 map (life ×1.16⁴, damage ×1.10⁴). */
-export const TIER5: Partial<MonsterScaling> = { level: 36, lifeMultiplier: 1.8, damageMultiplier: 1.46, magicPackChance: 0.15, rarePackChance: 0.05 };
+/** Monster scaling of a tier-5 map (life ×1.16⁴, damage ×1.10⁴). Level 28 is the real Tier 5; pack chances sit a little under the old 15%/5% since the Tier 2+ rare/magic life floor (power rework) made each elite pack tougher. */
+export const TIER5: Partial<MonsterScaling> = { level: 28, lifeMultiplier: 1.8, damageMultiplier: 1.46, magicPackChance: 0.1, rarePackChance: 0.04 };
 
 export const STRONG_LOADOUT: (SkillId | null)[] = ['emberLance', 'emberNova', 'arcChain', 'rimeShards', 'cinderWard', 'riftStep'];
 

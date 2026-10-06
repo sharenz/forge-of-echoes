@@ -74,6 +74,9 @@ export interface ProjectileSpec {
   critChance: number;
   critMult: number;
   ailmentChance: number;
+  /** Conversion: `convShare` (0..1) of the hit becomes `convTo` damage (a DAMAGE_TYPES index); both types keep their modifiers. 0 = none. */
+  convTo?: number;
+  convShare?: number;
   /** Remaining pierces; -1 = pierce everything. */
   pierce: number;
   /** Player id credited with this projectile's kills (0 for monster projectiles). */
@@ -110,6 +113,10 @@ export function spawnProjectile(w: World, s: ProjectileSpec, flight = 0): number
   pr.critChance[i] = s.critChance;
   pr.critMult[i] = s.critMult;
   pr.ailmentChance[i] = s.ailmentChance;
+  pr.convTo[i] = s.convTo ?? 0;
+  pr.convShare[i] = s.convShare ?? 0;
+  // The shared projSpec never carries a conversion over to the next spawn.
+  if (s === projSpec) { s.convTo = 0; s.convShare = 0; }
   pr.pierce[i] = s.pierce;
   pr.range[i] = s.range;
   pr.src[i] = NO_SOURCE;
@@ -312,7 +319,8 @@ export function updateProjectiles(w: World): void {
           break;
         }
         pr.recordHit(i, m.id[j]);
-        damageMonster(w, j, pr.damage[i], pr.dtype[i], pr.critChance[i], pr.critMult[i], pr.ailmentChance[i], vx, vy, 1, true, pr.owner[i]);
+        damageMonster(w, j, pr.damage[i], pr.dtype[i], pr.critChance[i], pr.critMult[i], pr.ailmentChance[i], vx, vy, 1, true, pr.owner[i],
+          pr.convShare[i] > 0 ? pr.convTo[i] : -1, pr.convShare[i]);
         const pierce = pr.pierce[i];
         if (pierce === 0) {
           endT = hitT[k];

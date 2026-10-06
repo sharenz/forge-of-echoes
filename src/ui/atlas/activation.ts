@@ -1,6 +1,6 @@
-// Activation feedback plumbing (brief A, 6.7). Activating a map is decided in MapDevice and answered by the server with
-// an open portal (hud.portal). The table watches that portal: a NEW one means "the device just lit", which flares the
-// course node on the chart and closes a sigil ring over the dock's map slot; an open portal also pins a portal glyph
+// Activation feedback plumbing (brief A, 6.7). Opening an area is decided in the area modal and answered by the server with
+// an open portal (hud.portal). The table watches that portal: a NEW one means "the device just lit", which closes the modal and
+// flares the area's node on the chart; an open portal also pins a portal glyph
 // to the node it leads to. The portal carries no area id, so the area that was the course at that moment is remembered
 // per viewer (localStorage) against the portal's identity.
 import { useEffect, useRef, useState } from 'preact/hooks';
@@ -17,6 +17,9 @@ export interface ActivationSnap {
 }
 
 const KEY = 'foe.atlas.portal.v1';
+/** The area the player just pressed "Open area" in (the modal's area): the portal that follows leads there, whatever the device holds by then. */
+let opening: string | null = null;
+export function setOpeningArea(id: string | null): void { opening = id; }
 let snap: ActivationSnap = { pulse: 0, area: null, sig: null };
 const subs = new Set<() => void>();
 const notify = (): void => subs.forEach((fn) => fn());
@@ -63,8 +66,10 @@ export function useActivationWatcher(courseId: string): void {
     }
     if (p && isNewActivation(prev.current, p)) {
       const sig = portalSig(p);
-      snap = { pulse: snap.pulse + 1, area: course.current, sig };
-      writeStored(sig, course.current);
+      const area = opening ?? course.current;
+      opening = null;
+      snap = { pulse: snap.pulse + 1, area, sig };
+      writeStored(sig, area);
       notify();
     } else if (!p && snap.area) {
       snap = { ...snap, area: null, sig: null };

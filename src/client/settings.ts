@@ -34,6 +34,8 @@ export function normalizeSettings(raw: unknown): Settings {
     screenShake: unit(o.screenShake, DEFAULT_SETTINGS.screenShake),
     showFps: flag(o.showFps, DEFAULT_SETTINGS.showFps),
     autoAttack: flag(o.autoAttack, DEFAULT_SETTINGS.autoAttack),
+    // Coach cards (first-time hints): on unless the player said no.
+    ...(typeof o.hints === 'boolean' ? { hints: o.hints } : {}),
   };
 }
 

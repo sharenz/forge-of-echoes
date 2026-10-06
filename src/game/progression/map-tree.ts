@@ -10,6 +10,8 @@ import {
 } from '../../data/progression/map-tree';
 import { spendCurrency } from './merchant';
 import { pinSlotCount } from '../../data/progression/routing';
+import { findAtlasArea } from '../../data/progression/atlas';
+import { beaconSlotCount } from './territory';
 import { fail, ok } from './util';
 
 /** The six final bosses: killing each for the first time grants a point. */
@@ -112,6 +114,9 @@ export function setMapTreeNode(ch: CharacterSave, id: MapTreeNodeId, allocate: b
   const atlas = next.atlas!;
   const nodes = allocate ? [...(atlas.nodes ?? []), id] : atlas.nodes!.filter(n => n !== id);
   const kept = normalizeMapTree(nodes, mapTreePoints(atlas));
+  // Lightkeeper's second beacon slots must be empty before it can be refunded: a sigil is never destroyed by a respec.
+  const lost = Object.entries(atlas.beacons ?? {}).find(([areaId, slots]) => (slots ?? []).some((s, i) => s && i >= beaconSlotCount(areaId, kept)));
+  if (lost) return fail(`Take the sigil out of the second slot of the ${findAtlasArea(lost[0])?.name ?? 'beacon'} beacon first: without this node it has one slot.`);
   // A respec that takes a pin-slot node away drops the pins beyond the new slot count (the last pinned goes first).
   const pins = atlas.pins?.slice(0, pinSlotCount(kept));
   const { pins: _pins, ...rest } = atlas;

@@ -5,7 +5,7 @@
 //   WebSocket    : everything in-game. Text frames = JSON messages below. Binary frames = world snapshots
 //                  encoded by src/net (see SnapshotCodec).
 import type { Attribute, SkillId, Theme } from './content';
-import type { MerchantOffer, RunSetup } from './game';
+import type { MerchantBoard, MerchantOffer, RunSetup } from './game';
 import type { CharacterSave, Item, ItemLocation, ItemTone } from './items';
 import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 
@@ -32,7 +32,11 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 // 21: account pins (pinArea), Rook's generated map offers (map:<area>:<tier>:<grade>), Re-chart services and benchRecycle.
 // 22: refillSurge (Hourglass Sand on one area / Grand Hourglass on all) and the daily surge ledger on the account Atlas (atlas.surge).
 // 23: ZoneInfo.flowSeed (conveyor-belt directions and reversal schedule of layout flow zones; a new optional field).
-export const PROTOCOL_VERSION = 23;
+// 24: Rook's wares board: merchantWares / buyWare / rerollWares; CommandResult.board (MerchantBoard); CharacterSave.wares. Rook's map:<area>:<tier>:<grade> offers are gone from buyOffer.
+// 25: the first-run guide: `guide` command (steps done, hints shown, props used, skip, replay, finish), account-level CharacterSave.guide, hideout flask refill, first-map warm-up flag; `sortBackpack`.
+// 26: power rework R1: new stats, flask, currency and unique ids.
+// 27: beacons and sigils: 36 sigil currency ids (appended), slotSigil / unslotSigil, atlas.beacons on the account Atlas, RunSetup.territory.
+export const PROTOCOL_VERSION = 27;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
@@ -114,6 +118,10 @@ export type Command =
   | { c: 'addStashTab' }
   | { c: 'renameStashTab'; tab: number; name: string }
   | { c: 'clearNewFlags' }
+  /** Re-lay the backpack: currency, flasks, maps (highest tier first), then gear by slot and rarity. Nothing is added or removed. */
+  | { c: 'sortBackpack' }
+  /** The first-run guide (contracts/guide.ts): record a step, hint or prop as done, or skip / replay / finish the tutorial. Idempotent. */
+  | import('./guide').GuideCommand
   // character
   | { c: 'allocateAttribute'; attr: Attribute }
   | { c: 'rankUpSkill'; skillId: SkillId }
@@ -124,10 +132,20 @@ export type Command =
   | { c: 'pinArea'; areaId: import('./atlas').AtlasAreaId; pinned: boolean }
   /** Hideout: use Hourglass Sand on `areaId`, or a Grand Hourglass on every area (`all`). Exactly one of the two. */
   | { c: 'refillSurge'; areaId?: import('./atlas').AtlasAreaId; all?: true }
+  /** Hideout: slot one sigil from the backpack stack `uid` into slot `slot` of the beacon `areaId` (a cleared area). A filled slot is swapped. */
+  | { c: 'slotSigil'; areaId: import('./atlas').AtlasAreaId; slot: number; uid: string }
+  /** Hideout: take the sigil out of a beacon slot (an unused one returns to the backpack, a used one is consumed). */
+  | { c: 'unslotSigil'; areaId: import('./atlas').AtlasAreaId; slot: number }
   | { c: 'activateMapDevice'; lootClass?: import('./content').ItemClass; passageKey?: import('./content').CurrencyId; pit?: true; useSurge?: boolean;
       /** Stale clients only: accepted when it equals the map's bound area, otherwise an error. */ areaId?: import('./atlas').AtlasAreaId }
   | { c: 'merchantOffers' }
   | { c: 'buyOffer'; offerId: string; at?: { x: number; y: number } }
+  /** Rook's wares board of this character (built by the server; answered with `board`). */
+  | { c: 'merchantWares' }
+  /** Buy a ware by id (`ware:<epoch>:<slot>`); a stale epoch or a sold slot is refused. Answers with the fresh `board`. */
+  | { c: 'buyWare'; wareId: string; at?: { x: number; y: number } }
+  /** "Ask for new wares": `epoch` and `cost` are what the player saw, so a stale click is refused instead of charged. */
+  | { c: 'rerollWares'; epoch: string; cost: number }
   | { c: 'sellItems'; uids: string[]; expectedScrap: number }
   | { c: 'buyDebugOffer'; offerId: string; options: import('./game').DebugMerchantOptions; at?: { x: number; y: number } }
   // party & social
@@ -292,7 +310,7 @@ export type ServerMessage =
   | { t: 'portal'; portal: PortalInfo | null }
   /** Cosmetic sim events for this client (AOI-filtered, capped by priority), batched with each snapshot. */
   | { t: 'events'; tick: number; events: SimEvent[] }
-  | { t: 'result'; id: number; ok: boolean; error?: string; message?: string; offers?: MerchantOffer[] }
+  | { t: 'result'; id: number; ok: boolean; error?: string; message?: string; offers?: MerchantOffer[]; board?: MerchantBoard }
   | { t: 'toast'; text: string; tone: 'info' | 'good' | 'bad' | ItemTone }
   | { t: 'party'; party: PartyInfo | null }
   | { t: 'invite'; invite: PartyInvite }

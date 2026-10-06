@@ -345,7 +345,8 @@ function returnPortalSpot(w: World, ax: number, ay: number, sx: number, sy: numb
       if (d.bossDefeated) clear = Math.min(clear, Math.hypot(x - d.bossDeathX, y - d.bossDeathY) / RETURN_PORTAL_CLEARANCE);
       for (const drop of w.drops) clear = Math.min(clear, Math.hypot(x - drop.x, y - drop.y) / RETURN_PORTAL_DROP_CLEARANCE);
       // Nearer is better, and a camera shows more width than height.
-      const cost = r + Math.max(0, Math.abs(y - ay) - 120) * 2;
+      // ...and not far south of the player: the command deck and the Life globe cover the bottom of the screen.
+      const cost = r + Math.max(0, Math.abs(y - ay) - 120) * 2 + Math.max(0, y - ay - 70) * 3;
       if (clear > bestClear + 1e-9 || (clear >= bestClear - 1e-9 && cost < bestCost)) {
         best = { x, y };
         bestClear = clear;

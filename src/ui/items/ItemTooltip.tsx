@@ -1,12 +1,15 @@
 // Item tooltip cards built from rules.describeItem. Alt reveals affix names, tiers, roll ranges and the item's
 // crafting history, and (for gear that is not equipped) side-by-side cards of what it would replace. A bench-crafted
-// affix carries the anvil glyph and a "Crafted" caption in every tooltip.
+// affix carries the anvil glyph and a "Crafted" caption in every tooltip. A map shows a short summary first (F-28, lib/map-brief.ts)
+// and its full card after a short hover (`full`, from the tooltip host) or while Alt is held.
 import { Fragment, type ComponentChildren } from 'preact';
 import type { EquipSlot } from '../../contracts/content';
 import type { CharacterSave, Item, ItemDescription, TooltipLine } from '../../contracts/items';
 import type { UiStore } from '../../contracts/ui';
+import { surgeStatus } from '../../game/progression/surge';
 import { PixelIcon, cx } from '../components/common';
 import { SLOT_LABELS } from '../lib/content';
+import { mapBrief, rechartHint, surgeText, type MapBrief } from '../lib/map-brief';
 import { safe } from './hooks';
 
 export interface CraftPreviewInfo {
@@ -31,7 +34,8 @@ export function kindCaption(line: TooltipLine): string | null {
   else if (line.kind === 'unique') parts.push('Unique');
   else if (line.kind === 'scar') parts.push('Scar');
   if (line.affixName) parts.push(`“${line.affixName}”`);
-  if (line.tier !== undefined) parts.push(`Tier ${line.tier}`);
+  // Affix tiers are ranks: 1 is the best roll band (a map's tier is the opposite: higher is harder), so the caption says so.
+  if (line.tier !== undefined) parts.push(line.kind === 'mapMod' ? `Tier ${line.tier}` : `Tier ${line.tier} (1 is best)`);
   if (line.tags?.length) parts.push(line.tags.join(', '));
   return parts.length > 1 || (line.kind === 'mapMod' && parts.length > 0) || line.tier !== undefined ? parts.join(' · ') : null;
 }
@@ -101,6 +105,72 @@ function Stability({ current, max }: { current: number; max: number }) {
 
 function Sep() {
   return <div class="fe-tt__sep" />;
+}
+
+/** The short map card: title, one summary line, the luck, one line per mod, then the cue for the full card. */
+export function MapBriefCard({ desc, brief, label, footer }: { desc: ItemDescription; brief: MapBrief; label?: string; footer?: ComponentChildren }) {
+  return (
+    <div class={cx('fe-tt', 'fe-tt--brief', `fe-tt--${desc.tone}`)} data-map-brief>
+      {label && <div class="fe-tt__label">{label}</div>}
+      <div class="fe-tt__header">
+        <div class="fe-tt__title">{desc.title}</div>
+        {desc.subtitle && <div class="fe-tt__subtitle">{desc.subtitle}</div>}
+      </div>
+      <div class="fe-tt__body">
+        <div class="fe-tt__brief-head">{brief.head}</div>
+        {brief.luck && <div class="fe-tt__meta">{brief.luck}</div>}
+        {brief.warnings.map((w) => <div class="fe-tt__req fe-tt__req--unmet" key={w}>{w}</div>)}
+        {brief.base.length > 0 && (
+          <>
+            <Sep />
+            <div class="fe-tt__block">
+              {brief.base.map((m, i) => (
+                <div key={i} class={cx('fe-tt__line', 'fe-tt__line--implicit', m.negative && 'fe-tt__line--neg')}>
+                  <div class="fe-tt__text"><span>{m.text}</span></div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        {brief.mods.length > 0 && (
+          <>
+            <Sep />
+            <div class="fe-tt__block">
+              {brief.mods.map((m, i) => (
+                <div key={i} class={cx('fe-tt__line', 'fe-tt__line--mapMod', m.negative && 'fe-tt__line--neg')}>
+                  <div class="fe-tt__text"><span>{m.text}</span></div>
+                </div>
+              ))}
+              {brief.more > 0 && <div class="fe-tt__brief-more">+{brief.more} more</div>}
+            </div>
+          </>
+        )}
+        {footer}
+        <div class="fe-tt__alt">Keep hovering or hold Alt for the full details</div>
+      </div>
+    </div>
+  );
+}
+
+/** A map's surge charges today (null when the area has none or the character has no Atlas yet). */
+function mapSurge(store: UiStore, ch: CharacterSave, item: Item): { remaining: number; max: number } | null {
+  if (item.kind !== 'map' || !ch.atlas) return null;
+  const offset = safe(() => store.get().serverClockOffset, 0) || 0;
+  return safe(() => surgeStatus(ch.atlas, item.areaId, Date.now() + offset), null);
+}
+
+/** Footer lines only a map's full card carries: today's surge charges and the Re-chart pointer. */
+function mapExtras(store: UiStore, ch: CharacterSave, item: Item): ComponentChildren {
+  if (item.kind !== 'map') return null;
+  const surge = surgeText(mapSurge(store, ch, item));
+  const rechart = rechartHint(item);
+  if (!surge && !rechart) return null;
+  return (
+    <>
+      {surge && <div class="fe-tt__hint" data-map-surge>{surge}</div>}
+      {rechart && <div class="fe-tt__hint" data-map-rechart>{rechart}</div>}
+    </>
+  );
 }
 
 export function ItemCard({
@@ -285,12 +355,15 @@ export function OwnedItemTooltip({
   uid,
   alt,
   armed,
+  full = true,
 }: {
   store: UiStore;
   ch: CharacterSave;
   uid: string;
   alt: boolean;
   armed: { uid: string; currencyId: string } | null;
+  /** False while a map tooltip is still short (the host flips it after MAP_BRIEF_LINGER_MS). */
+  full?: boolean;
 }) {
   const found = safe(() => store.rules.findItem(ch, uid), null);
   if (!found) return null;
@@ -310,11 +383,14 @@ export function OwnedItemTooltip({
     };
   }
 
+  if (item.kind === 'map' && !alt && !full && !craft) {
+    return <div class="fe-tt-row"><MapBriefCard desc={desc} brief={mapBrief(item, desc, mapSurge(store, ch, item))} /></div>;
+  }
   const compareMode = alt && item.kind === 'equipment' && location.kind !== 'equipment' && !armed;
   return (
     <div class="fe-tt-row">
       {compareMode && compareCards(store, ch, item, alt)}
-      <ItemCard desc={desc} alt={alt} craft={craft} />
+      <ItemCard desc={desc} alt={alt} craft={craft} footer={mapExtras(store, ch, item)} />
     </div>
   );
 }
@@ -328,6 +404,9 @@ export function DetachedItemTooltip({
   note,
   label,
   compare,
+  price,
+  appraisal,
+  full = true,
 }: {
   store: UiStore;
   ch: CharacterSave;
@@ -336,14 +415,31 @@ export function DetachedItemTooltip({
   note?: string;
   label?: string;
   compare?: boolean;
+  price?: { text: string; poor: boolean };
+  appraisal?: string[];
+  /** False while a map tooltip is still short (the host flips it after MAP_BRIEF_LINGER_MS). */
+  full?: boolean;
 }) {
   const desc = safe(() => store.rules.describeItem(item, ch), null);
   if (!desc) return null;
   const compareMode = !!compare && alt && item.kind === 'equipment';
+  const priceLine = price && <div class={cx('fe-tt__price', price.poor && 'fe-tt__price--poor')} data-testid="tooltip-price">{price.text}</div>;
+  // A map on sale keeps its price in the short form too.
+  if (item.kind === 'map' && !alt && !full) {
+    return <div class="fe-tt-row"><MapBriefCard desc={desc} label={label} brief={mapBrief(item, desc, mapSurge(store, ch, item))} footer={priceLine} /></div>;
+  }
+  const extras = mapExtras(store, ch, item);
   return (
     <div class="fe-tt-row">
       {compareMode && compareCards(store, ch, item, alt)}
-      <ItemCard desc={desc} alt={alt} label={label} footer={note ? <div class="fe-tt__hint">{note}</div> : undefined} />
+      <ItemCard desc={desc} alt={alt} label={label} footer={note || price || appraisal || extras ? (
+        <>
+          {extras}
+          {note && <div class="fe-tt__hint">{note}</div>}
+          {appraisal && <div class="fe-tt__appraisal">{appraisal.map((l, i) => <div key={i}>{l}</div>)}</div>}
+          {priceLine}
+        </>
+      ) : undefined} />
     </div>
   );
 }

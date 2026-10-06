@@ -2,6 +2,7 @@
 //
 // Invariant the UI relies on: for equipment, `description.affixes[i]` describes `item.affixes[i]`
 // (so an affix-choice click on line i maps to affixIndex i). Unique flag lines follow the unique mods.
+import { SIGIL_STRENGTH_NAMES, SIGIL_USES, findSigil } from '../../data/progression/territory';
 import type {
   CurrencyStack, EquipmentItem, FlaskStack, Item, ItemDescription, ItemTone, TooltipLine,
 } from '../../contracts/items';
@@ -71,7 +72,7 @@ export function describeEquipment(item: EquipmentItem, opts: EquipmentDescribeOp
   });
 
   const affixes: TooltipLine[] = item.affixes.map((_, i) => affixLine(item, i));
-  if (unique) for (const f of unique.flags) affixes.push({ text: f.text, kind: 'unique' });
+  if (unique) for (const f of unique.flags) if (!f.awaits) affixes.push({ text: f.text, kind: 'unique' });
 
   const scars: TooltipLine[] = item.scars.flatMap((s) => {
     const def = getScar(s.scarId);
@@ -146,6 +147,11 @@ export function describeCurrency(stack: CurrencyStack): ItemDescription {
     properties.push({ label: 'Scarab type', value: scarab.familyName }, { label: 'Scarab tier', value: String(scarab.tier) }, { label: 'Drop monster level', value: `${scarab.minMonsterLevel}+` });
     hint = `Drag or Ctrl-click into one of the four scarab sockets in your Map Device. Consumed only when the map opens. One ${scarab.familyName} Scarab per map, whatever its tier.${scarab.kind === 'area' ? ' Changes only which areas your dropped maps are bound to, never how many drop.' : ''}`;
   }
+  const sigil = findSigil(stack.currencyId);
+  if (sigil) {
+    properties.push({ label: 'Strength', value: SIGIL_STRENGTH_NAMES[sigil.strength] }, { label: 'Uses when slotted', value: String(SIGIL_USES[sigil.strength]) });
+    hint = 'Open a cleared area on the Atlas in your hideout and drag the sigil into its beacon slot (or Ctrl-click it). Each map opened within the beacon\'s reach spends one use.';
+  }
   if (stack.currencyId === 'hourglassSand') hint = 'Select an Atlas area in your hideout and choose "Refill surge" to use one. Refused when the area is already full.';
   if (stack.currencyId === 'grandHourglass') hint = 'Choose "Refill all surges" on the Atlas table in your hideout to use one. Refused when every area is already full.';
   // A Crafting Stash slot (uid "cstash:<id>", see src/game/items/special-stash.ts).
@@ -208,7 +214,10 @@ export function describeFlask(stack: FlaskStack, opts: FlaskDescribeOptions = {}
   const onBelt = beltIndex !== null;
   const resource = def?.resource === 'focus' ? 'Focus' : 'Life';
   const properties: { label: string; value: string }[] = [];
-  if (def) {
+  if (def?.utility) {
+    def.utility.lines.forEach((line, k) => properties.push({ label: k === 0 ? 'Effect' : '', value: line }));
+    properties.push({ label: 'Duration', value: `${formatNumber(def.duration)} seconds` });
+  } else if (def) {
     const value = opts.characterLevel !== undefined
       ? `${formatNumber(flaskRecovery(def.id, opts.characterLevel, opts.flaskEffect ?? 1))} ${resource}`
       : `${def.recoverBase} ${resource} + ${def.recoverPerLevel} per level`;

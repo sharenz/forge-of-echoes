@@ -33,7 +33,8 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Mouse | Aim |
 | `LMB` `RMB` `Q` `E` `R` `F` | Six loadout slots, any learned skill in any slot (held = cast as soon as usable) |
 | `1`–`4` | Flasks |
-| `I` / `C` / `K` | Inventory / character / skills |
+| `I` / `C` / `K` / `P` / `M` | Inventory / character / skills / party / Atlas (own hideout); buttons beside the command deck show the keys |
+| `H` / `F1` / `?` | Help (controls, how a run works, glossary, tutorial reset or skip) |
 | `Esc` | Close the top panel, or open the menu (pauses in maps) |
 | `Alt` (hold) | Affix tiers, roll ranges and comparison with equipped items |
 | `Ctrl`/`⌘`+click | Quick-move (a Crafting Stash slot gives a stack; with a Crafting Stash tab open, gear or a map from the backpack or your body loads the work slot, and the work slot's item returns to the backpack) |
@@ -46,9 +47,9 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 
 1. **Title:** create or select a Sorceress. You start in the hideout with the starting kit.
 2. **Hideout:** a small, lit, walkable ritual courtyard with these objects:
-   - **Map Device (the Atlas table):** an Ember Chart (canvas ground, roads and plates, one button per area) that sits beside the inventory, which opens together with the table (at 1280x720 and 1024x600 the chart takes the left part of the screen, and the inspector rail is a drawer over its right edge), a Codex tab, and an always-visible dock with the map slot and its home chip ("Opens Furnace Yard"), four scarab sockets, a **passage slot** (drag a key from the inventory into it; a Bounty map bound to Iron March offers "Open the Pit of Echoes" in it, click to take), a Re-chart button on the home chip, the readout with a "Next drops" line (where the map's own drops go) and an "Activate" button that opens the portal. A map is bound to one area, so there is no course to set: slotting a map eases the chart to its home and an empty slot leaves the chart browse-only. The chart has two **lenses** (Stock: a count badge per area of the maps you hold, tinted by tier band; Sources: the slotted map's drop table as arrows with shares; a Territory lens is reserved for beacons) and a **pin tray** (see §7 Pins).
+   - **Map Device (the physical object in the hideout; its panel holds the Atlas):** an Atlas chart (canvas ground, roads and plates, one button per area) that sits beside the inventory, which opens together with the table (at 1280x720 and 1024x600 the chart takes the left part of the screen), and a Codex tab. The chart window is only for choosing: it keeps the tabs, the lenses, the pin tray, the tier ruler, the key chips, the zoom controls and a slim status line (the open expedition with its portals left and "Enter the portal", the surge countdown and "Refill all"); it has **no map slot, scarab sockets, price or Activate button**. **Clicking an area opens that area's modal** (the inspector's content merged in: hero band with the boss and the monster family, the facts, what it pays, what can happen there, entry, your maps of the area and its pin toggle). In the centre of the modal sit the **map slot** (large) with the **four scarab sockets** around it, a **passage slot** only for sealed areas (their key) and the Pit of Echoes (lit when a Bounty map is loaded), the map's own readout (name, tier, quality, mods) with **Re-chart** and **Take out**, the surge pips with the Hold toggle and countdown, and a live readout (item quantity and rarity, monsters, danger mods, encounter odds, scarab effects, "Next drops", a "Full readout" for the rest). The footer holds the price and **Open area**, with the reason it is disabled always written out (no map, wrong area, tier above the ceiling, key missing, not enough Scrap...). Items are dragged in **from the inventory** (Ctrl/Cmd-click quick-loads; a Ctrl-click with no modal open opens the map's own area and loads it); the items that fit this area carry a quiet highlight in the inventory. A map is bound to one area: the slot of another area refuses it ("This map opens Furnace Yard") with a one-click "Go to Furnace Yard" that switches the modal and keeps the map in the slot. An area with no map shows "No map for this area" with where to find one (the charted areas whose expeditions drop it, Rook, the Crafting Bench). "Repeat last setup" refills the sockets (and the key) of the last run in this area with what is still in the inventory. Esc closes the modal first and the window second, Enter (or E) opens the area when it is ready, Tab stays inside the dialog. A successful Open area closes the modal; the Atlas stays open, the node flares and the status line offers the portal. A map is bound to one area, so there is no course to set. The chart has two **lenses** (Stock: a count badge per area of the maps you hold, tinted by tier band; Sources: the loaded map's drop table as arrows with shares; Territory: a ring per beacon at its chart radius, a glyph per sigil slot, and the areas the inspected beacon covers lit, with a caption per area of the sigils reaching it). A cleared area's modal also holds its **beacon** (see §7 Beacons and sigils) and a **pin tray** (see §7 Pins).
    - **Stash:** tabs; opens alongside the inventory.
-   - **Rook the merchant:** maps of cleared areas, flasks and gambling.
+   - **Rook the merchant:** a luck-driven wares board (4 maps and 8 items, new every 6 hours and at every level-up), a staples shelf, gambling and selling.
    - **Crafting Bench:** an anvil workbench with a coal forge (§12).
    - **Training dummy:** shows your damage numbers.
    - Braziers and banners for atmosphere.
@@ -79,8 +80,8 @@ Numbers are **starting targets** — tune them with the headless balance bot, bu
 | Dex bonus | +1% increased evasion per 5 dex |
 | Str bonus | +1% increased max life per 10 str |
 | Crit | 150% base crit multiplier; each skill has a base crit chance |
-| XP to next level | `floor(90·L^1.75)` (L1 → 90, L10 → 5.0k, L30 → 34k). Level cap 60 in this slice. +3 attribute points and +1 skill point per level |
-| Flasks | Recover over 3 s, never instantly. Life Flask `40 + 8·L` life, Focus Flask `30 + 4·L` focus, both × flask effect. 5 charges per belt slot; pickups refill a matching belt slot first |
+| XP to next level | `floor(90·L^1.75)` (L1 → 90, L10 → 5.0k, L30 → 34k). Level cap 80 (the tier ceiling's monster level is 88, so a capped character meets a +25% level gap at Tier 15 instead of +100%). +3 attribute points and +1 skill point per level |
+| Flasks | Recover over 3 s, never instantly. Life Flask `40 + 8·L` life, Focus Flask `30 + 4·L` focus, both × flask effect. 5 charges per belt slot; pickups refill a matching belt slot first. **Utility flasks** recover nothing: Quickstep +30% move speed and breaks Roots (4 s), Aegis +15 to all resistances (6 s, still capped by the maximum), Quicksilver Mind 15% max Focus at once and +25% Focus regeneration (5 s). **Kill charge:** each assigned belt slot gains one charge per 40 kills of the run (belt affix "of Reserves" shortens it, never below 10) |
 
 **Starting kit:**
 - **Equipment:** an equipped magic ilvl 1 Ashwood Wand with a T10 "Blazing" affix (8–12% increased fire damage: the best tier item level 1 can roll) and a normal Ashen Robe.
@@ -201,7 +202,7 @@ keep their stats and material identities. Area class preferences also apply to t
 
 **Rare names** come from two word lists (for example "Ember" + "Bite", "Grave" + "Coil"), with 40 words each.
 
-**Affixes:** 39 (15 prefixes, 24 suffixes), each with 7–10 tiers (T1 best), except "of Splintering" (1 tier). Item level unlocks tiers; weights fall steeply, so the top tiers (ilvl 78–84) stay rare even on high-level items:
+**Affixes:** 52 (17 prefixes, 35 suffixes), each with 7–10 tiers (T1 best), except "of Splintering" (1 tier). Item level unlocks tiers; weights fall steeply, so the top tiers (ilvl 78–84) stay rare even on high-level items:
 
 | Tiers | Item level per tier (worst → best) | Weight per tier (worst → best) |
 |---|---|---|
@@ -212,14 +213,14 @@ keep their stats and material identities. Area class preferences also apply to t
 
 | Kind | Affixes |
 |---|---|
-| Prefixes | flat max life (T1 54–60) · flat max focus · added spell damage (wand/sceptre/focus/amulet/ring; T1 19–21) · % spell damage (weapon/focus/amulet; T1 56–62%) · % fire / cold / lightning damage (weapon/focus/amulet/ring; T1 51–56%) · % elemental damage (ring/amulet) · flat armour / flat evasion (armour pieces with that property) · % armour / % evasion (armour pieces with that property) · % item rarity (helm/gloves/boots/amulet/ring, 5–25% — *luck*) · life on kill (weapon/gloves/belt/ring) · focus on kill (weapon/focus/gloves/belt/amulet) |
-| Suffixes | % cast speed (weapon/gloves/amulet/ring) · % crit chance (weapon/focus/helm/amulet) · crit multiplier (weapon/amulet) · fire / cold / lightning resistance (armour, belt & jewellery; T1 33–36%) · void resistance (T1 22–24%) · all resistances (amulet/ring) · % move speed (boots) · % focus regen (helm/focus/amulet/ring) · life regen (chest/belt/ring) · str / dex (armour, belt & jewellery) · int (also weapons and foci) · % projectile speed (weapon) · % area (focus/amulet) · % cooldown recovery (helm/amulet) · % pickup radius (belt/boots) · % item quantity (belt/amulet, 3–14% — *luck*) · % flask effect (belt) · ignite / chill / shock chance (weapon/gloves) · **+1 projectile** ("of Splintering", wand only, T1 only, ilvl 70+, weight 15) |
+| Prefixes | flat max life (T1 54–60) · flat max focus · added spell damage (wand/sceptre/focus/amulet/ring; T1 19–21) · % spell damage (weapon/focus/amulet; T1 56–62%) · % fire / cold / lightning damage (weapon/focus/amulet/ring; T1 51–56%) · % elemental damage (ring/amulet) · % void damage ("Entropic", weapon/focus/amulet/ring; 10 tiers, T1 51–56%) · % physical damage ("Concussive", weapon/focus/amulet; 10 tiers) · flat armour / flat evasion (armour pieces with that property) · % armour / % evasion (armour pieces with that property) · % item rarity (helm/gloves/boots/amulet/ring, 5–25% — *luck*) · life on kill (weapon/gloves/belt/ring) · focus on kill (weapon/focus/gloves/belt/amulet) |
+| Suffixes | % cast speed (weapon/gloves/amulet/ring) · % crit chance (weapon/focus/helm/amulet) · crit multiplier (weapon/amulet) · fire / cold / lightning resistance (armour, belt & jewellery; T1 33–36%) · void resistance (T1 22–24%) · all resistances (amulet/ring) · % move speed (boots) · % focus regen (helm/focus/amulet/ring) · life regen (chest/belt/ring) · str / dex (armour, belt & jewellery) · int (also weapons and foci) · % projectile speed (weapon) · % area (focus/amulet) · % cooldown recovery (helm/amulet) · % pickup radius (belt/boots) · % item quantity (belt/amulet, 3–14% — *luck*) · % flask effect (belt) · ignite / chill / shock chance (weapon/gloves) · **+1 projectile** ("of Splintering", wand only, T1 only, ilvl 70+, weight 15) · **penetration** (power rework; value = percentage points taken off the target's resistance, tag `penetration`, 7 tiers, T1 at ilvl 78): fire / cold / lightning / void / physical "of … Sundering" (wand/sceptre/focus/amulet; 2–3 up to 14–15, T4 8–9 at ilvl 40, one exclusive group per type) and "of Prisms" (elemental, focus/amulet/ring; 1–2 up to 8) · % damage over time ("of Lingering", weapon/focus/gloves; 8 tiers, 10–14% up to 54–63%) · % projectile damage ("of Volleys", wand/gloves; 8 tiers, 8–12% up to 36–41%) · % area damage ("of Eruptions", focus/amulet/gloves; same ladder) · +1 to 3 maximum resistances ("of Warding", amulet/ring; 7 tiers, 1/1/1/2/2/3/3 points, never above the 85 hard ceiling; not on the bench) · flask charge on kill ("of Reserves", belt; 7 tiers, a charge 1, 2, 4, 6, 8, 11 or 15 kills sooner than the base 40) |
 
 Luck affixes (item quantity / rarity) are personal: they raise only their wearer's drops (§9, §11).
 
 **Saved equipment:** phase-2 affix revision 2 is stored per item. Older rolls migrate once to the best new tier unlocked by the old tier’s item-level gate (also bounded by the item’s level), preserving their relative roll within the range. Names, history, scars, stability, seals, fractures and bench-crafted marks survive. Lowest-tier values and the starting kit remain unchanged.
 
-**World-pool uniques (4)** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tier 1, item level 4: none; Tier 2, item level 10: The Patient Spark; Tier 3, item level 16: + Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5+: all four), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties. Only Crown Fragments can reroll their numeric modifiers; ordinary and bench crafts cannot change them:
+**World-pool uniques (12: four classic, eight power-rework)** (any equipment drop at weight `0.2·m^1.5` of about 94, the boss's own 8%×m roll, and the gamble at 0.5%×m; m = rarity / 100 — the looter's personal rarity for drops, gear rarity for the gamble). Only uniques you could wear can appear: a drop picks among those whose level requirement ≤ its item level (Tier 1, item level 4: none; Tier 2, item level 10: The Patient Spark; Tier 3, item level 16: + Cinderwalkers; Tier 4: + Echo of the Matriarch; Tier 5: + Ruinheart Band; the eight of the power rework follow from their own level requirement, listed below), otherwise it becomes a rare; the gamble offers a unique only when one of the class is ≤ your level. They keep their base's implicit and properties. Only Crown Fragments can reroll their numeric modifiers; ordinary and bench crafts cannot change them:
 
 | Unique | Base | Effects | Flavour |
 |---|---|---|---|
@@ -228,8 +229,23 @@ Luck affixes (item quantity / rarity) are personal: they raise only their wearer
 | **Echo of the Matriarch** (level 20) | Cinder Pendant | +(15–25) max focus · Ember Nova repeats once after 0.4 s (`novaEcho`) · 8% reduced max life | "Her last command still rings in the embers." |
 | **Ruinheart Band** (level 24) | Void Signet | +1 projectile · +(20–30)% void resistance · 12% increased damage taken | "Power pours from the wound, not the hand." |
 
+**Power-rework uniques (10)** (docs/power-rework/power-curve.md 10.4: build enablers, none gives a `more` above 25%, none grants penetration above 16, none is mandatory). Eight are world-pool uniques (same rules as above); **Stormcaller's Lattice** joins Varkus's boss-exclusive pool and **Hollow Crown** the Hollow Warden's (their pools grow to three; each is eligible from its own level requirement). Their behaviour flag is **data-complete but gated**: it is not granted and its text is not shown until the slice that builds the behaviour ships (the `awaits` field in `src/data/items/uniques.ts`); the stat lines below are live now.
 
-**Keystone uniques (12):** boss-exclusive rewards, separate from the four world uniques above. Each matching final boss in the named Atlas areas has a `12% × personal item rarity / 100` chance (capped at 100%) to drop one eligible item from its two-item pool, equally weighted. Item quantity and the elite rarity multiplier do not affect this extra roll. The first item requires level 46 (Tier 8 / item level 46), the second level 58 (Tier 10 / item level 58). Below the pool's eligibility there is no extra drop. Ordinary equipment, chests, the ordinary boss unique roll and gambling never select these twelve. Each twin boss in an eligible area can roll independently. The Atlas, Map Device and item tooltip disclose sources and level gates.
+| Unique | Base | Effects | Flavour |
+|---|---|---|---|
+| **Frostfire Spiral** (level 30) | Glassbone Wand | +(25–35)% fire damage · +(25–35)% cold damage · 15% reduced cast speed · 40% of fire damage converted to cold (awaits the damage pipeline) | "The flame learned the cold, and kept the grudge." |
+| **Stormcaller's Lattice** (level 46) | Stormglass Sceptre | +(40–50)% lightning damage · penetrate (12–16)% lightning resistance · 10% reduced max life · skills chain 1 additional time (awaits) | "Every strike finds the next willing thing." |
+| **Penitent's Prism** (level 44) | Prismatic Amulet | +(20–30)% elemental damage · penetrate (10–14)% elemental resistances · skills cost 15% more Focus (awaits) | "It splits every prayer into three, and charges for each." |
+| **Hollow Crown** (level 52) | Duskweave Robe | +(35–45)% void damage · −10% to all resistances · Decay stacks up to 8 times (awaits) | "Whatever wore it was emptied first, and gladly." |
+| **Weeping Hearth** (level 22) | Ember Sceptre | +(60–90)% damage over time · −20% chance to ignite · ignite lasts 6 s and burns 40% less per second (awaits) | "The fire does not die. It only takes longer to leave." |
+| **Gravewind Boots** (level 40) | Wayfarer Greaves | +(10–14)% move speed · +(15–25)% cooldown recovery · Phase Stride lasts twice as long (awaits) | "The dead walk fast when nothing holds them back." |
+| **Anchorite's Seal** (level 48) | Dusksteel Ring | +(30–40) max focus · 8% reduced max life · 30% of damage taken drains Focus first (awaits) | "Faith is a held breath. Hers was never let go." |
+| **Bellwether** (level 38) | Bone Talisman | +(8–12) to all attributes · the skill in loadout slot 1 has 2 additional augment slots (awaits) | "One bell, rung true, is a whole choir." |
+| **Needlepoint** (level 36) | Cinder Orb | +(3–4)% crit chance · +(25–35)% crit multiplier · hits that are not critical strikes deal 10% less damage · critical strikes penetrate 15% of resistances (both awaiting) | "A single, patient point, and the whole armour opens." |
+| **Twice-Struck Bell** (level 34) | Runed Tome | +(20–30) max focus · +(10–15)% cooldown recovery · lodged detonations trigger a second time at 50% (awaits) | "The second note is the one that breaks the glass." |
+
+
+**Keystone uniques (14):** boss-exclusive rewards, separate from the world uniques above. Each matching final boss in the named Atlas areas has a `12% × personal item rarity / 100` chance (capped at 100%) to drop one eligible item from its pool (two items; three for Varkus and the Hollow Warden after the power rework), equally weighted. Item quantity and the elite rarity multiplier do not affect this extra roll. The first item requires level 46 (Tier 8 / item level 46), the second level 58 (Tier 10 / item level 58). Below the pool's eligibility there is no extra drop. Ordinary equipment, chests, the ordinary boss unique roll and gambling never select these fourteen. Each twin boss in an eligible area can roll independently. The Atlas, Map Device and item tooltip disclose sources and level gates.
 
 | Boss | Atlas sources | T8+ unique | T10+ unique |
 |---|---|---|---|
@@ -255,6 +271,7 @@ They retain their advanced base properties and implicits. Crown Fragments reroll
 | **The Broken Link** (level 46) | Ironweave Girdle | +(25–40) max life · +(12–18)% cooldown recovery · 20% reduced focus regen · Rift Step removes all harmful effects | "Freedom begins with one missing link." |
 | **Iron Refrain** (level 58) | Bastion Helm | +(35–50)% lightning damage · +(8–12)% cast speed · 8% reduced max life · Arc Chain may revisit earlier targets, never the same target on consecutive hits | "Every chain returns to its master." |
 | **The Unbowed Crown** (level 46) | Bastion Helm | +(30–45) max life · +(2–4) life regen · 8% reduced move speed · taking a Physical hit restores 0.5 seconds to an active Cinder Ward, capped at its original duration | "The crowd falls silent. The champion does not." |
+| **Stormcaller's Lattice** and **Hollow Crown** | see Power-rework uniques above | extra entries of Varkus's and the Hollow Warden's pools (levels 46 and 52) | |
 | **Victor's Debt** (level 58) | Dusksteel Ring | +(25–35)% spell damage · +(10–14)% all resistances · 10% increased damage taken · hits deal 25% more damage within 80 units, 25% less beyond 200 units | "Victory is paid for at arm’s length." |
 
 Echoes use the caster's current position and aim, preserve the cast's skill values, cost no extra Focus and never repeat recursively; death cancels pending echoes. The Nova fan can combine with Echo of the Matriarch, and the Rime echo with unlimited pierce. Ward snapshots its Cold/Focus/renewal behaviour at cast time; Focus mode suppresses damage and ailments even with Stillwinter. Renewal needs an actual positive Physical hit (not evaded, blocked by invulnerability or damage over time) and never revives an expired Ward. Victor's Debt uses distance at hit time; damage over time is unaffected.
@@ -286,7 +303,7 @@ Echoes use the caster's current position and aim, preserve the cast's skill valu
 | Kindling Shard | shape | 1 | Normal → magic with 1–2 random affixes. |
 | Forge Scrap | shape | 1 | Rerolls the values of all unsealed, unfractured affixes within their tiers. Also the merchant money. |
 | Reforging Ember | shape | 2 | Rerolls all unsealed, unfractured affixes into a new **rare** (3–6 total). |
-| Essence (Ember / Rime / Storm / Vital / Swift) | shape | 2 | Adds one affix with that tag. Ember = fire, Rime = cold, Storm = lightning, Vital = life/defence/resistance, Swift = speed (cast/move/projectile). Normal → magic; magic with 2 → rare. Fails if no room. |
+| Essence (Ember / Rime / Storm / Vital / Swift / Umbral) | shape | 2 | Adds one affix with that tag. Ember = fire, Rime = cold, Storm = lightning, Vital = life/defence/resistance, Swift = speed (cast/move/projectile), Umbral = void and physical. Fire, cold, lightning, void and physical essences include the matching penetration affix ("of … Sundering") and damage affix. Umbral Essence is not in the ordinary currency table: it comes from Void Breach seals (Silver 30%, Gold always, times the Voidtouched strength) and Tier 8+ final bosses (30% × personal rarity). Normal → magic; magic with 2 → rare. Fails if no room. |
 | Tempering Catalyst | refine | 3 | **Choose an affix:** upgrade it one tier (if item level allows) and reroll its value in the new tier. |
 | Forge Solvent | remove | 1 | Removes the **lowest-tier** unsealed, unfractured affix (ties random). With 0 affixes left, the item becomes normal. |
 | Binding Seal | preserve | 0 | **Choose an affix:** it is sealed for the next operation, then the seal breaks. One seal at a time. |
@@ -379,7 +396,7 @@ territory" for an area the viewer has not charted; a map of an undiscovered area
 cannot be opened. Maps are named by place (`Furnace Yard map`; magic: first mod + place; rare: the generated name, the place as subtitle).
 A Void Needle tier-up at the area's ceiling moves the map to a deeper area of its theme, so a raised tier never strands it.
 
-**Passages (sealed areas and the Pit).** Sealed areas and the Pit of Echoes are never a map's own address. The dock's **passage slot** is a real drop target (the key stays in the inventory until activation; the slot only records the choice, and refuses with the rules' own reason: not a key, no map slotted, area not charted, tier above its ceiling). A key held in the inventory offers its sealed area
+**Passages (sealed areas and the Pit).** Sealed areas and the Pit of Echoes are never a map's own address. The area modal's **passage slot** (only in the modal of a sealed area or the Pit) is a real drop target (the key stays in the inventory until activation; the slot only records the choice, and refuses with a reason: not this area's key, not a key at all; a missing map, a tier above the ceiling or a map that cannot reach the area show in the footer). A key held in the inventory offers its sealed area
 when the map's tier fits that area's ceiling: any map works, the key is spent with it, the map's own area is bypassed and the run records
 `RunSetup.passage = { kind: 'key' }` (the bound map stays in `sourceMap` for refunds). A Bounty map bound to Iron March (the Pit's only neighbour) offers
 "Open the Pit of Echoes" (`passage: { kind: 'bounty' }`). The wire command is `activateMapDevice { lootClass?, passageKey?, pit?, useSurge? }`; a stale
@@ -389,7 +406,7 @@ client's `areaId` is accepted only when it equals the map's bound area.
 every place a map can live (backpack, stash tabs, Map Stash, Crafting Stash work slot, the map device; open runs rebuild their `sourceMap` the same way). Choice inside a candidate set is
 `hash(uid) % n` over the set sorted by depth then id: deterministic, idempotent, no rng. Order: (1) a discovered same-theme area accepting the tier; (2) else any discovered area
 accepting it (smallest ceiling first; the map moves theme and says so in its tooltip); (3) else the shallowest area that accepts the tier, which is charted
-(the map is the chart fragment). Nobody loses a map. The starting kit is three Tier 1 Cinder Crossing maps; Rook sells T1/T2 maps of the areas you have cleared (see **Rook's maps** under §9).
+(the map is the chart fragment). Nobody loses a map. The starting kit is three Tier 1 Cinder Crossing maps; Rook's wares board always carries one plain map (see **Rook's wares** under §9).
 Drops are routed by the chart (see **Map drops** below). A run frozen before routing existed (no `routing` in its persisted setup) keeps the old behaviour: the theme is rolled (same rng) and the area follows
 from it (a discovered area of that theme accepting its tier, else any discovered area that accepts it, else the shallowest fit beside the chart).
 
@@ -401,7 +418,7 @@ from it (a discovered area of that theme accepting its tier, else any discovered
 | Rimed Ossuary | Frosted bone-tiles, cold blue light, ice crystals | 900 | Rime Essences 3× as likely; +20% monster life; +15% item rarity |
 | Iron Coliseum | Rusted iron plates, sand, torchlight | 650 | +25% monster count; armour bases +2 stability |
 
-**Tier and monster level:** tiers 1–15. Monster level = `min(90, 6·tier − 2)` (Tier 1 = 4, Tier 4 = 22, Tier 15 = 88), and it is the item level of every drop. **Monster stats scale with monster level, not tier** (Path of Exile style): life ×1.09 and damage ×1.09 per level above the reference level 10 (the level at which the sim's base monster table applies unchanged) up to monster level 16, then life ×1.11 and damage ×1.11 per level beyond it with life also gaining a flat +0.25 (of base) per level past 16; below the reference level monsters shrink gently (life ×1.09, damage ×1.065 per level), shown as "more" or "less" from "Monster level N" in the readout. **Level gap:** a monster more than 3 levels above the character it hits deals +5% damage per further level, up to +100% (nothing when the character is at or above monster level; damage over time is not scaled twice); shown in the map tooltip. Tier still drives experience (Tier 1 gives ×0.5, then ×1.28 per tier above 1: T2 ×1.28, T3 ×1.64, T4 ×2.10, T5 ×2.68) and +5% item rarity per tier (additive). Tier 1 experience is deliberately halved so a new character needs about ten Tier 1 maps to reach level 10, where Tier 2 is on-level; a fresh character is expected at level 4 after the first Tier 1 clear, 6 after three, 9 after eight.
+**Tier and monster level:** tiers 1–15. Monster level = `min(90, 6·tier − 2)` (Tier 1 = 4, Tier 4 = 22, Tier 15 = 88), and it is the item level of every drop. **Monster stats scale with monster level, not tier** (Path of Exile style): life ×1.09 and damage ×1.09 per level above the reference level 10 (the level at which the sim's base monster table applies unchanged) up to monster level 16, then life ×1.11 and damage ×1.11 per level beyond it with life also gaining a flat +0.25 (of base) per level past 16, **unchanged up to monster level 28**; from monster level 28 the curve bends (curve v3): life ×1.061 per level to monster level 40, ×1.0545 to 60 and ×1.0384 beyond, damage ×1.04, ×1.028 and ×1.019 (life ×18.1 and damage ×9.4 at monster level 40, ×52.2 and ×16.3 at 60, ×149.8 and ×27.7 at 88); below the reference level monsters shrink gently (life ×1.09, damage ×1.065 per level), shown as "more" or "less" from "Monster level N" in the readout. **Level gap:** a monster more than 3 levels above the character it hits deals +5% damage per further level, up to +100% (nothing when the character is at or above monster level; damage over time is not scaled twice); shown in the map tooltip. Tier still drives experience (Tier 1 gives ×0.5, then ×1.28 per tier above 1: T2 ×1.28, T3 ×1.64, T4 ×2.10, T5 ×2.68) and +5% item rarity per tier (additive). Tier 1 experience is deliberately halved so a new character needs about ten Tier 1 maps to reach level 10, where Tier 2 is on-level; a fresh character is expected at level 4 after the first Tier 1 clear, 6 after three, 9 after eight.
 
 **Defences scale with monster level too.** Evade chance = `rating / (rating + 30 × monster level)` (at most 75%): the same evasion rating avoids fewer hits from higher-level monsters, so roughly half of all hits can only be avoided with focused high-end gear. Monster accuracy is the `30 × monster level` term. Armour retains its hit-size formula (`armor / (armor + 10 × damage)`): higher-level hits already reduce its effectiveness, so there is no second armour penalty. The sheet's example physical hit scales from 20 at monster level 10 with the same damage curve.
 
@@ -449,7 +466,7 @@ Reward-only mods (Reward Ink):
 - **Cartographer's:** maps 3× as likely
 - **Essence-laden:** essences 3× as likely
 
-**Expanded map roster.** All six bases drop and Rook supplies T1/T2 maps of every cleared area of the theme. A map is bound to an area and takes its theme from it: Ember Vault uses Cinder Chapel, Glass Sepulchre uses Choral Crypt, and Iron March uses Chainworks. Other routes retain their original themes and bosses. The Atlas shows the theme and boss before activation.
+**Expanded map roster.** All six bases drop and Rook's wares board offers maps of the areas you have discovered. A map is bound to an area and takes its theme from it: Ember Vault uses Cinder Chapel, Glass Sepulchre uses Choral Crypt, and Iron March uses Chainworks. Other routes retain their original themes and bosses. The Atlas shows the theme and boss before activation.
 
 | New map | Wave family | Final boss | Implicit / arena |
 |---|---|---|---|
@@ -482,7 +499,7 @@ all numbers in `src/data/progression/routing.ts`, rules in `src/game/progression
 - **Readout:** `routingReadout(setup.routing, tier, discovered?)` returns the exact shares (own, neighbours, wander, pins; ordinary, boss/chest and upward columns) and the advance target, from the same functions the sim uses.
 - **Measured (harness, first pass kept):** about 7.5 maps per run (the same with and without routing), 12–22% of them for the run's own area once the chart fills in (35–45% early, when little is charted), 55–80% for neighbours,
   5–15% further along; a bot that always runs its best available map reaches the first Tier 15 run in a mean of 22.0 runs against 20.5 before routing (+7%), and every simulated player did.
-- Rook always sells Tier 1 maps of the starting area (free), so nobody can be map-locked; deeper maps are earned at their boss.
+- Rook's wares board always carries one Normal quality-0 map of an open area at your current tier (Tier 1 of the starting area costs 1 Scrap), so nobody can be map-locked; deeper and better maps are luck or earned at their boss.
 - **Atlas territory fee:** paid once by the map owner on activation, from inventory/stash Scrap. T1–T3 free;
   T4–T6 cost 1; T7–T9 cost 2; T10–T12 cost 3; T13–T15 cost 4. The device shows the fee before activation.
   Portal entry and restored runs do not charge it again. If a server failure makes the run unrestorable,
@@ -492,19 +509,30 @@ all numbers in `src/data/progression/routing.ts`, rules in `src/game/progression
 **Daily surge (slice G1; `src/game/progression/surge.ts`, constants in `src/data/progression/territory.ts`).** Every Atlas area holds **3 surge charges per account per forge day**. The forge day turns over at **04:00 UTC**
 (`forgeDay(now) = floor((now - 4 h) / 24 h)`: server clock only, no time zones, no DST; the client shows a countdown, "Surges refresh in 3 h 12 m", from `welcome.serverTime` and `pong`). The ledger is `atlas.surge = { day, spent: { area: n } }` on the account's Atlas,
 so every character of an account shares it and alt-hopping gains nothing; it resets lazily (a stored day before today counts as empty, a clock that steps back never grants charges), so a restart across the reset changes nothing.
-- **Spending:** Activate sends `useSurge` (the dock's Hold toggle, on by default; off keeps the charge). The opener spends one charge of the area actually run (a key passage spends the sealed area, the Bounty passage the Pit) in the same save as the map; the expedition freezes
+- **Spending:** Activate sends `useSurge` (the Hold toggle in the area modal, on by default; off keeps the charge). The opener spends one charge of the area actually run (a key passage spends the sealed area, the Bounty passage the Pit) in the same save as the map; the expedition freezes
   `RunSetup.surge = { areaId, quantityMore: 30, rarityMore: 15, day }`, persisted and restored with the run (a restart, even across the reset, keeps the bonus it was opened with). **Guests of a party get the bonus and never spend a charge of their own.**
-  With no charge left the run is simply the normal run (bit for bit; the dock says "No surge left (refreshes in ...)"): there is no hard cap anywhere.
+  With no charge left the run is simply the normal run (bit for bit; the modal says "No surge left" with the countdown): there is no hard cap anywhere.
 - **Bonus:** **+30% item quantity and +15% item rarity**, "more" multipliers on the map-side luck (the luck breakdown lists "30% more Surge"; the HUD number is the number the loot rules use). **Quantity applies to every category except maps**, so the clock never changes map volume (the harness
   asserts it). Boss and chest guarantees, encounter rewards and the Hunting Ground class roll do not see the surge.
 - **Refunds:** only an unrestorable server-side run returns the charge, in the same transaction as the map, key, Scrap and scarabs (and only on the same forge day). Deaths, abandons, disconnects and restarts with a restorable run refund nothing.
-- **Hourglass Sand** (stack 20, tradeable) refills one area to full: select the area in the rail on the Atlas table and choose "Refill surge" (the Sand is taken from the inventory or stash); refused, spending nothing, when the area is full. Sources: a final boss on a Tier 3+ map 5% x personal rarity (doubled in sealed areas),
-  the completion chest 3%, a Gold-grade encounter 10% (about 9% a run in total), all on their own rng stream so no other drop moves. **Grand Hourglass** (stack 5) refills every area ("Refill all" in the dock chip): Tier 9+ final bosses 0.5% x personal rarity.
+- **Hourglass Sand** (stack 20, tradeable) refills one area to full: open the area on the Atlas table and choose "Refill surge" in its modal (the Sand is taken from the inventory or stash); refused, spending nothing, when the area is full. Sources: a final boss on a Tier 3+ map 5% x personal rarity (doubled in sealed areas),
+  the completion chest 3%, a Gold-grade encounter 10% (about 9% a run in total), all on their own rng stream so no other drop moves. **Grand Hourglass** (stack 5) refills every area ("Refill all" in the Atlas status line): Tier 9+ final bosses 0.5% x personal rarity.
   The command is `refillSurge` (protocol 22); the server holds the clock and the ledger.
-- **Tree (as data):** Lantern-Bearer is now **Second Wind** (+1 charge on every area), Lamp Oil +1 charge on dead-end and sealed areas, Cartographer's Pen **Afterglow** (10% a spent charge is not consumed, rolled from the map seed; the bonus still applies), Trailmark +50% Hourglass Sand chance.
-- **Indicators:** three brass pips under every chart node, in the rail, the Re-chart popover and the dock chip (`SurgePips.tsx`), hollow and dim when spent.
+- **Tree (as data):** Lantern-Bearer is now **Second Wind** (+1 charge on every area), Lamp Oil +1 charge on dead-end and sealed areas (and +3 sigil uses, see Beacons), Cartographer's Pen **Afterglow** (10% a spent charge is not consumed, rolled from the map seed; the bonus still applies), Trailmark +50% Hourglass Sand chance.
+- **Tide sigils** (Beacons below) are the only beacon effect on the surge: Faint multiplies the bonus by 1.25, Bright and Blazing give every covered area +1 daily charge, Blazing also rolls its own 25% chance (beside Afterglow's, independently) that the spent charge is kept.
+- **Indicators:** three brass pips under every chart node, in the area modal (header and Hold row), the pin chips and the Re-chart popover (`SurgePips.tsx`), hollow and dim when spent.
 - **Measured** (`tests/game-progression/surge-economy.test.ts`, `BALANCE=1`): a boosted run is worth +8 to +14% (mean +10%) more than a normal one in the bot's Scrap valuation, because only ordinary kill drops are boosted; a player who rotates the chart boosts nearly all of about 20 daily runs (about +10% income), a focus farmer
   three of them (about +1.5%). Sand-adjusted value is about 3 to 4% of a run for a player who spends every Sand. The levers if income needs trimming are `SURGE_BONUS` (+25% / +12%) and `SURGE_CHARGES` (2).
+
+**Beacons and sigils (slice B1; rules `src/game/progression/territory.ts`, constants `src/data/progression/territory.ts`, UI `src/ui/atlas/BeaconPanel.tsx` and the Territory lens).** Every area the account has **completed is a beacon**, automatically.
+- **Slots:** depth 0 to 4 through-route areas 1, depth 5+ 2, sealed areas 2, dead ends 1; the notable **Lightkeeper** (Cartography outer ring, beside Fifth Socket) gives every one-slot beacon a second slot (it cannot be refunded while a second slot holds a sigil).
+- **Reach** in chart pixels between node centres (the 640 x 360 chart, `ATLAS_POS`): depth up to 3 120, depth 4 to 6 140, depth 7+ 160, sealed areas 100, dead ends +30; **Survey Stake** adds 20 to every beacon. An area is covered when its centre lies within the reach; the beacon's own area is always covered.
+- **Sigils** (36 currency ids: 12 kinds x Faint/Bright/Blazing, stack 20, tradeable) are slotted on the Atlas table in a hideout, **dragged from the inventory into a beacon slot of the area's modal** (Ctrl/Cmd-click fills the first empty slot; stashed sigils move to the inventory first). A slotted sigil has 12 uses (Blazing 10; **Lamp Oil** +3). Every map opened in a covered area spends one use of every covering sigil **whose effect applied** to that run; at 0 the slot empties (the opener's activation message says so). Taking a sigil out returns it only if it was never used; a used one is consumed (the modal asks first, also when another sigil is dropped onto it).
+- **Kinds** (I / II / III): **Omen** +4 / +6 / +9 percentage points encounter chance (after the area odds and the tree, outside the tree's cap, never past the 65% encounter cap); **Hoard** +9 / +14 / +20% increased item quantity in dead-end and sealed areas; **Fortune** +8 / +12 / +18% increased item rarity; **Ingredient** 20 / 35 / 50% more boss ingredient chances; **Survey** +25 / +40 / +60% chance for the boss kill to reveal one more neighbour (added to Master Surveyor's fraction); **Tide** (see Daily surge); and six **theme sigils** (Ashen, Chapel, Crypt, Ossuary, Chainworks, Coliseum) that on their theme's maps give 25 / 45 / 70% more weight to the theme's signature currency (Ember Essence, Binding Seal, Solvent, Rime Essence, Forge Scrap, Fracture Core) and +1 weight to each item class the area favours.
+- **Stacking:** several sigils of one kind covering a run: the strongest works at 100%, every other at 50%; different kinds add. Each appears in the readout as `Territory: <sigil> (<beacon>)`.
+- **Frozen:** the opener's applied sigils are frozen into `RunSetup.territory` (sigil, beacon, slot, share), persisted and restored with the run; guests share the effects and spend nothing. An unrestorable server-side run returns the uses it spent with its map, key, Scrap, scarabs and surge charge.
+- **Sources:** a final boss on a Tier 3+ map drops a sigil 10% x personal rarity (doubled in sealed areas, own rng stream): 60% one of the six generic kinds, 40% the boss theme's; Tier 3 to 7 Faint, Tier 8 to 11 Faint or Bright (100 : 30), Tier 12+ Faint, Bright or Blazing (100 : 30 : 8). **Rook** sells Faint sigils: the six generic kinds for 14 Scrap and the theme sigil of every theme you have cleared an area of for 18 (Maps shelf).
+- **Commands** (protocol 27): `slotSigil { areaId, slot, uid }` and `unslotSigil { areaId, slot }`, hideout only, atomic (the sigil and the account's `atlas.beacons` change in one save).
 
 **Scarabs (four optional Map Device sockets beside the map).** Each socket takes one scarab, split from its
 backpack or shared Crafting Stash stack (maximum stack 20). Move the scarab from the Crafting Stash into the inventory first, then drag it from the inventory into a socket of the
@@ -544,7 +572,7 @@ their 60-second baseline and start on wave 1. Exact combined timing and starting
 
 Homing never turns a map into an own-area-only machine: the own area's share of the table is capped at 70% unless the player pinned it (a dead end with one neighbour would reach 77% with Homing IV by the multiplier alone; charts with real neighbours stay at 53 to 67%). The Device readout lists each loaded scarab ("Scarab: Etched Homing Scarab: own area x3").
 
-**Atlas tree, "the Codex" (account-wide).** Open it from the Map Device. It is a wheel of 145 nodes around one origin (the Cinder Crossing brazier): six branches (Cartography, Foundry, Bounty, Fortune, Echoes, Peril), eighteen bridge nodes, five tier-bonus nodes in the inner ring and six theme seals on the outer belt. Every node changes map rules only: no node touches character stats, map tier or monster level, and none grants a temporary power-up. The full node list with every number is in `docs/atlas-rework/tree-nodes.md` (generated from `src/data/progression/map-tree.ts`; `tests/game-progression/spec-sync.test.ts` keeps it in step).
+**Atlas tree, "the Codex" (account-wide).** Open it from the Map Device. It is a wheel of 146 nodes around one origin (the Cinder Crossing brazier): six branches (Cartography, Foundry, Bounty, Fortune, Echoes, Peril), eighteen bridge nodes, five tier-bonus nodes in the inner ring and six theme seals on the outer belt. Every node changes map rules only: no node touches character stats, map tier or monster level, and none grants a temporary power-up. The full node list with every number is in `docs/atlas-rework/tree-nodes.md` (generated from `src/data/progression/map-tree.ts`; `tests/game-progression/spec-sync.test.ts` keeps it in step).
 
 | Class | Count | Cost | Refund (Scrap) | Job |
 |---|---|---|---|---|
@@ -677,6 +705,15 @@ Coliseum and Chainworks).
 | anvil | Wayside Anvil | T3 | 2 to 4 | fight around an anvil, then forge a boon for the completion chest | charge time (<= 90 s / <= 54 s) |
 | bellwatch | Bellwatch | T5 | 3 to 5 | silence four cantors before the bell tolls the arena to a frenzy | cantors cut down before toll 4 (2 / 3 / 4) |
 | voidBreach | Void Breach | T6, or forced | 3 to 4 | the arena shrinks under a void tide; seal the breach | seal time (<= 86 s / <= 61.5 s; x0.93 Ossuary, x0.85 Coliseum) |
+
+**Where events happen (anchors).** In a hand-crafted area the Event Director places each event on one of the layout's
+declared anchors of its kind (the Stalker on a perch with cover between it and the landing, the Echoing on an echo anchor,
+the Caravan along the area's road, the Fault on its fault line with the first crack along it, the Ember Relay on the
+area's three relay braziers, Pact Altar, Orchard plots, Champion's Ring, Stasis Host, Wayside Anvil and Bellwatch on
+their own anchors, Rival Crowns on a second boss stage when the area has one). Which anchor is picked with the run seed,
+so the same area always uses the same handful of sites. An anchor must keep the event's usual distance from every player
+and fit its footprint inside the arena (one up to 100 units over the rim slides inward); when none qualifies, or an
+anchor's tier window excludes the map, the event falls back to the old radial placement. The Void Breach stays central.
 
 Area bonuses are kept and extended: forge adds +5 Stalker and +5 Ember Relay (+3 Fault, +4 Wayside Anvil), arena +10 Stalker and
 +5 Rival Crowns (+5 Champion's Ring), crypt +10 The Echoing and +5 Fault (+3 Stasis Host, +5 Bellwatch), vault +5 The Echoing and
@@ -856,13 +893,13 @@ legacy maps event-free.
 
 **Pack rarity:**
 - Magic chance: 10% × magicPackChance multiplier. The whole pack is magic and shares one mod: Swift (+30% speed), Stout (+70% life) or Fierce (+40% damage). Blue outline.
-- Rare chance: 3% × multiplier. A single rare leader gets 2 mods from Juggernaut (+200% life), Frenzied (+50% speed), Ember-touched (fire burst on death, telegraphed) and Warded (40% less damage while allies are near). Gold outline and its name floats above it. The rest of the pack is normal.
+- Rare chance: 3% × multiplier. A single rare leader gets 2 mods from Juggernaut (+200% life), Frenzied (+50% speed), Ember-touched (fire burst on death, telegraphed) and Warded (40% less damage while allies are near); from deeper tiers the pool also holds strikes (Stormcalled, Rending) and **proofs**: Fire, Cold and Lightning proof (from Tier 2, weight 0.6 each, full at Tier 8), **Void-proof** (from Tier 8, weight 0.5, full at Tier 12) and **Physical-proof** (from Tier 10, weight 0.4, full at Tier 14), each 90% resistance to one damage type. From Tier 12 a fifth of rares with a proof swap another mod for a second proof of a different type (never more than two; the mod count per tier is unchanged). Gold outline and its name floats above it. The rest of the pack is normal.
 - Hovering a magic or rare monster shows its name, rarity, life and modifier explanations at the top centre.
   The card clears over UI or empty space and when the monster dies.
 
 **Rarity strength:** every magic monster has ×1.5 life and ×1.2 damage; a rare leader has ×3 life and ×1.5
 damage. These multiply the monster's level, wave and rolled modifiers (a Stout magic monster has ×2.55 life,
-a Juggernaut rare ×9 life relative to its normal counterpart). Named lieutenants, final bosses and training
+a Juggernaut rare ×9 life relative to its normal counterpart). **Life floor:** a rare leader's base life is `max(kind life, floor) × 3` and a magic monster's `max(kind life, 0.4 × floor) × 1.5`, where the floor rises from 22 at Tier 2's start toward 150 at Tier 6 and beyond (22 at Tier 1, where it does not apply, 48 at Tier 2, 73, 99, 124 at Tier 5, 150 from Tier 6). Named lieutenants, final bosses and training
 dummies use their own tuning and do not receive these rarity multipliers.
 
 **Loot** (rolled per player, §9): a magic monster gets ×1.5 quantity and ×2 rarity; a rare gets ×4 quantity and ×3 rarity; the lieutenant and the boss roll their ordinary loot like rares, on top of their guaranteed drops. Summoned minions drop nothing. **XP:** magic ×2, rare ×6.
@@ -900,7 +937,7 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 |---|---|---|
 | Currency | 1.5% | Scrap 40 · Kindling 12 · Map Dust 6 · Solvent 2.5 · Reforge 1.5 · Threat Glyph 1.5 · each Essence 0.8 (×5) · Seal 1.2 · Reward Ink 0.6 · Catalyst 0.5 · Void Needle 0.2 · Fracture Core 0.08. Scrap drops in stacks of 1 (75%), 2 (20%) or 3 (5%). Map implicits and Essence-laden multiply essence weights |
 | Equipment | 0.9% | Uniform over the bases whose level requirement ≤ item level; item level = monster level. A unique roll picks among the uniques wearable at that item level (§5), else it becomes a rare |
-| Flask | 1% | Life 60 · Focus 40 |
+| Flask | 1% | Life 60 · Focus 40 · Quickstep 12 · Aegis 10 · Quicksilver Mind 10 |
 | Map | 0.5% | See section 7 |
 
 **Equipment rarity** (m = R/100):
@@ -934,32 +971,51 @@ This is the Ashen Forge roster; the Rimed Ossuary and Iron Coliseum rosters are 
 **Gambling at Rook:** 6 Scrap buys a random item of a chosen class at the player's level, with magic 25%, rare 6% and unique 0.5% (×m from gear rarity; unique only for classes with a unique whose level requirement ≤ the player's level — a wand from level 10, a ring from 24; offered only for classes with a base at the player's level).
 
 **The vendor layout (Rook and Mira):** a merchant opens beside the inventory, like a Path of Exile vendor, and every
-item moves by drag and drop; clicking is an extra. Rook's Stall has four tabs: Buy (supplies), Maps (see **Rook's maps**), Gamble (one row per
-item class) and Sell. Buy and Gamble list the stock with prices, a search box and a "Can afford" filter.
-Dragging a stock row onto the backpack buys it: the cell under the pointer is the slot (the ghost and the grid preview go green
+item moves by drag and drop. Rook's window is **an inventory like the player's**: one plain item grid (the same grid, item icons, footprints, rarity frames and hover card as the
+backpack and stash, 12 wide, never shorter than the stash) with plain text tabs **Gear**, **Maps**, **Supplies**, **Gamble** and **Sell**; the tab of an item is decided by its item class alone
+(`vendorTabOf`: equipment is Gear, maps and scarabs are Maps, flasks, Kindling, Map Dust and every other currency are Supplies). There are no special tiles, price chips, badges or shelf headers.
+Dragging an item (or a gamble row, on the Gamble tab) onto the backpack buys it: the cell under the pointer is the slot (the ghost and the grid preview go green
 when the footprint is free there or the purchase tops up a stack of the same kind, red otherwise) and a gamble reserves room for
 the largest base of its class. The preview states why a drop is refused ("No room there. Drop it on free cells.", "Your
-backpack has no room for this.", "Can't afford: needs 6 Forge Scrap (you have 2).") and a refused drop buys nothing. The
-Buy/Gamble button and Ctrl/⌘-click on a row buy with first-fit placement. The drop cell travels in `buyOffer` /
-`buyDebugOffer` as an optional `at: {x, y}`; the server honours it only when the whole footprint is free there and otherwise
+backpack has no room for this.", "Can't afford: needs 6 Forge Scrap (you have 2).") and a refused drop buys nothing. Ctrl/⌘-click or right-click on an item buys with first-fit placement; the Buy/Gamble
+button remains on gamble rows only. The drop cell travels in `buyOffer` /
+`buyWare` / `buyDebugOffer` as an optional `at: {x, y}`; the server honours it only when the whole footprint is free there and otherwise
 places first-fit, so a stale or hostile cell never fails or changes a purchase. Everything else about buying (price, affordability,
 atomic payment and placement, the hideout and activation checks) is unchanged and decided by the server.
 
-**Rook's maps (brief D 5.4, the Maps tab).** Normal Tier 1 and 2 maps of every area the account has **cleared** (`atlas.completed`; the starting area is always sold, so nobody is map-locked), never a dead end, a sealed area or the Pit, and a Tier 2 row only where the area's ceiling takes it. Each is offered in three quality grades by id `map:<areaId>:<tier>:<grade>`:
+**Rook's wares (the Gear, Maps and Supplies tabs, owner brief: "just an inventory with some maps and some items to buy; random, usually crap, sometimes really cool").**
+Nothing is chosen: no tier, quality, area, search, filter or chip. Each character sees its **own board** of **4 maps and 8 items** plus a fixed **Staples**
+shelf (Life and Focus flasks 1 Scrap, Quickstep, Aegis and Quicksilver Mind flasks 3 Scrap, Kindling 3, Map Dust 3: bought by `buyOffer` as before, so luck can never strand anyone). The board is built by the
+server (`rules.waresBoard`) and sent with the `merchantWares` command; the client never rolls it. It is a pure function of the character id and the **stock epoch**
+`(rotation, character level, rerolls)`, so every look at the same epoch shows the same wares and a restart changes nothing.
 
-| Grade | Quality | Tier 1 | Tier 2 |
-|---|---|---|---|
-| Plain | 0 | free | 4 Scrap |
-| Fine | +6% | 2 Scrap | 7 Scrap |
-| Pristine | +12% | 6 Scrap | 12 Scrap |
-
-The tab has area chips (with how many maps of the area you hold), a tier toggle and a quality toggle; ONE stock row appears for the chosen combination and is bought like every Rook row (drag onto a backpack cell, or Buy). The server re-derives the offer from the id when you buy; a malformed id, an uncleared area or a tier above the ceiling is refused ("Rook does not sell that."). Stock is unlimited and Scrap is the gate; Rook never sells a map of an area you have not cleared.
+- **Refresh rules.** `rotation = floor((serverNow - 04:00 UTC) / 6 h)` (the same forge clock as the daily surge, `forgeRotation` in `surge.ts`): wares rotate at 04:00, 10:00, 16:00 and 22:00 UTC.
+  Every **level-up** of the character starts a new epoch too (new level, new wares). **"Ask for new wares"** costs Scrap that doubles with every use inside one rotation
+  (3, 6, 12, 24, 48, then 48) and returns to 3 with the next rotation; it bumps the reroll count (the salt) and refreshes the board. A level-up keeps the count. The sold slots clear with every new epoch.
+- **Persistence.** `CharacterSave.wares = { rotation, level, rerolls, sold[], tier, areas[] }` (optional, normalised on load, no `SAVE_VERSION` change): the epoch, the sold slot indices
+  and the inputs snapshotted when the epoch began (highest tier completed, the discovered bindable areas), so discovering an area or finishing a tier mid-rotation cannot move the stock.
+  The first look at a new epoch saves its state. A purchase pays the Scrap, places the item and marks the slot sold in **one character value**, written to the database at once.
+- **Buying.** Ware ids are `ware:<rotation>.<level>.<rerolls>:<slot>`. `buyWare` re-derives the board and refuses a stale epoch ("Rook has new wares. Take another look."), a sold slot,
+  a malformed id, missing Scrap or room, changing nothing. `rerollWares { epoch, cost }` carries what the player saw and refuses a stale price the same way. Visitors in someone's hideout
+  see and buy from their **own** board and pay with their own currency. Scrap in an open trade offer is never spent.
+- **Slots.** Slots 0-3 are maps, 4-11 items. Slot 0 is **always a Normal quality-0 map** of an open area at the character's current tier (Tier 1 of the starting area costs 1 Scrap), so nobody is
+  map-locked. Slot 4 is **Rook's pick**: doubled odds of the lucky tiers.
+- **Luck model** (data: `WARES` in `src/data/progression/merchant.ts`). Every other slot rolls a luck tier: **junk 70%, okay 22%, good 6.9%, jackpot 1.1%** (Rook's pick: 62 / 22 / 13.8 / 2.2). One board in about eight
+  carries a jackpot (12.4%). Maps are bound to a discovered, bindable area; tier is the highest completed tier + 1 plus an offset by luck (junk -2..0, okay -1..0, good 0..+1, jackpot +1..+3; 8% of maps +1..2 more),
+  never above the area's ceiling; quality is 0 for most junk and runs up to 20 (jackpot 14-20); rarity is Normal for most junk, with Magic and Rare maps (and their danger mods) rising with luck.
+  Items come from a weighted table per tier (equipment bases from the loot generator at the character level -4..0 for junk, up to +3..+8 for a jackpot; scarabs; currency; wearable uniques from "good" up, 40% of jackpots).
+- **Prices.** Gear: the appraisal (`sellQuote`) x4, uniques x3 more. Maps: `(1 + 3 (tier-1)) x (1 + quality/20) x rarity (1 / 1.8 / 3)`, rounded up. Scarabs 8 / 20 / 50 / 120 by tier; currency by a per-unit table. Every price is a whole number of Scrap, at least 1.
+- **UI.** The stock sits on the vendor grid as real items at their natural sizes. A pure packing function (`packVendor`, `src/ui/lib/merchant.ts`) places each tab's items first-fit in a fixed order (the staples, then the board by slot),
+  so the layout is stable for the whole epoch; a sold item leaves an empty gap and the others never move. The **price** is the last line of the hover card ("Price: 12 Scrap", red when you cannot pay) and a tiny quiet number over the item on hover only.
+  A lucky find has no extra chrome: the first time a new epoch's board is on screen with a good or jackpot ware, a soft chime and a brief glint over those items play once (`prefers-reduced-motion` removes the motion).
+  The footer is one line, "New wares in 2 h 14 m", and a small "Ask for new wares (N Scrap)" button; the Scrap balance shows beside the title like every currency.
+- **Sell tab.** The same window as a drop target: drag equipment from the inventory into it (Ctrl/⌘-click works too), hover an item for Rook's appraisal breakdown and "Rook pays: N Scrap", read the total under the grid and press **Accept** (then confirm).
+  Drag an item out, or Ctrl-click it, to keep it. Equipped and trade-locked gear is refused with a reason; the payout is one atomic server command.
+- The old `map:<area>:<tier>:<grade>` rows (Maps tab with area chips, tier and quality toggles) are gone from the wire (`buyOffer` refuses them); the pure `rookMapOffers` rules remain only as a fixture for tests and simulations.
 
 **Merchant stock:**
-- Maps: see Rook's maps (generated per cleared area)
-- Life and Focus flasks (1 Scrap)
-- Kindling (3 Scrap)
-- Map Dust (3 Scrap)
+- Wares: 4 maps and 8 items per character, random and luck-driven (see Rook's wares), shelved on the Gear, Maps and Supplies tabs by item class
+- Staples: Life and Focus flasks (1 Scrap), Quickstep, Aegis and Quicksilver Mind flasks (3 Scrap), Kindling (3 Scrap), Map Dust (3 Scrap)
 - Gamble per class
 
 **Selling equipment to Rook:** the Sell tab is an offer window beside the inventory. Drag unequipped equipment out of
@@ -1205,7 +1261,7 @@ crafting history, protections and stability. The database stores shared holdings
 - **Withdrawing:** drag to the backpack, a stash tab or the map device, or Ctrl-click (to the backpack; into the map device while its panel is open). The map device panel also lists the Map Stash as a picker, so a map can be loaded without opening the stash. A map already in the device goes back into the Map Stash.
 - Map currencies can be used on maps while they sit in the Map Stash.
 
-**Crafting Stash — Equipment.** One fixed, labelled slot per equipment currency: Kindling, Scrap, Reforge, the 5 Essences, Prefix Rune, Suffix Rune, Catalyst, Solvent, Seal and Fracture Core. Empty slots stay visible, ghosted.
+**Crafting Stash — Equipment.** One fixed, labelled slot per equipment currency: Kindling, Scrap, Reforge, the 6 Essences, Prefix Rune, Suffix Rune, Catalyst, Solvent, Seal and Fracture Core. Empty slots stay visible, ghosted.
 - Each slot holds up to 5,000 of its currency.
 - **Depositing:** dropping or Ctrl-clicking any currency stack files it into its slot, wherever you drop it (either Crafting Stash tab accepts every currency). What doesn't fit in a full slot stays where it was. A **"Deposit all"** button moves every currency stack in the backpack (stacks in an open trade offer stay).
 - **Withdrawing** never pushes another item out: dropped on an occupied cell, it tops up a matching stack there or lands anywhere free in that grid.
@@ -1236,6 +1292,21 @@ crafting history, protections and stability. The database stores shared holdings
 - `moveItem` gains an optional `count`, for splits and single withdrawals (it also splits normal stacks and limits flask charges loaded into the belt).
 - `quickMove`'s stash context accepts `'currency' | 'mapCurrency' | 'maps'`; with a Crafting Stash tab open it loads gear and maps into the work slot (from the backpack or the body), the work slot's item always returns to the backpack.
 - Stash search covers the special tabs too.
+
+## 12b. First-run guide (onboarding)
+
+Design and evidence: `docs/onboarding-ux.md`. Everything the guide says lives in `src/data/guide/strings.ts`; the step machine (`src/ui/guide/steps.ts`), hint rules (`hints.ts`) and cheat-sheet logic (`cheatsheet.ts`) are pure and tested.
+
+- **State is account-level.** `CharacterSave.guide?: GuideState` (`src/contracts/guide.ts`) rides in the shared account storage like `atlas`: `{ v: 1, mode: 'active' | 'skipped' | 'done', skippedBy?, done: GuideStepId[], hints: GuideHintId[], used?: GuideProp[], t?, startedAt?, finishedAt?, replays?, warmed? }`. It is optional and normalised on load (`normalizeGuide`: unknown ids dropped, de-duplicated, bad types ignored); no `SAVE_VERSION` bump. A character whose account has none gets it decided **once** when it first loads (`decideGuide`, persisted at once): **veteran** (any character at level 5 or higher, any `stats.mapsCompleted`, `atlas.clears > 0` or a completed area) = `skipped` by `veteran` with every hint marked seen; everyone else `active`. Creating a second character on an active account that already holds a veteran flips it to skipped. Protocol 25: the `guide` command `{ op: 'done' | 'hint' | 'used', id } | { op: 'skip' | 'replay' | 'finish' }` (validated against the id whitelists, idempotent, rate-limited with the other commands, answered with the usual `character` push; the client applies the same pure rule at once). `foe show <account>` prints the funnel.
+- **The tracker.** Eleven steps in three chapters, derived (never a stored cursor) from observable state; evidence of a later step completes the earlier ones of the walk (`device`, `area`, `map`, `open`, `enter`, `fight`, `boss`, `chest`, `home`), then `points` and `equip` complete independently, then the closing *What next* card (`finish`). A fall keeps the tracker on `fight` ("You fell and nothing is lost. Click the portal to try again (N left)"), a spent map asks for another, and a friend's open portal shows one "Follow {name}" line. Parties: every player has their own state; joining a map completes steps 1 to 5 by evidence; nothing posts to chat or blocks.
+- **World guidance.** A ring and chevron (DOM overlay driven by `UiStore.world`, the client's per-frame prop projection) mark the target; an edge arrow with the name points at one off screen; unused hideout objects carry name plates (and the reward chest and return portal on a cleared map). The hideout camera leans 52 units north (`PresentInput.cameraBias`) so the Map Device is fully visible at 1280x720 and 1024x600. The return portal is placed north of the player rather than under the command deck. The portal card on a cleared map reads "Return portal open", not 0/8.
+- **Controls cheat-sheet** on a map entry while `fight` is unlearned (cast, move, flasks, Rift Step, panels); chips dim when used (`UiStore.signals`), it fades 3 s after cast and move, or after 40 s.
+- **Warm-up (first map of an account).** On the first `activateMapDevice` of an active guide whose account has no completed map, `RunSetup.warmup` is set and `guide.warmed` recorded: the director (`sim/waves.ts`) holds the opening until a living player moves or casts, or `GUIDE_WARMUP_SECONDS` (15) pass; nothing else about the run changes (not kept across a server restart).
+- **Flasks refill for free** on entering a hideout (login included, silently; coming home from a map says "Your flasks are refilled.").
+- **Hints.** Seventeen first-time coach cards (`GUIDE_HINT_IDS`), each once per account, one at a time by priority, 25 s apart, never over a modal, the death overlay or the summary, nothing in the first 4 s of a map; the card takes the pointer only on its buttons, pauses while those are hovered or focused, and "Hide tips" (also Esc menu, Help) turns them off for this browser (`Settings.hints`).
+- **Help** (`H`, `F1`, `?`, the button right of the deck, the Esc menu): Controls (scrolls under a fixed header), How a run works, a searchable Glossary, Tutorial (progress, **Reset tutorial**, skip, hide, tips). Names: **Map Device** is the object (and its panel), **Atlas** the chart tab; "Cartography Table" and "Ember Chart" are retired.
+- **Other fixes:** panel buttons (I C K | P M ?), the death/fell copy by portals left, the summary's next actions and scroll shadow, affix tiers read "Tier N (1 is best)", flask and globe tooltips, event cards open with a one-sentence goal, the padlock only for missing prerequisites, an Atlas that shows only the chart, slot and button before the first clear, the Codex says so while no point was earned, a Bench that opens on Craft with Recycle as a second tab, an inventory Sort (`sortBackpack`), a suggested character name, "Create account" first for a first-time browser, one level-up text, only the nearest three rares keep a name plate.
+- **Follow-through (2026-10-06).** Rook's wares print the Forge Scrap price under every tile (red when unaffordable) with a one-line explainer and a per-tab empty state with the restock countdown. Map tooltips open short (tier, area, waves, boss, map luck, the area's effects, up to four mod lines and "+N more", unexplored/corrupted warnings, "Surge n/3 today") and show the full card after 600 ms of hover or while Alt is held; the full card points at Re-chart. Short windows (under 680 px tall) lean the hideout camera west as well as north so the Crafting Bench clears the Life globe at 1024x600.
 
 ## 13. Player debuffs
 

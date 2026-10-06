@@ -46,14 +46,18 @@ Other useful scripts:
 
 ## Selling equipment
 
-Click Rook in any hideout: his stall opens beside your inventory, like a Path of Exile vendor. On the **Sell** tab
-drag equipment from your backpack into the offer window (Ctrl/⌘-click works too), review each item's appraisal and the
-total, press **Sell**, then confirm. Drag an item back out or press × to keep it; clear or cancel without losing anything.
-Equipped gear must be unequipped first; gear offered in a trade is locked. **Buy** and **Gamble** work the same way in
-reverse: search or filter the stock, then drag a row onto the backpack cell where you want the item (green means it fits
-and you can pay, red says why not), or use the row's button.
+Click Rook in any hideout: his stall opens beside your inventory, like a Path of Exile vendor. He has an inventory like yours: one
+plain item grid with tabs **Gear**, **Maps** (area maps and scarabs), **Supplies** (flasks, Kindling, Map Dust, currency), **Gamble** and **Sell**.
+To buy, drag an item onto your backpack cell where you want it (green means it fits and you can pay, red says why not), or Ctrl/⌘-click
+(or right-click) it to buy into the first free spot. The price is the last line of the hover card (red when you cannot pay). The stock is Rook's
+luck of the day: four maps and eight items, random and mostly junk, sometimes a really good find, plus a small staples shelf
+(flasks, Kindling, Map Dust). Nothing to pick: the board is yours alone, changes every 6 hours (04:00, 10:00, 16:00, 22:00 UTC) and at every
+level-up, and **Ask for new wares** rerolls it for Scrap (3, 6, 12 ... doubling until the next rotation). A bought item leaves a gap; nothing shifts.
+To sell, open the **Sell** tab and drag equipment from your backpack into his window (Ctrl/⌘-click works too); hover an offered item
+for Rook's appraisal, read the payout under the grid, press **Accept**, then confirm. Drag an item back out (or Ctrl-click it) to keep it.
+Equipped gear must be unequipped first; gear offered in a trade is locked.
 
-Rook appraises the actual **item level, base, number of affixes and affix tiers**. Click an offered item's price
+Rook appraises the actual **item level, base, number of affixes and affix tiers**. Hover an offered item
 for its breakdown. Better bases, higher item levels, more affixes and stronger tiers raise the appraisal;
 rarity colour alone does not set a fixed price. Payment goes into your account's Crafting Stash, with overflow
 in your backpack. Visitors sell their own gear and receive their own payment. Sales are permanent and survive
@@ -152,9 +156,27 @@ first stack) or use its Buy button.
 
 `npm run e2e -- --prod --only debugmerchant --size 1024x600` tests live activation, stock, dragging and buying,
 guest purchases, disable and restart with two real browser clients and a disposable database.
+`npm run e2e -- --only modal --size 1280x720` (and `1024x600`) plays the Atlas area modal in every state (no map, highlight, wrong-area drop and Go to, loaded map, scarabs, held surge, Open area and Repeat last setup, sealed area with its key, keyboard) and screenshots each into `.shots/e2e-modal-*.png`.
 `npm run e2e -- --only territory --size 1280x720` (and `1024x600`) plays pins, the Stock and Sources lenses, Re-chart, Recycle by dragging three maps into the bench, Rook's Maps tab and the Map Stash grouped by area.
+`npm run e2e -- --only wares --size 1280x720` (and `1024x600`) plays Rook's vendor window (tabs and item shelving, typical and lucky boards, the glint, the price in the hover card, buying by drag and Ctrl-click, gaps for sold items, the no-room and can't-afford drops, the doubling reroll, the staples and a level-up refresh) and screenshots each state into `.shots/e2e-wares-*`.
 `npm run e2e -- --only selling --size 1280x720` (and `1024x600`) runs the debug merchant flow plus Rook: offering gear by
 drag, protected gear, appraisal, atomic payout, buying and gambling by drag onto a chosen cell, the can't-afford state and a restart.
+
+## The first run (tutorial)
+
+A new account is guided through its first map; nothing is ever blocked and everything can be skipped. The **objective tracker** (top left) shows
+three chapters (*First expedition*, *Win the map*, *Grow stronger*), at most five lines, one current step with its one-line help: click the **Map Device**,
+pick the area, drag a starter map into the slot (the maps that fit are outlined and a hand shows the drag), Open area, step into the portal, fight,
+defeat the boss, open the chest, return home, spend your points, equip your loot, then a *What next* card. Steps complete **by evidence** (a portal exists,
+you are in a map), so a player who finds another way is never held up. A pulsing ring and chevron mark the object the step wants (an edge arrow with its
+name when it is off screen); new players also see name plates on the hideout objects. On the first map entry a **controls cheat-sheet** appears (hold the
+left button to cast at the cursor, WASD, flasks, Rift Step, panel hotkeys) and each chip dims when used. **The very first map of an account opens gently**:
+the monsters wait until you move or cast (or 15 seconds). About fifteen first-time **coach cards** appear once each (low Life, first level-up, first loot,
+first death, first craft, ...). **Help** (`H`, the `?` button, Esc menu) holds the Controls reference, how a run works, a glossary and *Reset tutorial*.
+The tutorial state is **per account** (a second character does not repeat it); an account that already has a character of level 5 or higher or a completed
+map is skipped for good (a *veteran*). Flasks refill for free whenever you enter a hideout. Copy lives in `src/data/guide/strings.ts`; the step machine and
+hints are pure (`src/ui/guide/steps.ts`, `hints.ts`). `npm run e2e -- --only guide --size 1280x720` (and `1024x600`) plays a fresh account through all of it
+and screenshots each step into `.shots/e2e-guide-*.png`. `foe show <account>` prints the account's tutorial funnel.
 
 ## Playing with friends
 
@@ -163,17 +185,21 @@ drag, protected gear, appraisal, atomic payout, buying and gambling by drag onto
 3. Party members can **visit each other's hideouts** from the party panel ("Visit hideout", and "Go home").
    Rook the merchant trades with everyone in any hideout, crafting works in any hideout, and the stash always opens
    your own stash.
-4. The hideout owner opens the **Atlas** (click the Map Device in your hideout) and loads a map (the inventory opens beside the
-   table: drag a map and up to four scarabs from it into the dock's slots; items in your stash go into the inventory first). **A map
-   is bound to one area** ("Furnace Yard map"): the chart points at where it lives, there is no course to set, and an empty slot
-   leaves the chart browse-only. Drag a key from the inventory into the dock's **passage slot** (or, for a Bounty map bound to Iron March, click the slot) to open a sealed
-   area or the Pit of Echoes with the map. **Pin** up to three areas (the tray in the chart's corner, or the pin button on the selected area): their maps drop three times as
-   often. **Re-chart** (dock chip or bench) moves a map to a neighbouring area for Scrap; **Recycle** at the bench turns three maps of a tier into one of an area you choose; Rook's **Maps** tab sells low-tier maps of the areas you have cleared. Press Activate: **8 portals** open. Each entry, by
+4. The hideout owner opens the **Atlas** (click the Map Device in your hideout; the inventory opens beside it) and **clicks an area on the chart**:
+   its modal opens with the **map slot** in the centre, four **scarab sockets** around it and an **Open area** button at the bottom, which says in
+   words why it is disabled (no map, wrong area, key missing, not enough Scrap...). Drag a map and up to four scarabs out of your inventory into the
+   slots (Ctrl/⌘-click works too; items in your stash go into the inventory first); the things that fit the area carry a quiet highlight in the inventory.
+   **A map is bound to one area** ("Furnace Yard map"): another area's slot refuses it ("This map opens Furnace Yard") with a one-click *Go to Furnace Yard*
+   that keeps the map in the slot. An area you hold no map for shows where to find one. *Repeat last setup* refills the scarabs of the last run there.
+   A sealed area's modal has a **passage slot**: drag its key in (the Pit of Echoes opens with a Bounty map of Iron March). **Pin** up to three areas (the
+   tray in the chart's corner, or the pin button in the modal): their maps drop three times as often. **Re-chart** (in the modal or at the bench) moves a map to a
+   neighbouring area for Scrap; **Recycle** at the bench turns three maps of a tier into one of an area you choose; Rook's **Wares** board always carries one plain map and sometimes better ones. Press **Open area**: **8 portals** open,
+   the modal closes and the status line under the chart offers *Enter the portal*. Each entry, by
    anyone, uses one portal (re-entering after death too). Click the portal to go in. Every area has **3 surge charges a day**
-   (the day turns over at 04:00 UTC; the dock shows the countdown and brass pips mark each area on the chart): Activate with
-   the dock's Surge toggle on spends one for +30% item quantity (not maps) and +15% rarity in that expedition, for the whole
-   party. With none left the area simply runs at the normal rate. Hourglass Sand (one area) and the Grand Hourglass (all areas)
-   refill charges from the rail and the dock.
+   (the day turns over at 04:00 UTC; the chart shows the countdown and brass pips mark each area): opening an area with
+   the modal's Surge toggle on spends one for +30% item quantity (not maps) and +15% rarity in that expedition, for the whole
+   party. With none left the area simply runs at the normal rate. Hourglass Sand (one area, in its modal) and the Grand Hourglass (all areas, in the
+   chart's status line) refill charges. Esc closes the modal, then the Atlas; Enter opens the area when it is ready.
 5. In the map, **loot is instanced**: everyone sees and picks up only their own drops. **XP is shared** by everyone
    alive in the map. Monsters get tougher and more numerous per extra player.
 6. When you die, "Return to hideout" takes you to the map owner's hideout, right next to the portals, so you can
@@ -193,7 +219,8 @@ A party has up to 4 players; so does every map.
 | `Space` `Q` `E` `R` `F` | Skill slots 1–5 |
 | `1`–`4` | Flasks |
 | `T` | Toggle auto-attack (targets the nearest enemy near the cursor) |
-| `I` / `C` / `K` / `P` | Inventory / character / skills / party |
+| `I` / `C` / `K` / `P` / `M` | Inventory / character / skills / party / Atlas (the Map Device, in your own hideout); the buttons beside the command deck show the same keys |
+| `H` / `F1` / `?` | Help: Controls, How a run works, a Glossary and the Tutorial tab (reset or skip it) |
 | `Enter` | Chat (party chat; `/trade <name>` requests a trade) |
 | `Esc` | Close the top panel, or open the menu (the world keeps running: the game is online) |
 | `Alt` (hold) | Affix tiers, roll ranges and a comparison with your equipped item |

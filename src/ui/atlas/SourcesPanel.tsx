@@ -1,6 +1,6 @@
 // "Where your maps come from" (brief D 3, 4): the frozen drop table of the slotted map as rows with weights and shares, its advance
 // target and the pinned marks. Every number is `routingReadout`'s, the function the sim rolls with (I3); nothing is recomputed here.
-// Two faces: the full list (Sources lens panel, readout popover) and a one-line summary for the dock.
+// Two faces: the full list (Sources lens panel, the modal's full readout) and a one-line summary for the modal.
 import { useState } from 'preact/hooks';
 import type { AtlasAreaId } from '../../contracts/atlas';
 import type { RouteKind } from '../../contracts/game';
@@ -48,15 +48,15 @@ export function SourcesPanel({ readout, onFocus, class: klass, limit }: { readou
   );
 }
 
-/** The dock's one-liner: "Next drops: Shattered Forge 23% · Glass Sepulchre 23% · this area 16%". */
+/** The modal's one-liner: "Next drops: Shattered Forge 23% · Glass Sepulchre 23% · this area 16%". */
 export function SourcesLine({ readout, onFocus }: { readout: RoutingReadout | null; onFocus?: (id: AtlasAreaId) => void }) {
   const top = topSources(readout, 3);
   if (!top.length) return null;
   return (
-    <span class="fe-dock__sources ui-type-caption" data-sources-line>
-      <span class="fe-dock__sources-label">Next drops</span>
+    <span class="fe-nextdrops ui-type-caption" data-sources-line>
+      <span class="fe-nextdrops__label">Next drops</span>
       {top.map((t) => (
-        <button key={t.areaId} type="button" class={cx('fe-dock__source', t.pinned && 'fe-dock__source--pinned')} onClick={() => onFocus?.(t.areaId)} title="Show on the chart">
+        <button key={t.areaId} type="button" class={cx('fe-nextdrops__src', t.pinned && 'fe-nextdrops__src--pinned')} onClick={() => onFocus?.(t.areaId)} title={t.own ? undefined : `Go to ${t.name}`}>
           {t.pinned && <i class="fe-pinglyph" aria-hidden="true" />}{t.name} {formatShare(t.share)}
         </button>
       ))}

@@ -260,7 +260,7 @@ class WorldPresenter implements Presenter {
         this.snapPending = false;
       }
     }
-    const cam = this.rig.update(dt, px, py, ax, ay, input.settings.screenShake, input.paused);
+    const cam = this.rig.update(dt, px, py, ax, ay, input.settings.screenShake, input.paused, input.cameraBias?.x ?? 0, input.cameraBias?.y ?? 0);
     this.audio.setListener(local ? px : cam.x, local ? py : cam.y);
     const v = f.view;
     const zoom = cam.zoom > 0 ? cam.zoom : 1;

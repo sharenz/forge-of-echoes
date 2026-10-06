@@ -106,7 +106,10 @@ export function SkillsPanel() {
             const r = rank(n.id);
             const can = safe(() => store.rules.canRankUpSkill(ch, n.id), { ok: false });
             const learned = r > 0;
-            const locked = !learned && !can.ok;
+            // The padlock is for a skill whose prerequisite is missing. One that only lacks a skill point looks normal, just dimmed.
+            const withPoints = safe(() => store.rules.canRankUpSkill({ ...ch, unspentSkillPoints: Math.max(1, ch.unspentSkillPoints ?? 0) }, n.id), { ok: false });
+            const locked = !learned && !withPoints.ok;
+            const needsPoint = !learned && withPoints.ok && !can.ok;
             const slot = slotOf(n.id);
             return (
               <div
@@ -115,6 +118,7 @@ export function SkillsPanel() {
                   'fe-node',
                   learned && 'fe-node--learned',
                   locked && 'fe-node--locked',
+                  needsPoint && 'fe-node--needpoint',
                   !learned && can.ok && 'fe-node--ready',
                   r >= info.maxRank && 'fe-node--max',
                   pickedSkill === n.id && 'fe-node--picked',

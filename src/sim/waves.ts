@@ -5,6 +5,7 @@
 // nobody in the instance is alive (an empty or wiped map is frozen until someone comes through a
 // portal).
 import type { MonsterKind } from '../contracts/content';
+import { GUIDE_WARMUP_SECONDS } from '../contracts/guide';
 import type { MonsterRarity } from '../contracts/sim';
 import { KIND_INDEX, MAGIC_MODS, packWeight, rollRareMods } from './archetypes';
 import { removeHostileAreas, spawnArea } from './areas';
@@ -43,6 +44,7 @@ export function createDirector(mode: 'hideout' | 'map'): Director {
     wave: 0,
     waveTime: 0,
     intro: mode === 'hideout' ? 0 : INTRO_DELAY,
+    warm: 0,
     tellWave: 0,
     tellTimer: 0,
     plan: null,
@@ -70,6 +72,11 @@ export function updateDirector(w: World): void {
     return;
   }
   if (d.intro > 0) {
+    // First-run warm-up: the opening waits for the player to move or cast (or a few seconds), so reading the controls is safe.
+    if (w.config.warmup && warmupHolds(w, d)) {
+      refreshPhase(w);
+      return;
+    }
     d.intro -= DT;
     if (d.intro <= 0) beginTell(w, Math.max(1, Math.min(5, cfg.count, Math.floor(cfg.startWave ?? 1))));
     refreshPhase(w);
@@ -102,6 +109,18 @@ export function updateDirector(w: World): void {
     }
   }
   refreshPhase(w);
+}
+
+/** True while the warm-up still holds the opening; ends (for good) on the first move or cast, or after `GUIDE_WARMUP_SECONDS`. */
+function warmupHolds(w: World, d: Director): boolean {
+  if (d.warm < 0) return false;
+  d.warm += DT;
+  const acted = w.living.some((p) => p.intent.moveX !== 0 || p.intent.moveY !== 0 || p.intent.held.some(Boolean));
+  if (acted || d.warm >= GUIDE_WARMUP_SECONDS) {
+    d.warm = -1;
+    return false;
+  }
+  return true;
 }
 
 function refreshPhase(w: World): void {

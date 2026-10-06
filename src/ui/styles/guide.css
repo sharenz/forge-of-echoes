@@ -1,0 +1,434 @@
+/* The first-run guide: objective tracker, "What next" card, world markers and name plates, controls cheat-sheet, coach cards, the drag hand,
+ * panel buttons and the Help window. Font sizes come ONLY from the --font-ui-* tokens (tests/ui/typography.test.ts); the .ui-type-* classes on
+ * the elements set them. Motion: everything that loops is switched off by prefers-reduced-motion and by the calm motion setting
+ * (the `--calm` modifier classes), keeping only static rings, arrows and single short fades. */
+
+/* ================================================================================================
+ * Objective tracker (top-left column of the HUD)
+ * ============================================================================================== */
+.fe-leftcol:has(> .fe-guide) { width: 280px; }
+.fe-guide {
+  position: relative;
+  width: 280px;
+  max-width: 100%;
+  padding: 8px 12px 8px 10px;
+  color: var(--bone);
+  background: linear-gradient(180deg, rgba(31, 24, 27, 0.94), rgba(17, 13, 16, 0.94));
+  border: 1px solid #5a4630;
+  border-left: 3px solid var(--ember);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.75), 0 8px 18px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.fe-guide button { pointer-events: auto; }
+.fe-guide__live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.fe-guide__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.fe-guide__chapter { letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); }
+.fe-guide__count { color: var(--ash); font-variant-numeric: tabular-nums; }
+.fe-guide__lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.fe-guide__line { display: flex; gap: 8px; align-items: flex-start; overflow: hidden; }
+.fe-guide__mark {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 6px;
+  border: 2px solid var(--stone);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.fe-guide__line--todo { color: var(--ash); }
+.fe-guide__line--done { color: var(--good); }
+.fe-guide__line--done .fe-guide__mark { background: var(--good); border-color: var(--good); }
+.fe-guide__line--current .fe-guide__mark { width: 14px; height: 14px; margin-top: 5px; border-color: var(--ember); background: radial-gradient(circle, var(--flame) 0 35%, transparent 40%); }
+.fe-guide__line--current { color: var(--parchment); }
+.fe-guide__text { display: flex; flex-direction: column; min-width: 0; }
+.fe-guide__title { overflow-wrap: anywhere; }
+.fe-guide__line--current .fe-guide__title { color: var(--hot); font-weight: 700; }
+.fe-guide__body { color: var(--bone); margin-top: 1px; }
+.fe-guide__body--warm { color: var(--frost); }
+/* a step that completes in front of the player lingers three seconds, then folds away */
+.fe-guide__line--fold { animation: fe-guide-fold 0.45s ease 3s forwards; max-height: 40px; }
+@keyframes fe-guide-fold { to { max-height: 0; opacity: 0; margin: 0; } }
+.fe-guide__go { margin-top: 6px; }
+.fe-guide__go .fe-guide__btn { width: 100%; }
+.fe-guide__foot { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.fe-guide__btn { white-space: nowrap; }
+.fe-guide__fill { flex: 1; }
+.fe-guide__btn {
+  min-height: 24px;
+  padding: 1px 8px 2px;
+  color: var(--ash);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid #3a2b1b;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.fe-guide__btn:hover, .fe-guide__btn:focus-visible { color: var(--parchment); border-color: var(--bronze-light); }
+.fe-guide__btn--go { color: #2a1608; background: linear-gradient(180deg, var(--flame), var(--ember)); border-color: #7a3b24; font-weight: 700; }
+.fe-guide__btn--go:hover, .fe-guide__btn--go:focus-visible { color: #1a0d04; border-color: var(--hot); }
+.fe-guide--pill { width: auto; padding: 0; background: none; border: 0; box-shadow: none; }
+.fe-guide__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  padding: 4px 12px 5px 10px;
+  color: var(--parchment);
+  background: rgba(23, 17, 21, 0.94);
+  border: 1px solid #5a4630;
+  border-left: 3px solid var(--ember);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.fe-guide__pilldot { width: 8px; height: 8px; border-radius: 50%; background: var(--flame); box-shadow: 0 0 6px var(--ember); animation: fe-guide-breathe 1.8s ease-in-out infinite; }
+.fe-guide--calm .fe-guide__pilldot { animation: none; }
+@keyframes fe-guide-breathe { 50% { opacity: 0.45; } }
+/* the closing card */
+.fe-guide--next { width: 320px; border-left-color: var(--gold); }
+.fe-leftcol:has(> .fe-guide--next) { width: 320px; }
+.fe-guide__intro { margin: 0 0 6px; color: var(--bone); }
+.fe-guide__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fe-guide__row { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 8px; padding: 6px 0; border-top: 1px solid #2c2219; }
+.fe-guide__rowtext { display: flex; flex-direction: column; min-width: 0; flex: 1 1 100%; }
+.fe-guide__rowtext b { color: var(--parchment); font-weight: 700; }
+.fe-guide__rowtext span { color: var(--ash); }
+
+/* the tracker's line inside the panel it is about */
+.fe-coachstrip {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 10px 6px;
+  padding: 5px 10px;
+  color: var(--parchment);
+  background: linear-gradient(90deg, rgba(232, 102, 42, 0.2), rgba(232, 102, 42, 0.06));
+  border-left: 3px solid var(--ember);
+}
+.fe-coachstrip__step { flex: none; color: var(--gold); letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
+.fe-coachstrip__text b { color: var(--hot); }
+
+/* ================================================================================================
+ * World layer: marker ring, chevron, edge arrow, name plates (positions written by World.tsx every frame)
+ * ============================================================================================== */
+.fe-gw { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+.fe-gw__ring, .fe-gw__chev, .fe-gw__edge, .fe-gw__plate { position: absolute; left: 0; top: 0; will-change: transform; }
+.fe-gw__ring {
+  border: 3px solid var(--flame);
+  border-radius: 50%;
+  box-shadow: 0 0 14px 2px rgba(255, 154, 60, 0.7), inset 0 0 12px rgba(255, 154, 60, 0.45);
+}
+.fe-gw__ring::after { content: ''; position: absolute; inset: -9px; border: 2px solid rgba(255, 231, 168, 0.55); border-radius: 50%; animation: fe-gw-ring 1.5s ease-out infinite; }
+@keyframes fe-gw-ring { 0% { transform: scale(0.82); opacity: 0.95; } 100% { transform: scale(1.35); opacity: 0; } }
+.fe-gw__chev { width: 34px; height: 30px; margin-left: 0; }
+.fe-gw__chev > i {
+  display: block;
+  width: 34px;
+  height: 30px;
+  background: linear-gradient(180deg, var(--hot), var(--flame) 55%, var(--ember));
+  clip-path: polygon(0 0, 50% 55%, 100% 0, 100% 45%, 50% 100%, 0 45%);
+  filter: drop-shadow(0 2px 2px #000) drop-shadow(0 0 8px rgba(255, 154, 60, 0.9));
+  animation: fe-gw-bounce 0.95s ease-in-out infinite;
+}
+@keyframes fe-gw-bounce { 0%, 100% { transform: translateY(-4px); } 50% { transform: translateY(8px); } }
+.fe-gw--calm .fe-gw__ring::after, .fe-gw--calm .fe-gw__chev > i { animation: none; }
+.fe-gw--calm .fe-gw__ring::after { opacity: 0.6; }
+@media (prefers-reduced-motion: reduce) {
+  .fe-gw__ring::after, .fe-gw__chev > i, .fe-guide__pilldot, .fe-hand__pointer { animation: none; }
+  .fe-guide__line--fold { animation-duration: 0.01s; }
+}
+.fe-gw__plate {
+  padding: 1px 9px 2px;
+  color: var(--parchment);
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  background: rgba(15, 11, 13, 0.88);
+  border: 1px solid #6b5132;
+  border-radius: 2px;
+  text-shadow: 0 1px 1px #000;
+}
+.fe-gw__edge { display: flex; align-items: center; gap: 6px; }
+.fe-gw__edge[data-side="right"] { flex-direction: row-reverse; margin-left: -10px; transform-origin: right center; }
+.fe-gw__edge[data-side="left"] { margin-left: 10px; }
+.fe-gw__edge[data-side="up"] { margin-top: 10px; flex-direction: column; margin-left: 0; }
+.fe-gw__edge[data-side="down"] { margin-top: -10px; flex-direction: column-reverse; }
+.fe-gw__edgearrow {
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(180deg, var(--hot), var(--flame));
+  clip-path: polygon(0 20%, 60% 20%, 60% 0, 100% 50%, 60% 100%, 60% 80%, 0 80%);
+  filter: drop-shadow(0 1px 2px #000);
+}
+.fe-gw__edgename {
+  padding: 1px 8px 2px;
+  color: var(--parchment);
+  white-space: nowrap;
+  background: rgba(15, 11, 13, 0.9);
+  border: 1px solid var(--flame);
+  border-radius: 2px;
+}
+
+.fe-node--needpoint .fe-node__icon { opacity: 0.62; }
+.fe-char__wants { margin: 6px 0 0; color: var(--ash); }
+.fe-event__goal { margin: 3px 0 2px; color: var(--parchment); }
+
+/* Atlas, before the first clear: only the chart, the slot and the button (F-18) */
+.fe-device--intro .fe-lens, .fe-device--intro [data-pintray], .fe-device--intro .fe-chart__ruler,
+.fe-device--intro .fe-chart__controls [aria-label^="Motion"], .fe-device--intro .fe-table__status .fe-surge-chip { display: none; }
+
+.fe-cx__empty { position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%); max-width: min(420px, 80%); padding: 10px 16px; text-align: center; color: var(--parchment); background: rgba(14, 10, 12, 0.88); border: 1px solid #6b5132; pointer-events: none; z-index: 3; }
+
+/* the area the first step asks for pulses on the chart */
+.fe-root[data-guide-step="area"] .fe-atlas__node--known:not(:disabled) { animation: fe-guide-node 1.2s ease-in-out infinite; border-radius: 10px; }
+@keyframes fe-guide-node { 0%, 100% { box-shadow: 0 0 0 3px rgba(255, 154, 60, 0.9), 0 0 14px 4px rgba(255, 154, 60, 0.45); } 50% { box-shadow: 0 0 0 6px rgba(255, 213, 120, 0.95), 0 0 26px 10px rgba(255, 154, 60, 0.75); } }
+@media (prefers-reduced-motion: reduce) { .fe-root[data-guide-step="area"] .fe-atlas__node--known { animation: none; box-shadow: 0 0 0 4px rgba(255, 213, 120, 0.95); } }
+
+/* ================================================================================================
+ * Above the deck: controls cheat-sheet and coach cards
+ * ============================================================================================== */
+.fe-guidedock {
+  position: absolute;
+  left: calc(var(--free-l) + (100% - var(--free-l) - var(--free-r)) / 2);
+  bottom: calc(var(--deck-clear) + 6px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(560px, calc(100% - var(--free-l) - var(--free-r) - 28px));
+  pointer-events: none;
+  z-index: 4;
+}
+.fe-guidedock:empty { display: none; }
+.fe-cheat {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 8px;
+  padding: 7px 10px;
+  background: rgba(14, 10, 12, 0.78);
+  border: 1px solid rgba(90, 70, 48, 0.8);
+  border-radius: 3px;
+  animation: fe-guide-fadein 0.4s ease-out;
+}
+.fe-cheat--fading { animation: fe-cheat-out 3s ease-in forwards; }
+@keyframes fe-guide-fadein { from { opacity: 0; transform: translateY(6px); } }
+@keyframes fe-cheat-out { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
+.fe-cheat__chip { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; padding: 2px 8px 3px 6px; color: var(--parchment); background: rgba(40, 31, 28, 0.85); border-radius: 3px; transition: opacity 0.3s; }
+.fe-cheat__chip--used { opacity: 0.38; }
+.fe-cheat__keys { display: inline-flex; gap: 2px; }
+.fe-coach {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  padding: 8px 12px;
+  color: var(--parchment);
+  background: linear-gradient(180deg, rgba(36, 28, 31, 0.97), rgba(20, 15, 18, 0.97));
+  border: 1px solid #6b5132;
+  border-left: 3px solid var(--gold);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  animation: fe-guide-fadein 0.35s ease-out;
+}
+.fe-coach__acts { pointer-events: auto; }
+.fe-coach__mark { flex: none; width: 10px; height: 10px; background: var(--gold); transform: rotate(45deg); box-shadow: 0 0 8px rgba(224, 176, 74, 0.7); }
+.fe-coach__text { margin: 0; flex: 1; }
+.fe-coach__acts { display: flex; flex-direction: column; gap: 3px; flex: none; }
+
+/* a control a card points at pulses until the card goes away */
+.fe-root[data-guide-pulse="flasks"] .fe-deck__flasks,
+.fe-root[data-guide-pulse="focus"] .fe-globe--focus,
+.fe-root[data-guide-pulse="badges"] .fe-pbadge,
+.fe-root[data-guide-pulse="inventory"] [data-menubtn="inventory"],
+.fe-root[data-guide-pulse="device"] [data-menubtn="atlas"] { animation: fe-guide-pulse 1s ease-in-out infinite; }
+@keyframes fe-guide-pulse { 0%, 100% { filter: none; } 50% { filter: drop-shadow(0 0 8px var(--flame)) brightness(1.35); } }
+@media (prefers-reduced-motion: reduce) {
+  .fe-root[data-guide-pulse] .fe-deck__flasks, .fe-root[data-guide-pulse] .fe-globe--focus, .fe-root[data-guide-pulse] .fe-pbadge, .fe-root[data-guide-pulse] .fe-menubtn { animation: none; filter: drop-shadow(0 0 6px var(--flame)); }
+}
+
+/* ================================================================================================
+ * The drag hand and the highlighted starter maps
+ * ============================================================================================== */
+.fe-hand { position: fixed; inset: 0; pointer-events: none; z-index: 8; }
+.fe-hand__pointer { position: absolute; width: 34px; margin: -6px 0 0 -12px; animation: fe-hand-drag 2.4s ease-in-out infinite; }
+.fe-hand__pointer svg { display: block; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.9)); }
+.fe-hand__label { position: absolute; left: 30px; top: 22px; padding: 0 6px; color: var(--parchment); white-space: nowrap; background: rgba(15, 11, 13, 0.9); border: 1px solid var(--gold); border-radius: 2px; }
+@keyframes fe-hand-drag {
+  0% { transform: translate(0, 0) scale(1); opacity: 0; }
+  8% { opacity: 1; }
+  22% { transform: translate(0, 0) scale(0.88); opacity: 1; }
+  62% { transform: translate(var(--dx), var(--dy)) scale(0.88); opacity: 1; }
+  74% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 1; }
+  92% { opacity: 0; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 0; }
+}
+.fe-hand--calm .fe-hand__line { position: absolute; height: 0; border-top: 3px dashed var(--gold); transform-origin: left center; }
+.fe-hand--calm .fe-hand__label { position: absolute; transform: translate(-50%, -140%); left: auto; top: auto; }
+.fe-root[data-guide-step="map"] .fe-item--fits::before {
+  box-shadow: inset 0 0 0 2px rgba(255, 213, 120, 0.95), inset 0 0 14px rgba(255, 190, 80, 0.7);
+  animation: fe-guide-map 1.3s ease-in-out infinite;
+}
+.fe-root[data-guide-step="map"] .fe-item--fits::after {
+  content: 'Drag';
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: -2px;
+  transform: translateX(-50%);
+  padding: 0 4px;
+  font-size: var(--font-ui-caption);
+  line-height: 1.25;
+  color: #2a1608;
+  background: var(--gold);
+  border-radius: 2px;
+  pointer-events: none;
+}
+@keyframes fe-guide-map { 50% { box-shadow: inset 0 0 0 2px rgba(255, 233, 160, 1), inset 0 0 22px rgba(255, 190, 80, 0.95); } }
+@media (prefers-reduced-motion: reduce) { .fe-root[data-guide-step="map"] .fe-item--fits::before { animation: none; } }
+/* the empty map slot pulses while the step asks for a map */
+.fe-root[data-guide-step="map"] .fe-amodal__mapslot:not(.fe-device-slot--filled) { animation: fe-guide-pulse 1.2s ease-in-out infinite; }
+.fe-root[data-guide-step="open"] .fe-amodal__open:not(:disabled) { animation: fe-guide-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .fe-root[data-guide-step] .fe-amodal__mapslot, .fe-root[data-guide-step] .fe-amodal__open { animation: none; } }
+
+/* ================================================================================================
+ * Panel buttons (I C K | P Atlas ?) either side of the command deck
+ * ============================================================================================== */
+.fe-menubar { position: absolute; bottom: 24px; display: flex; gap: 4px; z-index: 3; }
+.fe-menubar--l { left: 8px; }
+.fe-menubar--r { right: 8px; }
+.fe-menubtn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  color: var(--bone);
+  cursor: pointer;
+  background: linear-gradient(180deg, #2a2327, #151012);
+  border: 1px solid #5a4630;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 rgba(255, 220, 170, 0.1), 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+.fe-menubtn:hover, .fe-menubtn:focus-visible { color: var(--hot); border-color: var(--bronze-light); }
+.fe-menubtn--on { color: var(--hot); background: linear-gradient(180deg, #3b2c1f, #1c1410); border-color: var(--gold); }
+.fe-menubtn--off { opacity: 0.55; }
+.fe-menubtn__glyph { display: block; }
+.fe-menubtn__key {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  min-width: 14px;
+  padding: 0 3px;
+  line-height: 1.15;
+  font-weight: 700;
+  text-align: center;
+  color: var(--gold);
+  background: rgba(10, 7, 8, 0.85);
+  border-radius: 2px;
+}
+.fe-menubtn__dot { position: absolute; top: 3px; right: 3px; width: 10px; height: 10px; background: var(--flame); border: 2px solid #1a1010; border-radius: 50%; box-shadow: 0 0 7px var(--ember); }
+
+/* ================================================================================================
+ * Help window
+ * ============================================================================================== */
+.fe-help2 { display: flex; flex-direction: column; max-height: calc(100vh - 40px); min-height: 0; }
+.fe-help2__tabs { display: flex; gap: 2px; padding: 0 22px; border-bottom: 1px solid #2c2219; }
+.fe-help2__tab { padding: 6px 14px 8px; color: var(--ash); cursor: pointer; background: none; border: 0; border-bottom: 3px solid transparent; font-family: var(--font-title); }
+.fe-help2__tab:hover, .fe-help2__tab:focus-visible { color: var(--parchment); }
+.fe-help2__tab--on { color: var(--hot); border-bottom-color: var(--ember); }
+.fe-help2__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #6b5132 rgba(0, 0, 0, 0.35);
+  padding-bottom: 8px;
+  mask-image: linear-gradient(180deg, #000 calc(100% - 16px), transparent);
+  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 16px), transparent);
+}
+.fe-help2__grid { overflow: visible; }
+.fe-help2__run, .fe-help2__gloss, .fe-help2__tut { display: flex; flex-direction: column; gap: 10px; padding: 18px 26px 14px; }
+.fe-help2__steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; color: var(--bone); }
+.fe-help2__search { width: 100%; padding: 6px 10px; color: var(--parchment); background: #0d0a0c; border: 1px solid #5a4630; border-radius: 3px; }
+.fe-help2__terms { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 26px; }
+.fe-help2__term dt { color: var(--gold); font-weight: 700; }
+.fe-help2__term dd { margin: 1px 0 0; color: var(--bone); }
+.fe-help2__tasks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; }
+.fe-help2__task { display: flex; gap: 8px; align-items: flex-start; color: var(--ash); }
+.fe-help2__task--done { color: var(--good); }
+.fe-help2__task--done .fe-guide__mark { background: var(--good); border-color: var(--good); }
+.fe-help2__acts { display: flex; gap: 10px; flex-wrap: wrap; }
+.fe-help2__tips { display: flex; align-items: center; gap: 12px; color: var(--bone); }
+.fe-help2__note { margin: 0; color: var(--frost); }
+@media (max-width: 880px) {
+  .fe-help2__terms, .fe-help2__tasks { grid-template-columns: 1fr; }
+}
+
+/* ================================================================================================
+ * Prominence while the tutorial is on: the unspent-point badges are larger, and the steps that ask for them pulse the buttons too
+ * ============================================================================================== */
+.fe-root[data-guide="on"] .fe-pbadge__chip { transform: scale(1.18); transform-origin: 50% 100%; }
+.fe-root[data-guide-step="points"] .fe-pbadge__chip { outline: 2px solid var(--flame); outline-offset: 3px; }
+.fe-root[data-guide-step="points"] [data-menubtn="character"], .fe-root[data-guide-step="points"] [data-menubtn="skills"], .fe-root[data-guide-step="equip"] [data-menubtn="inventory"] {
+  animation: fe-guide-pulse 1.1s ease-in-out infinite;
+  border-color: var(--flame);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fe-root[data-guide-step] .fe-menubtn { animation: none; filter: drop-shadow(0 0 5px var(--flame)); }
+}
+
+/* ================================================================================================
+ * Title screen additions: the one-line pitch and the name suggestion button
+ * ============================================================================================== */
+.fe-auth__pitch { margin: 2px 0 12px; text-align: center; color: var(--bone); letter-spacing: 0.04em; text-shadow: 0 1px 3px #000; }
+.fe-field:has(> .fe-create__dice) { position: relative; }
+.fe-create__dice {
+  position: absolute;
+  right: 6px;
+  top: 28px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--gold);
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #5a4630;
+  border-radius: 3px;
+}
+.fe-create__dice:hover, .fe-create__dice:focus-visible { color: var(--hot); border-color: var(--bronze-light); }
+
+/* Crafting Bench, nothing on it: two tabs and a folded explanation (F-20) */
+.fe-bench__tabs { display: flex; gap: 2px; margin: 0 0 6px; border-bottom: 1px solid #2c2219; }
+.fe-bench__tab { padding: 4px 12px 6px; color: var(--ash); cursor: pointer; background: none; border: 0; border-bottom: 3px solid transparent; font-family: var(--font-title); }
+.fe-bench__tab:hover, .fe-bench__tab:focus-visible { color: var(--parchment); }
+.fe-bench__tab--on { color: var(--hot); border-bottom-color: var(--ember); }
+.fe-bench__explain summary { cursor: pointer; list-style: none; }
+.fe-bench__explain summary::before { content: '\25B8  '; color: var(--gold); }
+.fe-bench__explain details[open] summary::before { content: '\25BE  '; }
+
+/* Inventory: the Sort button (F-36) */
+.fe-inv__sort { margin: 0 8px; padding: 1px 12px 2px; color: var(--bone); cursor: pointer; background: rgba(0, 0, 0, 0.35); border: 1px solid #5a4630; border-radius: 3px; }
+.fe-inv__sort:hover, .fe-inv__sort:focus-visible { color: var(--hot); border-color: var(--bronze-light); }
+
+.fe-create__skip { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--ash); cursor: pointer; }
+
+/* Short screens (1024x600): the closing card keeps its titles and drops the explanations so it clears the command deck */
+@media (max-height: 679px) {
+  .fe-guide--next .fe-guide__rowtext span, .fe-guide--next .fe-guide__intro { display: none; }
+  .fe-guide--next .fe-guide__row { padding: 4px 0; }
+}
+
+/* No room beside the open panels (1024x600 with the Atlas and the inventory): the panels carry the step as a coach strip instead */
+@container fe-hud (max-width: 340px) {
+  .fe-leftcol > .fe-guide { display: none; }
+}

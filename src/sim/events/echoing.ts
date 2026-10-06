@@ -17,7 +17,7 @@ import { DAMAGE_INDEX, GOLDEN_ANGLE } from '../math';
 import { MFLAG } from '../stores';
 import type { PlayerState, World } from '../world';
 import {
-  beat, canOnset, dismissMember, eventArea, eventDamage, eventMonster, familyKind, finish, hasRoom, markOnset, mods, nearestLivingDist,
+  anchorSite, beat, canOnset, dismissMember, eventArea, eventDamage, eventMonster, familyKind, finish, hasRoom, markOnset, mods, nearestLivingDist,
   pickSite, skinOf, placeAt } from './kit';
 import type { EventInstance, EventKill, EventScript, KillRecord } from './types';
 
@@ -67,7 +67,9 @@ export function echoGrade(intercepted: number, total: number, ease = 0): MapEven
 }
 
 function reveal(w: World, e: EventInstance): boolean {
-  const anchor = pickSite(w, e.plan.angle, { minPlayer: ECHO_ANCHOR_CLEARANCE, rim: ECHO_ANCHOR_RIM, from: 0.1, to: 0.8 });
+  const rule = { minPlayer: ECHO_ANCHOR_CLEARANCE, rim: ECHO_ANCHOR_RIM };
+  const at = anchorSite(w, e, 'echo', rule) ?? pickSite(w, e.plan.angle, { ...rule, from: 0.1, to: 0.8 });
+  const anchor = { x: at.x, y: at.y };
   e.s = { anchor, queue: [], t: 0, resonance: 0, intercepted: 0, weighted: 0, returned: 0, total: 0, echoes: new Map(), engaged: new Set(),
     pairs: new Map(), stage: 'available', erupt: 0, wardenId: 0, wardenWait: 0, eruptArea: null } satisfies EchoState;
   e.phase = 'available';

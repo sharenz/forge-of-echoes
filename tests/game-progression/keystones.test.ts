@@ -14,14 +14,16 @@ const atlas = { discovered: [...ATLAS_AREA_IDS], completed: [], clears: 0 };
 const exclusive = UNIQUE_IDS.filter(id => UNIQUES[id].bossSource);
 
 describe('boss-exclusive uniques', () => {
-  it('has two attainable uniques for each of six keystone bosses, outside every world/gamble pool', () => {
-    expect(exclusive).toHaveLength(12);
-    expect(uniqueIdsFor()).toEqual(['thePatientSpark', 'cinderwalkers', 'echoOfTheMatriarch', 'ruinheartBand']);
+  it('has two attainable uniques for each keystone boss (three for the Hollow Warden and Varkus), outside every world/gamble pool', () => {
+    // Power rework: Hollow Crown joins the Hollow Warden's pool and Stormcaller's Lattice Varkus's.
+    expect(exclusive).toHaveLength(14);
+    expect(uniqueIdsFor()).toEqual(['thePatientSpark', 'cinderwalkers', 'echoOfTheMatriarch', 'ruinheartBand',
+      'frostfireSpiral', 'penitentsPrism', 'weepingHearth', 'gravewindBoots', 'anchoritesSeal', 'bellwether', 'needlepoint', 'twiceStruckBell']);
     const bosses = [...new Set(exclusive.map(id => UNIQUES[id].bossSource!))];
     expect(bosses).toHaveLength(6);
     for (const boss of bosses) {
       const pool = uniqueIdsFor({ bossSource: boss });
-      expect(pool).toHaveLength(2);
+      expect(pool).toHaveLength(boss === 'hollowWarden' || boss === 'varkus' ? 3 : 2);
       for (const id of pool) {
         const tier = Math.ceil((uniqueLevelRequirement(id) + 2) / 6);
         expect(ATLAS_AREAS.some(a => a.uniquePool === boss && atlasTierCeiling(a) >= tier)).toBe(true);
@@ -31,7 +33,7 @@ describe('boss-exclusive uniques', () => {
     }
     for (const a of ATLAS_AREAS.filter(a => a.uniquePool)) expect(mapBosses(a.baseId).boss.kind).toBe(a.uniquePool);
     expect(keystoneRewards('crownFoundry', 9)!.pool.map(i => i.id)).toEqual(['everburn']);
-    expect(keystoneRewards('winterThrone', 9)!.pool.map(i => i.id)).toEqual(['winterstride']);
+    expect(keystoneRewards('winterThrone', 9)!.pool.map(i => i.id)).toEqual(['winterstride', 'hollowCrown']);
   });
 
   it('pays only the selected keystone pool at the displayed personal rarity chance and respects item levels', () => {
@@ -47,7 +49,7 @@ describe('boss-exclusive uniques', () => {
           expect(item.itemLevel).toBe(58); seen.add(item.uniqueId); count++;
         }
       }
-      expect(seen.size).toBe(2);
+      expect(seen.size).toBe(uniqueIdsFor({ bossSource: area.uniquePool!, maxLevel: 58 }).length);
       expect(count / 800).toBeCloseTo(info.chance, 1);
       expect(info.chance).toBeCloseTo(KEYSTONE_UNIQUE_CHANCE * rules.lootLuck(setup, looter).itemRarity / 100);
       const early = expectOk(openAt(rules, bareCharacter({ atlas, mapDevice: map(area.baseId, 7), currencyStash: { scrap: 100 } }), area.id)).setup;
@@ -81,7 +83,10 @@ describe('boss-exclusive uniques', () => {
       expect(desc.description).toContain(`Tier ${Math.ceil((uniqueLevelRequirement(id) + 2) / 6)}+`);
       if (id === 'sunkenSun') expect(desc.description).not.toContain('Crown Foundry');
       if (id === 'stillwinter') expect(desc.description).not.toContain('Winter Throne');
-      expect(desc.affixes.map(a => a.text).join(' ')).toContain(UNIQUES[id].flags[0].text);
+      // A flag whose behaviour has not shipped (`awaits`) shows no text yet; its numbers still do.
+      const live = UNIQUES[id].flags.filter(f => !f.awaits);
+      for (const f of UNIQUES[id].flags) expect(desc.affixes.map(a => a.text).join(' ').includes(f.text), `${id}: ${f.flag}`).toBe(!f.awaits);
+      if (!live.length) expect(desc.affixes.length).toBeGreaterThan(0);
     }
   });
 });

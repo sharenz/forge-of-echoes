@@ -8,6 +8,7 @@ import type { Command, InputMessage, ServerMessage, ZoneInfo } from '../../src/c
 import type { PlayerIntent, PropKind, WorldView } from '../../src/contracts/sim';
 import { SIM_DT } from '../../src/contracts/sim';
 import { rules } from '../../src/game';
+import { waresRotation } from '../../src/game/progression/wares';
 import { decodeSnapshot, inputFromIntent } from '../../src/net';
 import type { Snapshot } from '../../src/net';
 import { newConnectionId, silentLogger, startServer } from '../../src/server';
@@ -422,4 +423,19 @@ export function captureLogger(): Logger & { lines: CapturedLine[] } {
     lines.push({ level, msg, fields });
   };
   return { lines, info: at('info'), warn: at('warn'), error: at('error') };
+}
+
+/**
+ * Buy Rook's guaranteed plain map from the wares board (slot 0: Normal, quality 0, at the tier of the stock epoch snapshot). `areaId` narrows the
+ * snapshot to that one area (so the map is bound to it); returns the command result of the purchase.
+ */
+export function buyRookMap(p: LocalPlayer, areaId?: AtlasAreaId): ReturnType<LocalPlayer['command']> {
+  if (areaId) {
+    const ch = p.session.record.ch;
+    const rotation = waresRotation(p.server.game.now());
+    p.server.game.setCharacter(p.session, { ...ch, wares: { rotation, level: ch.level, rerolls: 0, sold: [], tier: 0, areas: [areaId] } });
+  }
+  const view = p.command({ c: 'merchantWares' });
+  if (!view.ok || !view.board) return view;
+  return p.command({ c: 'buyWare', wareId: view.board.wares[0].id });
 }

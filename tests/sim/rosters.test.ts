@@ -136,7 +136,7 @@ describe('every theme is playable end to end', () => {
       vi.spyOn(Math, 'random').mockImplementation(boom);
       vi.spyOn(Date, 'now').mockImplementation(boom);
       const intents: PlayerIntent[] = [];
-      const r = playMap(theme, 31, intents);
+      const r = playMap(theme, 32, intents);
       expect(r.result, `${theme} after ${r.minutes.toFixed(1)} min`).toBe('cleared');
       const roster = THEME_ROSTER[theme];
       for (const k of [...roster.family, roster.boss]) expect(r.seen.has(k), `${theme}: ${k} never appeared`).toBe(true);
@@ -144,7 +144,7 @@ describe('every theme is playable end to end', () => {
       expect(r.boss).toBe(monsterDef(roster.boss).name);
       expect(r.debuffs.size).toBeGreaterThan(0);
       vi.restoreAllMocks();
-      expect(replayMap(theme, 31, intents)).toEqual(r.digests);
+      expect(replayMap(theme, 32, intents)).toEqual(r.digests);
     }, 120_000);
   }
 

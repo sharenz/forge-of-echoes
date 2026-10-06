@@ -27,9 +27,12 @@ import type { Rng } from '../contracts/rng';
 import { createRng, hashString } from '../core/rng';
 import type { AtlasAreaId } from '../contracts/atlas';
 import { ATLAS_RARE_DOOR_CHANCE, ATLAS_START, findAtlasArea } from '../data/progression/atlas';
+import { killCharge, refillBelt } from '../game/progression/flasks';
+import { markWarmed, wantsWarmup } from '../game/progression/guide';
 import { atlasCreditFor, creditEventCompletion, discoverAfterBoss, newAtlas, paidTerritoryFee } from '../game/progression/atlas';
 import { paidEntranceKey } from '../game/progression/runs';
 import { normalizeRunSurge, refundSurge } from '../game/progression/surge';
+import { normalizeRunTerritory, refundTerritoryUses, territoryRevealChance } from '../game/progression/territory';
 import { atlasEventIdOf } from '../game/progression/map-event-rules';
 import { PORTALS_PER_MAP, PROTOCOL_VERSION } from '../contracts/net';
 import type { Command, PartyInfo, PartyMemberInfo, PortalInfo, RunSummaryInfo, ServerMessage } from '../contracts/net';
@@ -113,6 +116,8 @@ const PARTY_SWEEP_INTERVAL_MS = 60_000;
 export const RESTORED_LEADER_WAIT_MS = 2 * 60_000;
 /** Told to a player placed back into a map that a restart recreated. */
 export const RESTORED_MAP_TOAST = 'The server was updated — the fight restarted from wave 1.';
+/** Shown when entering a hideout refilled the flask belt (the guide's flask decision). */
+export const FLASKS_REFILLED_TOAST = 'Your flasks are refilled. Home always tops them up.';
 const SHUTDOWN_REASON = 'The server is updating. You will be reconnected in a moment.';
 /**
  * character_maps rows can also say "visiting this party member's hideout" (written at shutdown only): the map id
@@ -398,6 +403,8 @@ export class Game implements InstanceHost {
     this.byConnection.set(conn.id, s);
     this.memberCache.set(characterId, { name: s.name, level: s.record.ch.level });
 
+    // A fresh login that lands in a hideout starts with full flasks (before the first character push, so the client never sees stale belts).
+    if (!s.instance) this.guard('login refill', () => this.refillAtLogin(s));
     s.send({ t: 'welcome', protocol: PROTOCOL_VERSION, characterId, tickRate: SIM_HZ, serverTime: Date.now() });
     s.flushCharacter();
     const joinedParty = this.parties.partyOf(characterId);
@@ -585,6 +592,7 @@ export class Game implements InstanceHost {
         t: 'result', id, ok: true,
         ...(res.message !== undefined ? { message: res.message } : {}),
         ...(res.offers !== undefined ? { offers: res.offers } : {}),
+        ...(res.board !== undefined ? { board: res.board } : {}),
       }
       : { t: 'result', id, ok: false, error: res.error };
     s.sendResult(msg, changed);
@@ -713,7 +721,11 @@ export class Game implements InstanceHost {
       this.sendZone(s);
       return true;
     }
+    const cameFrom = s.instance;
     const summary = this.leaveInstance(s);
+    // Home refills the belt for free (first-run guide): done before the join so the sim starts with full flasks. A first placement
+    // after login was refilled in attach() (before the first character push), and a restored map is no hideout.
+    const refilled = target.kind === 'hideout' && cameFrom !== null ? this.refillFlasks(s) : 0;
     try {
       target.join(s, at ? { x: at.x, y: at.y } : {});
     } catch (err) {
@@ -730,8 +742,29 @@ export class Game implements InstanceHost {
     this.sendZone(s);
     if (target instanceof MapInstance) this.guard('map entry', () => this.recordMapEntry(s, target));
     if (summary) this.deliverSummary(s, summary);
+    // Said only when you come home from a map: a fresh login or a visit to a friend's hideout tops up quietly.
+    if (refilled > 0 && summary) s.toast(FLASKS_REFILLED_TOAST, 'flask');
     this.markParty(s.characterId);
     return true;
+  }
+
+  /** The belt of a character about to be placed in a hideout (not back into a map after a restart): topped up, silently, no push. */
+  private refillAtLogin(s: PlayerSession): void {
+    let inMap = false;
+    try {
+      const loc = this.db.characterMap(s.characterId);
+      inMap = !!loc && loc.mapId !== hideoutLocationKey(loc.ownerId);
+    } catch { /* an unreadable location places the character at home */ }
+    const r = inMap ? null : refillBelt(s.record.ch);
+    if (r) this.store.set(s.record, r.character);
+  }
+
+  /** Top up the belt of a session entering a hideout; the number of charges added (0 = nothing was missing). */
+  private refillFlasks(s: PlayerSession): number {
+    const r = refillBelt(s.record.ch);
+    if (!r) return 0;
+    this.setCharacter(s, r.character, 'lazy');
+    return r.charges;
   }
 
   /**
@@ -837,16 +870,23 @@ export class Game implements InstanceHost {
     const opened = this.serverRules.openMap(s.record.ch, { ...opts, now: this.now() });
     if (!opened.ok) return { ok: false, error: opened.error };
     if (old) this.closeMap(old, 'replaced');
-    const map = this.instances.createMap(s.characterId, s.name, opened.value.setup, this.now(), randomUUID());
+    // The account's very first map opens gently (first-run guide): the opening waits for a first move or cast. Granted once.
+    const evidence = { characters: [opened.value.character], atlas: opened.value.character.atlas };
+    const gentle = wantsWarmup(opened.value.character.guide, evidence);
+    const setup = gentle ? { ...opened.value.setup, warmup: true as const } : opened.value.setup;
+    const map = this.instances.createMap(s.characterId, s.name, setup, this.now(), randomUUID());
     map.sourceItem = item;
-    this.setCharacter(s, opened.value.character);
+    const guide = gentle && opened.value.character.guide ? markWarmed(opened.value.character.guide) : opened.value.character.guide;
+    this.setCharacter(s, guide === opened.value.character.guide ? opened.value.character : { ...opened.value.character, guide });
     // portalChanged() writes the open run in ONE transaction with the consumed map item (persistMap): a
     // crash right now neither loses the map nor keeps it twice (item in the device + a restorable run).
     this.portalChanged(map);
     const text = `${s.name} opened ${map.mapName} (Tier ${map.tier}): ${map.portalsTotal} portals.`;
     this.systemChat(this.parties.partyOf(s.characterId)?.members ?? [], text);
     this.log.info('map opened', { character: s.name, map: map.id, name: map.mapName, tier: map.tier });
-    return { ok: true, message: `The portals to ${map.mapName} are open.` };
+    // A beacon slot that burned out at activation (brief D 6.3) is said once, with the opening.
+    const notices = opened.value.notices ?? [];
+    return { ok: true, message: `The portals to ${map.mapName} are open.${notices.length ? ` ${notices.join(' ')}` : ''}` };
   }
 
   /** Portal count / state of a map changed: hideout portal prop, 'portal' messages, party frames. */
@@ -904,7 +944,7 @@ export class Game implements InstanceHost {
   private refundMap(map: MapInstance): void {
     const item = map.sourceItem;
     if (!item) return;
-    if (this.refundMapItem(map.ownerId, item, map.mapKey, () => this.db.deleteOpenMap(map.mapKey), paidEntranceKey(map.setup), map.setup.entranceScrap, map.setup.scarabs, map.setup.surge)) map.sourceItem = null;
+    if (this.refundMapItem(map.ownerId, item, map.mapKey, () => this.db.deleteOpenMap(map.mapKey), paidEntranceKey(map.setup), map.setup.entranceScrap, map.setup.scarabs, map.setup.surge, map.setup.territory)) map.sourceItem = null;
   }
 
   /**
@@ -912,14 +952,15 @@ export class Game implements InstanceHost {
    * with `alsoWrite` (the deletion of the map's row). All or nothing: when the write fails (logged) the
    * character is unchanged and false is returned.
    */
-  private refundMapItem(ownerId: string, item: MapItem, mapKey: string, alsoWrite: () => void, refundKey?: import('../contracts/content').CurrencyId, entranceScrap = 0, scarabs: readonly import('../contracts/content').ScarabId[] = [], surge?: RunSetup['surge']): boolean {
+  private refundMapItem(ownerId: string, item: MapItem, mapKey: string, alsoWrite: () => void, refundKey?: import('../contracts/content').CurrencyId, entranceScrap = 0, scarabs: readonly import('../contracts/content').ScarabId[] = [], surge?: RunSetup['surge'], territory?: RunSetup['territory']): boolean {
     const extra: Item[] = refundKey ? [{ kind: 'currency', currencyId: refundKey, count: 1, uid: `refund-key:${mapKey}` }] : [];
     scarabs.forEach((currencyId, index) => extra.push({ kind: 'currency', currencyId, count: 1, uid: `refund-scarab:${mapKey}:${index}` }));
     const fee = paidTerritoryFee(entranceScrap);
     if (fee) extra.push({ kind: 'currency', currencyId: 'scrap', count: fee, uid: `refund-scrap:${mapKey}` });
     // An unrestorable run also gives its surge charge back (D 7.2): same transaction, exact (nothing once the forge day has turned over).
-    const restoreSurge = surge ? (ch: CharacterSave): CharacterSave => {
-      const atlas = refundSurge(ch.atlas, surge, this.now());
+    // ... and the sigil uses it spent (brief D 2.2), exact per beacon slot.
+    const restoreSurge = surge || territory?.length ? (ch: CharacterSave): CharacterSave => {
+      const atlas = refundTerritoryUses(refundSurge(ch.atlas, surge, this.now()), territory);
       return atlas === ch.atlas || !atlas ? ch : { ...ch, atlas };
     } : undefined;
     return this.returnToOwner(ownerId, item, { what: 'map refund', done: 'map refunded' }, { map: mapKey }, alsoWrite, extra, restoreSurge);
@@ -1081,7 +1122,12 @@ export class Game implements InstanceHost {
       case 'kill':
         if (inst instanceof MapInstance && o.playerId > 0) {
           const s = inst.members.get(o.playerId);
-          if (s) inst.participant(s).kills++;
+          if (s) {
+            const kills = ++inst.participant(s).kills;
+            // Flask kill charge (power rework 10.3): every Nth kill of the run tops up the belt.
+            const r = killCharge(s.record.ch, kills);
+            if (r) { this.setCharacter(s, r.character); inst.updateRuntime(s); }
+          }
         }
         break;
       case 'flaskUsed': {
@@ -1169,7 +1215,8 @@ export class Game implements InstanceHost {
       try {
         if (rec.accountId !== accountId) { this.db.deleteAtlasCredit(map.mapKey, accountId); map.atlasPendingCredits.delete(accountId); this.persistMap(map); continue; }
         const rng = createRng(map.setup.seed ^ hashString(accountId));
-        const result = discoverAfterBoss(rec.ch.atlas ?? newAtlas(), areaId, rng.chance(ATLAS_RARE_DOOR_CHANCE), atlasCreditFor(areaId, map.setup.map.tier, rng.next()));
+        // Survey sigils of the expedition (brief D 6.5) add to the extra-reveal fraction; the rolls stay the same draws.
+        const result = discoverAfterBoss(rec.ch.atlas ?? newAtlas(), areaId, rng.chance(ATLAS_RARE_DOOR_CHANCE), atlasCreditFor(areaId, map.setup.map.tier, rng.next(), territoryRevealChance(map.setup.territory)));
         const credited = new Set(map.atlasCredits).add(accountId);
         const pending = new Map(map.atlasPendingCredits);
         pending.delete(accountId);
@@ -1620,7 +1667,7 @@ export class Game implements InstanceHost {
     if (!setup || !owner || this.instances.activeMapOf(row.ownerId)) {
       // The run cannot come back: the map item goes back to its owner, if it is still a valid map.
       const item = restoreRunSetup(isRecord(parsed) ? (parsed.sourceMap ?? parsed.map) : null, 0)?.map ?? null;
-      if (owner && item) this.refundMapItem(row.ownerId, item, row.mapId, () => this.db.deleteOpenMap(row.mapId), paidEntranceKey(parsed), isRecord(parsed) ? paidTerritoryFee(parsed.entranceScrap) : 0, isRecord(parsed) && Array.isArray(parsed.scarabs) ? parsed.scarabs.slice(0, 4).filter(isScarabId) : [], isRecord(parsed) ? normalizeRunSurge(parsed.surge) : undefined);
+      if (owner && item) this.refundMapItem(row.ownerId, item, row.mapId, () => this.db.deleteOpenMap(row.mapId), paidEntranceKey(parsed), isRecord(parsed) ? paidTerritoryFee(parsed.entranceScrap) : 0, isRecord(parsed) && Array.isArray(parsed.scarabs) ? parsed.scarabs.slice(0, 4).filter(isScarabId) : [], isRecord(parsed) ? normalizeRunSurge(parsed.surge) : undefined, isRecord(parsed) ? normalizeRunTerritory(parsed.territory) : undefined);
       else {
         this.db.deleteOpenMap(row.mapId);
         this.log.error('open map could not be restored', { map: row.mapId, owner: row.ownerName });

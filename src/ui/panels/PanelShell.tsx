@@ -2,6 +2,7 @@ import type { ComponentChildren } from 'preact';
 import type { Panel } from '../../contracts/ui';
 import { Frame, PanelHead, cx } from '../components/common';
 import { panelSide } from '../lib/panels';
+import { CoachStrip } from '../guide/CoachStrip';
 import { useStore } from '../store';
 
 /** A docked panel: left (stash, character, skills, party, map device, merchant, bench, trade) or right (inventory). */
@@ -34,6 +35,7 @@ export function PanelShell({
           store.actions.closePanel(panel);
         }}
       />
+      <CoachStrip panel={panel} />
       {aside && <div class="fe-panel__aside">{aside}</div>}
       <div class="fe-panel__body">{children}</div>
     </Frame>

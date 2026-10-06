@@ -193,7 +193,9 @@ describe('Essences', () => {
     const one = item({ baseId: 'ashwoodWand', itemLevel: 40, rarity: 'magic', affixes: [{ affixId: 'fireDamage', tier: 5 }] });
     const r1 = expectOk(craftEquipment(one, 'essenceEmber', createRng(1)));
     expect(r1.item.rarity).toBe('magic');
-    expect(r1.item.affixes.map((a) => a.affixId)).toEqual(['fireDamage', 'igniteChance']);
+    expect(r1.item.affixes[0].affixId).toBe('fireDamage');
+    // The second line is one of the wand's fire suffixes: Immolation or (power rework) Fire Sundering.
+    expect(['igniteChance', 'firePen']).toContain(r1.item.affixes[1].affixId);
 
     const two = item({ ...MAGIC_RING });
     const r2 = expectOk(craftEquipment(two, 'essenceStorm', createRng(2)));
@@ -208,10 +210,10 @@ describe('Essences', () => {
     expect(craftingTargetError(bench(belt, { essenceSwift: 1 }), 'essenceSwift', T)).toBe('No speed affix can roll on a Belt.');
 
     const full = item({
-      baseId: 'ashwoodWand', itemLevel: 44, rarity: 'magic',
-      affixes: [{ affixId: 'fireDamage', tier: 5 }, { affixId: 'igniteChance', tier: 4 }],
+      baseId: 'ashwoodWand', itemLevel: 44, rarity: 'rare', name: 'Ash Brand',
+      affixes: [{ affixId: 'fireDamage', tier: 5 }, { affixId: 'igniteChance', tier: 4 }, { affixId: 'firePen', tier: 4 }],
     });
-    // Magic with 2 → would become rare, but both fire affixes of a wand are present already.
+    // Room is left, but all three fire affixes of a wand (Blazing, Immolation, Fire Sundering) are present already.
     expect(craftingTargetError(bench(full, { essenceEmber: 1 }), 'essenceEmber', T))
       .toBe('Every fire affix this item can roll is already on it.');
 

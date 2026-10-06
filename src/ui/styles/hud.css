@@ -1313,6 +1313,9 @@
 .fe-zoneinfo__portals--spent {
   color: var(--bad);
 }
+.fe-zoneinfo__portals--cleared {
+  color: var(--good);
+}
 .fe-portals {
   display: inline-flex;
   gap: 3px;

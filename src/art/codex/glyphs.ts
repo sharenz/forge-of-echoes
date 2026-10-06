@@ -127,7 +127,7 @@ const BY_ID: Record<string, GlyphId> = {
   hunterPatience: 'paw', resonantRift: 'spiral', quickFingers: 'key', crownRivalry: 'crown', faultWalker: 'cracked', keeperOfTheFlame: 'flame',
   pactBroker: 'hand', greenThumb: 'bloom', ringmaster: 'fist', thawWarden: 'snowflake', anvilBlessing: 'anvil', bellringer: 'bell',
   // notables that deserve their own face
-  chartKeeper: 'compass', farHorizon: 'sun', masterSurveyor: 'eye', lanternBearer: 'hourglass', fifthSocket: 'scarab',
+  chartKeeper: 'compass', farHorizon: 'sun', masterSurveyor: 'eye', lanternBearer: 'hourglass', fifthSocket: 'scarab', lightkeeper: 'sun',
   soundFoundations: 'tower', deepSeams: 'vial', steadyAnvil: 'anvil', ingredientHunter: 'vial', cataloguersShelf: 'chest',
   rareBlood: 'skull', fatPacks: 'swarm', elderBlood: 'star', wardedHunts: 'shield',
   crownedChallenge: 'crown', kingmakersCache: 'chest', gildedInstinct: 'star', deepPockets: 'coin', lodestone: 'diamond',
@@ -145,6 +145,7 @@ const BY_STAT: Record<string, GlyphId> = {
   essenceDropChance: 'vial', emberEssenceChance: 'flame', rimeEssenceChance: 'snowflake',
   armourStability: 'tower', equipmentStability: 'tower', equipmentDropChance: 'anvil',
   eventChance: 'spiral', echoWave: 'spiral', waveDuration: 'hourglass', surgeCharges: 'hourglass', surgeKeep: 'hourglass', sandChance: 'hourglass', dangerModStrength: 'flame', corruptedModStrength: 'seal',
+  beaconSlots: 'sun', beaconRadius: 'sun', sigilUses: 'sun',
 };
 const BY_CURRENCY: Record<string, GlyphId> = {
   seal: 'seal', scrap: 'gear', solvent: 'drop', catalyst: 'vial', fractureCore: 'cracked', kindlingShard: 'flame', reforgingEmber: 'hammer', mapDust: 'sun',

@@ -28,7 +28,7 @@ import { ELITE_BIT as ELITE } from '../../contracts/sim';
 import { MFLAG } from '../stores';
 import type { Area, PlayerState, World } from '../world';
 import {
-  beat, canOnset, dismissMember, eventArea, eventDamage, eventFixture, eventMonster, familyKind, finish, fixtureLife, hasRoom, markOnset,
+  anchorSite, beat, canOnset, dismissMember, eventArea, eventDamage, eventFixture, eventMonster, familyKind, finish, fixtureLife, hasRoom, markOnset,
   mods, nearestLivingDist, pay, pickSite, skinOf, placeAt } from './kit';
 import type { EventInstance, EventKill, EventScript } from './types';
 
@@ -105,18 +105,42 @@ export function caravanGrade(broken: number): MapEventGrade {
   return Math.min(3, broken) as MapEventGrade;
 }
 
+/** The wagon sets out at least this far from every living player. */
+const CARAVAN_START_CLEARANCE = 250;
+
+/**
+ * E1: the layout's road, driven from whichever end is clear of the party (both clear: the plan's variant picks); null when the area
+ * has no layout, declares no road for this tier, or every road has players at both ends (the radial road stands in).
+ */
+function layoutRoad(w: World, e: EventInstance): { x: number; y: number }[] | null {
+  const clear = (p: { x: number; y: number }) => nearestLivingDist(w, p.x, p.y) >= CARAVAN_START_CLEARANCE;
+  const at = anchorSite(w, e, 'road', { minPlayer: 0 }, a => a.path.length >= 2 && (clear(a.path[0]) || clear(a.path[a.path.length - 1])));
+  if (!at) return null;
+  const path = at.anchor.path;
+  const fromStart = clear(path[0]), fromEnd = clear(path[path.length - 1]);
+  const reverse = fromStart && fromEnd ? ((e.plan.variant ?? 0) & 2) !== 0 : !fromStart;
+  const pts = reverse ? [...path].reverse() : path;
+  return pts.map(p => placeAt(p.x, p.y, w.arenaRadius, w.props));
+}
+
 function reveal(w: World, e: EventInstance): boolean {
   if (!canOnset(w) || !hasRoom(w, CARAVAN_ESCORTS + CARAVAN_LOCKS + 2)) return false;
   const R = w.arenaRadius;
-  const start = pickSite(w, e.plan.angle, { minPlayer: 250, rim: 60, from: 0.96, to: 1 });
-  const a0 = Math.atan2(start.y, start.x);
-  const sign = (e.plan.variant ?? 0) & 1 ? 1 : -1;
-  const mid = placeAt(Math.cos(a0 + sign * Math.PI / 2) * R * 0.25, Math.sin(a0 + sign * Math.PI / 2) * R * 0.25, R, w.props);
-  const a1 = a0 + Math.PI * 0.9 * sign;
-  const end = placeAt(Math.cos(a1) * (R - 60), Math.sin(a1) * (R - 60), R, w.props);
-  const road = [start, mid, end];
+  let road = layoutRoad(w, e);
+  let heading = road ? pointAt(road, 0).a : 0;
+  if (!road) {
+    const start = pickSite(w, e.plan.angle, { minPlayer: CARAVAN_START_CLEARANCE, rim: 60, from: 0.96, to: 1 });
+    const a0 = Math.atan2(start.y, start.x);
+    const sign = (e.plan.variant ?? 0) & 1 ? 1 : -1;
+    const mid = placeAt(Math.cos(a0 + sign * Math.PI / 2) * R * 0.25, Math.sin(a0 + sign * Math.PI / 2) * R * 0.25, R, w.props);
+    const a1 = a0 + Math.PI * 0.9 * sign;
+    const end = placeAt(Math.cos(a1) * (R - 60), Math.sin(a1) * (R - 60), R, w.props);
+    road = [start, mid, end];
+    heading = a0 + Math.PI;
+  }
+  const start = road[0];
   e.s = { road, length: polyLength(road), along: 0, wagon: 0, locks: [], broken: [false, false, false], escorts: new Map(),
-    reinforced: false, laneAt: 0, double: e.plan.required === true, heading: a0 + Math.PI, gone: false,
+    reinforced: false, laneAt: 0, double: e.plan.required === true, heading, gone: false,
     groups: [new Set(), new Set(), new Set()], wheels: [], wheelsBroken: 0, shielded: [true, true, true] } satisfies CaravanState;
   e.phase = 'warning';
   e.timer = MAP_EVENT_WARNING_SECONDS;

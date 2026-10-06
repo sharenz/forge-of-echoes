@@ -1,6 +1,7 @@
 // Damage resolution for both sides, ailments and kill credit.
 import type { PlayerDebuff } from '../contracts/bestiary';
 import { DAMAGE_TYPES, type DamageType, type MonsterKind } from '../contracts/content';
+import { DOT_RESIST_FACTOR, EXPOSURE, PEN_CAP } from '../data/progression/combat';
 import { MONSTER_ANIM, type MonsterRarity, type RootSource, type SimEvent } from '../contracts/sim';
 import { ELITE, KIND_BY_INDEX, KIND_INDEX } from './archetypes';
 import { removeOwnedAreas, spawnArea } from './areas';
@@ -37,9 +38,56 @@ export function isHittable(w: World, i: number): boolean {
 }
 
 /**
+ * A monster's resistance to `dtype` after everything the damage pipeline does to it (power-curve.md 3.1):
+ *   r1 = min(MONSTER_RESIST_CAP, resistance)           the cap comes first (proof rares stay a wall)
+ *   r2 = r1 - min(pen, max(0, r1))                      penetration (pp, at most PEN_CAP) never takes resistance below 0
+ *   r3 = max(exposure floor, r2 - exposure)             exposure (timed, half on bosses/lieutenants) is the only way below 0
+ * `penPoints` is the attacker's penetration for this damage type in percentage points. Returns a fraction; damage taken
+ * is `1 - r3`. A monster already below the exposure floor keeps its own (lower) resistance.
+ */
+export function monsterResist(w: World, i: number, dtype: number, penPoints = 0): number {
+  const m = w.monsters;
+  const r1 = Math.min(MONSTER_RESIST_CAP, m.res[i * 5 + dtype]);
+  const pen = Math.min(PEN_CAP, Math.max(0, penPoints)) / 100;
+  const r2 = r1 - Math.min(pen, Math.max(0, r1));
+  if (m.exposeTime[i] <= 0) return r2;
+  const raw = m.expose[i * 5 + dtype];
+  if (raw <= 0) return r2;
+  const expo = m.flags[i] & (MFLAG.boss | MFLAG.lieutenant) ? raw * EXPOSURE.bossFactor : raw;
+  return Math.min(r2, Math.max(EXPOSURE.floor / 100, r2 - expo));
+}
+
+/**
+ * Expose a monster to a damage type: `points` percentage points (at most EXPOSURE.max) for EXPOSURE.duration seconds.
+ * Exposure never stacks: the strongest value per type applies, and every application refreshes the shared timer.
+ * (Applied by skills and augments, never by gear; bosses and lieutenants take half when it is read.)
+ */
+export function exposeMonster(w: World, i: number, dtype: number, points: number): void {
+  const m = w.monsters;
+  if (!m.alive[i] || !(points > 0)) return;
+  if (m.exposeTime[i] <= 0) for (let k = 0; k < 5; k++) m.expose[i * 5 + k] = 0;
+  const v = Math.min(EXPOSURE.max, points) / 100;
+  if (v > m.expose[i * 5 + dtype]) m.expose[i * 5 + dtype] = v;
+  m.exposeTime[i] = EXPOSURE.duration;
+}
+
+/** Count exposure down one tick; the whole row is cleared when it runs out. */
+export function tickExposure(w: World, i: number, dt: number): void {
+  const m = w.monsters;
+  if (m.exposeTime[i] <= 0) return;
+  m.exposeTime[i] -= dt;
+  if (m.exposeTime[i] <= 0) {
+    m.exposeTime[i] = 0;
+    for (let k = 0; k < 5; k++) m.expose[i * 5 + k] = 0;
+  }
+}
+
+/**
  * Player damage on monster slot `i`. `amount` is the average hit (the skill's resolved damage);
- * this rolls ×0.8–1.2, then crit, then the target's resistance, shock, Warded and (for `hit`s on
- * an armoured monster such as the Ironhide Brute) armour. `dir` pushes the target back (knockback 2–4 units, scaled by `knock`
+ * this rolls ×0.8–1.2, then crit, then the target's resistance (cap → the source player's penetration → exposure),
+ * shock, Warded and (for `hit`s on an armoured monster such as the Ironhide Brute) armour.
+ * `convTo`/`convShare` convert a share of the hit to a second damage type (each share resists, penetrates and
+ * ailments on its own final type; the rules already gave both types' modifiers to the hit). `dir` pushes the target back (knockback 2–4 units, scaled by `knock`
  * and the monster's susceptibility; the pending push never exceeds the 4-unit cap however many
  * hits land at once). `hit` = false marks burning damage (ward embers, fire trails), which armour
  * (MonsterDef.hitReduction) does not reduce. `source` is the player id credited with the damage (0 = nobody). Returns true
@@ -47,7 +95,7 @@ export function isHittable(w: World, i: number): boolean {
  */
 export function damageMonster(
   w: World, i: number, amount: number, dtype: number, critChance: number, critMult: number, ailmentChance: number,
-  dirX: number, dirY: number, knock: number, hit = true, source = 0,
+  dirX: number, dirY: number, knock: number, hit = true, source = 0, convTo = -1, convShare = 0,
 ): boolean {
   if (!isHittable(w, i) || amount <= 0) return false;
   const m = w.monsters;
@@ -60,10 +108,27 @@ export function damageMonster(
     crit = true;
     dmg *= critMult > 1 ? critMult : 1.5;
   }
-  // Ailments build from the resisted hit; shock, Warded and armour apply to the hit itself (and
-  // live, per tick, to the burn), so a brute's armour is the thing ignite gets around.
-  const resisted = dmg * (1 - Math.min(MONSTER_RESIST_CAP, m.res[i * 5 + dtype]));
-  if (ailmentChance > 0) applyAilment(w, i, resisted, dtype, ailmentChance, source);
+  // Ailments build from the hit with DOT_RESIST_FACTOR of the resistance (a proof rare still burns); shock, Warded and
+  // armour apply to the hit itself (and live, per tick, to the burn), so a brute's armour is the thing ignite gets around.
+  const pen = player?.stats.pen;
+  const share2 = convTo >= 0 && convShare > 0 ? Math.min(1, convShare) : 0;
+  const r1 = monsterResist(w, i, dtype, pen?.[DAMAGE_TYPES[dtype]] ?? 0);
+  let resisted: number;
+  let shown = dtype;
+  if (share2 === 0) {
+    resisted = dmg * (1 - r1);
+    if (ailmentChance > 0) applyAilment(w, i, dmg * (1 - DOT_RESIST_FACTOR * r1), dtype, ailmentChance, source);
+  } else {
+    const r2 = monsterResist(w, i, convTo, pen?.[DAMAGE_TYPES[convTo]] ?? 0);
+    const d1 = dmg * (1 - share2);
+    const d2 = dmg * share2;
+    resisted = d1 * (1 - r1) + d2 * (1 - r2);
+    if (share2 > 0.5) shown = convTo;
+    if (ailmentChance > 0) {
+      if (d1 > 0) applyAilment(w, i, d1 * (1 - DOT_RESIST_FACTOR * r1), dtype, ailmentChance, source);
+      applyAilment(w, i, d2 * (1 - DOT_RESIST_FACTOR * r2), convTo, ailmentChance, source);
+    }
+  }
   dmg = resisted * takenMult(w, i);
   if (hit && m.hitReduction[i] > 0) dmg *= 1 - m.hitReduction[i];
   if (knock > 0 && m.knockback[i] > 0) {
@@ -86,7 +151,7 @@ export function damageMonster(
   wakePack(w, i);
   // Whoever hurts a monster draws its attention (unless it is locked on a closer player).
   if (source > 0 && m.target[i] === 0) m.target[i] = source;
-  return applyMonsterDamage(w, i, dmg, dtype, crit, source);
+  return applyMonsterDamage(w, i, dmg, shown, crit, source);
 }
 
 /**

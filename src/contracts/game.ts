@@ -144,6 +144,17 @@ export interface MapSummaryLine {
 /** How a map reaches an area other than its own (brief D 2.5). */
 export type RunPassage = { kind: 'key'; currencyId: import('./content').CurrencyId } | { kind: 'bounty' };
 
+/** One sigil frozen into an expedition (brief D 6.3): which beacon slot it sat in and the share it works at (stacking rule). */
+export interface RunTerritory {
+  sigilId: import('./content').SigilId;
+  /** The beacon (a completed area) holding the sigil. */
+  fromAreaId: AtlasAreaId;
+  /** The slot index in that beacon: a server-loss refund gives the use back to exactly this slot. */
+  slot: number;
+  /** 1 = the strongest sigil of its kind on this run, 0.5 = every other one of that kind. */
+  share: number;
+}
+
 /** How a routing candidate relates to the run's area (brief D 4.2); the readout groups by it. */
 export type RouteKind = 'own' | 'neighbour' | 'deadEnd' | 'wander' | 'pending' | 'pinned';
 
@@ -194,8 +205,12 @@ export interface RunSetup {
    * nothing was spent, so nothing is refunded. Frozen, persisted and restored with the run; guests get the bonus but never spend.
    */
   surge?: { areaId: AtlasAreaId; quantityMore: number; rarityMore: number; day: number; kept?: true };
-  /** Sigil effects applied (slice B1; unused in T0). */
-  territory?: { sigilId: string; fromAreaId: AtlasAreaId; effects: { stat: string; mode: string; value: number }[] }[];
+  /**
+   * Territory (brief D 6, slice B1): the sigils of the opener's beacons covering the run's area, frozen at activation (I5). One entry per
+   * sigil whose effect applied (that sigil spent one use); `share` is 1 for the strongest of a kind and 0.5 for every other of that kind.
+   * The effects are read by the rules through `territory.ts` (map modifiers, event chance, reveal chance, currency and class weights).
+   */
+  territory?: RunTerritory[];
   /** Layout edition run (slice L0; unused in T0). */
   layoutV?: number;
   /** Actual Scrap entry fee paid; absent on legacy/free maps. Returned only for server-side run loss. */
@@ -204,6 +219,8 @@ export interface RunSetup {
   entranceKey?: import('./content').CurrencyId;
   /** Owner's chosen Hunting Ground reward class, fixed for the expedition and its party. */
   lootClass?: import('./content').ItemClass;
+  /** The account's first map (first-run guide): a gentle opening, see RunConfig.warmup. Set by the server at activation; not persisted across restarts. */
+  warmup?: true;
   seed: number;
   monsterLevel: number;
   /** Map-side item quantity % (100 = base): tier + mods + quality + implicit. Excludes any player's gear. */
@@ -238,6 +255,41 @@ export interface MerchantOffer {
   gambleClass?: ItemClass;
   price: { currencyId: CurrencyId; count: number }[];
   affordable: boolean;
+}
+
+/** How lucky a ware is: the luck model of Rook's wares board (GAME_SPEC §9). */
+export type WareQuality = 'junk' | 'okay' | 'good' | 'jackpot';
+
+/** One slot of a character's wares board: the exact item (a preview with uid `ware:<epoch>:<slot>`), its price and whether it is sold. */
+export interface MerchantWare {
+  /** `ware:<epoch>:<slot>`: what `buyWare` takes. The epoch is part of the id, so a stale purchase is refused. */
+  id: string;
+  /** 0-3 maps (0 is Rook's plain map), 4-11 items (4 is Rook's pick). */
+  slot: number;
+  kind: 'map' | 'item';
+  item: Item;
+  quality: WareQuality;
+  /** The first item slot: doubled odds of a good find. */
+  featured: boolean;
+  /** The one cheap plain map every board carries. */
+  guaranteed: boolean;
+  price: { currencyId: CurrencyId; count: number }[];
+  sold: boolean;
+}
+
+/** A character's wares board, built by the server (stock is deterministic per epoch; the client never rolls it). */
+export interface MerchantBoard {
+  /** `<rotation>.<level>.<rerolls>`: any change means new wares. */
+  epoch: string;
+  rotation: number;
+  level: number;
+  rerolls: number;
+  wares: MerchantWare[];
+  /** Server time (ms) the rotation ends, and the server time this board was built at. */
+  nextRotationAt: number;
+  serverNow: number;
+  /** Scrap price of "Ask for new wares" right now. */
+  rerollCost: number;
 }
 
 export interface DebugMerchantOptions {
@@ -350,12 +402,19 @@ export interface GameRulesApi {
   // --- maps & runs ---
   mapSummary(ch: CharacterSave, map: MapItem): MapSummaryLine[];
   /** Consume the map in the device and produce run parameters (map-side luck only). */
-  openMap(ch: CharacterSave, opts?: OpenMapOptions): Result<{ character: CharacterSave; setup: RunSetup }>;
+  openMap(ch: CharacterSave, opts?: OpenMapOptions): Result<{ character: CharacterSave; setup: RunSetup; /** Beacon slots that burned out at activation (the banner). */ notices?: string[] }>;
   /**
    * Use one Hourglass Sand on an Atlas area, or one Grand Hourglass on every area (brief D 7.4): the item leaves the inventory or stash and
    * the daily surge ledger is reset. Refused, spending nothing, when everything it would refill is already full. `now` is the server clock.
    */
   refillSurge(ch: CharacterSave, target: { kind: 'area'; areaId: AtlasAreaId } | { kind: 'all' }, now: number): Result<{ character: CharacterSave; message: string }>;
+  /**
+   * Slot one sigil from the backpack stack `uid` into slot `slot` of the beacon `areaId` (brief D 6, a completed area). A filled slot is
+   * replaced: the old sigil is consumed (a never-used one goes back to the backpack). Atomic; validated like the server.
+   */
+  slotSigil(ch: CharacterSave, areaId: AtlasAreaId, slot: number, uid: string): Result<{ character: CharacterSave; message: string }>;
+  /** Take the sigil out of a beacon slot: a never-used one returns to the backpack, a used one is consumed (its uses cannot be recovered). */
+  unslotSigil(ch: CharacterSave, areaId: AtlasAreaId, slot: number): Result<{ character: CharacterSave; message: string }>;
   /** Build the instance sim config (players join separately via SimRun.addPlayer). `setup` null = hideout. */
   buildRunConfig(setup: RunSetup | null, hooks: RunHooks): RunConfig;
   /** One player's resolved stats/skills/loadout/belt for an instance (after joining, level-ups, gear or flask changes). */
@@ -379,9 +438,21 @@ export interface GameRulesApi {
 
   // --- merchant ---
   merchantOffers(ch: CharacterSave): MerchantOffer[];
-  /** Areas Rook sells maps of (cleared ones plus the starting area), and the T1-T2 quality grades he offers for one (brief D 5.4). */
+  /**
+   * Legacy picker rows (cleared areas x T1-T2 x quality grades, `map:<area>:<tier>:<grade>`). Rook no longer sells them (the server refuses these ids and the UI has no
+   * Maps tab): maps come from the wares board. Kept as a pure fixture for tests and simulations.
+   */
   rookMapAreas(ch: CharacterSave): AtlasAreaId[];
   rookMapOffers(ch: CharacterSave, areaId: AtlasAreaId): MerchantOffer[];
+  /**
+   * Rook's wares board (GAME_SPEC §9): a deterministic function of the character, the 6-hour rotation (`now`, server ms), the
+   * character level and the reroll count. Returns the board and the character with its wares state initialised (the server saves it).
+   */
+  waresBoard(ch: CharacterSave, now: number): { character: CharacterSave; board: MerchantBoard };
+  /** Buy one ware by its id (`ware:<epoch>:<slot>`); refused when the epoch changed, the slot is sold or the price cannot be paid. */
+  buyWare(ch: CharacterSave, wareId: string, now: number, at?: { x: number; y: number }): Result<{ character: CharacterSave; item: Item }>;
+  /** "Ask for new wares": pays the doubling Scrap price, bumps the reroll count (a fresh salt) and clears the sold slots. */
+  rerollWares(ch: CharacterSave, now: number, expect?: { epoch: string; cost: number }): Result<{ character: CharacterSave }>;
   sellQuote(item: Item): { scrap: number; lines: string[] } | null;
   sellItems(ch: CharacterSave, uids: readonly string[], expectedScrap: number): Result<{ character: CharacterSave; scrap: number }>;
   buyOffer(ch: CharacterSave, offerId: string, at?: { x: number; y: number }): Result<{ character: CharacterSave; item: Item }>;

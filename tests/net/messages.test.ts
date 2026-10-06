@@ -79,6 +79,10 @@ describe('client message validation', () => {
       { c: 'setMapTreeNode', nodeId: 'crownedChallenge', allocate: true },
       { c: 'setMapTreeNode', nodeId: 'waypoint', allocate: false },
       { c: 'merchantOffers' },
+      { c: 'merchantWares' },
+      { c: 'buyWare', wareId: 'ware:12345.7.0:4' },
+      { c: 'buyWare', wareId: 'ware:-1.1.2:11', at: { x: 3, y: 2 } },
+      { c: 'rerollWares', epoch: '12345.7.0', cost: 3 },
       { c: 'buyOffer', offerId: 'gamble:wand' },
       { c: 'buyOffer', offerId: 'map:emberRoad:2:plain', at: { x: 11, y: 4 } },
       { c: 'partyInvite', name: 'Mira' },
@@ -226,6 +230,10 @@ describe('client message validation', () => {
       cmd({ c: 'moveItem', uid: 'x'.repeat(65), to: { kind: 'mapDevice' } }),
       cmd({ c: 'moveItem', uid: { $gt: '' }, to: { kind: 'mapDevice' } }),
       cmd({ c: 'quickMove', uid: 'i1' }),
+      cmd({ c: 'buyWare' }), cmd({ c: 'buyWare', wareId: 'ware 1.2.3:4' }), cmd({ c: 'buyWare', wareId: 'w'.repeat(65) }), cmd({ c: 'buyWare', wareId: 5 }),
+      cmd({ c: 'buyWare', wareId: 'ware:1.2.3:4', at: { x: -1, y: 0 } }), cmd({ c: 'buyWare', wareId: 'ware:1.2.3:4', extra: true }),
+      cmd({ c: 'rerollWares', epoch: '1.2.3' }), cmd({ c: 'rerollWares', epoch: '1.2.3', cost: -3 }), cmd({ c: 'rerollWares', epoch: '1.2.3', cost: 1.5 }),
+      cmd({ c: 'rerollWares', epoch: '', cost: 3 }), cmd({ c: 'merchantWares', extra: 1 }),
       cmd({ c: 'applyCurrency', currencyUid: 'i1', targetUid: 'i2', affixIndex: -1 }),
       cmd({ c: 'applyCurrency', currencyUid: 'i1', targetUid: 'i2', affixIndex: null }),
       cmd({ c: 'renameStashTab', tab: 0, name: '' }),
@@ -319,6 +327,7 @@ describe('server message validation', () => {
         ],
       },
       { t: 'result', id: 3, ok: false, error: 'Not enough room' },
+      { t: 'result', id: 4, ok: true, board: { epoch: '1.2.0', rotation: 1, level: 2, rerolls: 0, wares: [{ id: 'ware:1.2.0:0', slot: 0 }], nextRotationAt: 5, serverNow: 1, rerollCost: 3 } as never },
       { t: 'toast', text: 'Rare drop!', tone: 'rare' },
       { t: 'party', party: { id: 'p1', leaderId: 'c1', members: [{ characterId: 'c1', name: 'Mira', level: 12, online: true, isLeader: true, zone: { kind: 'map', ownerName: 'Mira', mapName: 'Ashen Forge', tier: 3 }, activeMap: null }] } },
       { t: 'party', party: null },
@@ -350,6 +359,9 @@ describe('server message validation', () => {
       { t: 'events', tick: -1, events: [] },
       { t: 'events', events: [] },
       { t: 'toast', text: 'x', tone: 'loud' },
+      { t: 'result', id: 1, ok: true, board: 'nope' },
+      { t: 'result', id: 1, ok: true, board: { epoch: 5, wares: [] } },
+      { t: 'result', id: 1, ok: true, board: { epoch: '1.1.0', wares: [{ slot: 0 }] } },
       { t: 'mystery' },
       { t: 'pong', time: 1, serverTime: 1 },
       { t: 'tradeRequest' },
@@ -664,5 +676,17 @@ it('validates account pins, Re-chart through benchCraft and the three-map recycl
     { c: 'benchRecycle', uids: ['i1', 'i2', 'i3'], areaId: 'emberRoad', expectedScrap: -1 },
     { c: 'benchRecycle', uids: ['i1', 'i2', 'i3'], areaId: 'emberRoad', expectedScrap: 1.5 },
     { c: 'benchRecycle', uids: 'i1', areaId: 'emberRoad' },
+  ]) expect(rejected(cmd(bad)), JSON.stringify(bad)).toBeTruthy();
+});
+
+it('validates the first-run guide command and the backpack sort', () => {
+  for (const good of [
+    { c: 'guide', op: 'done', id: 'device' }, { c: 'guide', op: 'done', id: 'next' }, { c: 'guide', op: 'hint', id: 'lowLife' },
+    { c: 'guide', op: 'used', id: 'anvil' }, { c: 'guide', op: 'skip' }, { c: 'guide', op: 'replay' }, { c: 'guide', op: 'finish' }, { c: 'sortBackpack' },
+  ]) expect(ok(cmd(good))).toEqual(cmd(good));
+  for (const bad of [
+    { c: 'guide', op: 'done', id: 'lowLife' }, { c: 'guide', op: 'hint', id: 'device' }, { c: 'guide', op: 'used', id: 'portal' },
+    { c: 'guide', op: 'done' }, { c: 'guide', op: 'skip', id: 'device' }, { c: 'guide', op: 'reset' }, { c: 'guide' }, { c: 'guide', op: 'done', id: 'device', extra: 1 },
+    { c: 'sortBackpack', tab: 1 },
   ]) expect(rejected(cmd(bad)), JSON.stringify(bad)).toBeTruthy();
 });

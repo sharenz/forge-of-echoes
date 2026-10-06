@@ -18,7 +18,7 @@ import { DAMAGE_INDEX, TAU } from '../math';
 import { MFLAG } from '../stores';
 import type { Area, PlayerState, World } from '../world';
 import {
-  beat, canOnset, dismissMember, eventArea, eventDamage, eventMonster, familyKind, finish, hasRoom, markOnset, mods, nearestLivingDist,
+  anchorSite, beat, canOnset, dismissMember, eventArea, eventDamage, eventMonster, familyKind, finish, hasRoom, markOnset, mods, nearestLivingDist,
   pay, pickSite, placeAt, releaseMembers, skinOf,
 } from './kit';
 import type { EventInstance, EventKill, EventScript } from './types';
@@ -62,7 +62,9 @@ export const tollEvery = (w: World, fallen: number) => BELL_TOLL_SECONDS * (mods
 
 function reveal(w: World, e: EventInstance): boolean {
   if (!canOnset(w) || !hasRoom(w, BELL_CANTORS)) return false;
-  const bell = pickSite(w, e.plan.angle, { minPlayer: BELL_CLEARANCE, rim: BELL_OUTER_RADIUS + 50, from: 0, to: 0.65 });
+  const rule = { minPlayer: BELL_CLEARANCE, rim: BELL_OUTER_RADIUS + 50 };
+  const at = anchorSite(w, e, 'bell', rule) ?? pickSite(w, e.plan.angle, { ...rule, from: 0, to: 0.65 });
+  const bell = { x: at.x, y: at.y };
   e.s = { bell, cantors: [], spawned: false, t: 0, tolls: 0, nextToll: BELL_FIRST_TOLL, lastToll: 0, ring: -1, ringAngle: 0, dirge: 0, fallen: 0,
     fallenBeforeGold: 0, fallenAt: [], silentAt: -1, warn: null, waited: 0, done: false } satisfies BellState;
   e.phase = 'warning';

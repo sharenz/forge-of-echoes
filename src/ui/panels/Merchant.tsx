@@ -1,30 +1,34 @@
-// Rook the merchant (any hideout — visitors pay with their own currency): maps, supplies and class gambles, and he buys
-// equipment. The panel opens beside the inventory and items move by drag and drop, like a Path of Exile vendor:
-//   Buy / Gamble  drag a stock row onto your backpack (the drop cell picks the slot), or use its Buy button / Ctrl-click
-//   Sell          drag equipment from the backpack into the offer window (see MerchantSell.tsx)
-// Offers come from the shared rules (actions.merchantOffers); buying is a server command, so the server stays the judge.
+// Rook the merchant (any hideout, visitors pay with their own currency): a vendor window like Path of Exile's. His stock is one plain item grid
+// with tabs (Gear, Maps, Supplies; see MerchantWares.tsx), plus class gambles and a Sell tab (he buys equipment). The panel opens beside the
+// inventory and items move by drag and drop:
+//   Gear / Maps / Supplies   drag an item onto your backpack (the drop cell picks the slot), or Ctrl/Cmd-click or right-click it to buy it
+//   Gamble                   drag a class row onto your backpack
+//   Sell                     drag equipment from the backpack into the vendor's window (see MerchantSell.tsx)
+// The wares board comes from the server (actions.merchantWares); gambles come from the shared rules (actions.merchantOffers).
+// Buying is a server command, so the server stays the judge.
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { MerchantSell } from './MerchantSell';
-import { MerchantMaps } from './MerchantMaps';
+import { MerchantWares } from './MerchantWares';
 import { StockFilters, StockRow } from './MerchantStock';
 import type { MerchantOffer } from '../../contracts/game';
 import { iconIdForCurrency } from '../../contracts/content';
 import { PixelIcon, cx } from '../components/common';
 import { safe } from '../items/hooks';
 import { useLocal } from '../local';
-import { gamblePreview, unaffordableReason } from '../lib/merchant';
+import { VENDOR_TABS, gamblePreview, unaffordableReason, type VendorTab } from '../lib/merchant';
 import { formatInt } from '../lib/format';
 import { currencyHoldings } from '../lib/stash';
 import { useSignal, useStore, useUi } from '../store';
 import { PanelShell } from './PanelShell';
 
-type Tab = 'buy' | 'maps' | 'gamble' | 'sell';
+type Tab = VendorTab | 'gamble' | 'sell';
+const TABS: readonly { id: Tab; label: string }[] = [...VENDOR_TABS, { id: 'gamble', label: 'Gamble' }, { id: 'sell', label: 'Sell' }];
 
 export function MerchantPanel() {
   const store = useStore();
   const local = useLocal();
   const sale = useSignal(local.merchantSale);
-  const [stockTab, setStockTab] = useState<'buy' | 'maps' | 'gamble'>('buy');
+  const [stockTab, setStockTab] = useState<Exclude<Tab, 'sell'>>('gear');
   const [search, setSearch] = useState('');
   const [affordOnly, setAffordOnly] = useState(false);
   const tab: Tab = sale ? 'sell' : stockTab;
@@ -70,7 +74,6 @@ export function MerchantPanel() {
 
   const q = search.toLowerCase().trim();
   const match = (o: MerchantOffer): boolean => (!q || o.label.toLowerCase().includes(q)) && (!affordOnly || o.affordable);
-  const supplies = offers.filter((o) => (o.kind === 'flask' || o.kind === 'currency') && match(o));
   const gambles = offers.filter((o) => o.kind === 'gamble' && match(o));
 
   const row = (o: MerchantOffer) => {
@@ -121,10 +124,10 @@ export function MerchantPanel() {
         </span>
       }
     >
-      <div class="fe-rook__tabs" role="tablist" aria-label="Rook's services">
-        {(['buy', 'maps', 'gamble', 'sell'] as const).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} disabled={sale?.busy} onClick={() => switchTab(t)}>
-            {t === 'buy' ? 'Buy' : t === 'maps' ? 'Maps' : t === 'gamble' ? 'Gamble' : 'Sell'}
+      <div class="fe-tabs fe-rook__tabs" role="tablist" aria-label="Rook's stock">
+        {TABS.map((t) => (
+          <button key={t.id} type="button" role="tab" class={cx('fe-tab', tab === t.id && 'fe-tab--on')} aria-selected={tab === t.id} disabled={sale?.busy} onClick={() => switchTab(t.id)} data-tab={t.id}>
+            {t.label}
           </button>
         ))}
       </div>
@@ -132,35 +135,23 @@ export function MerchantPanel() {
         <p class="fe-panel__note">Rook only trades in a hideout.</p>
       ) : tab === 'sell' ? (
         <MerchantSell />
-      ) : tab === 'maps' ? (
-        <div class={cx('fe-merchant__scroll', 'fe-stocklist')}><MerchantMaps />
-          <p class="fe-panel__note ui-type-caption">Drag the row onto your backpack to buy it, or use its Buy button.</p></div>
+      ) : tab !== 'gamble' ? (
+        <MerchantWares tab={tab} onShelf={(t) => { if (!sale) setStockTab(t); }} />
       ) : (
         <>
           <StockFilters
             search={search}
             onSearch={setSearch}
             label="Search Rook's stock"
-            placeholder={tab === 'buy' ? 'Search supplies…' : 'Search item classes…'}
+            placeholder="Search item classes…"
             afford={{ on: affordOnly, toggle: () => setAffordOnly(!affordOnly) }}
           />
           <div class={cx('fe-merchant__scroll', 'fe-stocklist')} data-testid="rook-stock">
-            {tab === 'buy' ? (
-              <>
-                {group('Supplies', supplies)}
-                {supplies.length === 0 && <p class="fe-panel__note">Nothing matches. Clear the search or the filters.</p>}
-              </>
-            ) : (
-              <>
-                {group('Gamble', gambles)}
-                {gambles.length === 0 && <p class="fe-panel__note">No item class matches.</p>}
-              </>
-            )}
+            {group('Gamble', gambles)}
+            {gambles.length === 0 && <p class="fe-panel__note">No item class matches.</p>}
           </div>
           <p class="fe-panel__note ui-type-caption">
-            {tab === 'buy'
-              ? 'Drag a stock row onto your backpack to buy it, or use its Buy button.'
-              : 'Drag a class onto your backpack: it rolls a random item at your level and needs room for the largest of that class. Hover for the odds.'}
+            Drag a class onto your backpack: it rolls a random item at your level and needs room for the largest of that class. Hover for the odds.
           </p>
         </>
       )}

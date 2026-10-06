@@ -3,10 +3,13 @@
 // purchase lands (the server honours it when the whole footprint is free there, otherwise it places first-fit), so the
 // preview here has to agree with that rule: a free footprint at the cell, or a stack of the same kind with room.
 import type { BaseId, ItemClass } from '../../contracts/content';
-import type { MerchantOffer } from '../../contracts/game';
+import type { MerchantBoard, MerchantOffer, MerchantWare } from '../../contracts/game';
 import type { EquipmentItem, GridContainer, Item } from '../../contracts/items';
 import type { CurrencyId } from '../../contracts/content';
 import { autoPlace, canPlace, canStack, itemSize, maxStackSize, overlappingEntries } from '../../game/items';
+import { resetCountdownText } from '../../game/progression/surge';
+import { findScarab } from '../../data/scarabs';
+import { findSigil } from '../../data/progression/territory';
 import type { Cell, Size } from './grid';
 
 export interface StockFit {
@@ -81,4 +84,127 @@ export function gamblePreview(
 /** The drop cell the server receives: the footprint's top-left. */
 export function dropCell(origin: Cell | undefined): { x: number; y: number } | undefined {
   return origin ? { x: origin.x, y: origin.y } : undefined;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Rook's wares board (panels/MerchantWares.tsx). The board comes from the server; these helpers only read it.
+// ---------------------------------------------------------------------------------------------
+
+/** Why a ware cannot be bought right now (null when it can): sold, or the Scrap it needs against what the player has. */
+export function wareBlocked(ware: MerchantWare, scrapOnHand: number): string | null {
+  if (ware.sold) return 'Sold.';
+  const need = ware.price.reduce((n, p) => n + p.count, 0);
+  return scrapOnHand >= need ? null : `Can't afford: needs ${need} Forge Scrap (you have ${scrapOnHand}).`;
+}
+
+/** The luckiest unsold ware of a board: 'jackpot', 'good' or null (nothing lucky). Guaranteed and junk wares never count. */
+export function luckiest(board: MerchantBoard): 'jackpot' | 'good' | null {
+  let best: 'jackpot' | 'good' | null = null;
+  for (const w of board.wares) {
+    if (w.sold) continue;
+    if (w.quality === 'jackpot') return 'jackpot';
+    if (w.quality === 'good') best = 'good';
+  }
+  return best;
+}
+
+/**
+ * The "lucky find" flourish: only at the first view of an epoch (`seen` is the epoch the player looked at last), and only when a good or a jackpot
+ * ware is on the board. Null = no flourish.
+ */
+export function revealFor(seen: string | null, board: MerchantBoard): 'jackpot' | 'good' | null {
+  return seen === board.epoch ? null : luckiest(board);
+}
+
+/** Milliseconds until the rotation ends, from the board as it arrived (`receivedAt`, `now`: the same monotonic clock). */
+export function rotationMsLeft(board: Pick<MerchantBoard, 'nextRotationAt' | 'serverNow'>, receivedAt: number, now: number): number {
+  return Math.max(0, board.nextRotationAt - board.serverNow - Math.max(0, now - receivedAt));
+}
+
+/** "New wares in 2 h 14 m". */
+export function newWaresText(ms: number): string {
+  return `New wares in ${resetCountdownText(ms)}`;
+}
+
+/** Tooltip footer for a ware: "Price: 12 Scrap" (a Scrap price reads "Scrap", not "Forge Scrap"), red when you cannot pay. */
+export function priceLine(
+  price: readonly { currencyId: CurrencyId; count: number }[], name: (id: CurrencyId) => string, canPay: boolean,
+): { text: string; poor: boolean } {
+  const parts = price.map((p) => `${p.count} ${p.currencyId === 'scrap' ? 'Scrap' : name(p.currencyId)}`);
+  return { text: parts.length ? `Price: ${parts.join(', ')}` : 'Price: free', poor: !canPay };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The vendor grid: Rook's stock laid out like an inventory (items/VendorGrid.tsx)
+// ---------------------------------------------------------------------------------------------
+
+export type VendorTab = 'gear' | 'maps' | 'supplies';
+export const VENDOR_TABS: readonly { id: VendorTab; label: string }[] = [
+  { id: 'gear', label: 'Gear' }, { id: 'maps', label: 'Maps' }, { id: 'supplies', label: 'Supplies' },
+];
+/** Columns of the vendor grid: the same width as the stash and the backpack. */
+export const VENDOR_COLS = 12;
+/** The vendor grid is never shorter than the stash grid. */
+export const VENDOR_MIN_ROWS = 8;
+/** A priced grid (Rook's wares: a price line under every row) is about as tall as the stash with fewer, taller rows. */
+export const VENDOR_PRICED_MIN_ROWS = 5;
+
+/** The one-line explanation above Rook's wares (F-17). */
+export const WARES_EXPLAINER = 'Prices are in Forge Scrap. Drag an item onto your backpack to buy it.';
+
+/**
+ * The empty state of a wares tab: nothing of that class on this board, or everything sold. Null when something is for sale.
+ * `msLeft` is the time to the next rotation (the board changes then, or now for a reroll).
+ */
+export function shelfEmptyText(tab: VendorTab, shelf: { total: number; unsold: number }, msLeft: number): string | null {
+  if (shelf.unsold > 0) return null;
+  const when = `${newWaresText(msLeft)}, or ask for new wares below.`;
+  if (shelf.total > 0) return `Sold out. ${when}`;
+  if (tab === 'gear') return `No gear on Rook's board this time. ${when}`;
+  if (tab === 'maps') return `No maps or scarabs on Rook's board this time. ${when}`;
+  return 'Rook has no supplies to sell right now.';
+}
+
+/** Which vendor tab shelves an item, decided by its class alone: equipment, maps, scarabs and sigils, then everything else (flasks, Kindling, Map Dust, currency). */
+export function vendorTabOf(item: Item): VendorTab {
+  if (item.kind === 'equipment') return 'gear';
+  if (item.kind === 'map' || (item.kind === 'currency' && (!!findScarab(item.currencyId) || !!findSigil(item.currencyId)))) return 'maps';
+  return 'supplies';
+}
+
+export interface VendorSlot { key: string; w: number; h: number }
+export interface VendorPlacement { key: string; x: number; y: number }
+
+/**
+ * Lay slots out on a `cols`-wide grid in the order given, each at the first free spot (row by row, left to right).
+ * Pure and deterministic: the same slots always land on the same cells, so a stock keeps its layout for the whole epoch
+ * (a sold item leaves a gap, the others never move). The grid grows downwards as needed; a slot wider than the grid is skipped.
+ */
+export function packVendor(slots: readonly VendorSlot[], cols = VENDOR_COLS, minRows = VENDOR_MIN_ROWS): { placements: VendorPlacement[]; rows: number } {
+  const used: boolean[][] = [];
+  const free = (x: number, y: number, w: number, h: number): boolean => {
+    for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if (used[yy]?.[xx]) return false;
+    return true;
+  };
+  const placements: VendorPlacement[] = [];
+  let rows = minRows;
+  for (const s of slots) {
+    const w = Math.max(1, Math.floor(s.w)), h = Math.max(1, Math.floor(s.h));
+    if (w > cols) continue;
+    search: for (let y = 0; ; y++) {
+      for (let x = 0; x + w <= cols; x++) {
+        if (!free(x, y, w, h)) continue;
+        for (let yy = y; yy < y + h; yy++) { used[yy] ??= []; for (let xx = x; xx < x + w; xx++) used[yy][xx] = true; }
+        placements.push({ key: s.key, x, y });
+        rows = Math.max(rows, y + h);
+        break search;
+      }
+    }
+  }
+  return { placements, rows };
+}
+
+/** Why "Ask for new wares" is unavailable (null when it is allowed). */
+export function rerollBlocked(board: Pick<MerchantBoard, 'rerollCost'>, scrapOnHand: number): string | null {
+  return scrapOnHand >= board.rerollCost ? null : `Can't afford: needs ${board.rerollCost} Forge Scrap (you have ${scrapOnHand}).`;
 }

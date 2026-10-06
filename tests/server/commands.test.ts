@@ -2,7 +2,7 @@
 // nothing; legitimate ones go through the shared rules (in-process: fake connections on a fake clock).
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CharacterSave } from '../../src/contracts/items';
-import { LocalPlayer, createClock, createLocalCharacter, startTestServer, tick, walkIntoProp } from './helpers';
+import { LocalPlayer, buyRookMap, createClock, createLocalCharacter, startTestServer, tick, walkIntoProp } from './helpers';
 
 type Server = Awaited<ReturnType<typeof startTestServer>>;
 
@@ -38,10 +38,10 @@ describe('command authority', () => {
   it("cannot touch another player's items; every command acts on the sender's own character", async () => {
     const { players } = await setup(['Owner Ann', 'Thief Tom']);
     const [ann, tom] = players;
-    // Ann buys a free Tier 1 map: it gets a uid Tom's character has never minted.
+    // Ann buys Rook's plain map: it gets a uid Tom's character has never minted.
     const offers = ann.command({ c: 'merchantOffers' });
     expect(offers.ok).toBe(true);
-    const bought = ann.command({ c: 'buyOffer', offerId: 'map:cinderCrossing:1:plain' });
+    const bought = buyRookMap(ann);
     expect(bought).toMatchObject({ ok: true });
     const annCh = ann.session.record.ch;
     const newUid = annCh.backpack.entries.map((e) => e.item.uid).find((uid) => !tom.session.record.ch.backpack.entries.some((e) => e.item.uid === uid))!;
@@ -76,7 +76,7 @@ describe('command authority', () => {
     expect(offers.offers!.length).toBeGreaterThan(0);
     const hostBefore = host.session.record.ch;
     const mapsBefore = guest.session.record.ch.backpack.entries.filter((e) => e.item.kind === 'map').length;
-    const bought = guest.command({ c: 'buyOffer', offerId: 'map:cinderCrossing:1:plain' });
+    const bought = buyRookMap(guest);
     expect(bought.ok).toBe(true);
     expect(guest.session.record.ch.backpack.entries.filter((e) => e.item.kind === 'map').length).toBe(mapsBefore + 1);
     expect(host.session.record.ch).toBe(hostBefore);

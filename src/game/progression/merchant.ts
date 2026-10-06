@@ -21,6 +21,7 @@ import type { AtlasAreaId } from '../../contracts/atlas';
 import { ATLAS_AREAS, ATLAS_START, atlasTierCeiling, findAtlasArea } from '../../data/progression/atlas';
 import { buildPlayerModel } from './model';
 import { fail, ok } from './util';
+import { GENERIC_SIGIL_KINDS, ROOK_SIGIL_PRICE, THEME_SIGILS, sigilIdOf, type ThemeSigilKind } from '../../data/progression/territory';
 
 /** A backpack cell the buyer dropped the purchase on. */
 export type BackpackCell = { x: number; y: number };
@@ -47,11 +48,11 @@ export function currencyOnHand(ch: CharacterSave, id: CurrencyId): number {
   return stacksOf(ch, id).reduce((s, f) => s + f.item.count, 0);
 }
 
-function canAfford(ch: CharacterSave, price: readonly PriceDef[]): boolean {
+export function canAfford(ch: CharacterSave, price: readonly PriceDef[]): boolean {
   return price.every((p) => currencyOnHand(ch, p.currencyId) >= p.count);
 }
 
-function pay(ch: CharacterSave, price: readonly PriceDef[]): CharacterSave {
+export function pay(ch: CharacterSave, price: readonly PriceDef[]): CharacterSave {
   let next = ch;
   for (const p of price) {
     let left = p.count;
@@ -219,11 +220,30 @@ function gambleOffer(ch: CharacterSave, itemClass: ItemClass, m: number): Mercha
   };
 }
 
+/**
+ * Rook's Faint sigils (brief D 6.4): the six generic kinds always (14 Scrap), a theme sigil once the account has cleared an area of that
+ * theme (18 Scrap). Stocked like the staples: unlimited, Scrap is the gate.
+ */
+export function rookSigilStock(ch: Pick<CharacterSave, 'atlas'>): MerchantStockDef[] {
+  const cleared = new Set((ch.atlas?.completed ?? []).map((id) => findAtlasArea(id)?.baseId));
+  const themes = (Object.keys(THEME_SIGILS) as ThemeSigilKind[]).filter((k) => cleared.has(THEME_SIGILS[k].baseId));
+  const row = (kind: (typeof GENERIC_SIGIL_KINDS)[number] | ThemeSigilKind, price: number): MerchantStockDef => {
+    const currencyId = sigilIdOf(kind, 1);
+    return { id: `sigil-${currencyId}`, kind: 'currency', currencyId, count: 1, price: [{ currencyId: 'scrap', count: price }] };
+  };
+  return [...GENERIC_SIGIL_KINDS.map((k) => row(k, ROOK_SIGIL_PRICE.generic)), ...themes.map((k) => row(k, ROOK_SIGIL_PRICE.theme))];
+}
+
+/** Rook's fixed shelf: the staples and his sigils. */
+function rookStock(ch: CharacterSave): MerchantStockDef[] {
+  return [...MERCHANT_STOCK, ...rookSigilStock(ch)];
+}
+
 /** Everything Rook sells right now, with prices and affordability. */
 export function merchantOffers(ch: CharacterSave): MerchantOffer[] {
   const m = gearRarityMultiplier(ch);
   return [
-    ...MERCHANT_STOCK.map((def) => stockOffer(ch, def)).filter((o): o is MerchantOffer => o !== null),
+    ...rookStock(ch).map((def) => stockOffer(ch, def)).filter((o): o is MerchantOffer => o !== null),
     ...gambleClasses(ch).map((c) => gambleOffer(ch, c, m)),
   ];
 }
@@ -280,7 +300,7 @@ export function buyOffer(ch: CharacterSave, offerId: string, at?: BackpackCell):
   } else if (mapSpec) {
     item = { ...createMapItem(mapSpec.areaId, mapSpec.tier, minted.uid, { quality: mapSpec.grade.quality }), isNew: true };
   } else {
-    const def = MERCHANT_STOCK.find((d) => d.id === offerId)!;
+    const def = rookStock(next).find((d) => d.id === offerId)!;
     item = { ...stockItem(next, def, minted.uid)!, uid: minted.uid, isNew: true };
   }
   // Pay first, then place: paying can empty the very stack that blocked the only free cell. Every step

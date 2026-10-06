@@ -1,0 +1,137 @@
+{
+  "title_size": 108,
+  "tag_size": 33,
+  "label_size": 27,
+  "title": {
+    "x": 1478,
+    "y": 40,
+    "w": 874
+  },
+  "tagline": [
+    "A from-scratch pixel ARPG: maps, an Atlas,",
+    "crafting and bosses, in your browser"
+  ],
+  "chips": [
+    "25 hand-crafted areas",
+    "13 map events",
+    "145-node Atlas tree",
+    "Online co-op"
+  ],
+  "slots": {
+    "hero": [
+      48,
+      48,
+      1400,
+      788
+    ],
+    "atlas": [
+      1472,
+      504,
+      880,
+      332
+    ],
+    "boss": [
+      48,
+      860,
+      444,
+      442
+    ],
+    "event": [
+      513,
+      860,
+      444,
+      442
+    ],
+    "belt": [
+      978,
+      860,
+      444,
+      442
+    ],
+    "codex": [
+      1443,
+      860,
+      444,
+      442
+    ],
+    "craft": [
+      1908,
+      860,
+      444,
+      442
+    ]
+  },
+  "labels": {
+    "atlas": "The Atlas: chart your expedition",
+    "boss": "Boss fights with telegraphs",
+    "event": "Map events",
+    "belt": "Iron March conveyors",
+    "codex": "The Codex tree",
+    "craft": "Crafting stash"
+  },
+  "shots": {
+    "hero": {
+      "file": "combat-furnaceYard-017-w2m38p13a6.png",
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ]
+    },
+    "atlas": {
+      "file": "atlas-fit.png",
+      "crop": [
+        12,
+        60,
+        1218,
+        459
+      ]
+    },
+    "boss": {
+      "file": "boss-crownFoundry-000-w6d298m37p39a3B.png",
+      "crop": [
+        250,
+        0,
+        1080,
+        1075
+      ]
+    },
+    "event": {
+      "file": "iron-ironMarch-000-w2m38p14a1.png",
+      "crop": [
+        430,
+        0,
+        1080,
+        1075
+      ]
+    },
+    "belt": {
+      "file": "iron2-ironMarch-001-w3d9999m39p14a3.png",
+      "crop": [
+        330,
+        0,
+        1080,
+        1075
+      ]
+    },
+    "codex": {
+      "file": "codex-keystone.png",
+      "crop": [
+        12,
+        12,
+        1056,
+        1056
+      ]
+    },
+    "craft": {
+      "file": "workslot.png",
+      "crop": [
+        0,
+        0,
+        700,
+        700
+      ]
+    }
+  }
+}

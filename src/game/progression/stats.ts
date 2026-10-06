@@ -9,13 +9,13 @@ import { ATTRIBUTES, PLAYER_FLAGS } from '../../contracts/content';
 import type { PlayerCombatStats } from '../../contracts/sim';
 import { resolveStatBreakdown } from '../../core/modifiers';
 import { STAT_LABEL, UNIQUES, findBase } from '../../data/items';
-import { MONSTER_LEVEL_SCALING, getSkill, monsterDamageScale } from '../../data/progression';
+import { MONSTER_LEVEL_SCALING, PEN_CAP, STAT_CAPS, getSkill, monsterDamageScale } from '../../data/progression';
 import type { ClassDef } from '../../data/progression';
 import { formatNumber, formatSigned } from '../items';
 import { lootLuckLines } from './luck';
 import { mapPlayerModifiers } from './maps';
 import { treeContextOf } from './atlas-rules';
-import { attributeRuleText, buildPlayerModel, focusRegenBreakdown, maxFocusOf, PERCENT_STATS, spellPowerAt } from './model';
+import { attributeRuleText, buildPlayerModel, focusRegenBreakdown, maxFocusOf, maxResistOf, penetrationOf, PERCENT_STATS, spellPowerAt } from './model';
 import type { PlayerModel } from './model';
 import {
   BASIC_SKILL, amount, damageRange, damageStatsFor, damageTypeName, estimateLines, isMultiHit, normalizeLoadout, resolveSkill, skillRank,
@@ -67,7 +67,7 @@ interface Computed {
   combat: PlayerCombatStats;
   breakdowns: Partial<Record<StatId, StatBreakdown>>;
   evasionRating: number;
-  /** Uncapped resistances in percent. */
+  /** Uncapped resistances in percent (map penalty already included). */
   resistUncapped: Record<Exclude<DamageType, 'physical'>, number>;
 }
 
@@ -99,12 +99,15 @@ export function computeCombat(model: PlayerModel): Computed {
   const evasion = Math.min(cls.evasionCap, evasionRating / (evasionRating + evasionConstant));
 
   const resistUncapped = { fire: 0, cold: 0, lightning: 0, void: 0 };
+  // Resistance is handed to the sim UNCAPPED (the map penalty is already subtracted): the sim caps it at maxResist after
+  // Withered, so resistance above the cap is a real buffer (power-curve.md 4.1).
   const resist: Record<DamageType, number> = { physical: 0, fire: 0, cold: 0, lightning: 0, void: 0 };
+  const maxResist = maxResistOf(model);
   for (const [type, stat] of Object.entries(RESIST_STATS) as [Exclude<DamageType, 'physical'>, StatId][]) {
     const bd = resistBreakdown(model, stat);
     bds[stat] = bd;
     resistUncapped[type] = bd.value;
-    resist[type] = Math.min(cls.resistCap, bd.value) / 100;
+    resist[type] = bd.value / 100;
   }
   take('allRes', 0);
 
@@ -122,17 +125,24 @@ export function computeCombat(model: PlayerModel): Computed {
     lifeOnKill: Math.max(0, take('lifeOnKill', 0).value),
     focusOnKill: Math.max(0, take('focusOnKill', 0).value),
     flaskEffect: Math.max(0, take('flaskEffect').value / 100),
+    pen: {
+      physical: penetrationOf(model, 'physical').value, fire: penetrationOf(model, 'fire').value,
+      cold: penetrationOf(model, 'cold').value, lightning: penetrationOf(model, 'lightning').value,
+      void: penetrationOf(model, 'void').value,
+    },
+    maxResist,
     flags: [...model.flags],
   };
   // Offence and luck breakdowns (read by the sheet and debugging tooltips).
   for (const stat of [
-    'spellDamage', 'fireDamage', 'coldDamage', 'lightningDamage', 'voidDamage', 'physicalDamage', 'elementalDamage',
+    'projectileDamage', 'areaDamage', 'damageOverTime', 'spellDamage', 'fireDamage', 'coldDamage', 'lightningDamage', 'voidDamage', 'physicalDamage', 'elementalDamage',
     'castSpeed', 'projectileSpeed', 'area', 'duration', 'cooldownRecovery', 'itemQuantity', 'itemRarity',
   ] as StatId[]) take(stat);
-  for (const stat of ['addedSpellDamage', 'critChance', 'extraProjectiles', 'pierce', 'igniteChance', 'chillChance', 'shockChance'] as StatId[]) {
+  for (const stat of ['addedSpellDamage', 'critChance', 'extraProjectiles', 'pierce', 'extraChains', 'igniteChance', 'chillChance', 'shockChance'] as StatId[]) {
     take(stat, 0);
   }
   take('critMultiplier');
+  take('maxResistance', 0);
   return { combat, breakdowns: bds, evasionRating, resistUncapped };
 }
 
@@ -150,6 +160,15 @@ function hasSources(bd: StatBreakdown | undefined): boolean {
 
 function percentStatLine(label: string, bd: StatBreakdown): SheetLine {
   return line(label, signedPercent(bd.value - 100), breakdownLines(bd));
+}
+
+/** A percent stat with a hard cap on the increase (power-curve.md 11): the value is the capped one, the breakdown says so. */
+function cappedPercentLine(label: string, bd: StatBreakdown, capIncrease: number): SheetLine {
+  const increase = bd.value - 100;
+  const lines = breakdownLines(bd);
+  if (increase > capIncrease) lines.push(`Capped at +${capIncrease}% (${signedPercent(increase)} uncapped)`);
+  else lines.push(`Maximum +${capIncrease}%`);
+  return line(label, signedPercent(Math.min(increase, capIncrease)), lines);
 }
 
 const FLAG_TEXT: Record<PlayerFlag, { text: string; source: string }> = Object.fromEntries(
@@ -187,6 +206,7 @@ function resourceSection(c: Computed): SheetSection {
 function defenceSection(c: Computed, model: PlayerModel): SheetSection {
   const b = c.breakdowns;
   const cls = model.cls;
+  const cap = c.combat.maxResist;
   const armor = c.combat.armor;
   const monsterLevel = model.monsterLevel ?? MONSTER_LEVEL_SCALING.referenceLevel;
   // Armour already loses effectiveness against larger hits. Scale the example with monster damage,
@@ -212,14 +232,34 @@ function defenceSection(c: Computed, model: PlayerModel): SheetSection {
   for (const [type, stat] of Object.entries(RESIST_STATS) as [Exclude<DamageType, 'physical'>, StatId][]) {
     const uncapped = c.resistUncapped[type];
     const bl = breakdownLines(b[stat]!, { unit: '%', hideBase: true });
-    if (uncapped > cls.resistCap) bl.push(`Capped at ${cls.resistCap}% (${formatNumber(round1(uncapped))}% uncapped)`);
-    else bl.push(`Maximum ${cls.resistCap}%`);
-    lines.push(line(`${names[type]} Resistance`, `${plainNumber(round1(Math.min(cls.resistCap, uncapped)))}%`, bl));
+    if (uncapped > cap) bl.push(`Capped at ${cap}% (${formatNumber(round1(uncapped))}% uncapped)`, 'Resistance above the cap buffers the map resistance penalty and Withered');
+    else bl.push(`Maximum ${cap}%`);
+    lines.push(line(`${names[type]} Resistance`, `${plainNumber(round1(Math.min(cap, uncapped)))}%`, bl));
+  }
+  if (cap !== cls.resistCap) {
+    lines.push(line('Maximum Resistances', `${plainNumber(cap)}%`, [`Base ${cls.resistCap}%`, ...breakdownLines(b.maxResistance!, { unit: '%', hideBase: true }), `At most ${STAT_CAPS.maxResistHard}%`]));
   }
   if (hasSources(b.damageTaken)) {
     lines.push(line('Damage Taken', percent(c.combat.damageTaken), breakdownLines(b.damageTaken!, { hideBase: true })));
   }
   return { title: 'Defence', lines };
+}
+
+const PEN_NAMES: [DamageType, string][] = [['physical', 'Physical'], ['fire', 'Fire'], ['cold', 'Cold'], ['lightning', 'Lightning'], ['void', 'Void']];
+
+/** Penetration: percentage points of monster resistance ignored, per type, with every source. Shown once anything grants it. */
+function penetrationSection(model: PlayerModel): SheetSection {
+  const lines: SheetLine[] = [];
+  for (const [type, name] of PEN_NAMES) {
+    const pen = penetrationOf(model, type);
+    if (!pen.sources.length) continue;
+    const bl = pen.sources.map((m) => sourceLine(m, '%'));
+    if (pen.uncapped > PEN_CAP) bl.push(`Capped at ${PEN_CAP}% (${formatNumber(round1(pen.uncapped))}% uncapped)`);
+    else bl.push(`Maximum ${PEN_CAP}%`);
+    bl.push('Ignores that many points of monster resistance; it never lowers resistance below 0');
+    lines.push(line(`${name} Penetration`, `${plainNumber(round1(pen.value))}%`, bl));
+  }
+  return { title: 'Penetration', lines };
 }
 
 function offenceSection(c: Computed, model: PlayerModel): SheetSection {
@@ -245,7 +285,9 @@ function offenceSection(c: Computed, model: PlayerModel): SheetSection {
     const total = ((1 + inc / 100) * more - 1) * 100;
     lines.push(line(`${name} Skill Damage`, signedPercent(total), mods.length ? mods.map((m) => sourceLine(m)) : ['No modifiers']));
   }
-  lines.push(percentStatLine('Cast Speed', b.castSpeed!));
+  lines.push(cappedPercentLine('Cast Speed', b.castSpeed!, STAT_CAPS.castSpeed));
+  const tags: [StatId, string][] = [['projectileDamage', 'Projectile Damage'], ['areaDamage', 'Area Damage'], ['damageOverTime', 'Damage over Time']];
+  for (const [stat, label] of tags) if (hasSources(b[stat])) lines.push(percentStatLine(label, b[stat]!));
 
   const basicDef = getSkill(BASIC_SKILL);
   const basic = resolveSkill(model, BASIC_SKILL, 1).runtime;
@@ -253,17 +295,25 @@ function offenceSection(c: Computed, model: PlayerModel): SheetSection {
     `${basicDef.name} base ${basicDef.critChance}% (each skill has its own base chance)`,
     ...b.critChance!.sources.map((m) => sourceLine(m, m.mode === 'flat' ? '%' : '')),
   ];
-  lines.push(line('Critical Strike Chance', percent(basic.critChance, 1), critLines));
-  lines.push(line('Critical Strike Multiplier', `${formatNumber(round1(b.critMultiplier!.value))}%`, breakdownLines(b.critMultiplier!, { unit: '%' })));
-  const optional: [StatId, string][] = [
-    ['projectileSpeed', 'Projectile Speed'], ['area', 'Area of Effect'], ['duration', 'Skill Duration'],
-    ['cooldownRecovery', 'Cooldown Recovery'],
+  lines.push(line('Critical Strike Chance', percent(basic.critChance, 1), [...critLines, 'Maximum 100%']));
+  const critMult = Math.min(STAT_CAPS.critMultiplier, b.critMultiplier!.value);
+  lines.push(line('Critical Strike Multiplier', `${formatNumber(round1(critMult))}%`, [
+    ...breakdownLines(b.critMultiplier!, { unit: '%' }),
+    b.critMultiplier!.value > STAT_CAPS.critMultiplier ? `Capped at ${STAT_CAPS.critMultiplier}% (${formatNumber(round1(b.critMultiplier!.value))}% uncapped)` : `Maximum ${STAT_CAPS.critMultiplier}%`,
+  ]));
+  if (hasSources(b.projectileSpeed)) lines.push(percentStatLine('Projectile Speed', b.projectileSpeed!));
+  if (hasSources(b.area)) lines.push(cappedPercentLine('Area of Effect', b.area!, STAT_CAPS.area));
+  if (hasSources(b.duration)) lines.push(percentStatLine('Skill Duration', b.duration!));
+  if (hasSources(b.cooldownRecovery)) lines.push(cappedPercentLine('Cooldown Recovery', b.cooldownRecovery!, STAT_CAPS.cooldownRecovery));
+  const counts: [StatId, string, number][] = [
+    ['extraProjectiles', 'Additional Projectiles', STAT_CAPS.extraProjectiles], ['pierce', 'Additional Pierce', STAT_CAPS.pierce],
+    ['extraChains', 'Additional Chains', STAT_CAPS.chains],
   ];
-  for (const [stat, label] of optional) if (hasSources(b[stat])) lines.push(percentStatLine(label, b[stat]!));
-  if (hasSources(b.extraProjectiles)) {
-    lines.push(line('Additional Projectiles', formatSigned(b.extraProjectiles!.value), breakdownLines(b.extraProjectiles!, { hideBase: true })));
+  for (const [stat, label, cap] of counts) {
+    if (!hasSources(b[stat])) continue;
+    const v = b[stat]!.value;
+    lines.push(line(label, formatSigned(Math.min(cap, v)), [...breakdownLines(b[stat]!, { hideBase: true }), v > cap ? `Capped at ${cap} (${formatSigned(v)} uncapped)` : `Maximum ${cap}`]));
   }
-  if (hasSources(b.pierce)) lines.push(line('Additional Pierce', formatSigned(b.pierce!.value), breakdownLines(b.pierce!, { hideBase: true })));
   const ailments: [StatId, string][] = [['igniteChance', 'Ignite Chance'], ['chillChance', 'Chill Chance'], ['shockChance', 'Shock Chance']];
   for (const [stat, label] of ailments) {
     if (hasSources(b[stat])) lines.push(line(label, `${formatSigned(round1(b[stat]!.value))}%`, breakdownLines(b[stat]!, { unit: '%', hideBase: true })));
@@ -368,6 +418,7 @@ export function deriveFromModel(ch: CharacterSave, model: PlayerModel, setup: Ru
     resourceSection(c),
     defenceSection(c, model),
     offenceSection(c, model),
+    penetrationSection(model),
     skillSection(ch, model),
     luckSection(c, ch, setup),
     utilitySection(c),
@@ -442,10 +493,10 @@ const RESOURCE_DEFENCE_METRICS: readonly CompareMetric[] = [
   { label: 'Focus Regeneration', value: (s) => s.derived.combat.focusRegen, fmt: (v) => `${oneDecimal(v)}/s`, better: 1 },
   { label: 'Armour', value: (s) => s.derived.combat.armor, fmt: whole, better: 1 },
   { label: 'Chance to Evade', value: (s) => s.derived.combat.evasion, fmt: pct1, better: 1, scale: 100 },
-  { label: 'Fire Resistance', value: (s) => s.derived.combat.resist.fire, fmt: pct1, better: 1, scale: 100 },
-  { label: 'Cold Resistance', value: (s) => s.derived.combat.resist.cold, fmt: pct1, better: 1, scale: 100 },
-  { label: 'Lightning Resistance', value: (s) => s.derived.combat.resist.lightning, fmt: pct1, better: 1, scale: 100 },
-  { label: 'Void Resistance', value: (s) => s.derived.combat.resist.void, fmt: pct1, better: 1, scale: 100 },
+  { label: 'Fire Resistance', value: (s) => Math.min(s.derived.combat.maxResist / 100, s.derived.combat.resist.fire), fmt: pct1, better: 1, scale: 100 },
+  { label: 'Cold Resistance', value: (s) => Math.min(s.derived.combat.maxResist / 100, s.derived.combat.resist.cold), fmt: pct1, better: 1, scale: 100 },
+  { label: 'Lightning Resistance', value: (s) => Math.min(s.derived.combat.maxResist / 100, s.derived.combat.resist.lightning), fmt: pct1, better: 1, scale: 100 },
+  { label: 'Void Resistance', value: (s) => Math.min(s.derived.combat.maxResist / 100, s.derived.combat.resist.void), fmt: pct1, better: 1, scale: 100 },
   { label: 'Damage Taken', value: (s) => s.derived.combat.damageTaken, fmt: (v) => percent(v), better: -1, scale: 100 },
 ];
 

@@ -527,6 +527,8 @@ function Palette({
   carriedRef.current = carried;
   const gridRef = useRef<HTMLDivElement>(null);
   const [more, setMore] = useState({ left: false, right: false });
+  /** The currency under the pointer or focus: its name and count are read out in the header (the tiles carry icons only). */
+  const [hot, setHot] = useState<CurrencyId | null>(null);
 
   // The one-row palette (short screens) fades out at an edge with more currency beyond it.
   useLayoutEffect(() => {
@@ -610,7 +612,11 @@ function Palette({
     <div class="fe-palette">
       <div class="fe-palette__head">
         <span class="fe-section-title">Currency</span>
-        <span class="fe-palette__hint">{uid ? 'Click to apply to the bench item' : 'Place an item to use your currency'}</span>
+        <span class="fe-palette__hint" data-palette-hint>
+          {hot && carried.get(hot)
+            ? `${store.rules.content.currencies[hot]?.name ?? hot} · ${formatInt(carried.get(hot)!.count)}`
+            : uid ? 'Click to apply to the bench item' : 'Place an item to use your currency'}
+        </span>
       </div>
       {ids.length === 0 ? (
         <p class="fe-bench__note">You have no currency in your backpack or Crafting Stash.</p>
@@ -635,8 +641,10 @@ function Palette({
                 type="button"
                 class={cx('fe-cur', off && 'fe-cur--off')}
                 aria-label={store.rules.content.currencies[id]?.name ?? id}
-                onPointerEnter={(e) => showTip(id, e.currentTarget)}
-                onPointerLeave={() => local.hideTooltip()}
+                onPointerEnter={(e) => { setHot(id); showTip(id, e.currentTarget); }}
+                onPointerLeave={() => { setHot(null); local.hideTooltip(); }}
+                onFocus={() => setHot(id)}
+                onBlur={() => setHot(null)}
                 onClick={(e) => {
                   if (!uid) {
                     store.actions.uiSound('error');
@@ -799,23 +807,7 @@ export function CraftingBenchPanel() {
             <Story history={desc.history ?? []} />
           </>
         ) : (
-          <>
-          {allowed && <MapRecycle allowed={allowed} />}
-          <section class="fe-bench__section fe-bench__explain">
-            <div class="fe-section-title">How the bench works</div>
-            <ul class="fe-bench__rules">
-              <li>
-                Choose exactly which affix to add. It comes at a fixed, modest tier for Forge Scrap, plus an essence for tagged affixes.
-              </li>
-              <li>Each recipe costs 1 Stability with no scar risk. A normal item becomes magic.</li>
-              <li>
-                One crafted affix per item, marked with <AnvilGlyph /> in tooltips. Clearing it is free.
-              </li>
-              <li>Your currency below applies to the bench item with one click, odds shown on hover.</li>
-              <li>Maps: Re-chart moves one to a neighbouring area, and Recycle turns three of a tier into one new map.</li>
-            </ul>
-          </section>
-          </>
+          <BenchIdle allowed={allowed} />
         )}
       </div>
       <Palette
@@ -829,5 +821,51 @@ export function CraftingBenchPanel() {
         }}
       />
     </PanelShell>
+  );
+}
+
+/**
+ * The bench with nothing on it: how it works (folded after the first look, remembered per browser) and, on a second tab, the map Recycle
+ * service, so the first screen is one idea instead of a wall of text and two features at once (docs/onboarding-ux.md F-20).
+ */
+const BENCH_SEEN_KEY = 'foe.bench.seen';
+function benchSeen(): boolean {
+  try { return localStorage.getItem(BENCH_SEEN_KEY) === '1'; } catch { return false; }
+}
+
+function BenchIdle({ allowed }: { allowed: boolean }) {
+  const [tab, setTab] = useState<'craft' | 'recycle'>('craft');
+  const [open] = useState(() => !benchSeen());
+  useEffect(() => { try { localStorage.setItem(BENCH_SEEN_KEY, '1'); } catch { /* per-browser convenience */ } }, []);
+  return (
+    <>
+      <div class="fe-bench__tabs" role="tablist" aria-label="Bench">
+        {(['craft', 'recycle'] as const).map((id) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} data-bench-tab={id} class={cx('fe-bench__tab ui-type-body', tab === id && 'fe-bench__tab--on')} onClick={() => setTab(id)}>
+            {id === 'craft' ? 'Craft' : 'Recycle maps'}
+          </button>
+        ))}
+      </div>
+      {tab === 'recycle' && allowed && <MapRecycle allowed={allowed} />}
+      {tab === 'craft' && (
+        <section class="fe-bench__section fe-bench__explain">
+          <details open={open} data-bench-explain>
+            <summary class="fe-section-title">How the bench works</summary>
+            <ul class="fe-bench__rules">
+              <li>
+                Choose exactly which affix to add. It comes at a fixed, modest tier for Forge Scrap, plus an essence for tagged affixes.
+              </li>
+              <li>Each recipe costs 1 Stability with no scar risk. A normal item becomes magic.</li>
+              <li>
+                One crafted affix per item, marked with <AnvilGlyph /> in tooltips. Clearing it is free.
+              </li>
+              <li>Your currency below applies to the bench item with one click, odds shown on hover.</li>
+              <li>Maps: Re-chart moves one to a neighbouring area, and Recycle turns three of a tier into one new map.</li>
+            </ul>
+          </details>
+          <p class="fe-bench__note">Drag a piece of gear or a map onto the socket above to begin.</p>
+        </section>
+      )}
+    </>
   );
 }

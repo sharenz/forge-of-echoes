@@ -13,7 +13,7 @@
 // normalizeCharacterReport returns such items so the caller can log them.
 import type {
   BeltSlot, CharacterSave, CharacterStatsLog, CraftSlotItem, CurrencyStack, EquipmentItem, FlaskStack, GridContainer, Item, MapItem,
-  Rarity, RolledAffix, RolledMapMod, RolledScar, SaveGame, Settings, StashTab,
+  Rarity, RolledAffix, RolledMapMod, RolledScar, SaveGame, Settings, StashTab, WaresState,
 } from '../../contracts/items';
 import {
   BACKPACK_SIZE, BELT_SLOTS, CURRENCY_STASH_MAX, MAP_STASH_CAPACITY, MAX_STASH_TABS, MAX_PRESERVED_STASH_TABS, STASH_TAB_SIZE,
@@ -29,7 +29,7 @@ import type { BaseDef } from '../../data/items';
 import { LEGACY_AFFIX_TIERS } from '../../data/items/affixes-v1';
 import {
   DEFAULT_SETTINGS, DEFAULT_STASH_TABS, LEVEL_CAP, MAX_DANGER_MODS, MAX_MAP_QUALITY, MAX_REWARD_MODS, MAX_SKILL_RANK,
-  SAVE_VERSION, getMapMod,
+  SAVE_VERSION, WARES, getMapMod,
 } from '../../data/progression';
 import {
   autoPlace, canPlace, clampItemLevel, createGrid, createStashTab, isReservedUid, placeItem, rollRareName, sortAffixes, uniqueModId,
@@ -39,6 +39,8 @@ import { sanitizeName, xpToNext } from './character';
 import { clampTier, rarityForDangerCount, sortMapMods } from './maps';
 import { normalizeLoadout } from './skills';
 import { normalizeAtlas } from './atlas';
+import { normalizeGuide } from './guide';
+import { findAtlasArea } from '../../data/progression/atlas';
 import { bindLegacyMaps, savedBinding } from './map-binding';
 import { findScarab } from '../../data/scarabs';
 import { SCARAB_SLOTS } from '../../contracts/items';
@@ -51,6 +53,19 @@ const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const oneOf = <T extends string>(v: unknown, options: readonly T[], fallback: T): T =>
   (typeof v === 'string' && (options as readonly string[]).includes(v) ? (v as T) : fallback);
+
+/** Rook's wares state (CharacterSave.wares): optional; a malformed one is dropped and Rook starts a fresh epoch at the next visit. */
+function normalizeWares(raw: Json): { wares?: WaresState } {
+  const areas = [...new Set(arr(raw.areas).filter((id): id is string => typeof id === 'string' && !!findAtlasArea(id)))];
+  if (typeof raw.rotation !== 'number' || !Number.isFinite(raw.rotation) || !areas.length) return {};
+  const sold = [...new Set(arr(raw.sold).filter((n): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) < WARES.mapSlots + WARES.itemSlots))].sort((a, b) => a - b);
+  return {
+    wares: {
+      rotation: Math.floor(raw.rotation), level: intIn(raw.level, 1, LEVEL_CAP, 1), rerolls: intIn(raw.rerolls, 0, 1000, 0), sold,
+      tier: intIn(raw.tier, 0, 15, 0), areas,
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------------------------
 // Save
@@ -92,6 +107,7 @@ function normalizeSettings(raw: unknown): Settings {
     screenShake: unit(r.screenShake, DEFAULT_SETTINGS.screenShake),
     showFps: typeof r.showFps === 'boolean' ? r.showFps : DEFAULT_SETTINGS.showFps,
     autoAttack: typeof r.autoAttack === 'boolean' ? r.autoAttack : DEFAULT_SETTINGS.autoAttack,
+    ...(typeof r.hints === 'boolean' ? { hints: r.hints } : {}),
   };
 }
 
@@ -561,6 +577,7 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     lost.push(rest);
   }
 
+  const guide = normalizeGuide(raw.guide);
   const character: CharacterSave = {
     id,
     name,
@@ -584,9 +601,11 @@ export function normalizeCharacterReport(raw: unknown): NormalizeReport | null {
     mapStash,
     ...(craftSlot ? { craftSlot } : {}),
     ...(raw.atlas !== undefined ? { atlas: normalizeAtlas(raw.atlas) } : {}),
+    ...(guide ? { guide } : {}),
     belt: normalizeBelt(raw.belt),
     mapDevice,
     ...(raw.mapScarabs !== undefined ? { mapScarabs } : {}),
+    ...(isObj(raw.wares) ? normalizeWares(raw.wares) : {}),
     rngState: typeof raw.rngState === 'number' && Number.isFinite(raw.rngState) ? raw.rngState >>> 0 : hashString(id),
     nextUid: minter.next,
     ...(prefix ? { uidNamespace: prefix } : {}),

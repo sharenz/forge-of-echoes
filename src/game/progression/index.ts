@@ -117,6 +117,7 @@
 //              dropSpec(item, token, owner, playerDropped?) (autoPickup: equipment and player-dropped items false),
 //              dropLabel, categoryChances, killLuck, equipmentRarityOdds, rollEquipmentRarity
 //   merchant:  merchantOffers, buyOffer, gambleOdds(class, m, level?), currencyOnHand
+//   wares:     waresBoard(ch, now), buyWare(ch, id, now, at?), rerollWares(ch, now, expect?) — Rook's luck-driven board (wares.ts, GAME_SPEC §9)
 //   save:      newSave, parseSave, serializeSave, normalizeSave, normalizeCharacter, normalizeItem,
 //              normalizeCharacterReport (the character + the items it could not re-home, for server logs)
 //   dispatch:  describeItem, craftingTargetError, craftPreview, applyCurrency
@@ -162,6 +163,13 @@ export {
   surgeLedgerAt, surgeMaxCharges, surgeStatus, surgeStatusAll,
 } from './surge';
 export type { SurgeRefill, SurgeStatus } from './surge';
+//   territory: beaconSlotCount / beaconRadius / beaconCoverage / coveringSigils (beacons, D 6.1-6.2), territoryFor + spendTerritoryUses
+//              (activation), refundTerritoryUses (server-loss refund), slotSigil / unslotSigil (hideout commands)
+export {
+  beaconAreas, beaconCoverage, beaconRadius, beaconSlotCount, beaconSlots, chartDistance, coveringSigils, normalizeBeacons, normalizeRunTerritory,
+  refundTerritoryUses, sigilApplies, sigilFullUses, slotSigil, spendTerritoryUses, territoryFor, territoryLines, tideCharges, unslotSigil,
+} from './territory';
+export type { CoveringSigil } from './territory';
 export { lootLuckWithoutSurge } from './luck';
 export { gearLuck, lootLuck, lootLuckLines } from './luck';
 export type { Luck } from './luck';
@@ -171,6 +179,7 @@ export {
 } from './loot';
 export type { KillLuck } from './loot';
 export { buyOffer, currencyOnHand, gambleOdds, merchantOffers, sellItems, sellQuote } from './merchant';
+export { boardQualities, buyWare, generateWares, rerollCost, rerollWares, waresBoard, waresStateAt } from './wares';
 export {
   NEUTRAL_ROUTING_BIAS, advanceFor, advanceTarget, attachRouting, buildRouting, normalizeRouting, pendingReveals, routeMapDrop, routingBiasFor, routingReadout,
 } from './map-routing';

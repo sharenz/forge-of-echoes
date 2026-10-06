@@ -41,6 +41,9 @@ export type BaseId = (typeof BASE_IDS)[number];
 export const UNIQUE_IDS = ['thePatientSpark', 'cinderwalkers', 'echoOfTheMatriarch', 'ruinheartBand',
   'everburn', 'sunkenSun', 'winterstride', 'stillwinter', 'vigilOfAsh', 'lastRite',
   'choirOfGlass', 'secondVerse', 'brokenLink', 'ironRefrain', 'unbowedCrown', 'victorsDebt',
+  // power rework R1 (append-only)
+  'frostfireSpiral', 'stormcallersLattice', 'penitentsPrism', 'hollowCrown', 'weepingHearth',
+  'gravewindBoots', 'anchoritesSeal', 'bellwether', 'needlepoint', 'twiceStruckBell',
 ] as const;
 export type UniqueId = (typeof UNIQUE_IDS)[number];
 
@@ -66,6 +69,7 @@ export const EQUIPMENT_CURRENCY_IDS = [
   'transmute',      // Change to a compatible base of the same equipment class
   'echoShard',      // Roll each unprotected affix value twice and keep the higher roll
   'crownFragment',  // Reroll a unique's numeric modifiers, preserving its special behaviour
+  'umbralEssence',  // Shape: add one void/physical damage or penetration affix (power rework)
 ] as const;
 /** Wave scarabs (slice of the first batch): four tiers each. */
 export const WAVE_SCARAB_IDS = ['hasteScarab1', 'hasteScarab2', 'hasteScarab3', 'hasteScarab4', 'invasionScarab1', 'invasionScarab2', 'invasionScarab3', 'invasionScarab4'] as const;
@@ -82,6 +86,20 @@ export type ScarabId = (typeof SCARAB_IDS)[number];
 /** Hourglass Sand refills one area's surge charges; the Grand Hourglass refills every area's (brief D 7.4). */
 export const HOURGLASS_IDS = ['hourglassSand', 'grandHourglass'] as const;
 export type HourglassId = (typeof HOURGLASS_IDS)[number];
+/**
+ * Sigil kinds (brief D 6.3, slice B1): six generic regional modifiers and six theme variants. A sigil is slotted into a beacon (a cleared
+ * Atlas area) and modifies every map run in the areas within the beacon's chart radius.
+ */
+export const SIGIL_KINDS = [
+  'omen', 'hoard', 'fortune', 'ingredient', 'survey', 'tide',
+  'ashen', 'chapel', 'crypt', 'ossuary', 'chainworks', 'coliseum',
+] as const;
+export type SigilKind = (typeof SIGIL_KINDS)[number];
+/** Strength 1 = Faint, 2 = Bright, 3 = Blazing. */
+export type SigilStrength = 1 | 2 | 3;
+export type SigilId = `${SigilKind}Sigil${SigilStrength}`;
+/** 12 kinds x 3 strengths, kind-major (`omenSigil1`, `omenSigil2`, `omenSigil3`, `hoardSigil1`, ...). Append-only. */
+export const SIGIL_IDS: readonly SigilId[] = SIGIL_KINDS.flatMap((k) => ([1, 2, 3] as const).map((s): SigilId => `${k}Sigil${s}`));
 export const MAP_CURRENCY_IDS = [
   'mapDust',        // normal → magic, or reroll a magic/rare map's mods
   'threatGlyph',    // add one danger mod (danger paired with reward)
@@ -94,12 +112,13 @@ export const MAP_CURRENCY_IDS = [
   'gildedKey', 'blackKey', 'huntingKey', 'riftKey', // sealed Atlas destinations
   ...SCARAB_IDS,
   ...HOURGLASS_IDS, // daily surge refills (brief D 7.4, slice G1)
+  ...SIGIL_IDS,     // beacon sigils (brief D 6.3, slice B1)
 ] as const;
 export const CURRENCY_IDS = [...EQUIPMENT_CURRENCY_IDS, ...MAP_CURRENCY_IDS] as const;
 export type CurrencyId = (typeof CURRENCY_IDS)[number];
 
 /** Flasks. Icon id is `icon/flask/<id>`. */
-export const FLASK_IDS = ['lifeFlask', 'focusFlask'] as const;
+export const FLASK_IDS = ['lifeFlask', 'focusFlask', 'quickstep', 'aegis', 'quicksilverMind'] as const;
 export type FlaskId = (typeof FLASK_IDS)[number];
 
 /** Map bases. Icon id is `icon/map/<id>`. Each base has its own visual theme. */
@@ -139,6 +158,9 @@ export const PLAYER_FLAGS = [
   'novaEcho',         // Echo of the Matriarch: Ember Nova repeats once after 0.4 s
   'lanceIgnites', 'novaFan', 'riftChill', 'coldWard', 'wardFocus', 'flameRing',
   'shardPierceAll', 'rimeEcho', 'riftCleanse', 'arcReturns', 'wardRenew', 'closeQuarters',
+  // Power rework uniques (append-only). Their behaviour lands in later slices; see `awaits` in src/data/items/uniques.ts.
+  'convertFireToCold', 'chainAll', 'focusCostMore', 'decayStacks8', 'igniteLingers', 'phaseStrideLong', 'focusShield',
+  'slotOneAugments', 'critsPenetrate', 'nonCritLess', 'lodgeTwice',
 ] as const;
 export type PlayerFlag = (typeof PLAYER_FLAGS)[number];
 

@@ -34,13 +34,41 @@ export const MONSTER_LEVEL = { base: -2, perTier: 6, cap: 90 } as const;
 export const MONSTER_LEVEL_SCALING = {
   life: 1.09, damage: 1.09, belowLife: 1.09, belowDamage: 1.065, referenceLevel: 10,
   steep: { level: 16, life: 1.11, damage: 1.11, lifeFlat: 0.25 },
+  /**
+   * Curve v3 (docs/power-rework/power-curve.md 6.1): up to monster level `late.level` nothing changes (bit-for-bit);
+   * past it life and damage compound per stretch from the previous stretch's end value. `to` is the monster level
+   * the stretch ends at (the last stretch has no end). Replaces the old x1.11 compounding that reached x3,000 at
+   * monster level 88.
+   */
+  late: {
+    level: 28,
+    stretches: [
+      { to: 40, life: 1.061, damage: 1.04 },
+      { to: 60, life: 1.0545, damage: 1.028 },
+      { to: Infinity, life: 1.0384, damage: 1.019 },
+    ],
+  },
 } as const;
+
+/** Life or damage multiplier past the late curve's start: the level-28 value compounded through the stretches. */
+function lateScale(base: number, level: number, key: 'life' | 'damage'): number {
+  const { level: from, stretches } = MONSTER_LEVEL_SCALING.late;
+  let v = base;
+  let lo: number = from;
+  for (const st of stretches) {
+    if (level <= lo) break;
+    v *= st[key] ** (Math.min(level, st.to) - lo);
+    lo = st.to;
+  }
+  return v;
+}
 
 /** Life multiplier of a monster level (1 at the reference level). */
 export function monsterLifeScale(level: number): number {
   const S = MONSTER_LEVEL_SCALING;
   const g = level - S.referenceLevel;
   if (g <= 0) return S.belowLife ** g;
+  if (level > S.late.level) return lateScale(monsterLifeScale(S.late.level), level, 'life');
   const past = Math.max(0, level - S.steep.level);
   return S.life ** Math.min(g, S.steep.level - S.referenceLevel) * S.steep.life ** past + S.steep.lifeFlat * past;
 }
@@ -50,6 +78,7 @@ export function monsterDamageScale(level: number): number {
   const S = MONSTER_LEVEL_SCALING;
   const g = level - S.referenceLevel;
   if (g <= 0) return S.belowDamage ** g;
+  if (level > S.late.level) return lateScale(monsterDamageScale(S.late.level), level, 'damage');
   return S.damage ** Math.min(g, S.steep.level - S.referenceLevel) * S.steep.damage ** Math.max(0, level - S.steep.level);
 }
 

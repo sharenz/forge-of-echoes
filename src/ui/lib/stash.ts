@@ -11,11 +11,20 @@ import {
   EQUIPMENT_CURRENCY_IDS,
   MAP_BASE_IDS,
   MAP_CURRENCY_IDS,
+  SIGIL_IDS,
+  SIGIL_KINDS,
   iconIdForCurrency,
   iconIdForMap,
   type CurrencyId,
   type MapBaseId,
+  type SigilId,
+  type SigilKind,
 } from '../../contracts/content';
+
+const SIGIL_SHELF_LABEL: Readonly<Record<SigilKind, string>> = {
+  omen: 'Omen', hoard: 'Hoard', fortune: 'Fortune', ingredient: 'Ingredient', survey: 'Survey', tide: 'Tide',
+  ashen: 'Ashen', chapel: 'Chapel', crypt: 'Crypt', ossuary: 'Ossuary', chainworks: 'Chainworks', coliseum: 'Coliseum',
+};
 import {
   CURRENCY_STASH_MAX,
   currencyStashUid,
@@ -65,7 +74,7 @@ export interface CurrencyShelf {
 export const CURRENCY_SHELVES: Readonly<Record<'currency' | 'mapCurrency', readonly CurrencyShelf[]>> = {
   currency: [
     { title: 'Shaping', ids: ['kindling', 'scrap', 'reforge', 'prefixRune', 'suffixRune'] },
-    { title: 'Essences', ids: ['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift'] },
+    { title: 'Essences', ids: ['essenceEmber', 'essenceRime', 'essenceStorm', 'essenceVital', 'essenceSwift', 'umbralEssence'] },
     { title: 'Refining & binding', ids: ['catalyst', 'solvent', 'seal', 'fractureCore'] },
     { title: 'Recovery & transformation', ids: ['scarBalm', 'anneal', 'graft', 'transmute'] },
     { title: 'Encounter ingredients', ids: ['echoShard', 'crownFragment'] },
@@ -82,6 +91,8 @@ export const CURRENCY_SHELVES: Readonly<Record<'currency' | 'mapCurrency', reado
     { title: 'Hearthbound Scarabs', ids: ['hearthboundScarab1', 'hearthboundScarab2', 'hearthboundScarab3', 'hearthboundScarab4'] },
     { title: 'Daily surge', ids: ['hourglassSand', 'grandHourglass'] },
     { title: 'Atlas keys', ids: ['reliquaryKey', 'gildedKey', 'blackKey', 'huntingKey', 'riftKey'] },
+    // Beacon sigils (brief D 6.3): one shelf per kind, Faint to Blazing.
+    ...SIGIL_KINDS.map((k): CurrencyShelf => ({ title: `${SIGIL_SHELF_LABEL[k]} Sigils`, ids: [1, 2, 3].map((s) => `${k}Sigil${s}` as SigilId) })),
   ],
 };
 
@@ -114,6 +125,7 @@ export const CURRENCY_SHORT: Readonly<Record<CurrencyId, string>> = {
   essenceStorm: 'Storm',
   essenceVital: 'Vital',
   essenceSwift: 'Swift',
+  umbralEssence: 'Umbral',
   catalyst: 'Catalyst',
   solvent: 'Solvent',
   seal: 'Seal',
@@ -124,6 +136,10 @@ export const CURRENCY_SHORT: Readonly<Record<CurrencyId, string>> = {
   voidNeedle: 'Void Needle',
   reliquaryKey: 'Reliquary Key',
   gildedKey: 'Gilded Key', blackKey: 'Black Key', huntingKey: 'Hunting Key', riftKey: 'Rift Key',
+  ...(Object.fromEntries(SIGIL_IDS.map((id) => {
+    const m = /^([a-z]+)Sigil([123])$/.exec(id)!;
+    return [id, `${SIGIL_SHELF_LABEL[m[1] as SigilKind]} ${['I', 'II', 'III'][Number(m[2]) - 1]}`];
+  })) as Record<SigilId, string>),
 };
 
 /** The Crafting Stash tab that shows a currency. */

@@ -118,6 +118,7 @@ import './styles/stash.css';
 import './styles/workslot.css';
 import './styles/debuffs.css';
 import './styles/merchant.css';
+import './styles/guide.css';
 
 import { h, render } from 'preact';
 import type { MountUi, UiStore } from '../contracts/ui';

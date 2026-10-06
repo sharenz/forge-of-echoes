@@ -3,6 +3,7 @@ import type {
   Attribute, BaseId, ClassId, CurrencyId, EquipSlot, FlaskId, ItemClass, MapBaseId, SkillId, UniqueId,
 } from './content';
 import type { AtlasAreaId, AtlasProgress } from './atlas';
+import type { GuideState } from './guide';
 
 // ---------------------------------------------------------------------------
 // Modifiers & stats
@@ -28,6 +29,9 @@ export const STAT_IDS = [
   // utility & luck
   'moveSpeed', 'pickupRadius', 'flaskEffect',
   'itemQuantity', 'itemRarity',
+  // power rework R1 (append-only): penetration, damage-type scaling, max resistance, chains, flask charge
+  'firePen', 'coldPen', 'lightningPen', 'voidPen', 'physicalPen', 'elementalPen',
+  'projectileDamage', 'areaDamage', 'damageOverTime', 'maxResistance', 'extraChains', 'flaskChargeOnKill',
 ] as const;
 export type StatId = (typeof STAT_IDS)[number];
 
@@ -59,7 +63,7 @@ export type AffixKind = 'prefix' | 'suffix';
 export type AffixTag =
   | 'fire' | 'cold' | 'lightning' | 'void' | 'physical' | 'elemental'
   | 'life' | 'focus' | 'defense' | 'resistance'
-  | 'caster' | 'critical' | 'speed' | 'luck' | 'utility';
+  | 'caster' | 'critical' | 'speed' | 'luck' | 'utility' | 'penetration';
 
 export interface RolledAffix {
   affixId: string;
@@ -238,6 +242,21 @@ export function currencyStashUid(id: CurrencyId): string { return `cstash:${id}`
 /** Special stash tabs shown after the normal tabs. */
 export type SpecialStashTab = 'maps' | 'currency' | 'mapCurrency';
 
+export interface WaresState {
+  /** Forge-time rotation index (6 h slices from 04:00 UTC). */
+  rotation: number;
+  /** The character level the board was built for: a level-up starts a new epoch. */
+  level: number;
+  /** "Ask for new wares" uses in this rotation (the salt, and the price exponent). */
+  rerolls: number;
+  /** Sold slot indices (greyed out until the epoch changes). */
+  sold: number[];
+  /** Highest map tier the character had completed when the epoch started. */
+  tier: number;
+  /** Atlas areas open to the character when the epoch started (discovered and bindable). */
+  areas: string[];
+}
+
 export interface CharacterSave {
   id: string;
   name: string;
@@ -267,11 +286,22 @@ export interface CharacterSave {
    * on. It physically holds the item (it is in no other container); missing on older saves means empty.
    */
   craftSlot?: CraftSlotItem | null;
+  /**
+   * The first-run guide (account-wide, part of shared storage; contracts/guide.ts). Missing on older saves means
+   * "not decided yet": the server decides it once at load (veterans are skipped).
+   */
+  guide?: GuideState;
   /** BELT_SLOTS entries. */
   belt: (BeltSlot | null)[];
   mapDevice: MapItem | null;
   /** One consumable per socket. Missing on older saves means four empty sockets. */
   mapScarabs?: (CurrencyStack | null)[];
+  /**
+   * Rook's wares state (per character): the stock epoch (rotation, level, rerolls), the sold slots and the inputs snapshotted when
+   * the epoch started (highest tier completed, the areas open to the character), so the board cannot shift while the epoch lasts.
+   * Missing on older saves: Rook starts a fresh epoch at the next visit.
+   */
+  wares?: WaresState;
   /** Deterministic RNG state for out-of-run randomness (crafting, merchant, gambling). */
   rngState: number;
   /** Monotonic counter used to mint item uids. */
@@ -291,6 +321,8 @@ export interface Settings {
   showFps: boolean;
   /** Basic attack auto-fires at the nearest enemy near the cursor. */
   autoAttack: boolean;
+  /** Show the coach cards (first-time hints). Missing means on. */
+  hints?: boolean;
 }
 
 export interface SaveGame {

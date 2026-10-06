@@ -50,6 +50,19 @@ export interface AtlasProgress {
    * non-sealed, non-Pit areas only; at most `pinSlotCount(nodes)` (3, more through the tree). Account-wide, free to change.
    */
   pins?: AtlasAreaId[];
+  /**
+   * Beacons (brief D 6): every completed area is a beacon with 1 or 2 slots; a slot holds one sigil and its remaining uses (null = empty).
+   * Keys are completed areas only; slot arrays never exceed the area's slot count. Account-wide; changed in a hideout only.
+   */
+  beacons?: Partial<Record<AtlasAreaId, (BeaconSlot | null)[]>>;
+}
+
+/** One filled beacon slot: the sigil and the activations it has left (it empties at 0). */
+export interface BeaconSlot {
+  sigilId: import('./content').SigilId;
+  uses: number;
+  /** Uses it was slotted with (12 or 10, more with Lamp Oil): a sigil taken out unused (uses === max) goes back to the backpack. */
+  max: number;
 }
 
 /** Charges spent per area on one forge day. `day` is `forgeDay(server now)`; a stored day before today means nothing is spent. */

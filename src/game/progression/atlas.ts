@@ -5,6 +5,7 @@ import { ATLAS_AREAS, ATLAS_REVEALS_PER_BOSS, ATLAS_START, atlasTierCeiling, fin
 import { ATLAS_POINT_TIERS, mapTreeNodes } from '../../data/progression/map-tree';
 import { ATLAS_BOSS_KINDS, mapTreePoints, normalizeMapTree } from './map-tree';
 import { normalizeSurge } from './surge';
+import { normalizeBeacons, tideCharges } from './territory';
 import { isMapAddress } from './map-binding';
 import { pinSlotCount } from '../../data/progression/routing';
 import type { CharacterSave } from '../../contracts/items';
@@ -51,15 +52,21 @@ function normalizeAtlasCore(raw: unknown): AtlasProgress {
   const legacy = value.treeVersion !== ATLAS_TREE_VERSION;
   if (legacy) {
     if (Array.isArray(value.nodes) && value.nodes.length) base.redrawn = true;
-    return withSurge(Array.isArray(value.nodes) ? { ...base, nodes: [] } : base, value.surge);
+    return withSurge(withBeacons(Array.isArray(value.nodes) ? { ...base, nodes: [] } : base, value.beacons), value.surge);
   }
   if (value.redrawn === true) base.redrawn = true;
-  return withSurge(Array.isArray(value.nodes) ? { ...base, nodes: normalizeMapTree(value.nodes, mapTreePoints(base)) } : base, value.surge);
+  return withSurge(withBeacons(Array.isArray(value.nodes) ? { ...base, nodes: normalizeMapTree(value.nodes, mapTreePoints(base)) } : base, value.beacons), value.surge);
 }
 
-/** The daily surge ledger (brief D 7.1) rides along, clamped to the charges the allocated tree grants. */
+/** Beacons (brief D 6) ride along: completed areas only, slots clamped to what the area and the allocated tree allow. */
+function withBeacons(atlas: AtlasProgress, raw: unknown): AtlasProgress {
+  const beacons = normalizeBeacons(raw, atlas);
+  return beacons ? { ...atlas, beacons } : atlas;
+}
+
+/** The daily surge ledger (brief D 7.1) rides along, clamped to the charges the allocated tree (and covering Tide sigils) grant. */
 function withSurge(atlas: AtlasProgress, raw: unknown): AtlasProgress {
-  const surge = normalizeSurge(raw, atlas.nodes);
+  const surge = normalizeSurge(raw, atlas.nodes, (areaId) => tideCharges(atlas, areaId));
   return surge ? { ...atlas, surge } : atlas;
 }
 
@@ -107,7 +114,9 @@ export function discoverAfterBoss(progress: AtlasProgress, areaId: AtlasAreaId, 
   };
   reveal(areaId);
   // Master Surveyor / Dead-End Devotee: the account's tree changes how many neighbours a boss reveals.
-  const chance = mapTreeNodes(progress.nodes).flatMap(n => n.effects).filter(e => e.stat === 'revealChance').reduce((n, e) => n + e.value, 0) / 100;
+  // Survey sigils (brief D 6.5) add the expedition's own fraction to the tree's.
+  const chance = mapTreeNodes(progress.nodes).flatMap(n => n.effects).filter(e => e.stat === 'revealChance').reduce((n, e) => n + e.value, 0) / 100
+    + Math.max(0, credit.revealBonus ?? 0);
   const whole = Math.floor(chance);
   const reveals = Math.max(0, ATLAS_REVEALS_PER_BOSS + whole + ((credit.revealRoll ?? 1) < chance - whole ? 1 : 0));
   for (const id of area.neighbours.filter((id) => !discovered.has(id) && !findAtlasArea(id)?.sealed).slice(0, reveals)) reveal(id);
@@ -122,7 +131,11 @@ export function discoverAfterBoss(progress: AtlasProgress, areaId: AtlasAreaId, 
 }
 
 /** What else a credited clear earns besides the area: the map tier cleared and the final boss killed (both first-time points). */
-export interface AtlasCredit { tier?: number; boss?: string; /** 0..1 roll for the fractional extra reveal. */ revealRoll?: number }
+export interface AtlasCredit {
+  tier?: number; boss?: string; /** 0..1 roll for the fractional extra reveal. */ revealRoll?: number;
+  /** Extra reveal chance (0..1) of the expedition's Survey sigils (brief D 6.5), added to the tree's fraction. */
+  revealBonus?: number;
+}
 
 
 /** Atlas territory upkeep: early maps stay free. Legacy non-Atlas rule calls have no territory fee. */
@@ -138,9 +151,9 @@ export function paidTerritoryFee(raw: unknown): number {
 }
 
 /** The extra credits of one boss-clear receipt: the map tier and the area's final boss (none on boss-less areas), plus the reveal roll. */
-export function atlasCreditFor(areaId: AtlasAreaId, tier: number, revealRoll: number): AtlasCredit {
+export function atlasCreditFor(areaId: AtlasAreaId, tier: number, revealRoll: number, revealBonus = 0): AtlasCredit {
   const area = findAtlasArea(areaId);
-  return { revealRoll, ...(tier > 0 ? { tier } : {}), ...(area && !area.noBoss ? { boss: THEME_ROSTER[area.baseId].boss } : {}) };
+  return { revealRoll, ...(tier > 0 ? { tier } : {}), ...(area && !area.noBoss ? { boss: THEME_ROSTER[area.baseId].boss } : {}), ...(revealBonus > 0 ? { revealBonus } : {}) };
 }
 
 

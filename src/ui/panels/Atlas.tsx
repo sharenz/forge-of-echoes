@@ -1,7 +1,7 @@
 // The chart of the Cartography Table (brief A): a canvas-drawn Ember Chart with one DOM <button data-area> per node
 // on top (keyboard, screen readers, the existing browser scenarios), region banners, names and a hover tooltip as DOM
 // text on the shared type scale, discrete 1x/2x/3x zoom, drag/arrow-key panning and the discovery cinematic.
-// The inspector rail and the dock live beside it (src/ui/atlas/Rail.tsx, Dock.tsx); MapDevice.tsx composes them.
+// Clicking an area opens its modal (src/ui/atlas/AreaModal.tsx); MapDevice.tsx composes the table.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { AtlasAreaId, AtlasProgress } from '../../contracts/atlas';
 import { ATLAS_AREAS, findAtlasArea } from '../../data/progression/atlas';
@@ -19,7 +19,7 @@ import { portalOpen, useActivation, useActivationWatcher } from '../atlas/activa
 import { CURRENCIES } from '../../data/items';
 import { KEY_COLOUR } from '../../art/atlas/geometry';
 import { PixelIcon } from '../components/common';
-import { DEFAULT_LENS, LENSES, formatShare, stockBand, type ChartLens, type SourceEdge, type StockEntry } from '../atlas/lens';
+import { DEFAULT_LENS, LENSES, formatShare, stockBand, type ChartLens, type SourceEdge, type StockEntry, type TerritoryView } from '../atlas/lens';
 import { PinTray } from '../atlas/PinTray';
 import { SourcesPanel } from '../atlas/SourcesPanel';
 import type { RoutingReadout } from '../../game/progression/map-routing';
@@ -73,12 +73,14 @@ export interface ChartExtras {
   /** The slotted map's drop table (Sources lens); null with an empty slot. */
   sources: RoutingReadout | null;
   edges: readonly SourceEdge[];
+  /** Beacons and the sigils that reach each area (Territory lens). */
+  territory: TerritoryView;
   /** Pan to an area and inspect it (bumps `n` to repeat the same area). */
   focus: { id: AtlasAreaId; n: number } | null;
   onFocus: (id: AtlasAreaId) => void;
 }
 
-export function AtlasChart({ progress, inspected, onInspect, courseId, tier, corrupted, keys, rail, compactRail, railOpen, tab, extras }: {
+export function AtlasChart({ progress, inspected, onInspect, courseId, tier, corrupted, keys, modalOpen, tab, extras }: {
   progress: AtlasProgress;
   inspected: AtlasAreaId;
   onInspect: (id: AtlasAreaId) => void;
@@ -87,9 +89,8 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
   tier: number | null;
   corrupted: boolean;
   keys: ReadonlySet<string>;
-  rail: (model: NodeModel) => preact.ComponentChildren;
-  compactRail: boolean;
-  railOpen: boolean;
+  /** An area modal is open over the chart: the chart is inert behind it. */
+  modalOpen: boolean;
   tab: 'chart' | 'codex';
   extras?: ChartExtras;
 }) {
@@ -115,6 +116,9 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
   const completed = useMemo(() => new Set<string>(progress.completed), [progress.completed]);
   const pinSet = useMemo(() => new Set<string>(extras?.pins ?? []), [extras?.pins]);
   const lens = extras?.lens ?? DEFAULT_LENS;
+  const lensInput = useMemo(() => ({ lens, from: extras?.sources?.from ?? null, edges: extras?.edges ?? [], beacons: extras?.territory.beacons ?? [], inspected }),
+    [lens, extras?.sources, extras?.edges, extras?.territory, inspected]);
+  const beaconOf = useMemo(() => new Map((extras?.territory.beacons ?? []).map((b) => [b.areaId as string, b])), [extras?.territory]);
   const ctx: ChartContext = useMemo(() => ({ discovered, completed, tier, keys, fresh, corrupted, home: courseId, pins: pinSet, ...(extras ? { stock: extras.stock } : {}) }), [discovered, completed, tier, keys, fresh, corrupted, courseId, pinSet, extras?.stock]);
   const models = useMemo(() => allNodeModels(ctx), [ctx]);
   const byId = useMemo(() => new Map(models.map((m) => [m.id, m])), [models]);
@@ -180,8 +184,8 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
   useEffect(() => {
     const r = renderer.current;
     if (!r) return;
-    r.setInput({ ctx, selected: inspected, hovered, course: courseId, reduceMotion: reduce, portal, keyAnchors, lens: { lens, from: extras?.sources?.from ?? null, edges: extras?.edges ?? [] } });
-  }, [assets, ctx, inspected, hovered, courseId, reduce, portal, keyAnchors, lens, extras?.edges, extras?.sources]);
+    r.setInput({ ctx, selected: inspected, hovered, course: courseId, reduceMotion: reduce, portal, keyAnchors, lens: lensInput });
+  }, [assets, ctx, inspected, hovered, courseId, reduce, portal, keyAnchors, lensInput]);
 
   // a focus request from the pin tray, the Sources rows or "Show home": inspect the area and bring it to the middle
   const lastFocus = useRef<number>(extras?.focus?.n ?? 0);
@@ -236,7 +240,7 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
       .sort((a, b) => findAtlasArea(a)!.depth - findAtlasArea(b)!.depth)
       .map((id, i) => ({ id, from: discoverer(id, known, completed), start: i * 0.7 }));
     setFresh((prev) => { const n = new Set(prev); newIds.forEach((id) => n.add(id)); writeList(FRESH_KEY, n); return n; });
-    r.setInput({ ctx, selected: inspected, hovered, course: courseId, reduceMotion: reduce, portal, keyAnchors, lens: { lens, from: extras?.sources?.from ?? null, edges: extras?.edges ?? [] } });
+    r.setInput({ ctx, selected: inspected, hovered, course: courseId, reduceMotion: reduce, portal, keyAnchors, lens: lensInput });
     setPending(new Set(newIds));
     r.startCinematic(items, reduce);
     cineDone.current = true;
@@ -383,7 +387,6 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
     for (const m of models) if (m.known && !m.area.sealed) counts[m.ceiling]++;
     return counts;
   }, [models]);
-  const areaModel = byId.get(inspected)!;
   const sourceShare = useMemo(() => new Map((extras?.edges ?? []).map((e) => [e.to as string, { label: e.pending ? 'next' : formatShare(e.share), pinned: e.pinned, pending: e.pending }])), [extras?.edges]);
   // DOM order is graph order (depth, then chart y), so Tab walks the chart the way the roads run
   const ordered = useMemo(() => [...models].sort((a, b) => a.area.depth - b.area.depth || a.y - b.y), [models]);
@@ -391,7 +394,7 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
 
   return (
     <div class={'fe-chartwrap'} hidden={tab !== 'chart'}>
-      <div class="fe-chart" ref={viewport} role="application" aria-label="Atlas chart. Arrow keys pan, plus and minus zoom, F fits the charted area." tabIndex={-1}
+      <div class="fe-chart" ref={viewport} role="application" aria-label="Atlas chart. Arrow keys pan, plus and minus zoom, F fits the charted area. Enter on an area opens it." tabIndex={-1} inert={modalOpen ? true : undefined}
         onKeyDown={onKey as never} onScroll={(e) => { const el = e.currentTarget as HTMLElement; if (el.scrollLeft || el.scrollTop) el.scrollTo(0, 0); }} onPointerDown={onPointerDown as never} onPointerMove={onPointerMove as never} onPointerUp={onPointerUp as never} onPointerCancel={onPointerUp as never}>
         <canvas class="fe-chart__canvas" ref={canvas} aria-hidden="true" />
         {!assets && <div class="fe-chart__loading ui-type-secondary" role="status">Unrolling the chart…</div>}
@@ -424,6 +427,15 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
                 )}
                 {extras && lens === 'sources' && m.known && !hiding && sourceShare.get(m.id) && (
                   <span class={cx('fe-chart__share ui-type-caption', sourceShare.get(m.id)!.pinned && 'fe-chart__share--pinned', sourceShare.get(m.id)!.pending && 'fe-chart__share--pending')} style={{ left: 0, top: -(30 * zoom) }} data-share={m.id}>{sourceShare.get(m.id)!.label}</span>
+                )}
+                {extras && lens === 'territory' && m.known && !hiding && (beaconOf.get(m.id) || extras.territory.coveredBy.get(m.id)) && (
+                  <span class={cx('fe-chart__share ui-type-caption', beaconOf.get(m.id) && 'fe-chart__share--pinned')} style={{ left: 0, top: -(34 * zoom) }} data-territory={m.id}
+                    title={[
+                      beaconOf.get(m.id) ? `Beacon: ${beaconOf.get(m.id)!.slots.filter(Boolean).length} of ${beaconOf.get(m.id)!.slots.length} sigil slots filled, reaches ${beaconOf.get(m.id)!.coverage.length - 1} area${beaconOf.get(m.id)!.coverage.length === 2 ? '' : 's'}` : null,
+                      ...(extras.territory.coveredBy.get(m.id) ?? []).map((c) => `${c.name} (${findAtlasArea(c.beacon)?.name ?? ''})`),
+                    ].filter(Boolean).join('\n')}>
+                    {beaconOf.get(m.id) ? `${beaconOf.get(m.id)!.slots.filter(Boolean).length}/${beaconOf.get(m.id)!.slots.length}` : `${extras.territory.coveredBy.get(m.id)!.length} sigil${extras.territory.coveredBy.get(m.id)!.length === 1 ? '' : 's'}`}
+                  </span>
                 )}
                 {extras && m.known && !hiding && !m.area.sealed && inspected === m.id && (
                   <button type="button" class="fe-chart__pinbtn" style={{ left: 20 * zoom, top: -(20 * zoom) }} aria-pressed={m.pinned} data-pin-node={m.id}
@@ -478,6 +490,7 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
             <span class="ui-type-caption fe-chart__tip-meta">{tip.area.sealed ? 'Sealed' : ({ frontier: 'Frontier', forge: 'Forge', crypt: 'Crypt', arena: 'Arena', vault: 'Dead end', reliquary: 'Sealed' } as const)[tip.area.type]} · {THEMES[tip.area.baseId].label} · T1–T{tip.ceiling}</span>
             <span class="ui-type-secondary">{tip.area.noBoss ? 'No final boss' : `Boss: ${tipBoss(tip)}`}</span>
             <span class={cx('ui-type-caption fe-chart__tip-status', tip.tooShallow && 'fe-chart__tip-status--bad')}>{tip.status}</span>
+            <span class="ui-type-caption fe-chart__tip-meta fe-chart__tip-open">Click to open</span>
             {(tip.pinned || tip.stock) && <span class="ui-type-caption fe-chart__tip-meta">{tip.pinned ? `Pinned: x${extras?.pinMultiplier ?? 3} map drops` : ''}{tip.pinned && tip.stock ? ' · ' : ''}{tip.stock ? `You hold ${tip.stock.count} map${tip.stock.count === 1 ? '' : 's'}` : ''}</span>}
           </div>
         )}
@@ -495,7 +508,6 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
           ))}
         </div>
       </div>
-      <div class={cx('fe-railslot', compactRail && 'fe-railslot--compact', compactRail && railOpen && 'fe-railslot--open')} data-rail-slot>{rail(areaModel)}</div>
     </div>
   );
 }

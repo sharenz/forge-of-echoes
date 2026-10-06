@@ -87,7 +87,7 @@ export const PIT_OF_ECHOES: AreaLayout = defineLayout({
     { id: 'orchard-1', fits: 'orchard', at: pol(520, 300) },
     { id: 'host-1', fits: 'host', at: pol(520, 120) },
     { id: 'anvil-1', fits: 'anvil', at: pol(520, 240) },
-    { id: 'bell-1', fits: 'bell', at: pol(520, 0) },
+    { id: 'bell-1', fits: 'bell', at: pol(356, 0) }, // on the tier ring: the Bellwatch's 230 u rings must fit inside the pit (E1 check 10)
   ],
   rareSpots: [
     { at: pol(356, 330), r: 60, weight: 2 },
