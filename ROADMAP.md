@@ -8,7 +8,9 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped).
 
 1. **Onboarding follow-through and first-10-minutes verification.** The guide shipped (tracker, markers, cheat-sheet, Help, hints,
    gentle first map). Watch real new players (the first reviewer needed 2 minutes to find the drag), then fix what they still trip on.
-   Open from the audit: Rook's price copy (F-17) and the short map tooltip (F-28), return portal/anvil off screen at 1024x600, e2e for
+   Done 2026-10-06: Rook's prices under every tile with empty states (F-17), the short map tooltip with the long form after 600 ms or
+   Alt plus "Surge n/3 today" and a Re-chart hint (F-28), the hideout camera keeps the anvil clear at 1024x600, the area modal scroll fade.
+   Still open: the return portal can land behind the inventory at 1024x600 (`returnPortalSpot` in `src/sim/props.ts`), e2e for
    keyboard-only, reduced motion, parties and veterans.
 2. **Power rework, release R1 "Power": Done, deployed 2026-10-06.** Next releases of the same design (`docs/power-rework/build-plan.md`):
    R2 "Skills I" (C2 contracts and protocol 27, SK0 skill executor and save migration, SK1 Skills panel v2, SK2 ten new skills), then
