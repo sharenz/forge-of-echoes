@@ -10,7 +10,7 @@ import { coverOf } from '../data/propCover';
 import { livingIds } from './combat';
 import {
   CHEST_TOUCH_PAD, DT, PLAYER_RADIUS, PORTAL_DWELL, PORTAL_ENTER_RADIUS, PORTAL_LATCH_RADIUS, RETURN_PORTAL_CLEARANCE,
-  RETURN_PORTAL_DROP_CLEARANCE,
+  RETURN_PORTAL_DROP_CLEARANCE, RETURN_PORTAL_VIEW, RETURN_PORTAL_VIEW_WEIGHT,
 } from './constants';
 import { resolveProps } from './grid';
 import { rollChestLoot } from './hooks';
@@ -316,21 +316,23 @@ export function spawnClearRewards(w: World, ax: number, ay: number): void {
   w.events.push({ t: 'portal', playerId: 0, x: portal.x, y: portal.y, kind: 'open' });
 }
 
-const PORTAL_RINGS = [110, 150, 190] as const;
-const PORTAL_BEARINGS = 16;
+const PORTAL_RINGS = [110, 130, 150, 170, 190] as const;
+const PORTAL_BEARINGS = 24;
 
 /**
  * The return portal: close to the player (on screen, preferably to the side) but clear of where
  * loot lands — the boss's fall and the chest, which both fountain loot, and every drop already on
  * the ground — so walking over your loot never brushes the way home. Candidates ring the anchor
- * (ax, ay), starting on its side (sx, sy); the nearest fully clear one wins, else the clearest.
+ * (ax, ay), starting on its side (sx, sy). It must also be seen: a spot the open inventory (docked right) or the command
+ * deck (bottom) would hide on the smallest supported screen gives up clearance for every unit it lies outside
+ * RETURN_PORTAL_VIEW. The best score wins (clearance less that penalty), the nearest among equals.
  */
 function returnPortalSpot(w: World, ax: number, ay: number, sx: number, sy: number, chestX: number, chestY: number): { x: number; y: number } {
   const lim = w.arenaRadius - 40;
   const d = w.director;
   const base = Math.atan2(sy, sx);
   let best: { x: number; y: number } | null = null;
-  let bestClear = -1;
+  let bestScore = -Infinity;
   let bestCost = Infinity;
   for (const r of PORTAL_RINGS) {
     for (let k = 0; k < PORTAL_BEARINGS; k++) {
@@ -344,17 +346,24 @@ function returnPortalSpot(w: World, ax: number, ay: number, sx: number, sy: numb
       let clear = Math.min(1, Math.hypot(x - chestX, y - chestY) / RETURN_PORTAL_CLEARANCE);
       if (d.bossDefeated) clear = Math.min(clear, Math.hypot(x - d.bossDeathX, y - d.bossDeathY) / RETURN_PORTAL_CLEARANCE);
       for (const drop of w.drops) clear = Math.min(clear, Math.hypot(x - drop.x, y - drop.y) / RETURN_PORTAL_DROP_CLEARANCE);
-      // Nearer is better, and a camera shows more width than height.
-      // ...and not far south of the player: the command deck and the Life globe cover the bottom of the screen.
-      const cost = r + Math.max(0, Math.abs(y - ay) - 120) * 2 + Math.max(0, y - ay - 70) * 3;
-      if (clear > bestClear + 1e-9 || (clear >= bestClear - 1e-9 && cost < bestCost)) {
+      const score = clear - portalViewPenalty(x - ax, y - ay) * RETURN_PORTAL_VIEW_WEIGHT;
+      // Nearer is better among equals, and a camera shows more width than height.
+      const cost = r + Math.abs(y - ay) * 0.5;
+      if (score > bestScore + 1e-9 || (score >= bestScore - 1e-9 && cost < bestCost)) {
         best = { x, y };
-        bestClear = clear;
+        bestScore = score;
         bestCost = cost;
       }
     }
   }
-  return best ?? placeNear(w, ax + sx * 96, ay + sy * 96, PORTAL_ENTER_RADIUS, w.arenaRadius);
+  // Nothing on the rings (walls everywhere): a step to the left, where no docked inventory covers it.
+  return best ?? placeNear(w, ax - 96, ay, PORTAL_ENTER_RADIUS, w.arenaRadius);
+}
+
+/** World units an offset (dx, dy) from the player lies outside RETURN_PORTAL_VIEW, summed over both axes (0 = in view). */
+export function portalViewPenalty(dx: number, dy: number): number {
+  const v = RETURN_PORTAL_VIEW;
+  return Math.max(0, v.left - dx, dx - v.right) + Math.max(0, v.top - dy, dy - v.bottom);
 }
 
 function placeNear(w: World, x: number, y: number, r: number, R: number): { x: number; y: number } {

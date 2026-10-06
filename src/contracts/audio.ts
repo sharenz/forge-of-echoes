@@ -38,6 +38,10 @@ export const SFX_IDS = [
   'anvilStrike', 'anvilCharged', 'anvilForge',
   'bellToll', 'cantorFall', 'dirge',
   'voidTide', 'voidSurge', 'heartCrack',
+  // the Atlas (brief A 5.5 and D slice F1): table open, node hover/select, zoom, the discovery road and reveal, a sealed door
+  // opening, pins, and the daily surge (a charge spent at activation, Hourglass Sand / Grand Hourglass refills)
+  'atlasOpen', 'atlasHover', 'atlasSelect', 'atlasRoute', 'atlasReveal', 'atlasSeal', 'atlasZoom',
+  'atlasPin', 'atlasUnpin', 'surgeSpend', 'surgeRefill',
 ] as const;
 export type SfxId = (typeof SFX_IDS)[number];
 

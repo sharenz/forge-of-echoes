@@ -32,6 +32,7 @@ import { markWarmed, wantsWarmup } from '../game/progression/guide';
 import { atlasCreditFor, creditEventCompletion, discoverAfterBoss, newAtlas, paidTerritoryFee } from '../game/progression/atlas';
 import { paidEntranceKey } from '../game/progression/runs';
 import { normalizeRunSurge, refundSurge } from '../game/progression/surge';
+import { TerritoryCounts } from './territory-counts';
 import { normalizeRunTerritory, refundTerritoryUses, territoryRevealChance } from '../game/progression/territory';
 import { atlasEventIdOf } from '../game/progression/map-event-rules';
 import { PORTALS_PER_MAP, PROTOCOL_VERSION } from '../contracts/net';
@@ -164,6 +165,8 @@ export class Game implements InstanceHost {
   private readonly pendingSummaries = new Map<string, { summary: RunSummaryInfo; at: number }>();
   private readonly entropy: () => number;
   private lastStatusLog = 0;
+  /** Atlas usage since the last status line (slice F1 telemetry). */
+  readonly territoryCounts = new TerritoryCounts();
   private lastTokenCheck = 0;
   private lastPartySweep = 0;
   /** Wall ms until which party leadership is not repaired (restored leaders get time to reconnect). */
@@ -330,6 +333,7 @@ export class Game implements InstanceHost {
       this.statsMark.set(inst, { ticks: st.ticks, totalMs: st.totalMs, overruns: st.overruns });
     }
     const maps = this.instances.list().filter((i) => i.kind === 'map').length;
+    const atlas = this.territoryCounts.drain();
     this.log.info('status', {
       players: this.sessions.size,
       instances: this.instances.size,
@@ -339,6 +343,7 @@ export class Game implements InstanceHost {
       avgTickMs: ticks > 0 ? ms / ticks : 0,
       worstTickMs: worst,
       overruns,
+      ...(atlas ? { atlas } : {}),
     });
   }
 
@@ -870,6 +875,8 @@ export class Game implements InstanceHost {
     const opened = this.serverRules.openMap(s.record.ch, { ...opts, now: this.now() });
     if (!opened.ok) return { ok: false, error: opened.error };
     if (old) this.closeMap(old, 'replaced');
+    const surged = opened.value.setup.surge;
+    if (surged) this.territoryCounts.add(surged.kept ? 'surgeKept' : 'surgeSpent');
     // The account's very first map opens gently (first-run guide): the opening waits for a first move or cast. Granted once.
     const evidence = { characters: [opened.value.character], atlas: opened.value.character.atlas };
     const gentle = wantsWarmup(opened.value.character.guide, evidence);
@@ -1230,6 +1237,7 @@ export class Game implements InstanceHost {
         map.atlasCredits.add(accountId);
         map.atlasPendingCredits.delete(accountId);
         map.persisted = true;
+        this.territoryCounts.add('revealed', result.revealed.length);
         this.sessions.get(characterId)?.pushCharacter('soon');
         const names = result.revealed.map((id) => findAtlasArea(id)!.name);
         for (const s of map.members.values()) if (s.record.accountId === accountId) {

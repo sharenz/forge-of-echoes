@@ -28,6 +28,7 @@ import { areaModalSignal, mapFit } from '../atlas/area-modal';
 import { routingFor } from '../atlas/readout';
 import { SurgeBar } from '../atlas/SurgePips';
 import { chartedCount, nodeModel } from '../atlas/model';
+import { useMotion } from '../atlas/motion';
 
 /**
  * The table shares the screen with the inventory. The area modal lays itself out by the table's own width (a container query); this
@@ -105,6 +106,10 @@ export function MapDevicePanel() {
   const compact = useCompact();
   const map = ch?.mapDevice ?? null;
   const modalId = useSignal(areaModalSignal);
+  // The chart is unrolled on the table (brief A 5.5).
+  useEffect(() => { store.actions.uiSound('atlasOpen'); }, []);
+  // Calm (the game-wide motion setting) stills the table's CSS motion too: entrances, the slot invitations (slice F1).
+  const { calm } = useMotion();
   const [inspected, inspect] = useState<AtlasAreaId>(modalId ?? map?.areaId ?? ch?.atlas?.completed.at(-1) ?? ATLAS_START);
   const [tab, setTab] = useState<'chart' | 'codex'>('chart');
   const [lens, setLens] = useState<ChartLens>(DEFAULT_LENS);
@@ -197,7 +202,7 @@ export function MapDevicePanel() {
   const modalModel = modalArea ? nodeModel(modalArea, { ...ctx, home: null }) : null;
 
   return (
-    <Frame class={cx('fe-panel fe-solid fe-panel--left fe-device fe-device--table', compact && 'fe-device--compact', intro && 'fe-device--intro')} data-atlas-intro={intro ? '1' : '0'} role="region" aria-label="Atlas" data-panel="mapDevice" onKeyDown={onKeyDown as never}>
+    <Frame class={cx('fe-panel fe-solid fe-panel--left fe-device fe-device--table', compact && 'fe-device--compact', intro && 'fe-device--intro', calm && 'fe-device--calm')} data-atlas-intro={intro ? '1' : '0'} role="region" aria-label="Atlas" data-panel="mapDevice" onKeyDown={onKeyDown as never}>
       <header class="fe-table__head">
         <div class="fe-table__tabs" role="tablist" aria-label="Atlas tabs">
           <button role="tab" aria-selected={tab === 'chart'} class={cx('fe-table__tab ui-type-body', tab === 'chart' && 'fe-table__tab--on')} onClick={() => { store.actions.uiSound('click'); setTab('chart'); }}>Chart</button>

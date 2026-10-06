@@ -108,6 +108,9 @@ export interface HudState {
   dead: boolean;
 }
 
+/** The Atlas table's own sounds (brief A 5.5, D slice F1), played by the UI through `uiSound`. */
+export type AtlasUiSound = 'atlasOpen' | 'atlasHover' | 'atlasSelect' | 'atlasRoute' | 'atlasReveal' | 'atlasSeal' | 'atlasZoom' | 'atlasPin' | 'atlasUnpin' | 'surgeSpend' | 'surgeRefill';
+
 export interface Toast {
   id: number;
   text: string;
@@ -281,8 +284,8 @@ export interface UiActions {
   dismissToast(id: number): void;
   /** Show a toast (the guide names the key to press for new points). */
   toast(text: string, tone?: Toast['tone']): void;
-  /** `find` / `jackpot`: the soft chimes of Rook's lucky-find reveal. */
-  uiSound(id: 'click' | 'hover' | 'open' | 'close' | 'error' | 'equip' | 'find' | 'jackpot'): void;
+  /** `find` / `jackpot`: the soft chimes of Rook's lucky-find reveal. The Atlas ids play the same-named SfxId (brief A 5.5). */
+  uiSound(id: 'click' | 'hover' | 'open' | 'close' | 'error' | 'equip' | 'find' | 'jackpot' | AtlasUiSound): void;
 }
 
 export interface UiStore {

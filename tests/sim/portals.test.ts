@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { MONSTER_KINDS } from '../../src/contracts/content';
 import { SIM_DT, type PlayerIntent, type SimRun } from '../../src/contracts/sim';
 import { damageMonster } from '../../src/sim/combat';
-import { PORTAL_DWELL, PORTAL_ENTER_RADIUS, RETURN_PORTAL_CLEARANCE } from '../../src/sim/constants';
+import { PORTAL_DWELL, PORTAL_ENTER_RADIUS, RETURN_PORTAL_CLEARANCE, RETURN_PORTAL_VIEW } from '../../src/sim/constants';
+import { portalViewPenalty } from '../../src/sim/props';
 import { DAMAGE_INDEX } from '../../src/sim/math';
 import type { World } from '../../src/sim/world';
 import { STRONG_LOADOUT, idleIntent, makeHooks, makeJoin, makeParty, makeSolo, makeStats, strongSkills, strongStats } from './fixtures';
@@ -149,6 +150,27 @@ describe('map return portal', () => {
       stepN(run, 180);
       for (const d of run.view.drops) expect(Math.hypot(d.x - portal.x, d.y - portal.y)).toBeGreaterThan(PORTAL_ENTER_RADIUS + 20);
     }
+  });
+
+  it('opens where the 1024x600 screen shows it: left of the open inventory, above the command deck', () => {
+    // A 512x300 view centred on the player: the docked inventory hides x > +37, the deck y > +94.
+    expect(RETURN_PORTAL_VIEW.right).toBeLessThanOrEqual(37);
+    expect(RETURN_PORTAL_VIEW.bottom).toBeLessThanOrEqual(94);
+    expect(RETURN_PORTAL_VIEW.left).toBeGreaterThanOrEqual(-256 + PORTAL_ENTER_RADIUS);
+    expect(RETURN_PORTAL_VIEW.top).toBeGreaterThanOrEqual(-150 + PORTAL_ENTER_RADIUS);
+    for (const seed of [17, 3, 29, 41, 5, 8, 13]) {
+      const { run, world } = clearBossMap(seed);
+      const portal = run.view.props.find((p) => p.kind === 'returnPortal')!;
+      const p1 = world.playerById[1]!;
+      expect(portalViewPenalty(portal.x - p1.x, portal.y - p1.y), `seed ${seed}`).toBe(0);
+    }
+  });
+
+  it('scores a spot by how far it lies outside the view box', () => {
+    expect(portalViewPenalty(-120, 0)).toBe(0);
+    expect(portalViewPenalty(RETURN_PORTAL_VIEW.right + 30, 0)).toBe(30);
+    expect(portalViewPenalty(0, RETURN_PORTAL_VIEW.bottom + 10)).toBe(10);
+    expect(portalViewPenalty(RETURN_PORTAL_VIEW.left - 5, RETURN_PORTAL_VIEW.top - 5)).toBe(10);
   });
 
   it('collecting loot and opening the chest never sends anyone home; standing in the portal does', () => {

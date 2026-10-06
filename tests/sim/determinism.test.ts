@@ -52,7 +52,10 @@ const GOLDEN_4242 = [2334532443, 3845941355, 2202071788];
 // Re-pinned 2026-10-01 for cover (see GOLDEN_4242): previously 1734587646 in 16189 ticks. The map still clears.
 // Re-pinned 2026-10-06 for the power rework (see GOLDEN_4242): previously 993620320 in 16617 ticks. The map still clears; tier-5 rares
 // carry the depth life floor, so the clear takes longer.
-const GOLDEN_9001 = { digest: 2920781135, ticks: 18932 };
+// Re-pinned 2026-10-06 for the return portal's view box (src/sim/props.ts returnPortalSpot, RETURN_PORTAL_VIEW: it opens left of the
+// open inventory and above the command deck at 1024x600): the clear is identical, the bot's walk home is 14 ticks longer. Previously
+// 2920781135 in 18932 ticks. GOLDEN_4242 is unchanged (no clear in its 3000 ticks).
+const GOLDEN_9001 = { digest: 404978754, ticks: 18946 };
 const strong = { stats: strongStats(), skills: strongSkills(), loadout: STRONG_LOADOUT };
 
 function soloRun(seed: number, extra: Partial<ConfigOptions> = {}): SimRun {

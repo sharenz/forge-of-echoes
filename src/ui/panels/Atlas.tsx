@@ -143,7 +143,9 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
         if (w) { w.style.transform = `translate(${ox}px, ${oy}px)`; w.dataset.zoom = String(z); }
       },
       onBeat: (beat, id) => {
-        if (beat === 'arrive' || beat === 'forge') store.actions.uiSound(beat === 'forge' ? 'open' : 'hover');
+        // brief A 5.5: the ember crackles down the road, the bell ladder lands as the plate is forged
+        if (beat === 'depart') store.actions.uiSound('atlasRoute');
+        if (beat === 'forge') store.actions.uiSound('atlasReveal');
         if (beat === 'forge') setPending((prev) => { const n = new Set(prev); n.delete(id); return n; });
       },
       onCinematicDone: (ids) => {
@@ -243,12 +245,14 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
     r.setInput({ ctx, selected: inspected, hovered, course: courseId, reduceMotion: reduce, portal, keyAnchors, lens: lensInput });
     setPending(new Set(newIds));
     r.startCinematic(items, reduce);
+    // Calm: the cinematic is a short cross-fade with no beats, so the reveal is said once here.
+    if (reduce) store.actions.uiSound('atlasReveal');
     cineDone.current = true;
   }, [assets, progress.discovered]);
 
   // ---- selection, focus and zoom --------------------------------------------------------------------------
   const select = useCallback((id: AtlasAreaId, pan = true) => {
-    store.actions.uiSound('click');
+    store.actions.uiSound('atlasSelect');
     onInspect(id);
     setFresh((prev) => { if (!prev.has(id)) return prev; const n = new Set(prev); n.delete(id); writeList(FRESH_KEY, n); return n; });
     if (pan) renderer.current?.panTo(ATLAS_POS[id].x, ATLAS_POS[id].y);
@@ -266,7 +270,7 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
     const z = Math.max(minZoom, z0) as 1 | 2 | 3;
     const r = renderer.current;
     if (!r || z === r.zoom) return;
-    store.actions.uiSound('hover');
+    store.actions.uiSound('atlasZoom');
     r.setZoom(z, anchor ?? r.center);
     setZoomState(z);
   }, [store, minZoom]);
@@ -417,7 +421,7 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
                   style={{ width: w, height: h, marginTop: sealed ? -2 * zoom : 0 }}
                   onClick={() => select(m.id)}
                   onDblClick={() => select(m.id, false)}
-                  onPointerEnter={() => { if (m.known) { setHovered(m.id); store.actions.uiSound('hover'); } }}
+                  onPointerEnter={() => { if (m.known) { setHovered(m.id); store.actions.uiSound('atlasHover'); } }}
                   onPointerLeave={() => setHovered((h0) => (h0 === m.id ? null : h0))}
                   onFocus={() => { if (m.known) { setHovered(m.id); renderer.current?.panTo(m.x, m.y); } }}
                   onBlur={() => setHovered((h0) => (h0 === m.id ? null : h0))} />
@@ -499,7 +503,7 @@ export function AtlasChart({ progress, inspected, onInspect, courseId, tier, cor
           <span class="fe-chart__zoomread ui-type-caption" aria-live="polite">{zoom}×</span>
           <button class="fe-chart__btn ui-type-body" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoom(Math.min(3, zoom + 1) as 1 | 2 | 3)}>+</button>
           <button class="fe-chart__btn fe-chart__btn--fit ui-type-caption" title="Fit the charted area (F)" onClick={fit}>Fit</button>
-          <button class={cx('fe-chart__btn fe-chart__btn--fit ui-type-caption', reduce && 'fe-chart__btn--on')} aria-label={MOTION_LABEL[motionPref]} title={`${MOTION_LABEL[motionPref]}. Calm turns off animation; System follows your device setting.`} onClick={cycleMotion}>{motionPref === 'auto' ? 'Motion: auto' : motionPref === 'calm' ? 'Motion: calm' : 'Motion: full'}</button>
+          <button class={cx('fe-chart__btn fe-chart__btn--fit ui-type-caption', reduce && 'fe-chart__btn--on')} aria-label={MOTION_LABEL[motionPref]} title={`${MOTION_LABEL[motionPref]}. Calm turns off animation; System follows your device setting and calms when Screen shake is 0.`} onClick={cycleMotion}>{motionPref === 'auto' ? 'Motion: auto' : motionPref === 'calm' ? 'Motion: calm' : 'Motion: full'}</button>
         </div>
         <div class="fe-chart__ruler ui-type-caption" role="img" aria-label={`Tier ruler: ${tier ? `your map is Tier ${tier}` : 'no map slotted'}`}>
           <span class="fe-chart__ruler-label">Tier</span>

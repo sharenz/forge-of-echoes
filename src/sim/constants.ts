@@ -355,3 +355,12 @@ export const PORTAL_LATCH_RADIUS = PORTAL_ENTER_RADIUS + 10;
 export const RETURN_PORTAL_CLEARANCE = 140;
 /** …and at least this far from any drop lying around (picking one up must not brush the portal). */
 export const RETURN_PORTAL_DROP_CLEARANCE = 60;
+/**
+ * Where the return portal is sure to be seen, relative to the player who killed the boss (world units = virtual pixels).
+ * Sized for the smallest supported screen, 1024x600 at pixel scale 2 (a 512x300 view centred on the player): the open
+ * inventory docks on the right and covers everything past about +37, the command deck and the globes cover the bottom
+ * 56 (plus the globes' corners), the top bars a little of the top. 1280x720 (640x360, free to +77 and +116) contains it.
+ */
+export const RETURN_PORTAL_VIEW = { left: -200, right: 20, top: -110, bottom: 70 } as const;
+/** Clearance (0..1) a candidate gives up per world unit it lies outside RETURN_PORTAL_VIEW. */
+export const RETURN_PORTAL_VIEW_WEIGHT = 1 / 60;

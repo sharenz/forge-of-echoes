@@ -1770,4 +1770,106 @@ export const SFX: Record<SfxId, SfxDef> = {
       v.crackle({ at: 0.05, dur: 0.5, gain: 0.1, hp: 4000 });
     },
   },
+
+  // ---------------------------------------------------------------------------
+  // The Atlas (brief A 5.5, brief D slice F1): stone, brass and ember, quieter than combat
+  // ---------------------------------------------------------------------------
+  atlasOpen: {
+    // The chart is unrolled on the table: a slate scrape (a brown-noise sweep) and one low bell.
+    group: 'ui', target: -22, maxVoices: 1, minInterval: 0.4, pitchVar: 0.02, reverb: 0.4, priority: 1,
+    build(v) {
+      v.noise({ color: 'brown', gain: 1.6, env: { a: 0.04, h: 0.12, d: 0.22 }, filter: { type: 'bandpass', f: [260, 1400, 0.3], q: 0.9 } });
+      v.noise({ color: 'pink', gain: 0.5, env: { a: 0.03, d: 0.25 }, filter: { type: 'highpass', f: [1800, 4200, 0.3] } });
+      v.bell({ at: 0.18, f: midi(45), partials: P.church, gain: 0.14, decay: 1.6, wet: 0.45, fixed: true });
+    },
+  },
+  atlasHover: {
+    // A 25 ms soft tick on the plate.
+    group: 'ui', target: -34, maxVoices: 2, minInterval: 0.05, pitchVar: 0.08, reverb: 0, priority: 0, bank: { variants: 4 },
+    build(v) {
+      v.click({ gain: 0.12, f: 3400, d: 0.01 });
+      v.bell({ f: v.rr(1500, 1700), partials: P.dull, gain: 0.05, decay: 0.025 });
+    },
+  },
+  atlasSelect: {
+    // A stone chime: two partials a fifth apart.
+    group: 'ui', target: -25, maxVoices: 2, minInterval: 0.06, pitchVar: 0.03, reverb: 0.18, priority: 1,
+    build(v) {
+      v.thump({ f: [220, 120, 0.04], gain: 0.25, d: 0.06 });
+      v.bell({ f: midi(69), partials: P.silver, gain: 0.1, decay: 0.45, wet: 0.2 });
+      v.bell({ at: 0.012, f: midi(76), partials: P.silver, gain: 0.07, decay: 0.38, wet: 0.2 });
+    },
+  },
+  atlasRoute: {
+    // The ember runs along the road to the new node: a crackle trail that follows the dot (0.8 s).
+    group: 'flow', target: -27, maxVoices: 2, minInterval: 0.2, pitchVar: 0.05, reverb: 0.15, priority: 1,
+    build(v) {
+      v.crackle({ dur: 0.8, gain: 0.12, hp: 1800, lp: 7000, wet: 0.15 });
+      v.noise({ color: 'pink', gain: 0.6, env: { a: 0.08, h: 0.5, d: 0.2 }, filter: { type: 'bandpass', f: [500, 1300, 0.8], q: 1.2 } });
+    },
+  },
+  atlasReveal: {
+    // A rising three-note bell ladder; the plate forges in on the last note (`impact`, read by sfxImpactDelay).
+    group: 'flow', target: -18, maxVoices: 1, minInterval: 0.3, pitchVar: 0, reverb: 0.5, priority: 2, impact: 0.24, fixedPitch: true,
+    duck: { music: 3, hold: 0.8, release: 0.8 },
+    build(v) {
+      [62, 66, 69].forEach((n, k) => v.bell({ at: k * 0.12, f: midi(n), partials: P.chime, gain: 0.12 + k * 0.03, decay: 1.2, wet: 0.45, fixed: true }));
+      v.thump({ at: 0.24, f: [180, 70, 0.1], gain: 0.4, d: 0.18 });
+      v.bell({ at: 0.24, f: midi(57), partials: P.anvil, gain: 0.08, decay: 0.7, wet: 0.35, fixed: true });
+      v.crackle({ at: 0.24, dur: 0.4, gain: 0.08, hp: 3000 });
+    },
+  },
+  atlasSeal: {
+    // A sealed door opens: a chain drag, then a key turn and a latch (dual transient).
+    group: 'ui', target: -22, maxVoices: 1, minInterval: 0.3, pitchVar: 0.03, reverb: 0.25, priority: 1, impact: 0.3,
+    build(v) {
+      for (let i = 0; i < 4; i++) v.bell({ at: i * 0.05 + v.rr(0, 0.015), f: v.rr(900, 1300), partials: LINK, gain: 0.05, decay: 0.12, pan: v.rr(-0.3, 0.3) });
+      v.noise({ color: 'pink', gain: 0.7, env: { a: 0.02, d: 0.2 }, filter: { type: 'bandpass', f: 1500, q: 1.4 } });
+      v.click({ at: 0.24, gain: 0.35, f: 2600, d: 0.02 });
+      v.thump({ at: 0.3, f: [260, 120, 0.05], gain: 0.5, d: 0.09 });
+      v.bell({ at: 0.3, f: v.rr(620, 680), partials: P.anvil, gain: 0.08, decay: 0.3, wet: 0.25 });
+    },
+  },
+  atlasZoom: {
+    // A soft paper slide, 120 ms.
+    group: 'ui', target: -33, maxVoices: 2, minInterval: 0.08, pitchVar: 0.06, reverb: 0, priority: 0, bank: { variants: 4 },
+    build(v) {
+      v.noise({ color: 'pink', gain: 0.9, env: { a: 0.03, d: 0.09 }, filter: { type: 'bandpass', f: [1400, 2600, 0.12], q: 0.8 } });
+    },
+  },
+  atlasPin: {
+    // A brass pin pressed into the chart: a short tap and a small bright ring.
+    group: 'ui', target: -24, maxVoices: 2, minInterval: 0.08, pitchVar: 0.04, reverb: 0.12, priority: 1,
+    build(v) {
+      v.click({ gain: 0.35, f: 3000, d: 0.012 });
+      v.thump({ f: [240, 140, 0.03], gain: 0.3, d: 0.05 });
+      v.bell({ at: 0.01, f: midi(81), partials: P.coin, gain: 0.07, decay: 0.32, wet: 0.15 });
+    },
+  },
+  atlasUnpin: {
+    // The pin pulled out: a falling, duller tick.
+    group: 'ui', target: -27, maxVoices: 2, minInterval: 0.08, pitchVar: 0.04, reverb: 0.06, priority: 1,
+    build(v) {
+      v.noise({ color: 'pink', gain: 0.6, env: { a: 0.005, d: 0.06 }, filter: { type: 'highpass', f: [3200, 1600, 0.06] } });
+      v.bell({ at: 0.02, f: midi(74), partials: P.dull, gain: 0.06, decay: 0.12 });
+    },
+  },
+  surgeSpend: {
+    // A surge charge spent at activation: an hourglass turned (a sand hiss) and a warm brass swell.
+    group: 'flow', target: -21, maxVoices: 1, minInterval: 0.4, pitchVar: 0, reverb: 0.35, priority: 2, fixedPitch: true,
+    build(v) {
+      v.noise({ color: 'white', gain: 0.35, env: { a: 0.05, h: 0.2, d: 0.3 }, filter: { type: 'bandpass', f: [5200, 3600, 0.5], q: 1.6 } });
+      v.tone({ type: 'triangle', f: midi(57), fixed: true, gain: 0.08, env: { a: 0.12, h: 0.15, d: 0.5 }, filter: { type: 'lowpass', f: 1600, fixed: true }, wet: 0.35 });
+      v.bell({ at: 0.1, f: midi(69), partials: P.silver, gain: 0.1, decay: 0.9, wet: 0.35, fixed: true });
+      v.bell({ at: 0.18, f: midi(76), partials: P.silver, gain: 0.08, decay: 0.8, wet: 0.35, fixed: true });
+    },
+  },
+  surgeRefill: {
+    // Hourglass Sand / Grand Hourglass: sand pours back up and three charges ring in.
+    group: 'ui', target: -20, maxVoices: 1, minInterval: 0.3, pitchVar: 0, reverb: 0.35, priority: 1, fixedPitch: true,
+    build(v) {
+      v.noise({ color: 'white', gain: 0.35, env: { a: 0.1, h: 0.15, d: 0.2 }, filter: { type: 'bandpass', f: [3000, 6000, 0.4], q: 1.4 } });
+      [69, 73, 76].forEach((n, k) => v.bell({ at: 0.12 + k * 0.08, f: midi(n), partials: P.coin, gain: 0.08, decay: 0.5, wet: 0.3, fixed: true }));
+    },
+  },
 };

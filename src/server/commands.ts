@@ -302,6 +302,7 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       const used = r.refillSurge(ch, cmd.areaId ? { kind: 'area', areaId: cmd.areaId } : { kind: 'all' }, game.now());
       if (!used.ok) return fail(used.error);
       if (!game.store.commit(s.record, used.value.character)) return fail('The hourglass could not be used. Nothing was spent; try again.');
+      game.territoryCounts.add(cmd.areaId ? 'sandUsed' : 'grandUsed');
       s.pushCharacter('now');
       return { ok: true, message: used.value.message };
     }
@@ -313,6 +314,7 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       const slotted = r.slotSigil(ch, cmd.areaId, cmd.slot, cmd.uid);
       if (!slotted.ok) return fail(slotted.error);
       if (!game.store.commit(s.record, slotted.value.character)) return fail('The sigil could not be slotted. Nothing changed; try again.');
+      game.territoryCounts.add('sigilSlotted');
       s.pushCharacter('now');
       return { ok: true, message: slotted.value.message };
     }
@@ -321,12 +323,16 @@ export function handleCommand(game: Game, s: PlayerSession, cmd: Command, id = 0
       const taken = r.unslotSigil(ch, cmd.areaId, cmd.slot);
       if (!taken.ok) return fail(taken.error);
       if (!game.store.commit(s.record, taken.value.character)) return fail('The sigil could not be taken out. Nothing changed; try again.');
+      game.territoryCounts.add('sigilUnslotted');
       s.pushCharacter('now');
       return { ok: true, message: taken.value.message };
     }
-    case 'pinArea':
+    case 'pinArea': {
       // Pins are an account setting: free, instant and allowed anywhere (the chart is read in the hideout, the result is what counts).
-      return applyResult(game, s, r.setPin(ch, cmd.areaId, cmd.pinned), false);
+      const res = applyResult(game, s, r.setPin(ch, cmd.areaId, cmd.pinned), false);
+      if (res.ok) game.territoryCounts.add(cmd.pinned ? 'pinned' : 'unpinned');
+      return res;
+    }
     case 'addStashTab':
       if (!inHideout(s)) return fail(NEED_HIDEOUT_STASH);
       return applyResult(game, s, r.addStashTab(ch), false);

@@ -19,6 +19,8 @@ describe('sample bank', () => {
       'castEmber', 'castFrost', 'mote', 'pickupItem', 'pickupCurrency', 'dropNormal', 'uiHover', 'uiClick',
       // wave 5: swarmer / artillery attacks and the shield clank (hit by every blocked projectile)
       'boneRattle', 'houndBite', 'crossbowShot', 'tarSplat', 'shieldBlock',
+      // the Atlas: the node hover tick and the zoom slide (slice F1)
+      'atlasHover', 'atlasZoom',
     ];
     expect([...BANKED_IDS].sort()).toEqual([...frequent].sort());
     // Telegraphs, boss moves and debuffs stay live: they are rare, and several are longer than a bank slot.

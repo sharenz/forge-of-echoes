@@ -62,7 +62,8 @@ export function AreaHero({ area, model, pin, headingId, onClose }: {
 }) {
   const sprites = useAtlasSprites();
   const { calm } = useMotion();
-  const motion = !calm && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  // `calm` already follows the OS on "system"; a viewer who picked "full" gets the motion they asked for.
+  const motion = !calm;
   const theme = THEMES[area.baseId];
   const bosses = mapBosses(area.baseId);
   const roster = (THEME_ROSTER as Record<string, { family: readonly string[] }>)[area.baseId];
