@@ -43,7 +43,9 @@ import type { PlayerIntent, PropView, SimEvent, WorldView } from './sim';
 //     frostSpike; SimEvent 'buff'; AILMENT_BIT.decayed; flank event (art keeps its promises); new SFX ids (all appended).
 // 30: power rework SK3 roster batch 2: area kinds gravityWell, entropyHex, witherField, immolationSigil; AILMENT_BIT withered and
 //     hexed on monsters; new SFX ids (all appended).
-export const PROTOCOL_VERSION = 30;
+// 31: power rework SK5 flagship augments: SimEvent 'augment' (lodge, detonate, split, mark, explode, blast, return, refund); area kinds
+//     frostGround, staticField; AILMENT_BIT marked and lodged (all appended).
+export const PROTOCOL_VERSION = 31;
 export const SERVER_PORT = 8787;
 /** Snapshots are sent every SNAPSHOT_EVERY sim ticks (60 Hz / 2 = 30 Hz). */
 export const SNAPSHOT_EVERY = 2;
