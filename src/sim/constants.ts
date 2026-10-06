@@ -308,7 +308,7 @@ export const STREAM_ARC = (40 * Math.PI) / 180;
  * horn) and starts STREAM_MARGIN past the view edge like every stream member, so it is seen before it arrives. Groups smaller
  * than FLANK_MIN_GROUP never flank.
  */
-export const FLANK_FROM_WAVE = 2;
+export const FLANK_FROM_WAVE = 3;
 export const FLANK_EVERY = 3;
 export const FLANK_MIN_GROUP = 4;
 export const FLANK_JITTER = 0.45;

@@ -29,9 +29,9 @@ Last reprioritised: 2026-10-01. Updated 2026-10-06 (R1 "Power" shipped; item 4 "
    Done 2026-10-06 (GAME_SPEC 7 "Flow zones" and "Burning ground", 8 "Flankers", the monster hover): frost currents (Winter Throne's lake
    drifts round the dais, Frozen Passage's outer bridges run opposite ways; `look: 'frost'`), Pit of Echoes' two raked sand corridors
    counter-rotate (`look: 'sand'`), every Ashen Forge slag pool burns and every lava crack flares on an 8 s cycle with a 1.5 s telegraph
-   (`hazard` on the decal, validator check 11, the bot steps off it), stream flankers from wave 2 (every third group comes from behind
+   (`hazard` on the decal, validator check 11, the bot steps off it), stream flankers from wave 3 (every third group comes from behind
    the player, opposite the hunters already on her, with a "Flank!" edge marker and a panned horn; a first pincer version that split
-   groups made the bot's Tier 5 clears easier, 13/16 vs 7/16 seeds, and was dropped), and "Level 34 · 6 above you · deals 15% more damage" on the hover.
+   groups made the bot's Tier 5 clears easier, 13/16 vs 7/16 seeds, and was dropped; starting at wave 2 cost the fairly geared Coliseum Tier 5 bot a seed, so they start at wave 3), and "Level 34 · 6 above you · deals 15% more damage" on the hover.
    Still open: the Chainworks hazard stripes (a press or crusher line along them is the natural mechanic), a tram road, a flanker
    *brain* (monsters that circle to the back on their own) if flank groups prove too gentle, and frost pools that chill.
 5. **P2 character depth: more Sorceress skills and a deeper skill tree, then the passive tree** (about 250 nodes). Designed together

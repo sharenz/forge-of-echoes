@@ -1,4 +1,4 @@
-// Stream flankers (roadmap 4: standing still is not a strategy): from wave 2 every third stream group comes from BEHIND the player,
+// Stream flankers (roadmap 4: standing still is not a strategy): from wave 3 every third stream group comes from BEHIND the player,
 // the side opposite the hunters already on her, announced by a 'flank' event the moment it spawns.
 import { describe, expect, it } from 'vitest';
 import { SIM_DT, type SimEvent } from '../../src/contracts/sim';
@@ -54,7 +54,7 @@ const diff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - 
 describe('stream flankers', () => {
   const groups = record(31, 110);
 
-  it('wave 1 streams never flank; from wave 2 flankers arrive, never more often than every third group', () => {
+  it('waves 1 and 2 never flank; from wave 3 flankers arrive, never more often than every third group', () => {
     expect(groups.filter((g) => g.wave < FLANK_FROM_WAVE).every((g) => g.flank === null)).toBe(true);
     const later = groups.filter((g) => g.wave >= FLANK_FROM_WAVE);
     const flanks = later.filter((g) => g.flank);

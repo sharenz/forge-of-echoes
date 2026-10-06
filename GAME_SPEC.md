@@ -946,7 +946,7 @@ legacy maps event-free.
 **Wave budget:** `baseMonsters 40 + 18·(wave−1)` × countMultiplier, over 60 s.
 - 60% of the budget is placed at wave start as **packs** (4–8 monsters) around the arena, at least 250 units from the player. Hunting them is the "PoE" part.
 - 40% **streams** from just off-screen toward the player over the wave. This is the "VS" pressure.
-- **Flankers.** From wave 2, every third stream group of a wave **flanks**: instead of a random bearing it arrives from behind the player, the side
+- **Flankers.** From wave 3, every third stream group of a wave **flanks**: instead of a random bearing it arrives from behind the player, the side
   opposite the hunters already on her (their centroid within 450 u, ± 26°), or from one of her sides when her back is the arena wall; with nobody on her it
   is an ordinary group. It is announced the moment it spawns: a red "Flank!" marker blinks at the screen edge pointing where it comes from (3 s) and the
   tell horn sounds, higher, panned to that side. Like every stream member it starts just past the view edge, so it is seen before it arrives. Facing one
